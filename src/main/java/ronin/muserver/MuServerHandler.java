@@ -28,7 +28,7 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
 			HttpResponse response = new DefaultHttpResponse(HTTP_1_1, HttpResponseStatus.OK);
 
 			for (MuHandler handler : handlers) {
-				AsyncContext asyncContext = new AsyncContext(ctx, new NettyRequestAdapter(ctx, request), new NettyResponseAdaptor(ctx, response));
+				AsyncContext asyncContext = new AsyncContext(new NettyRequestAdapter(ctx, request), new NettyResponseAdaptor(ctx, response));
 				MuAsyncHandler asyncHandler = handler.start(asyncContext);
 				if (asyncHandler != null) {
 					state.put(ctx, asyncHandler);
@@ -37,7 +37,6 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
 				}
 			}
 
-			ctx.write(response);
 		} else if (msg instanceof HttpContent) {
 			HttpContent content = (HttpContent) msg;
 			MuAsyncHandler asyncHandler = state.get(ctx);
