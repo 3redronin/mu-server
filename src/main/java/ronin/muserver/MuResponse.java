@@ -7,5 +7,6 @@ public interface MuResponse {
 	int status();
 	void status(int value);
 
-	Future<Void> write(String text);
+	Future<Void> writeAsync(String text);
+	void write(String text);
 }
