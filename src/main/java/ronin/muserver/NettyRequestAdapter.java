@@ -14,12 +14,12 @@ public class NettyRequestAdapter implements MuRequest {
 
 	@Override
 	public HttpMethod method() {
-		return null;
+		return HttpMethod.fromNetty(request.method());
 	}
 
 	@Override
 	public URI uri() {
-		return null;
+		return URI.create(request.uri());
 	}
 
 	@Override

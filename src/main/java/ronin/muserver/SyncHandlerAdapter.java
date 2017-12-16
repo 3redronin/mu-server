@@ -4,37 +4,29 @@ import java.nio.ByteBuffer;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public class SyncHandlerAdapter implements MuAsyncHandler {
+public class SyncHandlerAdapter implements MuHandler {
 
-    private final AsyncContext ctx;
     private final SyncHandler syncHandler;
     private final ExecutorService executor = Executors.newCachedThreadPool();
 
     public static MuHandler syncHandler(SyncHandler syncHandler) {
-        return new MuHandler() {
-            @Override
-            public MuAsyncHandler start(AsyncContext ctx) {
-                return new SyncHandlerAdapter(ctx, syncHandler);
-            }
-        };
+        return new SyncHandlerAdapter(syncHandler);
     }
 
-    public SyncHandlerAdapter(AsyncContext ctx, SyncHandler syncHandler) {
-        this.ctx = ctx;
+    public SyncHandlerAdapter(SyncHandler syncHandler) {
         this.syncHandler = syncHandler;
     }
 
-    @Override
-    public void onHeaders() throws Exception {
+
+    public boolean onHeaders(AsyncContext ctx) throws Exception {
+        return true;
     }
 
-    @Override
-    public void onRequestData(ByteBuffer buffer) throws Exception {
+    public void onRequestData(AsyncContext ctx, ByteBuffer buffer) throws Exception {
 
     }
 
-    @Override
-    public void onRequestComplete() {
+    public void onRequestComplete(AsyncContext ctx) {
         executor.submit(() -> {
             try {
                 syncHandler.handle(ctx.request, ctx.response);
@@ -45,6 +37,5 @@ public class SyncHandlerAdapter implements MuAsyncHandler {
                 ctx.complete();
             }
         });
-
     }
 }

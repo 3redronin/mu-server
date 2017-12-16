@@ -1,6 +1,10 @@
 package ronin.muserver;
 
-import okhttp3.*;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
 import okio.BufferedSink;
 import org.junit.Test;
 
@@ -21,33 +25,53 @@ public class MuServerTest {
     @Test
     public void asyncHandlersSupported() throws IOException, InterruptedException {
         MuServer muServer = muServer()
-                .withHttpConnection(12808)
-                .withHandlers(new MuHandler() {
+            .withHttpConnection(12808)
+            .withHandlers(
+                new MuHandler() {
+                    public boolean onHeaders(AsyncContext ctx) throws Exception {
+                        System.out.println("I am a logging handler and saw " + ctx.request);
+                        return false;
+                    }
+
+                    public void onRequestData(AsyncContext ctx, ByteBuffer buffer) throws Exception {
+                    }
+
+                    public void onRequestComplete(AsyncContext ctx) {
+                    }
+                },
+                new MuHandler() {
                     @Override
-                    public MuAsyncHandler start(AsyncContext ctx) {
-                        return new MuAsyncHandler() {
-                            @Override
-                            public void onHeaders() throws Exception {
-                                System.out.println("Request starting");
-                                ctx.response.status(201);
-                            }
+                    public boolean onHeaders(AsyncContext ctx) throws Exception {
+                        System.out.println("Request starting");
+                        ctx.response.status(201);
+                        return true;
+                    }
 
-                            @Override
-                            public void onRequestData(ByteBuffer buffer) throws Exception {
-                                String text = StandardCharsets.UTF_8.decode(buffer).toString();
-                                System.out.println("Got: " + text);
-                                ctx.response.writeAsync(text);
-                            }
+                    @Override
+                    public void onRequestData(AsyncContext ctx, ByteBuffer buffer) throws Exception {
+                        String text = StandardCharsets.UTF_8.decode(buffer).toString();
+                        System.out.println("Got: " + text);
+                        ctx.response.writeAsync(text);
+                    }
 
-                            @Override
-                            public void onRequestComplete() {
-                                System.out.println("Request complete");
-                                ctx.complete();
-                            }
-                        };
+                    @Override
+                    public void onRequestComplete(AsyncContext ctx) {
+                        System.out.println("Request complete");
+                        ctx.complete();
+                    }
+                },
+                new MuHandler() {
+                    public boolean onHeaders(AsyncContext ctx) throws Exception {
+                        throw new RuntimeException("This should never get here");
+                    }
+
+                    public void onRequestData(AsyncContext ctx, ByteBuffer buffer) throws Exception {
+                    }
+
+                    public void onRequestComplete(AsyncContext ctx) {
                     }
                 })
-                .start();
+            .start();
 
         StringBuffer expected = new StringBuffer();
         RequestBody requestBody = new RequestBody() {
@@ -73,9 +97,9 @@ public class MuServerTest {
         };
 
         Response resp = client.newCall(new Request.Builder()
-                .url("http://localhost:12808")
-                .post(requestBody)
-                .build()).execute();
+            .url("http://localhost:12808")
+            .post(requestBody)
+            .build()).execute();
 
         muServer.stop();
 
@@ -86,24 +110,44 @@ public class MuServerTest {
     @Test
     public void syncHandlersSupported() throws IOException, InterruptedException {
         MuServer muServer = muServer()
-                .withHttpConnection(12808)
-                .withHandlers(syncHandler((request, response) -> {
+            .withHttpConnection(12808)
+            .withHandlers(
+                route(HttpMethod.GET, "/blah", syncHandler((request, response) -> {
                     System.out.println("Running sync handler");
                     response.status(202);
                     response.write("This is a test");
                     System.out.println("Sync handler complete");
-                    return false;
-                }))
-                .start();
+                    return true;
+                })))
+            .start();
 
         Response resp = client.newCall(new Request.Builder()
-                .url("http://localhost:12808")
-                .build()).execute();
+            .url("http://localhost:12808/blah")
+            .build()).execute();
 
         muServer.stop();
 
         assertThat(resp.code(), is(202));
         assertThat(resp.body().string(), equalTo("This is a test"));
+    }
+
+    private static MuHandler route(HttpMethod method, String path, MuHandler muHandler) {
+        return new MuHandler() {
+            public boolean onHeaders(AsyncContext ctx) throws Exception {
+                if (!ctx.request.uri().getPath().equals(path) && ctx.request.method() == method)
+                    return false;
+                muHandler.onHeaders(ctx);
+                return true;
+            }
+
+            public void onRequestData(AsyncContext ctx, ByteBuffer buffer) throws Exception {
+                muHandler.onRequestData(ctx, buffer);
+            }
+
+            public void onRequestComplete(AsyncContext ctx) {
+                muHandler.onRequestComplete(ctx);
+            }
+        };
     }
 
 }

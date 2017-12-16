@@ -12,10 +12,19 @@ import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 
 class MuServerHandler extends SimpleChannelInboundHandler<Object> {
 	private final MuHandler[] handlers;
-	private final ConcurrentHashMap<ChannelHandlerContext, MuAsyncHandler> state = new ConcurrentHashMap<ChannelHandlerContext, MuAsyncHandler>();
+	private final ConcurrentHashMap<ChannelHandlerContext, State> state = new ConcurrentHashMap<>();
 
 	public MuServerHandler(MuHandler[] handlers) {
 		this.handlers = handlers;
+	}
+
+	private static final class State {
+		public final AsyncContext asyncContext;
+		public final MuHandler handler;
+		private State(AsyncContext asyncContext, MuHandler handler) {
+			this.asyncContext = asyncContext;
+			this.handler = handler;
+		}
 	}
 
 	@Override
@@ -23,33 +32,36 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
 		if (msg instanceof HttpRequest) {
 			System.out.println("Got request");
 			HttpRequest request = (HttpRequest) msg;
-
-
 			HttpResponse response = new DefaultHttpResponse(HTTP_1_1, HttpResponseStatus.OK);
 
+			boolean handled = false;
+			AsyncContext asyncContext = new AsyncContext(new NettyRequestAdapter(ctx, request), new NettyResponseAdaptor(ctx, response));
+
 			for (MuHandler handler : handlers) {
-				AsyncContext asyncContext = new AsyncContext(new NettyRequestAdapter(ctx, request), new NettyResponseAdaptor(ctx, response));
-				MuAsyncHandler asyncHandler = handler.start(asyncContext);
-				if (asyncHandler != null) {
-					state.put(ctx, asyncHandler);
-					asyncHandler.onHeaders();
+				handled = handler.onHeaders(asyncContext);
+				if (handled) {
+					state.put(ctx, new State(asyncContext, handler));
 					break;
 				}
+			}
+			if (!handled) {
+				System.out.println("No handler found");
+				asyncContext.response.status(404);
 			}
 
 		} else if (msg instanceof HttpContent) {
 			HttpContent content = (HttpContent) msg;
-			MuAsyncHandler asyncHandler = state.get(ctx);
-			if (asyncHandler == null) {
+			State state = this.state.get(ctx);
+			if (state == null) {
 				// ummmmmm
 			} else {
 				ByteBuf byteBuf = content.content();
 				if (byteBuf.capacity() > 0) {
 					ByteBuffer byteBuffer = byteBuf.nioBuffer();
-					asyncHandler.onRequestData(byteBuffer);
+					state.handler.onRequestData(state.asyncContext, byteBuffer);
 				}
 				if (msg instanceof LastHttpContent) {
-					asyncHandler.onRequestComplete();
+					state.handler.onRequestComplete(state.asyncContext);
 				}
 			}
 		}
