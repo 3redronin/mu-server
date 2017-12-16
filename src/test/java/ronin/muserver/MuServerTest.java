@@ -11,7 +11,11 @@ import org.junit.Test;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
+import static java.util.Arrays.asList;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.IsEqual.equalTo;
@@ -23,16 +27,28 @@ public class MuServerTest {
 
     @Test
     public void syncHandlersSupported() throws IOException, InterruptedException {
+        List<String> handlersHit = new ArrayList<>();
         MuServer muServer = muServer()
                 .withHttpConnection(12808)
                 .withHandlers(
+                        (request, response) -> {
+                            handlersHit.add("Logger");
+                            System.out.println("Got " + request);
+                            return false;
+                        },
                         route(HttpMethod.GET, "/blah", (request, response) -> {
+                            handlersHit.add("BlahHandler");
                             System.out.println("Running sync handler");
                             response.status(202);
                             response.write("This is a test");
                             System.out.println("Sync handler complete");
                             return true;
-                        }))
+                        }),
+                        ((request, response) -> {
+                            handlersHit.add("LastHandler");
+                            return true;
+                        })
+                )
                 .start();
 
         Response resp = client.newCall(new Request.Builder()
@@ -43,6 +59,7 @@ public class MuServerTest {
 
         assertThat(resp.code(), is(202));
         assertThat(resp.body().string(), equalTo("This is a test"));
+        assertThat(handlersHit, equalTo(asList("Logger", "BlahHandler")));
     }
 
     @Test

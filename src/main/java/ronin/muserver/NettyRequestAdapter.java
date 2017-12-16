@@ -7,9 +7,11 @@ import java.net.URI;
 
 public class NettyRequestAdapter implements MuRequest {
 	private final HttpRequest request;
+    private final URI uri;
 
-	public NettyRequestAdapter(ChannelHandlerContext ctx, HttpRequest request) {
+    public NettyRequestAdapter(ChannelHandlerContext ctx, HttpRequest request) {
 		this.request = request;
+		this.uri = URI.create(request.uri());
 	}
 
 	@Override
@@ -19,11 +21,16 @@ public class NettyRequestAdapter implements MuRequest {
 
 	@Override
 	public URI uri() {
-		return URI.create(request.uri());
+		return uri;
 	}
 
 	@Override
 	public URI serverURI() {
 		return null;
 	}
+
+    @Override
+    public String toString() {
+        return method().name() + " " + uri();
+    }
 }
