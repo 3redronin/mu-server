@@ -1,32 +1,34 @@
 package ronin.muserver;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 public class MuServerBuilder {
 	public int httpPort = 0;
-	private SyncHandlerAdapter handlers = new SyncHandlerAdapter();
-	private AsyncMuHandler[] asyncHandlers = new AsyncMuHandler[0];
+	private List<AsyncMuHandler> asyncHandlers = new ArrayList<>();
+	private List<MuHandler> handlers = new ArrayList<>();
 
 	public MuServerBuilder withHttpConnection(int port) {
 		this.httpPort = port;
 		return this;
 	}
-	public MuServerBuilder withAsyncHandlers(AsyncMuHandler... handlers) {
-		this.asyncHandlers = handlers;
+	public MuServerBuilder addAsyncHandler(AsyncMuHandler handler) {
+		asyncHandlers.add(handler);
 		return this;
 	}
 
-	public MuServerBuilder withHandlers(MuHandler... handlers) {
-		this.handlers = new SyncHandlerAdapter(handlers);
+	public MuServerBuilder addHandler(MuHandler handler) {
+		handlers.add(handler);
 		return this;
 	}
+	public MuServerBuilder addHandler(HttpMethod method, String pathRegex, MuHandler handler) {
+		return addHandler(Routes.route(method, pathRegex, handler));
+	}
+
 
 	public MuServer build() {
-		List<AsyncMuHandler> all = new ArrayList<>(Arrays.asList(asyncHandlers));
-		all.add(handlers);
-		return new MuServer(httpPort, all);
+		asyncHandlers.add(new SyncHandlerAdapter(handlers));
+		return new MuServer(httpPort, asyncHandlers);
 	}
 
 	public MuServer start() throws InterruptedException {

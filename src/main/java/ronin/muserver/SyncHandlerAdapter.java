@@ -1,15 +1,16 @@
 package ronin.muserver;
 
 import java.nio.ByteBuffer;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class SyncHandlerAdapter implements AsyncMuHandler {
 
-    private final MuHandler[] muHandlers;
+    private final List<MuHandler> muHandlers;
     private final ExecutorService executor = Executors.newCachedThreadPool();
 
-    public SyncHandlerAdapter(MuHandler... muHandlers) {
+    public SyncHandlerAdapter(List<MuHandler> muHandlers) {
         this.muHandlers = muHandlers;
     }
 

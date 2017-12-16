@@ -28,7 +28,7 @@ public class NettyRequestAdapter implements MuRequest {
 
 	@Override
 	public URI serverURI() {
-		return null;
+		return uri;
 	}
 
     @Override

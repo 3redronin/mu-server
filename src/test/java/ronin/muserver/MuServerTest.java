@@ -1,10 +1,6 @@
 package ronin.muserver;
 
-import okhttp3.MediaType;
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.RequestBody;
-import okhttp3.Response;
+import okhttp3.*;
 import okio.BufferedSink;
 import org.junit.Test;
 
@@ -13,7 +9,6 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 import static java.util.Arrays.asList;
 import static org.hamcrest.CoreMatchers.is;
@@ -23,141 +18,129 @@ import static ronin.muserver.MuServerBuilder.muServer;
 
 public class MuServerTest {
 
-    private final OkHttpClient client = new OkHttpClient();
+	private final OkHttpClient client = new OkHttpClient();
 
-    @Test
-    public void syncHandlersSupported() throws IOException, InterruptedException {
-        List<String> handlersHit = new ArrayList<>();
-        MuServer muServer = muServer()
-                .withHttpConnection(12808)
-                .withHandlers(
-                        (request, response) -> {
-                            handlersHit.add("Logger");
-                            System.out.println("Got " + request);
-                            return false;
-                        },
-                        route(HttpMethod.GET, "/blah", (request, response) -> {
-                            handlersHit.add("BlahHandler");
-                            System.out.println("Running sync handler");
-                            response.status(202);
-                            response.write("This is a test");
-                            System.out.println("Sync handler complete");
-                            return true;
-                        }),
-                        ((request, response) -> {
-                            handlersHit.add("LastHandler");
-                            return true;
-                        })
-                )
-                .start();
+	@Test
+	public void syncHandlersSupported() throws IOException, InterruptedException {
+		List<String> handlersHit = new ArrayList<>();
 
-        Response resp = client.newCall(new Request.Builder()
-                .url("http://localhost:12808/blah")
-                .build()).execute();
+		MuServer muServer = muServer()
+				.withHttpConnection(12808)
+				.addHandler((request, response) -> {
+					handlersHit.add("Logger");
+					System.out.println("Got " + request);
+					return false;
+				})
+				.addHandler(HttpMethod.GET, "/blah", (request, response) -> {
+					handlersHit.add("BlahHandler");
+					System.out.println("Running sync handler");
+					response.status(202);
+					response.write("This is a test");
+					System.out.println("Sync handler complete");
+					return true;
+				})
+				.addHandler((request, response) -> {
+					handlersHit.add("LastHandler");
+					return true;
+				})
+				.start();
 
-        muServer.stop();
+		Response resp = client.newCall(new Request.Builder()
+				.url("http://localhost:12808/blah")
+				.build()).execute();
 
-        assertThat(resp.code(), is(202));
-        assertThat(resp.body().string(), equalTo("This is a test"));
-        assertThat(handlersHit, equalTo(asList("Logger", "BlahHandler")));
-    }
+		muServer.stop();
 
-    @Test
-    public void asyncHandlersSupported() throws IOException, InterruptedException {
-        MuServer muServer = muServer()
-                .withHttpConnection(12808)
-                .withAsyncHandlers(
-                        new AsyncMuHandler() {
-                            public boolean onHeaders(AsyncContext ctx) throws Exception {
-                                System.out.println("I am a logging handler and saw " + ctx.request);
-                                return false;
-                            }
+		assertThat(resp.code(), is(202));
+		assertThat(resp.body().string(), equalTo("This is a test"));
+		assertThat(handlersHit, equalTo(asList("Logger", "BlahHandler")));
+	}
 
-                            public void onRequestData(AsyncContext ctx, ByteBuffer buffer) throws Exception {
-                            }
+	@Test
+	public void asyncHandlersSupported() throws IOException, InterruptedException {
+		MuServer muServer = muServer()
+				.withHttpConnection(12808)
+				.addAsyncHandler(new AsyncMuHandler() {
+					public boolean onHeaders(AsyncContext ctx) throws Exception {
+						System.out.println("I am a logging handler and saw " + ctx.request);
+						return false;
+					}
 
-                            public void onRequestComplete(AsyncContext ctx) {
-                            }
-                        },
-                        new AsyncMuHandler() {
-                            @Override
-                            public boolean onHeaders(AsyncContext ctx) throws Exception {
-                                System.out.println("Request starting");
-                                ctx.response.status(201);
-                                return true;
-                            }
+					public void onRequestData(AsyncContext ctx, ByteBuffer buffer) throws Exception {
+					}
 
-                            @Override
-                            public void onRequestData(AsyncContext ctx, ByteBuffer buffer) throws Exception {
-                                String text = StandardCharsets.UTF_8.decode(buffer).toString();
-                                System.out.println("Got: " + text);
-                                ctx.response.writeAsync(text);
-                            }
+					public void onRequestComplete(AsyncContext ctx) {
+					}
+				})
+				.addAsyncHandler(new AsyncMuHandler() {
+					@Override
+					public boolean onHeaders(AsyncContext ctx) throws Exception {
+						System.out.println("Request starting");
+						ctx.response.status(201);
+						return true;
+					}
 
-                            @Override
-                            public void onRequestComplete(AsyncContext ctx) {
-                                System.out.println("Request complete");
-                                ctx.complete();
-                            }
-                        },
-                        new AsyncMuHandler() {
-                            public boolean onHeaders(AsyncContext ctx) throws Exception {
-                                throw new RuntimeException("This should never get here");
-                            }
+					@Override
+					public void onRequestData(AsyncContext ctx, ByteBuffer buffer) throws Exception {
+						String text = StandardCharsets.UTF_8.decode(buffer).toString();
+						System.out.println("Got: " + text);
+						ctx.response.writeAsync(text);
+					}
 
-                            public void onRequestData(AsyncContext ctx, ByteBuffer buffer) throws Exception {
-                            }
+					@Override
+					public void onRequestComplete(AsyncContext ctx) {
+						System.out.println("Request complete");
+						ctx.complete();
+					}
+				})
+				.addAsyncHandler(new AsyncMuHandler() {
+					public boolean onHeaders(AsyncContext ctx) throws Exception {
+						throw new RuntimeException("This should never get here");
+					}
 
-                            public void onRequestComplete(AsyncContext ctx) {
-                            }
-                        })
-                .start();
+					public void onRequestData(AsyncContext ctx, ByteBuffer buffer) throws Exception {
+					}
 
-        StringBuffer expected = new StringBuffer();
+					public void onRequestComplete(AsyncContext ctx) {
+					}
+				})
+				.start();
 
-        Response resp = client.newCall(new Request.Builder()
-                .url("http://localhost:12808")
-                .post(largeRequestBody(expected))
-                .build()).execute();
+		StringBuffer expected = new StringBuffer();
 
-        muServer.stop();
+		Response resp = client.newCall(new Request.Builder()
+				.url("http://localhost:12808")
+				.post(largeRequestBody(expected))
+				.build()).execute();
 
-        assertThat(resp.code(), is(201));
-        assertThat(resp.body().string(), equalTo(expected.toString()));
-    }
+		muServer.stop();
 
-    private static RequestBody largeRequestBody(StringBuffer expected) throws IOException {
-        return new RequestBody() {
-            @Override
-            public MediaType contentType() {
-                return MediaType.parse("text/plain");
-            }
+		assertThat(resp.code(), is(201));
+		assertThat(resp.body().string(), equalTo(expected.toString()));
+	}
 
-            @Override
-            public void writeTo(BufferedSink sink) throws IOException {
-                write(sink, "Numbers\n");
-                write(sink, "-------\n");
-                for (int i = 2; i <= 997; i++) {
-                    write(sink, String.format(" * %s\n", i));
-                }
-            }
+	private static RequestBody largeRequestBody(StringBuffer expected) throws IOException {
+		return new RequestBody() {
+			@Override
+			public MediaType contentType() {
+				return MediaType.parse("text/plain");
+			}
 
-            private void write(BufferedSink sink, String s) throws IOException {
-                expected.append(s);
-                sink.writeUtf8(s);
-            }
+			@Override
+			public void writeTo(BufferedSink sink) throws IOException {
+				write(sink, "Numbers\n");
+				write(sink, "-------\n");
+				for (int i = 2; i <= 997; i++) {
+					write(sink, String.format(" * %s\n", i));
+				}
+			}
 
-        };
-    }
+			private void write(BufferedSink sink, String s) throws IOException {
+				expected.append(s);
+				sink.writeUtf8(s);
+			}
 
-    private static MuHandler route(HttpMethod method, String path, MuHandler muHandler) {
-        return (request, response) -> {
-            boolean methodMatches = method == null || method.equals(request.method());
-            if (methodMatches && request.uri().getPath().matches(path)) {
-                return muHandler.handle(request, response);
-            }
-            return false;
-        };
-    }
+		};
+	}
 
 }
