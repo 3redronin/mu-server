@@ -10,15 +10,17 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.http.HttpRequestDecoder;
 import io.netty.handler.codec.http.HttpResponseEncoder;
 
+import java.util.List;
+
 public class MuServer {
 
 	private int httpPort;
-	private final MuHandler[] handlers;
+	private final List<AsyncMuHandler> handlers;
 	private NioEventLoopGroup bossGroup;
 	private NioEventLoopGroup workerGroup;
 	private Channel channel;
 
-	MuServer(int httpPort, MuHandler[] handlers) {
+	MuServer(int httpPort, List<AsyncMuHandler> handlers) {
 		this.httpPort = httpPort;
 		this.handlers = handlers;
 	}

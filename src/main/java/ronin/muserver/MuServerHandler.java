@@ -6,22 +6,23 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.*;
 
 import java.nio.ByteBuffer;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 
 class MuServerHandler extends SimpleChannelInboundHandler<Object> {
-	private final MuHandler[] handlers;
+	private final List<AsyncMuHandler> handlers;
 	private final ConcurrentHashMap<ChannelHandlerContext, State> state = new ConcurrentHashMap<>();
 
-	public MuServerHandler(MuHandler[] handlers) {
+	public MuServerHandler(List<AsyncMuHandler> handlers) {
 		this.handlers = handlers;
 	}
 
 	private static final class State {
 		public final AsyncContext asyncContext;
-		public final MuHandler handler;
-		private State(AsyncContext asyncContext, MuHandler handler) {
+		public final AsyncMuHandler handler;
+		private State(AsyncContext asyncContext, AsyncMuHandler handler) {
 			this.asyncContext = asyncContext;
 			this.handler = handler;
 		}
@@ -37,7 +38,7 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
 			boolean handled = false;
 			AsyncContext asyncContext = new AsyncContext(new NettyRequestAdapter(ctx, request), new NettyResponseAdaptor(ctx, response));
 
-			for (MuHandler handler : handlers) {
+			for (AsyncMuHandler handler : handlers) {
 				handled = handler.onHeaders(asyncContext);
 				if (handled) {
 					state.put(ctx, new State(asyncContext, handler));

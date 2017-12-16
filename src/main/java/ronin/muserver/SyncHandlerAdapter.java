@@ -4,17 +4,13 @@ import java.nio.ByteBuffer;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public class SyncHandlerAdapter implements MuHandler {
+public class SyncHandlerAdapter implements AsyncMuHandler {
 
-    private final SyncHandler syncHandler;
+    private final MuHandler[] muHandlers;
     private final ExecutorService executor = Executors.newCachedThreadPool();
 
-    public static MuHandler syncHandler(SyncHandler syncHandler) {
-        return new SyncHandlerAdapter(syncHandler);
-    }
-
-    public SyncHandlerAdapter(SyncHandler syncHandler) {
-        this.syncHandler = syncHandler;
+    public SyncHandlerAdapter(MuHandler... muHandlers) {
+        this.muHandlers = muHandlers;
     }
 
 
@@ -29,7 +25,12 @@ public class SyncHandlerAdapter implements MuHandler {
     public void onRequestComplete(AsyncContext ctx) {
         executor.submit(() -> {
             try {
-                syncHandler.handle(ctx.request, ctx.response);
+                for (MuHandler muHandler : muHandlers) {
+                    boolean handled = muHandler.handle(ctx.request, ctx.response);
+                    if (handled) {
+                        break;
+                    }
+                }
             } catch (Exception ex) {
                 System.out.println("Error from handler: " + ex.getMessage());
                 ex.printStackTrace();
