@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public class SyncHandlerAdapter implements AsyncMuHandler {
+class SyncHandlerAdapter implements AsyncMuHandler {
 
     private final List<MuHandler> muHandlers;
     private final ExecutorService executor = Executors.newCachedThreadPool();
