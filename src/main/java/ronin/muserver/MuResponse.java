@@ -18,12 +18,15 @@ public interface MuResponse {
 
 	Future<Void> writeAsync(String text);
 	void write(String text);
+
+	Headers headers();
 }
 
 class NettyResponseAdaptor implements MuResponse {
 	private final ChannelHandlerContext ctx;
 	private final HttpResponse response;
 	private volatile boolean headersWritten = false;
+	private final Headers headers = new Headers();
 
 	public NettyResponseAdaptor(ChannelHandlerContext ctx, HttpResponse response) {
 		this.ctx = ctx;
@@ -41,10 +44,12 @@ class NettyResponseAdaptor implements MuResponse {
 			throw new IllegalStateException("Cannot set the status after the headers have already been sent");
 		}
 		response.setStatus(HttpResponseStatus.valueOf(value));
+
 	}
 
 	private ChannelFuture writeResponseHeaders() {
 		headersWritten = true;
+		response.headers().add(headers.nettyHeaders());
 		return ctx.write(response);
 	}
 
@@ -59,6 +64,11 @@ class NettyResponseAdaptor implements MuResponse {
 	@Override
 	public void write(String text) {
 		writeAsync(text);
+	}
+
+	@Override
+	public Headers headers() {
+		return headers;
 	}
 
 	public Future<Void> complete() {

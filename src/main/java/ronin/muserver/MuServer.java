@@ -10,6 +10,9 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.http.HttpRequestDecoder;
 import io.netty.handler.codec.http.HttpResponseEncoder;
 
+import java.net.InetSocketAddress;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.util.List;
 
 public class MuServer {
@@ -19,6 +22,7 @@ public class MuServer {
 	private NioEventLoopGroup bossGroup;
 	private NioEventLoopGroup workerGroup;
 	private Channel channel;
+	private URL url;
 
 	MuServer(int httpPort, List<AsyncMuHandler> handlers) {
 		this.httpPort = httpPort;
@@ -34,7 +38,6 @@ public class MuServer {
 		ServerBootstrap b = new ServerBootstrap();
 		b.group(bossGroup, workerGroup)
 				.channel(NioServerSocketChannel.class)
-//				.handler(new LoggingHandler(LogLevel.INFO))
 				.childHandler(new ChannelInitializer<SocketChannel>() {
 					@Override
 					protected void initChannel(SocketChannel socketChannel) throws Exception {
@@ -45,6 +48,12 @@ public class MuServer {
 					}
 				});
 		channel = b.bind(httpPort).sync().channel();
+		InetSocketAddress a = (InetSocketAddress) channel.localAddress();
+		try {
+			this.url = new URL("http", "localhost", a.getPort(), "");
+		} catch (MalformedURLException e) {
+			throw new RuntimeException("Could not create URL", e);
+		}
 	}
 
 	public void stop() throws InterruptedException {
@@ -53,4 +62,7 @@ public class MuServer {
 		workerGroup.shutdownGracefully();
 	}
 
+	public URL url() {
+		return url;
+	}
 }

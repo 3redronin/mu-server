@@ -48,6 +48,7 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
 			if (!handled) {
 				System.out.println("No handler found");
 				asyncContext.response.status(404);
+				asyncContext.complete();
 			}
 
 		} else if (msg instanceof HttpContent) {

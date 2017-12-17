@@ -10,6 +10,7 @@ public interface MuRequest {
 	HttpMethod method();
 	URI uri();
 	URI serverURI();
+	Headers headers();
 
 }
 
@@ -17,11 +18,13 @@ class NettyRequestAdapter implements MuRequest {
 	private final HttpRequest request;
 	private final URI uri;
 	private final HttpMethod method;
+	private final Headers headers;
 
 	public NettyRequestAdapter(ChannelHandlerContext ctx, HttpRequest request) {
 		this.request = request;
 		this.uri = URI.create(request.uri());
 		this.method = HttpMethod.fromNetty(request.method());
+		this.headers = new Headers(request.headers());
 	}
 
 	@Override
@@ -37,6 +40,11 @@ class NettyRequestAdapter implements MuRequest {
 	@Override
 	public URI serverURI() {
 		return uri;
+	}
+
+	@Override
+	public Headers headers() {
+		return headers;
 	}
 
 	@Override

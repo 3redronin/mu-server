@@ -27,7 +27,9 @@ public class MuServerBuilder {
 
 
 	public MuServer build() {
-		asyncHandlers.add(new SyncHandlerAdapter(handlers));
+		if (!handlers.isEmpty()) {
+			asyncHandlers.add(new SyncHandlerAdapter(handlers));
+		}
 		return new MuServer(httpPort, asyncHandlers);
 	}
 

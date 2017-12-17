@@ -21,6 +21,18 @@ public class MuServerTest {
 	private final OkHttpClient client = new OkHttpClient();
 
 	@Test
+	public void portZeroCanBeUsed() throws Exception {
+		MuServer server = muServer().start();
+
+		Response resp = client.newCall(new Request.Builder()
+				.url(server.url())
+				.build()).execute();
+
+		server.stop();
+		assertThat(resp.code(), is(404));
+	}
+
+	@Test
 	public void syncHandlersSupported() throws IOException, InterruptedException {
 		List<String> handlersHit = new ArrayList<>();
 
