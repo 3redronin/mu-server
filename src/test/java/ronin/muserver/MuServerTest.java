@@ -1,8 +1,9 @@
 package ronin.muserver;
 
 import okhttp3.*;
-import okio.BufferedSink;
+import org.junit.After;
 import org.junit.Test;
+import scaffolding.ClientUtils;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -19,16 +20,16 @@ import static ronin.muserver.MuServerBuilder.muServer;
 public class MuServerTest {
 
 	private final OkHttpClient client = new OkHttpClient();
+	private MuServer server;
 
 	@Test
 	public void portZeroCanBeUsed() throws Exception {
-		MuServer server = muServer().start();
+		server = muServer().start();
 
 		Response resp = client.newCall(new Request.Builder()
 				.url(server.url())
 				.build()).execute();
 
-		server.stop();
 		assertThat(resp.code(), is(404));
 	}
 
@@ -36,7 +37,7 @@ public class MuServerTest {
 	public void syncHandlersSupported() throws IOException, InterruptedException {
 		List<String> handlersHit = new ArrayList<>();
 
-		MuServer muServer = muServer()
+		server = muServer()
 				.withHttpConnection(12808)
 				.addHandler((request, response) -> {
 					handlersHit.add("Logger");
@@ -61,7 +62,6 @@ public class MuServerTest {
 				.url("http://localhost:12808/blah")
 				.build()).execute();
 
-		muServer.stop();
 
 		assertThat(resp.code(), is(202));
 		assertThat(resp.body().string(), equalTo("This is a test"));
@@ -70,7 +70,7 @@ public class MuServerTest {
 
 	@Test
 	public void asyncHandlersSupported() throws IOException, InterruptedException {
-		MuServer muServer = muServer()
+		server = muServer()
 				.withHttpConnection(12808)
 				.addAsyncHandler(new AsyncMuHandler() {
 					public boolean onHeaders(AsyncContext ctx) throws Exception {
@@ -122,37 +122,19 @@ public class MuServerTest {
 
 		Response resp = client.newCall(new Request.Builder()
 				.url("http://localhost:12808")
-				.post(largeRequestBody(expected))
+				.post(ClientUtils.largeRequestBody(expected))
 				.build()).execute();
 
-		muServer.stop();
 
 		assertThat(resp.code(), is(201));
 		assertThat(resp.body().string(), equalTo(expected.toString()));
 	}
 
-	private static RequestBody largeRequestBody(StringBuffer expected) throws IOException {
-		return new RequestBody() {
-			@Override
-			public MediaType contentType() {
-				return MediaType.parse("text/plain");
-			}
-
-			@Override
-			public void writeTo(BufferedSink sink) throws IOException {
-				write(sink, "Numbers\n");
-				write(sink, "-------\n");
-				for (int i = 2; i <= 997; i++) {
-					write(sink, String.format(" * %s\n", i));
-				}
-			}
-
-			private void write(BufferedSink sink, String s) throws IOException {
-				expected.append(s);
-				sink.writeUtf8(s);
-			}
-
-		};
+	@After
+	public void stopIt() throws InterruptedException {
+		if (server != null) {
+			server.stop();
+		}
 	}
 
 }

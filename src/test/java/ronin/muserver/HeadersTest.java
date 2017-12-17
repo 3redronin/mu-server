@@ -3,6 +3,7 @@ package ronin.muserver;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
+import org.junit.After;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -16,10 +17,11 @@ import static ronin.muserver.MuServerBuilder.muServer;
 public class HeadersTest {
 
 	private final OkHttpClient client = new OkHttpClient();
+	private MuServer server;
 
 	@Test
 	public void canGetAndSetThem() throws InterruptedException, IOException {
-		MuServer server = muServer()
+		server = muServer()
 				.addHandler((request, response) -> {
 					for (Map.Entry<String, String> entry : request.headers()) {
 						System.out.println(entry);
@@ -36,10 +38,13 @@ public class HeadersTest {
 				.url(server.url())
 				.build()).execute();
 
-
-		server.stop();
-
 		assertThat(resp.header("X-Response"), equalTo(randomValue));
+	}
 
+	@After
+	public void stopIt() throws InterruptedException {
+		if (server != null) {
+			server.stop();
+		}
 	}
 }
