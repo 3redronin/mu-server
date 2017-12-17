@@ -31,11 +31,11 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
 	@Override
 	protected void channelRead0(ChannelHandlerContext ctx, Object msg) throws Exception {
 		if (msg instanceof HttpRequest) {
-			System.out.println("Got request");
 			HttpRequest request = (HttpRequest) msg;
 			HttpResponse response = new DefaultHttpResponse(HTTP_1_1, HttpResponseStatus.OK);
 
 			boolean handled = false;
+
 			AsyncContext asyncContext = new AsyncContext(new NettyRequestAdapter(ctx, request), new NettyResponseAdaptor(ctx, response));
 
 			for (AsyncMuHandler handler : handlers) {
@@ -56,6 +56,7 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
 			State state = this.state.get(ctx);
 			if (state == null) {
 				// ummmmmm
+				System.out.println("Got a chunk of message for an unknown request");
 			} else {
 				ByteBuf byteBuf = content.content();
 				if (byteBuf.capacity() > 0) {
