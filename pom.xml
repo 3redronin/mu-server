@@ -27,6 +27,11 @@
         <url>https://github.com/3redronin/mu-server/issues</url>
     </issueManagement>
 
+    <ciManagement>
+        <system>travis-ci</system>
+        <url>https://travis-ci.org/3redronin/mu-server</url>
+    </ciManagement>
+
 
     <dependencies>
         <dependency>
