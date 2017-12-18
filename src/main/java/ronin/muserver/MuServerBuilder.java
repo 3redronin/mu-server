@@ -33,9 +33,13 @@ public class MuServerBuilder {
 		return new MuServer(httpPort, asyncHandlers);
 	}
 
-	public MuServer start() throws InterruptedException {
+	public MuServer start() {
 		MuServer server = build();
-		server.start();
+		try {
+			server.start();
+		} catch (InterruptedException e) {
+			throw new MuException("Abandoning startup of MuServer due to interruption", e);
+		}
 		return server;
 	}
 

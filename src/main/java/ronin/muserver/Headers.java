@@ -8,6 +8,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static io.netty.util.internal.ObjectUtil.checkNotNull;
+
 public class Headers implements Iterable<Map.Entry<String, String>> {
 
 	private final HttpHeaders entries;
@@ -15,6 +17,7 @@ public class Headers implements Iterable<Map.Entry<String, String>> {
 	public Headers() {
 		this(new DefaultHttpHeaders());
 	}
+
 	Headers(HttpHeaders entries) {
 		this.entries = entries;
 	}
@@ -115,8 +118,10 @@ public class Headers implements Iterable<Map.Entry<String, String>> {
 		return this;
 	}
 
-	public Headers add(HttpHeaders headers) {
-		entries.add(headers);
+	public Headers add(Headers headers) {
+		for (Map.Entry<String, String> e : headers) {
+			add(e.getKey(), e.getValue());
+		}
 		return this;
 	}
 
@@ -150,13 +155,20 @@ public class Headers implements Iterable<Map.Entry<String, String>> {
 		return this;
 	}
 
-	public Headers set(HttpHeaders headers) {
-		entries.set(headers);
+	public Headers set(Headers headers) {
+		checkNotNull(headers, "headers");
+		clear();
+		for (Map.Entry<String, String> entry : headers) {
+			add(entry.getKey(), entry.getValue());
+		}
 		return this;
 	}
 
-	public Headers setAll(HttpHeaders headers) {
-		entries.setAll(headers);
+	public Headers setAll(Headers headers) {
+		checkNotNull(headers, "headers");
+		for (Map.Entry<String, String> entry : headers) {
+			set(entry.getKey(), entry.getValue());
+		}
 		return this;
 	}
 

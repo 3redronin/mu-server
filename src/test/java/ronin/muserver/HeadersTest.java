@@ -5,6 +5,7 @@ import okhttp3.Request;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
+import scaffolding.StringUtils;
 
 import java.io.IOException;
 import java.util.Map;
@@ -39,6 +40,25 @@ public class HeadersTest {
 				.build()).execute();
 
 		assertThat(resp.header("X-Response"), equalTo(randomValue));
+	}
+
+	@Test
+	public void largeHeadersAreFine() throws IOException {
+		server = muServer()
+				.addHandler((request, response) -> {
+					response.headers().add(request.headers());
+					return true;
+				}).start();
+
+
+		String randomValue = StringUtils.randomString(8000);
+
+		Response resp = client.newCall(new Request.Builder()
+				.header("X-Something", randomValue)
+				.url(server.url())
+				.build()).execute();
+
+		assertThat(resp.header("X-Something"), equalTo(randomValue));
 	}
 
 	@After

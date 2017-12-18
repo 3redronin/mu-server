@@ -12,6 +12,7 @@ import io.netty.handler.codec.http.HttpResponseEncoder;
 
 import java.net.InetSocketAddress;
 import java.net.MalformedURLException;
+import java.net.URI;
 import java.net.URL;
 import java.util.List;
 
@@ -22,7 +23,7 @@ public class MuServer {
 	private NioEventLoopGroup bossGroup;
 	private NioEventLoopGroup workerGroup;
 	private Channel channel;
-	private URL url;
+	private URI uri;
 
 	MuServer(int httpPort, List<AsyncMuHandler> handlers) {
 		this.httpPort = httpPort;
@@ -49,11 +50,7 @@ public class MuServer {
 				});
 		channel = b.bind(httpPort).sync().channel();
 		InetSocketAddress a = (InetSocketAddress) channel.localAddress();
-		try {
-			this.url = new URL("http", "localhost", a.getPort(), "");
-		} catch (MalformedURLException e) {
-			throw new RuntimeException("Could not create URL", e);
-		}
+		this.uri = URI.create("http://localhost:" + a.getPort());
 	}
 
 	public void stop() throws InterruptedException {
@@ -63,6 +60,13 @@ public class MuServer {
 	}
 
 	public URL url() {
-		return url;
+		try {
+			return uri.toURL();
+		} catch (MalformedURLException e) {
+			throw new RuntimeException(e);
+		}
+	}
+	public URI uri() {
+		return uri;
 	}
 }
