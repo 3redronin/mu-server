@@ -65,7 +65,7 @@ public interface MuRequest {
 
 	/**
 	 * Gets the querystring value with the given name, or empty string if there is no parameter with that name.
-	 * <p/>
+	 * <p>
 	 * If there are multiple parameters with the same name, the first one is returned.
 	 */
 	String getParameter(String name);
