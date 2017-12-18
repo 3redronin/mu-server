@@ -1,6 +1,7 @@
 package ronin.muserver;
 
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpRequest;
 
 import java.io.IOException;
@@ -56,6 +57,7 @@ public interface MuRequest {
 
 class NettyRequestAdapter implements MuRequest {
 	private final HttpRequest request;
+	private final URI serverUri;
 	private final URI uri;
 	private final HttpMethod method;
 	private final Headers headers;
@@ -63,9 +65,20 @@ class NettyRequestAdapter implements MuRequest {
 
 	public NettyRequestAdapter(ChannelHandlerContext ctx, HttpRequest request) {
 		this.request = request;
-		this.uri = URI.create(request.uri());
+		String proto = "http"; // TODO: figure this out based on the request or current channel
+		this.serverUri = URI.create(proto + "://" + request.headers().get("Host") + request.uri());
+		this.uri = getUri(request, serverUri);
 		this.method = HttpMethod.fromNetty(request.method());
 		this.headers = new Headers(request.headers());
+	}
+
+	private static URI getUri(HttpRequest request, URI serverUri) {
+		HttpHeaders h = request.headers();
+		String proto = h.get("X-Forwarded-Proto", serverUri.getScheme());
+		String host = h.get("X-Forwarded-Host", serverUri.getHost());
+		int port = h.getInt("X-Forwarded-Port", serverUri.getPort());
+		String portString = (port != 80 && port != 443) ? ":" + port : "";
+		return URI.create(proto + "://" + host + portString + request.uri());
 	}
 
 	@Override
@@ -80,7 +93,7 @@ class NettyRequestAdapter implements MuRequest {
 
 	@Override
 	public URI serverURI() {
-		return uri;
+		return serverUri;
 	}
 
 	@Override

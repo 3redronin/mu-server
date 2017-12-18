@@ -1,6 +1,7 @@
 package scaffolding;
 
 import okhttp3.MediaType;
+import okhttp3.Request;
 import okhttp3.RequestBody;
 import okio.BufferedSink;
 
@@ -29,5 +30,9 @@ public class ClientUtils {
 			}
 
 		};
+	}
+
+	public static Request.Builder request() {
+		return new Request.Builder();
 	}
 }

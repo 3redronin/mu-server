@@ -4,9 +4,11 @@ import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
 import org.junit.After;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.net.URI;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -15,6 +17,7 @@ import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.IsEqual.equalTo;
 import static ronin.muserver.MuServerBuilder.muServer;
+import static scaffolding.ClientUtils.request;
 import static scaffolding.StringUtils.randomString;
 
 public class HeadersTest {
@@ -33,10 +36,9 @@ public class HeadersTest {
 
 		String randomValue = UUID.randomUUID().toString();
 
-		Response resp = client.newCall(new Request.Builder()
+		Response resp = call(request()
 				.header("X-Something", randomValue)
-				.url(server.url())
-				.build()).execute();
+				.url(server.url()));
 
 		assertThat(resp.header("X-Response"), equalTo(randomValue));
 	}
@@ -58,10 +60,9 @@ public class HeadersTest {
 				.start();
 
 
-		Response resp = client.newCall(new Request.Builder()
+		Response resp = call(request()
 				.header("X-Something", "OriginalValue")
-				.url(server.url())
-				.build()).execute();
+				.url(server.url()));
 
 		assertThat(resp.header("X-Response"), equalTo(randomValue));
 	}
@@ -76,10 +77,9 @@ public class HeadersTest {
 				}).start();
 
 		String randomValue = randomString(32000);
-		Response resp = client.newCall(new Request.Builder()
+		Response resp = call(request()
 				.header("X-Something", randomValue)
-				.url(server.url())
-				.build()).execute();
+				.url(server.url()));
 		assertThat(resp.header("X-Something"), equalTo(randomValue));
 	}
 
@@ -94,9 +94,8 @@ public class HeadersTest {
 					return true;
 				}).start();
 
-		Response resp = client.newCall(new Request.Builder()
-				.url(server.uri().resolve("/this-is-much-longer-than-that-value-allowed-by-the-config-above-i-think").toURL())
-				.build()).execute();
+		Response resp = call(request()
+				.url(server.uri().resolve("/this-is-much-longer-than-that-value-allowed-by-the-config-above-i-think").toURL()));
 		assertThat(resp.code(), is(414));
 		assertThat(handlerHit.get(), is(false));
 	}
@@ -111,12 +110,37 @@ public class HeadersTest {
 				}).start();
 
 		String randomValue = randomString(1025);
-		Response resp = client.newCall(new Request.Builder()
+		Response resp = call(request()
 				.header("X-Something", randomValue)
-				.url(server.url())
-				.build()).execute();
-		assertThat(resp.code(), is(431)); // TODO why isn't Netty complaining?
+				.url(server.url()));
+		assertThat(resp.code(), is(431));
 		assertThat(resp.header("X-Something"), is(nullValue()));
+	}
+
+	@Test
+	@Ignore("Doesn't work because the request URIs are not currently absolute")
+	public void ifXForwardedHeadersAreSpecifiedThenRequestUriUsesThem() throws IOException {
+		URI[] actual = new URI[2];
+		server = muServer()
+				.withHttpConnection(12752)
+				.withMaxHeadersSize(1024)
+				.addHandler((request, response) -> {
+					actual[0] = request.uri();
+					actual[1] = request.serverURI();
+					return true;
+				}).start();
+
+		call(request()
+				.header("X-Forwarded-Proto", "https")
+				.header("X-Forwarded-Host", "www.example.org")
+				.header("X-Forwarded-Port", "443")
+				.url(server.uri().resolve("/blah?query=value").toString()));
+		assertThat(actual[1].toString(), equalTo("http://localhost:12752/blah?query=value"));
+		assertThat(actual[0].toString(), equalTo("https://www.example.org/blah?query=value"));
+	}
+
+	private Response call(Request.Builder request) throws IOException {
+		return client.newCall(request.build()).execute();
 	}
 
 	@After
