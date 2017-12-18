@@ -60,6 +60,7 @@ public interface MuRequest {
 
 	/**
 	 * Gets the path of the URL, e.g. for <code>https://www.example.org/some/path.html?value=a</code> it returns <code>/some/path.html</code>
+     * @return The path that was requested
 	 */
 	String getPath();
 
