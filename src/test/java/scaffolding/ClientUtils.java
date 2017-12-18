@@ -7,7 +7,7 @@ import okio.BufferedSink;
 import java.io.IOException;
 
 public class ClientUtils {
-	public static RequestBody largeRequestBody(StringBuffer expected) throws IOException {
+	public static RequestBody largeRequestBody(StringBuffer sentData) throws IOException {
 		return new RequestBody() {
 			@Override
 			public MediaType contentType() {
@@ -24,7 +24,7 @@ public class ClientUtils {
 			}
 
 			private void write(BufferedSink sink, String s) throws IOException {
-				expected.append(s);
+				sentData.append(s);
 				sink.writeUtf8(s);
 			}
 

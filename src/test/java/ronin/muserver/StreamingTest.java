@@ -5,6 +5,7 @@ import okhttp3.Request;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
+import scaffolding.ClientUtils;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -12,6 +13,7 @@ import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.util.concurrent.CountDownLatch;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
@@ -29,10 +31,10 @@ public class StreamingTest {
 		server = muServer()
 				.addHandler((request, response) -> {
 					try (OutputStream outputStream = response.outputStream(4)) {
-						outputStream.write(new byte[] {1, 2, 3, 4});
+						outputStream.write(new byte[]{1, 2, 3, 4});
 						latch.await();
-						outputStream.write(new byte[] {5, 6});
-						outputStream.write(new byte[] {7});
+						outputStream.write(new byte[]{5, 6});
+						outputStream.write(new byte[]{7});
 						latch2.await();
 						outputStream.flush();
 					}
@@ -63,7 +65,7 @@ public class StreamingTest {
 	}
 
 	@Test
-	public void textCanBeWrittenWithThePrintWriter() throws InterruptedException, IOException {
+	public void textCanBeWrittenWithThePrintWriter() throws Exception {
 		server = muServer()
 				.addHandler((request, response) -> {
 					try (PrintWriter writer = response.writer()) {
@@ -79,6 +81,34 @@ public class StreamingTest {
 
 		String actual = resp.body().string();
 		assertThat(actual, equalTo(String.format("Hello, world%nWhat's happening?")));
+	}
+
+	@Test
+	public void requestDataCanBeReadFromTheInputStream() throws Exception {
+		server = muServer()
+				.addHandler((request, response) -> {
+					try (InputStream in = request.inputStream();
+					     OutputStream out = response.outputStream()) {
+						byte[] buffer = new byte[128];
+						int read;
+						while ((read = in.read(buffer)) > -1) {
+							System.out.println("Read " + read + " - " + new String(buffer, 0, read, UTF_8).replace("\n", " "));
+							Thread.sleep(10);
+							out.write(buffer, 0, read);
+						}
+						out.flush();
+					}
+					return true;
+				}).start();
+
+		StringBuffer sentData = new StringBuffer();
+		Response resp = client.newCall(new Request.Builder()
+				.post(ClientUtils.largeRequestBody(sentData))
+				.url(server.url())
+				.build()).execute();
+
+		String actual = new String(resp.body().bytes(), UTF_8);
+		assertThat(actual, equalTo(sentData.toString()));
 	}
 
 	@After

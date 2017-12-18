@@ -3,6 +3,7 @@ package ronin.muserver;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.HttpRequest;
 
+import java.io.InputStream;
 import java.net.URI;
 
 public interface MuRequest {
@@ -11,6 +12,7 @@ public interface MuRequest {
 	URI uri();
 	URI serverURI();
 	Headers headers();
+	InputStream inputStream();
 
 }
 
@@ -19,6 +21,7 @@ class NettyRequestAdapter implements MuRequest {
 	private final URI uri;
 	private final HttpMethod method;
 	private final Headers headers;
+	private InputStream inputStream;
 
 	public NettyRequestAdapter(ChannelHandlerContext ctx, HttpRequest request) {
 		this.request = request;
@@ -45,6 +48,15 @@ class NettyRequestAdapter implements MuRequest {
 	@Override
 	public Headers headers() {
 		return headers;
+	}
+
+	@Override
+	public InputStream inputStream() {
+		return inputStream;
+	}
+
+	void inputStream(InputStream stream) {
+		this.inputStream = stream;
 	}
 
 	@Override

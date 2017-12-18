@@ -85,7 +85,7 @@ class NettyResponseAdaptor implements MuResponse {
 	@Override
 	public OutputStream outputStream(int bufferSizeInBytes) {
 		ensureHeadersWritten();
-		return new BufferedOutputStream(new NettyResponseOutputStream(ctx), bufferSizeInBytes);
+		return new BufferedOutputStream(new ChannelOutputStream(ctx), bufferSizeInBytes);
 	}
 
 	@Override

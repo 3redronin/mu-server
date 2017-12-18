@@ -7,10 +7,10 @@ import io.netty.handler.codec.http.DefaultHttpContent;
 import java.io.IOException;
 import java.io.OutputStream;
 
-class NettyResponseOutputStream extends OutputStream {
+class ChannelOutputStream extends OutputStream {
 	private ChannelHandlerContext ctx;
 
-	NettyResponseOutputStream(ChannelHandlerContext ctx) {
+	ChannelOutputStream(ChannelHandlerContext ctx) {
 		this.ctx = ctx;
 	}
 

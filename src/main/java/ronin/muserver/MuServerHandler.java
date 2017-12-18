@@ -60,7 +60,8 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
 			} else {
 				ByteBuf byteBuf = content.content();
 				if (byteBuf.capacity() > 0) {
-					ByteBuffer byteBuffer = byteBuf.nioBuffer();
+					// TODO: why does the buffer need to be copied?
+					ByteBuffer byteBuffer = byteBuf.copy().nioBuffer();
 					state.handler.onRequestData(state.asyncContext, byteBuffer);
 				}
 				if (msg instanceof LastHttpContent) {
