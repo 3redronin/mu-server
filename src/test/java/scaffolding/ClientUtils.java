@@ -37,7 +37,11 @@ public class ClientUtils {
 		return new Request.Builder();
 	}
 
-	public static Response call(Request.Builder request) throws IOException {
-		return client.newCall(request.build()).execute();
+	public static Response call(Request.Builder request) {
+		try {
+			return client.newCall(request.build()).execute();
+		} catch (IOException e) {
+			throw new RuntimeException("Error while calling " + request, e);
+		}
 	}
 }

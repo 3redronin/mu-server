@@ -3,10 +3,13 @@ package ronin.muserver;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.http.QueryStringDecoder;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
+import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -53,12 +56,31 @@ public interface MuRequest {
 	 * @throws IOException if there is an exception during reading the request, e.g. if the HTTP connection is stopped during a request
 	 */
 	String bodyAsString() throws IOException;
+
+
+	/**
+	 * Gets the path of the URL, e.g. for <code>https://www.example.org/some/path.html?value=a</code> it returns <code>/some/path.html</code>
+	 */
+	String getPath();
+
+	/**
+	 * Gets the querystring value with the given name, or empty string if there is no parameter with that name.
+	 * <p/>
+	 * If there are multiple parameters with the same name, the first one is returned.
+	 */
+	String getParameter(String name);
+
+	/**
+	 * Gets all the querystring parameters with the given name, or an empty list if none are found.
+	 */
+	List<String> getParameters(String name);
 }
 
 class NettyRequestAdapter implements MuRequest {
 	private final HttpRequest request;
 	private final URI serverUri;
 	private final URI uri;
+	private final QueryStringDecoder queryStringDecoder;
 	private final HttpMethod method;
 	private final Headers headers;
 	private InputStream inputStream;
@@ -68,6 +90,7 @@ class NettyRequestAdapter implements MuRequest {
 		String proto = "http"; // TODO: figure this out based on the request or current channel
 		this.serverUri = URI.create(proto + "://" + request.headers().get("Host") + request.uri());
 		this.uri = getUri(request, serverUri);
+		this.queryStringDecoder = new QueryStringDecoder(request.uri(), true);
 		this.method = HttpMethod.fromNetty(request.method());
 		this.headers = new Headers(request.headers());
 	}
@@ -121,6 +144,29 @@ class NettyRequestAdapter implements MuRequest {
 		} else {
 			return "";
 		}
+	}
+
+	@Override
+	public String getParameter(String name) {
+		List<String> values = queryStringDecoder.parameters().get(name);
+		if (values == null) {
+			return "";
+		}
+		return values.get(0);
+	}
+
+	@Override
+	public List<String> getParameters(String name) {
+		List<String> values = queryStringDecoder.parameters().get(name);
+		if (values == null) {
+			return Collections.emptyList();
+		}
+		return values;
+	}
+
+	@Override
+	public String getPath() {
+		return queryStringDecoder.path();
 	}
 
 	void inputStream(InputStream stream) {

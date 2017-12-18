@@ -1,6 +1,5 @@
 package ronin.muserver;
 
-import okhttp3.OkHttpClient;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
@@ -20,7 +19,6 @@ import static scaffolding.ClientUtils.*;
 
 public class MuServerTest {
 
-	private final OkHttpClient client = new OkHttpClient();
 	private MuServer server;
 
 	@Test
