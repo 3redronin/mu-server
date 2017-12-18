@@ -8,10 +8,25 @@
     <artifactId>mu-server</artifactId>
     <version>0.0-SNAPSHOT</version>
 
+    <name>mu-server</name>
+    <description>A fluent web server framework</description>
+    <url>https://github.com/3redronin/mu-server</url>
+
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <netty.version>4.1.19.Final</netty.version>
     </properties>
+
+    <scm>
+        <url>https://github.com/3redronin/mu-server</url>
+        <connection>scm:git:git@github.com:3redronin/mu-server.git</connection>
+    </scm>
+
+    <issueManagement>
+        <system>GitHub</system>
+        <url>https://github.com/3redronin/mu-server/issues</url>
+    </issueManagement>
+
 
     <dependencies>
         <dependency>
