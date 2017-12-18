@@ -34,7 +34,7 @@ public class MuServerTest {
 	}
 
 	@Test
-	public void syncHandlersSupported() throws IOException, InterruptedException {
+	public void syncHandlersSupported() throws IOException {
 		List<String> handlersHit = new ArrayList<>();
 
 		server = muServer()
@@ -69,7 +69,7 @@ public class MuServerTest {
 	}
 
 	@Test
-	public void asyncHandlersSupported() throws IOException, InterruptedException {
+	public void asyncHandlersSupported() throws IOException {
 		server = muServer()
 				.withHttpConnection(12808)
 				.addAsyncHandler(new AsyncMuHandler() {
@@ -131,7 +131,7 @@ public class MuServerTest {
 	}
 
 	@After
-	public void stopIt() throws InterruptedException {
+	public void stopIt() {
 		if (server != null) {
 			server.stop();
 		}

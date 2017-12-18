@@ -28,7 +28,7 @@ public class StreamingTest {
 	private MuServer server;
 
 	@Test
-	public void theOutputStreamBuffersBasedOnSizeAskedFor() throws InterruptedException, IOException {
+	public void theOutputStreamBuffersBasedOnSizeAskedFor() throws IOException {
 		CountDownLatch latch = new CountDownLatch(1);
 		CountDownLatch latch2 = new CountDownLatch(1);
 		server = muServer()
@@ -148,7 +148,7 @@ public class StreamingTest {
 	}
 
 	@After
-	public void stopIt() throws InterruptedException {
+	public void stopIt() {
 		if (server != null) {
 			server.stop();
 		}

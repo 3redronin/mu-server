@@ -1,5 +1,6 @@
 package ronin.muserver;
 
+import io.netty.handler.codec.HeadersUtils;
 import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.HttpHeaders;
 
@@ -227,6 +228,11 @@ public class Headers implements Iterable<Map.Entry<String, String>> {
 
 	public int hashCode() {
 		return entries.hashCode();
+	}
+
+	@Override
+	public String toString() {
+		return HeadersUtils.toString(getClass(), iteratorCharSequence(), size());
 	}
 
 	HttpHeaders nettyHeaders() {

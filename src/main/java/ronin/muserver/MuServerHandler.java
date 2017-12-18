@@ -1,15 +1,19 @@
 package ronin.muserver;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.handler.codec.TooLongFrameException;
 import io.netty.handler.codec.http.*;
 
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static io.netty.buffer.Unpooled.copiedBuffer;
 import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 class MuServerHandler extends SimpleChannelInboundHandler<Object> {
 	private final List<AsyncMuHandler> handlers;
@@ -32,23 +36,29 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
 	protected void channelRead0(ChannelHandlerContext ctx, Object msg) throws Exception {
 		if (msg instanceof HttpRequest) {
 			HttpRequest request = (HttpRequest) msg;
-			HttpResponse response = new DefaultHttpResponse(HTTP_1_1, HttpResponseStatus.OK);
 
-			boolean handled = false;
+			if (request.decoderResult().isFailure()) {
+				handleHttpRequestDecodeFailure(ctx, request.decoderResult().cause());
+			} else {
 
-			AsyncContext asyncContext = new AsyncContext(new NettyRequestAdapter(ctx, request), new NettyResponseAdaptor(ctx, response));
+				HttpResponse response = new DefaultHttpResponse(HTTP_1_1, HttpResponseStatus.OK);
 
-			for (AsyncMuHandler handler : handlers) {
-				handled = handler.onHeaders(asyncContext, asyncContext.request.headers());
-				if (handled) {
-					state.put(ctx, new State(asyncContext, handler));
-					break;
+				boolean handled = false;
+
+				AsyncContext asyncContext = new AsyncContext(new NettyRequestAdapter(ctx, request), new NettyResponseAdaptor(ctx, response));
+
+				for (AsyncMuHandler handler : handlers) {
+					handled = handler.onHeaders(asyncContext, asyncContext.request.headers());
+					if (handled) {
+						state.put(ctx, new State(asyncContext, handler));
+						break;
+					}
 				}
-			}
-			if (!handled) {
-				System.out.println("No handler found");
-				asyncContext.response.status(404);
-				asyncContext.complete();
+				if (!handled) {
+					System.out.println("No handler found");
+					asyncContext.response.status(404);
+					asyncContext.complete();
+				}
 			}
 
 		} else if (msg instanceof HttpContent) {
@@ -69,5 +79,23 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
 				}
 			}
 		}
+	}
+
+	private void handleHttpRequestDecodeFailure(ChannelHandlerContext ctx, Throwable cause) {
+		String message = "Server error";
+		int code = 500;
+		if (cause instanceof TooLongFrameException) {
+			if (cause.getMessage().contains("header is larger")) {
+				code = 431;
+				message = "HTTP headers too large";
+			} else if (cause.getMessage().contains("line is larger")) {
+				code = 414;
+				message = "URI too long";
+			}
+		}
+		FullHttpResponse response = new DefaultFullHttpResponse(HTTP_1_1, HttpResponseStatus.valueOf(code), copiedBuffer(message.getBytes(UTF_8)));
+		response.headers().set(HttpHeaderNames.CONTENT_TYPE, "text/plain");
+		response.headers().set(HttpHeaderNames.CONTENT_LENGTH, message.length());
+		ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
 	}
 }
