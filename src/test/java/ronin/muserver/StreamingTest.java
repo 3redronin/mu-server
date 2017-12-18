@@ -11,9 +11,12 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.Arrays.asList;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
@@ -87,13 +90,11 @@ public class StreamingTest {
 	public void requestDataCanBeReadFromTheInputStream() throws Exception {
 		server = muServer()
 				.addHandler((request, response) -> {
-					try (InputStream in = request.inputStream();
+					try (InputStream in = request.inputStream().get();
 					     OutputStream out = response.outputStream()) {
 						byte[] buffer = new byte[128];
 						int read;
 						while ((read = in.read(buffer)) > -1) {
-							System.out.println("Read " + read + " - " + new String(buffer, 0, read, UTF_8).replace("\n", " "));
-							Thread.sleep(10);
 							out.write(buffer, 0, read);
 						}
 						out.flush();
@@ -109,6 +110,41 @@ public class StreamingTest {
 
 		String actual = new String(resp.body().bytes(), UTF_8);
 		assertThat(actual, equalTo(sentData.toString()));
+	}
+
+	@Test
+	public void theWholeRequestBodyCanBeReadAsAStringWithABlockingCall() throws Exception {
+		server = muServer()
+				.addHandler((request, response) -> {
+					response.write(request.bodyAsString());
+					return true;
+				}).start();
+
+		StringBuffer sentData = new StringBuffer();
+		Response resp = client.newCall(new Request.Builder()
+				.post(ClientUtils.largeRequestBody(sentData))
+				.url(server.url())
+				.build()).execute();
+
+		assertThat(resp.body().string(), equalTo(sentData.toString()));
+	}
+
+
+	@Test
+	public void thereIsNoInputStreamIfThereIsNoRequestBody() throws Exception {
+		List<String> actual = new ArrayList<>();
+		server = muServer()
+				.addHandler((request, response) -> {
+					actual.add(request.inputStream().isPresent() ? "Present" : "Not Present");
+					actual.add("Request body: " + request.bodyAsString());
+					return true;
+				}).start();
+
+		client.newCall(new Request.Builder()
+				.url(server.url())
+				.build()).execute();
+
+		assertThat(actual, equalTo(asList("Not Present", "Request body: ")));
 	}
 
 	@After

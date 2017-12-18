@@ -73,7 +73,7 @@ public class MuServerTest {
 		server = muServer()
 				.withHttpConnection(12808)
 				.addAsyncHandler(new AsyncMuHandler() {
-					public boolean onHeaders(AsyncContext ctx) throws Exception {
+					public boolean onHeaders(AsyncContext ctx, Headers headers) throws Exception {
 						System.out.println("I am a logging handler and saw " + ctx.request);
 						return false;
 					}
@@ -86,7 +86,7 @@ public class MuServerTest {
 				})
 				.addAsyncHandler(new AsyncMuHandler() {
 					@Override
-					public boolean onHeaders(AsyncContext ctx) throws Exception {
+					public boolean onHeaders(AsyncContext ctx, Headers headers) throws Exception {
 						System.out.println("Request starting");
 						ctx.response.status(201);
 						return true;
@@ -106,7 +106,7 @@ public class MuServerTest {
 					}
 				})
 				.addAsyncHandler(new AsyncMuHandler() {
-					public boolean onHeaders(AsyncContext ctx) throws Exception {
+					public boolean onHeaders(AsyncContext ctx, Headers headers) throws Exception {
 						throw new RuntimeException("This should never get here");
 					}
 

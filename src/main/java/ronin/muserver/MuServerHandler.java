@@ -39,7 +39,7 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
 			AsyncContext asyncContext = new AsyncContext(new NettyRequestAdapter(ctx, request), new NettyResponseAdaptor(ctx, response));
 
 			for (AsyncMuHandler handler : handlers) {
-				handled = handler.onHeaders(asyncContext);
+				handled = handler.onHeaders(asyncContext, asyncContext.request.headers());
 				if (handled) {
 					state.put(ctx, new State(asyncContext, handler));
 					break;

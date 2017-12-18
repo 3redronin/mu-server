@@ -11,19 +11,12 @@ class SyncHandlerAdapter implements AsyncMuHandler {
 	private final List<MuHandler> muHandlers;
 	private final ExecutorService executor = Executors.newCachedThreadPool();
 
-	private static class State {
-		final GrowableByteBufferInputStream reqBody = new GrowableByteBufferInputStream();
-	}
-
 	public SyncHandlerAdapter(List<MuHandler> muHandlers) {
 		this.muHandlers = muHandlers;
 	}
 
 
-	public boolean onHeaders(AsyncContext ctx) throws Exception {
-		State state = new State();
-		ctx.state = state;
-		((NettyRequestAdapter) ctx.request).inputStream(state.reqBody);
+	public boolean onHeaders(AsyncContext ctx, Headers headers) throws Exception {
 		executor.submit(() -> {
 			try {
 
@@ -49,15 +42,21 @@ class SyncHandlerAdapter implements AsyncMuHandler {
 	}
 
 	public void onRequestData(AsyncContext ctx, ByteBuffer buffer) throws Exception {
-		State state = (State) ctx.state;
-		GrowableByteBufferInputStream reqBody = state.reqBody;
-		reqBody.handOff(buffer);
+		GrowableByteBufferInputStream state = (GrowableByteBufferInputStream)ctx.state;
+		if (state == null) {
+			state = new GrowableByteBufferInputStream();
+			((NettyRequestAdapter) ctx.request).inputStream(state);
+			ctx.state = state;
+		}
+		state.handOff(buffer);
 	}
 
 	public void onRequestComplete(AsyncContext ctx) {
-		State state = (State) ctx.state;
 		try {
-			state.reqBody.close();
+			GrowableByteBufferInputStream state = (GrowableByteBufferInputStream)ctx.state;
+			if (state != null) {
+				state.close();
+			}
 		} catch (IOException e) {
 			System.out.println("This can't happen");
 		}
