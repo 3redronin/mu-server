@@ -1,5 +1,7 @@
 package ronin.muserver;
 
+import io.netty.handler.codec.http.HttpHeaderNames;
+
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
@@ -17,6 +19,12 @@ class SyncHandlerAdapter implements AsyncMuHandler {
 
 
 	public boolean onHeaders(AsyncContext ctx, Headers headers) throws Exception {
+		if (headers.contains(HttpHeaderNames.TRANSFER_ENCODING) || headers.getInt(HttpHeaderNames.CONTENT_LENGTH, -1) > 0) {
+			// There will be a request body, so set the streams
+			GrowableByteBufferInputStream requestBodyStream = new GrowableByteBufferInputStream();
+			((NettyRequestAdapter) ctx.request).inputStream(requestBodyStream);
+			ctx.state = requestBodyStream;
+		}
 		executor.submit(() -> {
 			try {
 
@@ -42,18 +50,13 @@ class SyncHandlerAdapter implements AsyncMuHandler {
 	}
 
 	public void onRequestData(AsyncContext ctx, ByteBuffer buffer) throws Exception {
-		GrowableByteBufferInputStream state = (GrowableByteBufferInputStream)ctx.state;
-		if (state == null) {
-			state = new GrowableByteBufferInputStream();
-			((NettyRequestAdapter) ctx.request).inputStream(state);
-			ctx.state = state;
-		}
+		GrowableByteBufferInputStream state = (GrowableByteBufferInputStream) ctx.state;
 		state.handOff(buffer);
 	}
 
 	public void onRequestComplete(AsyncContext ctx) {
 		try {
-			GrowableByteBufferInputStream state = (GrowableByteBufferInputStream)ctx.state;
+			GrowableByteBufferInputStream state = (GrowableByteBufferInputStream) ctx.state;
 			if (state != null) {
 				state.close();
 			}

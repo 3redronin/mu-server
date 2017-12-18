@@ -1,13 +1,14 @@
 package scaffolding;
 
-import okhttp3.MediaType;
-import okhttp3.Request;
-import okhttp3.RequestBody;
+import okhttp3.*;
 import okio.BufferedSink;
 
 import java.io.IOException;
 
 public class ClientUtils {
+
+	public static final OkHttpClient client = new OkHttpClient();
+
 	public static RequestBody largeRequestBody(StringBuffer sentData) throws IOException {
 		return new RequestBody() {
 			@Override
@@ -34,5 +35,9 @@ public class ClientUtils {
 
 	public static Request.Builder request() {
 		return new Request.Builder();
+	}
+
+	public static Response call(Request.Builder request) throws IOException {
+		return client.newCall(request.build()).execute();
 	}
 }

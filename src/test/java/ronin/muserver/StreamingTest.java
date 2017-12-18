@@ -1,11 +1,8 @@
 package ronin.muserver;
 
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
-import scaffolding.ClientUtils;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -21,10 +18,10 @@ import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static ronin.muserver.MuServerBuilder.muServer;
+import static scaffolding.ClientUtils.*;
 
 public class StreamingTest {
 
-	private final OkHttpClient client = new OkHttpClient();
 	private MuServer server;
 
 	@Test
@@ -44,9 +41,7 @@ public class StreamingTest {
 					return true;
 				}).start();
 
-		Response resp = client.newCall(new Request.Builder()
-				.url(server.url())
-				.build()).execute();
+		Response resp = call(request().url(server.url()));
 
 		try (InputStream stream = resp.body().byteStream()) {
 			latch.countDown();
@@ -78,9 +73,7 @@ public class StreamingTest {
 					return true;
 				}).start();
 
-		Response resp = client.newCall(new Request.Builder()
-				.url(server.url())
-				.build()).execute();
+		Response resp = call(request().url(server.url()));
 
 		String actual = resp.body().string();
 		assertThat(actual, equalTo(String.format("Hello, world%nWhat's happening?")));
@@ -103,10 +96,9 @@ public class StreamingTest {
 				}).start();
 
 		StringBuffer sentData = new StringBuffer();
-		Response resp = client.newCall(new Request.Builder()
-				.post(ClientUtils.largeRequestBody(sentData))
+		Response resp = call(request()
 				.url(server.url())
-				.build()).execute();
+				.post(largeRequestBody(sentData)));
 
 		String actual = new String(resp.body().bytes(), UTF_8);
 		assertThat(actual, equalTo(sentData.toString()));
@@ -121,10 +113,9 @@ public class StreamingTest {
 				}).start();
 
 		StringBuffer sentData = new StringBuffer();
-		Response resp = client.newCall(new Request.Builder()
-				.post(ClientUtils.largeRequestBody(sentData))
+		Response resp = call(request()
 				.url(server.url())
-				.build()).execute();
+				.post(largeRequestBody(sentData)));
 
 		assertThat(resp.body().string(), equalTo(sentData.toString()));
 	}
@@ -140,10 +131,7 @@ public class StreamingTest {
 					return true;
 				}).start();
 
-		client.newCall(new Request.Builder()
-				.url(server.url())
-				.build()).execute();
-
+		call(request().url(server.url()));
 		assertThat(actual, equalTo(asList("Not Present", "Request body: ")));
 	}
 

@@ -1,7 +1,5 @@
 package ronin.muserver;
 
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Ignore;
@@ -17,12 +15,12 @@ import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.IsEqual.equalTo;
 import static ronin.muserver.MuServerBuilder.muServer;
+import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 import static scaffolding.StringUtils.randomString;
 
 public class HeadersTest {
 
-	private final OkHttpClient client = new OkHttpClient();
 	private MuServer server;
 
 	@Test
@@ -137,10 +135,6 @@ public class HeadersTest {
 				.url(server.uri().resolve("/blah?query=value").toString()));
 		assertThat(actual[1].toString(), equalTo("http://localhost:12752/blah?query=value"));
 		assertThat(actual[0].toString(), equalTo("https://www.example.org/blah?query=value"));
-	}
-
-	private Response call(Request.Builder request) throws IOException {
-		return client.newCall(request.build()).execute();
 	}
 
 	@After

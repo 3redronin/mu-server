@@ -1,9 +1,9 @@
 package ronin.muserver;
 
-import okhttp3.*;
+import okhttp3.OkHttpClient;
+import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
-import scaffolding.ClientUtils;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -16,6 +16,7 @@ import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.IsEqual.equalTo;
 import static ronin.muserver.MuServerBuilder.muServer;
+import static scaffolding.ClientUtils.*;
 
 public class MuServerTest {
 
@@ -25,11 +26,7 @@ public class MuServerTest {
 	@Test
 	public void portZeroCanBeUsed() throws Exception {
 		server = muServer().start();
-
-		Response resp = client.newCall(new Request.Builder()
-				.url(server.url())
-				.build()).execute();
-
+		Response resp = call(request().url(server.url()));
 		assertThat(resp.code(), is(404));
 	}
 
@@ -58,11 +55,7 @@ public class MuServerTest {
 				})
 				.start();
 
-		Response resp = client.newCall(new Request.Builder()
-				.url("http://localhost:12808/blah")
-				.build()).execute();
-
-
+		Response resp = call(request().url("http://localhost:12808/blah"));
 		assertThat(resp.code(), is(202));
 		assertThat(resp.body().string(), equalTo("This is a test"));
 		assertThat(handlersHit, equalTo(asList("Logger", "BlahHandler")));
@@ -120,11 +113,10 @@ public class MuServerTest {
 
 		StringBuffer expected = new StringBuffer();
 
-		Response resp = client.newCall(new Request.Builder()
+		Response resp = call(request()
 				.url("http://localhost:12808")
-				.post(ClientUtils.largeRequestBody(expected))
-				.build()).execute();
-
+				.post(largeRequestBody(expected))
+		);
 
 		assertThat(resp.code(), is(201));
 		assertThat(resp.body().string(), equalTo(expected.toString()));
