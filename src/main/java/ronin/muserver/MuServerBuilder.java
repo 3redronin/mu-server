@@ -133,7 +133,7 @@ public class MuServerBuilder {
         b.group(bossGroup, workerGroup)
             .channel(NioServerSocketChannel.class)
             .childHandler(new ChannelInitializer<SocketChannel>() {
-                @Override
+
                 protected void initChannel(SocketChannel socketChannel) throws Exception {
                     Attribute<String> proto = socketChannel.attr(PROTO_ATTRIBUTE);
                     proto.set(usesSsl ? "https" : "http");

@@ -62,8 +62,7 @@ public class StreamingTest {
 
 	}
 
-	@Test
-	public void textCanBeWrittenWithThePrintWriter() throws Exception {
+	@Test public void textCanBeWrittenWithThePrintWriter() throws Exception {
 		server = httpServer()
 				.addHandler((request, response) -> {
 					try (PrintWriter writer = response.writer()) {
@@ -79,8 +78,7 @@ public class StreamingTest {
 		assertThat(actual, equalTo(String.format("Hello, world%nWhat's happening?")));
 	}
 
-	@Test
-	public void requestDataCanBeReadFromTheInputStream() throws Exception {
+	@Test public void requestDataCanBeReadFromTheInputStream() throws Exception {
 		server = httpServer()
 				.addHandler((request, response) -> {
 					try (InputStream in = request.inputStream().get();
@@ -104,8 +102,7 @@ public class StreamingTest {
 		assertThat(actual, equalTo(sentData.toString()));
 	}
 
-	@Test
-	public void theWholeRequestBodyCanBeReadAsAStringWithABlockingCall() throws Exception {
+	@Test public void theWholeRequestBodyCanBeReadAsAStringWithABlockingCall() throws Exception {
 		server = httpServer()
 				.addHandler((request, response) -> {
 					response.write(request.readBodyAsString());
@@ -120,9 +117,7 @@ public class StreamingTest {
 		assertThat(resp.body().string(), equalTo(sentData.toString()));
 	}
 
-
-	@Test
-	public void thereIsNoInputStreamIfThereIsNoRequestBody() throws Exception {
+	@Test public void thereIsNoInputStreamIfThereIsNoRequestBody() throws Exception {
 		List<String> actual = new ArrayList<>();
 		server = httpServer()
 				.addHandler((request, response) -> {
@@ -135,10 +130,7 @@ public class StreamingTest {
 		assertThat(actual, equalTo(asList("Not Present", "Request body: ")));
 	}
 
-	@After
-	public void stopIt() {
-		if (server != null) {
-			server.stop();
-		}
+	@After public void stopIt() {
+		server.stop();
 	}
 }

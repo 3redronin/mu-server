@@ -142,27 +142,27 @@ class NettyRequestAdapter implements MuRequest {
         return URI.create(proto + "://" + host + portString + request.uri());
     }
 
-    @Override
+
     public Method method() {
         return method;
     }
 
-    @Override
+
     public URI uri() {
         return uri;
     }
 
-    @Override
+
     public URI serverURI() {
         return serverUri;
     }
 
-    @Override
+
     public Headers headers() {
         return headers;
     }
 
-    @Override
+
     public Optional<InputStream> inputStream() {
         if (inputStream == null) {
             return Optional.empty();
@@ -172,7 +172,7 @@ class NettyRequestAdapter implements MuRequest {
         }
     }
 
-    @Override
+
     public String readBodyAsString() throws IOException {
         if (inputStream != null) {
             claimingBodyRead();
@@ -197,7 +197,7 @@ class NettyRequestAdapter implements MuRequest {
         bodyRead = true;
     }
 
-    @Override
+
     public String parameter(String name) {
         return getSingleParam(name, queryStringDecoder);
     }
@@ -210,7 +210,7 @@ class NettyRequestAdapter implements MuRequest {
         return values.get(0);
     }
 
-    @Override
+
     public List<String> parameters(String name) {
         return getMultipleParams(name, queryStringDecoder);
     }
@@ -223,13 +223,13 @@ class NettyRequestAdapter implements MuRequest {
         return values;
     }
 
-    @Override
+
     public String formValue(String name) throws IOException {
         ensureFormDataLoaded();
         return getSingleParam(name, formDecoder);
     }
 
-    @Override
+
     public List<String> formValues(String name) throws IOException {
         ensureFormDataLoaded();
         return getMultipleParams(name, formDecoder);
@@ -246,7 +246,7 @@ class NettyRequestAdapter implements MuRequest {
         this.inputStream = stream;
     }
 
-    @Override
+
     public String toString() {
         return method().name() + " " + uri();
     }

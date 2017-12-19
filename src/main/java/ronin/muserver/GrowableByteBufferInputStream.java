@@ -32,7 +32,6 @@ class GrowableByteBufferInputStream extends InputStream {
 		}
 	}
 
-	@Override
 	public int read() throws IOException {
 		ByteBuffer cur = cycleIfNeeded();
 		if (cur == LAST) {
@@ -41,12 +40,10 @@ class GrowableByteBufferInputStream extends InputStream {
 		return cur.get() & 0xff;
 	}
 
-	@Override
 	public int read(byte[] b) throws IOException {
 		return read(b, 0, b.length);
 	}
 
-	@Override
 	public int read(byte[] b, int off, int len) throws IOException {
 		ByteBuffer cur = cycleIfNeeded();
 		if (cur == LAST) {
@@ -57,13 +54,11 @@ class GrowableByteBufferInputStream extends InputStream {
 		return toRead;
 	}
 
-	@Override
 	public int available() throws IOException {
 		ByteBuffer cur = cycleIfNeeded();
 		return cur.remaining();
 	}
 
-	@Override
 	public void close() throws IOException {
 		// This is called from the main netty accepter thread so must be non-blocking
 		queue.add(LAST);

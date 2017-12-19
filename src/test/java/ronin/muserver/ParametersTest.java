@@ -5,6 +5,7 @@ import org.junit.After;
 import org.junit.Test;
 
 import java.net.MalformedURLException;
+import java.net.URL;
 import java.util.Collections;
 
 import static java.util.Arrays.asList;
@@ -19,8 +20,7 @@ public class ParametersTest {
 
 	private MuServer server;
 
-	@Test
-	public void queryStringsCanBeGot() throws MalformedURLException {
+	@Test public void queryStringsCanBeGot() throws MalformedURLException {
 		Object[] actual = new Object[4];
 		server = httpServer().addHandler((request, response) -> {
 			actual[0] = request.parameter("value1");
@@ -30,15 +30,14 @@ public class ParametersTest {
 			return true;
 		}).start();
 
-		call(request().url(server.uri().resolve("/something/here.html?value1=something&value1=somethingAgain&value2=something%20else+i+think").toURL()));
+		call(request().url(http("/something/here.html?value1=something&value1=somethingAgain&value2=something%20else+i+think")));
 		assertThat(actual[0], equalTo("something"));
 		assertThat(actual[1], equalTo("something else i think"));
 		assertThat(actual[2], equalTo(""));
 		assertThat(actual[3], equalTo("/something/here.html"));
 	}
 
-	@Test
-	public void queryStringParametersCanAppearMultipleTimes() throws MalformedURLException {
+	@Test public void queryStringParametersCanAppearMultipleTimes() throws MalformedURLException {
 		Object[] actual = new Object[3];
 		server = httpServer().addHandler((request, response) -> {
 			actual[0] = request.parameters("value1");
@@ -47,14 +46,13 @@ public class ParametersTest {
 			return true;
 		}).start();
 
-		call(request().url(server.uri().resolve("/something/here.html?value1=something&value1=somethingAgain&value2=something%20else+i+think").toURL()));
+		call(request().url(http("/something/here.html?value1=something&value1=somethingAgain&value2=something%20else+i+think")));
 		assertThat(actual[0], equalTo(asList("something", "somethingAgain")));
 		assertThat(actual[1], equalTo(asList("something else i think")));
 		assertThat(actual[2], equalTo(Collections.<String>emptyList()));
 	}
 
-    @Test
-    public void formParametersCanBeGot() throws MalformedURLException {
+    @Test public void formParametersCanBeGot() throws MalformedURLException {
         Object[] actual = new Object[3];
         server = httpServer().addHandler((request, response) -> {
             actual[0] = request.formValue("value1");
@@ -63,8 +61,9 @@ public class ParametersTest {
             return true;
         }).start();
 
+        String str = "/something/here.html?value1=unrelated";
         call(request()
-            .url(server.uri().resolve("/something/here.html?value1=unrelated").toURL())
+            .url(http(str))
             .post(new FormBody.Builder()
                 .add("value1", "something")
                 .add("value1", "somethingAgain")
@@ -76,8 +75,7 @@ public class ParametersTest {
         assertThat(actual[2], equalTo(""));
     }
 
-    @Test
-    public void formParametersWithMultipleValuesCanBeGot() throws MalformedURLException {
+    @Test public void formParametersWithMultipleValuesCanBeGot() throws MalformedURLException {
         Object[] actual = new Object[3];
         server = httpServer().addHandler((request, response) -> {
             actual[0] = request.formValues("value1");
@@ -87,7 +85,7 @@ public class ParametersTest {
         }).start();
 
         call(request()
-            .url(server.uri().resolve("/something/here.html?value1=unrelated").toURL())
+            .url(http("/something/here.html?value1=unrelated"))
             .post(new FormBody.Builder()
                 .add("value1", "something")
                 .add("value1", "somethingAgain")
@@ -99,8 +97,7 @@ public class ParametersTest {
         assertThat(actual[2], equalTo(Collections.<String>emptyList()));
     }
 
-    @Test
-    public void exceptionsThrownWhenTryingToReadBodyAfterReadingFormData() {
+    @Test public void exceptionsThrownWhenTryingToReadBodyAfterReadingFormData() {
         Throwable[] actual = new Throwable[1];
         server = httpServer().addHandler((request, response) -> {
             request.formValue("blah");
@@ -122,11 +119,11 @@ public class ParametersTest {
         assertThat(actual[0].getMessage(), equalTo("The body of the request message cannot be read twice. This can happen when calling any 2 of inputStream(), readBodyAsString(), or getFormValue() methods."));
     }
 
-	@After
-	public void stopIt() {
-		if (server != null) {
-			server.stop();
-		}
+	@After public void stopIt() {
+        server.stop();
 	}
 
+    URL http(String str) throws MalformedURLException {
+        return server.uri().resolve(str).toURL();
+    }
 }

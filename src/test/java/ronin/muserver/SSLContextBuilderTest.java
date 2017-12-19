@@ -6,13 +6,11 @@ import java.io.File;
 
 public class SSLContextBuilderTest {
 
-    @Test
-    public void canCreateAnUnsignedOne() {
+    @Test public void canCreateAnUnsignedOne() {
         SSLContextBuilder.unsignedLocalhostCert();
     }
 
-    @Test
-    public void canCreateADefaultOne() {
+    @Test public void canCreateADefaultOne() {
         SSLContextBuilder.defaultSSLContext();
     }
 
@@ -26,8 +24,7 @@ public class SSLContextBuilderTest {
             .build();
     }
 
-    @Test
-    public void canCreateFromTheFileSystem() {
+    @Test public void canCreateFromTheFileSystem() {
         SSLContextBuilder.sslContext()
             .withKeystoreType("JKS")
             .withKeystorePassword("Very5ecure")

@@ -21,15 +21,13 @@ public class MuServerTest {
 
 	private MuServer server;
 
-	@Test
-	public void portZeroCanBeUsed() throws Exception {
+	@Test public void portZeroCanBeUsed() {
 		server = httpServer().start();
 		Response resp = call(request().url(server.url()));
 		assertThat(resp.code(), is(404));
 	}
 
-	@Test
-	public void syncHandlersSupported() throws IOException {
+	@Test public void syncHandlersSupported() throws IOException {
 		List<String> handlersHit = new ArrayList<>();
 
 		server = httpServer()
@@ -59,49 +57,45 @@ public class MuServerTest {
 		assertThat(handlersHit, equalTo(asList("Logger", "BlahHandler")));
 	}
 
-	@Test
-	public void asyncHandlersSupported() throws IOException {
+	@Test public void asyncHandlersSupported() throws IOException {
 		server = httpServer()
 				.withHttpConnection(12808)
 				.addAsyncHandler(new AsyncMuHandler() {
-					public boolean onHeaders(AsyncContext ctx, Headers headers) throws Exception {
+					public boolean onHeaders(AsyncContext ctx, Headers headers) {
 						System.out.println("I am a logging handler and saw " + ctx.request);
 						return false;
 					}
 
-					public void onRequestData(AsyncContext ctx, ByteBuffer buffer) throws Exception {
+					public void onRequestData(AsyncContext ctx, ByteBuffer buffer) {
 					}
 
 					public void onRequestComplete(AsyncContext ctx) {
 					}
 				})
 				.addAsyncHandler(new AsyncMuHandler() {
-					@Override
-					public boolean onHeaders(AsyncContext ctx, Headers headers) throws Exception {
+					public boolean onHeaders(AsyncContext ctx, Headers headers) {
 						System.out.println("Request starting");
 						ctx.response.status(201);
 						return true;
 					}
 
-					@Override
-					public void onRequestData(AsyncContext ctx, ByteBuffer buffer) throws Exception {
+					public void onRequestData(AsyncContext ctx, ByteBuffer buffer) {
 						String text = StandardCharsets.UTF_8.decode(buffer).toString();
 						System.out.println("Got: " + text);
 						ctx.response.writeAsync(text);
 					}
 
-					@Override
 					public void onRequestComplete(AsyncContext ctx) {
 						System.out.println("Request complete");
 						ctx.complete();
 					}
 				})
 				.addAsyncHandler(new AsyncMuHandler() {
-					public boolean onHeaders(AsyncContext ctx, Headers headers) throws Exception {
+					public boolean onHeaders(AsyncContext ctx, Headers headers) {
 						throw new RuntimeException("This should never get here");
 					}
 
-					public void onRequestData(AsyncContext ctx, ByteBuffer buffer) throws Exception {
+					public void onRequestData(AsyncContext ctx, ByteBuffer buffer) {
 					}
 
 					public void onRequestComplete(AsyncContext ctx) {
@@ -120,11 +114,7 @@ public class MuServerTest {
 		assertThat(resp.body().string(), equalTo(expected.toString()));
 	}
 
-	@After
-	public void stopIt() {
-		if (server != null) {
-			server.stop();
-		}
+	@After public void stopIt() {
+		server.stop();
 	}
-
 }

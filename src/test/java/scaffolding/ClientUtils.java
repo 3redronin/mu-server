@@ -20,12 +20,10 @@ public class ClientUtils {
 
     public static RequestBody largeRequestBody(StringBuffer sentData) throws IOException {
         return new RequestBody() {
-            @Override
             public MediaType contentType() {
                 return MediaType.parse("text/plain");
             }
 
-            @Override
             public void writeTo(BufferedSink sink) throws IOException {
                 write(sink, "Numbers\n");
                 write(sink, "-------\n");
@@ -38,7 +36,6 @@ public class ClientUtils {
                 sentData.append(s);
                 sink.writeUtf8(s);
             }
-
         };
     }
 
@@ -54,8 +51,6 @@ public class ClientUtils {
         }
     }
 
-
-
     public static SSLContext sslContextForTesting(TrustManager trustManager) {
         try {
             SSLContext context = SSLContext.getInstance("TLS");
@@ -68,18 +63,11 @@ public class ClientUtils {
 
     public static X509TrustManager veryTrustingTrustManager() {
         return new X509TrustManager() {
-            @Override
-            public void checkClientTrusted(java.security.cert.X509Certificate[] chain, String authType) {
-            }
+            public void checkClientTrusted(java.security.cert.X509Certificate[] chain, String authType) { }
 
-            @Override
-            public void checkServerTrusted(java.security.cert.X509Certificate[] chain, String authType) {
-            }
+            public void checkServerTrusted(java.security.cert.X509Certificate[] chain, String authType) { }
 
-            @Override
-            public java.security.cert.X509Certificate[] getAcceptedIssuers() {
-                return new java.security.cert.X509Certificate[]{};
-            }
+            public java.security.cert.X509Certificate[] getAcceptedIssuers() { return new java.security.cert.X509Certificate[]{}; }
         };
     }
 }

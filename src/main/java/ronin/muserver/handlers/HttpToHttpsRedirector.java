@@ -32,7 +32,6 @@ public class HttpToHttpsRedirector implements AsyncMuHandler {
         this.httpsPort = httpsPort;
     }
 
-    @Override
     public boolean onHeaders(AsyncContext ctx, Headers headers) throws Exception {
         URI uri = ctx.request.uri();
         boolean isHttp = uri.getScheme().equals("http");
@@ -45,11 +44,9 @@ public class HttpToHttpsRedirector implements AsyncMuHandler {
         return true;
     }
 
-    @Override
     public void onRequestData(AsyncContext ctx, ByteBuffer buffer) throws Exception {
     }
 
-    @Override
     public void onRequestComplete(AsyncContext ctx) {
     }
 }

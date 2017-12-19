@@ -62,7 +62,5 @@ public class GrowableByteBufferInputStreamTest {
 		byte[] bytes = new byte[size];
 		rng.nextBytes(bytes);
 		return ByteBuffer.wrap(bytes);
-
 	}
-
 }

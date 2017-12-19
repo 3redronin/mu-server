@@ -3,7 +3,7 @@ package scaffolding;
 import java.util.Random;
 
 public class StringUtils {
-	public static String randomString(int numberOfCharacters) {
+	public static String randomStringOfLength(int numberOfCharacters) {
 		Random rng = new Random();
 		StringBuilder sb = new StringBuilder(numberOfCharacters);
 		for (int i = 0; i < numberOfCharacters; i++) {

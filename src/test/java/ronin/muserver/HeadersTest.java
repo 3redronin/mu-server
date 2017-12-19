@@ -1,10 +1,11 @@
 package ronin.muserver;
 
+import okhttp3.Request;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
 
-import java.io.IOException;
+import java.net.MalformedURLException;
 import java.net.URI;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -16,14 +17,13 @@ import static org.hamcrest.core.IsEqual.equalTo;
 import static ronin.muserver.MuServerBuilder.httpServer;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
-import static scaffolding.StringUtils.randomString;
+import static scaffolding.StringUtils.randomStringOfLength;
 
 public class HeadersTest {
 
 	private MuServer server;
 
-	@Test
-	public void canGetAndSetThem() throws IOException {
+	@Test public void canGetAndSetThem() {
 		server = httpServer()
 				.addHandler((request, response) -> {
 					String something = request.headers().get("X-Something");
@@ -33,15 +33,12 @@ public class HeadersTest {
 
 		String randomValue = UUID.randomUUID().toString();
 
-		Response resp = call(request()
-				.header("X-Something", randomValue)
-				.url(server.url()));
+		Response resp = call(xSomethingHeader(randomValue));
 
 		assertThat(resp.header("X-Response"), equalTo(randomValue));
 	}
 
-	@Test
-	public void aHandlerCanChangeTheHeadersOfASubsequentHandler() throws IOException {
+	@Test public void aHandlerCanChangeTheHeadersOfASubsequentHandler() {
 		String randomValue = UUID.randomUUID().toString();
 
 		server = httpServer()
@@ -57,15 +54,11 @@ public class HeadersTest {
 				.start();
 
 
-		Response resp = call(request()
-				.header("X-Something", "OriginalValue")
-				.url(server.url()));
-
+		Response resp = call(xSomethingHeader("OriginalValue"));
 		assertThat(resp.header("X-Response"), equalTo(randomValue));
 	}
 
-	@Test
-	public void largeHeadersAreFineIfConfigured() throws IOException {
+	@Test public void largeHeadersAreFineIfConfigured() {
 		server = httpServer()
 				.withMaxHeadersSize(33000)
 				.addHandler((request, response) -> {
@@ -73,15 +66,12 @@ public class HeadersTest {
 					return true;
 				}).start();
 
-		String randomValue = randomString(32000);
-		Response resp = call(request()
-				.header("X-Something", randomValue)
-				.url(server.url()));
-		assertThat(resp.header("X-Something"), equalTo(randomValue));
+		String bigString = randomStringOfLength(32000);
+		Response resp = call(xSomethingHeader(bigString));
+		assertThat(resp.header("X-Something"), equalTo(bigString));
 	}
 
-	@Test
-	public void urlsThatAreTooLongAreRejected() throws IOException {
+	@Test public void urlsThatAreTooLongAreRejected() throws MalformedURLException {
 		AtomicBoolean handlerHit = new AtomicBoolean(false);
 		server = httpServer()
 				.withMaxUrlSize(30)
@@ -91,14 +81,12 @@ public class HeadersTest {
 					return true;
 				}).start();
 
-		Response resp = call(request()
-				.url(server.uri().resolve("/this-is-much-longer-than-that-value-allowed-by-the-config-above-i-think").toURL()));
+		Response resp = call(request().url(server.uri().resolve("/this-is-much-longer-than-that-value-allowed-by-the-config-above-i-think").toURL()));
 		assertThat(resp.code(), is(414));
 		assertThat(handlerHit.get(), is(false));
 	}
 
-	@Test
-	public void a431IsReturnedIfTheHeadersAreTooLarge() throws IOException {
+	@Test public void a431IsReturnedIfTheHeadersAreTooLarge() {
 		server = httpServer()
 				.withMaxHeadersSize(1024)
 				.addHandler((request, response) -> {
@@ -106,16 +94,12 @@ public class HeadersTest {
 					return true;
 				}).start();
 
-		String randomValue = randomString(1025);
-		Response resp = call(request()
-				.header("X-Something", randomValue)
-				.url(server.url()));
+		Response resp = call(xSomethingHeader(randomStringOfLength(1025)));
 		assertThat(resp.code(), is(431));
 		assertThat(resp.header("X-Something"), is(nullValue()));
 	}
 
-	@Test
-	public void ifXForwardedHeadersAreSpecifiedThenRequestUriUsesThem() throws IOException {
+	@Test public void ifXForwardedHeadersAreSpecifiedThenRequestUriUsesThem() {
 		URI[] actual = new URI[2];
 		server = httpServer()
 				.withHttpConnection(12752)
@@ -135,10 +119,11 @@ public class HeadersTest {
 		assertThat(actual[0].toString(), equalTo("https://www.example.org/blah?query=value"));
 	}
 
-	@After
-	public void stopIt() {
-		if (server != null) {
-			server.stop();
-		}
+	@After public void stopIt() {
+		server.stop();
+	}
+
+	Request.Builder xSomethingHeader(String value) {
+		return request().header("X-Something", value).url(server.url());
 	}
 }

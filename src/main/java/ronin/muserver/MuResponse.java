@@ -49,12 +49,10 @@ class NettyResponseAdaptor implements MuResponse {
         this.response = response;
 	}
 
-	@Override
 	public int status() {
 		return response.status().code();
 	}
 
-	@Override
 	public void status(int value) {
 		if (headersWritten) {
 			throw new IllegalStateException("Cannot set the status after the headers have already been sent");
@@ -71,51 +69,42 @@ class NettyResponseAdaptor implements MuResponse {
 		}
 	}
 
-	@Override
 	public Future<Void> writeAsync(String text) {
 		ensureHeadersWritten();
 		return ctx.write(new DefaultHttpContent(Unpooled.copiedBuffer(text, CharsetUtil.UTF_8)));
 	}
 
-	@Override
 	public void write(String text) {
 		writeAsync(text);
 	}
 
-    @Override
     public void redirect(String newLocation) {
         redirect(URI.create(newLocation));
     }
 
-    @Override
     public void redirect(URI newLocation) {
         URI absoluteUrl = request.uri().resolve(newLocation);
         status(302);
         headers().add(HttpHeaderNames.LOCATION, absoluteUrl.toString());
     }
 
-    @Override
 	public Headers headers() {
 		return headers;
 	}
 
-	@Override
 	public OutputStream outputStream() {
 		return outputStream(32*1024); // TODO find a good value for this default and make it configurable
 	}
 
-	@Override
 	public OutputStream outputStream(int bufferSizeInBytes) {
 		ensureHeadersWritten();
 		return new BufferedOutputStream(new ChannelOutputStream(ctx), bufferSizeInBytes);
 	}
 
-	@Override
 	public PrintWriter writer() {
 		return writer(32*1024); // TODO find a good value for this default and make it configurable
 	}
 
-	@Override
 	public PrintWriter writer(int bufferSizeInChars) {
 		ensureHeadersWritten();
 		return new PrintWriter(new OutputStreamWriter(outputStream(bufferSizeInChars), StandardCharsets.UTF_8));
@@ -125,5 +114,4 @@ class NettyResponseAdaptor implements MuResponse {
 		ensureHeadersWritten();
 		return ctx.writeAndFlush(Unpooled.EMPTY_BUFFER).addListener(ChannelFutureListener.CLOSE);
 	}
-
 }

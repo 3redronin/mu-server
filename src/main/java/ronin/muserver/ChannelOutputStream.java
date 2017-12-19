@@ -4,7 +4,6 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.DefaultHttpContent;
 
-import java.io.IOException;
 import java.io.OutputStream;
 
 class ChannelOutputStream extends OutputStream {
@@ -14,28 +13,23 @@ class ChannelOutputStream extends OutputStream {
 		this.ctx = ctx;
 	}
 
-	@Override
-	public void write(int b) throws IOException {
+	public void write(int b) {
 		write(new byte[] { (byte)b });
 	}
 
-	@Override
-	public void write(byte[] b) throws IOException {
+	public void write(byte[] b) {
 		ctx.writeAndFlush(new DefaultHttpContent(Unpooled.wrappedBuffer(b)));
 	}
 
-	@Override
-	public void write(byte[] b, int off, int len) throws IOException {
+	public void write(byte[] b, int off, int len) {
 		ctx.writeAndFlush(new DefaultHttpContent(Unpooled.wrappedBuffer(b, off, len)));
 	}
 
-	@Override
-	public void flush() throws IOException {
+	public void flush() {
 		ctx.flush();
 	}
 
-	@Override
-	public void close() throws IOException {
+	public void close() {
 		ctx.close();
 	}
 }

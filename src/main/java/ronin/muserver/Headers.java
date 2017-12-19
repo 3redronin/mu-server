@@ -230,7 +230,7 @@ public class Headers implements Iterable<Map.Entry<String, String>> {
 		return entries.hashCode();
 	}
 
-	@Override
+
 	public String toString() {
 		return HeadersUtils.toString(getClass(), iteratorCharSequence(), size());
 	}
