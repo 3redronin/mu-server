@@ -2,7 +2,6 @@ package ronin.muserver;
 
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLEngine;
 import java.io.*;
 import java.security.KeyStore;
 import java.security.NoSuchAlgorithmException;
@@ -23,13 +22,16 @@ public class SSLContextBuilder {
     public SSLContextBuilder withKeyPassword(String keyPassword) {
         return withKeyPassword(keyPassword.toCharArray());
     }
+
     public SSLContextBuilder withKeystorePassword(String keystorePassword) {
         return withKeystorePassword(keystorePassword.toCharArray());
     }
+
     public SSLContextBuilder withKeyPassword(char[] keyPassword) {
         this.keyPassword = keyPassword;
         return this;
     }
+
     public SSLContextBuilder withKeystorePassword(char[] keystorePassword) {
         this.keystorePassword = keystorePassword;
         return this;
@@ -39,6 +41,7 @@ public class SSLContextBuilder {
         this.keystoreStream = keystoreStream;
         return this;
     }
+
     public SSLContextBuilder withKeystore(File file) {
         if (!file.isFile()) {
             throw new IllegalArgumentException(path(file) + " does not exist");
@@ -50,6 +53,7 @@ public class SSLContextBuilder {
         }
         return this;
     }
+
     public SSLContextBuilder withKeystoreFromClasspath(String classpath) {
         keystoreStream = SSLContextBuilder.class.getResourceAsStream(classpath);
         if (keystoreStream == null) {
@@ -66,7 +70,7 @@ public class SSLContextBuilder {
         }
     }
 
-    public SSLEngine build() {
+    public SSLContext build() {
         if (keystoreStream == null) {
             throw new MuException("No keystore has been set");
         }
@@ -80,18 +84,7 @@ public class SSLContextBuilder {
             kmf.init(ks, keyPassword);
 
             serverContext.init(kmf.getKeyManagers(), null, null);
-
-            SSLEngine sslEngine = contextToEngine(serverContext);
-            System.out.println("Protocols:");
-            for (String proto : sslEngine.getEnabledProtocols()) {
-                System.out.println(" * " + proto);
-            }
-            System.out.println("Ciphers:");
-            for (String cipher : sslEngine.getEnabledCipherSuites()) {
-                System.out.println(" * " + cipher);
-            }
-            sslEngine.setUseClientMode(false);
-            return sslEngine;
+            return serverContext;
         } catch (Exception e) {
             throw new MuException("Error while setting up SSLContext", e);
         } finally {
@@ -109,19 +102,15 @@ public class SSLContextBuilder {
         return new SSLContextBuilder();
     }
 
-    private static SSLEngine contextToEngine(SSLContext serverContext) {
-        return serverContext.createSSLEngine();
-    }
-
-    public static SSLEngine defaultSSLContext() {
+    public static SSLContext defaultSSLContext() {
         try {
-            return contextToEngine(SSLContext.getDefault());
+            return SSLContext.getDefault();
         } catch (NoSuchAlgorithmException e) {
             throw new MuException("Error while setting up SSLContext", e);
         }
     }
 
-    public static SSLEngine unsignedLocalhostCert() {
+    public static SSLContext unsignedLocalhostCert() {
         // The cert was created with the following command:
         // keytool -genkey -storetype JKS -keyalg RSA -sigalg SHA256withRSA -alias muserverlocalhost -keystore localhost.jks -validity 36500 -keysize 2048 -storepass Very5ecure -keypass ActuallyNotSecure
         return sslContext()

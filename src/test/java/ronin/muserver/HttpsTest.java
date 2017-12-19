@@ -5,7 +5,8 @@ import org.junit.After;
 import org.junit.Test;
 
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.*;
+import static ronin.muserver.MuServerBuilder.httpsServer;
 import static ronin.muserver.MuServerBuilder.muServer;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
@@ -25,10 +26,21 @@ public class HttpsTest {
             })
             .start();
 
-        System.out.println("Started at " + server.httpsUri());
-        Thread.sleep(30000);
         Response resp = call(request().url(server.httpsUrl()));
         assertThat(resp.body().string(), equalTo("This is encrypted"));
+    }
+
+    @Test
+    public void httpCanBeDisabled() {
+        server = httpsServer()
+            .withHttpDisabled()
+            .addHandler((request, response) -> {
+                response.write("This is encrypted");
+                return true;
+            })
+            .start();
+
+        assertThat(server.uri(), is(nullValue()));
     }
 
 

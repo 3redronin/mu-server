@@ -9,9 +9,10 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.http.HttpRequestDecoder;
 import io.netty.handler.codec.http.HttpResponseEncoder;
-import io.netty.handler.ssl.SslHandler;
+import io.netty.handler.ssl.ClientAuth;
+import io.netty.handler.ssl.JdkSslContext;
 
-import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLContext;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URL;
@@ -26,16 +27,25 @@ public class MuServerBuilder {
     private int maxUrlSize = 8192 - LENGTH_OF_METHOD_AND_PROTOCOL;
     private List<AsyncMuHandler> asyncHandlers = new ArrayList<>();
     private List<MuHandler> handlers = new ArrayList<>();
-    private SSLEngine sslEngine;
+    private SSLContext sslContext;
 
     public MuServerBuilder withHttpConnection(int port) {
         this.httpPort = port;
         return this;
     }
+    public MuServerBuilder withHttpDisabled() {
+        this.httpPort = -1;
+        return this;
+    }
 
-    public MuServerBuilder withHttpsConnection(int port, SSLEngine sslEngine) {
+    public MuServerBuilder withHttpsConnection(int port, SSLContext sslEngine) {
         this.httpsPort = port;
-        this.sslEngine = sslEngine;
+        this.sslContext = sslEngine;
+        return this;
+    }
+    public MuServerBuilder withHttpsDisabled() {
+        this.httpsPort = -1;
+        this.sslContext = null;
         return this;
     }
 
@@ -70,15 +80,19 @@ public class MuServerBuilder {
         try {
             NioEventLoopGroup bossGroup = new NioEventLoopGroup(1);
             NioEventLoopGroup workerGroup = new NioEventLoopGroup();
-            Channel httpChannel = createChannel(bossGroup, workerGroup, httpPort, null);
-            Channel httpsChannel = sslEngine == null ? null : createChannel(bossGroup, workerGroup, httpsPort, sslEngine);
-            URI uri = getUriFromChannel(httpChannel, "http");
-            URL url = uri.toURL();
+            Channel httpChannel = httpPort < 0 ? null : createChannel(bossGroup, workerGroup, httpPort, null);
+            Channel httpsChannel = sslContext == null ? null : createChannel(bossGroup, workerGroup, httpsPort, sslContext);
+            URI uri = null;
+            URL url = null;
+            if (httpChannel != null) {
+                uri = getUriFromChannel(httpChannel, "http");
+                url = uri.toURL();
+            }
             URI httpsUri = null;
-            URL httpsURL = null;
+            URL httpsUrl = null;
             if (httpsChannel != null) {
                 httpsUri = getUriFromChannel(httpsChannel, "https");
-                httpsURL = httpsUri.toURL();
+                httpsUrl = httpsUri.toURL();
             }
 
             Runnable shutdown = () -> {
@@ -93,7 +107,7 @@ public class MuServerBuilder {
                     System.out.println("Error while shutting down. Will ignore. Error was: " + e.getMessage());
                 }
             };
-            return new MuServer(uri, url, httpsUri, httpsURL, shutdown);
+            return new MuServer(uri, url, httpsUri, httpsUrl, shutdown);
 
         } catch (Exception ex) {
             throw new MuException("Error while starting server", ex);
@@ -106,7 +120,9 @@ public class MuServerBuilder {
         return URI.create(protocol + "://localhost:" + a.getPort());
     }
 
-    private Channel createChannel(NioEventLoopGroup bossGroup, NioEventLoopGroup workerGroup, int port, final SSLEngine sslEngine) throws InterruptedException {
+    private Channel createChannel(NioEventLoopGroup bossGroup, NioEventLoopGroup workerGroup, int port, SSLContext rawSSLContext) throws InterruptedException {
+        JdkSslContext sslContext = rawSSLContext == null ? null : new JdkSslContext(rawSSLContext, false, ClientAuth.NONE);
+
         ServerBootstrap b = new ServerBootstrap();
         b.group(bossGroup, workerGroup)
             .channel(NioServerSocketChannel.class)
@@ -114,8 +130,8 @@ public class MuServerBuilder {
                 @Override
                 protected void initChannel(SocketChannel socketChannel) throws Exception {
                     ChannelPipeline p = socketChannel.pipeline();
-                    if (sslEngine != null) {
-                        p.addLast(new SslHandler(sslEngine, true));
+                    if (sslContext != null) {
+                        p.addLast("ssl", sslContext.newHandler(socketChannel.alloc()));
                     }
                     p.addLast(new HttpRequestDecoder(maxUrlSize + LENGTH_OF_METHOD_AND_PROTOCOL, maxHeadersSize, 8192));
                     p.addLast(new HttpResponseEncoder());
@@ -127,5 +143,8 @@ public class MuServerBuilder {
 
     public static MuServerBuilder muServer() {
         return new MuServerBuilder();
+    }
+    public static MuServerBuilder httpsServer() {
+        return new MuServerBuilder().withHttpsConnection(0, SSLContextBuilder.unsignedLocalhostCert());
     }
 }

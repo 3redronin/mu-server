@@ -2,7 +2,6 @@ package ronin.muserver;
 
 import okhttp3.Response;
 import org.junit.After;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -116,7 +115,6 @@ public class HeadersTest {
 	}
 
 	@Test
-	@Ignore("Doesn't work because the request URIs are not currently absolute")
 	public void ifXForwardedHeadersAreSpecifiedThenRequestUriUsesThem() throws IOException {
 		URI[] actual = new URI[2];
 		server = muServer()

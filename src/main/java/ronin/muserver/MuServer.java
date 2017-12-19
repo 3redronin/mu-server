@@ -23,15 +23,30 @@ public class MuServer {
 		shutdown.run();
 	}
 
+    /**
+     * The HTTP URL of the web server, if HTTP is supported
+     */
 	public URL url() {
 		return url;
 	}
-	public URI uri() {
+
+    /**
+     * The HTTP URI of the web server, if HTTP is supported
+     */
+    public URI uri() {
 		return uri;
 	}
+
+    /**
+     * The HTTPS URI of the web server, if HTTPS is supported
+     */
     public URI httpsUri() {
         return httpsUri;
     }
+
+    /**
+     * The HTTPS URL of the web server, if HTTPS is supported
+     */
     public URL httpsUrl() {
         return httpsUrl;
     }
