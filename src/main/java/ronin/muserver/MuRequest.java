@@ -15,12 +15,17 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 public interface MuRequest {
 
-    HttpMethod method();
+    /**
+     * @return The request method, e.g. GET or POST
+     */
+    Method method();
 
     /**
      * The URI of the request at the origin.
      * <p>
      * If behind a reverse proxy, this URI should be the URI that the client saw when making the request.
+     *
+     * @return The full request URI
      */
     URI uri();
 
@@ -29,15 +34,22 @@ public interface MuRequest {
      * <p>
      * If behind a reverse proxy, this will be different from {@link #uri()} as it is the actual server URI rather
      * than what the client sees.
+     *
+     * @return The full request URI
      */
     URI serverURI();
 
+    /**
+     * @return The request headers
+     */
     Headers headers();
 
     /**
      * The input stream of the request, if there was a request body.
      * <p>
      * Note: this can only be read once and cannot be used with {@link #readBodyAsString()}, {@link #formValue(String)} or {@link #formValues(String)}.
+     *
+     * @return {@link Optional#empty()} if there is no request body; otherwise the input stream of the request body.
      */
     Optional<InputStream> inputStream();
 
@@ -60,11 +72,17 @@ public interface MuRequest {
      * Gets the querystring value with the given name, or empty string if there is no parameter with that name.
      * <p>
      * If there are multiple parameters with the same name, the first one is returned.
+     *
+     * @param name The querystring parameter name to get
+     * @return The querystring value, or an empty string
      */
     String parameter(String name);
 
     /**
      * Gets all the querystring parameters with the given name, or an empty list if none are found.
+     *
+     * @param name The querystring parameter name to get
+     * @return All values of the parameter with the given name
      */
     List<String> parameters(String name);
 
@@ -76,6 +94,9 @@ public interface MuRequest {
      * Note: this cannot be called after a call to {@link #inputStream()} or {@link #readBodyAsString()}
      *
      * @param name The name of the form element to get
+     * @throws IOException Thrown when there is an error while reading the form, e.g. if a user closes their
+     *                     browser before the form is fully read into memory.
+     * @return The value of the form element with the given name, or an empty string
      */
     String formValue(String name) throws IOException;
 
@@ -85,6 +106,9 @@ public interface MuRequest {
      * Note: this cannot be called after a call to {@link #inputStream()} or {@link #readBodyAsString()}
      *
      * @param name The name of the form element to get
+     * @throws IOException Thrown when there is an error while reading the form, e.g. if a user closes their
+     *                     browser before the form is fully read into memory.
+     * @return All values of the form element with the given name
      */
     List<String> formValues(String name) throws IOException;
 }
@@ -94,7 +118,7 @@ class NettyRequestAdapter implements MuRequest {
     private final URI serverUri;
     private final URI uri;
     private final QueryStringDecoder queryStringDecoder;
-    private final HttpMethod method;
+    private final Method method;
     private final Headers headers;
     private InputStream inputStream;
     private QueryStringDecoder formDecoder;
@@ -105,7 +129,7 @@ class NettyRequestAdapter implements MuRequest {
         this.serverUri = URI.create(proto + "://" + request.headers().get("Host") + request.uri());
         this.uri = getUri(request, serverUri);
         this.queryStringDecoder = new QueryStringDecoder(request.uri(), true);
-        this.method = HttpMethod.fromNetty(request.method());
+        this.method = Method.fromNetty(request.method());
         this.headers = new Headers(request.headers());
     }
 
@@ -119,7 +143,7 @@ class NettyRequestAdapter implements MuRequest {
     }
 
     @Override
-    public HttpMethod method() {
+    public Method method() {
         return method;
     }
 
@@ -204,6 +228,7 @@ class NettyRequestAdapter implements MuRequest {
         ensureFormDataLoaded();
         return getSingleParam(name, formDecoder);
     }
+
     @Override
     public List<String> formValues(String name) throws IOException {
         ensureFormDataLoaded();

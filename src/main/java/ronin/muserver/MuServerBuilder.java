@@ -74,7 +74,7 @@ public class MuServerBuilder {
         return this;
     }
 
-    public MuServerBuilder addHandler(HttpMethod method, String pathRegex, MuHandler handler) {
+    public MuServerBuilder addHandler(Method method, String pathRegex, MuHandler handler) {
         return addHandler(Routes.route(method, pathRegex, handler));
     }
 

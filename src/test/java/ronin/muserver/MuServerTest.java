@@ -39,7 +39,7 @@ public class MuServerTest {
 					System.out.println("Got " + request);
 					return false;
 				})
-				.addHandler(HttpMethod.GET, "/blah", (request, response) -> {
+				.addHandler(Method.GET, "/blah", (request, response) -> {
 					handlersHit.add("BlahHandler");
 					System.out.println("Running sync handler");
 					response.status(202);

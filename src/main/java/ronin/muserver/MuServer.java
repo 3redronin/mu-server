@@ -24,28 +24,28 @@ public class MuServer {
 	}
 
     /**
-     * The HTTP URL of the web server, if HTTP is supported
+     * @return The HTTP URL of the web server, if HTTP is supported
      */
 	public URL url() {
 		return url;
 	}
 
     /**
-     * The HTTP URI of the web server, if HTTP is supported
+     * @return The HTTP URI of the web server, if HTTP is supported
      */
     public URI uri() {
 		return uri;
 	}
 
     /**
-     * The HTTPS URI of the web server, if HTTPS is supported
+     * @return The HTTPS URI of the web server, if HTTPS is supported
      */
     public URI httpsUri() {
         return httpsUri;
     }
 
     /**
-     * The HTTPS URL of the web server, if HTTPS is supported
+     * @return The HTTPS URL of the web server, if HTTPS is supported
      */
     public URL httpsUrl() {
         return httpsUrl;
