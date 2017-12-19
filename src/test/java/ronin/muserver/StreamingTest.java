@@ -108,7 +108,7 @@ public class StreamingTest {
 	public void theWholeRequestBodyCanBeReadAsAStringWithABlockingCall() throws Exception {
 		server = muServer()
 				.addHandler((request, response) -> {
-					response.write(request.bodyAsString());
+					response.write(request.readBodyAsString());
 					return true;
 				}).start();
 
@@ -127,7 +127,7 @@ public class StreamingTest {
 		server = muServer()
 				.addHandler((request, response) -> {
 					actual.add(request.inputStream().isPresent() ? "Present" : "Not Present");
-					actual.add("Request body: " + request.bodyAsString());
+					actual.add("Request body: " + request.readBodyAsString());
 					return true;
 				}).start();
 
