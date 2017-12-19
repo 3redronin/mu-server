@@ -6,6 +6,8 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.TooLongFrameException;
 import io.netty.handler.codec.http.*;
+import io.netty.util.Attribute;
+import io.netty.util.AttributeKey;
 
 import java.nio.ByteBuffer;
 import java.util.List;
@@ -16,7 +18,9 @@ import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 class MuServerHandler extends SimpleChannelInboundHandler<Object> {
-	private final List<AsyncMuHandler> handlers;
+    static final AttributeKey<String> PROTO_ATTRIBUTE = AttributeKey.newInstance("proto");
+
+    private final List<AsyncMuHandler> handlers;
 	private final ConcurrentHashMap<ChannelHandlerContext, State> state = new ConcurrentHashMap<>();
 
 	public MuServerHandler(List<AsyncMuHandler> handlers) {
@@ -44,8 +48,9 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
 				HttpResponse response = new DefaultHttpResponse(HTTP_1_1, HttpResponseStatus.OK);
 
 				boolean handled = false;
+                Attribute<String> proto = ctx.channel().attr(PROTO_ATTRIBUTE);
 
-				AsyncContext asyncContext = new AsyncContext(new NettyRequestAdapter(request), new NettyResponseAdaptor(ctx, response));
+                AsyncContext asyncContext = new AsyncContext(new NettyRequestAdapter(proto.get(), request), new NettyResponseAdaptor(ctx, response));
 
 				for (AsyncMuHandler handler : handlers) {
 					handled = handler.onHeaders(asyncContext, asyncContext.request.headers());

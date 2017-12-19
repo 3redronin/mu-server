@@ -11,6 +11,7 @@ import io.netty.handler.codec.http.HttpRequestDecoder;
 import io.netty.handler.codec.http.HttpResponseEncoder;
 import io.netty.handler.ssl.ClientAuth;
 import io.netty.handler.ssl.JdkSslContext;
+import io.netty.util.Attribute;
 
 import javax.net.ssl.SSLContext;
 import java.net.InetSocketAddress;
@@ -18,6 +19,8 @@ import java.net.URI;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
+
+import static ronin.muserver.MuServerHandler.PROTO_ATTRIBUTE;
 
 public class MuServerBuilder {
     private static final int LENGTH_OF_METHOD_AND_PROTOCOL = 17; // e.g. "OPTIONS HTTP/1.1 "
@@ -33,6 +36,7 @@ public class MuServerBuilder {
         this.httpPort = port;
         return this;
     }
+
     public MuServerBuilder withHttpDisabled() {
         this.httpPort = -1;
         return this;
@@ -43,6 +47,7 @@ public class MuServerBuilder {
         this.sslContext = sslEngine;
         return this;
     }
+
     public MuServerBuilder withHttpsDisabled() {
         this.httpsPort = -1;
         this.sslContext = null;
@@ -121,7 +126,8 @@ public class MuServerBuilder {
     }
 
     private Channel createChannel(NioEventLoopGroup bossGroup, NioEventLoopGroup workerGroup, int port, SSLContext rawSSLContext) throws InterruptedException {
-        JdkSslContext sslContext = rawSSLContext == null ? null : new JdkSslContext(rawSSLContext, false, ClientAuth.NONE);
+        boolean usesSsl = rawSSLContext != null;
+        JdkSslContext sslContext = usesSsl ? new JdkSslContext(rawSSLContext, false, ClientAuth.NONE) : null;
 
         ServerBootstrap b = new ServerBootstrap();
         b.group(bossGroup, workerGroup)
@@ -129,8 +135,10 @@ public class MuServerBuilder {
             .childHandler(new ChannelInitializer<SocketChannel>() {
                 @Override
                 protected void initChannel(SocketChannel socketChannel) throws Exception {
+                    Attribute<String> proto = socketChannel.attr(PROTO_ATTRIBUTE);
+                    proto.set(usesSsl ? "https" : "http");
                     ChannelPipeline p = socketChannel.pipeline();
-                    if (sslContext != null) {
+                    if (usesSsl) {
                         p.addLast("ssl", sslContext.newHandler(socketChannel.alloc()));
                     }
                     p.addLast(new HttpRequestDecoder(maxUrlSize + LENGTH_OF_METHOD_AND_PROTOCOL, maxHeadersSize, 8192));
@@ -138,12 +146,15 @@ public class MuServerBuilder {
                     p.addLast(new MuServerHandler(asyncHandlers));
                 }
             });
-        return b.bind(port).sync().channel();
+
+        Channel channel = b.bind(port).sync().channel();
+        return channel;
     }
 
     public static MuServerBuilder muServer() {
         return new MuServerBuilder();
     }
+
     public static MuServerBuilder httpsServer() {
         return new MuServerBuilder().withHttpsConnection(0, SSLContextBuilder.unsignedLocalhostCert());
     }

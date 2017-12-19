@@ -21,13 +21,13 @@ public class HttpsTest {
         server = muServer()
             .withHttpsConnection(8443, SSLContextBuilder.unsignedLocalhostCert())
             .addHandler((request, response) -> {
-                response.write("This is encrypted");
+                response.write("This is encrypted and the URL is " + request.uri());
                 return true;
             })
             .start();
 
         Response resp = call(request().url(server.httpsUrl()));
-        assertThat(resp.body().string(), equalTo("This is encrypted"));
+        assertThat(resp.body().string(), equalTo("This is encrypted and the URL is https://localhost:8443/"));
     }
 
     @Test

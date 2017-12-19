@@ -100,9 +100,8 @@ class NettyRequestAdapter implements MuRequest {
     private QueryStringDecoder formDecoder;
     private boolean bodyRead = false;
 
-    public NettyRequestAdapter(HttpRequest request) {
+    public NettyRequestAdapter(String proto, HttpRequest request) {
         this.request = request;
-        String proto = "http"; // TODO: figure this out based on the request or current channel
         this.serverUri = URI.create(proto + "://" + request.headers().get("Host") + request.uri());
         this.uri = getUri(request, serverUri);
         this.queryStringDecoder = new QueryStringDecoder(request.uri(), true);
