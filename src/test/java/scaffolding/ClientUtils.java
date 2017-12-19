@@ -3,13 +3,43 @@ package scaffolding;
 import okhttp3.*;
 import okio.BufferedSink;
 
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.X509TrustManager;
 import java.io.IOException;
+import java.security.NoSuchAlgorithmException;
 
 public class ClientUtils {
 
-	public static final OkHttpClient client = new OkHttpClient();
+	public static final OkHttpClient client = new OkHttpClient.Builder()
+        .sslSocketFactory(sslContextForTesting().getSocketFactory(), veryTrustingTrustManager())
+        .build();
 
-	public static RequestBody largeRequestBody(StringBuffer sentData) throws IOException {
+    private static SSLContext sslContextForTesting() {
+        try {
+            return SSLContext.getDefault();
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("Cannot set up test SSLContext", e);
+        }
+    }
+
+    private static X509TrustManager veryTrustingTrustManager() {
+        return new X509TrustManager() {
+            @Override
+            public void checkClientTrusted(java.security.cert.X509Certificate[] chain, String authType) {
+            }
+
+            @Override
+            public void checkServerTrusted(java.security.cert.X509Certificate[] chain, String authType) {
+            }
+
+            @Override
+            public java.security.cert.X509Certificate[] getAcceptedIssuers() {
+                return new java.security.cert.X509Certificate[]{};
+            }
+        };
+    }
+
+    public static RequestBody largeRequestBody(StringBuffer sentData) throws IOException {
 		return new RequestBody() {
 			@Override
 			public MediaType contentType() {
