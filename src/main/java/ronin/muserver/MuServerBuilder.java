@@ -152,10 +152,18 @@ public class MuServerBuilder {
     }
 
     public static MuServerBuilder muServer() {
-        return new MuServerBuilder();
+        return new MuServerBuilder()
+            .withHttpsDisabled();
+    }
+
+    public static MuServerBuilder httpServer() {
+        return new MuServerBuilder()
+            .withHttpsDisabled();
     }
 
     public static MuServerBuilder httpsServer() {
-        return new MuServerBuilder().withHttpsConnection(0, SSLContextBuilder.unsignedLocalhostCert());
+        return new MuServerBuilder()
+            .withHttpsConnection(0, SSLContextBuilder.unsignedLocalhostCert())
+            .withHttpDisabled();
     }
 }

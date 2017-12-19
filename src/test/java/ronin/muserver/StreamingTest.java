@@ -17,7 +17,7 @@ import static java.util.Arrays.asList;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
-import static ronin.muserver.MuServerBuilder.muServer;
+import static ronin.muserver.MuServerBuilder.httpServer;
 import static scaffolding.ClientUtils.*;
 
 public class StreamingTest {
@@ -28,7 +28,7 @@ public class StreamingTest {
 	public void theOutputStreamBuffersBasedOnSizeAskedFor() throws IOException {
 		CountDownLatch latch = new CountDownLatch(1);
 		CountDownLatch latch2 = new CountDownLatch(1);
-		server = muServer()
+		server = httpServer()
 				.addHandler((request, response) -> {
 					try (OutputStream outputStream = response.outputStream(4)) {
 						outputStream.write(new byte[]{1, 2, 3, 4});
@@ -64,7 +64,7 @@ public class StreamingTest {
 
 	@Test
 	public void textCanBeWrittenWithThePrintWriter() throws Exception {
-		server = muServer()
+		server = httpServer()
 				.addHandler((request, response) -> {
 					try (PrintWriter writer = response.writer()) {
 						writer.println("Hello, world");
@@ -81,7 +81,7 @@ public class StreamingTest {
 
 	@Test
 	public void requestDataCanBeReadFromTheInputStream() throws Exception {
-		server = muServer()
+		server = httpServer()
 				.addHandler((request, response) -> {
 					try (InputStream in = request.inputStream().get();
 					     OutputStream out = response.outputStream()) {
@@ -106,7 +106,7 @@ public class StreamingTest {
 
 	@Test
 	public void theWholeRequestBodyCanBeReadAsAStringWithABlockingCall() throws Exception {
-		server = muServer()
+		server = httpServer()
 				.addHandler((request, response) -> {
 					response.write(request.readBodyAsString());
 					return true;
@@ -124,7 +124,7 @@ public class StreamingTest {
 	@Test
 	public void thereIsNoInputStreamIfThereIsNoRequestBody() throws Exception {
 		List<String> actual = new ArrayList<>();
-		server = muServer()
+		server = httpServer()
 				.addHandler((request, response) -> {
 					actual.add(request.inputStream().isPresent() ? "Present" : "Not Present");
 					actual.add("Request body: " + request.readBodyAsString());

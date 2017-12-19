@@ -7,7 +7,7 @@ import org.junit.Test;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static ronin.muserver.MuServerBuilder.httpsServer;
-import static ronin.muserver.MuServerBuilder.muServer;
+import static ronin.muserver.MuServerBuilder.httpServer;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 
@@ -18,7 +18,7 @@ public class HttpsTest {
 
     @Test
     public void canCreate() throws Exception {
-        server = muServer()
+        server = httpServer()
             .withHttpsConnection(8443, SSLContextBuilder.unsignedLocalhostCert())
             .addHandler((request, response) -> {
                 response.write("This is encrypted and the URL is " + request.uri());
@@ -42,7 +42,6 @@ public class HttpsTest {
 
         assertThat(server.uri(), is(nullValue()));
     }
-
 
     @After
     public void stopIt() {

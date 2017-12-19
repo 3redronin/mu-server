@@ -4,11 +4,16 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.DefaultHttpContent;
+import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.util.CharsetUtil;
 
-import java.io.*;
+import java.io.BufferedOutputStream;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.Future;
 
@@ -20,6 +25,9 @@ public interface MuResponse {
 	Future<Void> writeAsync(String text);
 	void write(String text);
 
+	void redirect(String url);
+	void redirect(URI uri);
+
 	Headers headers();
 
 	OutputStream outputStream();
@@ -30,13 +38,15 @@ public interface MuResponse {
 
 class NettyResponseAdaptor implements MuResponse {
 	private final ChannelHandlerContext ctx;
-	private final HttpResponse response;
+    private final NettyRequestAdapter request;
+    private final HttpResponse response;
 	private volatile boolean headersWritten = false;
 	private final Headers headers = new Headers();
 
-	public NettyResponseAdaptor(ChannelHandlerContext ctx, HttpResponse response) {
+	public NettyResponseAdaptor(ChannelHandlerContext ctx, NettyRequestAdapter request, HttpResponse response) {
 		this.ctx = ctx;
-		this.response = response;
+        this.request = request;
+        this.response = response;
 	}
 
 	@Override
@@ -72,7 +82,19 @@ class NettyResponseAdaptor implements MuResponse {
 		writeAsync(text);
 	}
 
-	@Override
+    @Override
+    public void redirect(String newLocation) {
+        redirect(URI.create(newLocation));
+    }
+
+    @Override
+    public void redirect(URI newLocation) {
+        URI absoluteUrl = request.uri().resolve(newLocation);
+        status(302);
+        headers().add(HttpHeaderNames.LOCATION, absoluteUrl.toString());
+    }
+
+    @Override
 	public Headers headers() {
 		return headers;
 	}

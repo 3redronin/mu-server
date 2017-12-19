@@ -9,9 +9,9 @@ import java.io.IOException;
 public class ClientUtils {
 
     public static final OkHttpClient client;
+    public static X509TrustManager veryTrustingTrustManager = veryTrustingTrustManager();
 
     static {
-        X509TrustManager veryTrustingTrustManager = veryTrustingTrustManager();
         client = new OkHttpClient.Builder()
             .hostnameVerifier((hostname, session) -> true)
             .sslSocketFactory(sslContextForTesting(veryTrustingTrustManager).getSocketFactory(), veryTrustingTrustManager)
@@ -56,7 +56,7 @@ public class ClientUtils {
 
 
 
-    private static SSLContext sslContextForTesting(TrustManager trustManager) {
+    public static SSLContext sslContextForTesting(TrustManager trustManager) {
         try {
             SSLContext context = SSLContext.getInstance("TLS");
             context.init(null, new TrustManager[]{trustManager}, null);
@@ -66,7 +66,7 @@ public class ClientUtils {
         }
     }
 
-    private static X509TrustManager veryTrustingTrustManager() {
+    public static X509TrustManager veryTrustingTrustManager() {
         return new X509TrustManager() {
             @Override
             public void checkClientTrusted(java.security.cert.X509Certificate[] chain, String authType) {

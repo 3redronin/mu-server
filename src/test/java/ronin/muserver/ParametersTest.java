@@ -11,7 +11,7 @@ import static java.util.Arrays.asList;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.instanceOf;
-import static ronin.muserver.MuServerBuilder.muServer;
+import static ronin.muserver.MuServerBuilder.httpServer;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 
@@ -22,7 +22,7 @@ public class ParametersTest {
 	@Test
 	public void queryStringsCanBeGot() throws MalformedURLException {
 		Object[] actual = new Object[4];
-		server = muServer().addHandler((request, response) -> {
+		server = httpServer().addHandler((request, response) -> {
 			actual[0] = request.parameter("value1");
 			actual[1] = request.parameter("value2");
 			actual[2] = request.parameter("unspecified");
@@ -40,7 +40,7 @@ public class ParametersTest {
 	@Test
 	public void queryStringParametersCanAppearMultipleTimes() throws MalformedURLException {
 		Object[] actual = new Object[3];
-		server = muServer().addHandler((request, response) -> {
+		server = httpServer().addHandler((request, response) -> {
 			actual[0] = request.parameters("value1");
 			actual[1] = request.parameters("value2");
 			actual[2] = request.parameters("unspecified");
@@ -56,7 +56,7 @@ public class ParametersTest {
     @Test
     public void formParametersCanBeGot() throws MalformedURLException {
         Object[] actual = new Object[3];
-        server = muServer().addHandler((request, response) -> {
+        server = httpServer().addHandler((request, response) -> {
             actual[0] = request.formValue("value1");
             actual[1] = request.formValue("value2");
             actual[2] = request.formValue("unspecified");
@@ -79,7 +79,7 @@ public class ParametersTest {
     @Test
     public void formParametersWithMultipleValuesCanBeGot() throws MalformedURLException {
         Object[] actual = new Object[3];
-        server = muServer().addHandler((request, response) -> {
+        server = httpServer().addHandler((request, response) -> {
             actual[0] = request.formValues("value1");
             actual[1] = request.formValues("value2");
             actual[2] = request.formValues("unspecified");
@@ -102,7 +102,7 @@ public class ParametersTest {
     @Test
     public void exceptionsThrownWhenTryingToReadBodyAfterReadingFormData() {
         Throwable[] actual = new Throwable[1];
-        server = muServer().addHandler((request, response) -> {
+        server = httpServer().addHandler((request, response) -> {
             request.formValue("blah");
             try {
                 request.readBodyAsString();

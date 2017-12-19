@@ -14,7 +14,7 @@ import static java.util.Arrays.asList;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.IsEqual.equalTo;
-import static ronin.muserver.MuServerBuilder.muServer;
+import static ronin.muserver.MuServerBuilder.httpServer;
 import static scaffolding.ClientUtils.*;
 
 public class MuServerTest {
@@ -23,7 +23,7 @@ public class MuServerTest {
 
 	@Test
 	public void portZeroCanBeUsed() throws Exception {
-		server = muServer().start();
+		server = httpServer().start();
 		Response resp = call(request().url(server.url()));
 		assertThat(resp.code(), is(404));
 	}
@@ -32,7 +32,7 @@ public class MuServerTest {
 	public void syncHandlersSupported() throws IOException {
 		List<String> handlersHit = new ArrayList<>();
 
-		server = muServer()
+		server = httpServer()
 				.withHttpConnection(12808)
 				.addHandler((request, response) -> {
 					handlersHit.add("Logger");
@@ -61,7 +61,7 @@ public class MuServerTest {
 
 	@Test
 	public void asyncHandlersSupported() throws IOException {
-		server = muServer()
+		server = httpServer()
 				.withHttpConnection(12808)
 				.addAsyncHandler(new AsyncMuHandler() {
 					public boolean onHeaders(AsyncContext ctx, Headers headers) throws Exception {
