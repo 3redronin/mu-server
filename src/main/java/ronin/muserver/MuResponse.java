@@ -4,10 +4,10 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.DefaultHttpContent;
-import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.util.CharsetUtil;
+import ronin.muserver.handlers.HeaderNames;
 
 import java.io.BufferedOutputStream;
 import java.io.OutputStream;
@@ -85,7 +85,7 @@ class NettyResponseAdaptor implements MuResponse {
     public void redirect(URI newLocation) {
         URI absoluteUrl = request.uri().resolve(newLocation);
         status(302);
-        headers().add(HttpHeaderNames.LOCATION, absoluteUrl.toString());
+        headers().add(HeaderNames.LOCATION, absoluteUrl.toString());
     }
 
 	public Headers headers() {

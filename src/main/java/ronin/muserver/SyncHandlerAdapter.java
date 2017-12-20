@@ -1,6 +1,6 @@
 package ronin.muserver;
 
-import io.netty.handler.codec.http.HttpHeaderNames;
+import ronin.muserver.handlers.HeaderNames;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -19,7 +19,7 @@ class SyncHandlerAdapter implements AsyncMuHandler {
 
 
 	public boolean onHeaders(AsyncContext ctx, Headers headers) throws Exception {
-		if (headers.contains(HttpHeaderNames.TRANSFER_ENCODING) || headers.getInt(HttpHeaderNames.CONTENT_LENGTH, -1) > 0) {
+		if (headers.contains(HeaderNames.TRANSFER_ENCODING) || headers.getInt(HeaderNames.CONTENT_LENGTH, -1) > 0) {
 			// There will be a request body, so set the streams
 			GrowableByteBufferInputStream requestBodyStream = new GrowableByteBufferInputStream();
 			((NettyRequestAdapter) ctx.request).inputStream(requestBodyStream);

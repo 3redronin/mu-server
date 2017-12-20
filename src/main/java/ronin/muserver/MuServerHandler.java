@@ -8,6 +8,7 @@ import io.netty.handler.codec.TooLongFrameException;
 import io.netty.handler.codec.http.*;
 import io.netty.util.Attribute;
 import io.netty.util.AttributeKey;
+import ronin.muserver.handlers.HeaderNames;
 
 import java.nio.ByteBuffer;
 import java.util.List;
@@ -99,8 +100,8 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
 			}
 		}
 		FullHttpResponse response = new DefaultFullHttpResponse(HTTP_1_1, HttpResponseStatus.valueOf(code), copiedBuffer(message.getBytes(UTF_8)));
-		response.headers().set(HttpHeaderNames.CONTENT_TYPE, "text/plain");
-		response.headers().set(HttpHeaderNames.CONTENT_LENGTH, message.length());
+		response.headers().set(HeaderNames.CONTENT_TYPE, HeaderValues.TEXT_PLAIN);
+		response.headers().set(HeaderNames.CONTENT_LENGTH, message.length());
 		ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
 	}
 }

@@ -76,7 +76,7 @@ public class Headers implements Iterable<Map.Entry<String, String>> {
 	}
 
 	public Iterator<Map.Entry<String, String>> iterator() {
-		return entries.iterator();
+		return entries.iteratorAsString();
 	}
 
 	public Iterator<Map.Entry<CharSequence, CharSequence>> iteratorCharSequence() {
