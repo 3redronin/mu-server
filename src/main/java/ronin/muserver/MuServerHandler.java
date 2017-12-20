@@ -60,8 +60,7 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
 					}
 				}
 				if (!handled) {
-					System.out.println("No handler found");
-					asyncContext.response.status(404);
+                    send404(asyncContext);
 					asyncContext.complete();
 				}
 			}
@@ -86,7 +85,18 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
 		}
 	}
 
-	private void handleHttpRequestDecodeFailure(ChannelHandlerContext ctx, Throwable cause) {
+    public static void send404(AsyncContext asyncContext) {
+        sendPlainText(asyncContext, "404 Not Found", 404);
+    }
+
+    public static void sendPlainText(AsyncContext asyncContext, String message, int statusCode) {
+        asyncContext.response.status(statusCode);
+        asyncContext.response.headers().set(HeaderNames.CONTENT_TYPE, HeaderValues.TEXT_PLAIN);
+        asyncContext.response.headers().set(HeaderNames.CONTENT_LENGTH, message.length());
+        asyncContext.response.write(message);
+    }
+
+    private void handleHttpRequestDecodeFailure(ChannelHandlerContext ctx, Throwable cause) {
 		String message = "Server error";
 		int code = 500;
 		if (cause instanceof TooLongFrameException) {
@@ -103,4 +113,5 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
 		response.headers().set(HeaderNames.CONTENT_LENGTH, message.length());
 		ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
 	}
+
 }

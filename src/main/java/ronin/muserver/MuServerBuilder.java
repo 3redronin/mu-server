@@ -7,6 +7,7 @@ import io.netty.channel.ChannelPipeline;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.handler.codec.http.HttpContentCompressor;
 import io.netty.handler.codec.http.HttpRequestDecoder;
 import io.netty.handler.codec.http.HttpResponseEncoder;
 import io.netty.handler.ssl.ClientAuth;
@@ -31,9 +32,15 @@ public class MuServerBuilder {
     private List<AsyncMuHandler> asyncHandlers = new ArrayList<>();
     private List<MuHandler> handlers = new ArrayList<>();
     private SSLContext sslContext;
+    private boolean gzipEnabled = true;
 
     public MuServerBuilder withHttpConnection(int port) {
         this.httpPort = port;
+        return this;
+    }
+
+    public MuServerBuilder withGzipEnabled(boolean enabled) {
+        this.gzipEnabled = enabled;
         return this;
     }
 
@@ -102,7 +109,9 @@ public class MuServerBuilder {
 
             Runnable shutdown = () -> {
                 try {
-                    httpChannel.close().sync();
+                    if (httpChannel != null) {
+                        httpChannel.close().sync();
+                    }
                     if (httpsChannel != null) {
                         httpsChannel.close().sync();
                     }
@@ -141,9 +150,15 @@ public class MuServerBuilder {
                     if (usesSsl) {
                         p.addLast("ssl", sslContext.newHandler(socketChannel.alloc()));
                     }
-                    p.addLast(new HttpRequestDecoder(maxUrlSize + LENGTH_OF_METHOD_AND_PROTOCOL, maxHeadersSize, 8192));
-                    p.addLast(new HttpResponseEncoder());
-                    p.addLast(new MuServerHandler(asyncHandlers));
+                    p.addLast("decoder", new HttpRequestDecoder(maxUrlSize + LENGTH_OF_METHOD_AND_PROTOCOL, maxHeadersSize, 8192));
+                    p.addLast("encoder", new HttpResponseEncoder());
+
+                    if (gzipEnabled) {
+                        p.addLast("compressor", new HttpContentCompressor());
+                    }
+//                    p.addLast(new HttpContentDecompressor());
+
+                    p.addLast("muhandler", new MuServerHandler(asyncHandlers));
                 }
             });
 

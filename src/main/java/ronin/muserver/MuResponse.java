@@ -1,11 +1,10 @@
 package ronin.muserver;
 
 import io.netty.buffer.Unpooled;
+import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.handler.codec.http.DefaultHttpContent;
-import io.netty.handler.codec.http.HttpResponse;
-import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.*;
 import io.netty.handler.codec.http.cookie.ServerCookieEncoder;
 import io.netty.util.CharsetUtil;
 
@@ -43,6 +42,7 @@ class NettyResponseAdaptor implements MuResponse {
     private final HttpResponse response;
 	private volatile boolean headersWritten = false;
 	private final Headers headers = new Headers();
+	private boolean keepAlive;
 
 	public NettyResponseAdaptor(ChannelHandlerContext ctx, NettyRequestAdapter request, HttpResponse response) {
 		this.ctx = ctx;
@@ -65,7 +65,20 @@ class NettyResponseAdaptor implements MuResponse {
 	private void ensureHeadersWritten() {
 		if (!headersWritten) {
 			headersWritten = true;
+
+
+			keepAlive = !headers.contains(HeaderNames.CONNECTION) && request.isKeepAliveRequested();
+            if (keepAlive) {
+                response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE);
+            }
+
+            // TODO: why does setting this transfer coding break the input stream?!?
+            if (!headers.contains(HeaderNames.CONTENT_LENGTH) && !headers.contains(HttpHeaderNames.TRANSFER_ENCODING)) {
+                response.headers().set(HttpHeaderNames.TRANSFER_ENCODING, HttpHeaderValues.CHUNKED);
+            }
+
 			response.headers().add(headers.nettyHeaders());
+
 			ctx.write(response);
 		}
 	}
@@ -117,6 +130,10 @@ class NettyResponseAdaptor implements MuResponse {
 
 	public Future<Void> complete() {
 		ensureHeadersWritten();
-		return ctx.writeAndFlush(Unpooled.EMPTY_BUFFER).addListener(ChannelFutureListener.CLOSE);
+        ChannelFuture completeFuture = ctx.writeAndFlush(new DefaultLastHttpContent());
+        if (!keepAlive) {
+            completeFuture = completeFuture.addListener(ChannelFutureListener.CLOSE);
+        }
+        return completeFuture;
 	}
 }

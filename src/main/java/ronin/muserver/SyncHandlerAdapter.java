@@ -34,7 +34,7 @@ class SyncHandlerAdapter implements AsyncMuHandler {
 					}
 				}
 				if (!handled) {
-					ctx.response.status(404);
+				    MuServerHandler.send404(ctx);
 				}
 
 			} catch (Exception ex) {
@@ -47,7 +47,7 @@ class SyncHandlerAdapter implements AsyncMuHandler {
 		return true;
 	}
 
-	public void onRequestData(AsyncContext ctx, ByteBuffer buffer) throws Exception {
+	public void onRequestData(AsyncContext ctx, ByteBuffer buffer) {
 		GrowableByteBufferInputStream state = (GrowableByteBufferInputStream) ctx.state;
 		state.handOff(buffer);
 	}

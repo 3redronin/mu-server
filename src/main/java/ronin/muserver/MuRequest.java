@@ -2,6 +2,7 @@ package ronin.muserver;
 
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.QueryStringDecoder;
 import io.netty.handler.codec.http.cookie.ServerCookieDecoder;
 
@@ -148,6 +149,10 @@ class NettyRequestAdapter implements MuRequest {
         this.queryStringDecoder = new QueryStringDecoder(request.uri(), true);
         this.method = Method.fromNetty(request.method());
         this.headers = new Headers(request.headers());
+    }
+
+    boolean isKeepAliveRequested() {
+        return HttpUtil.isKeepAlive(request);
     }
 
     private static URI getUri(HttpRequest request, URI serverUri) {

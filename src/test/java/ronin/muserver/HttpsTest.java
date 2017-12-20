@@ -4,13 +4,8 @@ import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
 
-import java.io.IOException;
-
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.nullValue;
-import static ronin.muserver.MuServerBuilder.httpServer;
+import static org.hamcrest.Matchers.*;
 import static ronin.muserver.MuServerBuilder.httpsServer;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
@@ -19,10 +14,11 @@ public class HttpsTest {
 
     private MuServer server;
 
-    @Test public void canCreate() throws IOException {
-        server = httpServer()
+    @Test public void canCreate() throws Exception {
+        server = httpsServer()
             .withHttpsConnection(8443, SSLContextBuilder.unsignedLocalhostCert())
             .addHandler((request, response) -> {
+                response.headers().add(HeaderNames.CONTENT_TYPE, HeaderValues.TEXT_PLAIN);
                 response.write("This is encrypted and the URL is " + request.uri());
                 return true;
             })
