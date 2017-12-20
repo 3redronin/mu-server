@@ -12,10 +12,14 @@ public class ClientUtils {
     public static X509TrustManager veryTrustingTrustManager = veryTrustingTrustManager();
 
     static {
-        client = new OkHttpClient.Builder()
-            .hostnameVerifier((hostname, session) -> true)
-            .sslSocketFactory(sslContextForTesting(veryTrustingTrustManager).getSocketFactory(), veryTrustingTrustManager)
+        client = newClient()
             .build();
+    }
+
+    public static OkHttpClient.Builder newClient() {
+        return new OkHttpClient.Builder()
+            .hostnameVerifier((hostname, session) -> true)
+            .sslSocketFactory(sslContextForTesting(veryTrustingTrustManager).getSocketFactory(), veryTrustingTrustManager);
     }
 
     public static RequestBody largeRequestBody(StringBuffer sentData) throws IOException {

@@ -3,6 +3,7 @@ package ronin.muserver;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.QueryStringDecoder;
+import io.netty.handler.codec.http.cookie.ServerCookieDecoder;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -10,8 +11,10 @@ import java.net.URI;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static ronin.muserver.Cookie.nettyToMu;
 
 public interface MuRequest {
 
@@ -94,9 +97,9 @@ public interface MuRequest {
      * Note: this cannot be called after a call to {@link #inputStream()} or {@link #readBodyAsString()}
      *
      * @param name The name of the form element to get
+     * @return The value of the form element with the given name, or an empty string
      * @throws IOException Thrown when there is an error while reading the form, e.g. if a user closes their
      *                     browser before the form is fully read into memory.
-     * @return The value of the form element with the given name, or an empty string
      */
     String formValue(String name) throws IOException;
 
@@ -106,11 +109,24 @@ public interface MuRequest {
      * Note: this cannot be called after a call to {@link #inputStream()} or {@link #readBodyAsString()}
      *
      * @param name The name of the form element to get
+     * @return All values of the form element with the given name
      * @throws IOException Thrown when there is an error while reading the form, e.g. if a user closes their
      *                     browser before the form is fully read into memory.
-     * @return All values of the form element with the given name
      */
     List<String> formValues(String name) throws IOException;
+
+    /**
+     * Gets all the client-sent cookies
+     * @return A set of cookie objects
+     */
+    Set<Cookie> cookies();
+
+    /**
+     * Gets the client-sent cookie with the given name
+     * @param name The name of the cookie
+     * @return The cookie, or {@link Optional#empty()} if there is no cookie with that name.
+     */
+    Optional<Cookie> cookie(String name);
 }
 
 class NettyRequestAdapter implements MuRequest {
@@ -123,6 +139,7 @@ class NettyRequestAdapter implements MuRequest {
     private InputStream inputStream;
     private QueryStringDecoder formDecoder;
     private boolean bodyRead = false;
+    private Set<Cookie> cookies;
 
     public NettyRequestAdapter(String proto, HttpRequest request) {
         this.request = request;
@@ -233,6 +250,25 @@ class NettyRequestAdapter implements MuRequest {
     public List<String> formValues(String name) throws IOException {
         ensureFormDataLoaded();
         return getMultipleParams(name, formDecoder);
+    }
+
+    @Override
+    public Set<Cookie> cookies() {
+        if (this.cookies == null) {
+            this.cookies = nettyToMu(ServerCookieDecoder.STRICT.decode(headers().get(HeaderNames.COOKIE)));
+        }
+        return this.cookies;
+    }
+
+    @Override
+    public Optional<Cookie> cookie(String name) {
+        Set<Cookie> cookies = cookies();
+        for (Cookie cookie : cookies) {
+            if (cookie.name().equals(name)) {
+                return Optional.of(cookie);
+            }
+        }
+        return Optional.empty();
     }
 
     private void ensureFormDataLoaded() throws IOException {

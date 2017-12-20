@@ -6,6 +6,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.DefaultHttpContent;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.cookie.ServerCookieEncoder;
 import io.netty.util.CharsetUtil;
 
 import java.io.BufferedOutputStream;
@@ -28,6 +29,7 @@ public interface MuResponse {
 	void redirect(URI uri);
 
 	Headers headers();
+	void addCookie(Cookie cookie);
 
 	OutputStream outputStream();
 	OutputStream outputStream(int bufferSizeInBytes);
@@ -91,7 +93,11 @@ class NettyResponseAdaptor implements MuResponse {
 		return headers;
 	}
 
-	public OutputStream outputStream() {
+    public void addCookie(Cookie cookie) {
+        headers.add(HeaderNames.SET_COOKIE, ServerCookieEncoder.STRICT.encode(cookie.nettyCookie));
+    }
+
+    public OutputStream outputStream() {
 		return outputStream(32*1024); // TODO find a good value for this default and make it configurable
 	}
 
