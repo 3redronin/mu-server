@@ -1,7 +1,5 @@
 package ronin.muserver;
 
-import ronin.muserver.handlers.HeaderNames;
-
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;

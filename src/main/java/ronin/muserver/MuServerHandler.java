@@ -8,7 +8,6 @@ import io.netty.handler.codec.TooLongFrameException;
 import io.netty.handler.codec.http.*;
 import io.netty.util.Attribute;
 import io.netty.util.AttributeKey;
-import ronin.muserver.handlers.HeaderNames;
 
 import java.nio.ByteBuffer;
 import java.util.List;

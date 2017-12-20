@@ -1,7 +1,6 @@
 package ronin.muserver;
 
 import io.netty.handler.codec.http.HttpHeaderValues;
-import ronin.muserver.handlers.HeaderNames;
 
 /**
  * Standard HTTP header values.

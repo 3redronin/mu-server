@@ -1,4 +1,4 @@
-package ronin.muserver.handlers;
+package ronin.muserver;
 
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.util.AsciiString;

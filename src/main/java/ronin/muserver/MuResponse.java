@@ -7,7 +7,6 @@ import io.netty.handler.codec.http.DefaultHttpContent;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.util.CharsetUtil;
-import ronin.muserver.handlers.HeaderNames;
 
 import java.io.BufferedOutputStream;
 import java.io.OutputStream;

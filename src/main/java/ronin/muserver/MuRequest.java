@@ -3,7 +3,6 @@ package ronin.muserver;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.QueryStringDecoder;
-import ronin.muserver.handlers.HeaderNames;
 
 import java.io.IOException;
 import java.io.InputStream;
