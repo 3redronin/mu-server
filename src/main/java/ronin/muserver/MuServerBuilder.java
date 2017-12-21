@@ -7,7 +7,6 @@ import io.netty.channel.ChannelPipeline;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
-import io.netty.handler.codec.http.HttpContentCompressor;
 import io.netty.handler.codec.http.HttpRequestDecoder;
 import io.netty.handler.codec.http.HttpResponseEncoder;
 import io.netty.handler.ssl.ClientAuth;
@@ -19,12 +18,16 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
+import static java.util.Arrays.asList;
 import static ronin.muserver.MuServerHandler.PROTO_ATTRIBUTE;
 
 public class MuServerBuilder {
     private static final int LENGTH_OF_METHOD_AND_PROTOCOL = 17; // e.g. "OPTIONS HTTP/1.1 "
+    private int minimumGzipSize = 1400;
     private int httpPort = 0;
     private int httpsPort = 0;
     private int maxHeadersSize = 8192;
@@ -33,6 +36,11 @@ public class MuServerBuilder {
     private List<MuHandler> handlers = new ArrayList<>();
     private SSLContext sslContext;
     private boolean gzipEnabled = true;
+    private Set<CharSequence> mimeTypesToGzip = new HashSet<>(asList(
+        HeaderValues.TEXT_PLAIN, HeaderValues.APPLICATION_JSON, HeaderValues.TEXT_HTML, "application/xml",
+        "application/javascript", "text/css", "text/csv", "text/markdown", "image/svg+xml"
+        ));
+
 
     public MuServerBuilder withHttpConnection(int port) {
         this.httpPort = port;
@@ -41,6 +49,12 @@ public class MuServerBuilder {
 
     public MuServerBuilder withGzipEnabled(boolean enabled) {
         this.gzipEnabled = enabled;
+        return this;
+    }
+    public MuServerBuilder withGzip(int minimumGzipSize, Set<CharSequence> mimeTypesToGzip) {
+        this.gzipEnabled = true;
+        this.mimeTypesToGzip = mimeTypesToGzip;
+        this.minimumGzipSize = minimumGzipSize;
         return this;
     }
 
@@ -153,7 +167,7 @@ public class MuServerBuilder {
                     p.addLast("decoder", new HttpRequestDecoder(maxUrlSize + LENGTH_OF_METHOD_AND_PROTOCOL, maxHeadersSize, 8192));
                     p.addLast("encoder", new HttpResponseEncoder());
                     if (gzipEnabled) {
-                        p.addLast("compressor", new HttpContentCompressor());
+                        p.addLast("compressor", new SelectiveHttpContentCompressor(minimumGzipSize, mimeTypesToGzip));
                     }
                     p.addLast("muhandler", new MuServerHandler(asyncHandlers));
                 }

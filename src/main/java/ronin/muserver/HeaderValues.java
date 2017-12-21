@@ -1,6 +1,7 @@
 package ronin.muserver;
 
 import io.netty.handler.codec.http.HttpHeaderValues;
+import io.netty.util.AsciiString;
 
 /**
  * Standard HTTP header values.
@@ -179,6 +180,10 @@ public final class HeaderValues {
      * {@code "text/plain"}
      */
     public static final CharSequence TEXT_PLAIN = HttpHeaderValues.TEXT_PLAIN;
+    /**
+     * {@code "text/html"}
+     */
+    public static final CharSequence TEXT_HTML = AsciiString.cached("text/html");
     /**
      * {@code "trailers"}
      */

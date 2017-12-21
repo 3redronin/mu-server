@@ -5,6 +5,8 @@ import okio.BufferedSink;
 
 import javax.net.ssl.*;
 import java.io.IOException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class ClientUtils {
 
@@ -12,6 +14,7 @@ public class ClientUtils {
     public static X509TrustManager veryTrustingTrustManager = veryTrustingTrustManager();
 
     static {
+        Logger.getLogger(OkHttpClient.class.getName()).setLevel(Level.FINE);
         client = newClient()
             .build();
     }
@@ -22,7 +25,7 @@ public class ClientUtils {
             .sslSocketFactory(sslContextForTesting(veryTrustingTrustManager).getSocketFactory(), veryTrustingTrustManager);
     }
 
-    public static RequestBody largeRequestBody(StringBuffer sentData) throws IOException {
+    public static RequestBody largeRequestBody(StringBuffer sentData) {
         return new RequestBody() {
             public MediaType contentType() {
                 return MediaType.parse("text/plain");

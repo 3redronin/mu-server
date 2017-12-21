@@ -8,12 +8,9 @@ public class RunLocal {
         MuServer server = muServer()
             .withHttpConnection(8080)
             .withHttpsConnection(8443, SSLContextBuilder.unsignedLocalhostCert())
-            .withGzipEnabled(true)
             .addHandler(Method.GET, "/", (request, response) -> {
-                response.headers().add(HeaderNames.CONTENT_TYPE, HeaderValues.APPLICATION_JSON + ";charset=utf-8");
-                String text = "{ \"hello\": \"world                    this is something           to be gzipped\" }";
-                response.headers().add(HeaderNames.CONTENT_LENGTH, text.length());
-                response.write(text);
+                response.headers().add(HeaderNames.CONTENT_TYPE, HeaderValues.APPLICATION_JSON);
+                response.write("{ \"hello\": \"world                    this is something           to be gzipped\" }");
                 return true;
             })
             .start();

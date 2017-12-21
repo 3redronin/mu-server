@@ -83,6 +83,7 @@ public class HeadersTest {
 				}).start();
 
 		Response resp = call(request().url(server.uri().resolve("/this-is-much-longer-than-that-value-allowed-by-the-config-above-i-think").toURL()));
+		resp.close();
 		assertThat(resp.code(), is(414));
 		assertThat(handlerHit.get(), is(false));
 	}
@@ -96,6 +97,7 @@ public class HeadersTest {
 				}).start();
 
 		Response resp = call(xSomethingHeader(randomStringOfLength(1025)));
+		resp.close();
 		assertThat(resp.code(), is(431));
 		assertThat(resp.header("X-Something"), is(nullValue()));
 	}
@@ -122,7 +124,6 @@ public class HeadersTest {
 
     @Test public void ifNoResponseDataThenContentLengthIsZero() {
         server = httpServer()
-            .withGzipEnabled(false)
             .addHandler((request, response) -> {
                 response.status(200);
                 response.headers().add("X-Blah", "ha");
@@ -140,7 +141,6 @@ public class HeadersTest {
 
     @Test public void ifOutputStreamUsedThenTransferEncodingIsChunked() {
         server = httpServer()
-            .withGzipEnabled(false)
             .addHandler((request, response) -> {
                 response.status(200);
                 try (PrintWriter writer = response.writer()) {
@@ -150,6 +150,7 @@ public class HeadersTest {
             }).start();
 
         Response resp = call(request().url(server.url()));
+        resp.close();
         assertThat(resp.code(), is(200));
         assertThat(resp.header("Content-Length"), is(nullValue()));
         assertThat(resp.header("Transfer-Encoding"), is("chunked"));
