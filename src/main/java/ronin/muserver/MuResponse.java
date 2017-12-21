@@ -8,7 +8,6 @@ import io.netty.handler.codec.http.*;
 import io.netty.handler.codec.http.cookie.ServerCookieEncoder;
 import io.netty.util.CharsetUtil;
 
-import java.io.BufferedOutputStream;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
@@ -37,10 +36,11 @@ public interface MuResponse {
 }
 
 class NettyResponseAdaptor implements MuResponse {
+    private boolean chunkResponse = false;
 	private final ChannelHandlerContext ctx;
     private final NettyRequestAdapter request;
     private final HttpResponse response;
-	private volatile boolean headersWritten = false;
+	private boolean headersWritten = false;
 	private final Headers headers = new Headers();
 	private boolean keepAlive;
 
@@ -62,31 +62,41 @@ class NettyResponseAdaptor implements MuResponse {
 
 	}
 
+	private void useChunkedMode() {
+	    if (!chunkResponse) {
+	        chunkResponse = true;
+            response.headers().set(HttpHeaderNames.TRANSFER_ENCODING, HttpHeaderValues.CHUNKED);
+            response.headers().remove(HttpHeaderNames.CONTENT_LENGTH);
+        }
+    }
+
 	private void ensureHeadersWritten() {
 		if (!headersWritten) {
 			headersWritten = true;
-
 
 			keepAlive = !headers.contains(HeaderNames.CONNECTION) && request.isKeepAliveRequested();
             if (keepAlive) {
                 response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE);
             }
 
-            // TODO: why does setting this transfer coding break the input stream?!?
-            if (!headers.contains(HeaderNames.CONTENT_LENGTH) && !headers.contains(HttpHeaderNames.TRANSFER_ENCODING)) {
-                response.headers().set(HttpHeaderNames.TRANSFER_ENCODING, HttpHeaderValues.CHUNKED);
+            if (!chunkResponse) {
+                response.headers().set(HttpHeaderNames.CONTENT_LENGTH, HttpHeaderValues.ZERO);
             }
 
 			response.headers().add(headers.nettyHeaders());
+
 
 			ctx.write(response);
 		}
 	}
 
 	public Future<Void> writeAsync(String text) {
+	    useChunkedMode();
 		ensureHeadersWritten();
 		return ctx.write(new DefaultHttpContent(Unpooled.copiedBuffer(text, CharsetUtil.UTF_8)));
 	}
+
+
 
 	public void write(String text) {
 		writeAsync(text);
@@ -115,8 +125,9 @@ class NettyResponseAdaptor implements MuResponse {
 	}
 
 	public OutputStream outputStream(int bufferSizeInBytes) {
+	    useChunkedMode();
 		ensureHeadersWritten();
-		return new BufferedOutputStream(new ChannelOutputStream(ctx), bufferSizeInBytes);
+		return new ChunkOutputStream(ctx, bufferSizeInBytes);
 	}
 
 	public PrintWriter writer() {
@@ -130,7 +141,7 @@ class NettyResponseAdaptor implements MuResponse {
 
 	public Future<Void> complete() {
 		ensureHeadersWritten();
-        ChannelFuture completeFuture = ctx.writeAndFlush(new DefaultLastHttpContent());
+        ChannelFuture completeFuture = ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
         if (!keepAlive) {
             completeFuture = completeFuture.addListener(ChannelFutureListener.CLOSE);
         }

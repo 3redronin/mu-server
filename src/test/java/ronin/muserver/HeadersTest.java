@@ -5,6 +5,7 @@ import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
 
+import java.io.PrintWriter;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.util.UUID;
@@ -119,7 +120,43 @@ public class HeadersTest {
 		assertThat(actual[0].toString(), equalTo("https://www.example.org/blah?query=value"));
 	}
 
-	@After public void stopIt() {
+    @Test public void ifNoResponseDataThenContentLengthIsZero() {
+        server = httpServer()
+            .withGzipEnabled(false)
+            .addHandler((request, response) -> {
+                response.status(200);
+                response.headers().add("X-Blah", "ha");
+                // no response writing
+                return true;
+            }).start();
+
+
+        Response resp = call(request().url(server.url()));
+        assertThat(resp.code(), is(200));
+        assertThat(resp.header("X-Blah"), is("ha"));
+        assertThat(resp.header("Content-Length"), is("0"));
+        assertThat(resp.header("Transfer-Encoding"), is(nullValue()));
+    }
+
+    @Test public void ifOutputStreamUsedThenTransferEncodingIsChunked() {
+        server = httpServer()
+            .withGzipEnabled(false)
+            .addHandler((request, response) -> {
+                response.status(200);
+                try (PrintWriter writer = response.writer()) {
+                    writer.println("Why, hello there");
+                }
+                return true;
+            }).start();
+
+        Response resp = call(request().url(server.url()));
+        assertThat(resp.code(), is(200));
+        assertThat(resp.header("Content-Length"), is(nullValue()));
+        assertThat(resp.header("Transfer-Encoding"), is("chunked"));
+    }
+
+
+    @After public void stopIt() {
 		server.stop();
 	}
 

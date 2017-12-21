@@ -152,18 +152,13 @@ public class MuServerBuilder {
                     }
                     p.addLast("decoder", new HttpRequestDecoder(maxUrlSize + LENGTH_OF_METHOD_AND_PROTOCOL, maxHeadersSize, 8192));
                     p.addLast("encoder", new HttpResponseEncoder());
-
                     if (gzipEnabled) {
                         p.addLast("compressor", new HttpContentCompressor());
                     }
-//                    p.addLast(new HttpContentDecompressor());
-
                     p.addLast("muhandler", new MuServerHandler(asyncHandlers));
                 }
             });
-
-        Channel channel = b.bind(port).sync().channel();
-        return channel;
+        return b.bind(port).sync().channel();
     }
 
     public static MuServerBuilder muServer() {

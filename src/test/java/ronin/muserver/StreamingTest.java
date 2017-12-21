@@ -81,6 +81,7 @@ public class StreamingTest {
 
 	@Test public void requestDataCanBeReadFromTheInputStream() throws Exception {
 		server = httpServer()
+            .withGzipEnabled(false)
 				.addHandler((request, response) -> {
 					try (InputStream in = request.inputStream().get();
 					     OutputStream out = response.outputStream()) {
@@ -130,6 +131,7 @@ public class StreamingTest {
 		call(request().url(server.url()));
 		assertThat(actual, equalTo(asList("Not Present", "Request body: ")));
 	}
+
 
 	@After public void stopIt() {
 		server.stop();
