@@ -23,8 +23,9 @@ public class MuServerTest {
 
 	@Test public void portZeroCanBeUsed() {
 		server = httpServer().start();
-		Response resp = call(request().url(server.url()));
-		assertThat(resp.code(), is(404));
+        try (Response resp = call(request().url(server.url()))) {
+            assertThat(resp.code(), is(404));
+        }
 	}
 
 	@Test public void syncHandlersSupported() throws IOException {
@@ -34,15 +35,12 @@ public class MuServerTest {
 				.withHttpConnection(12808)
 				.addHandler((request, response) -> {
 					handlersHit.add("Logger");
-					System.out.println("Got " + request);
 					return false;
 				})
 				.addHandler(Method.GET, "/blah", (request, response) -> {
 					handlersHit.add("BlahHandler");
-					System.out.println("Running sync handler");
 					response.status(202);
 					response.write("This is a test");
-					System.out.println("Sync handler complete");
 					return true;
 				})
 				.addHandler((request, response) -> {
@@ -81,7 +79,6 @@ public class MuServerTest {
 
 					public void onRequestData(AsyncContext ctx, ByteBuffer buffer) {
 						String text = StandardCharsets.UTF_8.decode(buffer).toString();
-						System.out.println("Got: " + text);
 						ctx.response.writeAsync(text);
 					}
 

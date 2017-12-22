@@ -12,7 +12,8 @@ public class ResourceTypeTest {
     @Test
     public void canDiscoverResourceTypes() {
         Map<String, ResourceType> map = ResourceType.DEFAULT_EXTENSION_MAPPINGS;
-        assertThat(map.get("jpg"), is(ResourceType.JPEG));
-        assertThat(map.get("jpeg"), is(ResourceType.JPEG));
+        assertThat(map.get("jpg"), is(ResourceType.IMAGE_JPEG));
+        assertThat(map.get("jpeg"), is(ResourceType.IMAGE_JPEG));
     }
+
 }
