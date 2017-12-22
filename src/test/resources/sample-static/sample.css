@@ -1,0 +1,107 @@
+body {
+    margin: 0;
+    padding: 0;
+    font-family: "Raleway", "HelveticaNeue", "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+header {
+    border: 5px solid #dfc7ff;
+    border-right-width: 0;
+    border-left-width: 0;
+    background-color: #f33bff;
+    margin: 0;
+    padding: 5px 30px 5px 5px;
+    color: White;
+    line-height: 20pt;
+}
+header h1 {
+    padding: 0; margin: 0;
+    color: White;
+    font-style: italic;
+    font-size: 20pt;
+    float: right;
+}
+header a, header a:visited {
+    color: White;
+    text-decoration: none;
+}
+header nav a {
+    padding-left: 10px;
+    padding-right: 10px;
+}
+
+main {
+    margin: 20px;
+}
+
+footer {
+    margin-top: 100px;
+    padding: 10px;
+    text-align: center;
+    font-style: italic;
+    border-top: solid 1px #ffe44a;
+}
+footer a, footer a:visited {
+    color: #92c2ff;
+}
+
+.app-container {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: space-around;
+    align-items: stretch;
+    margin: -5px; /* to get rid of outer margins added in the app-item */
+}
+.app-item {
+    flex-grow: 1;
+    flex-shrink: 0;
+    width: 200px;
+    max-width: 90%;
+    border: solid 1px black;
+    margin: 5px;
+    background-size: cover;
+    height: 200px;
+}
+.app-item .links {
+    background-color: rgba(255,255,255,0.7) ;
+    text-align: center;
+    width: 100%;
+    height: 200px;
+}
+.app-item .links h2 {
+    margin: 0;
+    padding: 40px 0 40px 0;
+}
+.app-item .links a {
+    color: #000000;
+    background-color: rgba(255, 228, 74, 0.5);
+    border-radius: 10px;
+    padding: 10px;
+    text-decoration: none;
+}
+
+.deploy-form .output {
+    width: 100%;
+    border: 1px dashed #DDDDDD;
+    overflow-x: auto;
+    overflow-y: scroll;
+    height: auto;
+    max-height: 400px;
+}
+
+.app-screenshot {
+    float: right;
+    max-width: 100%;
+    width: 30%;
+}
+
+.app-screenshot img {
+    width: 100%;
+    border: solid 1px #ffb340;
+}
+
+.not-running {
+    -webkit-filter: grayscale(100%);
+    filter: grayscale(100%);
+}

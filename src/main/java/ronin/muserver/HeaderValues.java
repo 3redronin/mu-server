@@ -8,18 +8,6 @@ import io.netty.util.AsciiString;
  */
 public final class HeaderValues {
     /**
-     * {@code "application/json"}
-     */
-    public static final CharSequence APPLICATION_JSON = HttpHeaderValues.APPLICATION_JSON;
-    /**
-     * {@code "application/x-www-form-urlencoded"}
-     */
-    public static final CharSequence APPLICATION_X_WWW_FORM_URLENCODED = HttpHeaderValues.APPLICATION_X_WWW_FORM_URLENCODED;
-    /**
-     * {@code "application/octet-stream"}
-     */
-    public static final CharSequence APPLICATION_OCTET_STREAM = HttpHeaderValues.APPLICATION_OCTET_STREAM;
-    /**
      * {@code "attachment"}
      * See {@link HeaderNames#CONTENT_DISPOSITION}
      */
@@ -176,14 +164,6 @@ public final class HeaderValues {
      * {@code "s-maxage"}
      */
     public static final CharSequence S_MAXAGE = HttpHeaderValues.S_MAXAGE;
-    /**
-     * {@code "text/plain"}
-     */
-    public static final CharSequence TEXT_PLAIN = HttpHeaderValues.TEXT_PLAIN;
-    /**
-     * {@code "text/html"}
-     */
-    public static final CharSequence TEXT_HTML = AsciiString.cached("text/html");
     /**
      * {@code "trailers"}
      */

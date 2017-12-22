@@ -37,7 +37,7 @@ public class MuServerBuilder {
     private SSLContext sslContext;
     private boolean gzipEnabled = true;
     private Set<CharSequence> mimeTypesToGzip = new HashSet<>(asList(
-        HeaderValues.TEXT_PLAIN, HeaderValues.APPLICATION_JSON, HeaderValues.TEXT_HTML, "application/xml",
+        ContentTypes.TEXT_PLAIN, ContentTypes.APPLICATION_JSON, ContentTypes.TEXT_HTML, "application/xml",
         "application/javascript", "text/css", "text/csv", "text/markdown", "image/svg+xml"
         ));
 

@@ -6,6 +6,8 @@ import java.net.URLEncoder;
 
 public class Mutils {
 
+    public static final String NEWLINE = String.format("%n");
+
     public static String urlEncode(String value) {
         try {
             return URLEncoder.encode(value, "UTF-8");

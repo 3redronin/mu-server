@@ -65,7 +65,7 @@ public class StreamingTest {
 	@Test public void textCanBeWrittenWithThePrintWriter() throws Exception {
 		server = httpServer()
 				.addHandler((request, response) -> {
-                    response.headers().set(HeaderNames.CONTENT_TYPE, HeaderValues.TEXT_PLAIN);
+                    response.headers().set(HeaderNames.CONTENT_TYPE, ContentTypes.TEXT_PLAIN);
 					try (PrintWriter writer = response.writer()) {
 						writer.println("Hello, world");
 						writer.print("What's happening?");
