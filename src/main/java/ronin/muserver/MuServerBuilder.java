@@ -12,6 +12,7 @@ import io.netty.handler.codec.http.HttpResponseEncoder;
 import io.netty.handler.ssl.ClientAuth;
 import io.netty.handler.ssl.JdkSslContext;
 import io.netty.util.Attribute;
+import ronin.muserver.handlers.ResourceType;
 
 import javax.net.ssl.SSLContext;
 import java.net.InetSocketAddress;
@@ -36,11 +37,7 @@ public class MuServerBuilder {
     private List<MuHandler> handlers = new ArrayList<>();
     private SSLContext sslContext;
     private boolean gzipEnabled = true;
-    private Set<CharSequence> mimeTypesToGzip = new HashSet<>(asList(
-        ContentTypes.TEXT_PLAIN, ContentTypes.APPLICATION_JSON, ContentTypes.TEXT_HTML, "application/xml",
-        "application/javascript", "text/css", "text/csv", "text/markdown", "image/svg+xml"
-        ));
-
+    private Set<CharSequence> mimeTypesToGzip = ResourceType.gzippableMimeTypes(ResourceType.getResourceTypes());
 
     public MuServerBuilder withHttpConnection(int port) {
         this.httpPort = port;

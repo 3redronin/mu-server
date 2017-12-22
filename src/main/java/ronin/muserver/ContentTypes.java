@@ -24,11 +24,19 @@ public class ContentTypes {
      * {@code "image/jpeg"}
      */
     public static final CharSequence IMAGE_JPEG = AsciiString.cached("image/jpeg");
+    /**
+     * {@code "image/svg+xml"}
+     */
+    public static final CharSequence IMAGE_SVG = AsciiString.cached("image/svg+xml");
 
     /**
      * {@code "text/css"}
      */
     public static final CharSequence TEXT_CSS = AsciiString.cached("text/css");
+    /**
+     * {@code "text/csv"}
+     */
+    public static final CharSequence TEXT_CSV = AsciiString.cached("text/csv");
     /**
      * {@code "text/plain"}
      */
@@ -37,4 +45,12 @@ public class ContentTypes {
      * {@code "text/html"}
      */
     public static final CharSequence TEXT_HTML = AsciiString.cached("text/html");
+    /**
+     * {@code "text/markdown"}
+     */
+    public static final CharSequence TEXT_MARKDOWN = AsciiString.cached("text/markdown");
+    /**
+     * {@code "text/xml"}
+     */
+    public static final CharSequence TEXT_XML = AsciiString.cached("text/xml");
 }
