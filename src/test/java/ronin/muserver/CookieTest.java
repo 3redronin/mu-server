@@ -70,7 +70,6 @@ public class CookieTest {
                 return true;
             })
             .addHandler(GET, "/save", (request, response) -> {
-                System.out.println("request.headers() = " + request.headers());
                 nonExistentCookieLookup.set(request.cookie("ThereIsNoCookie"));
                 sessionLookup.set(request.cookie("A Session"));
                 actualSentCookies.addAll(request.cookies());

@@ -37,7 +37,7 @@ public class MuServerBuilder {
     private List<MuHandler> handlers = new ArrayList<>();
     private SSLContext sslContext;
     private boolean gzipEnabled = true;
-    private Set<CharSequence> mimeTypesToGzip = ResourceType.gzippableMimeTypes(ResourceType.getResourceTypes());
+    private Set<String> mimeTypesToGzip = ResourceType.gzippableMimeTypes(ResourceType.getResourceTypes());
 
     public MuServerBuilder withHttpConnection(int port) {
         this.httpPort = port;
@@ -48,7 +48,7 @@ public class MuServerBuilder {
         this.gzipEnabled = enabled;
         return this;
     }
-    public MuServerBuilder withGzip(int minimumGzipSize, Set<CharSequence> mimeTypesToGzip) {
+    public MuServerBuilder withGzip(int minimumGzipSize, Set<String> mimeTypesToGzip) {
         this.gzipEnabled = true;
         this.mimeTypesToGzip = mimeTypesToGzip;
         this.minimumGzipSize = minimumGzipSize;

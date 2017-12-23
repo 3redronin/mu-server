@@ -41,6 +41,7 @@ public class ResourceHandler implements MuHandler {
             System.out.println("Could not find " + localPath.normalize());
             return false;
         }
+        response.headers().add(HeaderNames.CONTENT_LENGTH, Files.size(localPath));
         addHeaders(response, localPath);
         try (OutputStream out = response.outputStream()) {
             long copy = Files.copy(localPath, out);

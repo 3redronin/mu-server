@@ -1,8 +1,11 @@
 package ronin.muserver.handlers;
 
+import org.hamcrest.CoreMatchers;
+import org.hamcrest.MatcherAssert;
 import org.junit.Test;
 
 import java.util.Map;
+import java.util.Set;
 
 import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.assertThat;
@@ -16,4 +19,11 @@ public class ResourceTypeTest {
         assertThat(map.get("jpeg"), is(ResourceType.IMAGE_JPEG));
     }
 
+    @Test
+    public void gzippablesAreFound() {
+        Set<String> set = ResourceType.gzippableMimeTypes(ResourceType.getResourceTypes());
+        System.out.println(set);
+        assertThat(set.contains("image/jpeg"), is(false));
+        assertThat(set.contains("text/html"), is(true));
+    }
 }
