@@ -5,12 +5,13 @@ import org.junit.After;
 import org.junit.Test;
 import ronin.muserver.MuServer;
 
-import java.net.URI;
+import java.nio.file.Paths;
 
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static ronin.muserver.MuServerBuilder.httpsServer;
+import static ronin.muserver.handlers.ResourceProviderFactory.fileBased;
 import static ronin.muserver.handlers.ResourceType.DEFAULT_EXTENSION_MAPPINGS;
 import static ronin.muserver.handlers.ResourceType.getResourceTypes;
 import static ronin.muserver.handlers.ResourceType.gzippableMimeTypes;
@@ -26,7 +27,7 @@ public class ResourceHandlerTest {
     public void canServeFromRootOfServer() throws Exception {
         server = httpsServer()
             .withGzipEnabled(false)
-            .addHandler(new ResourceHandler("src/test/resources/sample-static", "/", "index.html", DEFAULT_EXTENSION_MAPPINGS))
+            .addHandler(new ResourceHandler(fileBased(Paths.get("src/test/resources/sample-static")), "/", "index.html", DEFAULT_EXTENSION_MAPPINGS))
             .start();
 
         assertContentTypeAndContent("/index.html", "text/html", false);
@@ -39,7 +40,7 @@ public class ResourceHandlerTest {
     @Test
     public void canServeFromPath() throws Exception {
         server = httpsServer()
-            .addHandler(new ResourceHandler("src/test/resources/sample-static", "/blah", "index.html", DEFAULT_EXTENSION_MAPPINGS))
+            .addHandler(new ResourceHandler(fileBased(Paths.get("src/test/resources/sample-static")), "/blah", "index.html", DEFAULT_EXTENSION_MAPPINGS))
             .start();
 
         Response badOne = call(request().url(server.httpsUri().resolve("/index.html").toURL()));
@@ -55,7 +56,7 @@ public class ResourceHandlerTest {
     @Test
     public void itCanDefaultToFilesSuchAsIndexHtml() throws Exception {
         server = httpsServer()
-            .addHandler(new ResourceHandler("src/test/resources/sample-static", "/blah", "index.html", DEFAULT_EXTENSION_MAPPINGS))
+            .addHandler(new ResourceHandler(fileBased(Paths.get("src/test/resources/sample-static")), "/blah", "index.html", DEFAULT_EXTENSION_MAPPINGS))
             .start();
 
         Response resp = call(request().url(server.httpsUri().resolve("/blah/").toURL()));
@@ -68,7 +69,7 @@ public class ResourceHandlerTest {
     public void contentTypesAreCorrect() throws Exception {
         server = httpsServer()
             .withGzip(1, gzippableMimeTypes(getResourceTypes()))
-            .addHandler(new ResourceHandler("src/test/resources/sample-static", "/", null, ResourceType.DEFAULT_EXTENSION_MAPPINGS))
+            .addHandler(new ResourceHandler(fileBased(Paths.get("src/test/resources/sample-static")), "/", null, ResourceType.DEFAULT_EXTENSION_MAPPINGS))
             .start();
 
         assertContentTypeAndContent("/index.html", "text/html", true);

@@ -121,7 +121,7 @@ class NettyResponseAdaptor implements MuResponse {
     }
 
     public OutputStream outputStream() {
-		return outputStream(32*1024); // TODO find a good value for this default and make it configurable
+		return outputStream(16*1024); // TODO find a good value for this default and make it configurable
 	}
 
 	public OutputStream outputStream(int bufferSizeInBytes) {
@@ -131,7 +131,7 @@ class NettyResponseAdaptor implements MuResponse {
 	}
 
 	public PrintWriter writer() {
-		return writer(32*1024); // TODO find a good value for this default and make it configurable
+		return writer(16*1024); // TODO find a good value for this default and make it configurable
 	}
 
 	public PrintWriter writer(int bufferSizeInChars) {

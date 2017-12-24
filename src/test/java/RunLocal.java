@@ -1,7 +1,10 @@
 import ronin.muserver.*;
 import ronin.muserver.handlers.ResourceHandler;
 
+import java.nio.file.Paths;
+
 import static ronin.muserver.MuServerBuilder.muServer;
+import static ronin.muserver.handlers.ResourceProviderFactory.fileBased;
 import static ronin.muserver.handlers.ResourceType.DEFAULT_EXTENSION_MAPPINGS;
 
 public class RunLocal {
@@ -10,7 +13,7 @@ public class RunLocal {
         MuServer server = muServer()
             .withHttpConnection(8080)
             .withHttpsConnection(8443, SSLContextBuilder.unsignedLocalhostCert())
-            .addHandler(new ResourceHandler("src/test/resources/sample-static", "/", "index.html", DEFAULT_EXTENSION_MAPPINGS))
+            .addHandler(new ResourceHandler( fileBased(Paths.get("src/test/resources/sample-static")), "/", "index.html", DEFAULT_EXTENSION_MAPPINGS))
             .addHandler(Method.GET, "/api", (request, response) -> {
                 response.headers().add(HeaderNames.CONTENT_TYPE, ContentTypes.APPLICATION_JSON);
                 response.write("{ \"hello\": \"world                    this is something           to be gzipped\" }");
