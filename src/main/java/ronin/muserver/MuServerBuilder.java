@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 import static java.util.Arrays.asList;
 import static ronin.muserver.MuServerHandler.PROTO_ATTRIBUTE;
@@ -109,8 +110,9 @@ public class MuServerBuilder {
                 for (Channel channel : channels) {
                     channel.close().sync();
                 }
-                bossGroup.shutdownGracefully().sync();
-                workerGroup.shutdownGracefully().sync();
+                bossGroup.shutdownGracefully(0, 0, TimeUnit.MILLISECONDS).sync();
+                workerGroup.shutdownGracefully(0, 0, TimeUnit.MILLISECONDS).sync();
+
             } catch (Exception e) {
                 System.out.println("Error while shutting down. Will ignore. Error was: " + e.getMessage());
             }

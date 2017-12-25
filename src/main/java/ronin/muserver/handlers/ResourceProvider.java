@@ -80,14 +80,9 @@ class ClasspathResourceProvider implements ResourceProvider {
         byte[] buffer = new byte[bufferSizeInBytes];
         int read;
         try (InputStream stream = info.getInputStream()) {
-            int count = 0;
-            long start = System.currentTimeMillis();
             while ((read = stream.read(buffer)) > -1) {
-                count++;
-                System.out.println("Read " + count + " read " + read + " bytes");
                 out.write(buffer, 0, read);
             }
-            System.out.println("count = " + count + " in " + (System.currentTimeMillis() - start) + "ms");
         }
     }
 
