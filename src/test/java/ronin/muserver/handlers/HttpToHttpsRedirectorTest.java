@@ -70,6 +70,6 @@ public class HttpToHttpsRedirectorTest {
     }
 
     URI resolve(String str) {
-        return server.uri().resolve(str);
+        return server.httpUri().resolve(str);
     }
 }

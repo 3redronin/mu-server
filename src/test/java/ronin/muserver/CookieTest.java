@@ -114,7 +114,7 @@ public class CookieTest {
     }
 
     private HttpUrl serverUrl() {
-        return HttpUrl.get(server.url());
+        return HttpUrl.get(server.httpUri());
     }
 
     @After

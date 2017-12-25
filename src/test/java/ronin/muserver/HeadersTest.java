@@ -82,7 +82,7 @@ public class HeadersTest {
 					return true;
 				}).start();
 
-		Response resp = call(request().url(server.uri().resolve("/this-is-much-longer-than-that-value-allowed-by-the-config-above-i-think").toURL()));
+		Response resp = call(request().url(server.httpUri().resolve("/this-is-much-longer-than-that-value-allowed-by-the-config-above-i-think").toURL()));
 		resp.close();
 		assertThat(resp.code(), is(414));
 		assertThat(handlerHit.get(), is(false));
@@ -117,7 +117,7 @@ public class HeadersTest {
 				.header("X-Forwarded-Proto", "https")
 				.header("X-Forwarded-Host", "www.example.org")
 				.header("X-Forwarded-Port", "443")
-				.url(server.uri().resolve("/blah?query=value").toString()));
+				.url(server.httpUri().resolve("/blah?query=value").toString()));
 		assertThat(actual[1].toString(), equalTo("http://localhost:12752/blah?query=value"));
 		assertThat(actual[0].toString(), equalTo("https://www.example.org/blah?query=value"));
 	}
@@ -132,7 +132,7 @@ public class HeadersTest {
             }).start();
 
 
-        Response resp = call(request().url(server.url()));
+        Response resp = call(request().url(server.httpUrl()));
         assertThat(resp.code(), is(200));
         assertThat(resp.header("X-Blah"), is("ha"));
         assertThat(resp.header("Content-Length"), is("0"));
@@ -149,7 +149,7 @@ public class HeadersTest {
                 return true;
             }).start();
 
-        Response resp = call(request().url(server.url()));
+        Response resp = call(request().url(server.httpUrl()));
         resp.close();
         assertThat(resp.code(), is(200));
         assertThat(resp.header("Content-Length"), is(nullValue()));
@@ -162,6 +162,6 @@ public class HeadersTest {
 	}
 
 	Request.Builder xSomethingHeader(String value) {
-		return request().header("X-Something", value).url(server.url());
+		return request().header("X-Something", value).url(server.httpUrl());
 	}
 }

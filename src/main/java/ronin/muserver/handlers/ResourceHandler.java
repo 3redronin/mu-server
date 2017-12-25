@@ -132,6 +132,15 @@ public class ResourceHandler implements MuHandler {
         return new Builder().withResourceProviderFactory(ResourceProviderFactory.classpathBased(classpathRoot));
     }
 
+    /**
+     * Creates a resource handler that serves from the file system if the directory exists; otherwise from the class path.
+     * <p>
+     * A common use case is for when you want to serve from the file path at development time (so you can update
+     * files without restarting) but at deploy time resources are packaged in an uber jar.
+     * @param fileRootIfExists A path to a directory holding static content, which may not exist, e.g. <code>src/main/resources/web</code>
+     * @param classpathRoot A classpath path to a directory holding static content, e.g. <code>/web</code>
+     * @return Returns a file-based resource handler builder or a classpath-based one.
+     */
     public static ResourceHandler.Builder fileOrClasspath(String fileRootIfExists, String classpathRoot) {
         Path path = Paths.get(fileRootIfExists);
         if (Files.isDirectory(path)) {

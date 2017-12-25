@@ -110,7 +110,7 @@ public class ParametersTest {
         }).start();
 
         call(request()
-            .url(server.url())
+            .url(server.httpUrl())
             .post(new FormBody.Builder()
                 .add("blah", "something")
                 .build())
@@ -124,6 +124,6 @@ public class ParametersTest {
 	}
 
     URL http(String str) throws MalformedURLException {
-        return server.uri().resolve(str).toURL();
+        return server.httpUri().resolve(str).toURL();
     }
 }

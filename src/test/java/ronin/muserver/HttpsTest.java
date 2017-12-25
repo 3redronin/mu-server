@@ -37,7 +37,7 @@ public class HttpsTest {
             })
             .start();
 
-        assertThat(server.uri(), is(nullValue()));
+        assertThat(server.httpUri(), is(nullValue()));
     }
 
     @After public void stopIt() {

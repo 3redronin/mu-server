@@ -44,13 +44,13 @@ ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT).addListener(ChannelFutureL
  */
 class ChunkOutputStream extends OutputStream {
     final ByteBuf buffer;
-    final ChannelHandlerContext ctx;
+    private final ChannelHandlerContext ctx;
 
-    ChunkOutputStream(ChannelHandlerContext ctx, int chunksize) {
-        if (chunksize < 1) {
+    ChunkOutputStream(ChannelHandlerContext ctx, int chunkSize) {
+        if (chunkSize < 1) {
             throw new IllegalArgumentException("Chunk size must be at least 1");
         }
-        this.buffer = Unpooled.buffer(0, chunksize);
+        this.buffer = Unpooled.buffer(0, chunkSize);
         this.ctx = ctx;
     }
 
