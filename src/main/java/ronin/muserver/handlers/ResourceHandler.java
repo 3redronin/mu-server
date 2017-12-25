@@ -5,6 +5,8 @@ import ronin.muserver.MuHandler;
 import ronin.muserver.MuRequest;
 import ronin.muserver.MuResponse;
 
+import java.io.OutputStream;
+import java.nio.file.Files;
 import java.util.Map;
 
 public class ResourceHandler implements MuHandler {
@@ -34,21 +36,24 @@ public class ResourceHandler implements MuHandler {
             ? "." + requestPath
             : "." + requestPath.substring(pathToServeFrom.length());
 
-        ResourceProvider provider = resourceProviderFactory.get(pathWithoutWebPrefix);
+        try (ResourceProvider provider = resourceProviderFactory.get(pathWithoutWebPrefix)) {
 
-        if (!provider.exists()) {
-            System.out.println("Could not find " + requestPath);
-            return false;
+            if (!provider.exists()) {
+                System.out.println("Could not find " + requestPath);
+                return false;
+            }
+            Long fileSize = provider.fileSize();
+            if (fileSize != null) {
+                response.headers().add(HeaderNames.CONTENT_LENGTH, fileSize);
+            }
+
+            String filename = requestPath.substring(requestPath.lastIndexOf('/'));
+            addHeaders(response, filename);
+
+            try (OutputStream out = response.outputStream(16 * 1024)) {
+                provider.writeTo(out);
+            }
         }
-        Long fileSize = provider.fileSize();
-        if (fileSize != null) {
-            response.headers().add(HeaderNames.CONTENT_LENGTH, fileSize);
-        }
-
-        String filename = requestPath.substring(requestPath.lastIndexOf('/'));
-        addHeaders(response, filename);
-
-        provider.writeTo(response);
 
         return true;
     }

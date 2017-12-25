@@ -1,16 +1,19 @@
 package ronin.muserver.handlers;
 
-import ronin.muserver.MuResponse;
-
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.URL;
+import java.net.URLConnection;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-public interface ResourceProvider {
+public interface ResourceProvider extends AutoCloseable {
     boolean exists();
+
     Long fileSize();
-    void writeTo(MuResponse response) throws IOException;
+
+    void writeTo(OutputStream out) throws IOException;
 }
 
 class FileProvider implements ResourceProvider {
@@ -33,10 +36,58 @@ class FileProvider implements ResourceProvider {
         }
     }
 
-    public void writeTo(MuResponse response) throws IOException {
-        try (OutputStream out = response.outputStream(16 * 1024)) {
-            long copy = Files.copy(localPath, out);
-            System.out.println("Sent " + copy + " bytes for " + localPath);
+    public void writeTo(OutputStream out) throws IOException {
+        long copy = Files.copy(localPath, out);
+        System.out.println("Sent " + copy + " bytes for " + localPath);
+    }
+
+    public void close() throws Exception {
+    }
+}
+
+class ClasspathResourceProvider implements ResourceProvider {
+    private final URLConnection info;
+
+    public ClasspathResourceProvider(String classpathBase, String relativePath) {
+        URLConnection con;
+        if (relativePath.contains("..")) {
+            con = null;
+        } else {
+            String path = classpathBase + "/" + relativePath;
+            URL resource = ClasspathResourceProvider.class.getResource(path);
+            if (resource == null || resource.getPath().endsWith("/")) {
+                con = null;
+            } else {
+                try {
+                    con = resource.openConnection();
+                } catch (IOException e) {
+                    System.out.println("Error " + e.getMessage());
+                    con = null;
+                }
+            }
         }
+        this.info = con;
+    }
+
+    public boolean exists() {
+        return info != null;
+    }
+
+    public Long fileSize() {
+        long size = info.getContentLengthLong();
+        return size >= 0 ? size : null;
+    }
+
+    public void writeTo(OutputStream out) throws IOException {
+        byte[] buffer = new byte[16 * 1024];
+        int read;
+        try (InputStream stream = info.getInputStream()) {
+            while ((read = stream.read(buffer)) > -1) {
+                out.write(buffer, 0, read);
+            }
+        }
+    }
+
+    public void close() throws Exception {
     }
 }

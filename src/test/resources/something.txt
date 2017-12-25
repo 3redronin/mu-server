@@ -1,0 +1,1 @@
+This file exists for ResourceHandler tests. They should not be able to read this.

@@ -14,4 +14,7 @@ public interface ResourceProviderFactory {
         }
         return relativePath -> new FileProvider(baseDirectory, relativePath);
     }
+    static ResourceProviderFactory classpathBased(String classpathBase) {
+        return relativePath -> new ClasspathResourceProvider(classpathBase, relativePath);
+    }
 }
