@@ -100,41 +100,45 @@ public class MuServerBuilder {
         if (!handlers.isEmpty()) {
             asyncHandlers.add(new SyncHandlerAdapter(handlers));
         }
+        NioEventLoopGroup bossGroup = new NioEventLoopGroup(1);
+        NioEventLoopGroup workerGroup = new NioEventLoopGroup();
+        List<Channel> channels = new ArrayList<>();
+
+        Runnable shutdown = () -> {
+            try {
+                for (Channel channel : channels) {
+                    channel.close().sync();
+                }
+                bossGroup.shutdownGracefully().sync();
+                workerGroup.shutdownGracefully().sync();
+            } catch (Exception e) {
+                System.out.println("Error while shutting down. Will ignore. Error was: " + e.getMessage());
+            }
+        };
+
+
         try {
-            NioEventLoopGroup bossGroup = new NioEventLoopGroup(1);
-            NioEventLoopGroup workerGroup = new NioEventLoopGroup();
             Channel httpChannel = httpPort < 0 ? null : createChannel(bossGroup, workerGroup, httpPort, null);
             Channel httpsChannel = sslContext == null ? null : createChannel(bossGroup, workerGroup, httpsPort, sslContext);
             URI uri = null;
             URL url = null;
             if (httpChannel != null) {
+                channels.add(httpChannel);
                 uri = getUriFromChannel(httpChannel, "http");
                 url = uri.toURL();
             }
             URI httpsUri = null;
             URL httpsUrl = null;
             if (httpsChannel != null) {
+                channels.add(httpsChannel);
                 httpsUri = getUriFromChannel(httpsChannel, "https");
                 httpsUrl = httpsUri.toURL();
             }
 
-            Runnable shutdown = () -> {
-                try {
-                    if (httpChannel != null) {
-                        httpChannel.close().sync();
-                    }
-                    if (httpsChannel != null) {
-                        httpsChannel.close().sync();
-                    }
-                    bossGroup.shutdownGracefully();
-                    workerGroup.shutdownGracefully();
-                } catch (Exception e) {
-                    System.out.println("Error while shutting down. Will ignore. Error was: " + e.getMessage());
-                }
-            };
             return new MuServer(uri, url, httpsUri, httpsUrl, shutdown);
 
         } catch (Exception ex) {
+            shutdown.run();
             throw new MuException("Error while starting server", ex);
         }
 
