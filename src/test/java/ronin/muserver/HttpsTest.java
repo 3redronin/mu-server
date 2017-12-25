@@ -18,7 +18,7 @@ public class HttpsTest {
         server = httpsServer()
             .withHttpsConnection(8443, SSLContextBuilder.unsignedLocalhostCert())
             .addHandler((request, response) -> {
-                response.headers().add(HeaderNames.CONTENT_TYPE, ContentTypes.TEXT_PLAIN);
+                response.contentType(ContentTypes.TEXT_PLAIN);
                 response.write("This is encrypted and the URL is " + request.uri());
                 return true;
             })

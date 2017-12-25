@@ -91,7 +91,7 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
 
     public static void sendPlainText(AsyncContext asyncContext, String message, int statusCode) {
         asyncContext.response.status(statusCode);
-        asyncContext.response.headers().set(HeaderNames.CONTENT_TYPE, ContentTypes.TEXT_PLAIN);
+        asyncContext.response.contentType(ContentTypes.TEXT_PLAIN);
         asyncContext.response.headers().set(HeaderNames.CONTENT_LENGTH, message.length());
         asyncContext.response.write(message);
     }

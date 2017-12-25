@@ -70,7 +70,7 @@ public class ResourceHandler implements MuHandler {
             String extension = fileName.substring(ind + 1).toLowerCase();
             type = extensionToResourceType.getOrDefault(extension, ResourceType.DEFAULT);
         }
-        response.headers().set(HeaderNames.CONTENT_TYPE, type.mimeType);
+        response.contentType(type.mimeType);
         response.headers().add(type.headers);
     }
 

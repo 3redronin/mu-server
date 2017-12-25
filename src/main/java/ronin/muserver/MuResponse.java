@@ -27,6 +27,7 @@ public interface MuResponse {
 	void redirect(URI uri);
 
 	Headers headers();
+	void contentType(CharSequence contentType);
 	void addCookie(Cookie cookie);
 
 	OutputStream outputStream();
@@ -115,6 +116,10 @@ class NettyResponseAdaptor implements MuResponse {
 	public Headers headers() {
 		return headers;
 	}
+
+    public void contentType(CharSequence contentType) {
+        headers.set(HeaderNames.CONTENT_TYPE, contentType);
+    }
 
     public void addCookie(Cookie cookie) {
         headers.add(HeaderNames.SET_COOKIE, ServerCookieEncoder.STRICT.encode(cookie.nettyCookie));
