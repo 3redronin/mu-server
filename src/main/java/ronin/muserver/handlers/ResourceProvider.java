@@ -8,7 +8,7 @@ import java.net.URLConnection;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-public interface ResourceProvider extends AutoCloseable {
+public interface ResourceProvider {
     boolean exists();
 
     Long fileSize();
@@ -41,8 +41,6 @@ class FileProvider implements ResourceProvider {
         System.out.println("Sent " + copy + " bytes for " + localPath);
     }
 
-    public void close() throws Exception {
-    }
 }
 
 class ClasspathResourceProvider implements ResourceProvider {
@@ -88,6 +86,4 @@ class ClasspathResourceProvider implements ResourceProvider {
         }
     }
 
-    public void close() throws Exception {
-    }
 }
