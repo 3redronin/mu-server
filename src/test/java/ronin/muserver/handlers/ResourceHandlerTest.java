@@ -36,7 +36,7 @@ public class ResourceHandlerTest {
     public void classpathCanBeUsed() throws Exception {
         server = httpsServer()
             .withGzipEnabled(false)
-            .addHandler(ResourceHandler.resourceHandler("src/test/resources/does-not-exist", "/sample-static").build())
+            .addHandler(ResourceHandler.fileOrClasspath("src/test/resources/does-not-exist", "/sample-static").build())
             .start();
 
         assertContentTypeAndContent("/index.html", "text/html", false);

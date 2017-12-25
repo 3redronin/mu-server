@@ -1,6 +1,5 @@
 package ronin.muserver.handlers;
 
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.ByteArrayOutputStream;
@@ -45,7 +44,7 @@ public class ClasspathResourceProviderTest {
     public void fileContentsCanBeGot() throws IOException {
         ResourceProvider provider = factory.get("images/guangzhou.jpeg");
         ByteArrayOutputStream out = new ByteArrayOutputStream(372987);
-        provider.writeTo(out);
+        provider.writeTo(out, 32 * 1024);
         assertThat(toHex(out.toByteArray()), equalTo(toHex(Files.readAllBytes(Paths.get("src/test/resources/sample-static/images/guangzhou.jpeg")))));
     }
 

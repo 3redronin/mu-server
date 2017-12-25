@@ -13,7 +13,7 @@ public interface ResourceProvider {
 
     Long fileSize();
 
-    void writeTo(OutputStream out) throws IOException;
+    void writeTo(OutputStream out, int bufferSizeInBytes) throws IOException;
 }
 
 class FileProvider implements ResourceProvider {
@@ -36,7 +36,7 @@ class FileProvider implements ResourceProvider {
         }
     }
 
-    public void writeTo(OutputStream out) throws IOException {
+    public void writeTo(OutputStream out, int bufferSizeInBytes) throws IOException {
         long copy = Files.copy(localPath, out);
         System.out.println("Sent " + copy + " bytes for " + localPath);
     }
@@ -76,13 +76,18 @@ class ClasspathResourceProvider implements ResourceProvider {
         return size >= 0 ? size : null;
     }
 
-    public void writeTo(OutputStream out) throws IOException {
-        byte[] buffer = new byte[16 * 1024];
+    public void writeTo(OutputStream out, int bufferSizeInBytes) throws IOException {
+        byte[] buffer = new byte[bufferSizeInBytes];
         int read;
         try (InputStream stream = info.getInputStream()) {
+            int count = 0;
+            long start = System.currentTimeMillis();
             while ((read = stream.read(buffer)) > -1) {
+                count++;
+                System.out.println("Read " + count + " read " + read + " bytes");
                 out.write(buffer, 0, read);
             }
+            System.out.println("count = " + count + " in " + (System.currentTimeMillis() - start) + "ms");
         }
     }
 

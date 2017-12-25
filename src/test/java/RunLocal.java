@@ -9,7 +9,7 @@ public class RunLocal {
         MuServer server = muServer()
             .withHttpConnection(8080)
             .withHttpsConnection(8443, SSLContextBuilder.unsignedLocalhostCert())
-            .addHandler(ResourceHandler.fileHandler("src/test/resources/sample-static").build())
+            .addHandler(ResourceHandler.fileOrClasspath("asrc/test/resources/sample-static", "/sample-static").build())
             .addHandler(Method.GET, "/api", (request, response) -> {
                 response.contentType(ContentTypes.APPLICATION_JSON);
                 response.write("{ \"hello\": \"world                    this is something           to be gzipped\" }");

@@ -19,12 +19,14 @@ public class ResourceHandler implements MuHandler {
     private final String pathToServeFrom;
     private final String defaultFile;
     private final ResourceProviderFactory resourceProviderFactory;
+    private final int bufferSizeInBytes;
 
-    public ResourceHandler(ResourceProviderFactory resourceProviderFactory, String pathToServeFrom, String defaultFile, Map<String, ResourceType> extensionToResourceType) {
+    public ResourceHandler(ResourceProviderFactory resourceProviderFactory, String pathToServeFrom, String defaultFile, Map<String, ResourceType> extensionToResourceType, int bufferSizeInBytes) {
         this.resourceProviderFactory = resourceProviderFactory;
         this.pathToServeFrom = pathToServeFrom;
         this.extensionToResourceType = extensionToResourceType;
         this.defaultFile = defaultFile;
+        this.bufferSizeInBytes = bufferSizeInBytes;
     }
 
     @Override
@@ -54,8 +56,8 @@ public class ResourceHandler implements MuHandler {
         String filename = requestPath.substring(requestPath.lastIndexOf('/'));
         addHeaders(response, filename);
 
-        try (OutputStream out = response.outputStream(16 * 1024)) {
-            provider.writeTo(out);
+        try (OutputStream out = response.outputStream(bufferSizeInBytes)) {
+            provider.writeTo(out, bufferSizeInBytes);
         }
 
         return true;
@@ -79,6 +81,7 @@ public class ResourceHandler implements MuHandler {
         private String pathToServeFrom = "/";
         private String defaultFile = "index.html";
         private ResourceProviderFactory resourceProviderFactory;
+        private int bufferSizeInBytes = 32 * 1024;
 
         public Builder withExtensionToResourceType(Map<String, ResourceType> extensionToResourceType) {
             this.extensionToResourceType = extensionToResourceType;
@@ -95,6 +98,11 @@ public class ResourceHandler implements MuHandler {
             return this;
         }
 
+        public Builder withBufferSizeInBytes(int bufferSizeInBytes) {
+            this.bufferSizeInBytes = bufferSizeInBytes;
+            return this;
+        }
+
         public Builder withResourceProviderFactory(ResourceProviderFactory resourceProviderFactory) {
             this.resourceProviderFactory = resourceProviderFactory;
             return this;
@@ -104,7 +112,7 @@ public class ResourceHandler implements MuHandler {
             if (resourceProviderFactory == null) {
                 throw new IllegalStateException("No resourceProviderFactory has been set");
             }
-            return new ResourceHandler(resourceProviderFactory, pathToServeFrom, defaultFile, extensionToResourceType);
+            return new ResourceHandler(resourceProviderFactory, pathToServeFrom, defaultFile, extensionToResourceType, bufferSizeInBytes);
         }
     }
 
@@ -124,7 +132,7 @@ public class ResourceHandler implements MuHandler {
         return new Builder().withResourceProviderFactory(ResourceProviderFactory.classpathBased(classpathRoot));
     }
 
-    public static ResourceHandler.Builder resourceHandler(String fileRootIfExists, String classpathRoot) {
+    public static ResourceHandler.Builder fileOrClasspath(String fileRootIfExists, String classpathRoot) {
         Path path = Paths.get(fileRootIfExists);
         if (Files.isDirectory(path)) {
             return fileHandler(path);

@@ -41,7 +41,7 @@ public class FileProviderTest {
     public void fileContentsCanBeGot() throws IOException {
         ResourceProvider provider = factory.get("images/guangzhou.jpeg");
         ByteArrayOutputStream out = new ByteArrayOutputStream(372987);
-        provider.writeTo(out);
+        provider.writeTo(out, 32 * 1024);
         assertThat(toHex(out.toByteArray()), equalTo(toHex(Files.readAllBytes(Paths.get("src/test/resources/sample-static/images/guangzhou.jpeg")))));
     }
 
