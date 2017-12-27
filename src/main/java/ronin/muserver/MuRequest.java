@@ -160,7 +160,7 @@ class NettyRequestAdapter implements MuRequest {
         String proto = h.get(HeaderNames.X_FORWARDED_PROTO, serverUri.getScheme());
         String host = h.get(HeaderNames.X_FORWARDED_HOST, serverUri.getHost());
         int port = h.getInt(HeaderNames.X_FORWARDED_PORT, serverUri.getPort());
-        String portString = (port != 80 && port != 443) ? ":" + port : "";
+        String portString = (port != 80 && port != 443 && port > 0) ? ":" + port : "";
         return URI.create(proto + "://" + host + portString + request.uri());
     }
 
