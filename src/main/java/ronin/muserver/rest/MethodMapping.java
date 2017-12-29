@@ -25,6 +25,22 @@ public class MethodMapping {
                 return PATCH.class;
         }
         throw new MuException(method + " is not supported by mu-server JAX RS");
+    }
 
+    public static Method jaxToMu(Class<? extends Annotation> jaxMethod) {
+        if (GET.class.equals(jaxMethod)) {
+            return Method.GET;
+        } else if (POST.class.equals(jaxMethod)) {
+            return Method.POST;
+        } else if (OPTIONS.class.equals(jaxMethod)) {
+            return Method.OPTIONS;
+        } else if (PUT.class.equals(jaxMethod)) {
+            return Method.PUT;
+        } else if (DELETE.class.equals(jaxMethod)) {
+            return Method.DELETE;
+        } else if (PATCH.class.equals(jaxMethod)) {
+            return Method.PATCH;
+        }
+        throw new MuException(jaxMethod.getName() + " is not supported by mu-server JAX RS");
     }
 }
