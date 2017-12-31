@@ -2,17 +2,12 @@ package ronin.muserver.rest;
 
 import org.junit.After;
 import org.junit.Test;
-import ronin.muserver.Method;
 import ronin.muserver.MuServer;
-import scaffolding.ClientUtils;
 
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
-import javax.ws.rs.core.Response;
-
 import java.io.IOException;
-import java.net.URI;
 
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -31,6 +26,13 @@ public class RestHandlerTest {
         try (okhttp3.Response resp = call(request().url(server.uri().resolve("/api/fruits").toString()))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.body().string(), is("[ { \"name\": \"apple\" }, { \"name\": \"orange\" } ]"));
+        }
+    }
+    @Test
+    public void canGetOne() throws IOException {
+        try (okhttp3.Response resp = call(request().url(server.uri().resolve("/api/fruits/orange").toString()))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), is("{ \"name\": \"orange\" }"));
         }
     }
 
