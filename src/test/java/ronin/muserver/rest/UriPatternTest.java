@@ -12,10 +12,10 @@ public class UriPatternTest {
     @Test
     public void uriTemplatesCanBeConvertedToRegexes() {
         assertThat(pattern("/fruit"), equalTo("/\\Qfruit\\E(/.*)?"));
-        assertThat(pattern("/fruit/{name}"), equalTo("/\\Qfruit\\E/(?<name>[ˆ/]+?)(/.*)?"));
+        assertThat(pattern("/fruit/{name}"), equalTo("/\\Qfruit\\E/(?<name>[^/]+?)(/.*)?"));
         assertThat(pattern("/fruit/{version : v[12]}"), equalTo("/\\Qfruit\\E/(?<version>v[12])(/.*)?"));
         assertThat(pattern("/fruit/{version:v[12]}"), equalTo("/\\Qfruit\\E/(?<version>v[12])(/.*)?"));
-        assertThat(pattern("/fruit/{version: v[12]}/{name}/eat"), equalTo("/\\Qfruit\\E/(?<version>v[12])/(?<name>[ˆ/]+?)/\\Qeat\\E(/.*)?"));
+        assertThat(pattern("/fruit/{version: v[12]}/{name}/eat"), equalTo("/\\Qfruit\\E/(?<version>v[12])/(?<name>[^/]+?)/\\Qeat\\E(/.*)?"));
     }
 
     @Test

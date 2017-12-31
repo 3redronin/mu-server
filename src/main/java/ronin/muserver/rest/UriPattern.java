@@ -10,6 +10,10 @@ import java.util.regex.Pattern;
 
 import static ronin.muserver.Mutils.urlEncode;
 
+/**
+ * A pattern representing a URI template, such as <code>/fruit</code> or <code>/fruit/{name}</code> etc.
+ * To create a new pattern, call the static {@link #uriTemplateToRegex(String)} method.
+ */
 public class UriPattern {
 
     private final Pattern pattern;
@@ -20,14 +24,26 @@ public class UriPattern {
         this.namedGroups = Collections.unmodifiableSet(namedGroups);
     }
 
+    /**
+     * @return Returns the regular expression used to do the matching
+     */
     public String pattern() {
         return pattern.pattern();
     }
 
+    /**
+     * @return Returns the read-only set of path parameters in this pattern
+     */
     public Set<String> namedGroups() {
         return namedGroups;
     }
 
+    /**
+     * Matches the given URI against this pattern.
+     * @param input The URI to check against
+     * @return Returns a {@link PathMatch} where {@link PathMatch#matches()} is <code>true</code> if the URI matches
+     * and otherwise <code>false</code>.
+     */
     public PathMatch matcher(URI input) {
         Matcher matcher = pattern.matcher(input.getPath());
         if (matcher.matches()) {
@@ -50,7 +66,7 @@ public class UriPattern {
      * <a href="http://download.oracle.com/otn-pub/jcp/jaxrs-1.1-mrel-eval-oth-JSpec/jax_rs-1_1-mrel-spec.pdf">JAX-RS:
      * Java™ API for RESTful Web Services specification</a> section <code>3.7.3</code>
      * @param template A string as passed to a {@link javax.ws.rs.Path} annotation, such as <code>/fruit/{name}</code>
-     * @return Returns a compiled regex Pattern for the given template that will match relevant URI paths, for example <code>/\Qfruit\E/(?<name>[ˆ/]+?)(/.*)?</code>
+     * @return Returns a compiled regex Pattern for the given template that will match relevant URI paths, for example <code>/\Qfruit\E/(?&lt;name&gt;[ˆ/]+?)(/.*)?</code>
      * @throws IllegalArgumentException If the template contains invalid regular expression, or template is null, or other errors
      */
     public static UriPattern uriTemplateToRegex(String template) throws IllegalArgumentException {

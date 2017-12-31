@@ -12,7 +12,7 @@ public class PathMatchTest {
 
     @Test
     public void canMatchPathNames() {
-        PathMatch match = PathMatch.match("/fruit/{name}", URI.create("/fruit/orange"));
+        PathMatch match = UriPattern.uriTemplateToRegex("/fruit/{name}").matcher(URI.create("/fruit/orange"));
         assertThat(match.matches(), is(true));
         assertThat(match.params().get("name"), equalTo("orange"));
     }
