@@ -12,7 +12,7 @@ Experimental web server, very much under construction
 
 ## JAX-RS REST Resources
 
-Mu-Server provides a simple implementation of the [JAX-RS 1.1 spec](http://download.oracle.com/otn-pub/jcp/jaxrs-1.1-mrel-eval-oth-JSpec/jax_rs-1_1-mrel-spec.pdf), 
+Mu-Server provides a simple implementation of the [JAX-RS 2.0 spec](http://download.oracle.com/otn-pub/jcp/jaxrs-2_0-fr-eval-spec/jsr339-jaxrs-2.0-final-spec.pdf), 
 which is a Java standard used to define REST resources.
 
 Implemented:

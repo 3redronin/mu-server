@@ -183,6 +183,10 @@ public final class HeaderNames {
      */
     public static final CharSequence LAST_MODIFIED = HttpHeaderNames.LAST_MODIFIED;
     /**
+     * {@code "link"}
+     */
+    public static final CharSequence LINK = AsciiString.cached("link");
+    /**
      * {@code "location"}
      */
     public static final CharSequence LOCATION = HttpHeaderNames.LOCATION;
@@ -335,6 +339,8 @@ public final class HeaderNames {
      * {@code "x-frame-options"}
      */
     public static final CharSequence X_FRAME_OPTIONS = HttpHeaderNames.X_FRAME_OPTIONS;
+
+
 
     private HeaderNames() {
     }

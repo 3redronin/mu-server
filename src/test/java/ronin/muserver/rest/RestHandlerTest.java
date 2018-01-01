@@ -1,7 +1,6 @@
 package ronin.muserver.rest;
 
 import org.junit.After;
-import org.junit.Ignore;
 import org.junit.Test;
 import ronin.muserver.MuServer;
 
@@ -30,7 +29,6 @@ public class RestHandlerTest {
         }
     }
     @Test
-    @Ignore("In the middle of implementing this")
     public void canGetOne() throws IOException {
         try (okhttp3.Response resp = call(request().url(server.uri().resolve("/api/fruits/orange").toString()))) {
             assertThat(resp.code(), is(200));

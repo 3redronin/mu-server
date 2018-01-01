@@ -1,10 +1,7 @@
 package ronin.muserver.rest;
 
 import java.net.URI;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -16,6 +13,7 @@ import static ronin.muserver.Mutils.urlEncode;
  */
 public class UriPattern {
 
+    private static final String DEFAULT_CAPTURING_GROUP_PATTERN = "[^/]+?";
     private final Pattern pattern;
     private final Set<String> namedGroups;
 
@@ -51,9 +49,9 @@ public class UriPattern {
             for (String namedGroup : namedGroups) {
                 params.put(namedGroup, matcher.group(namedGroup));
             }
-            return new PathMatch(true, params);
+            return new PathMatch(true, params, matcher);
         } else {
-            return new PathMatch(false, Collections.emptyMap());
+            return new PathMatch(false, Collections.emptyMap(), matcher);
         }
     }
 
@@ -63,8 +61,8 @@ public class UriPattern {
 
     /**
      * Converts a URI Template to a regular expression, following the
-     * <a href="http://download.oracle.com/otn-pub/jcp/jaxrs-1.1-mrel-eval-oth-JSpec/jax_rs-1_1-mrel-spec.pdf">JAX-RS:
-     * Java™ API for RESTful Web Services specification</a> section <code>3.7.3</code>
+     * <a href="http://download.oracle.com/otn-pub/jcp/jaxrs-2_0-fr-eval-spec/jsr339-jaxrs-2.0-final-spec.pdf">JAX-RS:
+     * Java™ API for RESTful Web Services specification Version 2.0</a> section <code>3.7.3</code>
      * @param template A string as passed to a {@link javax.ws.rs.Path} annotation, such as <code>/fruit/{name}</code>
      * @return Returns a compiled regex Pattern for the given template that will match relevant URI paths, for example <code>/\Qfruit\E/(?&lt;name&gt;[ˆ/]+?)(/.*)?</code>
      * @throws IllegalArgumentException If the template contains invalid regular expression, or template is null, or other errors
@@ -97,7 +95,7 @@ public class UriPattern {
                     groupName = nameInfo[0];
                     groupRegex = nameInfo[1];
                 } else {
-                    groupRegex = "[^/]+?";
+                    groupRegex = DEFAULT_CAPTURING_GROUP_PATTERN;
                 }
                 groupNames.add(groupName);
                 regex.append("(?<").append(groupName).append(">").append(groupRegex).append(")");
@@ -115,5 +113,19 @@ public class UriPattern {
 
         return new UriPattern(Pattern.compile(regex.toString()), groupNames);
 
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        UriPattern that = (UriPattern) o;
+        return Objects.equals(pattern.pattern(), that.pattern.pattern());
+    }
+
+    @Override
+    public int hashCode() {
+
+        return Objects.hash(pattern.pattern());
     }
 }
