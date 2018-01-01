@@ -35,10 +35,10 @@ class RequestMatcher {
         this.roots = roots;
     }
 
-    public ResourceMethod findResourceMethod(Method httpMethod, URI uri) throws NotFoundException, NotAllowedException {
+    public MatchedMethod findResourceMethod(Method httpMethod, URI uri) throws NotFoundException, NotAllowedException {
         StepOneOutput stepOneOutput = stepOneIdentifyASetOfCandidateRootResourceClassesMatchingTheRequest(uri);
-        URI methodURI = stepOneOutput.unmatchedGroup == null ? null : URI.create(stepOneOutput.unmatchedGroup);
-        Set<ResourceMethod> candidateMethods = stepTwoObtainASetOfCandidateResourceMethodsForTheRequest(methodURI, stepOneOutput.candidates);
+        URI methodURI = stepOneOutput.unmatchedGroup == null ? null : URI.create(UriPattern.trimSlashes(stepOneOutput.unmatchedGroup));
+        Set<MatchedMethod> candidateMethods = stepTwoObtainASetOfCandidateResourceMethodsForTheRequest(methodURI, stepOneOutput.candidates);
         return stepThreeIdentifyTheMethodThatWillHandleTheRequest(httpMethod, uri, candidateMethods);
     }
 
@@ -79,38 +79,41 @@ class RequestMatcher {
         return new StepOneOutput(u, c0);
     }
 
-    private Set<ResourceMethod> stepTwoObtainASetOfCandidateResourceMethodsForTheRequest(URI relativeUri, List<ResourceClass> candidateClasses) {
+    private Set<MatchedMethod> stepTwoObtainASetOfCandidateResourceMethodsForTheRequest(URI relativeUri, List<ResourceClass> candidateClasses) {
         if (relativeUri == null) {
-            Set<ResourceMethod> candidates = candidateClasses.stream()
+            // handle section 3.7.2 - 2(a)
+            Set<MatchedMethod> candidates = candidateClasses.stream()
                 .flatMap(resourceClass -> resourceClass.resourceMethods.stream()
                     .filter(resourceMethod -> !resourceMethod.isSubResource()))
+                .map(rm -> {
+                    return new MatchedMethod(rm, PathMatch.EMPTY_MATCH);
+                })
                 .collect(toSet());
             if (!candidates.isEmpty()) {
                 return candidates;
             }
         }
-        List<ResourceMethod> candidates = candidateClasses.stream()
+        List<MatchedMethod> candidates = candidateClasses.stream()
             .flatMap(rc -> rc.resourceMethods.stream().filter(ResourceMethod::isSubResource))
-            .filter(rm -> {
-                PathMatch matcher = rm.pathPattern.matcher(relativeUri);
-                return matcher.matches() && matcher.lastGroup() == null;
-            })
+            .map(rm -> new MatchedMethod(rm, rm.pathPattern.matcher(relativeUri)))
+            .filter(rm -> rm.pathMatch.matches())
             .sorted((o1, o2) -> {
+                ResourceMethod rm1 = o1.resourceMethod;
+                ResourceMethod rm2 = o2.resourceMethod;
                 // "Sort E using the number of literal characters4 in each member as the primary key (descending order)"
-                int c = Integer.compare(o2.pathPattern.numberOfLiterals, o1.pathPattern.numberOfLiterals);
+                int c = Integer.compare(rm2.pathPattern.numberOfLiterals, rm1.pathPattern.numberOfLiterals);
                 if (c == 0) {
                     // "the number of capturing groups as a secondary key (descending order)"
-                    c = Integer.compare(o2.pathPattern.namedGroups().size(), o1.pathPattern.namedGroups().size());
+                    c = Integer.compare(rm2.pathPattern.namedGroups().size(), rm1.pathPattern.namedGroups().size());
                 }
                 if (c == 0) {
                     // " and the number of capturing groups with non-default regular expressions (i.e. not ‘([ˆ/]+?)’) as the tertiary key (descending order)"
-                    c = Integer.compare(countNonDefaultGroups(o2.pathTemplate), countNonDefaultGroups(o1.pathTemplate));
+                    c = Integer.compare(countNonDefaultGroups(rm2.pathTemplate), countNonDefaultGroups(rm1.pathTemplate));
                 }
                 if (c == 0) {
                     // "and the source of each member as quaternary key sorting those derived from sub-resource methods ahead of those derived from sub-resource locators"
                     // ...but as locators are not currently supported, this does nothing
                 }
-
                 return c;
             })
             .collect(toList());
@@ -119,19 +122,27 @@ class RequestMatcher {
             throw new NotFoundException();
         }
 
-        UriPattern matcher = candidates.get(0).pathPattern;
-        Set<ResourceMethod> m = candidates.stream().filter(rm -> rm.pathPattern.equals(matcher)).collect(toSet());
+        UriPattern matcher = candidates.get(0).resourceMethod.pathPattern;
+        Set<MatchedMethod> m = candidates.stream().filter(rm -> rm.resourceMethod.pathPattern.equals(matcher)).collect(toSet());
         if (!m.isEmpty()) {
             return m;
         }
-
         throw new NotFoundException();
     }
 
-    private ResourceMethod stepThreeIdentifyTheMethodThatWillHandleTheRequest(Method method, URI uri, Set<ResourceMethod> candidates) throws NotAllowedException {
-        List<ResourceMethod> result = candidates.stream().filter(rm -> rm.httpMethod == method).collect(toList());
+    public static class MatchedMethod {
+        public final ResourceMethod resourceMethod;
+        public final PathMatch pathMatch;
+        public MatchedMethod(ResourceMethod resourceMethod, PathMatch pathMatch) {
+            this.resourceMethod = resourceMethod;
+            this.pathMatch = pathMatch;
+        }
+    }
+
+    private MatchedMethod stepThreeIdentifyTheMethodThatWillHandleTheRequest(Method method, URI uri, Set<MatchedMethod> candidates) throws NotAllowedException {
+        List<MatchedMethod> result = candidates.stream().filter(rm -> rm.resourceMethod.httpMethod == method).collect(toList());
         if (result.isEmpty()) {
-            List<String> allowed = candidates.stream().map(c -> c.httpMethod.name()).distinct().collect(toList());
+            List<String> allowed = candidates.stream().map(c -> c.resourceMethod.httpMethod.name()).distinct().collect(toList());
             throw new NotAllowedException(allowed.get(0), allowed.subList(1, allowed.size()).toArray(new String[0]));
         }
         // TODO The media type of the request entity body (if any) is a supported input data format (see Section3.5). Ifnomethodssupportthemediatypeoftherequestentitybodyanimplementation MUST generate a NotSupportedException (415 status) and no entity.
@@ -143,6 +154,7 @@ class RequestMatcher {
     static class StepOneOutput {
         final String unmatchedGroup;
         final List<ResourceClass> candidates;
+
         StepOneOutput(String unmatchedGroup, List<ResourceClass> candidates) {
             this.unmatchedGroup = unmatchedGroup;
             this.candidates = candidates;

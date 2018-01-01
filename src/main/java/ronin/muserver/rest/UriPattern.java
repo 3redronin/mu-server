@@ -148,13 +148,13 @@ public class UriPattern {
 
     }
 
-    private static String trimSlashes(String template) {
-        boolean start = template.startsWith("/");
-        boolean end = template.endsWith("/");
+    static String trimSlashes(String url) {
+        boolean start = url.startsWith("/");
+        boolean end = url.endsWith("/");
         if (!start && !end) {
-            return template;
+            return url;
         }
-        return template.substring(start ? 1 : 0, end ? template.length() - 1 : template.length());
+        return url.substring(start ? 1 : 0, end ? url.length() - 1 : url.length());
     }
 
     @Override

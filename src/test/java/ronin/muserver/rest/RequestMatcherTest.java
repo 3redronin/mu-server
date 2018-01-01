@@ -23,7 +23,6 @@ public class RequestMatcherTest {
     private final ResourceClass resourceAnother = fromObject(new ResourceAnother());
     private final RequestMatcher rm = new RequestMatcher(set(resourceOne, resourceOneV2, resourceSomething, resourceAnother, resourceSomethingYeah));
 
-
     @Test(expected = NotFoundException.class)
     public void throwsIfNoValidCandidates() {
         assertThat(rm.stepOneIdentifyASetOfCandidateRootResourceClassesMatchingTheRequest(URI.create("api/three")).candidates, empty());
@@ -142,6 +141,33 @@ public class RequestMatcherTest {
     }
 
     @Test
+    public void methodsWithOnlyAPathParamWork() {
+
+        @Path("api/fruits")
+        class Fruit {
+
+            @GET
+            public String getAll() {
+                return "[]";
+            }
+
+            @GET
+            @Path("{name}")
+            public String get(@PathParam("name") String name) {
+                return name;
+            }
+        }
+
+        ResourceClass resourcePeopleBelts = fromObject(new Fruit());
+        RequestMatcher rm = new RequestMatcher(set(resourcePeopleBelts));
+//        ResourceMethod getAll = rm.findResourceMethod(Method.GET, URI.create("api/fruits"));
+//        assertThat(getAll.methodHandle.getName(), equalTo("getAll"));
+        RequestMatcher.MatchedMethod mm = rm.findResourceMethod(Method.GET, URI.create("api/fruits/orange"));
+        assertThat(mm.resourceMethod.methodHandle.getName(), equalTo("get"));
+        assertThat(mm.pathMatch.params().get("name"), equalTo("orange"));
+    }
+
+    @Test
     public void pathsOnClassesAreMatchedFirst() {
         // test example taken from https://bill.burkecentral.com/2013/05/29/the-poor-jax-rs-request-dispatching-algorithm/
 
@@ -157,14 +183,13 @@ public class RequestMatcherTest {
         }
 
         RequestMatcher rm = new RequestMatcher(set(fromObject(new OptionsDefault())));
-        assertThat(rm.findResourceMethod(Method.OPTIONS, URI.create("foo")).methodHandle.getName(), equalTo("options"));
+        assertThat(rm.findResourceMethod(Method.OPTIONS, URI.create("foo")).resourceMethod.methodHandle.getName(), equalTo("options"));
 
         RequestMatcher rm2 = new RequestMatcher(set(fromObject(new Foo()), fromObject(new OptionsDefault())));
         try {
-            ResourceMethod actual = rm2.findResourceMethod(Method.OPTIONS, URI.create("foo"));
+            RequestMatcher.MatchedMethod actual = rm2.findResourceMethod(Method.OPTIONS, URI.create("foo"));
             // NOTE that in this case, default OPTIONS handling should happen, but that's not supported yet so throw an exception instead
             Assert.fail("Should not have gotten a value, but got " + actual);
-            System.out.println("actual = " + actual);
         } catch (NotAllowedException e) {
             assertThat(e.getMessage(), equalTo("HTTP 405 Method Not Allowed"));
         }

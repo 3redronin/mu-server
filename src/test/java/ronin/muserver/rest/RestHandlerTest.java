@@ -28,6 +28,7 @@ public class RestHandlerTest {
             assertThat(resp.body().string(), is("[ { \"name\": \"apple\" }, { \"name\": \"orange\" } ]"));
         }
     }
+
     @Test
     public void canGetOne() throws IOException {
         try (okhttp3.Response resp = call(request().url(server.uri().resolve("/api/fruits/orange").toString()))) {
@@ -41,7 +42,7 @@ public class RestHandlerTest {
         new RestHandler(new Object());
     }
 
-    @Path("/api/fruits")
+    @Path("api/fruits")
     private static class Fruit {
 
         @GET
@@ -49,8 +50,9 @@ public class RestHandlerTest {
             return "[ { \"name\": \"apple\" }, { \"name\": \"orange\" } ]";
         }
 
-        @Path("/:name")
-        @GET String get(@PathParam("name") String name) {
+        @GET
+        @Path("{name}")
+        public String get(@PathParam("name") String name) {
             switch (name) {
                 case "apple":
                     return "{ \"name\": \"apple\" }";

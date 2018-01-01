@@ -1,13 +1,17 @@
 package ronin.muserver.rest;
 
+import java.util.Collections;
 import java.util.Map;
 import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * The result of matching a template URI against a real request URI. If there is a match, then any path parameters
  * are available in the {@link #params()} map.
  */
 public class PathMatch {
+
+    public static final PathMatch EMPTY_MATCH = new PathMatch(true, Collections.emptyMap(), Pattern.compile("").matcher(""));
 
     private final boolean matches;
     private final Map<String, String> params;
