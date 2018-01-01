@@ -1,7 +1,6 @@
 package ronin.muserver.rest;
 
 import org.junit.After;
-import org.junit.Ignore;
 import org.junit.Test;
 import ronin.muserver.MuServer;
 
@@ -16,7 +15,6 @@ import static ronin.muserver.MuServerBuilder.httpsServer;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 
-@Ignore
 public class RestHandlerTest {
     private MuServer server = httpsServer()
         .addHandler(new RestHandler(new Fruit()))

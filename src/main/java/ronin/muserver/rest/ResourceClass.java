@@ -12,13 +12,15 @@ class ResourceClass {
 
     final UriPattern pathPattern;
     private final Class<?> resourceClass;
+    final Object resourceInstance;
     Set<ResourceMethod> resourceMethods;
     final String pathTemplate;
 
-    private ResourceClass(UriPattern pathPattern, String pathTemplate, Class<?> resourceClass) {
+    private ResourceClass(UriPattern pathPattern, String pathTemplate, Object resourceInstance) {
         this.pathPattern = pathPattern;
         this.pathTemplate = pathTemplate;
-        this.resourceClass = resourceClass;
+        this.resourceClass = resourceInstance.getClass();
+        this.resourceInstance = resourceInstance;
     }
 
     public boolean matches(URI uri) {
@@ -71,7 +73,7 @@ class ResourceClass {
                         + " annotation because it has other JAX RS annotations declared. (Note that @Path cannot be inherited if there are other JAX RS annotations declared on this class.)");
                 }
                 UriPattern pathPattern = UriPattern.uriTemplateToRegex(path.value());
-                resourceClass = new ResourceClass(pathPattern, path.value(), clazz);
+                resourceClass = new ResourceClass(pathPattern, path.value(), restResource);
                 resourceClass.setupMethodInfo();
                 break;
             }

@@ -1,10 +1,10 @@
 package ronin.muserver.rest;
 
 import ronin.muserver.Method;
-import ronin.muserver.MuRequest;
 
 import javax.ws.rs.HttpMethod;
 import java.lang.annotation.Annotation;
+import java.lang.reflect.InvocationTargetException;
 
 import static ronin.muserver.rest.MethodMapping.jaxToMu;
 
@@ -27,12 +27,9 @@ class ResourceMethod {
         return pathPattern != null;
     }
 
-    public boolean matches(MuRequest request) {
-        if (request.method() != httpMethod) {
-            return false;
-        }
-        PathMatch matcher = pathPattern.matcher(request.uri());
-        return matcher.matches();
+    public Object invoke(Object... params) throws InvocationTargetException, IllegalAccessException {
+        Object result = methodHandle.invoke(resourceClass.resourceInstance, params);
+        return result;
     }
 
     static Method getMuMethod(java.lang.reflect.Method restMethod) {
