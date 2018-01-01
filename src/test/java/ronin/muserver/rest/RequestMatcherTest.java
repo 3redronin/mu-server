@@ -6,6 +6,7 @@ import ronin.muserver.Method;
 
 import javax.ws.rs.*;
 import java.net.URI;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -194,6 +195,23 @@ public class RequestMatcherTest {
             assertThat(e.getMessage(), equalTo("HTTP 405 Method Not Allowed"));
         }
 
+    }
+
+    @Test
+    public void matchedMethodsMergePathParamsFromResourceClass() {
+        @Path("api/{fruitFamily}")
+        class Fruit {
+            @GET
+            @Path("{fruitType}")
+            public String get() { return ""; }
+        }
+
+        RequestMatcher rm = new RequestMatcher(set(fromObject(new Fruit())));
+        RequestMatcher.MatchedMethod mm = rm.findResourceMethod(Method.GET, URI.create("api/citrus/orange"));
+        assertThat(mm.resourceMethod.methodHandle.getName(), equalTo("get"));
+        Map<String, String> pathParams = mm.pathMatch.params();
+        assertThat(pathParams.get("fruitType"), equalTo("orange"));
+        assertThat(pathParams.get("fruitFamily"), equalTo("citrus"));
     }
 
 
