@@ -37,13 +37,13 @@ class ResourceClass {
             throw new IllegalStateException("Cannot call setupMethodInfo twice");
         }
         Set<ResourceMethod> resourceMethods = new HashSet<>();
-        java.lang.reflect.Method[] methods = this.resourceClass.getClass().getMethods();
+        java.lang.reflect.Method[] methods = this.resourceClass.getMethods();
         for (java.lang.reflect.Method restMethod : methods) {
             Method httpMethod = ResourceMethod.getMuMethod(restMethod);
             if (httpMethod == null) {
                 continue;
             }
-            Path methodPath = httpMethod.getClass().getAnnotation(Path.class);
+            Path methodPath = restMethod.getAnnotation(Path.class);
             UriPattern pathPattern = methodPath == null ? null : UriPattern.uriTemplateToRegex(methodPath.value());
             resourceMethods.add(new ResourceMethod(this, pathPattern, restMethod, httpMethod, methodPath == null ? null : methodPath.value()));
         }
@@ -95,6 +95,10 @@ class ResourceClass {
 
     @Override
     public String toString() {
-        return "ResourceClass{" + resourceClass.getName() + '}';
+        return "ResourceClass{" + resourceClassName() + '}';
+    }
+
+    String resourceClassName() {
+        return resourceClass.getName();
     }
 }

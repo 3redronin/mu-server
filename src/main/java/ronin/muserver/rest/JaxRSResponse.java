@@ -44,117 +44,125 @@ class JaxRSResponse extends Response {
 
     @Override
     public <T> T readEntity(Class<T> entityType) {
-        return null;
+        throw NotImplementedException.notYet();
     }
 
     @Override
     public <T> T readEntity(GenericType<T> entityType) {
-        return null;
+        throw NotImplementedException.notYet();
     }
 
     @Override
     public <T> T readEntity(Class<T> entityType, Annotation[] annotations) {
-        return null;
+        throw NotImplementedException.notYet();
     }
 
     @Override
     public <T> T readEntity(GenericType<T> entityType, Annotation[] annotations) {
-        return null;
+        throw NotImplementedException.notYet();
     }
 
     @Override
     public boolean hasEntity() {
-        return false;
+        throw NotImplementedException.notYet();
     }
 
     @Override
     public boolean bufferEntity() {
-        return false;
+        throw NotImplementedException.notYet();
     }
 
     @Override
     public void close() {
-
+        throw NotImplementedException.notYet();
     }
 
     @Override
     public MediaType getMediaType() {
-        return null;
+        throw NotImplementedException.notYet();
     }
 
     @Override
     public Locale getLanguage() {
-        return null;
+        throw NotImplementedException.notYet();
     }
 
     @Override
     public int getLength() {
-        return 0;
+        throw NotImplementedException.notYet();
     }
 
     @Override
     public Set<String> getAllowedMethods() {
-        return null;
+        throw NotImplementedException.notYet();
     }
 
     @Override
     public Map<String, NewCookie> getCookies() {
-        return null;
+        throw NotImplementedException.notYet();
     }
 
     @Override
     public EntityTag getEntityTag() {
-        return null;
+        throw NotImplementedException.notYet();
     }
 
     @Override
     public Date getDate() {
-        return null;
+        throw NotImplementedException.notYet();
     }
 
     @Override
     public Date getLastModified() {
-        return null;
+        throw NotImplementedException.notYet();
     }
 
     @Override
     public URI getLocation() {
-        return null;
+        throw NotImplementedException.notYet();
     }
 
     @Override
     public Set<Link> getLinks() {
-        return null;
+        throw NotImplementedException.notYet();
     }
 
     @Override
     public boolean hasLink(String relation) {
-        return false;
+        throw NotImplementedException.notYet();
     }
 
     @Override
     public Link getLink(String relation) {
-        return null;
+        throw NotImplementedException.notYet();
     }
 
     @Override
     public Link.Builder getLinkBuilder(String relation) {
-        return null;
+        throw NotImplementedException.notYet();
     }
 
     @Override
     public MultivaluedMap<String, Object> getMetadata() {
-        return null;
+        MultivaluedMap<String, Object> map = new MultivaluedHashMap<>();
+        for (String name : headers.names()) {
+            map.addAll(name, headers.getAll(name));
+        }
+        return map;
     }
 
     @Override
     public MultivaluedMap<String, String> getStringHeaders() {
-        return null;
+        MultivaluedMap<String, String> map = new MultivaluedHashMap<>();
+        for (String name : headers.names()) {
+            map.addAll(name, headers.getAll(name));
+        }
+        return map;
     }
 
     @Override
     public String getHeaderString(String name) {
-        return null;
+        return headers.get(name);
     }
 
     public static class Builder extends Response.ResponseBuilder {

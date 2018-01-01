@@ -49,4 +49,9 @@ class ResourceMethod {
         }
         return value;
     }
+
+    @Override
+    public String toString() {
+        return "ResourceMethod{" + resourceClass.resourceClassName() + "#" + methodHandle.getName() + "}";
+    }
 }

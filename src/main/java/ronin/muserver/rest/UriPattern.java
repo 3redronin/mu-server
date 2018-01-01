@@ -16,10 +16,12 @@ public class UriPattern {
     private static final String DEFAULT_CAPTURING_GROUP_PATTERN = "[^/]+?";
     private final Pattern pattern;
     private final Set<String> namedGroups;
+    final int numberOfLiterals;
 
-    private UriPattern(Pattern pattern, Set<String> namedGroups) {
+    private UriPattern(Pattern pattern, Set<String> namedGroups, int numberOfLiterals) {
         this.pattern = pattern;
         this.namedGroups = Collections.unmodifiableSet(namedGroups);
+        this.numberOfLiterals = numberOfLiterals;
     }
 
     /**
@@ -38,7 +40,7 @@ public class UriPattern {
 
     /**
      * Matches the given URI against this pattern.
-     * @param input The URI to check against
+     * @param input The URI to check against.
      * @return Returns a {@link PathMatch} where {@link PathMatch#matches()} is <code>true</code> if the URI matches
      * and otherwise <code>false</code>.
      */
@@ -71,23 +73,50 @@ public class UriPattern {
         if (template == null) {
             throw new IllegalArgumentException("template cannot be null");
         }
+        template = trimSlashes(template);
 
         // Numbered comments are direct from the spec
         Set<String> groupNames = new HashSet<>();
 
-        StringBuilder regex = new StringBuilder("/");
-        String[] bits = template.split("/");
-        for (String bit : bits) {
-            if (bit.length() == 0) {
-                continue;
-            }
-            boolean isVar = bit.startsWith("{") && bit.endsWith("}");
-            if (!isVar) {
-                // 1. URI encode the template, ignoring URI template variable speciﬁcations.
-                // 2. Escape any regular expression characters in the URI template, again ignoring URI template variable specifications.
-                regex.append(Pattern.quote(urlEncode(bit)));
+        StringBuilder regex = new StringBuilder();
+        int numberOfLiterals = 0;
+        System.out.println("template = " + template + " - " + template.length());
+        int curIndex = 0;
+        int loop = 0;
+        while (curIndex < template.length()) {
+            loop++;
+            int startRegex = template.indexOf('{', curIndex);
+            System.out.println("Loop " + loop + " - curIndex=" + curIndex + " and startRegex=" + startRegex);
+            if (startRegex != curIndex) {
+                int endIndex = startRegex == -1 ? template.length() : startRegex;
+                String literal = template.substring(curIndex, endIndex);
+                System.out.println(" * literal = " + literal);
+
+
+                numberOfLiterals += literal.length();
+                if (literal.equals("/")) {
+                    regex.append('/');
+                } else if (!literal.contains("/")) {
+                    regex.append(Pattern.quote(urlEncode(literal)));
+                } else {
+                    String[] segments = literal.split("/");
+                    for (int i = 0; i < segments.length; i++) {
+                        String segment = segments[i];
+                        if (!segment.isEmpty()) {
+                            regex.append(Pattern.quote(urlEncode(segment)));
+                        }
+                        regex.append('/');
+                    }
+                }
+                curIndex = endIndex;
             } else {
-                // 3. Replace each URI template variable with a capturing group containing the speciﬁed regular expression or ‘([ˆ/]+?)’ if no regular expression is speciﬁed.
+                int endOfRegex = template.indexOf('}', curIndex);
+                if (endOfRegex == -1) {
+                    throw new IllegalArgumentException("Unclosed { character in path " + template);
+                }
+                endOfRegex++;
+                String bit = template.substring(curIndex, endOfRegex);
+                System.out.println(" * bit = " + bit);
                 String groupName = bit.substring(1, bit.length() - 1).trim();
                 String groupRegex;
                 if (groupName.contains(":")) {
@@ -99,20 +128,33 @@ public class UriPattern {
                 }
                 groupNames.add(groupName);
                 regex.append("(?<").append(groupName).append(">").append(groupRegex).append(")");
+                curIndex = endOfRegex;
             }
-            regex.append('/');
+            if (loop > 100) {
+                break;
+            }
         }
+        System.out.println("regex = " + regex);
 
-        // 4. If the resulting string ends with ‘/’ then remove the ﬁnal character.
+        // 4. If the resulting string ends with '/' then remove the final character.
         if (regex.lastIndexOf("/") == regex.length() - 1) {
             regex.delete(regex.length() - 1, regex.length());
         }
 
-        // 5. Append ‘(/.*)?’ to the result.
+        // 5. Append '(/.*)?' to the result.
         regex.append("(/.*)?");
 
-        return new UriPattern(Pattern.compile(regex.toString()), groupNames);
+        return new UriPattern(Pattern.compile(regex.toString()), groupNames, numberOfLiterals);
 
+    }
+
+    private static String trimSlashes(String template) {
+        boolean start = template.startsWith("/");
+        boolean end = template.endsWith("/");
+        if (!start && !end) {
+            return template;
+        }
+        return template.substring(start ? 1 : 0, end ? template.length() - 1 : template.length());
     }
 
     @Override
@@ -125,7 +167,13 @@ public class UriPattern {
 
     @Override
     public int hashCode() {
-
         return Objects.hash(pattern.pattern());
+    }
+
+    boolean equalModuloVariableNames(UriPattern other) {
+        String regex = "\\(\\?<[^>]+>";
+        String thisNormalised = this.pattern().replaceAll(regex, "(");
+        String otherNormalised = other.pattern().replaceAll(regex, "(");
+        return thisNormalised.equals(otherNormalised);
     }
 }
