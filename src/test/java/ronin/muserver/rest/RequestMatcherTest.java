@@ -6,11 +6,12 @@ import ronin.muserver.Method;
 
 import javax.ws.rs.*;
 import java.net.URI;
-import java.util.Map;
+import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static java.util.stream.Collectors.toList;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static ronin.muserver.rest.ResourceClass.fromObject;
@@ -26,12 +27,12 @@ public class RequestMatcherTest {
 
     @Test(expected = NotFoundException.class)
     public void throwsIfNoValidCandidates() {
-        assertThat(rm.stepOneIdentifyASetOfCandidateRootResourceClassesMatchingTheRequest(URI.create("api/three")).candidates, empty());
+        assertThat(stepOneMatches(URI.create("api/three"), rm), empty());
     }
 
     @Test
     public void findsTheMostSpecificInstanceAvailable() {
-        assertThat(rm.stepOneIdentifyASetOfCandidateRootResourceClassesMatchingTheRequest(URI.create("api/resources/one/2")).candidates,
+        assertThat(stepOneMatches(URI.create("api/resources/one/2"), rm),
             contains(resourceOneV2));
     }
 
@@ -41,8 +42,13 @@ public class RequestMatcherTest {
         assertThat(resourceSomething.matches(uri), is(false));
         assertThat(resourceSomethingYeah.matches(uri), is(true));
         assertThat(resourceAnother.matches(uri), is(true));
-        assertThat(rm.stepOneIdentifyASetOfCandidateRootResourceClassesMatchingTheRequest(uri).candidates,
+        assertThat(stepOneMatches(uri, rm),
             contains(resourceSomethingYeah));
+    }
+
+    private List<ResourceClass> stepOneMatches(URI uri, RequestMatcher rm1) {
+        return rm1.stepOneIdentifyASetOfCandidateRootResourceClassesMatchingTheRequest(uri).candidates
+            .stream().map(rm -> rm.resourceClass).collect(toList());
     }
 
     @Test(expected = NotFoundException.class)
@@ -71,8 +77,7 @@ public class RequestMatcherTest {
         assertThat(resourceSomething.matches(uri), is(true));
         assertThat(resourceAnother.matches(uri), is(true));
         assertThat(resourceSomething.pathPattern.numberOfLiterals, equalTo(resourceAnother.pathPattern.numberOfLiterals));
-        assertThat(rm.stepOneIdentifyASetOfCandidateRootResourceClassesMatchingTheRequest(uri).candidates,
-            contains(resourceAnother));
+        assertThat(stepOneMatches(uri, rm), contains(resourceAnother));
     }
 
     @Test
@@ -94,7 +99,7 @@ public class RequestMatcherTest {
         assertThat(resourcePeopleBeltsInCapitals.matches(uri), is(true));
         assertThat(resourcePeopleBelts.pathPattern.numberOfLiterals, equalTo(resourcePeopleBeltsInCapitals.pathPattern.numberOfLiterals));
         assertThat(resourcePeopleBelts.pathPattern.namedGroups().size(), equalTo(resourcePeopleBeltsInCapitals.pathPattern.namedGroups().size()));
-        assertThat(rm.stepOneIdentifyASetOfCandidateRootResourceClassesMatchingTheRequest(uri).candidates,
+        assertThat(stepOneMatches(uri, rm),
             contains(resourcePeopleBeltsInCapitals));
     }
 
@@ -117,7 +122,7 @@ public class RequestMatcherTest {
         assertThat(resourcePeopleBeltsInCapitals.matches(uri), is(true));
         assertThat(resourcePeopleBelts.pathPattern.numberOfLiterals, equalTo(resourcePeopleBeltsInCapitals.pathPattern.numberOfLiterals));
         assertThat(resourcePeopleBelts.pathPattern.namedGroups().size(), equalTo(resourcePeopleBeltsInCapitals.pathPattern.namedGroups().size()));
-        assertThat(rm.stepOneIdentifyASetOfCandidateRootResourceClassesMatchingTheRequest(uri).candidates,
+        assertThat(stepOneMatches(uri, rm),
             containsInAnyOrder(resourcePeopleBeltsInCapitals, resourcePeopleBelts));
     }
 
@@ -165,7 +170,7 @@ public class RequestMatcherTest {
 //        assertThat(getAll.methodHandle.getName(), equalTo("getAll"));
         RequestMatcher.MatchedMethod mm = rm.findResourceMethod(Method.GET, URI.create("api/fruits/orange"));
         assertThat(mm.resourceMethod.methodHandle.getName(), equalTo("get"));
-        assertThat(mm.pathMatch.params().get("name"), equalTo("orange"));
+        assertThat(mm.pathParams.get("name"), equalTo("orange"));
     }
 
     @Test
@@ -209,9 +214,8 @@ public class RequestMatcherTest {
         RequestMatcher rm = new RequestMatcher(set(fromObject(new Fruit())));
         RequestMatcher.MatchedMethod mm = rm.findResourceMethod(Method.GET, URI.create("api/citrus/orange"));
         assertThat(mm.resourceMethod.methodHandle.getName(), equalTo("get"));
-        Map<String, String> pathParams = mm.pathMatch.params();
-        assertThat(pathParams.get("fruitType"), equalTo("orange"));
-        assertThat(pathParams.get("fruitFamily"), equalTo("citrus"));
+        assertThat(mm.pathParams.get("fruitType"), equalTo("orange"));
+        assertThat(mm.pathParams.get("fruitFamily"), equalTo("citrus"));
     }
 
 

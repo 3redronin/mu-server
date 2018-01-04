@@ -5,8 +5,7 @@ import ronin.muserver.Method;
 import javax.ws.rs.NotAllowedException;
 import javax.ws.rs.NotFoundException;
 import java.net.URI;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toSet;
@@ -43,23 +42,26 @@ class RequestMatcher {
     }
 
     public StepOneOutput stepOneIdentifyASetOfCandidateRootResourceClassesMatchingTheRequest(URI uri) throws NotFoundException {
-        List<ResourceClass> candidates = roots.stream()
+        List<MatchedClass> candidates = roots.stream()
+            .map(rc -> new MatchedClass(rc, rc.pathPattern.matcher(uri)))
             .filter(rc -> {
-                PathMatch matcher = rc.pathPattern.matcher(uri);
+                PathMatch matcher = rc.pathMatch;
                 // Remove members that do not match U.
                 // Remove members for which the final regular expression capturing group value is neither empty nor ‘/’ and the class has no subresource methods or locators.
-                return matcher.matches() && !(matcher.lastGroup() != null && rc.subResourceMethods().isEmpty());
+                return matcher.matches() && !(matcher.lastGroup() != null && rc.resourceClass.subResourceMethods().isEmpty());
             })
             .sorted((o1, o2) -> {
+                UriPattern o1pp = o1.resourceClass.pathPattern;
+                UriPattern o2pp = o2.resourceClass.pathPattern;
                 // "Sort E using the number of literal characters in each member as the primary key (descending order)"
-                int c = Integer.compare(o2.pathPattern.numberOfLiterals, o1.pathPattern.numberOfLiterals);
+                int c = Integer.compare(o2pp.numberOfLiterals, o1pp.numberOfLiterals);
                 if (c == 0) {
                     // "the number of capturing groups as a secondary key (descending order)"
-                    c = Integer.compare(o2.pathPattern.namedGroups().size(), o1.pathPattern.namedGroups().size());
+                    c = Integer.compare(o2pp.namedGroups().size(), o1pp.namedGroups().size());
                 }
                 if (c == 0) {
                     // " and the number of capturing groups with non-default regular expressions (i.e. not ‘([ˆ/]+?)’) as the tertiary key (descending order)"
-                    c = Integer.compare(countNonDefaultGroups(o2.pathTemplate), countNonDefaultGroups(o1.pathTemplate));
+                    c = Integer.compare(countNonDefaultGroups(o2.resourceClass.pathTemplate), countNonDefaultGroups(o1.resourceClass.pathTemplate));
                 }
                 return c;
             })
@@ -68,55 +70,68 @@ class RequestMatcher {
             throw new NotFoundException();
         }
         // Set Rmatch to be the first member of E and set U to be the value of the final capturing group of Rmatch when matched against U
-        UriPattern rMatch = candidates.get(0).pathPattern;
+        UriPattern rMatch = candidates.get(0).resourceClass.pathPattern;
         String u = rMatch.matcher(uri).lastGroup();
 
         // Let C0 be the set of classes Z such that R(TZ) = Rmatch. By definition, all root resource classes in C0 must be annotated with the same URI path template modulo variable names
 
-        List<ResourceClass> c0 = candidates.stream()
-            .filter(rc -> rc.pathPattern.equalModuloVariableNames(rMatch))
+        List<MatchedClass> c0 = candidates.stream()
+            .filter(rc -> rc.resourceClass.pathPattern.equalModuloVariableNames(rMatch))
             .collect(toList());
         return new StepOneOutput(u, c0);
     }
 
-    private Set<MatchedMethod> stepTwoObtainASetOfCandidateResourceMethodsForTheRequest(URI relativeUri, List<ResourceClass> candidateClasses) {
+    private Set<MatchedMethod> stepTwoObtainASetOfCandidateResourceMethodsForTheRequest(URI relativeUri, List<MatchedClass> candidateClasses) {
         if (relativeUri == null) {
             // handle section 3.7.2 - 2(a)
-            Set<MatchedMethod> candidates = candidateClasses.stream()
-                .flatMap(resourceClass -> resourceClass.resourceMethods.stream()
-                    .filter(resourceMethod -> !resourceMethod.isSubResource()))
-                .map(rm -> {
-                    return new MatchedMethod(rm, PathMatch.EMPTY_MATCH);
-                })
-                .collect(toSet());
+            Set<MatchedMethod> candidates = new HashSet<>();
+            for (MatchedClass mc : candidateClasses) {
+                for (ResourceMethod resourceMethod : mc.resourceClass.resourceMethods) {
+                    if (!resourceMethod.isSubResource() && !resourceMethod.isSubResourceLocator()) {
+                        MatchedMethod matchedMethod = new MatchedMethod(resourceMethod, true, mc.pathMatch.params());
+                        candidates.add(matchedMethod);
+                    }
+                }
+            }
             if (!candidates.isEmpty()) {
                 return candidates;
             }
         }
-        List<MatchedMethod> candidates = candidateClasses.stream()
-            .flatMap(rc -> rc.resourceMethods.stream().filter(ResourceMethod::isSubResource))
-            .map(rm -> new MatchedMethod(rm, rm.pathPattern.matcher(relativeUri)))
-            .filter(rm -> rm.pathMatch.matches())
-            .sorted((o1, o2) -> {
-                ResourceMethod rm1 = o1.resourceMethod;
-                ResourceMethod rm2 = o2.resourceMethod;
-                // "Sort E using the number of literal characters4 in each member as the primary key (descending order)"
-                int c = Integer.compare(rm2.pathPattern.numberOfLiterals, rm1.pathPattern.numberOfLiterals);
-                if (c == 0) {
-                    // "the number of capturing groups as a secondary key (descending order)"
-                    c = Integer.compare(rm2.pathPattern.namedGroups().size(), rm1.pathPattern.namedGroups().size());
+
+        List<MatchedMethod> candidates = new ArrayList<>();
+        for (MatchedClass candidateClass : candidateClasses) {
+            for (ResourceMethod resourceMethod : candidateClass.resourceClass.resourceMethods) {
+                if (resourceMethod.isSubResource() || resourceMethod.isSubResourceLocator()) {
+                    PathMatch matcher = resourceMethod.pathPattern.matcher(relativeUri);
+                    if (matcher.matches()) {
+                        Map<String, String> combinedParams = new HashMap<>(candidateClass.pathMatch.params());
+                        combinedParams.putAll(matcher.params());
+                        candidates.add(new MatchedMethod(resourceMethod, true, combinedParams));
+                    }
                 }
-                if (c == 0) {
-                    // " and the number of capturing groups with non-default regular expressions (i.e. not ‘([ˆ/]+?)’) as the tertiary key (descending order)"
-                    c = Integer.compare(countNonDefaultGroups(rm2.pathTemplate), countNonDefaultGroups(rm1.pathTemplate));
-                }
-                if (c == 0) {
-                    // "and the source of each member as quaternary key sorting those derived from sub-resource methods ahead of those derived from sub-resource locators"
-                    // ...but as locators are not currently supported, this does nothing
-                }
-                return c;
-            })
-            .collect(toList());
+            }
+        }
+
+        candidates.sort((o1, o2) -> {
+            ResourceMethod rm1 = o1.resourceMethod;
+            ResourceMethod rm2 = o2.resourceMethod;
+            // "Sort E using the number of literal characters4 in each member as the primary key (descending order)"
+            int c = Integer.compare(rm2.pathPattern.numberOfLiterals, rm1.pathPattern.numberOfLiterals);
+            if (c == 0) {
+                // "the number of capturing groups as a secondary key (descending order)"
+                c = Integer.compare(rm2.pathPattern.namedGroups().size(), rm1.pathPattern.namedGroups().size());
+            }
+            if (c == 0) {
+                // " and the number of capturing groups with non-default regular expressions (i.e. not ‘([ˆ/]+?)’) as the tertiary key (descending order)"
+                c = Integer.compare(countNonDefaultGroups(rm2.pathTemplate), countNonDefaultGroups(rm1.pathTemplate));
+            }
+            if (c == 0) {
+                // "and the source of each member as quaternary key sorting those derived from sub-resource methods ahead of those derived from sub-resource locators"
+                // TODO: test that this is around the right way
+                c = Boolean.compare(o1.resourceMethod.isSubResourceLocator(), o2.resourceMethod.isSubResourceLocator());
+            }
+            return c;
+        });
 
         if (candidates.isEmpty()) {
             throw new NotFoundException();
@@ -130,12 +145,25 @@ class RequestMatcher {
         throw new NotFoundException();
     }
 
+    static class MatchedClass {
+        final ResourceClass resourceClass;
+        final PathMatch pathMatch;
+
+        MatchedClass(ResourceClass resourceClass, PathMatch pathMatch) {
+            this.resourceClass = resourceClass;
+            this.pathMatch = pathMatch;
+        }
+    }
+
     public static class MatchedMethod {
         public final ResourceMethod resourceMethod;
-        public final PathMatch pathMatch;
-        public MatchedMethod(ResourceMethod resourceMethod, PathMatch pathMatch) {
+        final boolean isMatch;
+        final Map<String, String> pathParams;
+
+        MatchedMethod(ResourceMethod resourceMethod, boolean isMatch, Map<String, String> pathParams) {
             this.resourceMethod = resourceMethod;
-            this.pathMatch = pathMatch;
+            this.isMatch = isMatch;
+            this.pathParams = pathParams;
         }
     }
 
@@ -153,9 +181,9 @@ class RequestMatcher {
 
     static class StepOneOutput {
         final String unmatchedGroup;
-        final List<ResourceClass> candidates;
+        final List<MatchedClass> candidates;
 
-        StepOneOutput(String unmatchedGroup, List<ResourceClass> candidates) {
+        StepOneOutput(String unmatchedGroup, List<MatchedClass> candidates) {
             this.unmatchedGroup = unmatchedGroup;
             this.candidates = candidates;
         }

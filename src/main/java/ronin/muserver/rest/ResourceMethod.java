@@ -26,6 +26,9 @@ class ResourceMethod {
     public boolean isSubResource() {
         return pathPattern != null;
     }
+    public boolean isSubResourceLocator() {
+        return httpMethod == null;
+    }
 
     public Object invoke(Object... params) throws InvocationTargetException, IllegalAccessException {
         Object result = methodHandle.invoke(resourceClass.resourceInstance, params);

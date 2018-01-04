@@ -43,7 +43,7 @@ public class RestHandler implements MuHandler {
                 PathParam pp = parameter.getAnnotation(PathParam.class);
                 if (pp != null) {
                     String paramName = pp.value();
-                    params[paramIndex] = mm.pathMatch.params().get(paramName);
+                    params[paramIndex] = mm.pathParams.get(paramName);
                 }
                 paramIndex++;
             }

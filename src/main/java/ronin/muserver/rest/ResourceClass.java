@@ -30,6 +30,7 @@ class ResourceClass {
     public Set<ResourceMethod> nonSubResourceMethods() {
         return resourceMethods.stream().filter(resourceMethod -> !resourceMethod.isSubResource()).collect(Collectors.toSet());
     }
+
     public Set<ResourceMethod> subResourceMethods() {
         return resourceMethods.stream().filter(ResourceMethod::isSubResource).collect(Collectors.toSet());
     }
