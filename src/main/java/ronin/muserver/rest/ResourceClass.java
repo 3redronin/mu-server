@@ -3,9 +3,10 @@ package ronin.muserver.rest;
 import ronin.muserver.Method;
 
 import javax.ws.rs.Path;
-import java.lang.annotation.Annotation;
 import java.net.URI;
-import java.util.*;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 class ResourceClass {
@@ -54,47 +55,29 @@ class ResourceClass {
     }
 
     public static ResourceClass fromObject(Object restResource) {
-        Class<?> clazz = restResource.getClass();
-        ResourceClass resourceClass = null;
-        while (clazz != null) {
-            // From section 3.6 of the spec:
-            // JAX-RS annotations MAY be used on the methods and method parameters of a super-class or an implemented interface.
-            // Such annotations are inherited by a corresponding sub-class or implementation class method provided that method
-            // and its parameters do not have any JAX-RS annotations of its own. Annotations on a super-class take precedence
-            // over those on an implemented interface. If a subclass or implementation method has any JAX-RS annotations then
-            // all of the annotations on the super class or interface method are ignored.
-
-            boolean hasAJaxAnnotation = hasAtLeastOneJaxRSAnnotation(clazz.getAnnotations());
-            if (!hasAJaxAnnotation) {
-                clazz = clazz.getSuperclass();
-            } else {
-                Path path = clazz.getDeclaredAnnotation(Path.class);
-                if (path == null) {
-                    throw new IllegalArgumentException("The class " + clazz.getName() + " must specify a " + Path.class.getName()
-                        + " annotation because it has other JAX RS annotations declared. (Note that @Path cannot be inherited if there are other JAX RS annotations declared on this class.)");
-                }
-                UriPattern pathPattern = UriPattern.uriTemplateToRegex(path.value());
-                resourceClass = new ResourceClass(pathPattern, path.value(), restResource);
-                resourceClass.setupMethodInfo();
-                break;
-            }
-        }
-        if (resourceClass == null) {
+        Class<?> clazz = JaxClassLocator.getClassWithJaxRSAnnotations(restResource.getClass());
+        if (clazz == null) {
             throw new IllegalArgumentException("The restResource class " + restResource.getClass().getName() + " must have a " + Path.class.getName() + " annotation to be eligible as a REST resource.");
         }
+
+        // From section 3.6 of the spec:
+        // JAX-RS annotations MAY be used on the methods and method parameters of a super-class or an implemented interface.
+        // Such annotations are inherited by a corresponding sub-class or implementation class method provided that method
+        // and its parameters do not have any JAX-RS annotations of its own. Annotations on a super-class take precedence
+        // over those on an implemented interface. If a subclass or implementation method has any JAX-RS annotations then
+        // all of the annotations on the super class or interface method are ignored.
+
+        Path path = clazz.getDeclaredAnnotation(Path.class);
+        if (path == null) {
+            throw new IllegalArgumentException("The class " + clazz.getName() + " must specify a " + Path.class.getName()
+                + " annotation because it has other JAX RS annotations declared. (Note that @Path cannot be inherited if there are other JAX RS annotations declared on this class.)");
+        }
+        UriPattern pathPattern = UriPattern.uriTemplateToRegex(path.value());
+        ResourceClass resourceClass = new ResourceClass(pathPattern, path.value(), restResource);
+        resourceClass.setupMethodInfo();
         return resourceClass;
     }
 
-    private static boolean hasAtLeastOneJaxRSAnnotation(Annotation[] annotations) {
-        boolean hasAJaxAnnotation = false;
-        for (Annotation annotation : annotations) {
-            String packageName = annotation.annotationType().getPackage().getName();
-            if (packageName.equals("javax.ws.rs") || packageName.startsWith("javax.ws.rs.")) {
-                hasAJaxAnnotation = true;
-            }
-        }
-        return hasAJaxAnnotation;
-    }
 
     @Override
     public String toString() {

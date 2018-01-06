@@ -219,6 +219,26 @@ public class RequestMatcherTest {
     }
 
 
+    @Path("api/{fruitFamily}")
+    interface FruitInterface {
+        @GET
+        @Path("{fruitType}")
+        String get();
+    }
+    @Test
+    public void paramsCanBeDefinedOnTheInterface() {
+        class FruitImpl implements FruitInterface {
+            public String get() { return ""; }
+        }
+
+        RequestMatcher rm = new RequestMatcher(set(fromObject(new FruitImpl())));
+        RequestMatcher.MatchedMethod mm = rm.findResourceMethod(Method.GET, URI.create("api/citrus/orange"));
+        assertThat(mm.resourceMethod.methodHandle.getName(), equalTo("get"));
+        assertThat(mm.pathParams.get("fruitType"), equalTo("orange"));
+        assertThat(mm.pathParams.get("fruitFamily"), equalTo("citrus"));
+    }
+
+
     private static Set<ResourceClass> set(ResourceClass... restResources) {
         return Stream.of(restResources).collect(Collectors.toSet());
     }
