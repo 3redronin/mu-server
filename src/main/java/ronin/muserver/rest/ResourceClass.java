@@ -43,11 +43,12 @@ class ResourceClass {
         Set<ResourceMethod> resourceMethods = new HashSet<>();
         java.lang.reflect.Method[] methods = this.resourceClass.getMethods();
         for (java.lang.reflect.Method restMethod : methods) {
-            Method httpMethod = ResourceMethod.getMuMethod(restMethod);
+            java.lang.reflect.Method annotationSource = JaxMethodLocator.getMethodThatHasJaxRSAnnotations(restMethod);
+            Method httpMethod = ResourceMethod.getMuMethod(annotationSource);
             if (httpMethod == null) {
                 continue;
             }
-            Path methodPath = restMethod.getAnnotation(Path.class);
+            Path methodPath = annotationSource.getAnnotation(Path.class);
             UriPattern pathPattern = methodPath == null ? null : UriPattern.uriTemplateToRegex(methodPath.value());
             resourceMethods.add(new ResourceMethod(this, pathPattern, restMethod, httpMethod, methodPath == null ? null : methodPath.value()));
         }
