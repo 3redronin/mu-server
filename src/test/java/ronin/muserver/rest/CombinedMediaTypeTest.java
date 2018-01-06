@@ -2,13 +2,13 @@ package ronin.muserver.rest;
 
 import org.junit.Test;
 
+import javax.ws.rs.core.MediaType;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.stream.Collectors;
 
-import static java.util.Arrays.asList;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.contains;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.sameInstance;
+import static org.hamcrest.Matchers.*;
 
 public class CombinedMediaTypeTest {
     private final MediaTypeHeaderDelegate delegate = new MediaTypeHeaderDelegate();
@@ -52,8 +52,7 @@ public class CombinedMediaTypeTest {
             t("text", "*", 0.5, 0.5, 1),
             t("text", "plain", 0.5, 0.5, 0)
         };
-        Arrays.sort(sample);
-        assertThat(asList(sample), contains(
+        assertThat(Arrays.stream(sample).sorted(Collections.reverseOrder()).collect(Collectors.toList()), contains(
             t("text", "plain", 0.5, 0.5, 0),
             t("text", "*", 0.5, 0.5, 0),
             t("text", "*", 0.5, 0.5, 1),
@@ -70,7 +69,13 @@ public class CombinedMediaTypeTest {
     public void ifNotCompatibleThenNumbersAreCompared() {
         assertThat(t("text", "html", 1.0, 0.7, 0)
             .compareTo(t("application", "xml", 1.0, 0.2, 0)),
-            equalTo(-1));
+            equalTo(1));
+    }
+
+    @Test
+    public void itCanCount() {
+        assertThat(CombinedMediaType.s(MediaType.valueOf("text/plain"), MediaType.valueOf("*/*")).d, equalTo(2));
+        assertThat(CombinedMediaType.s(MediaType.valueOf("text/plain"), MediaType.valueOf("text/plain")).d, equalTo(0));
     }
 
     private static CombinedMediaType t(String type, String subType, double q, double qs, int d) {

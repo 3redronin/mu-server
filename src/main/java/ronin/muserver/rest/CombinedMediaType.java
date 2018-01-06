@@ -37,10 +37,10 @@ class CombinedMediaType implements Comparable<CombinedMediaType> {
         double q = Double.parseDouble(clientType.getParameters().getOrDefault("q", "1.0"));
         double qs = Double.parseDouble(serverType.getParameters().getOrDefault("qs", "1.0"));
         int d = 0;
-        if (clientType.isWildcardType() ^ !serverType.isWildcardType()) {
+        if (clientType.isWildcardType() ^ serverType.isWildcardType()) {
             d++;
         }
-        if (clientType.isWildcardSubtype() ^ !serverType.isWildcardSubtype()) {
+        if (clientType.isWildcardSubtype() ^ serverType.isWildcardSubtype()) {
             d++;
         }
         return new CombinedMediaType(type, sub, q, qs, d);
@@ -49,20 +49,20 @@ class CombinedMediaType implements Comparable<CombinedMediaType> {
     @Override
     public int compareTo(CombinedMediaType o) {
         if (isWildcardType ^ o.isWildcardType) {
-            return Boolean.compare(isWildcardType, o.isWildcardType);
+            return Boolean.compare(o.isWildcardType, this.isWildcardType);
         }
         if (isWildcardSubtype ^ o.isWildcardSubtype) {
-            return Boolean.compare(isWildcardSubtype, o.isWildcardSubtype);
+            return Boolean.compare(o.isWildcardSubtype, this.isWildcardSubtype);
         }
-        int qVal = Double.compare(o.q, this.q);
+        int qVal = Double.compare(this.q, o.q);
         if (qVal != 0) {
             return qVal;
         }
-        int qsVal = Double.compare(o.qs, this.qs);
+        int qsVal = Double.compare(this.qs, o.qs);
         if (qsVal != 0) {
             return qsVal;
         }
-        return Integer.compare(this.d, o.d);
+        return Integer.compare(o.d, this.d);
     }
 
     @Override

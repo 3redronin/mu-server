@@ -168,8 +168,8 @@ public class RequestMatcherTest {
 
         ResourceClass resourcePeopleBelts = fromObject(new Fruit());
         RequestMatcher rm = new RequestMatcher(set(resourcePeopleBelts));
-//        ResourceMethod getAll = rm.findResourceMethod(Method.GET, URI.create("api/fruits"));
-//        assertThat(getAll.methodHandle.getName(), equalTo("getAll"));
+        ResourceMethod getAll = rm.findResourceMethod(Method.GET, URI.create("api/fruits"), emptyList(), null).resourceMethod;
+        assertThat(getAll.methodHandle.getName(), equalTo("getAll"));
         RequestMatcher.MatchedMethod mm = rm.findResourceMethod(Method.GET, URI.create("api/fruits/orange"), emptyList(), null);
         assertThat(mm.resourceMethod.methodHandle.getName(), equalTo("get"));
         assertThat(mm.pathParams.get("name"), equalTo("orange"));
@@ -246,7 +246,7 @@ public class RequestMatcherTest {
         class PictureThat {
 
             @GET
-            @Produces({"image/jpeg, image/gif ", " image/png"})
+            @Produces({"image/jpeg; qs=0.5, image/gif; qs=0.5 ", " image/png; qs=0.5"})
             public String image() {
                 return ";)";
             }
@@ -294,18 +294,44 @@ public class RequestMatcherTest {
         assertNotAcceptable(rm, asList("image/*"), null);
     }
 
+    @Test
+    public void consumesCanBeUsedToMatchMethods() {
+        @Path("pictures")
+        class PictureThat {
+
+            @GET
+            @Produces("text/plain")
+            @Consumes("text/plain")
+            public String text() {
+                return "hi";
+            }
+
+            @GET
+            @Produces("text/javascript")
+            public String json() {
+                return "[]";
+            }
+        }
+
+        RequestMatcher rm = new RequestMatcher(set(fromObject(new PictureThat())));
+        assertThat(nameOf(rm, emptyList(), "text/plain"), equalTo("text"));
+        assertThat(nameOf(rm, emptyList(), null), equalTo("json"));
+
+        assertNotAcceptable(rm, asList("text/plain"), "application/json");
+    }
+
     private static String nameOf(RequestMatcher rm, List<String> acceptHeaders, String requestBodyContentType) {
         return rm.findResourceMethod(Method.GET, URI.create("pictures"), acceptHeaders, requestBodyContentType).resourceMethod.methodHandle.getName();
     }
 
     private static void assertNotAcceptable(RequestMatcher rm, List<String> acceptHeaders, String requestBodyContentType) {
         try {
-            rm.findResourceMethod(Method.GET, URI.create("pictures"), acceptHeaders, requestBodyContentType);
-            Assert.fail("Should have thrown exception");
+            RequestMatcher.MatchedMethod found = rm.findResourceMethod(Method.GET, URI.create("pictures"), acceptHeaders, requestBodyContentType);
+            Assert.fail("Should have thrown exception but instead got " + found);
         } catch (NotAcceptableException e) {
             assertThat(e.getMessage(), equalTo("HTTP 406 Not Acceptable"));
-        } catch (Throwable t) {
-            Assert.fail("Should not throw this type of exception: " + t);
+        } catch (Exception ex) {
+            Assert.fail("Should not throw this type of exception: " + ex);
         }
     }
 

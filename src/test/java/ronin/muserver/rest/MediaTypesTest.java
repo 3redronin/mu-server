@@ -65,6 +65,7 @@ public class MediaTypesTest {
             assertThat(resp.body().string(), equalTo(expectedBody));
         }
     }
+
     private void assertNotSelected(String path, List<String> accept) {
         Request.Builder rb = request()
             .url(server.uri().resolve(path).toString());
@@ -72,7 +73,7 @@ public class MediaTypesTest {
             rb.addHeader("Accept", s);
         }
         try (Response resp = call(rb)) {
-            assertThat(resp.code(), Matchers.is(404));
+            assertThat(resp.code(), Matchers.is(406));
         }
     }
 
@@ -82,6 +83,7 @@ public class MediaTypesTest {
             .addHandler(new RestHandler(resources))
             .start();
     }
+
     @After
     public void stop() {
         server.stop();

@@ -17,8 +17,8 @@ class ResourceMethod {
     final java.lang.reflect.Method methodHandle;
     final Method httpMethod;
     final String pathTemplate;
-    private final List<MediaType> produces;
-    private final List<MediaType> consumes;
+    final List<MediaType> consumes;
+    final List<MediaType> produces;
 
     public ResourceMethod(ResourceClass resourceClass, UriPattern pathPattern, java.lang.reflect.Method methodHandle, Method httpMethod, String pathTemplate, List<MediaType> produces, List<MediaType> consumes) {
         this.resourceClass = resourceClass;

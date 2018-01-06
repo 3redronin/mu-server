@@ -168,6 +168,15 @@ class RequestMatcher {
             this.isMatch = isMatch;
             this.pathParams = pathParams;
         }
+
+        @Override
+        public String toString() {
+            return "MatchedMethod{" +
+                "resourceMethod=" + resourceMethod +
+                ", isMatch=" + isMatch +
+                ", pathParams=" + pathParams +
+                '}';
+        }
     }
 
     private MatchedMethod stepThreeIdentifyTheMethodThatWillHandleTheRequest(Method method, Set<MatchedMethod> candidates, String requestBodyContentType, List<String> acceptHeaders) throws NotAllowedException, NotAcceptableException, NotSupportedException {
@@ -195,25 +204,38 @@ class RequestMatcher {
             throw new NotAcceptableException();
         }
 
-        // TODO order by media types
-        if (result.size() > 1) {
-            result.sort((o1, o2) -> {
-
-                return 0;
-            });
+        if (result.size() == 1) {
+            return result.get(0);
         }
-        return result.get(0);
 
+        List<MediaType> requestBodyTypeAsList = Collections.singletonList(requestBodyMediaType);
+        return result.stream()
+            .max((o1, o2) -> {
+                int compare = bestMediaType(requestBodyTypeAsList, o1.resourceMethod.consumes).compareTo(bestMediaType(requestBodyTypeAsList, o2.resourceMethod.consumes));
+                if (compare != 0) {
+                    return compare;
+                }
+                return bestMediaType(clientAccepts, o1.resourceMethod.produces).compareTo(bestMediaType(clientAccepts, o2.resourceMethod.produces));
+            }).get();
+
+    }
+
+
+    private static CombinedMediaType bestMediaType(List<MediaType> requestedTypes, List<MediaType> serverProvided) {
+        return serverProvided.stream()
+            .map(serverType -> requestedTypes.stream().map(clientType -> CombinedMediaType.s(clientType, serverType)).max(Comparator.reverseOrder()).get())
+            .max(Comparator.reverseOrder()).get();
     }
 
     static class StepOneOutput {
         final String unmatchedGroup;
-        final List<MatchedClass> candidates;
+        final List<RequestMatcher.MatchedClass> candidates;
 
-        StepOneOutput(String unmatchedGroup, List<MatchedClass> candidates) {
+        StepOneOutput(String unmatchedGroup, List<RequestMatcher.MatchedClass> candidates) {
             this.unmatchedGroup = unmatchedGroup;
             this.candidates = candidates;
         }
+
     }
 
     private int countNonDefaultGroups(String pathTemplate) {
