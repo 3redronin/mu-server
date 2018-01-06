@@ -65,7 +65,7 @@ public class MediaTypesTest {
             assertThat(resp.body().string(), equalTo(expectedBody));
         }
     }
-    private void assertNotSelected(String path, List<String> accept) throws IOException {
+    private void assertNotSelected(String path, List<String> accept) {
         Request.Builder rb = request()
             .url(server.uri().resolve(path).toString());
         for (String s : accept) {

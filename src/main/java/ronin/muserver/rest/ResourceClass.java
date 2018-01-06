@@ -2,11 +2,15 @@ package ronin.muserver.rest;
 
 import ronin.muserver.Method;
 
+import javax.ws.rs.Consumes;
 import javax.ws.rs.Path;
 import javax.ws.rs.Produces;
 import javax.ws.rs.core.MediaType;
 import java.net.URI;
-import java.util.*;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static java.util.Arrays.asList;
@@ -17,14 +21,16 @@ class ResourceClass {
     private final Class<?> resourceClass;
     final Object resourceInstance;
     private final List<MediaType> produces;
+    private final List<MediaType> consumes;
     Set<ResourceMethod> resourceMethods;
     final String pathTemplate;
 
-    private ResourceClass(UriPattern pathPattern, String pathTemplate, Object resourceInstance, List<MediaType> produces) {
+    private ResourceClass(UriPattern pathPattern, String pathTemplate, Object resourceInstance, List<MediaType> consumes, List<MediaType> produces) {
         this.pathPattern = pathPattern;
         this.pathTemplate = pathTemplate;
         this.resourceClass = resourceInstance.getClass();
         this.resourceInstance = resourceInstance;
+        this.consumes = consumes;
         this.produces = produces;
     }
 
@@ -60,7 +66,12 @@ class ResourceClass {
             List<MediaType> methodProduces = methodProducesAnnotation != null
                 ? MediaTypeHeaderDelegate.fromStrings(asList(methodProducesAnnotation.value()))
                 : this.produces;
-            resourceMethods.add(new ResourceMethod(this, pathPattern, restMethod, httpMethod, methodPath == null ? null : methodPath.value(), methodProduces));
+
+            Consumes methodConsumesAnnotation = annotationSource.getAnnotation(Consumes.class);
+            List<MediaType> methodConsumes = methodConsumesAnnotation != null
+                ? MediaTypeHeaderDelegate.fromStrings(asList(methodConsumesAnnotation.value()))
+                : this.consumes;
+            resourceMethods.add(new ResourceMethod(this, pathPattern, restMethod, httpMethod, methodPath == null ? null : methodPath.value(), methodProduces, methodConsumes));
         }
         this.resourceMethods = Collections.unmodifiableSet(resourceMethods);
     }
@@ -88,7 +99,10 @@ class ResourceClass {
         Produces produces = annotationSource.getAnnotation(Produces.class);
         List<MediaType> producesList = MediaTypeHeaderDelegate.fromStrings(produces == null ? null : asList(produces.value()));
 
-        ResourceClass resourceClass = new ResourceClass(pathPattern, path.value(), restResource, producesList);
+        Consumes consumes = annotationSource.getAnnotation(Consumes.class);
+        List<MediaType> consumesList = MediaTypeHeaderDelegate.fromStrings(consumes == null ? null : asList(consumes.value()));
+
+        ResourceClass resourceClass = new ResourceClass(pathPattern, path.value(), restResource, consumesList, producesList);
         resourceClass.setupMethodInfo();
         return resourceClass;
     }

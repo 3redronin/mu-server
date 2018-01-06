@@ -10,10 +10,14 @@ class MediaTypeHeaderDelegate implements RuntimeDelegate.HeaderDelegate<MediaTyp
     }
 
     private static final List<MediaType> wildcard = Collections.singletonList(MediaType.WILDCARD_TYPE);
+    public static final MediaType NONE = new MediaType("-", "-");
 
 
     @Override
     public MediaType fromString(String value) {
+        if (value == null) {
+            throw new NullPointerException("value");
+        }
         int slashIndex = value.indexOf('/');
         String type = value.substring(0, slashIndex).trim();
         Map<String, String> params;
@@ -59,7 +63,7 @@ class MediaTypeHeaderDelegate implements RuntimeDelegate.HeaderDelegate<MediaTyp
         return results;
     }
 
-    public static boolean canProduceForClient(List<MediaType> providerProduces, List<MediaType> consumerAccepts) {
+    public static boolean atLeastOneCompatible(List<MediaType> providerProduces, List<MediaType> consumerAccepts) {
         for (MediaType clientAccept : consumerAccepts) {
             for (MediaType produce : providerProduces) {
                 boolean compatible = produce.isCompatible(clientAccept);

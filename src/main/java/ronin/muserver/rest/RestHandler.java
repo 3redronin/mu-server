@@ -33,7 +33,7 @@ public class RestHandler implements MuHandler {
         URI jaxURI = baseUri.relativize(URI.create(request.uri().getPath()));
         System.out.println("jaxURI = " + jaxURI);
         try {
-            RequestMatcher.MatchedMethod mm = requestMatcher.findResourceMethod(request.method(), jaxURI, Collections.emptyList());
+            RequestMatcher.MatchedMethod mm = requestMatcher.findResourceMethod(request.method(), jaxURI, Collections.emptyList(), request.headers().get(HeaderNames.CONTENT_TYPE));
             ResourceMethod rm = mm.resourceMethod;
             System.out.println("Got " + rm);
             Object[] params = new Object[rm.methodHandle.getParameterCount()];
