@@ -10,7 +10,7 @@ import java.util.stream.Collectors;
 import static java.util.Arrays.asList;
 
 public class ResourceType {
-    public static final Map<String,ResourceType> DEFAULT_EXTENSION_MAPPINGS;
+    public static final Map<String, ResourceType> DEFAULT_EXTENSION_MAPPINGS;
 
     public final CharSequence mimeType;
     public final Headers headers;
@@ -33,7 +33,7 @@ public class ResourceType {
         return new Headers()
             .add(HeaderNames.CACHE_CONTROL, HeaderValues.NO_CACHE);
     }
-    
+
     public static final ResourceType DEFAULT = new ResourceType(ContentTypes.APPLICATION_OCTET_STREAM, shortCache(), false, Collections.emptyList());
 
     public static final ResourceType AUDIO_AAC = new ResourceType(ContentTypes.AUDIO_AAC, shortCache(), false, asList("aac"));
@@ -44,7 +44,11 @@ public class ResourceType {
     public static final ResourceType APPLICATION_X_BZIP = new ResourceType(ContentTypes.APPLICATION_X_BZIP, shortCache(), false, asList("bz"));
     public static final ResourceType APPLICATION_X_BZIP2 = new ResourceType(ContentTypes.APPLICATION_X_BZIP2, shortCache(), false, asList("bz2"));
     public static final ResourceType APPLICATION_X_CSH = new ResourceType(ContentTypes.APPLICATION_X_CSH, shortCache(), false, asList("csh"));
-    public static final ResourceType TEXT_CSS = new ResourceType(ContentTypes.TEXT_CSS, shortCache(), true, asList("css"));
+    public static final ResourceType TEXT_CSS = new ResourceType(ContentTypes.TEXT_CSS,
+        new Headers()
+            .add(HeaderNames.CACHE_CONTROL, "max-age=300")
+            .add(HeaderNames.X_CONTENT_TYPE_OPTIONS, HeaderValues.NOSNIFF),
+        true, asList("css"));
     public static final ResourceType TEXT_CSV = new ResourceType(ContentTypes.TEXT_CSV, noCache(), true, asList("csv"));
     public static final ResourceType APPLICATION_MSWORD = new ResourceType(ContentTypes.APPLICATION_MSWORD, shortCache(), false, asList("doc"));
     public static final ResourceType APPLICATION_VND_MS_FONTOBJECT = new ResourceType(ContentTypes.APPLICATION_VND_MS_FONTOBJECT, shortCache(), false, asList("eot"));
@@ -55,7 +59,11 @@ public class ResourceType {
     public static final ResourceType TEXT_CALENDAR = new ResourceType(ContentTypes.TEXT_CALENDAR, noCache(), true, asList("ics"));
     public static final ResourceType APPLICATION_JAVA_ARCHIVE = new ResourceType(ContentTypes.APPLICATION_JAVA_ARCHIVE, shortCache(), false, asList("jar"));
     public static final ResourceType IMAGE_JPEG = new ResourceType(ContentTypes.IMAGE_JPEG, shortCache(), false, asList("jpg", "jpeg"));
-    public static final ResourceType APPLICATION_JAVASCRIPT = new ResourceType(ContentTypes.APPLICATION_JAVASCRIPT, shortCache(), true, asList("js"));
+    public static final ResourceType TEXT_JAVASCRIPT = new ResourceType(ContentTypes.APPLICATION_JAVASCRIPT,
+        new Headers()
+            .add(HeaderNames.CACHE_CONTROL, "max-age=300")
+            .add(HeaderNames.X_CONTENT_TYPE_OPTIONS, HeaderValues.NOSNIFF),
+        true, asList("js"));
     public static final ResourceType APPLICATION_JSON = new ResourceType(ContentTypes.APPLICATION_JSON, noCache(), true, asList("json"));
     public static final ResourceType AUDIO_MIDI = new ResourceType(ContentTypes.AUDIO_MIDI, shortCache(), false, asList("mid", "midi"));
     public static final ResourceType VIDEO_MPEG = new ResourceType(ContentTypes.VIDEO_MPEG, shortCache(), false, asList("mpeg"));

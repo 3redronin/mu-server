@@ -129,6 +129,10 @@ public final class HeaderValues {
      */
     public static final CharSequence NO_STORE = HttpHeaderValues.NO_STORE;
     /**
+     * {@code "nosniff"}
+     */
+    public static final CharSequence NOSNIFF = AsciiString.cached("nosniff");
+    /**
      * {@code "no-transform"}
      */
     public static final CharSequence NO_TRANSFORM = HttpHeaderValues.NO_TRANSFORM;

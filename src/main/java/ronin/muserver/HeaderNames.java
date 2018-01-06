@@ -319,6 +319,10 @@ public final class HeaderNames {
      */
     public static final CharSequence WWW_AUTHENTICATE = HttpHeaderNames.WWW_AUTHENTICATE;
     /**
+     * {@code "content-type"}
+     */
+    public static final CharSequence X_CONTENT_TYPE_OPTIONS = AsciiString.cached("x-content-type-options");
+    /**
      * {@code "x-forwarded-for"}
      */
     public static final CharSequence X_FORWARDED_FOR = AsciiString.cached("x-forwarded-for");
