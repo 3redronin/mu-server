@@ -11,6 +11,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static java.util.Arrays.asList;
+import static java.util.Collections.emptyList;
 import static java.util.stream.Collectors.toList;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
@@ -168,7 +170,7 @@ public class RequestMatcherTest {
         RequestMatcher rm = new RequestMatcher(set(resourcePeopleBelts));
 //        ResourceMethod getAll = rm.findResourceMethod(Method.GET, URI.create("api/fruits"));
 //        assertThat(getAll.methodHandle.getName(), equalTo("getAll"));
-        RequestMatcher.MatchedMethod mm = rm.findResourceMethod(Method.GET, URI.create("api/fruits/orange"));
+        RequestMatcher.MatchedMethod mm = rm.findResourceMethod(Method.GET, URI.create("api/fruits/orange"), emptyList());
         assertThat(mm.resourceMethod.methodHandle.getName(), equalTo("get"));
         assertThat(mm.pathParams.get("name"), equalTo("orange"));
     }
@@ -189,11 +191,11 @@ public class RequestMatcherTest {
         }
 
         RequestMatcher rm = new RequestMatcher(set(fromObject(new OptionsDefault())));
-        assertThat(rm.findResourceMethod(Method.OPTIONS, URI.create("foo")).resourceMethod.methodHandle.getName(), equalTo("options"));
+        assertThat(rm.findResourceMethod(Method.OPTIONS, URI.create("foo"), emptyList()).resourceMethod.methodHandle.getName(), equalTo("options"));
 
         RequestMatcher rm2 = new RequestMatcher(set(fromObject(new Foo()), fromObject(new OptionsDefault())));
         try {
-            RequestMatcher.MatchedMethod actual = rm2.findResourceMethod(Method.OPTIONS, URI.create("foo"));
+            RequestMatcher.MatchedMethod actual = rm2.findResourceMethod(Method.OPTIONS, URI.create("foo"), emptyList());
             // NOTE that in this case, default OPTIONS handling should happen, but that's not supported yet so throw an exception instead
             Assert.fail("Should not have gotten a value, but got " + actual);
         } catch (NotAllowedException e) {
@@ -212,7 +214,7 @@ public class RequestMatcherTest {
         }
 
         RequestMatcher rm = new RequestMatcher(set(fromObject(new Fruit())));
-        RequestMatcher.MatchedMethod mm = rm.findResourceMethod(Method.GET, URI.create("api/citrus/orange"));
+        RequestMatcher.MatchedMethod mm = rm.findResourceMethod(Method.GET, URI.create("api/citrus/orange"), emptyList());
         assertThat(mm.resourceMethod.methodHandle.getName(), equalTo("get"));
         assertThat(mm.pathParams.get("fruitType"), equalTo("orange"));
         assertThat(mm.pathParams.get("fruitFamily"), equalTo("citrus"));
@@ -232,10 +234,79 @@ public class RequestMatcherTest {
         }
 
         RequestMatcher rm = new RequestMatcher(set(fromObject(new FruitImpl())));
-        RequestMatcher.MatchedMethod mm = rm.findResourceMethod(Method.GET, URI.create("api/citrus/orange"));
+        RequestMatcher.MatchedMethod mm = rm.findResourceMethod(Method.GET, URI.create("api/citrus/orange"), emptyList());
         assertThat(mm.resourceMethod.methodHandle.getName(), equalTo("get"));
         assertThat(mm.pathParams.get("fruitType"), equalTo("orange"));
         assertThat(mm.pathParams.get("fruitFamily"), equalTo("citrus"));
+    }
+
+    @Test
+    public void acceptHeadersAreUsedForMethodMatching() {
+        @Path("pictures")
+        class PictureThat {
+
+            @GET
+            @Produces({"image/jpeg, image/gif ", " image/png"})
+            public String image() {
+                return ";)";
+            }
+
+            @GET
+            @Produces("application/json; qs=1")
+            public String json() {
+                return "[]";
+            }
+        }
+
+        RequestMatcher rm = new RequestMatcher(set(fromObject(new PictureThat())));
+        assertThat(nameOf(rm, asList("image/gif")), equalTo("image"));
+        assertThat(nameOf(rm, asList("image/jpeg")), equalTo("image"));
+        assertThat(nameOf(rm, asList("image/png")), equalTo("image"));
+        assertThat(nameOf(rm, asList("application/json")), equalTo("json"));
+        assertThat(nameOf(rm, emptyList()), equalTo("json"));
+        assertNotAcceptable(rm, asList("image/bmp"));
+    }
+
+    @Test
+    public void defaultAcceptHeadersCanBeSpecifiedAtTheClassLevel() {
+        @Path("pictures")
+        @Produces("application/json")
+        class PictureThat {
+
+            @GET
+            @Produces("text/plain")
+            public String text() {
+                return "hi";
+            }
+
+            @GET
+            public String json() {
+                return "[]";
+            }
+        }
+
+        RequestMatcher rm = new RequestMatcher(set(fromObject(new PictureThat())));
+        assertThat(nameOf(rm, asList("text/plain")), equalTo("text"));
+        assertThat(nameOf(rm, asList("text/plain;q=1")), equalTo("text"));
+        assertThat(nameOf(rm, asList("text/*")), equalTo("text"));
+        assertThat(nameOf(rm, asList("application/json")), equalTo("json"));
+
+        assertNotAcceptable(rm, asList("image/*"));
+    }
+
+    private static String nameOf(RequestMatcher rm, List<String> acceptHeaders) {
+        return rm.findResourceMethod(Method.GET, URI.create("pictures"), acceptHeaders).resourceMethod.methodHandle.getName();
+    }
+
+    private static void assertNotAcceptable(RequestMatcher rm, List<String> acceptHeaders) {
+        try {
+            rm.findResourceMethod(Method.GET, URI.create("pictures"), acceptHeaders);
+            Assert.fail("Should have thrown exception");
+        } catch (NotAcceptableException e) {
+            assertThat(e.getMessage(), equalTo("HTTP 406 Not Acceptable"));
+        } catch (Throwable t) {
+            Assert.fail("Should not throw this type of exception: " + t);
+        }
     }
 
 

@@ -1,6 +1,5 @@
 package ronin.muserver;
 
-import javax.ws.rs.PathParam;
 import java.net.URI;
 import java.net.URL;
 
@@ -25,7 +24,6 @@ public class MuServer {
         this.httpsUri = httpsUri;
         this.httpsUrl = httpsUrl;
         this.shutdown = shutdown;
-        System.out.println(PathParam.class);
 	}
 
 	public void stop() {

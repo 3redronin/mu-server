@@ -20,6 +20,7 @@ class MuRuntimeDelegate extends RuntimeDelegate {
     private final Map<Class<?>, HeaderDelegate> headerDelegates = new HashMap<>();
 
     private MuRuntimeDelegate() {
+        headerDelegates.put(MediaType.class, new MediaTypeHeaderDelegate());
         headerDelegates.put(CacheControl.class, new CacheControlHeaderDelegate());
         headerDelegates.put(NewCookie.class, new NewCookieHeaderDelegate());
         headerDelegates.put(Cookie.class, new CookieHeaderDelegate());

@@ -2,8 +2,10 @@ package ronin.muserver.rest;
 
 import ronin.muserver.Method;
 
+import javax.ws.rs.NotAcceptableException;
 import javax.ws.rs.NotAllowedException;
 import javax.ws.rs.NotFoundException;
+import javax.ws.rs.core.MediaType;
 import java.net.URI;
 import java.util.*;
 
@@ -34,11 +36,11 @@ class RequestMatcher {
         this.roots = roots;
     }
 
-    public MatchedMethod findResourceMethod(Method httpMethod, URI uri) throws NotFoundException, NotAllowedException {
+    public MatchedMethod findResourceMethod(Method httpMethod, URI uri, List<String> acceptHeaders) throws NotFoundException, NotAllowedException, NotAcceptableException {
         StepOneOutput stepOneOutput = stepOneIdentifyASetOfCandidateRootResourceClassesMatchingTheRequest(uri);
         URI methodURI = stepOneOutput.unmatchedGroup == null ? null : URI.create(UriPattern.trimSlashes(stepOneOutput.unmatchedGroup));
         Set<MatchedMethod> candidateMethods = stepTwoObtainASetOfCandidateResourceMethodsForTheRequest(methodURI, stepOneOutput.candidates);
-        return stepThreeIdentifyTheMethodThatWillHandleTheRequest(httpMethod, uri, candidateMethods);
+        return stepThreeIdentifyTheMethodThatWillHandleTheRequest(httpMethod, uri, candidateMethods, acceptHeaders);
     }
 
     public StepOneOutput stepOneIdentifyASetOfCandidateRootResourceClassesMatchingTheRequest(URI uri) throws NotFoundException {
@@ -167,16 +169,33 @@ class RequestMatcher {
         }
     }
 
-    private MatchedMethod stepThreeIdentifyTheMethodThatWillHandleTheRequest(Method method, URI uri, Set<MatchedMethod> candidates) throws NotAllowedException {
+    private MatchedMethod stepThreeIdentifyTheMethodThatWillHandleTheRequest(Method method, URI uri, Set<MatchedMethod> candidates, List<String> acceptHeaders) throws NotAllowedException, NotAcceptableException {
         List<MatchedMethod> result = candidates.stream().filter(rm -> rm.resourceMethod.httpMethod == method).collect(toList());
         if (result.isEmpty()) {
             List<String> allowed = candidates.stream().map(c -> c.resourceMethod.httpMethod.name()).distinct().collect(toList());
             throw new NotAllowedException(allowed.get(0), allowed.subList(1, allowed.size()).toArray(new String[0]));
         }
         // TODO The media type of the request entity body (if any) is a supported input data format (see Section3.5). Ifnomethodssupportthemediatypeoftherequestentitybodyanimplementation MUST generate a NotSupportedException (415 status) and no entity.
-        // TODO At least one of the acceptable response entity body media types is a supported output data format (see Section 3.5). If no methods support one of the acceptable response entity body media types an implementation MUST generate a NotAcceptableException (406 status) and no entity.
+
+
+        // At least one of the acceptable response entity body media types is a supported output data format (see Section 3.5).
+        // If no methods support one of the acceptable response entity body media types an implementation MUST generate a
+        // NotAcceptableException (406 status) and no entity.
+        List<MediaType> clientAccepts = MediaTypeHeaderDelegate.fromStrings(acceptHeaders);
+        result = result.stream().filter(rm -> rm.resourceMethod.canProduceFor(clientAccepts)).collect(toList());
+        if (result.isEmpty()) {
+            throw new NotAcceptableException();
+        }
+
         // TODO order by media types
+        if (result.size() > 1) {
+            result.sort((o1, o2) -> {
+
+                return 0;
+            });
+        }
         return result.get(0);
+
     }
 
     static class StepOneOutput {
