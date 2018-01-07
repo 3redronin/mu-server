@@ -69,13 +69,16 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
 			HttpContent content = (HttpContent) msg;
 			State state = this.state.get(ctx);
 			if (state == null) {
-				// ummmmmm
+				// This can happen when a request is rejected based on headers, and then the rejected body arrives
 				System.out.println("Got a chunk of message for an unknown request");
 			} else {
 				ByteBuf byteBuf = content.content();
 				if (byteBuf.capacity() > 0) {
-					// TODO: why does the buffer need to be copied?
-					ByteBuffer byteBuffer = byteBuf.copy().nioBuffer();
+					// TODO: why does the buffer need to be copied? Does this only need to happen for sync processing?
+                    ByteBuf copy = byteBuf.copy();
+                    ByteBuffer byteBuffer = ByteBuffer.allocate(byteBuf.capacity());
+                    copy.readBytes(byteBuffer).release();
+                    byteBuffer.flip();
 					state.handler.onRequestData(state.asyncContext, byteBuffer);
 				}
 				if (msg instanceof LastHttpContent) {

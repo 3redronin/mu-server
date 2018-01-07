@@ -10,16 +10,17 @@ import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.MultivaluedMap;
 import javax.ws.rs.ext.MessageBodyReader;
 import javax.ws.rs.ext.MessageBodyWriter;
-import java.io.*;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
-import static java.util.Arrays.asList;
 import static ronin.muserver.rest.EntityProviders.charsetFor;
 import static ronin.muserver.rest.EntityProviders.requestHasContent;
 
@@ -50,12 +51,18 @@ public class EntityProviders {
     }
 
     public static List<MessageBodyReader> builtInReaders() {
-       return Stream.concat(asList(StringMessageReaderWriter.INSTANCE).stream(), PrimitiveEntityProvider.primitiveEntryProviders.stream())
-           .collect(Collectors.toList());
+        List<MessageBodyReader> readers = new ArrayList<>();
+        readers.add(StringMessageReaderWriter.INSTANCE);
+        readers.addAll(PrimitiveEntityProvider.primitiveEntryProviders);
+        readers.addAll(BinaryEntityProviders.binaryEntityReaders);
+        return readers;
     }
     public static List<MessageBodyWriter> builtInWriters() {
-        return Stream.concat(asList(StringMessageReaderWriter.INSTANCE).stream(), PrimitiveEntityProvider.primitiveEntryProviders.stream())
-            .collect(Collectors.toList());
+        List<MessageBodyWriter> writers = new ArrayList<>();
+        writers.add(StringMessageReaderWriter.INSTANCE);
+        writers.addAll(PrimitiveEntityProvider.primitiveEntryProviders);
+        writers.addAll(BinaryEntityProviders.binaryEntityWriters);
+        return writers;
     }
 
 

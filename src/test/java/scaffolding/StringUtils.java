@@ -12,4 +12,10 @@ public class StringUtils {
 		}
 		return sb.toString();
 	}
+	public static byte[] randomBytes(int len) {
+	    byte[] res = new byte[len];
+        Random rng = new Random();
+        rng.nextBytes(res);
+        return res;
+    }
 }

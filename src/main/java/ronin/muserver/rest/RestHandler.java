@@ -97,7 +97,7 @@ public class RestHandler implements MuHandler {
                 if (genericType == null) genericType = type;
 
                 Annotation[] annotations = null;
-                MediaType responseMediaType = MediaType.TEXT_HTML_TYPE;
+                MediaType responseMediaType = mm.resourceMethod.produces.size() == 1 ? mm.resourceMethod.produces.get(0) : MediaType.TEXT_PLAIN_TYPE;
                 MessageBodyWriter messageBodyWriter = entityProviders.selectWriter(type, genericType, annotations, responseMediaType);
                 response.status(200);
 
@@ -112,7 +112,9 @@ public class RestHandler implements MuHandler {
                 for (String header : responseHeaders.keySet()) {
                     response.headers().add(header, responseHeaders.get(header));
                 }
-                response.headers().set(HeaderNames.CONTENT_TYPE, "text/plain");
+
+                String responseContentType = (responseMediaType.isWildcardType() || responseMediaType.isWildcardSubtype()) ? "text/plain" : responseMediaType.toString();
+                response.headers().set(HeaderNames.CONTENT_TYPE, responseContentType);
 
                 try (OutputStream entityStream = response.outputStream()) {
                     messageBodyWriter.writeTo(obj, type, genericType, annotations, responseMediaType, responseHeaders, entityStream);

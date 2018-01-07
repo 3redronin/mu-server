@@ -1,5 +1,7 @@
 package ronin.muserver;
 
+import io.netty.util.ResourceLeakDetector;
+
 import java.net.URI;
 import java.net.URL;
 

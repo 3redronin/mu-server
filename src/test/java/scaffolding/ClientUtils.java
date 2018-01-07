@@ -1,5 +1,6 @@
 package scaffolding;
 
+import io.netty.util.ResourceLeakDetector;
 import okhttp3.*;
 import okio.BufferedSink;
 
@@ -15,8 +16,8 @@ public class ClientUtils {
 
     static {
         Logger.getLogger(OkHttpClient.class.getName()).setLevel(Level.FINE);
-        client = newClient()
-            .build();
+        client = newClient().build();
+        ResourceLeakDetector.setLevel(ResourceLeakDetector.Level.PARANOID);
     }
 
     public static OkHttpClient.Builder newClient() {
@@ -70,11 +71,15 @@ public class ClientUtils {
 
     public static X509TrustManager veryTrustingTrustManager() {
         return new X509TrustManager() {
-            public void checkClientTrusted(java.security.cert.X509Certificate[] chain, String authType) { }
+            public void checkClientTrusted(java.security.cert.X509Certificate[] chain, String authType) {
+            }
 
-            public void checkServerTrusted(java.security.cert.X509Certificate[] chain, String authType) { }
+            public void checkServerTrusted(java.security.cert.X509Certificate[] chain, String authType) {
+            }
 
-            public java.security.cert.X509Certificate[] getAcceptedIssuers() { return new java.security.cert.X509Certificate[]{}; }
+            public java.security.cert.X509Certificate[] getAcceptedIssuers() {
+                return new java.security.cert.X509Certificate[]{};
+            }
         };
     }
 }
