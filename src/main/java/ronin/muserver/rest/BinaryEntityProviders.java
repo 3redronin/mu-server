@@ -2,6 +2,7 @@ package ronin.muserver.rest;
 
 import ronin.muserver.Mutils;
 
+import javax.activation.DataSource;
 import javax.ws.rs.Consumes;
 import javax.ws.rs.Produces;
 import javax.ws.rs.WebApplicationException;
@@ -24,12 +25,14 @@ class BinaryEntityProviders {
     static final List<MessageBodyReader> binaryEntityReaders = asList(
         new InputStreamReader(),
         new ByteArrayReaderWriter(),
-        new FileReaderWriter()
+        new FileReaderWriter(),
+        new DataSourceReaderWriter()
     );
     static final List<MessageBodyWriter> binaryEntityWriters = asList(
         new StreamingOutputWriter(),
         new ByteArrayReaderWriter(),
-        new FileReaderWriter()
+        new FileReaderWriter(),
+        new DataSourceReaderWriter()
     );
 
     @Produces("*/*")
@@ -110,6 +113,52 @@ class BinaryEntityProviders {
             try (FileInputStream fileInputStream = new FileInputStream(file)) {
                 Mutils.copy(fileInputStream, entityStream, 8192);
             }
+        }
+    }
+
+    @Produces("*/*")
+    @Consumes("*/*")
+    private static class DataSourceReaderWriter implements MessageBodyReader<DataSource>, MessageBodyWriter<DataSource> {
+        // Disclaimer: I don't even know what a javax.activation.DataSource is
+
+        @Override
+        public boolean isReadable(Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
+            return DataSource.class.isAssignableFrom(type);
+        }
+
+        @Override
+        public DataSource readFrom(Class<DataSource> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
+            return new DataSource() {
+                @Override
+                public InputStream getInputStream() throws IOException {
+                    return entityStream;
+                }
+
+                @Override
+                public OutputStream getOutputStream() throws IOException {
+                    throw new IOException("Output streams not available when reading");
+                }
+
+                @Override
+                public String getContentType() {
+                    return mediaType.toString();
+                }
+
+                @Override
+                public String getName() {
+                    return type.getName();
+                }
+            };
+        }
+
+        @Override
+        public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
+            return DataSource.class.isAssignableFrom(type);
+        }
+
+        @Override
+        public void writeTo(DataSource dataSource, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException, WebApplicationException {
+            Mutils.copy(dataSource.getInputStream(), entityStream, 2048);
         }
     }
 

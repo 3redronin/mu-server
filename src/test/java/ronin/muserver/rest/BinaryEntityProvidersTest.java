@@ -7,9 +7,10 @@ import org.junit.After;
 import org.junit.Test;
 import ronin.muserver.MuServer;
 import ronin.muserver.Mutils;
-import scaffolding.ClientUtils;
 import scaffolding.StringUtils;
 
+import javax.activation.DataSource;
+import javax.activation.FileDataSource;
 import javax.ws.rs.GET;
 import javax.ws.rs.POST;
 import javax.ws.rs.Path;
@@ -23,6 +24,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static ronin.muserver.MuServerBuilder.httpsServer;
 import static scaffolding.ClientUtils.call;
+import static scaffolding.ClientUtils.request;
 
 public class BinaryEntityProvidersTest {
     private MuServer server;
@@ -73,6 +75,36 @@ public class BinaryEntityProvidersTest {
         check(Mutils.toByteArray(new FileInputStream(sample), 8192), "image/jpeg");
         checkNoBody();
     }
+    @Test
+    public void dataSourcesSupported() throws Exception {
+        File sample = new File("src/test/resources/sample-static/images/friends.jpg");
+        if (!sample.isFile()) {
+            throw new RuntimeException("Expected " + sample.getCanonicalPath() + " to be a file");
+        }
+        @Path("samples")
+        class Sample {
+            @POST
+            @Produces("image/jpeg")
+            public DataSource echo(DataSource value) {
+                return value;
+            }
+
+            @GET
+            @Produces("image/jpeg")
+            public DataSource getFile() {
+                return new FileDataSource(sample);
+            }
+        }
+        startServer(new Sample());
+        byte[] imageBytes = Mutils.toByteArray(new FileInputStream(sample), 8192);
+        check(imageBytes, "image/jpeg");
+        checkNoBody();
+
+        try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(new String(resp.body().bytes(), UTF_8), equalTo(new String(imageBytes, UTF_8)));
+        }
+    }
 
     @Test
     public void streamingOutputSupported() throws IOException {
@@ -116,7 +148,7 @@ public class BinaryEntityProvidersTest {
         }
         startServer(new Sample());
 
-        try (Response resp = call(ClientUtils.request().url(server.uri().resolve("/samples").toString()));
+        try (Response resp = call(request().url(server.uri().resolve("/samples").toString()));
              Reader reader = resp.body().charStream()) {
 
             StringBuilder output = new StringBuilder();
@@ -141,7 +173,7 @@ public class BinaryEntityProvidersTest {
     }
 
     private void check(byte[] value, String mimeType) throws IOException {
-        Response resp = call(ClientUtils.request()
+        Response resp = call(request()
             .post(RequestBody.create(MediaType.parse(mimeType), value))
             .url(server.uri().resolve("/samples").toString())
         );
@@ -152,7 +184,7 @@ public class BinaryEntityProvidersTest {
     }
 
     private void checkNoBody() throws IOException {
-        Response resp = call(ClientUtils.request()
+        Response resp = call(request()
             .post(RequestBody.create(MediaType.parse("text/plain"), ""))
             .url(server.uri().resolve("/samples").toString())
         );
