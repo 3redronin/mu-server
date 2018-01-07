@@ -19,10 +19,8 @@ class SelectiveHttpContentCompressor extends HttpContentCompressor {
     @Override
     protected Result beginEncode(HttpResponse response, String acceptEncoding) throws Exception {
         Integer len = response.headers().getInt(HttpHeaderNames.CONTENT_LENGTH);
-        if (len != null) {
-            if (len <= minimumGzipSize) {
-                return null;
-            }
+        if (len != null && len <= minimumGzipSize) {
+            return null;
         }
 
         String contentType = response.headers().get(HttpHeaderNames.CONTENT_TYPE);

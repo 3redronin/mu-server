@@ -153,6 +153,10 @@ class JaxRSResponse extends Response {
 
     @Override
     public MultivaluedMap<String, String> getStringHeaders() {
+        return muHeadersToJax(headers);
+    }
+
+    static MultivaluedMap<String, String> muHeadersToJax(Headers headers) {
         MultivaluedMap<String, String> map = new MultivaluedHashMap<>();
         for (String name : headers.names()) {
             map.addAll(name, headers.getAll(name));
