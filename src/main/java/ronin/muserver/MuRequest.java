@@ -198,15 +198,8 @@ class NettyRequestAdapter implements MuRequest {
     public String readBodyAsString() throws IOException {
         if (inputStream != null) {
             claimingBodyRead();
-            StringBuilder sb = new StringBuilder();
-            try (InputStream in = inputStream) {
-                byte[] buffer = new byte[2048]; // TODO: what should this be?
-                int read;
-                while ((read = in.read(buffer)) > -1) {
-                    sb.append(new String(buffer, 0, read, UTF_8));
-                }
-            }
-            return sb.toString();
+            byte[] bytes = Mutils.toByteArray(inputStream, 2048);
+            return new String(bytes, UTF_8); // TODO: respect the charset of the content-type if provided
         } else {
             return "";
         }

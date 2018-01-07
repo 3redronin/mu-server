@@ -8,6 +8,7 @@ import org.junit.Test;
 import ronin.muserver.MuServer;
 import scaffolding.ClientUtils;
 
+import javax.ws.rs.GET;
 import javax.ws.rs.POST;
 import javax.ws.rs.Path;
 import java.io.IOException;
@@ -122,6 +123,24 @@ public class PrimitiveEntityProviderTest {
         check((byte)0);
         check((byte)1);
         checkNoBody();
+    }
+
+    @Test
+    public void numbersCanBeReturned() throws Exception {
+        @Path("samples")
+        class Sample {
+            @GET
+            public Number echo() {
+                return 123;
+            }
+        }
+        startServer(new Sample());
+        Response resp = call(ClientUtils.request()
+            .url(server.uri().resolve("/samples").toString())
+        );
+        assertThat(resp.code(), equalTo(200));
+        assertThat(resp.header("Content-Type"), equalTo("text/plain"));
+        assertThat(resp.body().string(), equalTo("123"));
     }
 
 

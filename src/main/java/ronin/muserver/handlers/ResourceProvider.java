@@ -1,7 +1,8 @@
 package ronin.muserver.handlers;
 
+import ronin.muserver.Mutils;
+
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URL;
 import java.net.URLConnection;
@@ -77,13 +78,7 @@ class ClasspathResourceProvider implements ResourceProvider {
     }
 
     public void writeTo(OutputStream out, int bufferSizeInBytes) throws IOException {
-        byte[] buffer = new byte[bufferSizeInBytes];
-        int read;
-        try (InputStream stream = info.getInputStream()) {
-            while ((read = stream.read(buffer)) > -1) {
-                out.write(buffer, 0, read);
-            }
-        }
+        Mutils.copy(info.getInputStream(), out, bufferSizeInBytes);
     }
 
 }

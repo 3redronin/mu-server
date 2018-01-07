@@ -1,5 +1,7 @@
 package ronin.muserver.rest;
 
+import ronin.muserver.Mutils;
+
 import javax.ws.rs.Consumes;
 import javax.ws.rs.Produces;
 import javax.ws.rs.WebApplicationException;
@@ -8,7 +10,6 @@ import javax.ws.rs.core.MultivaluedMap;
 import javax.ws.rs.core.NoContentException;
 import javax.ws.rs.ext.MessageBodyReader;
 import javax.ws.rs.ext.MessageBodyWriter;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -53,16 +54,9 @@ class PrimitiveEntityProvider<T> implements MessageBodyWriter<T>, MessageBodyRea
         if (!requestHasContent(httpHeaders)) {
             throw new NoContentException("No value specified for this " + type.getName() + " parameter. If optional, then use a @DefaultValue annotation.");
         }
-        int read;
-        byte[] buffer = new byte[1024];
-        ByteArrayOutputStream all = new ByteArrayOutputStream();
-        while ((read = entityStream.read(buffer)) > -1) {
-            if (read > 0) {
-                all.write(buffer, 0, read);
-            }
-        }
         Charset charset = charsetFor(mediaType);
-        String stringVal = new String(all.toByteArray(), charset);
+        byte[] bytes = Mutils.toByteArray(entityStream, 2048);
+        String stringVal = new String(bytes, charset);
         return stringToValue.apply(stringVal);
     }
 

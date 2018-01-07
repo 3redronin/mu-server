@@ -1,15 +1,16 @@
 package ronin.muserver.rest;
 
+import ronin.muserver.Mutils;
+
+import javax.ws.rs.Consumes;
 import javax.ws.rs.NotAcceptableException;
+import javax.ws.rs.Produces;
 import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.MultivaluedMap;
 import javax.ws.rs.ext.MessageBodyReader;
 import javax.ws.rs.ext.MessageBodyWriter;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
+import java.io.*;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
 import java.nio.charset.Charset;
@@ -73,6 +74,8 @@ public class EntityProviders {
     }
 }
 
+@Produces("*/*")
+@Consumes("*/*")
 class StringMessageReaderWriter implements MessageBodyWriter<String>, MessageBodyReader<String> {
     private StringMessageReaderWriter() {}
     public static final StringMessageReaderWriter INSTANCE = new StringMessageReaderWriter();
@@ -97,16 +100,10 @@ class StringMessageReaderWriter implements MessageBodyWriter<String>, MessageBod
         if (!requestHasContent(httpHeaders)) {
             return "";
         }
-        int read;
-        byte[] buffer = new byte[2048];
-        ByteArrayOutputStream all = new ByteArrayOutputStream();
-        while ((read = entityStream.read(buffer)) > -1) {
-            if (read > 0) {
-                all.write(buffer, 0, read);
-            }
-        }
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        Mutils.copy(entityStream, baos, 2048);
         Charset charset = charsetFor(mediaType);
-        return new String(all.toByteArray(), charset);
+        return new String(baos.toByteArray(), charset);
     }
 }
 
