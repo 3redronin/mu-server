@@ -60,6 +60,7 @@ public class RestHandler implements MuHandler {
                         Class<?> type = parameter.getType();
                         Type genericType = parameter.getParameterizedType();
                         MessageBodyReader messageBodyReader = entityProviders.selectReader(type, genericType, annotations, requestBodyMediaType);
+                        System.out.println("messageBodyReader = " + messageBodyReader);
                         try {
                             paramValue = messageBodyReader.readFrom(type, genericType, annotations, requestBodyMediaType, muHeadersToJax(request.headers()), inputStream.get());
                         } catch (NoContentException nce) {

@@ -12,6 +12,7 @@ import java.util.concurrent.Executors;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.greaterThan;
 
 public class GrowableByteBufferInputStreamTest {
 
@@ -50,6 +51,7 @@ public class GrowableByteBufferInputStreamTest {
 		byte[] data = new byte[128];
 		int read;
 		while ((read = stream.read(data)) > -1) {
+            assertThat(read, greaterThan(0));
 			actual.put(data, 0, read);
 		}
 

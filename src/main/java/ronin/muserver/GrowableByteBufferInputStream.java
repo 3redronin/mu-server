@@ -23,6 +23,7 @@ class GrowableByteBufferInputStream extends InputStream {
 			if (!cur.hasRemaining()) {
 				try {
 					current = queue.poll(120, TimeUnit.SECONDS); // TODO: add config for this which is like a request stream idle timeout limit
+                    cur = current;
 				} catch (InterruptedException e) {
 					// given the InputStream API, is this the way to handle interuptions?
 					throw new IOException("Thread was interrupted");
