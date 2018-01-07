@@ -1,11 +1,14 @@
 package ronin.muserver.rest;
 
+import io.netty.handler.codec.http.QueryStringDecoder;
+import io.netty.handler.codec.http.QueryStringEncoder;
 import ronin.muserver.Mutils;
 
 import javax.ws.rs.Consumes;
 import javax.ws.rs.Produces;
 import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.MultivaluedHashMap;
 import javax.ws.rs.core.MultivaluedMap;
 import javax.ws.rs.ext.MessageBodyReader;
 import javax.ws.rs.ext.MessageBodyWriter;
@@ -16,6 +19,7 @@ import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 import static java.util.Arrays.asList;
 import static ronin.muserver.rest.EntityProviders.charsetFor;
@@ -24,10 +28,10 @@ import static ronin.muserver.rest.EntityProviders.requestHasContent;
 class StringEntityProviders {
 
     static final List<MessageBodyReader> stringEntityReaders = asList(
-        StringMessageReaderWriter.INSTANCE, new ReaderEntityReader(), CharArrayReaderWriter.INSTANCE
+        StringMessageReaderWriter.INSTANCE, new FormUrlEncodedReader(), new ReaderEntityReader(), CharArrayReaderWriter.INSTANCE
     );
     static final List<MessageBodyWriter> stringEntityWriters = asList(
-        StringMessageReaderWriter.INSTANCE, CharArrayReaderWriter.INSTANCE
+        StringMessageReaderWriter.INSTANCE, CharArrayReaderWriter.INSTANCE, new FormUrlEncodedWriter()
     );
 
 
@@ -60,6 +64,7 @@ class StringEntityProviders {
             return new String(Mutils.toByteArray(entityStream, 2048), charsetFor(mediaType));
         }
     }
+
     @Produces("*/*")
     @Consumes("*/*")
     private static class CharArrayReaderWriter implements MessageBodyWriter<char[]>, MessageBodyReader<char[]> {
@@ -114,6 +119,54 @@ class StringEntityProviders {
         }
         public Reader readFrom(Class<Reader> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
             return new InputStreamReader(entityStream, charsetFor(mediaType));
+        }
+    }
+
+    @Consumes("application/x-www-form-urlencoded")
+    private static class FormUrlEncodedReader implements MessageBodyReader<MultivaluedMap<String, String>> {
+
+        @Override
+        public boolean isReadable(Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
+            return MultivaluedMap.class.isAssignableFrom(type);
+        }
+
+        @Override
+        public MultivaluedMap<String, String> readFrom(Class<MultivaluedMap<String, String>> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
+            if (!requestHasContent(httpHeaders)) {
+                return new MultivaluedHashMap<>();
+            }
+            String body = new String(Mutils.toByteArray(entityStream, 2048), charsetFor(mediaType));
+            QueryStringDecoder formDecoder = new QueryStringDecoder(body, false);
+            Map<String, List<String>> parameters = formDecoder.parameters();
+            MultivaluedHashMap<String, String> form = new MultivaluedHashMap<>();
+            for (Map.Entry<String, List<String>> entry : parameters.entrySet()) {
+                form.put(entry.getKey(), entry.getValue());
+            }
+            return form;
+        }
+    }
+
+    @Produces("application/x-www-form-urlencoded")
+    private static class FormUrlEncodedWriter implements MessageBodyWriter<MultivaluedMap<String, String>> {
+        @Override
+        public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
+            return MultivaluedMap.class.isAssignableFrom(type);
+        }
+
+        @Override
+        public long getSize(MultivaluedMap<String, String> stringStringMultivaluedMap, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
+            return -1;
+        }
+
+        @Override
+        public void writeTo(MultivaluedMap<String, String> form, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException, WebApplicationException {
+            QueryStringEncoder encoder = new QueryStringEncoder("");
+            for (Map.Entry<String, List<String>> entry : form.entrySet()) {
+                for (String value : entry.getValue()) {
+                    encoder.addParam(entry.getKey(), value);
+                }
+            }
+            entityStream.write(encoder.toString().substring(1).getBytes(charsetFor(mediaType)));
         }
     }
 }

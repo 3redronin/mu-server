@@ -100,6 +100,7 @@ public class RestHandler implements MuHandler {
                 Annotation[] annotations = null;
                 MediaType responseMediaType = mm.resourceMethod.produces.size() == 1 ? mm.resourceMethod.produces.get(0) : MediaType.TEXT_PLAIN_TYPE;
                 MessageBodyWriter messageBodyWriter = entityProviders.selectWriter(type, genericType, annotations, responseMediaType);
+                System.out.println("messageBodyWriter = " + messageBodyWriter);
                 response.status(200);
 
                 MultivaluedHashMap<String, Object> responseHeaders = new MultivaluedHashMap<>();
