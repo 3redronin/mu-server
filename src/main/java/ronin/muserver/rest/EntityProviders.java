@@ -84,6 +84,9 @@ public class EntityProviders {
 @Produces("*/*")
 @Consumes("*/*")
 class StringMessageReaderWriter implements MessageBodyWriter<String>, MessageBodyReader<String> {
+
+    // TODO add char[] and Reader support
+
     private StringMessageReaderWriter() {}
     public static final StringMessageReaderWriter INSTANCE = new StringMessageReaderWriter();
 

@@ -6,6 +6,7 @@ import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
 import ronin.muserver.MuServer;
+import ronin.muserver.Mutils;
 import scaffolding.ClientUtils;
 import scaffolding.StringUtils;
 
@@ -14,8 +15,7 @@ import javax.ws.rs.POST;
 import javax.ws.rs.Path;
 import javax.ws.rs.Produces;
 import javax.ws.rs.core.StreamingOutput;
-import java.io.IOException;
-import java.io.Reader;
+import java.io.*;
 import java.util.concurrent.CountDownLatch;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -39,6 +39,38 @@ public class BinaryEntityProvidersTest {
         }
         startServer(new Sample());
         check(StringUtils.randomBytes(64 * 1024));
+        checkNoBody();
+    }
+    @Test
+    public void inputStreamsSupported() throws Exception {
+        @Path("samples")
+        class Sample {
+            @POST
+            @Produces("application/octet-stream")
+            public byte[] echo(InputStream body) throws IOException {
+                return Mutils.toByteArray(body, 2048);
+            }
+        }
+        startServer(new Sample());
+        check(StringUtils.randomBytes(64 * 1024));
+        checkNoBody();
+    }
+    @Test
+    public void filesSupported() throws Exception {
+        File sample = new File("src/test/resources/sample-static/images/friends.jpg");
+        if (!sample.isFile()) {
+            throw new RuntimeException("Expected " + sample.getCanonicalPath() + " to be a file");
+        }
+        @Path("samples")
+        class Sample {
+            @POST
+            @Produces("image/jpeg")
+            public File echo(File value) {
+                return value;
+            }
+        }
+        startServer(new Sample());
+        check(Mutils.toByteArray(new FileInputStream(sample), 8192), "image/jpeg");
         checkNoBody();
     }
 
@@ -105,12 +137,16 @@ public class BinaryEntityProvidersTest {
 
 
     private void check(byte[] value) throws IOException {
+        check(value, "application/octet-stream");
+    }
+
+    private void check(byte[] value, String mimeType) throws IOException {
         Response resp = call(ClientUtils.request()
-            .post(RequestBody.create(MediaType.parse("application/octet-stream"), value))
+            .post(RequestBody.create(MediaType.parse(mimeType), value))
             .url(server.uri().resolve("/samples").toString())
         );
         assertThat(resp.code(), equalTo(200));
-        assertThat(resp.header("Content-Type"), equalTo("application/octet-stream"));
+        assertThat(resp.header("Content-Type"), equalTo(mimeType));
         byte[] actual = resp.body().bytes();
         assertThat("Expected " + value.length + " bytes; got " + actual.length, new String(actual, UTF_8), equalTo(new String(value, UTF_8)));
     }
