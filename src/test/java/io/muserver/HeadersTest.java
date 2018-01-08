@@ -131,7 +131,7 @@ public class HeadersTest {
             }).start();
 
 
-        Response resp = call(request().url(server.httpUrl()));
+        Response resp = call(request().url(server.httpUri().toString()));
         assertThat(resp.code(), is(200));
         assertThat(resp.header("X-Blah"), is("ha"));
         assertThat(resp.header("Content-Length"), is("0"));
@@ -148,7 +148,7 @@ public class HeadersTest {
                 return true;
             }).start();
 
-        Response resp = call(request().url(server.httpUrl()));
+        Response resp = call(request().url(server.httpUri().toString()));
         resp.close();
         assertThat(resp.code(), is(200));
         assertThat(resp.header("Content-Length"), is(nullValue()));
@@ -161,6 +161,6 @@ public class HeadersTest {
 	}
 
 	Request.Builder xSomethingHeader(String value) {
-		return request().header("X-Something", value).url(server.httpUrl());
+		return request().header("X-Something", value).url(server.httpUri().toString());
 	}
 }

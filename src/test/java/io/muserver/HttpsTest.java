@@ -23,7 +23,7 @@ public class HttpsTest {
             })
             .start();
 
-        Response resp = call(request().url(server.httpsUrl()));
+        Response resp = call(request().url(server.httpsUri().toString()));
         assertThat(resp.body().string(), equalTo("This is encrypted and the URL is https://localhost:8443/"));
     }
 

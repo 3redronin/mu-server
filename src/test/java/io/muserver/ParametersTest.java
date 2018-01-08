@@ -109,7 +109,7 @@ public class ParametersTest {
         }).start();
 
         call(request()
-            .url(server.httpUrl())
+            .url(server.httpUri().toString())
             .post(new FormBody.Builder()
                 .add("blah", "something")
                 .build())

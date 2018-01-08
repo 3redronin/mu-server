@@ -12,6 +12,7 @@ public class Mutils {
     public static final String NEWLINE = String.format("%n");
 
     /**
+     * @param value the value to encode
      * @return Returns the UTF-8 URL encoded value
      */
     public static String urlEncode(String value) {
@@ -23,6 +24,7 @@ public class Mutils {
     }
 
     /**
+     * @param value the value to decode
      * @return Returns the UTF-8 URL decoded value
      */
     public static String urlDecode(String value) {
@@ -53,7 +55,7 @@ public class Mutils {
     /**
      * Reads the given input stream into a byte array and closes the input stream
      * @param source The source of the bytes
-     * @param bufferSize
+     * @param bufferSize The size of the byte buffer to use when copying streams
      * @return Returns a byte array
      * @throws IOException If there is an error reading from the stream
      */

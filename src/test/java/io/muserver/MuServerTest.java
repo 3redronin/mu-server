@@ -23,7 +23,7 @@ public class MuServerTest {
 
 	@Test public void portZeroCanBeUsed() {
 		server = httpServer().start();
-        try (Response resp = call(request().url(server.httpUrl()))) {
+        try (Response resp = call(request().url(server.httpUri().toString()))) {
             assertThat(resp.code(), is(404));
         }
 	}

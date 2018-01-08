@@ -40,7 +40,7 @@ public class StreamingTest {
 					return true;
 				}).start();
 
-		Response resp = call(request().url(server.httpUrl()));
+		Response resp = call(request().url(server.httpUri().toString()));
 
 		try (InputStream stream = resp.body().byteStream()) {
 			latch.countDown();
@@ -72,7 +72,7 @@ public class StreamingTest {
 					return true;
 				}).start();
 
-		Response resp = call(request().url(server.httpUrl()));
+		Response resp = call(request().url(server.httpUri().toString()));
 
 		String actual = resp.body().string();
 		assertThat(actual, equalTo(String.format("Hello, world%nWhat's happening?")));
@@ -96,7 +96,7 @@ public class StreamingTest {
 
 		StringBuffer sentData = new StringBuffer();
 		Response resp = call(request()
-				.url(server.httpUrl())
+				.url(server.httpUri().toString())
 				.post(largeRequestBody(sentData)));
 
 		String actual = new String(resp.body().bytes(), UTF_8);
@@ -112,7 +112,7 @@ public class StreamingTest {
 
 		StringBuffer sentData = new StringBuffer();
 		Response resp = call(request()
-				.url(server.httpUrl())
+				.url(server.httpUri().toString())
 				.post(largeRequestBody(sentData)));
 
 		assertThat(resp.body().string(), equalTo(sentData.toString()));
@@ -127,7 +127,7 @@ public class StreamingTest {
 					return true;
 				}).start();
 
-		call(request().url(server.httpUrl()));
+		call(request().url(server.httpUri().toString()));
 		assertThat(actual, equalTo(asList("Not Present", "Request body: ")));
 	}
 

@@ -121,21 +121,17 @@ public class MuServerBuilder {
             Channel httpChannel = httpPort < 0 ? null : createChannel(bossGroup, workerGroup, httpPort, null);
             Channel httpsChannel = sslContext == null ? null : createChannel(bossGroup, workerGroup, httpsPort, sslContext);
             URI uri = null;
-            URL url = null;
             if (httpChannel != null) {
                 channels.add(httpChannel);
                 uri = getUriFromChannel(httpChannel, "http");
-                url = uri.toURL();
             }
             URI httpsUri = null;
-            URL httpsUrl = null;
             if (httpsChannel != null) {
                 channels.add(httpsChannel);
                 httpsUri = getUriFromChannel(httpsChannel, "https");
-                httpsUrl = httpsUri.toURL();
             }
 
-            return new MuServer(uri, url, httpsUri, httpsUrl, shutdown);
+            return new MuServer(uri, httpsUri, shutdown);
 
         } catch (Exception ex) {
             shutdown.run();
