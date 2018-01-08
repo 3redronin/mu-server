@@ -126,6 +126,42 @@ public class PrimitiveEntityProviderTest {
     }
 
     @Test
+    public void floatsSupported() throws Exception {
+        @Path("samples")
+        class Sample {
+            @POST
+            public float echo(float value) {
+                return value;
+            }
+        }
+        startServer(new Sample());
+        check(Float.MAX_VALUE);
+        check(Float.MIN_VALUE);
+        check((float)0);
+        check((float)0.0);
+        check((float)3.14);
+        checkNoBody();
+    }
+
+    @Test
+    public void doublesSupported() throws Exception {
+        @Path("samples")
+        class Sample {
+            @POST
+            public double echo(double value) {
+                return value;
+            }
+        }
+        startServer(new Sample());
+        check(Double.MAX_VALUE);
+        check(Double.MIN_VALUE);
+        check((double)0);
+        check((double)0.0);
+        check((double)3.14);
+        checkNoBody();
+    }
+
+    @Test
     public void numbersCanBeReturned() throws Exception {
         @Path("samples")
         class Sample {

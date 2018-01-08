@@ -31,6 +31,8 @@ class PrimitiveEntityProvider<T> implements MessageBodyWriter<T>, MessageBodyRea
         new PrimitiveEntityProvider<>(short.class, Short.class, Short::parseShort),
         new PrimitiveEntityProvider<>(char.class, Character.class, s -> s.charAt(0)),
         new PrimitiveEntityProvider<>(byte.class, Byte.class, Byte::parseByte),
+        new PrimitiveEntityProvider<>(float.class, Float.class, Float::parseFloat),
+        new PrimitiveEntityProvider<>(double.class, Double.class, Double::parseDouble),
         new PrimitiveEntityProvider<>(boolean.class, Boolean.class, Boolean::parseBoolean)
     );
 
