@@ -10,7 +10,7 @@ public class ObjWithTypeTest {
     @Test
     public void genericTypeAndTypeAreSameIfNoGenerics() {
         ObjWithType hello = ObjWithType.objType("Hello");
-        assertThat(hello.obj, equalTo("Hello"));
+        assertThat(hello.entity, equalTo("Hello"));
         assertThat(hello.type, equalTo(String.class));
         assertThat(hello.genericType, equalTo(String.class));
     }

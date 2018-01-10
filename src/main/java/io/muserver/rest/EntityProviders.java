@@ -1,6 +1,7 @@
 package io.muserver.rest;
 
-import javax.ws.rs.NotAcceptableException;
+import javax.ws.rs.InternalServerErrorException;
+import javax.ws.rs.NotSupportedException;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.MultivaluedMap;
 import javax.ws.rs.ext.MessageBodyReader;
@@ -11,31 +12,49 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 class EntityProviders {
 
-    final List<MessageBodyReader> readers;
+    private final List<MessageBodyReader> readers;
     final List<MessageBodyWriter> writers;
 
     public EntityProviders(List<MessageBodyReader> readers, List<MessageBodyWriter> writers) {
         this.readers = readers;
         this.writers = writers;
     }
-    public MessageBodyWriter<?> selectWriter(Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
-        for (MessageBodyWriter<?> writer : writers) {
-            if (writer.isWriteable(type, genericType, annotations, mediaType)) {
-                return writer;
-            }
-        }
-        throw new NotAcceptableException("Could not find a suitable entity provider to write " + type);
-    }
-    public MessageBodyReader<?> selectReader(Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
+    public MessageBodyReader<?> selectReader(Class<?> type, Type genericType, Annotation[] annotations, MediaType requestBodyMediaType) {
         for (MessageBodyReader<?> reader : readers) {
-            if (reader.isReadable(type, genericType, annotations, mediaType)) {
+            List<MediaType> mediaTypes = MediaTypeDeterminer.supportedConsumesTypes(reader.getClass());
+            boolean mediaTypeSupported = mediaTypes.stream().anyMatch(mt -> mt.isCompatible(requestBodyMediaType));
+            if (mediaTypeSupported && reader.isReadable(type, genericType, annotations, requestBodyMediaType)) {
                 return reader;
             }
         }
-        throw new NotAcceptableException("Could not find a suitable entity provider to read " + type);
+        throw new NotSupportedException("Could not find a suitable entity provider to read " + type);
+    }
+    public MessageBodyWriter<?> selectWriter(Class<?> type, Type genericType, Annotation[] annotations, MediaType responseMediaType) {
+        // From 4.2.2
+
+
+        // 3. SelectthesetofMessageBodyWriterprovidersthatsupport(seeSection4.2.3)theobjectandmedia type of the message entity body.
+        Optional<MessageBodyWriter> best = writers.stream().filter(w -> {
+            List<MediaType> writerProduces = MediaTypeDeterminer.supportedProducesTypes(w.getClass());
+            return writerProduces.stream().anyMatch(mt -> mt.isCompatible(responseMediaType));
+        })
+            .sorted((o1, o2) -> {
+                // 4. Sort the selected MessageBodyWriter providers with a primary key of generic type where providers whose generic
+                // type is the nearest superclass of the object class are sorted first and a secondary key of media type
+                // TODO implement this bit by creating a new class that wraps MethodBodyWriter and provides access to consumes lists
+                return 0;
+            })
+            .filter(w -> w.isWriteable(type, genericType, annotations, responseMediaType))
+            .findFirst();
+
+        if (best.isPresent()) {
+            return best.get();
+        }
+        throw new InternalServerErrorException("Could not find a suitable entity provider to write " + type);
     }
 
     public static List<MessageBodyReader> builtInReaders() {
@@ -67,5 +86,7 @@ class EntityProviders {
             return Charset.forName(charset);
         }
     }
+
+
 }
 

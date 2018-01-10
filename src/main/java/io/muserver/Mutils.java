@@ -66,4 +66,11 @@ public class Mutils {
         return baos.toByteArray();
     }
 
+    public static boolean nullOrEmpty(String val) {
+        return val == null || val.length() == 0;
+    }
+    public static boolean hasValue(String val) {
+        return !nullOrEmpty(val);
+    }
+
 }

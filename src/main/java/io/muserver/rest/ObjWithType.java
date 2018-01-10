@@ -1,29 +1,60 @@
 package io.muserver.rest;
 
 import javax.ws.rs.core.GenericEntity;
+import javax.ws.rs.core.Response;
 import java.lang.reflect.Type;
 
 class ObjWithType {
+    static final ObjWithType EMPTY = new ObjWithType(null, null, null, null);
+
     final Class type;
     final Type genericType;
-    final Object obj;
+    final Response response;
+    final Object entity;
 
-    private ObjWithType(Class type, Type genericType, Object obj) {
+    private ObjWithType(Class type, Type genericType, Response response, Object entity) {
         this.type = type;
         this.genericType = genericType;
-        this.obj = obj;
+        this.response = response;
+        this.entity = entity;
     }
-    static ObjWithType objType(Object result) {
-        Class type = result.getClass();
-        Type genericType = null;
-        Object obj = result;
-        if (result instanceof GenericEntity) {
-            GenericEntity ge = (GenericEntity) result;
-            obj = ge.getEntity();
+
+    public int status() {
+        if (response == null) {
+            if (entity == null) {
+                return 204;
+            } else {
+                return 200;
+            }
+        } else {
+            return response.getStatus();
+        }
+    }
+
+    static ObjWithType objType(Object valueFromMethod) {
+        if (valueFromMethod == null) {
+            return EMPTY;
+        }
+        Object entity;
+        Response response;
+        if (valueFromMethod instanceof Response) {
+            response = (Response)valueFromMethod;
+            entity = response.getEntity();
+        } else {
+            response = null;
+            entity = valueFromMethod;
+        }
+        Class type;
+        Type genericType;
+        if (entity instanceof GenericEntity) {
+            GenericEntity ge = (GenericEntity) entity;
+            entity = ge.getEntity();
             type = ge.getRawType();
             genericType = ge.getType();
+        } else {
+            type = entity == null ? null : entity.getClass();
+            genericType = type;
         }
-        if (genericType == null) genericType = type;
-        return new ObjWithType(type, genericType, obj);
+        return new ObjWithType(type, genericType, response, entity);
     }
 }

@@ -20,6 +20,7 @@ import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
 
+import static io.muserver.Mutils.hasValue;
 import static io.muserver.rest.JaxRSResponse.muHeadersToJax;
 
 public class RestHandler implements MuHandler {
@@ -44,7 +45,8 @@ public class RestHandler implements MuHandler {
         URI jaxURI = baseUri.relativize(URI.create(request.uri().getPath()));
         System.out.println("jaxURI = " + jaxURI);
         try {
-            RequestMatcher.MatchedMethod mm = requestMatcher.findResourceMethod(request.method(), jaxURI, request.headers().getAll(HeaderNames.ACCEPT), request.headers().get(HeaderNames.CONTENT_TYPE));
+            String requestContentType = request.headers().get(HeaderNames.CONTENT_TYPE);
+            RequestMatcher.MatchedMethod mm = requestMatcher.findResourceMethod(request.method(), jaxURI, request.headers().getAll(HeaderNames.ACCEPT), requestContentType);
             ResourceMethod rm = mm.resourceMethod;
             System.out.println("Got " + rm);
             Object[] params = new Object[rm.methodHandle.getParameterCount()];
@@ -55,18 +57,7 @@ public class RestHandler implements MuHandler {
                 if (paramValue == null) {
                     Optional<InputStream> inputStream = request.inputStream();
                     if (inputStream.isPresent()) {
-                        MediaType requestBodyMediaType = MediaType.valueOf(request.headers().get(HeaderNames.CONTENT_TYPE));
-                        Annotation[] annotations = parameter.getDeclaredAnnotations();
-                        Class<?> type = parameter.getType();
-                        Type genericType = parameter.getParameterizedType();
-                        MessageBodyReader messageBodyReader = entityProviders.selectReader(type, genericType, annotations, requestBodyMediaType);
-                        System.out.println("messageBodyReader = " + messageBodyReader);
-                        try {
-                            paramValue = messageBodyReader.readFrom(type, genericType, annotations, requestBodyMediaType, muHeadersToJax(request.headers()), inputStream.get());
-                        } catch (NoContentException nce) {
-                            throw new BadRequestException("No request body was sent to the " + parameter.getName() + " parameter of " + rm.methodHandle
-                                + " - if this should be optional then specify an @DefaultValue annotation on the parameter",  nce);
-                        }
+                        paramValue = readRequestEntity(request, requestContentType, rm, parameter, inputStream.get(), entityProviders);
                     } else {
                         // TODO: supply default values
                         throw new BadRequestException("No request body was sent to the " + parameter.getName() + " parameter of " + rm.methodHandle
@@ -79,25 +70,22 @@ public class RestHandler implements MuHandler {
             }
             Object result = rm.invoke(params);
             System.out.println("result = " + result);
+            ObjWithType obj = ObjWithType.objType(result);
 
-            if (result == null) {
+            if (obj.entity == null) {
                 response.status(204);
                 response.headers().add(HeaderNames.CONTENT_LENGTH, 0);
             } else {
-
-                ObjWithType obj = ObjWithType.objType(result);
 
                 Annotation[] annotations = new Annotation[0]; // TODO set this properly
 
                 MediaType responseMediaType = MediaTypeDeterminer.determine(obj, mm.resourceMethod.resourceClass.produces, mm.resourceMethod.directlyProduces, entityProviders.writers, request.headers().getAll(HeaderNames.ACCEPT));
                 MessageBodyWriter messageBodyWriter = entityProviders.selectWriter(obj.type, obj.genericType, annotations, responseMediaType);
-                System.out.println("messageBodyWriter = " + messageBodyWriter);
-                response.status(200);
 
+                response.status(obj.status());
                 MultivaluedHashMap<String, Object> responseHeaders = new MultivaluedHashMap<>();
 
-
-                long size = messageBodyWriter.getSize(obj.obj, obj.type, obj.genericType, annotations, responseMediaType);
+                long size = messageBodyWriter.getSize(obj.entity, obj.type, obj.genericType, annotations, responseMediaType);
                 if (size > -1) {
                     responseHeaders.putSingle(HeaderNames.CONTENT_LENGTH.toString(), size);
                 }
@@ -109,7 +97,7 @@ public class RestHandler implements MuHandler {
                 response.headers().set(HeaderNames.CONTENT_TYPE, responseMediaType.toString());
 
                 try (OutputStream entityStream = response.outputStream()) {
-                    messageBodyWriter.writeTo(obj.obj, obj.type, obj.genericType, annotations, responseMediaType, responseHeaders, entityStream);
+                    messageBodyWriter.writeTo(obj.entity, obj.type, obj.genericType, annotations, responseMediaType, responseHeaders, entityStream);
                 }
 
             }
@@ -132,6 +120,30 @@ public class RestHandler implements MuHandler {
             ex.printStackTrace();
         }
         return true;
+    }
+
+    private static Object readRequestEntity(MuRequest request, String requestContentType, ResourceMethod rm, Parameter parameter, InputStream inputStream, EntityProviders entityProviders) throws java.io.IOException {
+        Annotation[] annotations = parameter.getDeclaredAnnotations();
+
+        // Section 4.2.1 - determine message body reader
+
+        // 1. Obtain the media type of the request. If the request does not contain a Content-Type header then use application/octet-stream
+        MediaType requestBodyMediaType = hasValue(requestContentType) ? MediaType.valueOf(requestContentType) : MediaType.APPLICATION_OCTET_STREAM_TYPE;
+
+        // 2. Identify the Java type of the parameter whose value will be mapped from the entity body.
+        Class<?> type = parameter.getType();
+        Type genericType = parameter.getParameterizedType();
+
+
+        // 3 & 4: Select a reader that supports the media type of the request and isReadable
+        MessageBodyReader messageBodyReader = entityProviders.selectReader(type, genericType, annotations, requestBodyMediaType);
+        System.out.println("messageBodyReader = " + messageBodyReader);
+        try {
+            return messageBodyReader.readFrom(type, genericType, annotations, requestBodyMediaType, muHeadersToJax(request.headers()), inputStream);
+        } catch (NoContentException nce) {
+            throw new BadRequestException("No request body was sent to the " + parameter.getName() + " parameter of " + rm.methodHandle
+                + " - if this should be optional then specify an @DefaultValue annotation on the parameter",  nce);
+        }
     }
 
     private static Object getPathParamValue(RequestMatcher.MatchedMethod mm, Parameter parameter) {

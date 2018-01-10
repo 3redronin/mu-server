@@ -1,15 +1,17 @@
 package io.muserver.rest;
 
+import javax.ws.rs.Consumes;
 import javax.ws.rs.NotAcceptableException;
 import javax.ws.rs.Produces;
 import javax.ws.rs.core.MediaType;
-import javax.ws.rs.core.Response;
 import javax.ws.rs.ext.MessageBodyWriter;
 import java.lang.annotation.Annotation;
-import java.lang.reflect.Type;
+import java.lang.reflect.GenericDeclaration;
 import java.util.*;
 import java.util.stream.Stream;
 
+import static java.util.Arrays.asList;
+import static java.util.Collections.emptyList;
 import static java.util.stream.Collectors.toSet;
 
 /**
@@ -17,13 +19,10 @@ import static java.util.stream.Collectors.toSet;
  */
 class MediaTypeDeterminer {
     public static MediaType determine(ObjWithType responseObject, List<MediaType> classProduces, List<MediaType> methodProduces, List<MessageBodyWriter> messageBodyWriters, List<String> clientAccepts) {
-        Object obj = responseObject.obj;
-        Class type = responseObject.type;
-        Type genericType = responseObject.genericType;
 
         // 1. If the method returns an instance of Response whose metadata includes the response media type (Mspecified) then set Mselected = Mspecified, finis
-        if (responseObject.obj instanceof Response) {
-            MediaType rmt = ((Response) obj).getMediaType();
+        if (responseObject.response != null) {
+            MediaType rmt = responseObject.response.getMediaType();
             if (rmt != null) {
                 return rmt;
             }
@@ -39,10 +38,10 @@ class MediaTypeDeterminer {
             // • Else if the class is annotated with @Produces, set P = {V (class)}.
             p = new HashSet<>(classProduces);
         } else {
-            //  Else set P = {V (writers)}where ‘writers’ is the set of MessageBodyWriter that support the class of the
+            //  Else set P = {V (writers)} where ‘writers’ is the set of MessageBodyWriter that support the class of the
             // returned entity object.
             p = messageBodyWriters.stream()
-                .filter(writer -> writer.isWriteable(type, genericType, new Annotation[0], MediaType.WILDCARD_TYPE))
+                .filter(writer -> writer.isWriteable(responseObject.type, responseObject.genericType, new Annotation[0], MediaType.WILDCARD_TYPE))
                 .map(writer -> writer.getClass().getAnnotation(Produces.class))
                 .flatMap(produces -> produces == null ? Stream.empty() : Stream.of(produces.value()))
                 .map(MediaType::valueOf)
@@ -98,5 +97,19 @@ class MediaTypeDeterminer {
         
         // 10. Generate a NotAcceptableException (406 status) and no entity
         throw new NotAcceptableException("Could not determine the mime type for the response. Try setting an @Produces annotation on the method.");
+    }
+
+    static List<MediaType> supportedProducesTypes(GenericDeclaration annotationSource) {
+        Produces methodProducesAnnotation = annotationSource.getAnnotation(Produces.class);
+        return methodProducesAnnotation != null
+            ? MediaTypeHeaderDelegate.fromStrings(asList(methodProducesAnnotation.value()))
+            : emptyList();
+    }
+
+    static List<MediaType> supportedConsumesTypes(GenericDeclaration consumableMediaTypes) {
+        Consumes methodConsumesAnnotation = consumableMediaTypes.getAnnotation(Consumes.class);
+        return methodConsumesAnnotation != null
+            ? MediaTypeHeaderDelegate.fromStrings(asList(methodConsumesAnnotation.value()))
+            : emptyList();
     }
 }

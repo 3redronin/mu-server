@@ -14,7 +14,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static java.util.Arrays.asList;
-import static java.util.Collections.emptyList;
 
 class ResourceClass {
 
@@ -63,15 +62,8 @@ class ResourceClass {
             Path methodPath = annotationSource.getAnnotation(Path.class);
             UriPattern pathPattern = methodPath == null ? null : UriPattern.uriTemplateToRegex(methodPath.value());
 
-            Produces methodProducesAnnotation = annotationSource.getAnnotation(Produces.class);
-            List<MediaType> methodProduces = methodProducesAnnotation != null
-                ? MediaTypeHeaderDelegate.fromStrings(asList(methodProducesAnnotation.value()))
-                : emptyList();
-
-            Consumes methodConsumesAnnotation = annotationSource.getAnnotation(Consumes.class);
-            List<MediaType> methodConsumes = methodConsumesAnnotation != null
-                ? MediaTypeHeaderDelegate.fromStrings(asList(methodConsumesAnnotation.value()))
-                : emptyList();
+            List<MediaType> methodProduces = MediaTypeDeterminer.supportedProducesTypes(annotationSource);
+            List<MediaType> methodConsumes = MediaTypeDeterminer.supportedConsumesTypes(annotationSource);
             resourceMethods.add(new ResourceMethod(this, pathPattern, restMethod, httpMethod, methodPath == null ? null : methodPath.value(), methodProduces, methodConsumes));
         }
         this.resourceMethods = Collections.unmodifiableSet(resourceMethods);
