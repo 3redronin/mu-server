@@ -71,7 +71,6 @@ public class RestHandler implements MuHandler {
                         // TODO: supply default values
                         throw new BadRequestException("No request body was sent to the " + parameter.getName() + " parameter of " + rm.methodHandle
                             + " - if this should be optional then specify an @DefaultValue annotation on the parameter");
-
                     }
                 }
 
@@ -86,27 +85,19 @@ public class RestHandler implements MuHandler {
                 response.headers().add(HeaderNames.CONTENT_LENGTH, 0);
             } else {
 
-                Class type = result.getClass();
-                Type genericType = null;
-                Object obj = result;
-                if (result instanceof GenericEntity) {
-                    GenericEntity ge = (GenericEntity) result;
-                    obj = ge.getEntity();
-                    type = ge.getRawType();
-                    genericType = ge.getType();
-                }
-                if (genericType == null) genericType = type;
+                ObjWithType obj = ObjWithType.objType(result);
 
-                Annotation[] annotations = null;
-                MediaType responseMediaType = mm.resourceMethod.produces.size() == 1 ? mm.resourceMethod.produces.get(0) : MediaType.TEXT_PLAIN_TYPE;
-                MessageBodyWriter messageBodyWriter = entityProviders.selectWriter(type, genericType, annotations, responseMediaType);
+                Annotation[] annotations = new Annotation[0]; // TODO set this properly
+
+                MediaType responseMediaType = MediaTypeDeterminer.determine(obj, mm.resourceMethod.resourceClass.produces, mm.resourceMethod.directlyProduces, entityProviders.writers, request.headers().getAll(HeaderNames.ACCEPT));
+                MessageBodyWriter messageBodyWriter = entityProviders.selectWriter(obj.type, obj.genericType, annotations, responseMediaType);
                 System.out.println("messageBodyWriter = " + messageBodyWriter);
                 response.status(200);
 
                 MultivaluedHashMap<String, Object> responseHeaders = new MultivaluedHashMap<>();
 
 
-                long size = messageBodyWriter.getSize(obj, type, genericType, annotations, responseMediaType);
+                long size = messageBodyWriter.getSize(obj.obj, obj.type, obj.genericType, annotations, responseMediaType);
                 if (size > -1) {
                     responseHeaders.putSingle(HeaderNames.CONTENT_LENGTH.toString(), size);
                 }
@@ -115,11 +106,10 @@ public class RestHandler implements MuHandler {
                     response.headers().add(header, responseHeaders.get(header));
                 }
 
-                String responseContentType = (responseMediaType.isWildcardType() || responseMediaType.isWildcardSubtype()) ? "text/plain" : responseMediaType.toString();
-                response.headers().set(HeaderNames.CONTENT_TYPE, responseContentType);
+                response.headers().set(HeaderNames.CONTENT_TYPE, responseMediaType.toString());
 
                 try (OutputStream entityStream = response.outputStream()) {
-                    messageBodyWriter.writeTo(obj, type, genericType, annotations, responseMediaType, responseHeaders, entityStream);
+                    messageBodyWriter.writeTo(obj.obj, obj.type, obj.genericType, annotations, responseMediaType, responseHeaders, entityStream);
                 }
 
             }
@@ -152,4 +142,5 @@ public class RestHandler implements MuHandler {
         }
         return null;
     }
+
 }

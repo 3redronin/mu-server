@@ -15,8 +15,8 @@ class CombinedMediaType implements Comparable<CombinedMediaType> {
     public final double q;
     public final double qs;
     public final int d;
-    private final boolean isWildcardType;
-    private final boolean isWildcardSubtype;
+    public final boolean isWildcardType;
+    public final boolean isWildcardSubtype;
 
     CombinedMediaType(String type, String subType, double q, double qs, int d) {
         this.type = type;
@@ -26,6 +26,10 @@ class CombinedMediaType implements Comparable<CombinedMediaType> {
         this.d = d;
         this.isWildcardType = "*".equals(type);
         this.isWildcardSubtype = "*".equals(subType);
+    }
+
+    public boolean isConcrete() {
+        return !isWildcardType && !isWildcardSubtype;
     }
 
     public static CombinedMediaType s(MediaType clientType, MediaType serverType) {

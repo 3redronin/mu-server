@@ -19,11 +19,13 @@ class JaxRSResponse extends Response {
     final Headers headers;
     private final StatusType status;
     private final Object entity;
+    private final MediaType type;
 
-    JaxRSResponse(StatusType status, Headers headers, Object entity) {
+    JaxRSResponse(StatusType status, Headers headers, Object entity, MediaType type) {
         this.status = status;
         this.headers = headers;
         this.entity = entity;
+        this.type = type;
     }
 
 
@@ -79,7 +81,7 @@ class JaxRSResponse extends Response {
 
     @Override
     public MediaType getMediaType() {
-        throw NotImplementedException.notYet();
+        return type;
     }
 
     @Override
@@ -189,7 +191,10 @@ class JaxRSResponse extends Response {
             for (Link linkHeader : linkHeaders) {
                 headers.add(HeaderNames.LINK, "<" + linkHeader.getUri().toString() + ">;rel=" + linkHeader.getRel());
             }
-            return new JaxRSResponse(status, headers, entity);
+            if (type != null) {
+                headers.set(HeaderNames.CONTENT_TYPE, type.toString());
+            }
+            return new JaxRSResponse(status, headers, entity, type);
         }
 
         @Override

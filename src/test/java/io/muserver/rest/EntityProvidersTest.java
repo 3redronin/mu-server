@@ -11,7 +11,6 @@ import scaffolding.ClientUtils;
 
 import javax.ws.rs.POST;
 import javax.ws.rs.Path;
-
 import java.io.IOException;
 
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -33,7 +32,7 @@ public class EntityProvidersTest {
             }
         }
         startServer(new Sample());
-        stringCheck("text/plain", randomStringOfLength(128 * 1024), "text/plain", "/samples");
+        stringCheck("text/plain", randomStringOfLength(128 * 1024), "application/octet-stream", "/samples");
     }
 
     private void stringCheck(String requestBodyType, String content, String expectedResponseType, String requestPath) throws IOException {

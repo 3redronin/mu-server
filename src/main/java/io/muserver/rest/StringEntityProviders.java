@@ -145,7 +145,7 @@ class StringEntityProviders {
     }
 
     @Produces("application/x-www-form-urlencoded")
-    private static class FormUrlEncodedWriter implements MessageBodyWriter<MultivaluedMap<String, String>> {
+    static class FormUrlEncodedWriter implements MessageBodyWriter<MultivaluedMap<String, String>> {
         @Override
         public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
             return MultivaluedMap.class.isAssignableFrom(type);

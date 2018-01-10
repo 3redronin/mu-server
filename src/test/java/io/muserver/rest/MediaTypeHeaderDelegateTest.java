@@ -45,9 +45,9 @@ public class MediaTypeHeaderDelegateTest {
     }
 
     @Test
-    public void returnsTheAnyAnyTypeIfNoHeadersThere() {
-        assertThat(MediaTypeHeaderDelegate.fromStrings(null), contains(MediaType.WILDCARD_TYPE));
-        assertThat(MediaTypeHeaderDelegate.fromStrings(emptyList()), contains(MediaType.WILDCARD_TYPE));
+    public void returnsEmptyListForNull() {
+        assertThat(MediaTypeHeaderDelegate.fromStrings(null), hasSize(0));
+        assertThat(MediaTypeHeaderDelegate.fromStrings(emptyList()), hasSize(0));
     }
 
     @Test

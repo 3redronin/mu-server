@@ -14,8 +14,8 @@ import java.util.List;
 
 class EntityProviders {
 
-    private final List<MessageBodyReader> readers;
-    private final List<MessageBodyWriter> writers;
+    final List<MessageBodyReader> readers;
+    final List<MessageBodyWriter> writers;
 
     public EntityProviders(List<MessageBodyReader> readers, List<MessageBodyWriter> writers) {
         this.readers = readers;

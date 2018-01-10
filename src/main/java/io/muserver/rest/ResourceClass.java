@@ -14,14 +14,15 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static java.util.Arrays.asList;
+import static java.util.Collections.emptyList;
 
 class ResourceClass {
 
     final UriPattern pathPattern;
     private final Class<?> resourceClass;
     final Object resourceInstance;
-    private final List<MediaType> produces;
-    private final List<MediaType> consumes;
+    final List<MediaType> produces;
+    final List<MediaType> consumes;
     Set<ResourceMethod> resourceMethods;
     final String pathTemplate;
 
@@ -65,12 +66,12 @@ class ResourceClass {
             Produces methodProducesAnnotation = annotationSource.getAnnotation(Produces.class);
             List<MediaType> methodProduces = methodProducesAnnotation != null
                 ? MediaTypeHeaderDelegate.fromStrings(asList(methodProducesAnnotation.value()))
-                : this.produces;
+                : emptyList();
 
             Consumes methodConsumesAnnotation = annotationSource.getAnnotation(Consumes.class);
             List<MediaType> methodConsumes = methodConsumesAnnotation != null
                 ? MediaTypeHeaderDelegate.fromStrings(asList(methodConsumesAnnotation.value()))
-                : this.consumes;
+                : emptyList();
             resourceMethods.add(new ResourceMethod(this, pathPattern, restMethod, httpMethod, methodPath == null ? null : methodPath.value(), methodProduces, methodConsumes));
         }
         this.resourceMethods = Collections.unmodifiableSet(resourceMethods);

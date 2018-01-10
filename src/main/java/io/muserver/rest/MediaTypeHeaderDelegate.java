@@ -52,7 +52,7 @@ class MediaTypeHeaderDelegate implements RuntimeDelegate.HeaderDelegate<MediaTyp
 
     public static List<MediaType> fromStrings(List<String> accepts) {
         if (accepts == null || accepts.isEmpty()) {
-            return wildcard;
+            return Collections.emptyList();
         }
         List<MediaType> results = new ArrayList<>();
         for (String acceptMess : accepts) {

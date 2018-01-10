@@ -10,6 +10,7 @@ import javax.ws.rs.core.MediaType;
 import java.net.URI;
 import java.util.*;
 
+import static java.util.Collections.singletonList;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toSet;
 
@@ -23,11 +24,11 @@ import static java.util.stream.Collectors.toSet;
  * </p>
  */
 class RequestMatcher {
-
     static {
         MuRuntimeDelegate.ensureSet();
     }
 
+    static final List<MediaType> WILDCARD_AS_LIST = singletonList(MediaType.WILDCARD_TYPE);
     private final Set<ResourceClass> roots;
 
     RequestMatcher(Set<ResourceClass> roots) {
@@ -198,7 +199,7 @@ class RequestMatcher {
         // At least one of the acceptable response entity body media types is a supported output data format (see Section 3.5).
         // If no methods support one of the acceptable response entity body media types an implementation MUST generate a
         // NotAcceptableException (406 status) and no entity.
-        List<MediaType> clientAccepts = MediaTypeHeaderDelegate.fromStrings(acceptHeaders);
+        List<MediaType> clientAccepts = acceptHeaders.isEmpty() ? WILDCARD_AS_LIST : MediaTypeHeaderDelegate.fromStrings(acceptHeaders);
         result = result.stream().filter(rm -> rm.resourceMethod.canProduceFor(clientAccepts)).collect(toList());
         if (result.isEmpty()) {
             throw new NotAcceptableException();
@@ -211,11 +212,11 @@ class RequestMatcher {
         List<MediaType> requestBodyTypeAsList = Collections.singletonList(requestBodyMediaType);
         return result.stream()
             .max((o1, o2) -> {
-                int compare = bestMediaType(requestBodyTypeAsList, o1.resourceMethod.consumes).compareTo(bestMediaType(requestBodyTypeAsList, o2.resourceMethod.consumes));
+                int compare = bestMediaType(requestBodyTypeAsList, o1.resourceMethod.effectiveConsumes).compareTo(bestMediaType(requestBodyTypeAsList, o2.resourceMethod.effectiveConsumes));
                 if (compare != 0) {
                     return compare;
                 }
-                return bestMediaType(clientAccepts, o1.resourceMethod.produces).compareTo(bestMediaType(clientAccepts, o2.resourceMethod.produces));
+                return bestMediaType(clientAccepts, o1.resourceMethod.effectiveProduces).compareTo(bestMediaType(clientAccepts, o2.resourceMethod.effectiveProduces));
             }).get();
 
     }

@@ -12,13 +12,14 @@ import java.util.List;
 import static io.muserver.rest.MethodMapping.jaxToMu;
 
 class ResourceMethod {
-    private final ResourceClass resourceClass;
+    final ResourceClass resourceClass;
     final UriPattern pathPattern;
     final java.lang.reflect.Method methodHandle;
     final Method httpMethod;
     final String pathTemplate;
-    final List<MediaType> consumes;
-    final List<MediaType> produces;
+    final List<MediaType> effectiveConsumes;
+    final List<MediaType> directlyProduces;
+    final List<MediaType> effectiveProduces;
 
     public ResourceMethod(ResourceClass resourceClass, UriPattern pathPattern, java.lang.reflect.Method methodHandle, Method httpMethod, String pathTemplate, List<MediaType> produces, List<MediaType> consumes) {
         this.resourceClass = resourceClass;
@@ -26,13 +27,15 @@ class ResourceMethod {
         this.methodHandle = methodHandle;
         this.httpMethod = httpMethod;
         this.pathTemplate = pathTemplate;
-        this.produces = produces;
-        this.consumes = consumes;
+        this.directlyProduces = produces;
+        this.effectiveProduces = !produces.isEmpty() ? produces : (!resourceClass.produces.isEmpty() ? resourceClass.produces : RequestMatcher.WILDCARD_AS_LIST);
+        this.effectiveConsumes = !consumes.isEmpty() ? consumes : (!resourceClass.consumes.isEmpty() ? resourceClass.consumes : RequestMatcher.WILDCARD_AS_LIST);
     }
 
     public boolean isSubResource() {
         return pathPattern != null;
     }
+
     public boolean isSubResourceLocator() {
         return httpMethod == null;
     }
@@ -63,10 +66,10 @@ class ResourceMethod {
     }
 
     public boolean canProduceFor(List<MediaType> clientAccepts) {
-        return MediaTypeHeaderDelegate.atLeastOneCompatible(produces, clientAccepts);
+        return MediaTypeHeaderDelegate.atLeastOneCompatible(effectiveProduces, clientAccepts);
     }
 
     public boolean canConsume(MediaType requestBodyMediaType) {
-        return MediaTypeHeaderDelegate.atLeastOneCompatible(consumes, Collections.singletonList(requestBodyMediaType));
+        return MediaTypeHeaderDelegate.atLeastOneCompatible(effectiveConsumes, Collections.singletonList(requestBodyMediaType));
     }
 }
