@@ -37,7 +37,7 @@ class PrimitiveEntityProvider<T> implements MessageBodyWriter<T>, MessageBodyRea
     );
 
     private final Class primitiveClass;
-    private final Class<T> boxedClass;
+    final Class<T> boxedClass;
     private final Function<String, T> stringToValue;
 
     private PrimitiveEntityProvider(Class primitiveClass, Class<T> boxedClass, Function<String, T> stringToValue) {

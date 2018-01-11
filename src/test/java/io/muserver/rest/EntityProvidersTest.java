@@ -11,7 +11,10 @@ import scaffolding.ClientUtils;
 
 import javax.ws.rs.POST;
 import javax.ws.rs.Path;
+import javax.ws.rs.ext.MessageBodyWriter;
 import java.io.IOException;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
@@ -33,6 +36,30 @@ public class EntityProvidersTest {
         }
         startServer(new Sample());
         stringCheck("text/plain", randomStringOfLength(128 * 1024), "application/octet-stream", "/samples");
+    }
+
+    @Test
+    public void canFigureOutGenericTypes() {
+        for (MessageBodyWriter messageBodyWriter : EntityProviders.builtInWriters()) {
+
+
+            System.out.println("messageBodyWriter = " + messageBodyWriter);
+
+            Class<? extends MessageBodyWriter> writerClass = messageBodyWriter.getClass();
+            for (Type type : writerClass.getGenericInterfaces()) {
+
+
+                if (type instanceof ParameterizedType) {
+                    ParameterizedType pt = (ParameterizedType) type;
+                    if (pt.getRawType().equals(MessageBodyWriter.class)) {
+                        Type genericType = pt.getActualTypeArguments()[0];
+                        System.out.println("genericType = " + genericType + " (" + genericType.getTypeName() + " - " + genericType.getClass().getName());
+                    }
+                }
+            }
+
+        }
+
     }
 
     private void stringCheck(String requestBodyType, String content, String expectedResponseType, String requestPath) throws IOException {

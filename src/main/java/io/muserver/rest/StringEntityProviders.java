@@ -35,7 +35,7 @@ class StringEntityProviders {
 
     @Produces("*/*")
     @Consumes("*/*")
-    private static class StringMessageReaderWriter implements MessageBodyWriter<String>, MessageBodyReader<String> {
+    static class StringMessageReaderWriter implements MessageBodyWriter<String>, MessageBodyReader<String> {
         private StringMessageReaderWriter() {}
         public static final StringMessageReaderWriter INSTANCE = new StringMessageReaderWriter();
 
@@ -65,7 +65,7 @@ class StringEntityProviders {
 
     @Produces("*/*")
     @Consumes("*/*")
-    private static class CharArrayReaderWriter implements MessageBodyWriter<char[]>, MessageBodyReader<char[]> {
+    static class CharArrayReaderWriter implements MessageBodyWriter<char[]>, MessageBodyReader<char[]> {
         private CharArrayReaderWriter() {}
         public static final CharArrayReaderWriter INSTANCE = new CharArrayReaderWriter();
 
@@ -111,7 +111,7 @@ class StringEntityProviders {
     }
 
     @Consumes("*/*")
-    private static class ReaderEntityReader implements MessageBodyReader<Reader> {
+    static class ReaderEntityReader implements MessageBodyReader<Reader> {
         public boolean isReadable(Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
             return Reader.class.isAssignableFrom(type);
         }
@@ -121,7 +121,7 @@ class StringEntityProviders {
     }
 
     @Consumes("application/x-www-form-urlencoded")
-    private static class FormUrlEncodedReader implements MessageBodyReader<MultivaluedMap<String, String>> {
+    static class FormUrlEncodedReader implements MessageBodyReader<MultivaluedMap<String, String>> {
 
         @Override
         public boolean isReadable(Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {

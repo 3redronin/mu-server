@@ -8,7 +8,6 @@ import javax.ws.rs.ext.MessageBodyWriter;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.GenericDeclaration;
 import java.util.*;
-import java.util.stream.Stream;
 
 import static java.util.Arrays.asList;
 import static java.util.Collections.emptyList;
@@ -18,7 +17,7 @@ import static java.util.stream.Collectors.toSet;
  * An implementation of section 3.8 of the jax-rs 2.0 spec
  */
 class MediaTypeDeterminer {
-    public static MediaType determine(ObjWithType responseObject, List<MediaType> classProduces, List<MediaType> methodProduces, List<MessageBodyWriter> messageBodyWriters, List<String> clientAccepts) {
+    public static MediaType determine(ObjWithType responseObject, List<MediaType> classProduces, List<MediaType> methodProduces, List<ProviderWrapper<MessageBodyWriter<?>>> messageBodyWriters, List<String> clientAccepts) {
 
         // 1. If the method returns an instance of Response whose metadata includes the response media type (Mspecified) then set Mselected = Mspecified, finis
         if (responseObject.response != null) {
@@ -41,10 +40,8 @@ class MediaTypeDeterminer {
             //  Else set P = {V (writers)} where ‘writers’ is the set of MessageBodyWriter that support the class of the
             // returned entity object.
             p = messageBodyWriters.stream()
-                .filter(writer -> writer.isWriteable(responseObject.type, responseObject.genericType, new Annotation[0], MediaType.WILDCARD_TYPE))
-                .map(writer -> writer.getClass().getAnnotation(Produces.class))
-                .flatMap(produces -> produces == null ? Stream.empty() : Stream.of(produces.value()))
-                .map(MediaType::valueOf)
+                .filter(writer -> writer.provider.isWriteable(responseObject.type, responseObject.genericType, new Annotation[0], MediaType.WILDCARD_TYPE))
+                .flatMap(writer -> writer.mediaTypes.stream())
                 .collect(toSet());
         }
 

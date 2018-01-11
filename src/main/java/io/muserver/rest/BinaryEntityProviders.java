@@ -36,7 +36,7 @@ class BinaryEntityProviders {
 
     @Produces("*/*")
     @Consumes("*/*")
-    private static class ByteArrayReaderWriter implements MessageBodyReader<byte[]>, MessageBodyWriter<byte[]> {
+    static class ByteArrayReaderWriter implements MessageBodyReader<byte[]>, MessageBodyWriter<byte[]> {
         public boolean isReadable(Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
             return type.isArray() && type.getComponentType().equals(byte.class);
         }
@@ -58,7 +58,7 @@ class BinaryEntityProviders {
     }
 
     @Produces("*/*")
-    private static class StreamingOutputWriter implements MessageBodyWriter<StreamingOutput> {
+    static class StreamingOutputWriter implements MessageBodyWriter<StreamingOutput> {
         public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
             return StreamingOutput.class.isAssignableFrom(type);
         }
@@ -69,7 +69,7 @@ class BinaryEntityProviders {
 
 
     @Consumes("*/*")
-    private static class InputStreamReader implements MessageBodyReader<InputStream> {
+    static class InputStreamReader implements MessageBodyReader<InputStream> {
         public boolean isReadable(Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
             return InputStream.class.isAssignableFrom(type);
         }
@@ -80,7 +80,7 @@ class BinaryEntityProviders {
 
     @Produces("*/*")
     @Consumes("*/*")
-    private static class FileReaderWriter implements MessageBodyReader<File>, MessageBodyWriter<File> {
+    static class FileReaderWriter implements MessageBodyReader<File>, MessageBodyWriter<File> {
 
         @Override
         public boolean isReadable(Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
@@ -117,7 +117,7 @@ class BinaryEntityProviders {
 
     @Produces("*/*")
     @Consumes("*/*")
-    private static class DataSourceReaderWriter implements MessageBodyReader<DataSource>, MessageBodyWriter<DataSource> {
+    static class DataSourceReaderWriter implements MessageBodyReader<DataSource>, MessageBodyWriter<DataSource> {
         // Disclaimer: I don't even know what a javax.activation.DataSource is
 
         @Override
