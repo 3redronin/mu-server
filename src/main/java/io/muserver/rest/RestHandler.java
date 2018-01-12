@@ -2,10 +2,7 @@ package io.muserver.rest;
 
 import io.muserver.*;
 
-import javax.ws.rs.BadRequestException;
-import javax.ws.rs.NotFoundException;
-import javax.ws.rs.PathParam;
-import javax.ws.rs.WebApplicationException;
+import javax.ws.rs.*;
 import javax.ws.rs.core.*;
 import javax.ws.rs.ext.MessageBodyReader;
 import javax.ws.rs.ext.MessageBodyWriter;
@@ -106,6 +103,10 @@ public class RestHandler implements MuHandler {
             System.out.println(request.uri() + " not a JAX RS method");
             return false;
         } catch (WebApplicationException e) {
+            if (e instanceof ServerErrorException) {
+                System.out.println("Server error: " + e);
+                e.printStackTrace();
+            }
             Response r = e.getResponse();
             response.status(r.getStatus());
             response.contentType(ContentTypes.TEXT_PLAIN);

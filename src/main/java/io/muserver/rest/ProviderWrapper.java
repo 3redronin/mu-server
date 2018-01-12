@@ -46,7 +46,7 @@ class ProviderWrapper<T> implements Comparable<ProviderWrapper<T>> {
     }
 
     public boolean supports(MediaType mediaType) {
-        return mediaTypes.stream().anyMatch(mt -> mt.isCompatible(mediaType));
+        return mediaTypes.isEmpty() || mediaTypes.stream().anyMatch(mt -> mt.isCompatible(mediaType));
     }
 
     @Override
@@ -71,5 +71,15 @@ class ProviderWrapper<T> implements Comparable<ProviderWrapper<T>> {
             return assignCompare;
         }
         return o1C.isAssignableFrom(o2C) ? -1 : 1;
+    }
+
+    @Override
+    public String toString() {
+        return "ProviderWrapper{" +
+            "provider=" + provider +
+            ", isBuiltIn=" + isBuiltIn +
+            ", mediaTypes=" + mediaTypes +
+            ", genericType=" + genericType +
+            '}';
     }
 }
