@@ -80,7 +80,7 @@ public class MediaTypesTest {
 
     private void muServer(Object... resources) {
         this.server = MuServerBuilder.httpsServer()
-            .addHandler(new RestHandler(resources))
+            .addHandler(RestHandlerBuilder.restHandler(resources).build())
             .start();
     }
 

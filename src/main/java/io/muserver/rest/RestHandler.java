@@ -28,9 +28,9 @@ public class RestHandler implements MuHandler {
     private final Set<ResourceClass> resources;
     private final URI baseUri = URI.create("/");
     private final RequestMatcher requestMatcher;
-    private final EntityProviders entityProviders = new EntityProviders(EntityProviders.builtInReaders(), EntityProviders.builtInWriters());
+    private final EntityProviders entityProviders;
 
-    public RestHandler(Object... restResources) {
+    public RestHandler(EntityProviders entityProviders, Object... restResources) {
         HashSet<ResourceClass> set = new HashSet<>();
         for (Object restResource : restResources) {
             set.add(ResourceClass.fromObject(restResource));
@@ -38,6 +38,7 @@ public class RestHandler implements MuHandler {
 
         this.resources = Collections.unmodifiableSet(set);
         this.requestMatcher = new RequestMatcher(resources);
+        this.entityProviders = entityProviders;
     }
 
     @Override

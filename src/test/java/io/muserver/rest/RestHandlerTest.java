@@ -17,7 +17,7 @@ import static scaffolding.ClientUtils.request;
 
 public class RestHandlerTest {
     private MuServer server = MuServerBuilder.httpsServer()
-        .addHandler(new RestHandler(new Fruit()))
+        .addHandler(RestHandlerBuilder.restHandler(new Fruit()).build())
         .start();
 
 
@@ -39,7 +39,7 @@ public class RestHandlerTest {
 
     @Test(expected = IllegalArgumentException.class)
     public void throwsIfObjectDoesNotHavePathAnnotation() {
-        new RestHandler(new Object());
+        RestHandlerBuilder.create(new Object());
     }
 
     @Path("api/fruits")

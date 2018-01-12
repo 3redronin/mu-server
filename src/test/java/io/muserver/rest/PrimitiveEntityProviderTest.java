@@ -202,7 +202,7 @@ public class PrimitiveEntityProviderTest {
 
 
     private void startServer(Object restResource) {
-        this.server = MuServerBuilder.httpsServer().addHandler(new RestHandler(restResource)).start();
+        this.server = MuServerBuilder.httpsServer().addHandler(RestHandlerBuilder.create(restResource)).start();
     }
 
     @After
