@@ -6,11 +6,10 @@ import javax.ws.rs.Consumes;
 import javax.ws.rs.Path;
 import javax.ws.rs.Produces;
 import javax.ws.rs.core.MediaType;
+import javax.ws.rs.ext.ParamConverterProvider;
+import java.lang.reflect.Parameter;
 import java.net.URI;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import static java.util.Arrays.asList;
@@ -46,7 +45,7 @@ class ResourceClass {
         return resourceMethods.stream().filter(ResourceMethod::isSubResource).collect(Collectors.toSet());
     }
 
-    private void setupMethodInfo() {
+    private void setupMethodInfo(List<ParamConverterProvider> paramConverterProviders) {
         if (resourceMethods != null) {
             throw new IllegalStateException("Cannot call setupMethodInfo twice");
         }
@@ -64,12 +63,19 @@ class ResourceClass {
 
             List<MediaType> methodProduces = MediaTypeDeterminer.supportedProducesTypes(annotationSource);
             List<MediaType> methodConsumes = MediaTypeDeterminer.supportedConsumesTypes(annotationSource);
-            resourceMethods.add(new ResourceMethod(this, pathPattern, restMethod, httpMethod, methodPath == null ? null : methodPath.value(), methodProduces, methodConsumes));
+            List<ResourceMethodParam> params = new ArrayList<>();
+            Parameter[] parameters = annotationSource.getParameters();
+            for (int i = 0; i < parameters.length; i++) {
+                Parameter p = parameters[i];
+                ResourceMethodParam resourceMethodParam = ResourceMethodParam.fromParameter(i, p, paramConverterProviders);
+                params.add(resourceMethodParam);
+            }
+            resourceMethods.add(new ResourceMethod(this, pathPattern, restMethod, params, httpMethod, methodPath == null ? null : methodPath.value(), methodProduces, methodConsumes));
         }
         this.resourceMethods = Collections.unmodifiableSet(resourceMethods);
     }
 
-    public static ResourceClass fromObject(Object restResource) {
+    public static ResourceClass fromObject(Object restResource, List<ParamConverterProvider> paramConverterProviders) {
         Class<?> annotationSource = JaxClassLocator.getClassWithJaxRSAnnotations(restResource.getClass());
         if (annotationSource == null) {
             throw new IllegalArgumentException("The restResource class " + restResource.getClass().getName() + " must have a " + Path.class.getName() + " annotation to be eligible as a REST resource.");
@@ -96,7 +102,7 @@ class ResourceClass {
         List<MediaType> consumesList = MediaTypeHeaderDelegate.fromStrings(consumes == null ? null : asList(consumes.value()));
 
         ResourceClass resourceClass = new ResourceClass(pathPattern, path.value(), restResource, consumesList, producesList);
-        resourceClass.setupMethodInfo();
+        resourceClass.setupMethodInfo(paramConverterProviders);
         return resourceClass;
     }
 

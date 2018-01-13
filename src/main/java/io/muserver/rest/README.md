@@ -36,8 +36,8 @@ Not applicable as only singletons supported
 
 ### 3.3 Resource Methods 
 
-Mostly implemented, except Resource Locators. See sub-sections for details. Note that only standard HTTP
-headers are supported.
+Mostly implemented, except Resource Locators. See sub-sections for details. Note that only the standard HTTP
+methods (GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD) are supported.
 
 #### 3.3.1 Visibility 
 
@@ -46,7 +46,6 @@ Implemented, although Mu does not warn about mis-configured methods.
 #### 3.3.2 Parameters 
 
 Partially implemented. Not all ParamTypes yet supported. Encoded and Default not yet supported.
-ApplicationPath: not yet
 Path: done
 PathParam: done
 QueryParam: not yet

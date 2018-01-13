@@ -2,6 +2,7 @@ package io.muserver.rest;
 
 import javax.ws.rs.ext.MessageBodyReader;
 import javax.ws.rs.ext.MessageBodyWriter;
+import javax.ws.rs.ext.ParamConverterProvider;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -10,6 +11,7 @@ public class RestHandlerBuilder {
     private Object[] resources;
     private final List<MessageBodyWriter> customWriters = new ArrayList<>();
     private final List<MessageBodyReader> customReaders = new ArrayList<>();
+    private final List<ParamConverterProvider> customParamConverterProviders = new ArrayList<>();
 
     public RestHandlerBuilder(Object... resources) {
         this.resources = resources;
@@ -28,6 +30,10 @@ public class RestHandlerBuilder {
         customReaders.add(reader);
         return this;
     }
+    public RestHandlerBuilder addCustomParamConverterProvider(ParamConverterProvider paramConverterProvider) {
+        customParamConverterProviders.add(paramConverterProvider);
+        return this;
+    }
 
 
     public RestHandler build() {
@@ -36,7 +42,10 @@ public class RestHandlerBuilder {
         List<MessageBodyWriter> writers = EntityProviders.builtInWriters();
         writers.addAll(customWriters);
         EntityProviders entityProviders = new EntityProviders(readers, writers);
-        return new RestHandler(entityProviders, resources);
+        List<ParamConverterProvider> paramConverterProviders = new ArrayList<>();
+        paramConverterProviders.addAll(customParamConverterProviders);
+        paramConverterProviders.add(new BuiltInParamConverterProvider());
+        return new RestHandler(entityProviders, paramConverterProviders, resources);
     }
 
     public static RestHandlerBuilder restHandler(Object... resources) {

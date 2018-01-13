@@ -16,7 +16,7 @@ public class ResourceClassTest {
 
     @Test
     public void canCreate() {
-        ResourceClass rc = ResourceClass.fromObject(new Fruit());
+        ResourceClass rc = ResourceClass.fromObject(new Fruit(), ResourceMethodParamTest.BUILT_IN_PARAM_PROVIDERS);
         assertThat(rc.matches(create("api/fruit")), equalTo(false));
         assertThat(rc.matches(create("api/fruits")), equalTo(true));
         assertThat(rc.matches(create("api/fruits?yeah=yeah")), equalTo(true));
@@ -25,7 +25,7 @@ public class ResourceClassTest {
 
     @Test
     public void pathParamsCanBeInheritedIfThereAreNoJaxAnnotations() {
-        ResourceClass rc = ResourceClass.fromObject(new ConcreteWidget());
+        ResourceClass rc = ResourceClass.fromObject(new ConcreteWidget(), ResourceMethodParamTest.BUILT_IN_PARAM_PROVIDERS);
         assertThat(rc.matches(create("api/widgets")), equalTo(true));
     }
 
@@ -42,7 +42,7 @@ public class ResourceClassTest {
             public String more() { return ""; }
         }
 
-        ResourceClass resourceClass = ResourceClass.fromObject(new Optionsy());
+        ResourceClass resourceClass = ResourceClass.fromObject(new Optionsy(), ResourceMethodParamTest.BUILT_IN_PARAM_PROVIDERS);
         assertThat(resourceClass.resourceMethods, hasSize(3));
         assertThat(resourceClass.nonSubResourceMethods(), hasSize(2));
         assertThat(resourceClass.subResourceMethods(), hasSize(1));

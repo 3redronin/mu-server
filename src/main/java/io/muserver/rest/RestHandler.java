@@ -3,19 +3,20 @@ package io.muserver.rest;
 import io.muserver.*;
 
 import javax.ws.rs.*;
-import javax.ws.rs.core.*;
+import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.MultivaluedHashMap;
+import javax.ws.rs.core.NoContentException;
+import javax.ws.rs.core.Response;
 import javax.ws.rs.ext.MessageBodyReader;
 import javax.ws.rs.ext.MessageBodyWriter;
+import javax.ws.rs.ext.ParamConverterProvider;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.Type;
 import java.net.URI;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 
 import static io.muserver.Mutils.hasValue;
 import static io.muserver.rest.JaxRSResponse.muHeadersToJax;
@@ -27,10 +28,10 @@ public class RestHandler implements MuHandler {
     private final RequestMatcher requestMatcher;
     private final EntityProviders entityProviders;
 
-    public RestHandler(EntityProviders entityProviders, Object... restResources) {
+    RestHandler(EntityProviders entityProviders, List<ParamConverterProvider> paramConverterProviders, Object... restResources) {
         HashSet<ResourceClass> set = new HashSet<>();
         for (Object restResource : restResources) {
-            set.add(ResourceClass.fromObject(restResource));
+            set.add(ResourceClass.fromObject(restResource, paramConverterProviders));
         }
 
         this.resources = Collections.unmodifiableSet(set);
@@ -49,22 +50,24 @@ public class RestHandler implements MuHandler {
             System.out.println("Got " + rm);
             Object[] params = new Object[rm.methodHandle.getParameterCount()];
 
-            int paramIndex = 0;
-            for (Parameter parameter : rm.methodHandle.getParameters()) {
-                Object paramValue = getPathParamValue(mm, parameter);
-                if (paramValue == null) {
+            for (ResourceMethodParam param : rm.params) {
+                Object paramValue = null;
+                if (param.source == ResourceMethodParam.ValueSource.MESSAGE_BODY) {
                     Optional<InputStream> inputStream = request.inputStream();
                     if (inputStream.isPresent()) {
-                        paramValue = readRequestEntity(request, requestContentType, rm, parameter, inputStream.get(), entityProviders);
+                        paramValue = readRequestEntity(request, requestContentType, rm, param.parameterHandle, inputStream.get(), entityProviders);
                     } else {
                         // TODO: supply default values
-                        throw new BadRequestException("No request body was sent to the " + parameter.getName() + " parameter of " + rm.methodHandle
+                        throw new BadRequestException("No request body was sent to the " + param.parameterHandle.getName() + " parameter of " + rm.methodHandle
                             + " - if this should be optional then specify an @DefaultValue annotation on the parameter");
                     }
-                }
+                } else if (param.source == ResourceMethodParam.ValueSource.CONTEXT) {
 
-                params[paramIndex] = paramValue;
-                paramIndex++;
+                } else {
+                    ResourceMethodParam.RequestBasedParam rbp = (ResourceMethodParam.RequestBasedParam) param;
+                    paramValue = rbp.getValue(request, mm);
+                }
+                params[param.index] = paramValue;
             }
             Object result = rm.invoke(params);
             System.out.println("result = " + result);

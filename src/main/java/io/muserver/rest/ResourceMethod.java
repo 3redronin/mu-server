@@ -20,11 +20,13 @@ class ResourceMethod {
     final List<MediaType> effectiveConsumes;
     final List<MediaType> directlyProduces;
     final List<MediaType> effectiveProduces;
+    final List<ResourceMethodParam> params;
 
-    public ResourceMethod(ResourceClass resourceClass, UriPattern pathPattern, java.lang.reflect.Method methodHandle, Method httpMethod, String pathTemplate, List<MediaType> produces, List<MediaType> consumes) {
+    ResourceMethod(ResourceClass resourceClass, UriPattern pathPattern, java.lang.reflect.Method methodHandle, List<ResourceMethodParam> params, Method httpMethod, String pathTemplate, List<MediaType> produces, List<MediaType> consumes) {
         this.resourceClass = resourceClass;
         this.pathPattern = pathPattern;
         this.methodHandle = methodHandle;
+        this.params = params;
         this.httpMethod = httpMethod;
         this.pathTemplate = pathTemplate;
         this.directlyProduces = produces;
