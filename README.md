@@ -17,7 +17,7 @@ which is a Java standard used to define REST resources.
 
 Following the principle that you should be in charge of your own config and class instantiation, any parts
 of the spec dealing with reflection, dependency injection, config, or service discovery are not implemented.
-See the [rest/README.md](https://github.com/3redronin/mu-server/blob/master/rest/README.md) file for a full list of what is implemented from the spec.
+See the [rest/README.md](https://github.com/3redronin/mu-server/blob/master/src/main/java/io/muserver/rest/README.md) file for a full list of what is implemented from the spec.
 
 Example REST resource class:
 
