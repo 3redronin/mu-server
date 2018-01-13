@@ -36,7 +36,8 @@ public class JaxRSResponseTest {
 
         JaxRSResponse response = (JaxRSResponse) builder.build();
         assertThat(response.getStatus(), is(201));
-        Headers actual = response.headers;
+
+        Headers actual = response.getMuHeaders();
         MatcherAssert.assertThat(actual.get(HeaderNames.ALLOW), equalTo("HEAD,GET"));
         assertThat(actual.get(HeaderNames.CACHE_CONTROL), equalTo("private, no-transform, must-revalidate, max-age=10"));
         assertThat(actual.get(HeaderNames.CONTENT_LOCATION), equalTo("http://localhost:8080"));

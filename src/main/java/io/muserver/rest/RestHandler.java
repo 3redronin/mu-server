@@ -3,10 +3,7 @@ package io.muserver.rest;
 import io.muserver.*;
 
 import javax.ws.rs.*;
-import javax.ws.rs.core.MediaType;
-import javax.ws.rs.core.MultivaluedHashMap;
-import javax.ws.rs.core.NoContentException;
-import javax.ws.rs.core.Response;
+import javax.ws.rs.core.*;
 import javax.ws.rs.ext.MessageBodyReader;
 import javax.ws.rs.ext.MessageBodyWriter;
 import javax.ws.rs.ext.ParamConverterProvider;
@@ -20,6 +17,7 @@ import java.util.*;
 
 import static io.muserver.Mutils.hasValue;
 import static io.muserver.rest.JaxRSResponse.muHeadersToJax;
+import static io.muserver.rest.JaxRSResponse.muHeadersToJaxObj;
 
 public class RestHandler implements MuHandler {
 
@@ -40,7 +38,7 @@ public class RestHandler implements MuHandler {
     }
 
     @Override
-    public boolean handle(MuRequest request, MuResponse response) throws Exception {
+    public boolean handle(MuRequest request, MuResponse muResponse) throws Exception {
         URI jaxURI = baseUri.relativize(URI.create(request.uri().getPath()));
         System.out.println("jaxURI = " + jaxURI);
         try {
@@ -72,10 +70,12 @@ public class RestHandler implements MuHandler {
             Object result = rm.invoke(params);
             System.out.println("result = " + result);
             ObjWithType obj = ObjWithType.objType(result);
+            writeHeadersToResponse(muResponse, obj.response);
+
 
             if (obj.entity == null) {
-                response.status(204);
-                response.headers().add(HeaderNames.CONTENT_LENGTH, 0);
+                muResponse.status(204);
+                muResponse.headers().set(HeaderNames.CONTENT_LENGTH, 0);
             } else {
 
                 Annotation[] annotations = new Annotation[0]; // TODO set this properly
@@ -83,22 +83,17 @@ public class RestHandler implements MuHandler {
                 MediaType responseMediaType = MediaTypeDeterminer.determine(obj, mm.resourceMethod.resourceClass.produces, mm.resourceMethod.directlyProduces, entityProviders.writers, request.headers().getAll(HeaderNames.ACCEPT));
                 MessageBodyWriter messageBodyWriter = entityProviders.selectWriter(obj.type, obj.genericType, annotations, responseMediaType);
 
-                response.status(obj.status());
-                MultivaluedHashMap<String, Object> responseHeaders = new MultivaluedHashMap<>();
+                muResponse.status(obj.status());
 
                 long size = messageBodyWriter.getSize(obj.entity, obj.type, obj.genericType, annotations, responseMediaType);
                 if (size > -1) {
-                    responseHeaders.putSingle(HeaderNames.CONTENT_LENGTH.toString(), size);
+                    muResponse.headers().set(HeaderNames.CONTENT_LENGTH.toString(), size);
                 }
 
-                for (String header : responseHeaders.keySet()) {
-                    response.headers().add(header, responseHeaders.get(header));
-                }
+                muResponse.headers().set(HeaderNames.CONTENT_TYPE, responseMediaType.toString());
 
-                response.headers().set(HeaderNames.CONTENT_TYPE, responseMediaType.toString());
-
-                try (OutputStream entityStream = response.outputStream()) {
-                    messageBodyWriter.writeTo(obj.entity, obj.type, obj.genericType, annotations, responseMediaType, responseHeaders, entityStream);
+                try (OutputStream entityStream = muResponse.outputStream()) {
+                    messageBodyWriter.writeTo(obj.entity, obj.type, obj.genericType, annotations, responseMediaType, muHeadersToJaxObj(muResponse.headers()), entityStream);
                 }
 
             }
@@ -111,20 +106,26 @@ public class RestHandler implements MuHandler {
                 e.printStackTrace();
             }
             Response r = e.getResponse();
-            response.status(r.getStatus());
-            response.contentType(ContentTypes.TEXT_PLAIN);
+            muResponse.status(r.getStatus());
+            muResponse.contentType(ContentTypes.TEXT_PLAIN);
             Response.StatusType statusInfo = r.getStatusInfo();
-            response.write(statusInfo.getStatusCode() + " " + statusInfo.getReasonPhrase());
+            muResponse.write(statusInfo.getStatusCode() + " " + statusInfo.getReasonPhrase());
         } catch (Exception ex) {
             try {
-                response.status(500);
+                muResponse.status(500);
             } catch (IllegalStateException ise) {
-                System.out.println("Tried to change the response code to 500 but it's already been written so the response will be sent as " + response.status());
+                System.out.println("Tried to change the response code to 500 but it's already been written so the response will be sent as " + muResponse.status());
             }
             System.out.println("Unexpected server error: " + ex);
             ex.printStackTrace();
         }
         return true;
+    }
+
+    private void writeHeadersToResponse(MuResponse muResponse, JaxRSResponse jaxResponse) {
+        if (jaxResponse != null) {
+            jaxResponse.writeToMuResponse(muResponse);
+        }
     }
 
     private static Object readRequestEntity(MuRequest request, String requestContentType, ResourceMethod rm, Parameter parameter, InputStream inputStream, EntityProviders entityProviders) throws java.io.IOException {

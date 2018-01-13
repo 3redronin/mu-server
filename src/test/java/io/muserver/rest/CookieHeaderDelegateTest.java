@@ -17,7 +17,7 @@ public class CookieHeaderDelegateTest {
     public void canRoundTrip() {
         Cookie clientCookie = new Cookie("Blah", "ha ha", "/what", "example.org");
         String headerValue = delegate.toString(clientCookie);
-        assertThat(headerValue, equalTo("Blah=ha+ha"));
+        assertThat(headerValue, equalTo("Blah=ha%20ha"));
 
         Cookie recreated = delegate.fromString(headerValue);
         assertThat(recreated.getName(), equalTo("Blah"));

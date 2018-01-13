@@ -3,29 +3,34 @@ package io.muserver.rest;
 
 import io.muserver.HeaderNames;
 import io.muserver.Headers;
+import io.muserver.MuResponse;
 
 import javax.ws.rs.core.*;
 import java.lang.annotation.Annotation;
 import java.net.URI;
 import java.util.*;
+import java.util.stream.Stream;
 
 import static java.util.Arrays.asList;
+import static java.util.stream.Collectors.toMap;
 
 class JaxRSResponse extends Response {
     static {
         MuRuntimeDelegate.ensureSet();
     }
 
-    final Headers headers;
+    private final Headers headers;
     private final StatusType status;
     private final Object entity;
     private final MediaType type;
+    private final NewCookie[] cookies;
 
-    JaxRSResponse(StatusType status, Headers headers, Object entity, MediaType type) {
+    JaxRSResponse(StatusType status, Headers headers, Object entity, MediaType type, NewCookie[] cookies) {
         this.status = status;
         this.headers = headers;
         this.entity = entity;
         this.type = type;
+        this.cookies = cookies;
     }
 
 
@@ -101,7 +106,7 @@ class JaxRSResponse extends Response {
 
     @Override
     public Map<String, NewCookie> getCookies() {
-        throw NotImplementedException.notYet();
+        return Stream.of(cookies).collect(toMap(Cookie::getName, c -> c));
     }
 
     @Override
@@ -153,13 +158,24 @@ class JaxRSResponse extends Response {
         return map;
     }
 
+    Headers getMuHeaders() {
+        return this.headers;
+    }
+
     @Override
     public MultivaluedMap<String, String> getStringHeaders() {
         return muHeadersToJax(headers);
     }
 
-    static MultivaluedMap<String, String> muHeadersToJax(Headers headers) {
+    static <T> MultivaluedMap<String, String> muHeadersToJax(Headers headers) {
         MultivaluedMap<String, String> map = new MultivaluedHashMap<>();
+        for (String name : headers.names()) {
+            map.addAll(name, headers.getAll(name));
+        }
+        return map;
+    }
+    static MultivaluedMap<String, Object> muHeadersToJaxObj(Headers headers) {
+        MultivaluedMap<String, Object> map = new MultivaluedHashMap<>();
         for (String name : headers.names()) {
             map.addAll(name, headers.getAll(name));
         }
@@ -169,6 +185,15 @@ class JaxRSResponse extends Response {
     @Override
     public String getHeaderString(String name) {
         return headers.get(name);
+    }
+
+    public void writeToMuResponse(MuResponse muResponse) {
+        muResponse.headers().add(this.headers);
+        if (cookies != null) {
+            for (NewCookie cookie : cookies) {
+                muResponse.headers().add(HeaderNames.SET_COOKIE, cookie.toString());
+            }
+        }
     }
 
     public static class Builder extends Response.ResponseBuilder {
@@ -194,7 +219,7 @@ class JaxRSResponse extends Response {
             if (type != null) {
                 headers.set(HeaderNames.CONTENT_TYPE, type.toString());
             }
-            return new JaxRSResponse(status, headers, entity, type);
+            return new JaxRSResponse(status, headers, entity, type, cookies);
         }
 
         @Override

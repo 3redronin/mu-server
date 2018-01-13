@@ -58,6 +58,7 @@ class ResourceClass {
             if (httpMethod == null) {
                 continue;
             }
+            restMethod.setAccessible(true);
             Path methodPath = annotationSource.getAnnotation(Path.class);
             UriPattern pathPattern = methodPath == null ? null : UriPattern.uriTemplateToRegex(methodPath.value());
 

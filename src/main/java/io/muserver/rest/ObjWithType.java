@@ -9,10 +9,10 @@ class ObjWithType {
 
     final Class type;
     final Type genericType;
-    final Response response;
+    final JaxRSResponse response;
     final Object entity;
 
-    private ObjWithType(Class type, Type genericType, Response response, Object entity) {
+    private ObjWithType(Class type, Type genericType, JaxRSResponse response, Object entity) {
         this.type = type;
         this.genericType = genericType;
         this.response = response;
@@ -36,9 +36,9 @@ class ObjWithType {
             return EMPTY;
         }
         Object entity;
-        Response response;
+        JaxRSResponse response;
         if (valueFromMethod instanceof Response) {
-            response = (Response)valueFromMethod;
+            response = (JaxRSResponse)valueFromMethod;
             entity = response.getEntity();
         } else {
             response = null;

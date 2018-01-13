@@ -16,6 +16,7 @@ import java.util.Set;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static io.muserver.Cookie.nettyToMu;
+import static java.util.Collections.emptySet;
 
 public interface MuRequest {
 
@@ -123,11 +124,11 @@ public interface MuRequest {
     Set<Cookie> cookies();
 
     /**
-     * Gets the client-sent cookie with the given name
+     * Gets the value of the client-sent cookie with the given name
      * @param name The name of the cookie
      * @return The cookie, or {@link Optional#empty()} if there is no cookie with that name.
      */
-    Optional<Cookie> cookie(String name);
+    Optional<String> cookie(String name);
 }
 
 class NettyRequestAdapter implements MuRequest {
@@ -253,17 +254,22 @@ class NettyRequestAdapter implements MuRequest {
     @Override
     public Set<Cookie> cookies() {
         if (this.cookies == null) {
-            this.cookies = nettyToMu(ServerCookieDecoder.STRICT.decode(headers().get(HeaderNames.COOKIE)));
+            String encoded = headers().get(HeaderNames.COOKIE);
+            if (encoded == null) {
+                this.cookies = emptySet();
+            } else {
+                this.cookies = nettyToMu(ServerCookieDecoder.STRICT.decode(encoded));
+            }
         }
         return this.cookies;
     }
 
     @Override
-    public Optional<Cookie> cookie(String name) {
+    public Optional<String> cookie(String name) {
         Set<Cookie> cookies = cookies();
         for (Cookie cookie : cookies) {
             if (cookie.name().equals(name)) {
-                return Optional.of(cookie);
+                return Optional.of(cookie.value());
             }
         }
         return Optional.empty();

@@ -15,7 +15,7 @@ public class NewCookieHeaderDelegateTest {
     public void canRoundTrip() {
         NewCookie newCookie = new NewCookie("Blah", "ha ha", "/what", "example.org", "Comments are ignored", 1234567, true, true);
         String headerValue = delegate.toString(newCookie);
-        assertThat(headerValue, startsWith("Blah=ha+ha; Max-Age=1234567; Expires="));
+        assertThat(headerValue, startsWith("Blah=ha%20ha; Max-Age=1234567; Expires="));
         assertThat(headerValue, endsWith("; Path=/what; Domain=example.org; Secure; HTTPOnly"));
         NewCookie recreated = delegate.fromString(headerValue);
         assertThat(recreated.getName(), equalTo("Blah"));

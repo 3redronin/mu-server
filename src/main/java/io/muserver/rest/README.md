@@ -45,16 +45,7 @@ Implemented, although Mu does not warn about mis-configured methods.
 
 #### 3.3.2 Parameters 
 
-Partially implemented. Not all ParamTypes yet supported. Encoded and Default not yet supported.
-Path: done
-PathParam: done
-QueryParam: not yet
-FormParam: not yet
-MatrixParam: not yet
-CookieParam: not yet
-HeaderParam: not yet
-
-
+Partially implemented. Only String types supported so far.
 
 #### 3.3.3 Return Type 
 

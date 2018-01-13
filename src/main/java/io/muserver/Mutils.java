@@ -17,7 +17,7 @@ public class Mutils {
      */
     public static String urlEncode(String value) {
         try {
-            return URLEncoder.encode(value, "UTF-8");
+            return URLEncoder.encode(value, "UTF-8").replace("+", "%20");
         } catch (UnsupportedEncodingException e) {
             throw new MuException("Error encoding " + value, e);
         }

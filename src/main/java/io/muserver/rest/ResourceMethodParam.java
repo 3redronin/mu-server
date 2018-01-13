@@ -12,6 +12,8 @@ import java.lang.reflect.Parameter;
 import java.lang.reflect.Type;
 import java.util.List;
 
+import static io.muserver.Mutils.urlEncode;
+
 abstract class ResourceMethodParam {
 
     final int index;
@@ -37,7 +39,7 @@ abstract class ResourceMethodParam {
             boolean encodedRequested = hasDeclared(parameterHandle, Encoded.class);
             ParamConverter<?> converter = getParamConverter(parameterHandle, paramConverterProviders);
             boolean lazyDefaultValue = converter.getClass().getDeclaredAnnotation(ParamConverter.Lazy.class) != null;
-            Object defaultValue = getDefaultValue(parameterHandle, converter, lazyDefaultValue);
+            Object defaultValue = getDefaultValue(parameterHandle, converter, lazyDefaultValue, encodedRequested);
             return new RequestBasedParam(index, source, parameterHandle, defaultValue, encodedRequested, lazyDefaultValue, converter);
         }
     }
@@ -69,17 +71,23 @@ abstract class ResourceMethodParam {
         }
 
         public Object defaultValue() {
-            return convertValue(parameterHandle, paramConverter, !lazyDefaultValue, defaultValue);
+            return convertValue(parameterHandle, paramConverter, !lazyDefaultValue, encodedRequested, defaultValue);
         }
 
         public Object getValue(MuRequest request, RequestMatcher.MatchedMethod matchedMethod) throws IOException {
-            return source == ValueSource.COOKIE_PARAM ? request.cookie(key).get().value() // TODO make request.cookie return a string and default it
+            String specifiedValue =
+                source == ValueSource.COOKIE_PARAM ? request.cookie(key).orElse("") // TODO make request.cookie return a string and default it
                 : source == ValueSource.HEADER_PARAM ? request.headers().get(key)
                 : source == ValueSource.MATRIX_PARAM ? "" // TODO support matrix params
                 : source == ValueSource.FORM_PARAM ? request.formValue(key)
                 : source == ValueSource.PATH_PARAM ? matchedMethod.pathParams.get(key)
                 : source == ValueSource.QUERY_PARAM ? request.parameter(key)
-                : "";
+                : null;
+            boolean isSpecified = specifiedValue != null && specifiedValue.length() > 0;
+            if (isSpecified && encodedRequested) {
+                specifiedValue = urlEncode(specifiedValue);
+            }
+            return isSpecified ? ResourceMethodParam.convertValue(parameterHandle, paramConverter, !lazyDefaultValue, encodedRequested, specifiedValue) : defaultValue();
         }
     }
 
@@ -124,15 +132,15 @@ abstract class ResourceMethodParam {
         throw new WebApplicationException("Could not find a suitable ParamConverter for " + paramType);
     }
 
-    private static Object getDefaultValue(Parameter parameterHandle, ParamConverter<?> converter, boolean lazyDefaultValue) {
+    private static Object getDefaultValue(Parameter parameterHandle, ParamConverter<?> converter, boolean lazyDefaultValue, boolean encodeRequested) {
         DefaultValue annotation = parameterHandle.getDeclaredAnnotation(DefaultValue.class);
         if (annotation == null) {
             return null;
         }
-        return convertValue(parameterHandle, converter, lazyDefaultValue, annotation.value());
+        return convertValue(parameterHandle, converter, lazyDefaultValue, encodeRequested, annotation.value());
     }
 
-    private static Object convertValue(Parameter parameterHandle, ParamConverter<?> converter, boolean skipConverter, Object value) {
+    private static Object convertValue(Parameter parameterHandle, ParamConverter<?> converter, boolean skipConverter, boolean encodeRequested, Object value) {
         if (converter == null || skipConverter) {
             return value;
         } else {
