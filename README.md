@@ -15,34 +15,42 @@ Experimental web server, very much under construction
 Mu-Server provides a simple implementation of the [JAX-RS 2.0 spec](http://download.oracle.com/otn-pub/jcp/jaxrs-2_0-fr-eval-spec/jsr339-jaxrs-2.0-final-spec.pdf), 
 which is a Java standard used to define REST resources.
 
-Implemented:
+Following the principle that you should be in charge of your own config and class instantiation, any parts
+of the spec dealing with reflection, dependency injection, config, or service discovery are not implemented.
+See the [rest/README.md](https://github.com/3redronin/mu-server/blob/master/rest/README.md) file for a full list of what is implemented from the spec.
 
-* Classes with the following attributes: `@Path`, `@GET`, `@POST`, `@DELETE`, `@PUT`, `@PATCH`
+Example REST resource class:
 
-Will implement:
+````java
+    @Path("api/fruits")
+    private static class Fruit {
 
-* Automatic handling of `HEAD` and `OPTIONS` HTTP methods as per `3.3.5` in the spec.
-* `@CookieParam`, `@Context`, `@PathParam`, `@QueryParam`, `@HeaderParam` on resource method parameters
-* `@Consumes` and `@Produces` annotations
-* `@DefaultValue` for method parameters
-* From `3.3.1`: "An implementation SHOULD warn users if a non-public method carries a method designator or @Path annotation"
-* Return a `400` when the request does not match the method params (`3.3.2`)
-* Returning `void` (with `204` response), `Response` (where `null` results in `204`), `GenericEntity`, and primitives from resource methods.
-* Exception handling as per `3.3.4` of the spec.
-* As per `3.4` of spec, do not re-encode already URL-encoded paths, i.e the following are equivalent:
-`@Path("widget list/{id}")` and `@Path("widget%20list/{id}")`
-* Allow paths such as `@Path("widgets/{path:.+}")` to match paths like `widgets/small/a`
+        @GET
+        public String getAll() {
+            return "[ { \"name\": \"apple\" }, { \"name\": \"orange\" } ]";
+        }
 
-May implement:
+        @GET
+        @Path("{name}")
+        public String get(@PathParam("name") String name) {
+            switch (name) {
+                case "apple":
+                    return "{ \"name\": \"apple\" }";
+                case "orange":
+                    return "{ \"name\": \"orange\" }";
+            }
+            return "not found";
+        }
+    }
+````
 
-* Matrix URL support (i.e. URLs that have semi-colon separators)
-* `@Encoded` to prevent URL decoding of querystring parameters etc
+A web server with this registered can be created like so:
 
-Will not implement:
+````java
+	MuServer server = MuServerBuilder.httpsServer()
+		.addHandler(RestHandlerBuilder.restHandler(new Fruit()).build())
+		.start();
+````
 
-* Configuration using the `Application` construct and related methods, such as `createEndpoint`.
-* Automatic instantiation of Resource classes (you can use the `new` keyword and pass dependencies into a constructor,
-or any other approach you wish).
-Note this implies that you must pass an instance of a Resource during mu-server creation, and the same instance is
-used for all requests (rather than a new instance being made per request, as per the spec).
-* Sub-resource locators
+Making a `GET` request to `server.uri().resolve("/api/fruits/orange")` in this case would return the JSON
+snippet corresponding to the Orange case.
