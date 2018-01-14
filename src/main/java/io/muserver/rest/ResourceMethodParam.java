@@ -39,7 +39,7 @@ abstract class ResourceMethodParam {
             boolean encodedRequested = hasDeclared(parameterHandle, Encoded.class);
             ParamConverter<?> converter = getParamConverter(parameterHandle, paramConverterProviders);
             boolean lazyDefaultValue = converter.getClass().getDeclaredAnnotation(ParamConverter.Lazy.class) != null;
-            Object defaultValue = getDefaultValue(parameterHandle, converter, lazyDefaultValue, encodedRequested);
+            Object defaultValue = getDefaultValue(parameterHandle, converter, lazyDefaultValue);
             return new RequestBasedParam(index, source, parameterHandle, defaultValue, encodedRequested, lazyDefaultValue, converter);
         }
     }
@@ -71,7 +71,7 @@ abstract class ResourceMethodParam {
         }
 
         public Object defaultValue() {
-            return convertValue(parameterHandle, paramConverter, !lazyDefaultValue, encodedRequested, defaultValue);
+            return convertValue(parameterHandle, paramConverter, !lazyDefaultValue, defaultValue);
         }
 
         public Object getValue(MuRequest request, RequestMatcher.MatchedMethod matchedMethod) throws IOException {
@@ -87,7 +87,7 @@ abstract class ResourceMethodParam {
             if (isSpecified && encodedRequested) {
                 specifiedValue = urlEncode(specifiedValue);
             }
-            return isSpecified ? ResourceMethodParam.convertValue(parameterHandle, paramConverter, !lazyDefaultValue, encodedRequested, specifiedValue) : defaultValue();
+            return isSpecified ? ResourceMethodParam.convertValue(parameterHandle, paramConverter, false, specifiedValue) : defaultValue();
         }
     }
 
@@ -132,20 +132,23 @@ abstract class ResourceMethodParam {
         throw new WebApplicationException("Could not find a suitable ParamConverter for " + paramType);
     }
 
-    private static Object getDefaultValue(Parameter parameterHandle, ParamConverter<?> converter, boolean lazyDefaultValue, boolean encodeRequested) {
+    private static Object getDefaultValue(Parameter parameterHandle, ParamConverter<?> converter, boolean lazyDefaultValue) {
         DefaultValue annotation = parameterHandle.getDeclaredAnnotation(DefaultValue.class);
         if (annotation == null) {
-            return null;
+            return converter instanceof HasDefaultValue ? ((HasDefaultValue) converter).getDefault() : null;
         }
-        return convertValue(parameterHandle, converter, lazyDefaultValue, encodeRequested, annotation.value());
+        return convertValue(parameterHandle, converter, lazyDefaultValue, annotation.value());
     }
 
-    private static Object convertValue(Parameter parameterHandle, ParamConverter<?> converter, boolean skipConverter, boolean encodeRequested, Object value) {
+    private static Object convertValue(Parameter parameterHandle, ParamConverter<?> converter, boolean skipConverter, Object value) {
         if (converter == null || skipConverter) {
             return value;
         } else {
             try {
-                return converter.fromString((String)value);
+                String valueAsString = (String) value;
+                return converter instanceof HasDefaultValue && valueAsString.isEmpty()
+                    ? ((HasDefaultValue) converter).getDefault()
+                    : converter.fromString(valueAsString);
             } catch (Exception e) {
                 throw new WebApplicationException("Could not convert String value \"" + value + "\" to a " + parameterHandle.getType() + " using " + converter + " on parameter " + parameterHandle, e);
             }
@@ -154,6 +157,10 @@ abstract class ResourceMethodParam {
 
     enum ValueSource {
         MESSAGE_BODY, QUERY_PARAM, MATRIX_PARAM, PATH_PARAM, COOKIE_PARAM, HEADER_PARAM, FORM_PARAM, CONTEXT
+    }
+
+    interface HasDefaultValue {
+        Object getDefault();
     }
 
 }

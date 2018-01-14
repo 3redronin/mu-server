@@ -85,8 +85,116 @@ public class ResourceMethodParamTest {
         try (Response resp = call(request().url(server.uri().resolve("/samples?one=some%20thing%2F&three=some%20thing%2F").toString()))) {
             assertThat(resp.body().string(), equalTo("some thing/ / Some default / some%20thing%2F"));
         }
+    }
 
 
+    @Test
+    public void canConvertPrimitives() throws IOException {
+        @Path("samples")
+        class Sample {
+            @GET
+            public String getIt(
+                @QueryParam("bitey") byte bitey,
+                @QueryParam("shorty") short shorty,
+                @QueryParam("inty") int inty,
+                @QueryParam("long") long davidLongy,
+                @QueryParam("floater") float floater,
+                @QueryParam("doubleedoo") double doubleedoo,
+                @QueryParam("charred") char charred,
+                @QueryParam("boolyeah") boolean boolyeah) {
+                return bitey + " / " + shorty + " / " + inty + " / " + davidLongy + " / " + floater + " / " + doubleedoo + " / " + (charred == 0 ? '0' : charred) + " / " + boolyeah;
+            }
+        }
+        server = httpsServer().addHandler(RestHandlerBuilder.create(new Sample())).start();
+        try (Response resp = call(request().url(server.uri().resolve("/samples?bitey=127&shorty=1&inty=-10&long=2183748372&floater=123.34&doubleedoo=8753.1234&charred=C&boolyeah=true").toString()))) {
+            assertThat(resp.body().string(), equalTo("127 / 1 / -10 / 2183748372 / 123.34 / 8753.1234 / C / true"));
+        }
+        try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
+            assertThat(resp.body().string(), equalTo("0 / 0 / 0 / 0 / 0.0 / 0.0 / 0 / false"));
+        }
+    }
+
+
+    @Test
+    public void primitiveDefaultsCanBeSpecified() throws IOException {
+        @Path("samples")
+        class Sample {
+            @GET
+            public String getIt(
+                @DefaultValue("1") @QueryParam("bitey") byte bitey,
+                @DefaultValue("2") @QueryParam("shorty") short shorty,
+                @DefaultValue("3") @QueryParam("inty") int inty,
+                @DefaultValue("4") @QueryParam("long") long davidLongy,
+                @DefaultValue("5.5") @QueryParam("floater") float floater,
+                @DefaultValue("6.6") @QueryParam("doubleedoo") double doubleedoo,
+                @DefaultValue("d") @QueryParam("charred") char charred,
+                @DefaultValue("true") @QueryParam("boolyeah") boolean boolyeah) {
+                return bitey + " / " + shorty + " / " + inty + " / " + davidLongy + " / " + floater + " / " + doubleedoo + " / " + (charred == 0 ? '0' : charred) + " / " + boolyeah;
+            }
+        }
+        server = httpsServer().addHandler(RestHandlerBuilder.create(new Sample())).start();
+        try (Response resp = call(request().url(server.uri().resolve("/samples?bitey=127&shorty=1&inty=-10&long=2183748372&floater=123.34&doubleedoo=8753.1234&charred=C&boolyeah=true").toString()))) {
+            assertThat(resp.body().string(), equalTo("127 / 1 / -10 / 2183748372 / 123.34 / 8753.1234 / C / true"));
+        }
+        try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
+            assertThat(resp.body().string(), equalTo("1 / 2 / 3 / 4 / 5.5 / 6.6 / d / true"));
+        }
+    }
+
+    @Test
+    public void canConvertBoxed() throws IOException {
+
+        @Path("samples")
+        class Sample {
+            @GET
+            public String getIt(
+                @QueryParam("bitey") Byte bitey,
+                @QueryParam("shorty") Short shorty,
+                @QueryParam("inty") Integer inty,
+                @QueryParam("long") Long davidLongy,
+                @QueryParam("floater") Float floater,
+                @QueryParam("doubleedoo") Double doubleedoo,
+                @QueryParam("charred") Character charred,
+                @QueryParam("boolyeah") Boolean boolyeah) {
+                return bitey + " / " + shorty + " / " + inty + " / " + davidLongy + " / " + floater + " / " + doubleedoo + " / " + charred + " / " + boolyeah;
+            }
+        }
+        server = httpsServer().addHandler(RestHandlerBuilder.create(new Sample())).start();
+        try (Response resp = call(request().url(server.uri().resolve("/samples?bitey=127&shorty=1&inty=-10&long=2183748372&floater=123.34&doubleedoo=8753.1234&charred=C&boolyeah=true").toString()))) {
+            assertThat(resp.body().string(), equalTo("127 / 1 / -10 / 2183748372 / 123.34 / 8753.1234 / C / true"));
+        }
+
+        try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
+            assertThat(resp.body().string(), equalTo("null / null / null / null / null / null / null / null"));
+        }
+
+    }
+
+
+    @Test
+    public void boxedPrimitiveDefaultsCanBeSpecified() throws IOException {
+        @Path("samples")
+        class Sample {
+            @GET
+            public String getIt(
+                @DefaultValue("1") @QueryParam("bitey") Byte bitey,
+                @DefaultValue("2") @QueryParam("shorty") Short shorty,
+                @DefaultValue("3") @QueryParam("inty") Integer inty,
+                @DefaultValue("4") @QueryParam("long") Long davidLongy,
+                @DefaultValue("5.5") @QueryParam("floater") Float floater,
+                @DefaultValue("6.6") @QueryParam("doubleedoo") Double doubleedoo,
+                @DefaultValue("d") @QueryParam("charred") Character charred,
+                @DefaultValue("true") @QueryParam("boolyeah") Boolean boolyeah) {
+                return bitey + " / " + shorty + " / " + inty + " / " + davidLongy + " / " + floater + " / " + doubleedoo + " / " + (charred == 0 ? '0' : charred) + " / " + boolyeah;
+            }
+        }
+        server = httpsServer().addHandler(RestHandlerBuilder.create(new Sample())).start();
+        try (Response resp = call(request().url(server.uri().resolve("/samples?bitey=127&shorty=1&inty=-10&long=2183748372&floater=123.34&doubleedoo=8753.1234&charred=C&boolyeah=true").toString()))) {
+            assertThat(resp.body().string(), equalTo("127 / 1 / -10 / 2183748372 / 123.34 / 8753.1234 / C / true"));
+        }
+        try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
+            assertThat(resp.body().string(), equalTo("1 / 2 / 3 / 4 / 5.5 / 6.6 / d / true"));
+        }
     }
 
     @Test
@@ -101,7 +209,7 @@ public class ResourceMethodParamTest {
         }
         server = httpsServer().addHandler(RestHandlerBuilder.create(new Sample())).start();
         try (Response resp = call(request().url(server.uri().resolve("/samples").toString())
-        .post(new FormBody.Builder().add("someThing", "Is here").build())
+            .post(new FormBody.Builder().add("someThing", "Is here").build())
         )) {
             assertThat(resp.body().string(), equalTo("Is here / Ah hah"));
         }

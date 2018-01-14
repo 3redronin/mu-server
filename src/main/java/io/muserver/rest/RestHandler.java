@@ -3,10 +3,13 @@ package io.muserver.rest;
 import io.muserver.*;
 
 import javax.ws.rs.*;
-import javax.ws.rs.core.*;
+import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.NoContentException;
+import javax.ws.rs.core.Response;
 import javax.ws.rs.ext.MessageBodyReader;
 import javax.ws.rs.ext.MessageBodyWriter;
 import javax.ws.rs.ext.ParamConverterProvider;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.annotation.Annotation;
@@ -53,11 +56,12 @@ public class RestHandler implements MuHandler {
                 if (param.source == ResourceMethodParam.ValueSource.MESSAGE_BODY) {
                     Optional<InputStream> inputStream = request.inputStream();
                     if (inputStream.isPresent()) {
-                        paramValue = readRequestEntity(request, requestContentType, rm, param.parameterHandle, inputStream.get(), entityProviders);
+                        paramValue = readRequestEntity(request, requestContentType, rm, param.parameterHandle, inputStream.orElse(EmptyInputStream.INSTANCE), entityProviders);
                     } else {
                         // TODO: supply default values
-                        throw new BadRequestException("No request body was sent to the " + param.parameterHandle.getName() + " parameter of " + rm.methodHandle
-                            + " - if this should be optional then specify an @DefaultValue annotation on the parameter");
+                        throw new BadRequestException("No request body was sent to the " + param.parameterHandle.getName()
+                            + " parameter of the resource method \"" + rm.methodHandle + "\" "
+                            + "- if this should be optional then specify an @DefaultValue annotation on the parameter");
                     }
                 } else if (param.source == ResourceMethodParam.ValueSource.CONTEXT) {
 
@@ -109,7 +113,7 @@ public class RestHandler implements MuHandler {
             muResponse.status(r.getStatus());
             muResponse.contentType(ContentTypes.TEXT_PLAIN);
             Response.StatusType statusInfo = r.getStatusInfo();
-            muResponse.write(statusInfo.getStatusCode() + " " + statusInfo.getReasonPhrase());
+            muResponse.write(statusInfo.getStatusCode() + " " + statusInfo.getReasonPhrase() + " - " + e.getMessage());
         } catch (Exception ex) {
             try {
                 muResponse.status(500);
@@ -148,7 +152,7 @@ public class RestHandler implements MuHandler {
             return messageBodyReader.readFrom(type, genericType, annotations, requestBodyMediaType, muHeadersToJax(request.headers()), inputStream);
         } catch (NoContentException nce) {
             throw new BadRequestException("No request body was sent to the " + parameter.getName() + " parameter of " + rm.methodHandle
-                + " - if this should be optional then specify an @DefaultValue annotation on the parameter",  nce);
+                + " - if this should be optional then specify an @DefaultValue annotation on the parameter", nce);
         }
     }
 
@@ -159,6 +163,14 @@ public class RestHandler implements MuHandler {
             return mm.pathParams.get(paramName);
         }
         return null;
+    }
+
+    private static class EmptyInputStream extends InputStream {
+        private static final InputStream INSTANCE = new EmptyInputStream();
+        private EmptyInputStream() {}
+        public int read() throws IOException {
+            return -1;
+        }
     }
 
 }

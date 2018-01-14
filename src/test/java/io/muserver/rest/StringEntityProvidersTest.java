@@ -19,6 +19,7 @@ import java.io.Reader;
 
 import static java.util.stream.Collectors.toList;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
@@ -150,7 +151,7 @@ public class StringEntityProvidersTest {
             .url(server.uri().resolve("/samples").toString())
         )) {
             assertThat(resp.code(), equalTo(400));
-            assertThat(resp.body().string(), equalTo("400 Bad Request"));
+            assertThat(resp.body().string(), containsString("400 Bad Request"));
         }
 
     }
