@@ -11,6 +11,8 @@ import javax.ws.rs.ext.ParamConverterProvider;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
+import java.util.SortedSet;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -371,6 +373,53 @@ public class ResourceMethodParamTest {
         server = httpsServer().addHandler(RestHandlerBuilder.create(new Dogs())).start();
         try (Response resp = call(request().url(server.uri().resolve("/dogs?dogValue=Little,Chihuahua").toString()))) {
             assertThat(resp.body().string(), equalTo("Chihuahua - Little / null / Twinkle - Pinkle"));
+        }
+    }
+
+
+    static class Cat implements Comparable<Cat> {
+        final String name;
+        public Cat(String name) {
+            this.name = name;
+        }
+        @Override
+        public int compareTo(Cat o) {
+            return name.compareTo(o.name);
+        }
+    }
+
+    @Test
+    public void collectionsWork() throws IOException {
+        @Path("cats")
+        class Cats {
+            @GET
+            @Path("list")
+            public String getList(
+                @QueryParam("cats") List<Cat> cats) {
+                return cats.stream().map(d -> d.name).collect(Collectors.joining(", "));
+            }
+            @GET
+            @Path("set")
+            public String getSet(
+                @QueryParam("cats") Set<Cat> cats) {
+                return cats.stream().map(d -> d.name).sorted().collect(Collectors.joining(", "));
+            }
+            @GET
+            @Path("sortedSet")
+            public String getSortedSet(
+                @QueryParam("cats") SortedSet<Cat> cats) {
+                return cats.stream().map(d -> d.name).collect(Collectors.joining(", "));
+            }
+        }
+        server = httpsServer().addHandler(RestHandlerBuilder.create(new Cats())).start();
+        try (Response resp = call(request().url(server.uri().resolve("/cats/list?cats=Little&cats=Twinkle").toString()))) {
+            assertThat(resp.body().string(), equalTo("Little, Twinkle"));
+        }
+        try (Response resp = call(request().url(server.uri().resolve("/cats/set?cats=Twinkle&cats=Little").toString()))) {
+            assertThat(resp.body().string(), equalTo("Little, Twinkle"));
+        }
+        try (Response resp = call(request().url(server.uri().resolve("/cats/sortedSet?cats=Twinkle&cats=Little").toString()))) {
+            assertThat(resp.body().string(), equalTo("Little, Twinkle"));
         }
     }
 

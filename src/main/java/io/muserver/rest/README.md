@@ -54,7 +54,7 @@ N/A Not applicable as only singletons supported
 - [x] Static fromString method objects
 - [x] Static valueOf method objects
 - [x] Single-string constructor objects
-- [ ] `List<T>`, `Set<T>`, and `SortedSet<T>` for values satisfying above 3 cases. 
+- [x] `List<T>`, `Set<T>`, and `SortedSet<T>` for values satisfying above 3 cases. 
 
 #### 3.3.3 Return Type 
 

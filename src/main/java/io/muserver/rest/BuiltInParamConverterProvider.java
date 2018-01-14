@@ -1,14 +1,15 @@
 package io.muserver.rest;
 
+import javax.ws.rs.InternalServerErrorException;
 import javax.ws.rs.ext.ParamConverter;
 import javax.ws.rs.ext.ParamConverterProvider;
 import java.lang.annotation.Annotation;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
-import java.lang.reflect.Type;
-import java.util.List;
+import java.lang.reflect.*;
+import java.util.*;
 import java.util.function.Function;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static java.util.Arrays.asList;
 
@@ -47,6 +48,8 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
 
     @Override
     public <T> ParamConverter getConverter(Class<T> rawType, Type genericType, Annotation[] annotations) {
+
+
         if (String.class.isAssignableFrom(rawType)) {
             return stringParamConverter;
         }
@@ -71,9 +74,61 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
         if (smc != null) {
             return smc;
         }
+
+        if (Collection.class.isAssignableFrom(rawType) && genericType instanceof ParameterizedType) {
+            Type type = ((ParameterizedType) genericType).getActualTypeArguments()[0];
+            if (type instanceof Class) {
+                Class genericClass = (Class) type;
+                ParamConverter genericTypeConverter = getConverter(genericClass, type, annotations);
+                if (genericTypeConverter != null) {
+                    CollectionConverter collectionConverter = CollectionConverter.create(rawType, genericClass, genericTypeConverter);
+                    if (collectionConverter != null) {
+                        return collectionConverter;
+                    }
+                }
+            }
+        }
         return null;
     }
 
+    private static class CollectionConverter implements ParamConverter {
+        private final ParamConverter genericTypeConverter;
+        private final Supplier collectionSupplier;
+        private CollectionConverter(ParamConverter genericTypeConverter, Supplier collectionSupplier) {
+            this.genericTypeConverter = genericTypeConverter;
+            this.collectionSupplier = collectionSupplier;
+        }
+        public Object fromString(String value) {
+            Collection values = (Collection)collectionSupplier.get();
+            String[] parts = value.split(",");
+            Stream.of(parts).map(v -> genericTypeConverter.fromString(v))
+                .forEach(values::add);
+            return values;
+        }
+        public String toString(Object value) {
+            Collection<?> collection = (Collection) value;
+            return collection.stream().map(genericTypeConverter::toString).collect(Collectors.joining(""));
+        }
+        public static CollectionConverter create(Class collectionType, Class genericClass, ParamConverter genericTypeConverter) {
+            Supplier supplier;
+            if (SortedSet.class.equals(collectionType)) {
+                if (!Comparable.class.isAssignableFrom(genericClass)) {
+                    throw new InternalServerErrorException("The class " + genericClass + " does not implement Comparable so cannot be used in a SortedSet");
+                }
+                supplier = TreeSet::new;
+            } else if (Set.class.equals(collectionType)) {
+                supplier = HashSet::new;
+            } else if (List.class.equals(collectionType)) {
+                supplier = ArrayList::new;
+            } else {
+                return null;
+            }
+            return new CollectionConverter(genericTypeConverter, supplier);
+        }
+        public String toString() {
+            return "CollectionConverter<" + genericTypeConverter + '>';
+        }
+    }
 
     private static class BoxedPrimitiveConverter<T> implements ParamConverter<T> {
         private final Class<T> boxedClass;
