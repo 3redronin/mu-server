@@ -51,9 +51,9 @@ N/A Not applicable as only singletons supported
 - [x] String parameters
 - [x] Primitives and boxed primitives
 - [x] Enums
-- [ ] Static fromString method objects
-- [ ] Static valueOf method objects
-- [ ] Single-string constructor objects
+- [x] Static fromString method objects
+- [x] Static valueOf method objects
+- [x] Single-string constructor objects
 - [ ] `List<T>`, `Set<T>`, and `SortedSet<T>` for values satisfying above 3 cases. 
 
 #### 3.3.3 Return Type 

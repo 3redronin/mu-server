@@ -254,6 +254,126 @@ public class ResourceMethodParamTest {
         }
     }
 
+    @SuppressWarnings("unused")
+    private static class DogWithValueOf {
+        final String name;
+        final String breed;
+        DogWithValueOf(String value) {
+            throw new RuntimeException("Not called because not public");
+        }
+
+        private DogWithValueOf(String name, String breed) {
+            this.name = name;
+            this.breed = breed;
+        }
+        public static DogWithValueOf fromString(String dummy) {
+            throw new RuntimeException("valueOf should be preferred");
+        }
+        public static DogWithValueOf valueOf(String value) {
+            return new DogWithValueOf(value.split(",")[0], value.split(",")[1]);
+        }
+        public String toString() {
+            return this.breed + " - " + this.name;
+        }
+    }
+
+    @Test
+    public void staticValueOfMethodCanBeUsed() throws IOException {
+        @Path("dogs")
+        class Dogs {
+            @GET
+            public String getIt(
+                @QueryParam("dogValue") DogWithValueOf dog,
+                @QueryParam("noDawg") DogWithValueOf dog2,
+                @DefaultValue("Pinkle,Twinkle") @QueryParam("defaultDog") DogWithValueOf dog3) {
+                return dog + " / " + dog2 + " / " + dog3;
+            }
+        }
+        server = httpsServer().addHandler(RestHandlerBuilder.create(new Dogs())).start();
+        try (Response resp = call(request().url(server.uri().resolve("/dogs?dogValue=Little,Chihuahua").toString()))) {
+            assertThat(resp.body().string(), equalTo("Chihuahua - Little / null / Twinkle - Pinkle"));
+        }
+    }
+
+
+    @SuppressWarnings("unused")
+    private static class DogWithFromString {
+        final String name;
+        final String breed;
+        DogWithFromString(String value) {
+            throw new RuntimeException("Not called because not public");
+        }
+        private DogWithFromString(String name, String breed) {
+            this.name = name;
+            this.breed = breed;
+        }
+        public static DogWithFromString fromString(String value) {
+            return new DogWithFromString(value.split(",")[0], value.split(",")[1]);
+        }
+        public String valueOf(String dummy) {
+            throw new RuntimeException("This should not be called because it does not return the correct type");
+        }
+        public String toString() {
+            return this.breed + " - " + this.name;
+        }
+    }
+
+    @Test
+    public void staticFromStringMethodCanBeUsed() throws IOException {
+        @Path("dogs")
+        class Dogs {
+            @GET
+            public String getIt(
+                @QueryParam("dogValue") DogWithFromString dog,
+                @QueryParam("noDawg") DogWithFromString dog2,
+                @DefaultValue("Pinkle,Twinkle") @QueryParam("defaultDog") DogWithFromString dog3) {
+                return dog + " / " + dog2 + " / " + dog3;
+            }
+        }
+        server = httpsServer().addHandler(RestHandlerBuilder.create(new Dogs())).start();
+        try (Response resp = call(request().url(server.uri().resolve("/dogs?dogValue=Little,Chihuahua").toString()))) {
+            assertThat(resp.body().string(), equalTo("Chihuahua - Little / null / Twinkle - Pinkle"));
+        }
+    }
+
+
+    @SuppressWarnings("unused")
+    private static class DogWithConstructor {
+        final String name;
+        final String breed;
+        public DogWithConstructor(String value) {
+            this.name = value.split(",")[0];
+            this.breed = value.split(",")[1];
+        }
+        public static DogWithConstructor fromString(String dummy) {
+            throw new RuntimeException("Constructor should be preferred");
+        }
+        public static DogWithConstructor valueOf(String value) {
+            throw new RuntimeException("Constructor should be preferred");
+        }
+        public String toString() {
+            return this.breed + " - " + this.name;
+        }
+    }
+
+    @Test
+    public void singleStringConstructorsWork() throws IOException {
+        @Path("dogs")
+        class Dogs {
+            @GET
+            public String getIt(
+                @QueryParam("dogValue") DogWithConstructor dog,
+                @QueryParam("noDawg") DogWithConstructor dog2,
+                @DefaultValue("Pinkle,Twinkle") @QueryParam("defaultDog") DogWithConstructor dog3) {
+                return dog + " / " + dog2 + " / " + dog3;
+            }
+        }
+        server = httpsServer().addHandler(RestHandlerBuilder.create(new Dogs())).start();
+        try (Response resp = call(request().url(server.uri().resolve("/dogs?dogValue=Little,Chihuahua").toString()))) {
+            assertThat(resp.body().string(), equalTo("Chihuahua - Little / null / Twinkle - Pinkle"));
+        }
+    }
+
     @After
     public void stop() {
         if (server != null) server.stop();
