@@ -150,7 +150,7 @@ abstract class ResourceMethodParam {
                     ? ((HasDefaultValue) converter).getDefault()
                     : converter.fromString(valueAsString);
             } catch (Exception e) {
-                throw new WebApplicationException("Could not convert String value \"" + value + "\" to a " + parameterHandle.getType() + " using " + converter + " on parameter " + parameterHandle, e);
+                throw new BadRequestException("Could not convert String value \"" + value + "\" to a " + parameterHandle.getType() + " using " + converter + " on parameter " + parameterHandle, e);
             }
         }
     }

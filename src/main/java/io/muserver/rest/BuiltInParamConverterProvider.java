@@ -57,6 +57,9 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
                 return converter;
             }
         }
+        if (rawType.isEnum()) {
+            return new EnumConverter(rawType);
+        }
         return null;
     }
 
@@ -111,6 +114,30 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
         @Override
         public String toString() {
             return primitiveClass.getSimpleName() + " param converter";
+        }
+    }
+
+    private static class EnumConverter<E extends Enum<E>>  implements ParamConverter<E> {
+
+        private final Class<E> enumClass;
+
+        private EnumConverter(Class<E> enumClass) {
+            this.enumClass = enumClass;
+        }
+
+        @Override
+        public E fromString(String value) {
+            return Enum.valueOf(enumClass, value);
+        }
+
+        @Override
+        public String toString(E value) {
+            return value.name();
+        }
+
+        @Override
+        public String toString() {
+            return enumClass.getSimpleName() + " converter";
         }
     }
 

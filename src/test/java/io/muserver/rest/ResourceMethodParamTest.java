@@ -199,7 +199,6 @@ public class ResourceMethodParamTest {
 
     @Test
     public void canGetStuffFromTheForm() throws IOException {
-
         @Path("samples")
         class Sample {
             @POST
@@ -213,7 +212,46 @@ public class ResourceMethodParamTest {
         )) {
             assertThat(resp.body().string(), equalTo("Is here / Ah hah"));
         }
+    }
 
+    @SuppressWarnings("unused")
+    enum Breed {
+        CHIHUAHUA, BIG_HAIRY, YELPER
+    }
+
+    @Test
+    public void enumsCanBeUsed() throws IOException {
+        @Path("samples")
+        class Sample {
+            @GET
+            public String getIt(
+                @QueryParam("breedOne") Breed breed1,
+                @QueryParam("breedTwo") Breed breed2,
+                @DefaultValue("BIG_HAIRY") @QueryParam("breedThree") Breed breed3) {
+                return breed1 + " / " + breed2 + " / " + breed3;
+            }
+
+            @GET
+            @Path("headers")
+            public String getItFromHeaders(
+                @HeaderParam("breedOne") Breed breed1,
+                @HeaderParam("breedTwo") Breed breed2,
+                @DefaultValue("BIG_HAIRY") @HeaderParam("breedThree") Breed breed3) {
+                return breed1 + " / " + breed2 + " / " + breed3;
+            }
+        }
+        server = httpsServer().addHandler(RestHandlerBuilder.create(new Sample())).start();
+        try (Response resp = call(request().url(server.uri().resolve("/samples?breedOne=CHIHUAHUA").toString()))) {
+            assertThat(resp.body().string(), equalTo("CHIHUAHUA / null / BIG_HAIRY"));
+        }
+        try (Response resp = call(request().url(server.uri().resolve("/samples/headers").toString())
+            .header("breedOne", Breed.CHIHUAHUA.name()))) {
+            assertThat(resp.body().string(), equalTo("CHIHUAHUA / null / BIG_HAIRY"));
+        }
+        try (Response resp = call(request().url(server.uri().resolve("/samples?breedOne=BAD_DOG").toString()))) {
+            assertThat(resp.code(), is(400));
+            assertThat(resp.body().string(), startsWith("400 Bad Request - Could not convert String value \"BAD_DOG\" to a"));
+        }
     }
 
     @After

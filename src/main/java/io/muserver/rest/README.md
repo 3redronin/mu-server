@@ -23,16 +23,17 @@ configration, Mu-Server only supports singletons, so any constructors or fields 
 
 #### 3.1.1 Lifecycle and Environment 
 
-- [x] Only singletons will ever be supported.
+- [x] Singletons where lifecycle is handled by the user
+- [ ] Per request resources will never be implemented
 
 #### 3.1.2 Constructors 
 
-- [x] There are no restrictions or requirements around constructors of your resources, as you instantiate your own
+N/A There are no restrictions or requirements around constructors of your resources, as you instantiate your own
 resource instances.
 
 ### 3.2 Fields and Bean Properties 
 
-- [x] Not applicable as only singletons supported
+N/A Not applicable as only singletons supported
 
 ### 3.3 Resource Methods 
 
@@ -49,10 +50,11 @@ resource instances.
 
 - [x] String parameters
 - [x] Primitives and boxed primitives
-- [ ] Enums
+- [x] Enums
 - [ ] Static fromString method objects
-- [ ] Single-single constructor objects
-- [ ] Collections
+- [ ] Static valueOf method objects
+- [ ] Single-string constructor objects
+- [ ] `List<T>`, `Set<T>`, and `SortedSet<T>` for values satisfying above 3 cases. 
 
 #### 3.3.3 Return Type 
 
@@ -116,7 +118,7 @@ resource instances.
 
 #### 4.1.1 Automatic Discovery 
 
-This will never be implemented. Users should explicitly and programmatically specify any providers using
+N/A. This will never be implemented. Users should explicitly and programmatically specify any providers using
 the `io.muserver.rest.RestHandlerBuilder` class.
 
 #### 4.1.2 Constructors 
