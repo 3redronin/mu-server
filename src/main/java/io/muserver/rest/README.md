@@ -302,7 +302,7 @@ N/A
 
 #### 9.2.1 Application 
 
-N/A. Will not implement, as there is no support for `Application`.
+- [ ] N/A. Will not implement, as there is no support for `Application`.
 
 #### 9.2.2 URIs and URI Templates 
 
