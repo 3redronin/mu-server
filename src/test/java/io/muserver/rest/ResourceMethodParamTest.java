@@ -257,7 +257,7 @@ public class ResourceMethodParamTest {
     }
 
     @SuppressWarnings("unused")
-    private static class DogWithValueOf {
+    public static class DogWithValueOf {
         final String name;
         final String breed;
         DogWithValueOf(String value) {
@@ -272,6 +272,7 @@ public class ResourceMethodParamTest {
             throw new RuntimeException("valueOf should be preferred");
         }
         public static DogWithValueOf valueOf(String value) {
+            System.out.println("DogWithValueOf.valueOf called with " + value);
             return new DogWithValueOf(value.split(",")[0], value.split(",")[1]);
         }
         public String toString() {
@@ -299,7 +300,7 @@ public class ResourceMethodParamTest {
 
 
     @SuppressWarnings("unused")
-    private static class DogWithFromString {
+    public static class DogWithFromString {
         final String name;
         final String breed;
         DogWithFromString(String value) {
@@ -340,7 +341,7 @@ public class ResourceMethodParamTest {
 
 
     @SuppressWarnings("unused")
-    private static class DogWithConstructor {
+    public static class DogWithConstructor {
         final String name;
         final String breed;
         public DogWithConstructor(String value) {
