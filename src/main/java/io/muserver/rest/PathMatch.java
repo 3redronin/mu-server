@@ -53,4 +53,12 @@ public class PathMatch {
         String group = matcher.group(matcher.groupCount());
         return "/".equals(group) ? null : group;
     }
+
+    @Override
+    public String toString() {
+        return "PathMatch{" +
+            "matches=" + matches +
+            ", params=" + params +
+            '}';
+    }
 }

@@ -1,5 +1,6 @@
 package io.muserver;
 
+import io.muserver.handlers.ResourceType;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelInitializer;
@@ -12,12 +13,10 @@ import io.netty.handler.codec.http.HttpResponseEncoder;
 import io.netty.handler.ssl.ClientAuth;
 import io.netty.handler.ssl.JdkSslContext;
 import io.netty.util.Attribute;
-import io.muserver.handlers.ResourceType;
 
 import javax.net.ssl.SSLContext;
 import java.net.InetSocketAddress;
 import java.net.URI;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;

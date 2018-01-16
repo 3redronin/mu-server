@@ -80,19 +80,14 @@ public class UriPattern {
 
         StringBuilder regex = new StringBuilder();
         int numberOfLiterals = 0;
-        System.out.println("template = " + template + " - " + template.length());
         int curIndex = 0;
         int loop = 0;
         while (curIndex < template.length()) {
             loop++;
             int startRegex = template.indexOf('{', curIndex);
-            System.out.println("Loop " + loop + " - curIndex=" + curIndex + " and startRegex=" + startRegex);
             if (startRegex != curIndex) {
                 int endIndex = startRegex == -1 ? template.length() : startRegex;
                 String literal = template.substring(curIndex, endIndex);
-                System.out.println(" * literal = " + literal);
-
-
                 numberOfLiterals += literal.length();
                 if (literal.equals("/")) {
                     regex.append('/');
@@ -116,7 +111,6 @@ public class UriPattern {
                 }
                 endOfRegex++;
                 String bit = template.substring(curIndex, endOfRegex);
-                System.out.println(" * bit = " + bit);
                 String groupName = bit.substring(1, bit.length() - 1).trim();
                 String groupRegex;
                 if (groupName.contains(":")) {
@@ -134,7 +128,6 @@ public class UriPattern {
                 break;
             }
         }
-        System.out.println("regex = " + regex);
 
         // 4. If the resulting string ends with '/' then remove the final character.
         if (regex.lastIndexOf("/") == regex.length() - 1) {

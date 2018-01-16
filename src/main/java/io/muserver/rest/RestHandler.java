@@ -6,6 +6,7 @@ import javax.ws.rs.*;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.NoContentException;
 import javax.ws.rs.core.Response;
+import javax.ws.rs.core.UriInfo;
 import javax.ws.rs.ext.MessageBodyReader;
 import javax.ws.rs.ext.MessageBodyWriter;
 import javax.ws.rs.ext.ParamConverterProvider;
@@ -21,6 +22,7 @@ import java.util.*;
 import static io.muserver.Mutils.hasValue;
 import static io.muserver.rest.JaxRSResponse.muHeadersToJax;
 import static io.muserver.rest.JaxRSResponse.muHeadersToJaxObj;
+import static java.util.Collections.singletonList;
 
 public class RestHandler implements MuHandler {
 
@@ -43,28 +45,35 @@ public class RestHandler implements MuHandler {
     @Override
     public boolean handle(MuRequest request, MuResponse muResponse) throws Exception {
         URI jaxURI = baseUri.relativize(URI.create(request.uri().getPath()));
-        System.out.println("jaxURI = " + jaxURI);
         try {
             String requestContentType = request.headers().get(HeaderNames.CONTENT_TYPE);
             RequestMatcher.MatchedMethod mm = requestMatcher.findResourceMethod(request.method(), jaxURI, request.headers().getAll(HeaderNames.ACCEPT), requestContentType);
             ResourceMethod rm = mm.resourceMethod;
-            System.out.println("Got " + rm);
             Object[] params = new Object[rm.methodHandle.getParameterCount()];
 
             for (ResourceMethodParam param : rm.params) {
-                Object paramValue = null;
+                Object paramValue;
                 if (param.source == ResourceMethodParam.ValueSource.MESSAGE_BODY) {
                     Optional<InputStream> inputStream = request.inputStream();
                     if (inputStream.isPresent()) {
                         paramValue = readRequestEntity(request, requestContentType, rm, param.parameterHandle, inputStream.orElse(EmptyInputStream.INSTANCE), entityProviders);
                     } else {
-                        // TODO: supply default values
                         throw new BadRequestException("No request body was sent to the " + param.parameterHandle.getName()
                             + " parameter of the resource method \"" + rm.methodHandle + "\" "
                             + "- if this should be optional then specify an @DefaultValue annotation on the parameter");
                     }
                 } else if (param.source == ResourceMethodParam.ValueSource.CONTEXT) {
-
+                    Class<?> type = param.parameterHandle.getType();
+                    if (type.equals(UriInfo.class)) {
+                        List<String> matchedURIs = new ArrayList<>();
+                        String methodUri = jaxURI.toString();
+                        matchedURIs.add(methodUri);
+                        String methodSpecific = mm.pathMatch.regexMatcher().group();
+                        matchedURIs.add(methodUri.replace("/" + methodSpecific, ""));
+                        paramValue = new MuUriInfo(request.uri().resolve("/"), request.uri(), matchedURIs, singletonList(rm.resourceClass.resourceInstance));
+                    } else {
+                        throw new ServerErrorException("MuServer does not support @Context parameters with type " + type, 500);
+                    }
                 } else {
                     ResourceMethodParam.RequestBasedParam rbp = (ResourceMethodParam.RequestBasedParam) param;
                     paramValue = rbp.getValue(request, mm);
@@ -72,7 +81,6 @@ public class RestHandler implements MuHandler {
                 params[param.index] = paramValue;
             }
             Object result = rm.invoke(params);
-            System.out.println("result = " + result);
             ObjWithType obj = ObjWithType.objType(result);
             writeHeadersToResponse(muResponse, obj.response);
 

@@ -290,7 +290,16 @@ N/A
 
 ## 9 Context
 
-- [ ] Not yet implemented.
+This applies to the types allowed using `@Context` in method parameters.
+
+- [ ] `javax.ws.rs.core.Application` - will never implement as `Application` is not supported by MuServer
+- [ ] `javax.ws.rs.core.HttpHeaders`
+- [ ] `javax.ws.rs.core.Request`
+- [ ] `javax.ws.rs.core.SecurityContext`
+- [x] `javax.ws.rs.core.UriInfo`
+- [ ] `javax.ws.rs.core.Configuration`
+- [ ] `javax.ws.rs.container.ResourceContext`
+- [ ] `javax.ws.rs.ext.Providers`
 
 ### 9.1 Concurrency 
 

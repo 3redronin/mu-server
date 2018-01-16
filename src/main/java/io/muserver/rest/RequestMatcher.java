@@ -92,7 +92,7 @@ class RequestMatcher {
             for (MatchedClass mc : candidateClasses) {
                 for (ResourceMethod resourceMethod : mc.resourceClass.resourceMethods) {
                     if (!resourceMethod.isSubResource() && !resourceMethod.isSubResourceLocator()) {
-                        MatchedMethod matchedMethod = new MatchedMethod(resourceMethod, true, mc.pathMatch.params());
+                        MatchedMethod matchedMethod = new MatchedMethod(mc, resourceMethod, true, mc.pathMatch.params(), mc.pathMatch);
                         candidates.add(matchedMethod);
                     }
                 }
@@ -110,7 +110,7 @@ class RequestMatcher {
                     if (matcher.matches()) {
                         Map<String, String> combinedParams = new HashMap<>(candidateClass.pathMatch.params());
                         combinedParams.putAll(matcher.params());
-                        candidates.add(new MatchedMethod(resourceMethod, true, combinedParams));
+                        candidates.add(new MatchedMethod(candidateClass, resourceMethod, true, combinedParams, matcher));
                     }
                 }
             }
@@ -159,15 +159,19 @@ class RequestMatcher {
         }
     }
 
-    public static class MatchedMethod {
-        public final ResourceMethod resourceMethod;
+    static class MatchedMethod {
+        final MatchedClass matchedClass;
+        final ResourceMethod resourceMethod;
         final boolean isMatch;
         final Map<String, String> pathParams;
+        final PathMatch pathMatch;
 
-        MatchedMethod(ResourceMethod resourceMethod, boolean isMatch, Map<String, String> pathParams) {
+        MatchedMethod(MatchedClass matchedClass, ResourceMethod resourceMethod, boolean isMatch, Map<String,String> pathParams, PathMatch pathMatch) {
+            this.matchedClass = matchedClass;
             this.resourceMethod = resourceMethod;
             this.isMatch = isMatch;
             this.pathParams = pathParams;
+            this.pathMatch = pathMatch;
         }
 
         @Override
