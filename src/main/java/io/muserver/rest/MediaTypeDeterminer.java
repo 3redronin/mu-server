@@ -17,7 +17,7 @@ import static java.util.stream.Collectors.toSet;
  * An implementation of section 3.8 of the jax-rs 2.0 spec
  */
 class MediaTypeDeterminer {
-    public static MediaType determine(ObjWithType responseObject, List<MediaType> classProduces, List<MediaType> methodProduces, List<ProviderWrapper<MessageBodyWriter<?>>> messageBodyWriters, List<String> clientAccepts) {
+    public static MediaType determine(ObjWithType responseObject, List<MediaType> classProduces, List<MediaType> methodProduces, List<ProviderWrapper<MessageBodyWriter<?>>> messageBodyWriters, List<MediaType> clientAccepts) {
 
         // 1. If the method returns an instance of Response whose metadata includes the response media type (Mspecified) then set Mselected = Mspecified, finis
         if (responseObject.response != null) {
@@ -51,7 +51,7 @@ class MediaTypeDeterminer {
         }
 
         // 4. Obtain the acceptable media types A. If A = {}, set A = {‘*/*’}
-        Set<MediaType> a = clientAccepts.stream().map(MediaType::valueOf).collect(toSet());
+        Set<MediaType> a = new HashSet<>(clientAccepts);
         if (a.isEmpty()) {
             a.add(MediaType.WILDCARD_TYPE);
         }
@@ -108,5 +108,18 @@ class MediaTypeDeterminer {
         return methodConsumesAnnotation != null
             ? MediaTypeHeaderDelegate.fromStrings(asList(methodConsumesAnnotation.value()))
             : emptyList();
+    }
+
+    public static List<MediaType> parseAcceptHeaders(List<String> headers) {
+        List<MediaType> list = new ArrayList<>();
+        for (String header : headers) {
+            String[] bits = header.split(",");
+            for (String bit : bits) {
+                if (!bit.isEmpty()) {
+                    list.add(MediaType.valueOf(bit));
+                }
+            }
+        }
+        return list;
     }
 }

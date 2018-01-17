@@ -54,6 +54,23 @@ public class MediaTypesTest {
 
     }
 
+    @Test
+    public void canHandleChromeAcceptHeader() throws IOException {
+        @Path("pictures")
+        class Widget {
+            @GET
+            @Produces("application/json")
+            public String json() {
+                return "[]";
+            }
+        }
+
+        muServer(new Widget());
+
+        assertSelected("/pictures", asList("text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8"), "[]");
+
+    }
+
     private void assertSelected(String path, List<String> accept, String expectedBody) throws IOException {
         Request.Builder rb = request()
             .url(server.uri().resolve(path).toString());

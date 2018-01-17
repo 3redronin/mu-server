@@ -5,6 +5,7 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import javax.ws.rs.*;
+import javax.ws.rs.core.MediaType;
 import javax.ws.rs.ext.ParamConverterProvider;
 import java.net.URI;
 import java.util.List;
@@ -260,12 +261,12 @@ public class RequestMatcherTest {
         }
 
         RequestMatcher rm = new RequestMatcher(set(ResourceClass.fromObject(new PictureThat(), paramConverterProviders)));
-        assertThat(nameOf(rm, asList("image/gif"), null), equalTo("image"));
-        assertThat(nameOf(rm, asList("image/jpeg"), null), equalTo("image"));
-        assertThat(nameOf(rm, asList("image/png"), null), equalTo("image"));
-        assertThat(nameOf(rm, asList("application/json"), null), equalTo("json"));
+        assertThat(nameOf(rm, asList(MediaType.valueOf("image/gif")), null), equalTo("image"));
+        assertThat(nameOf(rm, asList(MediaType.valueOf("image/jpeg")), null), equalTo("image"));
+        assertThat(nameOf(rm, asList(MediaType.valueOf("image/png")), null), equalTo("image"));
+        assertThat(nameOf(rm, asList(MediaType.valueOf("application/json")), null), equalTo("json"));
         assertThat(nameOf(rm, emptyList(), null), equalTo("json"));
-        assertNotAcceptable(rm, asList("image/bmp"), null);
+        assertNotAcceptable(rm, asList(MediaType.valueOf("image/bmp")), null);
     }
 
     @Test
@@ -287,12 +288,12 @@ public class RequestMatcherTest {
         }
 
         RequestMatcher rm = new RequestMatcher(set(ResourceClass.fromObject(new PictureThat(), paramConverterProviders)));
-        assertThat(nameOf(rm, asList("text/plain"), null), equalTo("text"));
-        assertThat(nameOf(rm, asList("text/plain;q=1"), null), equalTo("text"));
-        assertThat(nameOf(rm, asList("text/*"), null), equalTo("text"));
-        assertThat(nameOf(rm, asList("application/json"), null), equalTo("json"));
+        assertThat(nameOf(rm, asList(MediaType.valueOf("text/plain")), null), equalTo("text"));
+        assertThat(nameOf(rm, asList(MediaType.valueOf("text/plain;q=1")), null), equalTo("text"));
+        assertThat(nameOf(rm, asList(MediaType.valueOf("text/*")), null), equalTo("text"));
+        assertThat(nameOf(rm, asList(MediaType.valueOf("application/json")), null), equalTo("json"));
 
-        assertNotAcceptable(rm, asList("image/*"), null);
+        assertNotAcceptable(rm, asList(MediaType.valueOf("image/*")), null);
     }
 
     @Test
@@ -318,14 +319,14 @@ public class RequestMatcherTest {
         assertThat(nameOf(rm, emptyList(), "text/plain"), equalTo("text"));
         assertThat(nameOf(rm, emptyList(), null), equalTo("json"));
 
-        assertNotAcceptable(rm, asList("text/plain"), "application/json");
+        assertNotAcceptable(rm, asList(MediaType.valueOf("text/plain")), "application/json");
     }
 
-    private static String nameOf(RequestMatcher rm, List<String> acceptHeaders, String requestBodyContentType) {
+    private static String nameOf(RequestMatcher rm, List<MediaType> acceptHeaders, String requestBodyContentType) {
         return rm.findResourceMethod(Method.GET, URI.create("pictures"), acceptHeaders, requestBodyContentType).resourceMethod.methodHandle.getName();
     }
 
-    private static void assertNotAcceptable(RequestMatcher rm, List<String> acceptHeaders, String requestBodyContentType) {
+    private static void assertNotAcceptable(RequestMatcher rm, List<MediaType> acceptHeaders, String requestBodyContentType) {
         try {
             RequestMatcher.MatchedMethod found = rm.findResourceMethod(Method.GET, URI.create("pictures"), acceptHeaders, requestBodyContentType);
             Assert.fail("Should have thrown exception but instead got " + found);

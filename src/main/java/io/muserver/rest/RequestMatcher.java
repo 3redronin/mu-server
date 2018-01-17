@@ -38,7 +38,7 @@ class RequestMatcher {
         this.roots = roots;
     }
 
-    public MatchedMethod findResourceMethod(Method httpMethod, URI uri, List<String> acceptHeaders, String requestBodyContentType) throws NotFoundException, NotAllowedException, NotAcceptableException, NotSupportedException {
+    public MatchedMethod findResourceMethod(Method httpMethod, URI uri, List<MediaType> acceptHeaders, String requestBodyContentType) throws NotFoundException, NotAllowedException, NotAcceptableException, NotSupportedException {
         StepOneOutput stepOneOutput = stepOneIdentifyASetOfCandidateRootResourceClassesMatchingTheRequest(uri);
         URI methodURI = stepOneOutput.unmatchedGroup == null ? null : URI.create(UriPattern.trimSlashes(stepOneOutput.unmatchedGroup));
         Set<MatchedMethod> candidateMethods = stepTwoObtainASetOfCandidateResourceMethodsForTheRequest(methodURI, stepOneOutput.candidates);
@@ -184,7 +184,7 @@ class RequestMatcher {
         }
     }
 
-    private MatchedMethod stepThreeIdentifyTheMethodThatWillHandleTheRequest(Method method, Set<MatchedMethod> candidates, String requestBodyContentType, List<String> acceptHeaders) throws NotAllowedException, NotAcceptableException, NotSupportedException {
+    private MatchedMethod stepThreeIdentifyTheMethodThatWillHandleTheRequest(Method method, Set<MatchedMethod> candidates, String requestBodyContentType, List<MediaType> acceptHeaders) throws NotAllowedException, NotAcceptableException, NotSupportedException {
         List<MatchedMethod> result = candidates.stream().filter(rm -> rm.resourceMethod.httpMethod == method).collect(toList());
         if (result.isEmpty()) {
             List<String> allowed = candidates.stream().map(c -> c.resourceMethod.httpMethod.name()).distinct().collect(toList());
@@ -203,7 +203,7 @@ class RequestMatcher {
         // At least one of the acceptable response entity body media types is a supported output data format (see Section 3.5).
         // If no methods support one of the acceptable response entity body media types an implementation MUST generate a
         // NotAcceptableException (406 status) and no entity.
-        List<MediaType> clientAccepts = acceptHeaders.isEmpty() ? WILDCARD_AS_LIST : MediaTypeHeaderDelegate.fromStrings(acceptHeaders);
+        List<MediaType> clientAccepts = acceptHeaders.isEmpty() ? WILDCARD_AS_LIST : acceptHeaders;
         result = result.stream().filter(rm -> rm.resourceMethod.canProduceFor(clientAccepts)).collect(toList());
         if (result.isEmpty()) {
             throw new NotAcceptableException();

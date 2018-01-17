@@ -47,7 +47,7 @@ public class MediaTypeDeterminerTest {
 
     @Test
     public void ifNoResponseTypeAndNoMethodProducesThenUseEntityProviders() {
-        MediaType mediaType = determine(objType("Hello"), emptyList(), emptyList(), wrapped(builtInWriters()), singletonList("application/x-www-form-urlencoded"));
+        MediaType mediaType = determine(objType("Hello"), emptyList(), emptyList(), wrapped(builtInWriters()), singletonList(MediaType.valueOf("application/x-www-form-urlencoded")));
         assertThat(mediaType.toString(), equalTo("application/x-www-form-urlencoded"));
     }
 
@@ -60,7 +60,7 @@ public class MediaTypeDeterminerTest {
     @Test(expected = NotAcceptableException.class)
     public void a406IsThrownIfNothingSuitable() {
         List<MessageBodyWriter> writers = singletonList(new StringEntityProviders.FormUrlEncodedWriter());
-        List<String> clientAccepts = singletonList("application/json");
+        List<MediaType> clientAccepts = singletonList(MediaType.valueOf("application/json"));
         determine(objType(new MultivaluedHashMap<>()), emptyList(), emptyList(), wrapped(writers), clientAccepts);
     }
 

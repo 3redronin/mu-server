@@ -47,7 +47,8 @@ public class RestHandler implements MuHandler {
         URI jaxURI = baseUri.relativize(URI.create(request.uri().getPath()));
         try {
             String requestContentType = request.headers().get(HeaderNames.CONTENT_TYPE);
-            RequestMatcher.MatchedMethod mm = requestMatcher.findResourceMethod(request.method(), jaxURI, request.headers().getAll(HeaderNames.ACCEPT), requestContentType);
+            List<MediaType> acceptHeaders = MediaTypeDeterminer.parseAcceptHeaders(request.headers().getAll(HeaderNames.ACCEPT));
+            RequestMatcher.MatchedMethod mm = requestMatcher.findResourceMethod(request.method(), jaxURI, acceptHeaders, requestContentType);
             ResourceMethod rm = mm.resourceMethod;
             Object[] params = new Object[rm.methodHandle.getParameterCount()];
 
@@ -92,7 +93,7 @@ public class RestHandler implements MuHandler {
 
                 Annotation[] annotations = new Annotation[0]; // TODO set this properly
 
-                MediaType responseMediaType = MediaTypeDeterminer.determine(obj, mm.resourceMethod.resourceClass.produces, mm.resourceMethod.directlyProduces, entityProviders.writers, request.headers().getAll(HeaderNames.ACCEPT));
+                MediaType responseMediaType = MediaTypeDeterminer.determine(obj, mm.resourceMethod.resourceClass.produces, mm.resourceMethod.directlyProduces, entityProviders.writers, acceptHeaders);
                 MessageBodyWriter messageBodyWriter = entityProviders.selectWriter(obj.type, obj.genericType, annotations, responseMediaType);
 
                 muResponse.status(obj.status());
