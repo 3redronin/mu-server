@@ -5,8 +5,12 @@ import org.junit.Test;
 
 import javax.ws.rs.core.UriBuilder;
 import java.net.URI;
+import java.util.HashMap;
+import java.util.Map;
 
 import static org.hamcrest.CoreMatchers.equalTo;
+import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.MatcherAssert.assertThat;
 
 public class MuUriBuilderTest {
@@ -14,9 +18,13 @@ public class MuUriBuilderTest {
         MuRuntimeDelegate.ensureSet();
     }
 
-
     @Test
     public void cloneTest() {
+        UriBuilder builder = MuUriBuilder.fromUri(u("http://example.org/blah/?a=b"));
+        UriBuilder clone = builder.clone();
+        assertThat(builder.build(), equalTo(clone.build()));
+        builder.path("mutations");
+        assertThat(builder.build(), not(equalTo(clone.build())));
     }
 
     @Test
@@ -144,7 +152,7 @@ public class MuUriBuilderTest {
     public void replaceQueryParam() {
         URI uri = MuUriBuilder.fromUri(u("http://example.org/blah?a=b&c=d&e=f"))
             .replaceQueryParam("a", "newA")
-            .replaceQueryParam("c", null)
+            .replaceQueryParam("c", (Object[])null)
             .replaceQueryParam("g", "h")
             .build();
         assertThat(uri.toString(), equalTo("http://example.org/blah?a=newA&e=f&g=h"));
@@ -183,7 +191,15 @@ public class MuUriBuilderTest {
     }
 
     @Test
+    @Ignore("build from template not working")
     public void buildFromMap1() {
+        UriBuilder builder = MuUriBuilder.fromUri("http://localhost:8123/{class}/{method}?some=thing");
+
+        Map<String, String> map = new HashMap<>();
+        map.put("class", "the Class");
+        map.put("method", "the method");
+        assertThat(builder.buildFromMap(map),
+            equalTo(u("http://localhost:8123/the%20Class/the%20method?some=thing")));
     }
 
     @Test

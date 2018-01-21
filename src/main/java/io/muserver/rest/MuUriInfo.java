@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.stream.Stream;
 
 import static io.muserver.Mutils.urlEncode;
+import static io.muserver.rest.ReadOnlyMultivaluedMap.readOnly;
 import static java.util.stream.Collectors.toList;
 
 class MuUriInfo implements UriInfo {
@@ -115,7 +116,7 @@ class MuUriInfo implements UriInfo {
     public MultivaluedMap<String, String> getPathParameters(boolean decode) {
         MultivaluedMap<String, String> all = new MultivaluedHashMap<>();
         getPathSegments(decode).forEach(seg -> all.putAll(seg.getMatrixParameters()));
-        return all;
+        return readOnly(all);
     }
 
     @Override
@@ -134,7 +135,7 @@ class MuUriInfo implements UriInfo {
                 all.put(entry.getKey(), entry.getValue().stream().map(Mutils::urlEncode).collect(toList()));
             }
         }
-        return all;
+        return readOnly(all);
     }
 
     @Override

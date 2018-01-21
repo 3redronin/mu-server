@@ -8,6 +8,7 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static io.muserver.Mutils.urlEncode;
@@ -25,9 +26,24 @@ class MuUriBuilder extends UriBuilder {
     private MultivaluedMap<String, String> query = new MultivaluedHashMap<>();
     private String fragment;
 
+    public MuUriBuilder() {}
+
+    private MuUriBuilder(String scheme, String userInfo, String host, int port, List<PathSegment> pathSegments,
+                         MultivaluedMap<String, String> query, String fragment) {
+        this.scheme = scheme;
+        this.userInfo = userInfo;
+        this.host = host;
+        this.port = port;
+        this.pathSegments = new ArrayList<>(pathSegments);
+        MultivaluedMap<String, String> copy = new MultivaluedHashMap<>();
+        copy.putAll(query);
+        this.query = copy;
+        this.fragment = fragment;
+    }
+
     @Override
     public UriBuilder clone() {
-        throw NotImplementedException.notYet();
+        return new MuUriBuilder(scheme, userInfo, host, port, pathSegments, query, fragment);
     }
 
     @Override
