@@ -23,6 +23,7 @@ class MuUriBuilder extends UriBuilder {
     private int port;
     private List<PathSegment> pathSegments = new ArrayList<>();
     private MultivaluedMap<String, String> query = new MultivaluedHashMap<>();
+    private String fragment;
 
     @Override
     public UriBuilder clone() {
@@ -31,13 +32,14 @@ class MuUriBuilder extends UriBuilder {
 
     @Override
     public UriBuilder uri(URI uri) {
-        this.scheme = uri.getScheme();
-        this.userInfo = uri.getUserInfo();
-        this.host = uri.getHost();
-        this.port = uri.getPort();
+        scheme(uri.getScheme());
+        userInfo(uri.getUserInfo());
+        host(uri.getHost());
+        port(uri.getPort());
         pathSegments = MuUriInfo.pathStringToSegments(uri.getPath(), false);
 
         replaceQuery(uri.getQuery());
+        fragment(uri.getFragment());
         return this;
     }
 
@@ -156,12 +158,14 @@ class MuUriBuilder extends UriBuilder {
 
     @Override
     public UriBuilder replaceQueryParam(String name, Object... values) {
-        throw NotImplementedException.notYet();
+        query.remove(name);
+        return values == null ? this : queryParam(name, values);
     }
 
     @Override
     public UriBuilder fragment(String fragment) {
-        throw NotImplementedException.notYet();
+        this.fragment = fragment;
+        return this;
     }
 
     @Override
@@ -246,6 +250,9 @@ class MuUriBuilder extends UriBuilder {
                     isFirst = false;
                 }
             }
+        }
+        if (fragment != null) {
+            sb.append('#').append(urlEncode(fragment));
         }
         return URI.create(sb.toString());
     }

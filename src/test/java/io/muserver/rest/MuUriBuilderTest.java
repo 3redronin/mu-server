@@ -141,7 +141,21 @@ public class MuUriBuilderTest {
     }
 
     @Test
+    public void replaceQueryParam() {
+        URI uri = MuUriBuilder.fromUri(u("http://example.org/blah?a=b&c=d&e=f"))
+            .replaceQueryParam("a", "newA")
+            .replaceQueryParam("c", null)
+            .replaceQueryParam("g", "h")
+            .build();
+        assertThat(uri.toString(), equalTo("http://example.org/blah?a=newA&e=f&g=h"));
+    }
+
+    @Test
     public void fragment() {
+        URI uri = MuUriBuilder.fromUri(u("http://example.org"))
+            .fragment("hello")
+            .build();
+        assertThat(uri.toString(), equalTo("http://example.org/#hello"));
     }
 
     @Test
@@ -166,10 +180,6 @@ public class MuUriBuilderTest {
 
     @Test
     public void resolveTemplatesFromEncoded() {
-    }
-
-    @Test
-    public void buildFromMap() {
     }
 
     @Test
