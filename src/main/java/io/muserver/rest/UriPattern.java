@@ -45,7 +45,7 @@ public class UriPattern {
      * and otherwise <code>false</code>.
      */
     public PathMatch matcher(URI input) {
-        Matcher matcher = pattern.matcher(input.getPath());
+        Matcher matcher = pattern.matcher(input.getRawPath());
         if (matcher.matches()) {
             HashMap<String, String> params = new HashMap<>();
             for (String namedGroup : namedGroups) {
@@ -92,13 +92,13 @@ public class UriPattern {
                 if (literal.equals("/")) {
                     regex.append('/');
                 } else if (!literal.contains("/")) {
-                    regex.append(Pattern.quote(Mutils.urlEncode(literal)));
+                    regex.append(escapeRegex(literal));
                 } else {
                     String[] segments = literal.split("/");
                     for (int i = 0; i < segments.length; i++) {
                         String segment = segments[i];
                         if (!segment.isEmpty()) {
-                            regex.append(Pattern.quote(Mutils.urlEncode(segment)));
+                            regex.append(escapeRegex(segment));
                         }
                         regex.append('/');
                     }
@@ -136,9 +136,12 @@ public class UriPattern {
 
         // 5. Append '(/.*)?' to the result.
         regex.append("(/.*)?");
-
         return new UriPattern(Pattern.compile(regex.toString()), groupNames, numberOfLiterals);
+    }
 
+    private static String escapeRegex(String literal) {
+        String bit = literal.contains("%") ? literal : Mutils.urlEncode(literal);
+        return Pattern.quote(bit);
     }
 
     static String trimSlashes(String url) {

@@ -22,6 +22,16 @@ public class UriPatternTest {
     }
 
     @Test
+    public void encodingIsOptional() {
+        assertThat(pattern("fruit bits"), equalTo(pattern("fruit%20bits")));
+    }
+    @Test
+    public void spacesInPathsAreOkay() {
+        assertThat(UriPattern.uriTemplateToRegex("fruit bits").matcher(URI.create("fruit%20bits")).matches(), is(true));
+    }
+
+
+    @Test
     public void uriTemplatesCanBeConvertedToRegexes() {
         assertThat(pattern("/fruit"), equalTo("\\Qfruit\\E(/.*)?"));
         assertThat(pattern("/fruit/{name}"), equalTo("\\Qfruit\\E/(?<name>[^/]+?)(/.*)?"));

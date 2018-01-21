@@ -1,6 +1,8 @@
 package io.muserver.rest;
 
 import io.muserver.Method;
+import io.muserver.MuServer;
+import io.muserver.MuServerBuilder;
 import org.junit.Assert;
 import org.junit.Test;
 

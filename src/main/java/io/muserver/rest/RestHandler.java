@@ -44,7 +44,7 @@ public class RestHandler implements MuHandler {
 
     @Override
     public boolean handle(MuRequest request, MuResponse muResponse) throws Exception {
-        URI jaxURI = baseUri.relativize(URI.create(request.uri().getPath()));
+        URI jaxURI = baseUri.relativize(URI.create(request.uri().getRawPath()));
         try {
             String requestContentType = request.headers().get(HeaderNames.CONTENT_TYPE);
             List<MediaType> acceptHeaders = MediaTypeDeterminer.parseAcceptHeaders(request.headers().getAll(HeaderNames.ACCEPT));

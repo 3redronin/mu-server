@@ -23,7 +23,7 @@ public class RestHandlerTest {
 
     @Test
     public void canGetAll() throws IOException {
-        try (okhttp3.Response resp = call(request().url(server.uri().resolve("/api/fruits").toString()))) {
+        try (okhttp3.Response resp = call(request().url(server.uri().resolve("/api/fruit%20bits").toString()))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.body().string(), is("[ { \"name\": \"apple\" }, { \"name\": \"orange\" } ]"));
         }
@@ -31,7 +31,7 @@ public class RestHandlerTest {
 
     @Test
     public void canGetOne() throws IOException {
-        try (okhttp3.Response resp = call(request().url(server.uri().resolve("/api/fruits/orange").toString()))) {
+        try (okhttp3.Response resp = call(request().url(server.uri().resolve("/api/fruit%20bits/orange").toString()))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.body().string(), is("{ \"name\": \"orange\" }"));
         }
@@ -42,7 +42,7 @@ public class RestHandlerTest {
         RestHandlerBuilder.create(new Object());
     }
 
-    @Path("api/fruits")
+    @Path("api/fruit bits")
     private static class Fruit {
 
         @GET
