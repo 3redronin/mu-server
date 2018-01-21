@@ -156,7 +156,6 @@ public class RestHandler implements MuHandler {
 
         // 3 & 4: Select a reader that supports the media type of the request and isReadable
         MessageBodyReader messageBodyReader = entityProviders.selectReader(type, genericType, annotations, requestBodyMediaType);
-        System.out.println("messageBodyReader = " + messageBodyReader);
         try {
             return messageBodyReader.readFrom(type, genericType, annotations, requestBodyMediaType, muHeadersToJax(request.headers()), inputStream);
         } catch (NoContentException nce) {

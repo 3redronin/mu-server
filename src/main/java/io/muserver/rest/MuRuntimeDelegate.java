@@ -29,7 +29,7 @@ class MuRuntimeDelegate extends RuntimeDelegate {
 
     @Override
     public UriBuilder createUriBuilder() {
-        throw NotImplementedException.notYet();
+        return new MuUriBuilder();
     }
 
     @Override

@@ -13,6 +13,9 @@ import static io.muserver.Mutils.urlEncode;
 import static java.util.stream.Collectors.toList;
 
 class MuUriInfo implements UriInfo {
+    static {
+        MuRuntimeDelegate.ensureSet();
+    }
 
     private final URI baseUri;
     private final URI requestUri;
@@ -47,8 +50,12 @@ class MuUriInfo implements UriInfo {
 
     @Override
     public List<PathSegment> getPathSegments(boolean decode) {
-        String path = getPath(decode);
-        return Stream.of(path.split("/"))
+        return pathStringToSegments(getPath(decode), false);
+    }
+
+    static List<PathSegment> pathStringToSegments(String path, boolean encodeSlashes) {
+        Stream<String> stream = encodeSlashes ? Stream.of(path) : Stream.of(path.split("/"));
+        return stream
             .filter(s -> !s.isEmpty())
             .map(s -> {
                 String[] segments = s.split(";");

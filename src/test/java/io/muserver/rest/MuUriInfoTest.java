@@ -13,6 +13,16 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 
 public class MuUriInfoTest {
+    static {
+        MuRuntimeDelegate.ensureSet();
+    }
+
+    @Test
+    public void canCreateBuilders() {
+        UriInfo uriInfo = create("https://example.org/hey-man?blah=ha#yo");
+        assertThat(uriInfo.getAbsolutePathBuilder().build(),
+            equalTo(uri("https://example.org/hey-man")));
+    }
 
     @Test
     public void resolveTest() {
