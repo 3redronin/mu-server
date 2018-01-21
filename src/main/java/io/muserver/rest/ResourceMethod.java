@@ -3,6 +3,7 @@ package io.muserver.rest;
 import io.muserver.Method;
 
 import javax.ws.rs.HttpMethod;
+import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.MediaType;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.InvocationTargetException;
@@ -42,9 +43,18 @@ class ResourceMethod {
         return httpMethod == null;
     }
 
-    public Object invoke(Object... params) throws InvocationTargetException, IllegalAccessException {
-        Object result = methodHandle.invoke(resourceClass.resourceInstance, params);
-        return result;
+    public Object invoke(Object... params) throws Exception, IllegalAccessException {
+        try {
+            Object result = methodHandle.invoke(resourceClass.resourceInstance, params);
+            return result;
+        } catch (InvocationTargetException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof WebApplicationException) {
+                throw (WebApplicationException)cause;
+            } else {
+                throw e;
+            }
+        }
     }
 
     static Method getMuMethod(java.lang.reflect.Method restMethod) {

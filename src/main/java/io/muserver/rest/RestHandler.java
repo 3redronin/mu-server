@@ -111,7 +111,6 @@ public class RestHandler implements MuHandler {
 
             }
         } catch (NotFoundException e) {
-            System.out.println(request.uri() + " not a JAX RS method");
             return false;
         } catch (WebApplicationException e) {
             if (e instanceof ServerErrorException) {
