@@ -200,7 +200,7 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
             try {
                 return constructor.newInstance(value);
             } catch (Exception e) {
-                throw new IllegalArgumentException("Could not convert \"" + value + "\" to a " + constructor.getDeclaringClass().getSimpleName());
+                throw new IllegalArgumentException("Could not convert \"" + value + "\" to a " + constructor.getDeclaringClass().getSimpleName(), e);
             }
         }
         public String toString(T value) {
@@ -233,9 +233,7 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
             try {
                 return (T) staticMethod.invoke(null, value);
             } catch (Exception e) {
-                System.out.println("Error converting: " + value);
-                e.printStackTrace();
-                throw new IllegalArgumentException("Could not convert \"" + value + "\" to a " + staticMethod.getDeclaringClass().getSimpleName() + " because " + e.getMessage());
+                throw new IllegalArgumentException("Could not convert \"" + value + "\" to a " + staticMethod.getDeclaringClass().getSimpleName() + " because " + e.getMessage(), e);
             }
         }
         public String toString(T value) {
@@ -246,25 +244,30 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
         }
 
         static <T> StaticMethodConverter<T> tryToCreate(Class clazz) {
-            Method staticMethod = null;
-            for (Method method : clazz.getDeclaredMethods()) {
-                int modifiers = method.getModifiers();
-                if (Modifier.isStatic(modifiers) && Modifier.isPublic(modifiers) && method.getReturnType().equals(clazz)) {
-                    if (method.getName().equals("valueOf")) {
-                        staticMethod = method;
-                        break;
-                    }
-                    if (method.getName().equals("fromString")) {
-                        staticMethod = method;
-                        break;
-                    }
-                }
+            Method[] declaredMethods = clazz.getDeclaredMethods();
+            Method staticMethod = getPublicStaticMethodNamed(clazz, declaredMethods, "valueOf");
+            if (staticMethod == null) {
+                staticMethod = getPublicStaticMethodNamed(clazz, declaredMethods, "fromString");
             }
             if (staticMethod == null) {
                 return null;
             }
             staticMethod.setAccessible(true);
             return new StaticMethodConverter<>(staticMethod);
+        }
+
+        private static Method getPublicStaticMethodNamed(Class clazz, Method[] declaredMethods, String name) {
+            Method staticMethod = null;
+            for (Method method : declaredMethods) {
+                int modifiers = method.getModifiers();
+                if (Modifier.isStatic(modifiers) && Modifier.isPublic(modifiers) && method.getReturnType().equals(clazz)) {
+                    if (method.getName().equals(name)) {
+                        staticMethod = method;
+                        break;
+                    }
+                }
+            }
+            return staticMethod;
         }
     }
 
