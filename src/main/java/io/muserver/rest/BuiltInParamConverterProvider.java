@@ -233,7 +233,9 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
             try {
                 return (T) staticMethod.invoke(null, value);
             } catch (Exception e) {
-                throw new IllegalArgumentException("Could not convert \"" + value + "\" to a " + staticMethod.getDeclaringClass().getSimpleName());
+                System.out.println("Error converting: " + value);
+                e.printStackTrace();
+                throw new IllegalArgumentException("Could not convert \"" + value + "\" to a " + staticMethod.getDeclaringClass().getSimpleName() + " because " + e.getMessage());
             }
         }
         public String toString(T value) {
