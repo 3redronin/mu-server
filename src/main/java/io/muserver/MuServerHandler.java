@@ -44,7 +44,7 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
 				handleHttpRequestDecodeFailure(ctx, request.decoderResult().cause());
 			} else {
 
-				HttpResponse response = new DefaultHttpResponse(HTTP_1_1, HttpResponseStatus.OK);
+				HttpResponse response = new DefaultHttpResponse(HTTP_1_1, HttpResponseStatus.OK, false);
 
 				boolean handled = false;
                 Attribute<String> proto = ctx.channel().attr(PROTO_ATTRIBUTE);
