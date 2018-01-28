@@ -1,12 +1,14 @@
 package io.muserver.rest;
 
+import io.muserver.MuHandlerBuilder;
+
 import javax.ws.rs.ext.MessageBodyReader;
 import javax.ws.rs.ext.MessageBodyWriter;
 import javax.ws.rs.ext.ParamConverterProvider;
 import java.util.ArrayList;
 import java.util.List;
 
-public class RestHandlerBuilder {
+public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
 
     private Object[] resources;
     private final List<MessageBodyWriter> customWriters = new ArrayList<>();

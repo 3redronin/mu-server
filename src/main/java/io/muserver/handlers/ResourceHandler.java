@@ -1,9 +1,6 @@
 package io.muserver.handlers;
 
-import io.muserver.HeaderNames;
-import io.muserver.MuHandler;
-import io.muserver.MuRequest;
-import io.muserver.MuResponse;
+import io.muserver.*;
 
 import java.io.File;
 import java.io.OutputStream;
@@ -76,7 +73,7 @@ public class ResourceHandler implements MuHandler {
         response.headers().add(type.headers);
     }
 
-    public static class Builder {
+    public static class Builder implements MuHandlerBuilder<ResourceHandler> {
         private Map<String, ResourceType> extensionToResourceType = DEFAULT_EXTENSION_MAPPINGS;
         private String pathToServeFrom = "/";
         private String defaultFile = "index.html";

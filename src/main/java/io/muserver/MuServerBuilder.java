@@ -85,14 +85,21 @@ public class MuServerBuilder {
         return this;
     }
 
+    public MuServerBuilder addHandler(MuHandlerBuilder handler) {
+        return addHandler(handler.build());
+    }
     public MuServerBuilder addHandler(MuHandler handler) {
         handlers.add(handler);
         return this;
     }
 
+    public MuServerBuilder addHandler(Method method, String pathRegex, MuHandlerBuilder handler) {
+        return addHandler(method, pathRegex, handler.build());
+    }
     public MuServerBuilder addHandler(Method method, String pathRegex, MuHandler handler) {
         return addHandler(Routes.route(method, pathRegex, handler));
     }
+
 
     public MuServer start() {
         if (!handlers.isEmpty()) {
