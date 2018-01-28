@@ -24,10 +24,20 @@ public class PathMatch {
     }
 
     /**
-     * @return Returns true if the checked URI matches this pattern.
+     * @return Returns true if the beginning of the checked URI matches this pattern. For example
+     * if the pattern is <code>/abc</code> then this will return <code>true</code> for <code>/abc</code>
+     * and <code>/abc/def</code> etc.
      */
-    public boolean matches() {
+    public boolean prefixMatches() {
         return matches;
+    }
+    /**
+     * @return Returns true if the checked URI matches this pattern. For example
+     * if the pattern is <code>/abc</code> then this will return <code>true</code> for <code>/abc</code>
+     * but false for <code>/abc/def</code> etc.
+     */
+    public boolean fullyMatches() {
+        return matches && lastGroup() == null;
     }
 
     /**

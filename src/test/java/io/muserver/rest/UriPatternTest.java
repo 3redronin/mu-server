@@ -18,7 +18,7 @@ public class UriPatternTest {
         assertThat(literalCount("/fruit"), equalTo(literalCount("fruit/")));
         assertThat(literalCount("/fruit"), equalTo(literalCount("/fruit/")));
 
-        assertThat(UriPattern.uriTemplateToRegex("fruit").matcher(URI.create("fruit")).matches(), is(true));
+        assertThat(UriPattern.uriTemplateToRegex("fruit").matcher(URI.create("fruit")).prefixMatches(), is(true));
     }
 
     @Test
@@ -27,7 +27,7 @@ public class UriPatternTest {
     }
     @Test
     public void spacesInPathsAreOkay() {
-        assertThat(UriPattern.uriTemplateToRegex("fruit bits").matcher(URI.create("fruit%20bits")).matches(), is(true));
+        assertThat(UriPattern.uriTemplateToRegex("fruit bits").matcher(URI.create("fruit%20bits")).prefixMatches(), is(true));
     }
 
 
@@ -68,7 +68,7 @@ public class UriPatternTest {
         assertThat(uriPattern.numberOfLiterals, is(8));
 
         PathMatch matcher = uriPattern.matcher(URI.create("people/Fennel-Kennel"));
-        assertThat(matcher.matches(), is(true));
+        assertThat(matcher.prefixMatches(), is(true));
         assertThat(matcher.params().get("givenName"), equalTo("Kennel"));
         assertThat(matcher.params().get("familyName"), equalTo("Fennel"));
     }

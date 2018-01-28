@@ -52,7 +52,7 @@ class RequestMatcher {
                 PathMatch matcher = rc.pathMatch;
                 // Remove members that do not match U.
                 // Remove members for which the final regular expression capturing group value is neither empty nor ‘/’ and the class has no subresource methods or locators.
-                return matcher.matches() && !(matcher.lastGroup() != null && rc.resourceClass.subResourceMethods().isEmpty());
+                return matcher.prefixMatches() && !(matcher.lastGroup() != null && rc.resourceClass.subResourceMethods().isEmpty());
             })
             .sorted((o1, o2) -> {
                 UriPattern o1pp = o1.resourceClass.pathPattern;
@@ -107,7 +107,7 @@ class RequestMatcher {
             for (ResourceMethod resourceMethod : candidateClass.resourceClass.resourceMethods) {
                 if (resourceMethod.isSubResource() || resourceMethod.isSubResourceLocator()) {
                     PathMatch matcher = resourceMethod.pathPattern.matcher(relativeUri);
-                    if (matcher.matches()) {
+                    if (matcher.prefixMatches()) {
                         Map<String, String> combinedParams = new HashMap<>(candidateClass.pathMatch.params());
                         combinedParams.putAll(matcher.params());
                         candidates.add(new MatchedMethod(candidateClass, resourceMethod, true, combinedParams, matcher));

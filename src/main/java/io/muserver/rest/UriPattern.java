@@ -41,11 +41,15 @@ public class UriPattern {
     /**
      * Matches the given URI against this pattern.
      * @param input The URI to check against.
-     * @return Returns a {@link PathMatch} where {@link PathMatch#matches()} is <code>true</code> if the URI matches
+     * @return Returns a {@link PathMatch} where {@link PathMatch#prefixMatches()} is <code>true</code> if the URI matches
      * and otherwise <code>false</code>.
      */
     public PathMatch matcher(URI input) {
-        Matcher matcher = pattern.matcher(input.getRawPath());
+        String rawPath = input.getRawPath();
+        if (rawPath.startsWith("/")) {
+            rawPath = rawPath.substring(1);
+        }
+        Matcher matcher = pattern.matcher(rawPath);
         if (matcher.matches()) {
             HashMap<String, String> params = new HashMap<>();
             for (String namedGroup : namedGroups) {

@@ -34,7 +34,7 @@ class ResourceClass {
     }
 
     public boolean matches(URI uri) {
-        return pathPattern.matcher(uri).matches();
+        return pathPattern.matcher(uri).prefixMatches();
     }
 
     public Set<ResourceMethod> nonSubResourceMethods() {

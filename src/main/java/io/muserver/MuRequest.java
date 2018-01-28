@@ -1,5 +1,6 @@
 package io.muserver;
 
+import io.muserver.rest.PathMatch;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpUtil;
@@ -9,10 +10,7 @@ import io.netty.handler.codec.http.cookie.ServerCookieDecoder;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
-import java.util.Collections;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static io.muserver.Cookie.nettyToMu;
@@ -129,6 +127,15 @@ public interface MuRequest {
      * @return The cookie, or {@link Optional#empty()} if there is no cookie with that name.
      */
     Optional<String> cookie(String name);
+
+    /**
+     * For request handlers created with {@link Routes}, this gets a path parameter by name.
+     * @param name The param name, for example <code>id</code> in the template <code>/things/{id : [0-9]+}</code>
+     * @return Returns the path parameter, or null if it doesn't exist.
+     * @throws IllegalStateException Thrown if routing is not being used.
+     */
+    String pathParam(String name);
+
 }
 
 class NettyRequestAdapter implements MuRequest {
@@ -142,6 +149,7 @@ class NettyRequestAdapter implements MuRequest {
     private QueryStringDecoder formDecoder;
     private boolean bodyRead = false;
     private Set<Cookie> cookies;
+    private Map<String, String> pathParams;
 
     public NettyRequestAdapter(String proto, HttpRequest request) {
         this.request = request;
@@ -284,6 +292,19 @@ class NettyRequestAdapter implements MuRequest {
 
     void inputStream(InputStream stream) {
         this.inputStream = stream;
+    }
+
+
+    @Override
+    public String pathParam(String name) {
+        if (pathParams == null) {
+            throw new IllegalStateException("Cannot use this method unless the handler was registered with the " + Routes.class.getName() + " handler.");
+        }
+        return pathParams.get(name);
+    }
+
+    void pathParams(Map<String, String> params) {
+        this.pathParams = params;
     }
 
 

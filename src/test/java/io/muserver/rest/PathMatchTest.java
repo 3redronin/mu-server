@@ -12,7 +12,7 @@ public class PathMatchTest {
     @Test
     public void canMatchPathNames() {
         PathMatch match = UriPattern.uriTemplateToRegex("/fruit/{name}").matcher(URI.create("fruit/orange"));
-        assertThat(match.matches(), is(true));
+        assertThat(match.prefixMatches(), is(true));
         assertThat(match.params().get("name"), equalTo("orange"));
     }
 
@@ -20,7 +20,7 @@ public class PathMatchTest {
     @Test
     public void theEmptyMatcherMatches() {
         PathMatch emptyMatch = PathMatch.EMPTY_MATCH;
-        assertThat(emptyMatch.matches(), is(true));
+        assertThat(emptyMatch.prefixMatches(), is(true));
         assertThat(emptyMatch.params().isEmpty(), is(true));
         assertThat(emptyMatch.regexMatcher().matches(), is(true));
     }

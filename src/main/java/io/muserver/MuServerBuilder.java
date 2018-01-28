@@ -93,11 +93,18 @@ public class MuServerBuilder {
         return this;
     }
 
-    public MuServerBuilder addHandler(Method method, String pathRegex, MuHandlerBuilder handler) {
-        return addHandler(method, pathRegex, handler.build());
-    }
-    public MuServerBuilder addHandler(Method method, String pathRegex, MuHandler handler) {
-        return addHandler(Routes.route(method, pathRegex, handler));
+    /**
+     * Registers a new handler that will only be called if it matches the given route info
+     * @param method The method to match, or <code>null</code> to accept any method.
+     * @param uriTemplate A URL template. Supports plain URLs like <code>/abc</code> or paths
+     *                   with named parameters such as <code>/abc/{id}</code> or named parameters
+     *                    with regexes such as <code>/abc/{id : [0-9]+}</code> where the named
+     *                    parameter values can be accessed with {@link MuRequest#pathParam(String)}
+     * @param handler The handler to invoke if the method and URI matches.
+     * @return Returns the server builder
+     */
+    public MuServerBuilder addHandler(Method method, String uriTemplate, MuHandler handler) {
+        return addHandler(Routes.route(method, uriTemplate, handler));
     }
 
 
