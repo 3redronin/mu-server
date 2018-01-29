@@ -26,24 +26,24 @@ Handlers are added to the server builder and executed one by one until a suitabl
 You can register a route with a URI template and then capture the path parameters:
 
 ````java
-    MuServer server = MuServerBuilder.httpsServer()
-        .addHandler(Method.GET, "/blah/{id}",
-            (request, response, pathParams) -> {
-                response.write("The ID is " + pathParams.get("id"));
-            })
-        .start();
+MuServer server = MuServerBuilder.httpsServer()
+    .addHandler(Method.GET, "/blah/{id}",
+        (request, response, pathParams) -> {
+            response.write("The ID is " + pathParams.get("id"));
+        })
+    .start();
 ````
 
 ...or you can register a handler that can match against an URL. Returning `true` means the handler has handled the
 request and no more handlers should be executed; `false` means it will continue to the next handler.
 
 ````java
-    MuServer server = MuServerBuilder.httpsServer()
-        .addHandler((request, response) -> {
-                response.write("Hello world");
-                return true;
-            })
-        .start();
+MuServer server = MuServerBuilder.httpsServer()
+    .addHandler((request, response) -> {
+            response.write("Hello world");
+            return true;
+        })
+    .start();
 ````
 
 ## JAX-RS REST Resources
@@ -58,34 +58,34 @@ See the [rest/README.md](https://github.com/3redronin/mu-server/blob/master/src/
 Example REST resource class:
 
 ````java
-    @Path("api/fruits")
-    private static class Fruit {
+@Path("api/fruits")
+public class Fruit {
 
-        @GET
-        public String getAll() {
-            return "[ { \"name\": \"apple\" }, { \"name\": \"orange\" } ]";
-        }
-
-        @GET
-        @Path("{name}")
-        public String get(@PathParam("name") String name) {
-            switch (name) {
-                case "apple":
-                    return "{ \"name\": \"apple\" }";
-                case "orange":
-                    return "{ \"name\": \"orange\" }";
-            }
-            return "not found";
-        }
+    @GET
+    public String getAll() {
+        return "[ { \"name\": \"apple\" }, { \"name\": \"orange\" } ]";
     }
+
+    @GET
+    @Path("{name}")
+    public String get(@PathParam("name") String name) {
+        switch (name) {
+            case "apple":
+                return "{ \"name\": \"apple\" }";
+            case "orange":
+                return "{ \"name\": \"orange\" }";
+        }
+        return "not found";
+    }
+}
 ````
 
 A web server with this registered can be created like so:
 
 ````java
-	MuServer server = MuServerBuilder.httpsServer()
-		.addHandler(RestHandlerBuilder.restHandler(new Fruit()).build())
-		.start();
+MuServer server = MuServerBuilder.httpsServer()
+    .addHandler(RestHandlerBuilder.restHandler(new Fruit()).build())
+    .start();
 ````
 
 Making a `GET` request to `server.uri().resolve("/api/fruits/orange")` in this case would return the JSON
