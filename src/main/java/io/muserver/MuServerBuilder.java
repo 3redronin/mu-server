@@ -99,11 +99,12 @@ public class MuServerBuilder {
      * @param uriTemplate A URL template. Supports plain URLs like <code>/abc</code> or paths
      *                   with named parameters such as <code>/abc/{id}</code> or named parameters
      *                    with regexes such as <code>/abc/{id : [0-9]+}</code> where the named
-     *                    parameter values can be accessed with {@link MuRequest#pathParam(String)}
+     *                    parameter values can be accessed with the <code>pathParams</code>
+     *                    parameter in the route handler.
      * @param handler The handler to invoke if the method and URI matches.
      * @return Returns the server builder
      */
-    public MuServerBuilder addHandler(Method method, String uriTemplate, MuHandler handler) {
+    public MuServerBuilder addHandler(Method method, String uriTemplate, RouteHandler handler) {
         return addHandler(Routes.route(method, uriTemplate, handler));
     }
 

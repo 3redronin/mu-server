@@ -10,6 +10,32 @@ Experimental web server, very much under construction
 * The dependencies should be kept to a minimum and all be  compile-time dependencies
 * All config via constructors or builders, so we do not assume or impose any dependency injection frameworks.
 
+## Routing
+
+Handlers are added to the server builder and executed one by one until a suitable handler is found.
+You can register a route with a URI template and then capture the path parameters:
+
+````java
+    MuServer server = httpsServer()
+        .addHandler(Method.GET, "/blah/{id}",
+            (request, response, pathParams) -> {
+                response.write("The ID is " + pathParams.get("id"));
+            })
+        .start();
+````
+
+...or you can register a handler that can match against an URL. Returning `true` means the handler has handled the
+request and no more handlers should be executed; `false` means it will continue to the next handler.
+
+````java
+    MuServer server = httpsServer()
+        .addHandler((request, response) -> {
+                response.write("Hello world");
+                return true;
+            })
+        .start();
+````
+
 ## JAX-RS REST Resources
 
 Mu-Server provides a simple implementation of the [JAX-RS 2.0 spec](http://download.oracle.com/otn-pub/jcp/jaxrs-2_0-fr-eval-spec/jsr339-jaxrs-2.0-final-spec.pdf), 

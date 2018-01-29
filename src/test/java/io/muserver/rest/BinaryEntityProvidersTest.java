@@ -115,7 +115,6 @@ public class BinaryEntityProvidersTest {
             @Produces("application/octet-stream")
             public StreamingOutput echo(byte[] input) {
                 return output -> {
-                    System.out.println("I am seeing " + input.length + " bytes: " + new String(input, UTF_8));
                     output.write(input);
                 };
             }

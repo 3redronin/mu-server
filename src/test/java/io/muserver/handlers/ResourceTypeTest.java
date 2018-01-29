@@ -20,7 +20,6 @@ public class ResourceTypeTest {
     @Test
     public void gzippablesAreFound() {
         Set<String> set = ResourceType.gzippableMimeTypes(ResourceType.getResourceTypes());
-        System.out.println(set);
         assertThat(set.contains("image/jpeg"), is(false));
         assertThat(set.contains("text/html"), is(true));
     }

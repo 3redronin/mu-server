@@ -37,11 +37,10 @@ public class MuServerTest {
 					handlersHit.add("Logger");
 					return false;
 				})
-				.addHandler(Method.GET, "/blah", (request, response) -> {
+				.addHandler(Method.GET, "/blah", (request, response, pathParams) -> {
 					handlersHit.add("BlahHandler");
 					response.status(202);
 					response.write("This is a test");
-					return true;
 				})
 				.addHandler((request, response) -> {
 					handlersHit.add("LastHandler");

@@ -94,18 +94,16 @@ public class CookieTest {
         AtomicReference<Optional<String>> sessionLookup = new AtomicReference<>();
         AtomicReference<Optional<String>> nonExistentCookieLookup = new AtomicReference<>();
         server = MuServerBuilder.httpServer()
-            .addHandler(Method.GET, "/set", (request, response) -> {
+            .addHandler(Method.GET, "/set", (request, response, pathParams) -> {
                 Cookie cookie = Cookie.secureCookie("A Session", "Some value");
                 Cookie cookie2 = new Cookie("Another", "Blah");
                 response.addCookie(cookie);
                 response.addCookie(cookie2);
-                return true;
             })
-            .addHandler(Method.GET, "/save", (request, response) -> {
+            .addHandler(Method.GET, "/save", (request, response, pathParams) -> {
                 nonExistentCookieLookup.set(request.cookie("ThereIsNoCookie"));
                 sessionLookup.set(request.cookie("A Session"));
                 actualSentCookies.addAll(request.cookies());
-                return true;
             })
             .start();
 

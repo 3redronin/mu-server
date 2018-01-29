@@ -128,14 +128,6 @@ public interface MuRequest {
      */
     Optional<String> cookie(String name);
 
-    /**
-     * For request handlers created with {@link Routes}, this gets a path parameter by name.
-     * @param name The param name, for example <code>id</code> in the template <code>/things/{id : [0-9]+}</code>
-     * @return Returns the path parameter, or null if it doesn't exist.
-     * @throws IllegalStateException Thrown if routing is not being used.
-     */
-    String pathParam(String name);
-
 }
 
 class NettyRequestAdapter implements MuRequest {
@@ -149,7 +141,6 @@ class NettyRequestAdapter implements MuRequest {
     private QueryStringDecoder formDecoder;
     private boolean bodyRead = false;
     private Set<Cookie> cookies;
-    private Map<String, String> pathParams;
 
     public NettyRequestAdapter(String proto, HttpRequest request) {
         this.request = request;
@@ -293,20 +284,6 @@ class NettyRequestAdapter implements MuRequest {
     void inputStream(InputStream stream) {
         this.inputStream = stream;
     }
-
-
-    @Override
-    public String pathParam(String name) {
-        if (pathParams == null) {
-            throw new IllegalStateException("Cannot use this method unless the handler was registered with the " + Routes.class.getName() + " handler.");
-        }
-        return pathParams.get(name);
-    }
-
-    void pathParams(Map<String, String> params) {
-        this.pathParams = params;
-    }
-
 
     public String toString() {
         return method().name() + " " + uri();

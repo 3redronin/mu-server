@@ -13,10 +13,9 @@ public class RunLocal {
             .withHttpConnection(8080)
             .withHttpsConnection(8443, SSLContextBuilder.unsignedLocalhostCert())
             .addHandler(ResourceHandler.fileOrClasspath("src/test/resources/sample-static", "/sample-static").build())
-            .addHandler(Method.GET, "/api", (request, response) -> {
+            .addHandler(Method.GET, "/api", (request, response, pathParams) -> {
                 response.contentType(ContentTypes.APPLICATION_JSON);
                 response.write("{ \"hello\": \"world                    this is something           to be gzipped\" }");
-                return true;
             })
             .start();
 

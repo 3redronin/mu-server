@@ -141,28 +141,6 @@ public class EntityProvidersTest {
         }
     }
 
-    @Test
-    public void canFigureOutGenericTypes() {
-        for (MessageBodyWriter messageBodyWriter : EntityProviders.builtInWriters()) {
-
-            System.out.println("messageBodyWriter = " + messageBodyWriter);
-
-            Class<? extends MessageBodyWriter> writerClass = messageBodyWriter.getClass();
-            for (Type type : writerClass.getGenericInterfaces()) {
-
-                if (type instanceof ParameterizedType) {
-                    ParameterizedType pt = (ParameterizedType) type;
-                    if (pt.getRawType().equals(MessageBodyWriter.class)) {
-                        Type genericType = pt.getActualTypeArguments()[0];
-                        System.out.println("genericType = " + genericType + " (" + genericType.getTypeName() + " - " + genericType.getClass().getName());
-                    }
-                }
-            }
-
-        }
-
-    }
-
     private void stringCheck(String requestBodyType, String content, String expectedResponseType, String requestPath) throws IOException {
         try (Response resp = call(ClientUtils.request()
             .post(RequestBody.create(MediaType.parse(requestBodyType), content))

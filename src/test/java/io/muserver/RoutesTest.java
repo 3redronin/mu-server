@@ -8,6 +8,7 @@ import org.junit.Test;
 import scaffolding.ClientUtils;
 
 import java.io.IOException;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.muserver.MuServerBuilder.httpsServer;
@@ -42,9 +43,8 @@ public class RoutesTest {
     public void jaxrsTemplatesCanBeUsed() throws IOException {
         server = httpsServer()
             .addHandler(Method.GET, "/blah/{id : [0-9]+}/ha",
-                (request, response) -> {
-                    response.write(request.pathParam("id"));
-                    return true;
+                (request, response, pathParams) -> {
+                    response.write(pathParams.get("id"));
                 })
             .start();
 
@@ -82,13 +82,10 @@ public class RoutesTest {
         if (server != null) server.stop();
     }
 
-    private static class RequestCounter implements MuHandler {
+    private static class RequestCounter implements RouteHandler {
         final AtomicInteger count = new AtomicInteger();
-
-        @Override
-        public boolean handle(MuRequest request, MuResponse response) throws Exception {
+        public void handle(MuRequest request, MuResponse response, Map<String, String> pathParams) throws Exception {
             count.incrementAndGet();
-            return true;
         }
     }
 }

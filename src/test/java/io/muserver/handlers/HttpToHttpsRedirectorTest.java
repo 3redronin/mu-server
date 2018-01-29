@@ -38,9 +38,8 @@ public class HttpToHttpsRedirectorTest {
             .withHttpConnection(11080)
             .withHttpsConnection(11443, SSLContextBuilder.unsignedLocalhostCert())
             .addAsyncHandler(new HttpToHttpsRedirector(11443))
-            .addHandler(Method.GET, "/blah", (request, response) -> {
+            .addHandler(Method.GET, "/blah", (request, response, pathParams) -> {
                 response.write("Hello from " + request.uri());
-                return false; // I don't understand :'(
             }).start();
 
         Response resp = get("/blah?ha=yo");
