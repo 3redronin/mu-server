@@ -10,13 +10,23 @@ Experimental web server, very much under construction
 * The dependencies should be kept to a minimum and all be  compile-time dependencies
 * All config via constructors or builders, so we do not assume or impose any dependency injection frameworks.
 
+## Maven config
+
+````xml
+<dependency>
+    <groupId>io.muserver</groupId>
+    <artifactId>mu-server</artifactId>
+    <version>0.1.1</version>
+</dependency>
+````
+
 ## Routing
 
 Handlers are added to the server builder and executed one by one until a suitable handler is found.
 You can register a route with a URI template and then capture the path parameters:
 
 ````java
-    MuServer server = httpsServer()
+    MuServer server = MuServerBuilder.httpsServer()
         .addHandler(Method.GET, "/blah/{id}",
             (request, response, pathParams) -> {
                 response.write("The ID is " + pathParams.get("id"));
@@ -28,7 +38,7 @@ You can register a route with a URI template and then capture the path parameter
 request and no more handlers should be executed; `false` means it will continue to the next handler.
 
 ````java
-    MuServer server = httpsServer()
+    MuServer server = MuServerBuilder.httpsServer()
         .addHandler((request, response) -> {
                 response.write("Hello world");
                 return true;
