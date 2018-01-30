@@ -1,6 +1,8 @@
 package io.muserver.handlers;
 
 import io.muserver.*;
+import io.netty.handler.codec.http.HttpHeaderNames;
+import io.netty.handler.codec.http.HttpHeaderValues;
 
 import java.io.File;
 import java.io.OutputStream;
@@ -48,6 +50,8 @@ public class ResourceHandler implements MuHandler {
         Long fileSize = provider.fileSize();
         if (fileSize != null) {
             response.headers().add(HeaderNames.CONTENT_LENGTH, fileSize);
+        } else {
+            response.headers().set(HttpHeaderNames.TRANSFER_ENCODING, HttpHeaderValues.CHUNKED);
         }
 
         String filename = requestPath.substring(requestPath.lastIndexOf('/'));
