@@ -134,7 +134,7 @@ public class UriPattern {
         }
 
         // 4. If the resulting string ends with '/' then remove the final character.
-        if (regex.lastIndexOf("/") == regex.length() - 1) {
+        if (regex.length() > 0 && regex.lastIndexOf("/") == regex.length() - 1) {
             regex.delete(regex.length() - 1, regex.length());
         }
 
@@ -149,6 +149,9 @@ public class UriPattern {
     }
 
     static String trimSlashes(String url) {
+        if (url.equals("/")) {
+            return "";
+        }
         boolean start = url.startsWith("/");
         boolean end = url.endsWith("/");
         if (!start && !end) {

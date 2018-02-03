@@ -13,10 +13,10 @@ class SyncHandlerAdapter implements AsyncMuHandler {
 
 	public SyncHandlerAdapter(List<MuHandler> muHandlers) {
 		this.muHandlers = muHandlers;
-	}
+    }
 
 
-	public boolean onHeaders(AsyncContext ctx, Headers headers) throws Exception {
+    public boolean onHeaders(AsyncContext ctx, Headers headers) throws Exception {
 		if (headers.contains(HeaderNames.TRANSFER_ENCODING) || headers.getInt(HeaderNames.CONTENT_LENGTH, -1) > 0) {
 			// There will be a request body, so set the streams
 			GrowableByteBufferInputStream requestBodyStream = new GrowableByteBufferInputStream();
@@ -29,7 +29,7 @@ class SyncHandlerAdapter implements AsyncMuHandler {
 				boolean handled = false;
 				for (MuHandler muHandler : muHandlers) {
 					handled = muHandler.handle(ctx.request, ctx.response);
-					if (handled) {
+		if (handled) {
 						break;
 					}
 				}
@@ -41,8 +41,8 @@ class SyncHandlerAdapter implements AsyncMuHandler {
 				System.out.println("Error from handler: " + ex.getMessage());
 				ex.printStackTrace();
 			} finally {
-				ctx.complete();
-			}
+		    ctx.complete();
+        }
 		});
 		return true;
 	}

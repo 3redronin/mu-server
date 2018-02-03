@@ -1,7 +1,5 @@
 package io.muserver;
 
-import io.muserver.rest.PathMatch;
-import io.muserver.rest.UriPattern;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
@@ -37,6 +35,14 @@ public class RoutesTest {
         assertThat(call(Method.GET, "/blah?oh=yeah"), is(200));
         assertThat(call(Method.GET, "/blah#hi"), is(200));
         assertThat(requestCounter.count.get(), is(4));
+    }
+
+    @Test
+    public void canRouteToSlash() {
+        server = httpsServer()
+            .addHandler(Method.GET, "/", requestCounter)
+            .start();
+        assertThat(call(Method.GET, "/"), is(200)); // should this be 404?
     }
 
     @Test

@@ -28,6 +28,16 @@ public class MuServerTest {
         }
 	}
 
+
+    @Test public void multipleCalles() {
+        server = httpServer()
+//            .addHandler(Method.GET, "/", (request, response, pathParams) -> response.write("Hello"))
+            .start();
+        try (Response ignored = call(request().url(server.uri().toString()))) { }
+        try (Response ignored = call(request().url(server.uri().toString()))) { }
+        try (Response ignored = call(request().url(server.uri().toString()))) { }
+    }
+
 	@Test public void syncHandlersSupported() throws IOException {
 		List<String> handlersHit = new ArrayList<>();
 

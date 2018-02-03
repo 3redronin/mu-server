@@ -24,7 +24,7 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
 	private final ConcurrentHashMap<ChannelHandlerContext, State> state = new ConcurrentHashMap<>();
 
 	public MuServerHandler(List<AsyncMuHandler> handlers) {
-		this.handlers = handlers;
+	    this.handlers = handlers;
 	}
 
 	private static final class State {
@@ -61,9 +61,9 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
 				}
 				if (!handled) {
                     send404(asyncContext);
-					asyncContext.complete();
-				}
-			}
+                    asyncContext.complete();
+                }
+            }
 
 		} else if (msg instanceof HttpContent) {
 			HttpContent content = (HttpContent) msg;
