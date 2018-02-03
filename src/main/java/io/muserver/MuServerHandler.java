@@ -19,9 +19,9 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 class MuServerHandler extends SimpleChannelInboundHandler<Object> {
     static final AttributeKey<String> PROTO_ATTRIBUTE = AttributeKey.newInstance("proto");
+    static final AttributeKey<State> STATE_ATTRIBUTE = AttributeKey.newInstance("state");
 
     private final List<AsyncMuHandler> handlers;
-	private final ConcurrentHashMap<ChannelHandlerContext, State> state = new ConcurrentHashMap<>();
 
 	public MuServerHandler(List<AsyncMuHandler> handlers) {
 	    this.handlers = handlers;
@@ -55,7 +55,7 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
 				for (AsyncMuHandler handler : handlers) {
 					handled = handler.onHeaders(asyncContext, asyncContext.request.headers());
 					if (handled) {
-						state.put(ctx, new State(asyncContext, handler));
+					    ctx.channel().attr(STATE_ATTRIBUTE).set(new State(asyncContext, handler));
 						break;
 					}
 				}
@@ -67,7 +67,7 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
 
 		} else if (msg instanceof HttpContent) {
 			HttpContent content = (HttpContent) msg;
-			State state = this.state.get(ctx);
+			State state = ctx.channel().attr(STATE_ATTRIBUTE).get();
 			if (state == null) {
 				// This can happen when a request is rejected based on headers, and then the rejected body arrives
 				System.out.println("Got a chunk of message for an unknown request");
