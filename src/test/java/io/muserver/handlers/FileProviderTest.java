@@ -46,7 +46,6 @@ public class FileProviderTest {
     }
 
     @Test
-    @Ignore("Not working yet")
     public void canReadFilesFromFileSystem() throws IOException {
         File bigFileDir = new File("src/test/big-files");
 
@@ -57,8 +56,24 @@ public class FileProviderTest {
         File[] files = bigFileDir.listFiles(File::isFile);
         assertThat(files.length, Matchers.greaterThanOrEqualTo(2));
         for (File file : files) {
+            System.out.println("Going to test " + file.getName());
             try (Response resp = call(request().url(server.uri().resolve("/" + urlEncode(file.getName())).toString()))) {
                 assertThat(resp.code(), is(200));
+                System.out.println("resp.headers() = " + resp.headers());
+//                InputStream inputStream = resp.body().byteStream();
+//                long soFar = 0;
+//                long total = file.length();
+//                byte[] buf = new byte[32 * 1024];
+//                int read;
+//                int percent = 0;
+//                while ((read = inputStream.read(buf)) > -1) {
+//                    soFar += read;
+//                    int nowPercent = (int) (100.0 * (soFar / (double)total));
+//                    if (percent != nowPercent) {
+//                        percent = nowPercent;
+//                        System.out.println(file.getName() + " percent = " + percent);
+//                    }
+//                }
                 assertThat(isEqual(new FileInputStream(file), resp.body().byteStream()), is(true));
             }
 
@@ -71,8 +86,8 @@ public class FileProviderTest {
         ReadableByteChannel ch1 = Channels.newChannel(i1);
         ReadableByteChannel ch2 = Channels.newChannel(i2);
 
-        ByteBuffer buf1 = ByteBuffer.allocateDirect(1024);
-        ByteBuffer buf2 = ByteBuffer.allocateDirect(1024);
+        ByteBuffer buf1 = ByteBuffer.allocateDirect(32 * 1024);
+        ByteBuffer buf2 = ByteBuffer.allocateDirect(32 * 1024);
 
         try {
             while (true) {

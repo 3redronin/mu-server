@@ -3,17 +3,12 @@ package io.muserver.handlers;
 import io.muserver.MuResponse;
 import io.muserver.Mutils;
 
-import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URL;
 import java.net.URLConnection;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Objects;
-
-import static java.nio.file.Files.copy;
 
 public interface ResourceProvider {
     boolean exists();
@@ -49,9 +44,8 @@ class FileProvider implements ResourceProvider {
 
     @Override
     public void sendTo(MuResponse response) throws IOException {
-        try (OutputStream os = response.outputStream();
-             FileInputStream is = new FileInputStream(localPath.toFile())) {
-            Mutils.copy(is, os, 8192);
+        try (OutputStream os = response.outputStream()) {
+            Files.copy(localPath, os);
         }
     }
 
