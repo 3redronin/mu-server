@@ -1,19 +1,16 @@
 package io.muserver;
 
+import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.*;
 import io.netty.handler.codec.http.*;
 import io.netty.handler.codec.http.cookie.ServerCookieEncoder;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.stream.ChunkedFile;
-import io.netty.handler.stream.ChunkedNioFile;
-import io.netty.handler.stream.ChunkedStream;
 import io.netty.util.CharsetUtil;
-import sun.net.www.http.ChunkedInputStream;
 
 import java.io.*;
 import java.net.URI;
-import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.Future;
 
@@ -29,6 +26,8 @@ public interface MuResponse {
     Future<Void> writeAsync(String text);
 
     void write(String text);
+
+    void sendChunk(String text);
 
     void redirect(String url);
 
@@ -53,18 +52,23 @@ public interface MuResponse {
 }
 
 class NettyResponseAdaptor implements MuResponse {
+    private OutputState outputState = OutputState.NOTHING;
     private boolean chunkResponse = false;
     private final ChannelHandlerContext ctx;
     private final NettyRequestAdapter request;
-    private HttpResponse response;
+    private HttpResponse response = new DefaultHttpResponse(HTTP_1_1, OK, false);
     private boolean headersWritten = false;
     private final Headers headers = new Headers();
     private boolean keepAlive;
+    private ChannelFuture lastAction;
 
-    public NettyResponseAdaptor(ChannelHandlerContext ctx, NettyRequestAdapter request, HttpResponse response) {
+    private enum OutputState {
+        NOTHING, FULL_SENT, CHUNKING
+    }
+
+    public NettyResponseAdaptor(ChannelHandlerContext ctx, NettyRequestAdapter request) {
         this.ctx = ctx;
         this.request = request;
-        this.response = response;
     }
 
     public int status() {
@@ -77,6 +81,26 @@ class NettyResponseAdaptor implements MuResponse {
         }
         response.setStatus(HttpResponseStatus.valueOf(value));
 
+    }
+
+    private void startChunking() {
+        if (outputState != OutputState.NOTHING) {
+            throw new IllegalStateException("Cannot start chunking when state is " + outputState);
+        }
+        outputState = OutputState.CHUNKING;
+        response = new DefaultHttpResponse(HTTP_1_1, HttpResponseStatus.valueOf(status()), false);
+
+        response.headers().add(this.headers.nettyHeaders());
+
+        boolean useKeepAlive = request.isKeepAliveRequested();
+        if (useKeepAlive) {
+            response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE);
+        }
+
+        response.headers().set(HttpHeaderNames.TRANSFER_ENCODING, HttpHeaderValues.CHUNKED);
+        response.headers().remove(HttpHeaderNames.CONTENT_LENGTH);
+
+        ctx.writeAndFlush(response);
     }
 
     private void useChunkedMode() {
@@ -100,22 +124,51 @@ class NettyResponseAdaptor implements MuResponse {
                 response.headers().set(HttpHeaderNames.CONTENT_LENGTH, HttpHeaderValues.ZERO);
             }
 
-            response.headers().add(headers.nettyHeaders());
+            writeHeaders(response, headers);
 
 
             ctx.write(response);
         }
     }
 
+    private static void writeHeaders(HttpResponse response, Headers headers) {
+        response.headers().add(headers.nettyHeaders());
+    }
+
     public Future<Void> writeAsync(String text) {
         useChunkedMode();
         ensureHeadersWritten();
-        return ctx.write(new DefaultHttpContent(Unpooled.copiedBuffer(text, CharsetUtil.UTF_8)));
+        return ctx.write(new DefaultHttpContent(textToBuffer(text)));
     }
 
 
     public void write(String text) {
-        writeAsync(text);
+        if (outputState != OutputState.NOTHING) {
+            String what = outputState == OutputState.FULL_SENT ? "twice for one response" : "after sending chunks";
+            throw new IllegalStateException("You cannot call write " + what + ". If you want to send text in multiple chunks, use sendChunk instead.");
+        }
+        outputState = OutputState.FULL_SENT;
+        FullHttpResponse resp = new DefaultFullHttpResponse(HTTP_1_1, HttpResponseStatus.valueOf(this.status()), textToBuffer(text), false);
+
+        resp.headers().add(this.headers.nettyHeaders());
+        HttpUtil.setContentLength(resp, text.length());
+
+        if (request.isKeepAliveRequested()) {
+            resp.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE);
+        }
+
+        lastAction = ctx.writeAndFlush(resp);
+    }
+
+    public void sendChunk(String text) {
+        if (outputState == OutputState.NOTHING) {
+            startChunking();
+        }
+        lastAction = ctx.writeAndFlush(new DefaultHttpContent(textToBuffer(text)));
+    }
+
+    private static ByteBuf textToBuffer(String text) {
+        return Unpooled.copiedBuffer(text, CharsetUtil.UTF_8);
     }
 
     public void redirect(String newLocation) {
@@ -219,11 +272,19 @@ class NettyResponseAdaptor implements MuResponse {
     }
 
     public Future<Void> complete() {
-        ensureHeadersWritten();
-        ChannelFuture completeFuture = ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
-        if (!keepAlive) {
-            completeFuture = completeFuture.addListener(ChannelFutureListener.CLOSE);
+        System.out.println("Complete called and status is " + outputState);
+
+        if (outputState == OutputState.NOTHING) {
+            DefaultFullHttpResponse msg = new DefaultFullHttpResponse(HTTP_1_1, HttpResponseStatus.valueOf(status()), false);
+            msg.headers().add(this.headers.nettyHeaders());
+            msg.headers().set(HeaderNames.CONTENT_LENGTH, 0);
+            lastAction = ctx.writeAndFlush(msg);
+        } else if (outputState == OutputState.CHUNKING) {
+            lastAction = ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
         }
-        return completeFuture;
+        if (!request.isKeepAliveRequested()) {
+            lastAction = lastAction.addListener(ChannelFutureListener.CLOSE);
+        }
+        return lastAction;
     }
 }

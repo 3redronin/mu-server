@@ -44,13 +44,11 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
 				handleHttpRequestDecodeFailure(ctx, request.decoderResult().cause());
 			} else {
 
-				HttpResponse response = new DefaultHttpResponse(HTTP_1_1, HttpResponseStatus.OK, false);
-
 				boolean handled = false;
                 Attribute<String> proto = ctx.channel().attr(PROTO_ATTRIBUTE);
 
                 NettyRequestAdapter muRequest = new NettyRequestAdapter(proto.get(), request);
-                AsyncContext asyncContext = new AsyncContext(muRequest, new NettyResponseAdaptor(ctx, muRequest, response));
+                AsyncContext asyncContext = new AsyncContext(muRequest, new NettyResponseAdaptor(ctx, muRequest));
 
 				for (AsyncMuHandler handler : handlers) {
 					handled = handler.onHeaders(asyncContext, asyncContext.request.headers());
