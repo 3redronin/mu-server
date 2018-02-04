@@ -4,7 +4,12 @@ import io.muserver.MuServer;
 import io.muserver.SSLContextBuilder;
 import io.muserver.handlers.ResourceHandler;
 
+import java.io.File;
+import java.net.URI;
+
 import static io.muserver.MuServerBuilder.muServer;
+import static io.muserver.Mutils.urlEncode;
+import static io.muserver.handlers.FileProviderTest.BIG_FILE_DIR;
 
 public class RunLocal {
 
@@ -12,6 +17,7 @@ public class RunLocal {
         MuServer server = muServer()
             .withHttpConnection(8080)
             .withHttpsConnection(8443, SSLContextBuilder.unsignedLocalhostCert())
+            .addHandler(ResourceHandler.fileHandler(BIG_FILE_DIR).build())
             .addHandler(ResourceHandler.fileOrClasspath("src/test/resources/sample-static", "/sample-static").build())
             .addHandler(Method.GET, "/api", (request, response, pathParams) -> {
                 response.contentType(ContentTypes.APPLICATION_JSON);
@@ -20,6 +26,12 @@ public class RunLocal {
             .start();
 
         System.out.println("Started at " + server.httpUri() + " and " + server.httpsUri());
+
+        File[] files = BIG_FILE_DIR.listFiles(File::isFile);
+        for (File file : files) {
+            URI downloadUri = server.httpUri().resolve("/" + urlEncode(file.getName()));
+            System.out.println("Download " + file.getName() + " from " + downloadUri);
+        }
 
         Runtime.getRuntime().addShutdownHook(new Thread(server::stop));
     }

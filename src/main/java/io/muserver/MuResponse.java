@@ -42,8 +42,6 @@ public interface MuResponse {
     OutputStream outputStream();
     PrintWriter writer();
 
-    void sendFile(File file) throws IOException;
-
 }
 
 class NettyResponseAdaptor implements MuResponse {
@@ -159,65 +157,6 @@ class NettyResponseAdaptor implements MuResponse {
 
     public PrintWriter writer() {
         return new PrintWriter(new OutputStreamWriter(outputStream(), StandardCharsets.UTF_8));
-    }
-
-    @Override
-    public void sendFile(File file) throws IOException {
-        // https://github.com/netty/netty/blob/4.1/example/src/main/java/io/netty/example/http/file/HttpStaticFileServerHandler.java
-        RandomAccessFile raf = new RandomAccessFile(file, "r");
-
-        long fileLength = raf.length();
-
-        response = new DefaultHttpResponse(HTTP_1_1, OK);
-
-        HttpUtil.setContentLength(response, raf.length());
-//        keepAlive = !headers.contains(HeaderNames.CONNECTION) && request.isKeepAliveRequested();
-//
-//        if (keepAlive) {
-//            response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE);
-//        }
-
-
-        // Write the initial line and the header.
-        ctx.write(response);
-
-        // Write the content.
-        ChannelFuture sendFileFuture;
-        ChannelFuture lastContentFuture;
-        if (ctx.pipeline().get(SslHandler.class) == null) {
-            sendFileFuture =
-                ctx.write(new DefaultFileRegion(raf.getChannel(), 0, fileLength), ctx.newProgressivePromise());
-            // Write the end marker.
-            lastContentFuture = ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
-        } else {
-            sendFileFuture =
-                ctx.writeAndFlush(new HttpChunkedInput(new ChunkedFile(raf, 0, fileLength, 8192)),
-                    ctx.newProgressivePromise());
-            // HttpChunkedInput will write the end marker (LastHttpContent) for us.
-            lastContentFuture = sendFileFuture;
-        }
-
-        sendFileFuture.addListener(new ChannelProgressiveFutureListener() {
-            @Override
-            public void operationProgressed(ChannelProgressiveFuture future, long progress, long total) {
-                if (total < 0) { // total unknown
-                    System.err.println(future.channel() + " Transfer progress: " + progress);
-                } else {
-                    System.err.println(future.channel() + " Transfer progress: " + progress + " / " + total);
-                }
-            }
-
-            @Override
-            public void operationComplete(ChannelProgressiveFuture future) {
-                System.err.println(future.channel() + " Transfer complete.");
-            }
-        });
-
-        // Decide whether to close the connection or not.
-//        if (!keepAlive) {
-//            // Close the connection when the whole content is written out.
-//            lastContentFuture.addListener(ChannelFutureListener.CLOSE);
-//        }
     }
 
     public Future<Void> complete() {

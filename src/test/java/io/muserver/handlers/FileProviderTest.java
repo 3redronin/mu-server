@@ -1,19 +1,24 @@
 package io.muserver.handlers;
 
 import io.muserver.MuServer;
+import io.muserver.SSLContextBuilder;
 import okhttp3.Response;
 import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Ignore;
 import org.junit.Test;
 
-import java.io.*;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.file.Paths;
 
-import static io.muserver.MuServerBuilder.httpsServer;
+import static io.muserver.MuServerBuilder.muServer;
 import static io.muserver.Mutils.urlEncode;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -24,6 +29,7 @@ public class FileProviderTest {
 
     private final ResourceProviderFactory factory = ResourceProviderFactory.fileBased(Paths.get("src/test/resources/sample-static"));
     MuServer server;
+    public static final File BIG_FILE_DIR = new File("src/test/big-files");
 
     @Test
     public void fileExistenceCanBeFound() {
@@ -46,18 +52,21 @@ public class FileProviderTest {
     }
 
     @Test
-    public void canReadFilesFromFileSystem() throws IOException {
-        File bigFileDir = new File("src/test/big-files");
+    public void canReadFilesFromFileSystem() throws Exception {
 
-        server = httpsServer()
-            .addHandler(ResourceHandler.fileHandler(bigFileDir))
+        server = muServer()
+            .withHttpsConnection(12443, SSLContextBuilder.unsignedLocalhostCert())
+            .withHttpConnection(12080)
+            .addHandler(ResourceHandler.fileHandler(BIG_FILE_DIR))
             .start();
 
-        File[] files = bigFileDir.listFiles(File::isFile);
+        File[] files = BIG_FILE_DIR.listFiles(File::isFile);
         assertThat(files.length, Matchers.greaterThanOrEqualTo(2));
         for (File file : files) {
-            System.out.println("Going to test " + file.getName());
-            try (Response resp = call(request().url(server.uri().resolve("/" + urlEncode(file.getName())).toString()))) {
+            URI downloadUri = server.httpUri().resolve("/" + urlEncode(file.getName()));
+            System.out.println("Going to test " + file.getName() + " from " + downloadUri);
+
+            try (Response resp = call(request().url(downloadUri.toString()))) {
                 assertThat(resp.code(), is(200));
                 System.out.println("resp.headers() = " + resp.headers());
 //                InputStream inputStream = resp.body().byteStream();
@@ -76,10 +85,10 @@ public class FileProviderTest {
 //                }
                 assertThat(isEqual(new FileInputStream(file), resp.body().byteStream()), is(true));
             }
-
         }
 
     }
+
 
     private static boolean isEqual(InputStream i1, InputStream i2) throws IOException {
 
@@ -113,6 +122,7 @@ public class FileProviderTest {
             i2.close();
         }
     }
+
     @After
     public void stop() {
         if (server != null) {

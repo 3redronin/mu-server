@@ -49,6 +49,7 @@ public class ResourceType {
             .add(HeaderNames.CACHE_CONTROL, "max-age=300")
             .add(HeaderNames.X_CONTENT_TYPE_OPTIONS, HeaderValues.NOSNIFF),
         true, asList("css"));
+    public static final ResourceType TEXT_CONFIG = new ResourceType(ContentTypes.TEXT_PLAIN, noCache(), true, asList("ini", "gitignore", "gitattributes", "cfg"));
     public static final ResourceType TEXT_CSV = new ResourceType(ContentTypes.TEXT_CSV, noCache(), true, asList("csv"));
     public static final ResourceType APPLICATION_MSWORD = new ResourceType(ContentTypes.APPLICATION_MSWORD, shortCache(), false, asList("doc"));
     public static final ResourceType APPLICATION_VND_MS_FONTOBJECT = new ResourceType(ContentTypes.APPLICATION_VND_MS_FONTOBJECT, shortCache(), false, asList("eot"));
