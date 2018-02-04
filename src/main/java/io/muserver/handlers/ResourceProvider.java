@@ -1,20 +1,26 @@
 package io.muserver.handlers;
 
+import io.muserver.MuResponse;
 import io.muserver.Mutils;
 
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URL;
 import java.net.URLConnection;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Objects;
+
+import static java.nio.file.Files.copy;
 
 public interface ResourceProvider {
     boolean exists();
 
     Long fileSize();
 
-    void writeTo(OutputStream out, int bufferSizeInBytes) throws IOException;
+    void sendTo(MuResponse response) throws IOException;
 }
 
 class FileProvider implements ResourceProvider {
@@ -41,9 +47,12 @@ class FileProvider implements ResourceProvider {
         }
     }
 
-    public void writeTo(OutputStream out, int bufferSizeInBytes) throws IOException {
-        long copy = Files.copy(localPath, out);
-        System.out.println("Sent " + copy + " bytes for " + localPath);
+    @Override
+    public void sendTo(MuResponse response) throws IOException {
+        try (OutputStream os = response.outputStream(8192);
+             FileInputStream is = new FileInputStream(localPath.toFile())) {
+            Mutils.copy(is, os, 8192);
+        }
     }
 
 }
@@ -81,8 +90,11 @@ class ClasspathResourceProvider implements ResourceProvider {
         return size >= 0 ? size : null;
     }
 
-    public void writeTo(OutputStream out, int bufferSizeInBytes) throws IOException {
-        Mutils.copy(info.getInputStream(), out, bufferSizeInBytes);
+    @Override
+    public void sendTo(MuResponse response) throws IOException {
+        try (OutputStream out = response.outputStream(8192)) {
+            Mutils.copy(info.getInputStream(), out, 8192);
+        }
     }
 
 }

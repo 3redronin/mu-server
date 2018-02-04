@@ -40,12 +40,4 @@ public class ClasspathResourceProviderTest {
         assertThat(factory.get("images/guangzhou.jpeg").fileSize(), is(372987L));
     }
 
-    @Test
-    public void fileContentsCanBeGot() throws IOException {
-        ResourceProvider provider = factory.get("images/guangzhou.jpeg");
-        ByteArrayOutputStream out = new ByteArrayOutputStream(372987);
-        provider.writeTo(out, 32 * 1024);
-        MatcherAssert.assertThat(FileProviderTest.toHex(out.toByteArray()), equalTo(FileProviderTest.toHex(Files.readAllBytes(Paths.get("src/test/resources/sample-static/images/guangzhou.jpeg")))));
-    }
-
 }

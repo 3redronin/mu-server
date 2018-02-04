@@ -1,0 +1,6 @@
+# Ignore everything so that you can copy some massive files into this dir without having to upload them to github.
+*
+
+# But not these files...
+!.gitignore
+!guangzhou.jpeg

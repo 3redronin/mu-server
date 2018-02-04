@@ -15,7 +15,7 @@ public class HttpsTest {
 
     @Test public void canCreate() throws Exception {
         server = MuServerBuilder.httpsServer()
-            .withHttpsConnection(8443, SSLContextBuilder.unsignedLocalhostCert())
+            .withHttpsConnection(9443, SSLContextBuilder.unsignedLocalhostCert())
             .addHandler((request, response) -> {
                 response.contentType(ContentTypes.TEXT_PLAIN);
                 response.write("This is encrypted and the URL is " + request.uri());
@@ -24,7 +24,7 @@ public class HttpsTest {
             .start();
 
         Response resp = call(request().url(server.httpsUri().toString()));
-        assertThat(resp.body().string(), equalTo("This is encrypted and the URL is https://localhost:8443/"));
+        assertThat(resp.body().string(), equalTo("This is encrypted and the URL is https://localhost:9443/"));
     }
 
     @Test public void httpCanBeDisabled() {

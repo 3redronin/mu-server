@@ -47,19 +47,11 @@ public class ResourceHandler implements MuHandler {
             System.out.println("Could not find " + requestPath);
             return false;
         }
-        Long fileSize = provider.fileSize();
-        if (fileSize != null) {
-            response.headers().add(HeaderNames.CONTENT_LENGTH, fileSize);
-        } else {
-            response.headers().set(HttpHeaderNames.TRANSFER_ENCODING, HttpHeaderValues.CHUNKED);
-        }
 
         String filename = requestPath.substring(requestPath.lastIndexOf('/'));
         addHeaders(response, filename);
 
-        try (OutputStream out = response.outputStream(bufferSizeInBytes)) {
-            provider.writeTo(out, bufferSizeInBytes);
-        }
+        provider.sendTo(response);
 
         return true;
     }

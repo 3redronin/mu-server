@@ -19,7 +19,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 class MuServerHandler extends SimpleChannelInboundHandler<Object> {
     static final AttributeKey<String> PROTO_ATTRIBUTE = AttributeKey.newInstance("proto");
-    static final AttributeKey<State> STATE_ATTRIBUTE = AttributeKey.newInstance("state");
+    private static final AttributeKey<State> STATE_ATTRIBUTE = AttributeKey.newInstance("state");
 
     private final List<AsyncMuHandler> handlers;
 
