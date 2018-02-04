@@ -23,23 +23,24 @@ import static scaffolding.ClientUtils.*;
 
 public class TextSendingTest {
 
-	private MuServer server;
+    private MuServer server;
 
-	@Test
+    @Test
     public void largeChunksOfTextCanBeWritten() throws Exception {
-	    String lotsoText = StringUtils.randomStringOfLength(70000);
-		server = MuServerBuilder.httpServer()
-				.addHandler(Method.GET, "/", (request, response, pp) -> {
-                    response.contentType(ContentTypes.TEXT_PLAIN);
-					response.write(lotsoText);
-				}).start();
+        String lotsoText = StringUtils.randomStringOfLength(70000);
+        server = MuServerBuilder.httpServer()
+            .withGzipEnabled(false)
+            .addHandler(Method.GET, "/", (request, response, pp) -> {
+                response.contentType(ContentTypes.TEXT_PLAIN);
+                response.write(lotsoText);
+            }).start();
 
         try (Response resp = call(request().url(server.httpUri().toString()))) {
             assertThat(resp.header("Content-Length"), is("70000"));
             assertThat(resp.header("Transfer-Encoding"), is(nullValue()));
             assertThat(resp.body().string(), equalTo(lotsoText));
         }
-	}
+    }
 
     @Test
     public void emptyStringsAreFine() throws Exception {
@@ -57,7 +58,7 @@ public class TextSendingTest {
 
     @Test
     public void textCanBeSentInChunks() throws Exception {
-	    List<String> chunks = asList("Hello", "World", StringUtils.randomStringOfLength(200000), "Yo");
+        List<String> chunks = asList("Hello", "World", StringUtils.randomStringOfLength(200000), "Yo");
 
         server = MuServerBuilder.httpServer()
             .addHandler(Method.GET, "/", (request, response, pp) -> {
@@ -79,7 +80,8 @@ public class TextSendingTest {
     @Test
     public void anEmptyHandlerIsA200WithNoContent() throws Exception {
         server = MuServerBuilder.httpServer()
-            .addHandler(Method.GET, "/", (request, response, pp) -> {}).start();
+            .addHandler(Method.GET, "/", (request, response, pp) -> {
+            }).start();
         try (Response resp = call(request().url(server.httpUri().toString()))) {
             assertThat(resp.header("Content-Length"), is("0"));
             assertThat(resp.body().bytes().length, is(0));
@@ -87,7 +89,8 @@ public class TextSendingTest {
     }
 
 
-    @After public void stopIt() {
-		server.stop();
-	}
+    @After
+    public void stopIt() {
+        server.stop();
+    }
 }
