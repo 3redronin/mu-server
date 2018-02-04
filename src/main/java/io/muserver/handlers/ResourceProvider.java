@@ -49,7 +49,7 @@ class FileProvider implements ResourceProvider {
 
     @Override
     public void sendTo(MuResponse response) throws IOException {
-        try (OutputStream os = response.outputStream(8192);
+        try (OutputStream os = response.outputStream();
              FileInputStream is = new FileInputStream(localPath.toFile())) {
             Mutils.copy(is, os, 8192);
         }
@@ -92,7 +92,7 @@ class ClasspathResourceProvider implements ResourceProvider {
 
     @Override
     public void sendTo(MuResponse response) throws IOException {
-        try (OutputStream out = response.outputStream(8192)) {
+        try (OutputStream out = response.outputStream()) {
             Mutils.copy(info.getInputStream(), out, 8192);
         }
     }

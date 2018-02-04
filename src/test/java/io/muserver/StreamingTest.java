@@ -23,44 +23,6 @@ public class StreamingTest {
 
 	private MuServer server;
 
-	@Test
-	public void theOutputStreamBuffersBasedOnSizeAskedFor() throws IOException {
-		CountDownLatch latch = new CountDownLatch(1);
-		CountDownLatch latch2 = new CountDownLatch(1);
-		server = MuServerBuilder.httpServer()
-				.addHandler((request, response) -> {
-					try (OutputStream outputStream = response.outputStream(4)) {
-						outputStream.write(new byte[]{1, 2, 3, 4});
-						latch.await();
-						outputStream.write(new byte[]{5, 6});
-						outputStream.write(new byte[]{7});
-						latch2.await();
-						outputStream.flush();
-					}
-					return true;
-				}).start();
-
-		Response resp = call(request().url(server.httpUri().toString()));
-
-		try (InputStream stream = resp.body().byteStream()) {
-			latch.countDown();
-			byte[] buffer = new byte[5];
-			int read = stream.read(buffer);
-			assertThat(read, is(4));
-			assertThat(buffer, equalTo(new byte[]{1, 2, 3, 4, 0}));
-
-			int available = stream.available();
-			assertThat(available, is(0));
-			latch2.countDown();
-
-			buffer = new byte[5];
-			read = stream.read(buffer);
-			assertThat(read, is(3));
-			assertThat(buffer, equalTo(new byte[]{5, 6, 7, 0, 0}));
-		}
-
-	}
-
 	@Test public void textCanBeWrittenWithThePrintWriter() throws Exception {
 		server = MuServerBuilder.httpServer()
 				.addHandler((request, response) -> {

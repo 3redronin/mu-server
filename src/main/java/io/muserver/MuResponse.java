@@ -40,12 +40,7 @@ public interface MuResponse {
     void addCookie(io.muserver.Cookie cookie);
 
     OutputStream outputStream();
-
-    OutputStream outputStream(int bufferSizeInBytes);
-
     PrintWriter writer();
-
-    PrintWriter writer(int bufferSizeInChars);
 
     void sendFile(File file) throws IOException;
 
@@ -53,13 +48,10 @@ public interface MuResponse {
 
 class NettyResponseAdaptor implements MuResponse {
     private OutputState outputState = OutputState.NOTHING;
-    private boolean chunkResponse = false;
     private final ChannelHandlerContext ctx;
     private final NettyRequestAdapter request;
     private HttpResponse response = new DefaultHttpResponse(HTTP_1_1, OK, false);
-    private boolean headersWritten = false;
     private final Headers headers = new Headers();
-    private boolean keepAlive;
     private ChannelFuture lastAction;
 
     private enum OutputState {
@@ -76,7 +68,7 @@ class NettyResponseAdaptor implements MuResponse {
     }
 
     public void status(int value) {
-        if (headersWritten) {
+        if (outputState != OutputState.NOTHING) {
             throw new IllegalStateException("Cannot set the status after the headers have already been sent");
         }
         response.setStatus(HttpResponseStatus.valueOf(value));
@@ -103,42 +95,9 @@ class NettyResponseAdaptor implements MuResponse {
         ctx.writeAndFlush(response);
     }
 
-    private void useChunkedMode() {
-        if (!chunkResponse) {
-            chunkResponse = true;
-            response.headers().set(HttpHeaderNames.TRANSFER_ENCODING, HttpHeaderValues.CHUNKED);
-            response.headers().remove(HttpHeaderNames.CONTENT_LENGTH);
-        }
-    }
-
-    private void ensureHeadersWritten() {
-        if (!headersWritten) {
-            headersWritten = true;
-
-            keepAlive = !headers.contains(HeaderNames.CONNECTION) && request.isKeepAliveRequested();
-            if (keepAlive) {
-                response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE);
-            }
-
-            if (!chunkResponse && !headers.contains(HeaderNames.CONTENT_LENGTH)) {
-                response.headers().set(HttpHeaderNames.CONTENT_LENGTH, HttpHeaderValues.ZERO);
-            }
-
-            writeHeaders(response, headers);
-
-
-            ctx.write(response);
-        }
-    }
-
-    private static void writeHeaders(HttpResponse response, Headers headers) {
-        response.headers().add(headers.nettyHeaders());
-    }
-
     public Future<Void> writeAsync(String text) {
-        useChunkedMode();
-        ensureHeadersWritten();
-        return ctx.write(new DefaultHttpContent(textToBuffer(text)));
+        sendChunk(text);
+        return lastAction;
     }
 
 
@@ -194,22 +153,12 @@ class NettyResponseAdaptor implements MuResponse {
     }
 
     public OutputStream outputStream() {
-        return outputStream(16 * 1024); // TODO find a good value for this default and make it configurable
-    }
-
-    public OutputStream outputStream(int bufferSizeInBytes) {
-        useChunkedMode();
-        ensureHeadersWritten();
-        return new ChunkOutputStream(ctx, bufferSizeInBytes);
+        startChunking();
+        return new ChunkedHttpOutputStream(ctx);
     }
 
     public PrintWriter writer() {
-        return writer(16 * 1024); // TODO find a good value for this default and make it configurable
-    }
-
-    public PrintWriter writer(int bufferSizeInChars) {
-        ensureHeadersWritten();
-        return new PrintWriter(new OutputStreamWriter(outputStream(bufferSizeInChars), StandardCharsets.UTF_8));
+        return new PrintWriter(new OutputStreamWriter(outputStream(), StandardCharsets.UTF_8));
     }
 
     @Override
@@ -222,11 +171,11 @@ class NettyResponseAdaptor implements MuResponse {
         response = new DefaultHttpResponse(HTTP_1_1, OK);
 
         HttpUtil.setContentLength(response, raf.length());
-        keepAlive = !headers.contains(HeaderNames.CONNECTION) && request.isKeepAliveRequested();
-
-        if (keepAlive) {
-            response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE);
-        }
+//        keepAlive = !headers.contains(HeaderNames.CONNECTION) && request.isKeepAliveRequested();
+//
+//        if (keepAlive) {
+//            response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE);
+//        }
 
 
         // Write the initial line and the header.
@@ -265,15 +214,13 @@ class NettyResponseAdaptor implements MuResponse {
         });
 
         // Decide whether to close the connection or not.
-        if (!keepAlive) {
-            // Close the connection when the whole content is written out.
-            lastContentFuture.addListener(ChannelFutureListener.CLOSE);
-        }
+//        if (!keepAlive) {
+//            // Close the connection when the whole content is written out.
+//            lastContentFuture.addListener(ChannelFutureListener.CLOSE);
+//        }
     }
 
     public Future<Void> complete() {
-        System.out.println("Complete called and status is " + outputState);
-
         if (outputState == OutputState.NOTHING) {
             DefaultFullHttpResponse msg = new DefaultFullHttpResponse(HTTP_1_1, HttpResponseStatus.valueOf(status()), false);
             msg.headers().add(this.headers.nettyHeaders());

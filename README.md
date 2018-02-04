@@ -75,7 +75,7 @@ public class Fruit {
             case "orange":
                 return "{ \"name\": \"orange\" }";
         }
-        return "not found";
+        throw new javax.ws.rs.NotFoundException();
     }
 }
 ````
