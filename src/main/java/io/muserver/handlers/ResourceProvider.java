@@ -15,7 +15,7 @@ public interface ResourceProvider {
 
     Long fileSize();
 
-    void sendTo(MuResponse response) throws IOException;
+    void sendTo(MuResponse response, boolean sendBody) throws IOException;
 }
 
 class FileProvider implements ResourceProvider {
@@ -43,9 +43,13 @@ class FileProvider implements ResourceProvider {
     }
 
     @Override
-    public void sendTo(MuResponse response) throws IOException {
-        try (OutputStream os = response.outputStream()) {
-            Files.copy(localPath, os);
+    public void sendTo(MuResponse response, boolean sendBody) throws IOException {
+        if (sendBody) {
+            try (OutputStream os = response.outputStream()) {
+                Files.copy(localPath, os);
+            }
+        } else {
+            response.outputStream();
         }
     }
 
@@ -85,9 +89,13 @@ class ClasspathResourceProvider implements ResourceProvider {
     }
 
     @Override
-    public void sendTo(MuResponse response) throws IOException {
-        try (OutputStream out = response.outputStream()) {
-            Mutils.copy(info.getInputStream(), out, 8192);
+    public void sendTo(MuResponse response, boolean sendBody) throws IOException {
+        if (sendBody) {
+            try (OutputStream out = response.outputStream()) {
+                Mutils.copy(info.getInputStream(), out, 8192);
+            }
+        } else {
+            response.outputStream();
         }
     }
 

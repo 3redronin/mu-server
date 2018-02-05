@@ -1,11 +1,8 @@
 package io.muserver.handlers;
 
 import io.muserver.*;
-import io.netty.handler.codec.http.HttpHeaderNames;
-import io.netty.handler.codec.http.HttpHeaderValues;
 
 import java.io.File;
-import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -51,7 +48,7 @@ public class ResourceHandler implements MuHandler {
         String filename = requestPath.substring(requestPath.lastIndexOf('/'));
         addHeaders(response, filename);
 
-        provider.sendTo(response);
+        provider.sendTo(response, request.method() != Method.HEAD);
 
         return true;
     }

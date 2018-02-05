@@ -8,18 +8,18 @@ import java.util.Set;
 
 class SelectiveHttpContentCompressor extends HttpContentCompressor {
 
-    private final int minimumGzipSize;
+    private final long minimumGzipSize;
     private final Set<String> contentTypes;
 
-    SelectiveHttpContentCompressor(int minimumGzipSize, Set<String> contentTypes) {
+    SelectiveHttpContentCompressor(long minimumGzipSize, Set<String> contentTypes) {
         this.minimumGzipSize = minimumGzipSize;
         this.contentTypes = contentTypes;
     }
 
     @Override
     protected Result beginEncode(HttpResponse response, String acceptEncoding) throws Exception {
-        Integer len = response.headers().getInt(HttpHeaderNames.CONTENT_LENGTH);
-        if (len != null && len <= minimumGzipSize) {
+        String len = response.headers().get(HttpHeaderNames.CONTENT_LENGTH);
+        if (len != null && Long.parseLong(len) <= minimumGzipSize) {
             return null;
         }
 

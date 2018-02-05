@@ -9,6 +9,7 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.http.HttpRequestDecoder;
+import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseEncoder;
 import io.netty.handler.ssl.ClientAuth;
 import io.netty.handler.ssl.JdkSslContext;
@@ -26,7 +27,7 @@ import static io.muserver.MuServerHandler.PROTO_ATTRIBUTE;
 
 public class MuServerBuilder {
     private static final int LENGTH_OF_METHOD_AND_PROTOCOL = 17; // e.g. "OPTIONS HTTP/1.1 "
-    private int minimumGzipSize = 1400;
+    private long minimumGzipSize = 1400;
     private int httpPort = 0;
     private int httpsPort = 0;
     private int maxHeadersSize = 8192;
@@ -46,7 +47,7 @@ public class MuServerBuilder {
         this.gzipEnabled = enabled;
         return this;
     }
-    public MuServerBuilder withGzip(int minimumGzipSize, Set<String> mimeTypesToGzip) {
+    public MuServerBuilder withGzip(long minimumGzipSize, Set<String> mimeTypesToGzip) {
         this.gzipEnabled = true;
         this.mimeTypesToGzip = mimeTypesToGzip;
         this.minimumGzipSize = minimumGzipSize;
@@ -176,7 +177,12 @@ public class MuServerBuilder {
                         p.addLast("ssl", sslContext.newHandler(socketChannel.alloc()));
                     }
                     p.addLast("decoder", new HttpRequestDecoder(maxUrlSize + LENGTH_OF_METHOD_AND_PROTOCOL, maxHeadersSize, 8192));
-                    p.addLast("encoder", new HttpResponseEncoder());
+                    p.addLast("encoder", new HttpResponseEncoder() {
+                        @Override
+                        protected boolean isContentAlwaysEmpty(HttpResponse msg) {
+                            return super.isContentAlwaysEmpty(msg) || msg instanceof NettyResponseAdaptor.EmptyHttpResponse;
+                        }
+                    });
                     if (gzipEnabled) {
                         p.addLast("compressor", new SelectiveHttpContentCompressor(minimumGzipSize, mimeTypesToGzip));
                     }
