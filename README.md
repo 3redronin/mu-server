@@ -34,7 +34,7 @@ MuServer server = MuServerBuilder.httpsServer()
     .start();
 ````
 
-...or you can register a handler that can match against an URL. Returning `true` means the handler has handled the
+...or you can register a handler that can match against any URL. Returning `true` means the handler has handled the
 request and no more handlers should be executed; `false` means it will continue to the next handler.
 
 ````java
