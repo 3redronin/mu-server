@@ -48,7 +48,7 @@ MuServer server = MuServerBuilder.httpsServer()
 
 ## JAX-RS REST Resources
 
-Mu-Server provides a simple implementation of the [JAX-RS 2.0 spec](http://download.oracle.com/otn-pub/jcp/jaxrs-2_0-fr-eval-spec/jsr339-jaxrs-2.0-final-spec.pdf), 
+Mu-Server provides a partial implementation of the [JAX-RS 2.0 spec](http://download.oracle.com/otn-pub/jcp/jaxrs-2_0-fr-eval-spec/jsr339-jaxrs-2.0-final-spec.pdf), 
 which is a Java standard used to define REST resources.
 
 Following the principle that you should be in charge of your own config and class instantiation, any parts
