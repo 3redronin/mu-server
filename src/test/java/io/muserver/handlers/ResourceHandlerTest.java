@@ -3,6 +3,7 @@ package io.muserver.handlers;
 import io.muserver.MuServer;
 import io.muserver.MuServerBuilder;
 import okhttp3.Headers;
+import okhttp3.OkHttpClient;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
@@ -17,8 +18,7 @@ import static io.muserver.handlers.ResourceType.gzippableMimeTypes;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
-import static scaffolding.ClientUtils.call;
-import static scaffolding.ClientUtils.request;
+import static scaffolding.ClientUtils.*;
 import static scaffolding.FileUtils.readResource;
 
 public class ResourceHandlerTest {
@@ -47,6 +47,41 @@ public class ResourceHandlerTest {
         assertContentTypeAndContent("/index.html", "text/html", false);
 
         assertNotFound("/bad-path");
+    }
+
+    @Test
+    public void requestsWithDotDotOrTildesResultIn404s() throws Exception {
+        server = MuServerBuilder.httpsServer()
+            .withGzipEnabled(false)
+            .addHandler(ResourceHandler.fileOrClasspath("src/test/resources/does-not-exist", "/sample-static").build())
+            .start();
+
+        assertNotFound("/../something.txt");
+        assertNotFound("/images/../../something.txt");
+        assertNotFound("/images/../blah");
+    }
+
+    @Test
+    public void directoriesResultIn302s() throws Exception {
+        server = MuServerBuilder.httpsServer()
+            .withGzipEnabled(false)
+            .addHandler(ResourceHandler.classpathHandler("/sample-static").withPathToServeFrom("/classpath").build())
+            .addHandler(ResourceHandler.fileHandler("src/test/resources/sample-static").withPathToServeFrom("/file").build())
+            .start();
+
+        OkHttpClient client = newClient().followRedirects(false).build();
+        try (Response resp = client.newCall(request().url(server.uri().resolve("/classpath/images").toURL()).build()).execute()) {
+            assertThat(resp.code(), equalTo(302));
+            assertThat(resp.header("location"), equalTo(server.uri().resolve("/classpath/images/").toString()));
+            assertThat(resp.body().contentLength(), equalTo(0L));
+        }
+        // TODO Why does this need a new client?
+        client = newClient().followRedirects(false).build();
+        try (Response resp = client.newCall(request().url(server.uri().resolve("/file/images").toURL()).build()).execute()) {
+            assertThat(resp.code(), equalTo(302));
+            assertThat(resp.header("location"), equalTo(server.uri().resolve("/file/images/").toString()));
+            assertThat(resp.body().contentLength(), equalTo(0L));
+        }
     }
 
     private void assertNotFound(String path) throws MalformedURLException {

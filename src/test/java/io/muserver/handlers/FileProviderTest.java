@@ -1,7 +1,6 @@
 package io.muserver.handlers;
 
 import io.muserver.MuServer;
-import io.muserver.SSLContextBuilder;
 import okhttp3.Response;
 import org.hamcrest.Matchers;
 import org.junit.After;
@@ -9,14 +8,12 @@ import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
-import java.nio.file.Paths;
 
 import static io.muserver.MuServerBuilder.muServer;
 import static io.muserver.Mutils.urlEncode;
@@ -27,29 +24,8 @@ import static scaffolding.ClientUtils.request;
 
 public class FileProviderTest {
 
-    private final ResourceProviderFactory factory = ResourceProviderFactory.fileBased(Paths.get("src/test/resources/sample-static"));
-    MuServer server;
+    private MuServer server;
     public static final File BIG_FILE_DIR = new File("src/test/big-files");
-
-    @Test
-    public void fileExistenceCanBeFound() {
-        assertThat(factory.get("/no-valid-file").exists(), is(false));
-        assertThat(factory.get("/images").exists(), is(false));
-        assertThat(factory.get("/images/").exists(), is(false));
-        assertThat(factory.get("./index.html").exists(), is(true));
-        assertThat(factory.get("index.html").exists(), is(true));
-    }
-
-    @Test
-    @Ignore("This fails... should this return false or an error though?")
-    public void pathsMustBeDescendantsOfBase() {
-        assertThat(factory.get("../something.txt").exists(), is(false));
-    }
-
-    @Test
-    public void fileSizesCanBeFound() {
-        assertThat(factory.get("images/guangzhou.jpeg").fileSize(), is(372987L));
-    }
 
     @Test
     @Ignore("too slow")

@@ -11,7 +11,6 @@ import io.netty.util.AttributeKey;
 
 import java.nio.ByteBuffer;
 import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
 
 import static io.netty.buffer.Unpooled.copiedBuffer;
 import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
@@ -91,10 +90,10 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
     }
 
     public static void sendPlainText(AsyncContext asyncContext, String message, int statusCode) {
-        asyncContext.response.status(statusCode);
-        asyncContext.response.contentType(ContentTypes.TEXT_PLAIN);
-        asyncContext.response.headers().set(HeaderNames.CONTENT_LENGTH, message.length());
-        asyncContext.response.write(message);
+        MuResponse resp = asyncContext.response;
+        resp.status(statusCode);
+        resp.contentType(ContentTypes.TEXT_PLAIN);
+        resp.write(message);
     }
 
     private void handleHttpRequestDecodeFailure(ChannelHandlerContext ctx, Throwable cause) {

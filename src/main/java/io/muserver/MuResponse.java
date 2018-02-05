@@ -41,6 +41,7 @@ public interface MuResponse {
     void addCookie(io.muserver.Cookie cookie);
 
     OutputStream outputStream();
+
     PrintWriter writer();
 
 }
@@ -83,17 +84,19 @@ class NettyResponseAdaptor implements MuResponse {
         HttpResponse response = isHead ? new EmptyHttpResponse(httpStatus()) : new DefaultHttpResponse(HTTP_1_1, httpStatus(), false);
 
 
-        response.headers().add(this.headers.nettyHeaders());
-
-        boolean useKeepAlive = request.isKeepAliveRequested();
-        if (useKeepAlive) {
-            response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE);
-        }
+        writeHeaders(response, headers, request);
 
         response.headers().set(HttpHeaderNames.TRANSFER_ENCODING, HttpHeaderValues.CHUNKED);
         response.headers().remove(HttpHeaderNames.CONTENT_LENGTH);
 
         lastAction = ctx.writeAndFlush(response);
+    }
+
+    private static void writeHeaders(HttpResponse response, Headers headers, NettyRequestAdapter request) {
+        response.headers().add(headers.nettyHeaders());
+        if (request.isKeepAliveRequested()) {
+            response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE);
+        }
     }
 
     public Future<Void> writeAsync(String text) {
@@ -108,15 +111,12 @@ class NettyResponseAdaptor implements MuResponse {
             throw new IllegalStateException("You cannot call write " + what + ". If you want to send text in multiple chunks, use sendChunk instead.");
         }
         outputState = OutputState.FULL_SENT;
-        FullHttpResponse resp = new DefaultFullHttpResponse(HTTP_1_1, httpStatus(), textToBuffer(text), false);
+        FullHttpResponse resp = isHead ?
+            new EmptyHttpResponse(httpStatus())
+            : new DefaultFullHttpResponse(HTTP_1_1, httpStatus(), textToBuffer(text), false);
 
-        resp.headers().add(this.headers.nettyHeaders());
+        writeHeaders(resp, this.headers, request);
         HttpUtil.setContentLength(resp, text.length());
-
-        if (request.isKeepAliveRequested()) {
-            resp.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE);
-        }
-
         lastAction = ctx.writeAndFlush(resp);
     }
 
@@ -139,6 +139,10 @@ class NettyResponseAdaptor implements MuResponse {
         URI absoluteUrl = request.uri().resolve(newLocation);
         status(302);
         headers().set(HeaderNames.LOCATION, absoluteUrl.toString());
+        HttpResponse resp = new EmptyHttpResponse(httpStatus());
+        writeHeaders(resp, this.headers, request);
+        HttpUtil.setContentLength(resp, 0);
+        lastAction = ctx.writeAndFlush(resp);
     }
 
     public Headers headers() {

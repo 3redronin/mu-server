@@ -13,6 +13,8 @@ import java.nio.file.Path;
 public interface ResourceProvider {
     boolean exists();
 
+    boolean isDirectory();
+
     Long fileSize();
 
     void sendTo(MuResponse response, boolean sendBody) throws IOException;
@@ -22,11 +24,19 @@ class FileProvider implements ResourceProvider {
     private final Path localPath;
 
     FileProvider(Path baseDirectory, String relativePath) {
+        if (relativePath.startsWith("/")) {
+            relativePath = "." + relativePath;
+        }
         this.localPath = baseDirectory.resolve(relativePath);
     }
 
     public boolean exists() {
         return Files.exists(localPath);
+    }
+
+    @Override
+    public boolean isDirectory() {
+        return Files.isDirectory(localPath);
     }
 
     public Long fileSize() {
@@ -57,30 +67,34 @@ class FileProvider implements ResourceProvider {
 
 class ClasspathResourceProvider implements ResourceProvider {
     private final URLConnection info;
+    private final boolean isDir;
 
     public ClasspathResourceProvider(String classpathBase, String relativePath) {
         URLConnection con;
-        if (relativePath.contains("..")) {
+        String path = Mutils.join(classpathBase, "/", relativePath);
+        URL resource = ClasspathResourceProvider.class.getResource(path);
+        if (resource == null) {
             con = null;
         } else {
-            String path = classpathBase + "/" + relativePath;
-            URL resource = ClasspathResourceProvider.class.getResource(path);
-            if (resource == null || resource.getPath().endsWith("/")) {
+            try {
+                con = resource.openConnection();
+            } catch (IOException e) {
+                System.out.println("Error " + e.getMessage());
                 con = null;
-            } else {
-                try {
-                    con = resource.openConnection();
-                } catch (IOException e) {
-                    System.out.println("Error " + e.getMessage());
-                    con = null;
-                }
             }
         }
         this.info = con;
+        // TODO: support files that don't have extensions
+        this.isDir = con != null && (path.lastIndexOf(".") < path.lastIndexOf("/"));
     }
 
     public boolean exists() {
         return info != null;
+    }
+
+    @Override
+    public boolean isDirectory() {
+        return isDir;
     }
 
     public Long fileSize() {
