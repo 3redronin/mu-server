@@ -15,9 +15,8 @@ public class RunLocal {
 
     public static void main(String[] args) {
         MuServer server = muServer()
-            .withHttpConnection(8080)
-            .withHttpsConnection(8443, SSLContextBuilder.unsignedLocalhostCert())
-            .withGzipEnabled(false)
+            .withHttpConnection(18080)
+            .withHttpsConnection(18443, SSLContextBuilder.unsignedLocalhostCert())
             .addHandler(ResourceHandler.fileHandler(BIG_FILE_DIR).build())
             .addHandler(ResourceHandler.fileOrClasspath("src/test/resources/sample-static", "/sample-static").build())
             .addHandler(Method.GET, "/api", (request, response, pathParams) -> {
@@ -32,7 +31,7 @@ public class RunLocal {
                     } else {
                         response.sendChunk(".");
                     }
-                    Thread.sleep(200);
+                    Thread.sleep(10);
                 }
             })
             .start();
