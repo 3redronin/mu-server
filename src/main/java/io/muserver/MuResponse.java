@@ -44,6 +44,7 @@ public interface MuResponse {
 
     PrintWriter writer();
 
+    boolean hasStartedSendingData();
 }
 
 class NettyResponseAdaptor implements MuResponse {
@@ -164,6 +165,11 @@ class NettyResponseAdaptor implements MuResponse {
 
     public PrintWriter writer() {
         return new PrintWriter(new OutputStreamWriter(outputStream(), StandardCharsets.UTF_8));
+    }
+
+    @Override
+    public boolean hasStartedSendingData() {
+        return outputState != OutputState.NOTHING;
     }
 
     public Future<Void> complete() {

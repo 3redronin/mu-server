@@ -44,6 +44,7 @@ public class BinaryEntityProvidersTest {
         check(StringUtils.randomBytes(64 * 1024));
         checkNoBody();
     }
+
     @Test
     public void inputStreamsSupported() throws Exception {
         @Path("samples")
@@ -58,6 +59,7 @@ public class BinaryEntityProvidersTest {
         check(StringUtils.randomBytes(64 * 1024));
         checkNoBody();
     }
+
     @Test
     public void filesSupported() throws Exception {
         File sample = new File("src/test/resources/sample-static/images/friends.jpg");
@@ -76,6 +78,7 @@ public class BinaryEntityProvidersTest {
         check(Mutils.toByteArray(new FileInputStream(sample), 8192), "image/jpeg");
         checkNoBody();
     }
+
     @Test
     public void dataSourcesSupported() throws Exception {
         File sample = new File("src/test/resources/sample-static/images/friends.jpg");
@@ -162,7 +165,6 @@ public class BinaryEntityProvidersTest {
             }
             assertThat(output.toString(), equalTo("This is message one..." + "... and this is message two"));
         }
-
 
         assertThat(errors.toString(), equalTo(""));
     }

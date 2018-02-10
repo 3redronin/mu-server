@@ -1,8 +1,6 @@
 package io.muserver.rest;
 
-import io.muserver.MuServer;
-import io.muserver.MuServerBuilder;
-import io.muserver.SSLContextBuilder;
+import io.muserver.*;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
@@ -11,11 +9,11 @@ import javax.ws.rs.GET;
 import javax.ws.rs.Path;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.UriInfo;
-
 import java.util.stream.Collectors;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.is;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 
@@ -46,6 +44,24 @@ public class ContextTest {
             assertThat(resp.body().string(), equalTo("https://localhost:50977/, /samples/zample/barmpit, https://localhost:50977/samples/zample/barmpit, " +
                 "https://localhost:50977/samples/zample/barmpit?hoo=har%20har, har har, har%20har, " +
                 "Sample Resource Class, samples/zample/barmpit:samples"));
+        }
+    }
+
+
+    @Test
+    public void muResponseCanBeGotten() throws Exception {
+        @Path("samples")
+        class Sample {
+            @GET
+            public void get(@Context MuRequest req, @Context MuResponse resp) {
+                resp.sendChunk("Hello");
+                resp.sendChunk(" world");
+            }
+        }
+        startServer(new Sample());
+        try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), equalTo("Hello world"));
         }
     }
 

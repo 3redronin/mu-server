@@ -72,6 +72,10 @@ public class RestHandler implements MuHandler {
                         String methodSpecific = mm.pathMatch.regexMatcher().group();
                         matchedURIs.add(methodUri.replace("/" + methodSpecific, ""));
                         paramValue = new MuUriInfo(request.uri().resolve("/"), request.uri(), matchedURIs, singletonList(rm.resourceClass.resourceInstance));
+                    } else if (type.equals(MuResponse.class)) {
+                        paramValue = muResponse;
+                    } else if (type.equals(MuRequest.class)) {
+                        paramValue = request;
                     } else {
                         throw new ServerErrorException("MuServer does not support @Context parameters with type " + type, 500);
                     }
@@ -82,31 +86,33 @@ public class RestHandler implements MuHandler {
                 params[param.index] = paramValue;
             }
             Object result = rm.invoke(params);
-            ObjWithType obj = ObjWithType.objType(result);
-            writeHeadersToResponse(muResponse, obj.response);
+            if (!muResponse.hasStartedSendingData()) {
+                ObjWithType obj = ObjWithType.objType(result);
 
-            muResponse.status(obj.status());
+                writeHeadersToResponse(muResponse, obj.response);
+                muResponse.status(obj.status());
 
-            if (obj.entity == null) {
-                muResponse.headers().set(HeaderNames.CONTENT_LENGTH, 0);
-            } else {
+                if (obj.entity == null) {
+                    muResponse.headers().set(HeaderNames.CONTENT_LENGTH, 0);
+                } else {
 
-                Annotation[] annotations = new Annotation[0]; // TODO set this properly
+                    Annotation[] annotations = new Annotation[0]; // TODO set this properly
 
-                MediaType responseMediaType = MediaTypeDeterminer.determine(obj, mm.resourceMethod.resourceClass.produces, mm.resourceMethod.directlyProduces, entityProviders.writers, acceptHeaders);
-                MessageBodyWriter messageBodyWriter = entityProviders.selectWriter(obj.type, obj.genericType, annotations, responseMediaType);
+                    MediaType responseMediaType = MediaTypeDeterminer.determine(obj, mm.resourceMethod.resourceClass.produces, mm.resourceMethod.directlyProduces, entityProviders.writers, acceptHeaders);
+                    MessageBodyWriter messageBodyWriter = entityProviders.selectWriter(obj.type, obj.genericType, annotations, responseMediaType);
 
-                long size = messageBodyWriter.getSize(obj.entity, obj.type, obj.genericType, annotations, responseMediaType);
-                if (size > -1) {
-                    muResponse.headers().set(HeaderNames.CONTENT_LENGTH.toString(), size);
+                    long size = messageBodyWriter.getSize(obj.entity, obj.type, obj.genericType, annotations, responseMediaType);
+                    if (size > -1) {
+                        muResponse.headers().set(HeaderNames.CONTENT_LENGTH.toString(), size);
+                    }
+
+                    muResponse.headers().set(HeaderNames.CONTENT_TYPE, responseMediaType.toString());
+
+                    try (OutputStream entityStream = muResponse.outputStream()) {
+                        messageBodyWriter.writeTo(obj.entity, obj.type, obj.genericType, annotations, responseMediaType, muHeadersToJaxObj(muResponse.headers()), entityStream);
+                    }
+
                 }
-
-                muResponse.headers().set(HeaderNames.CONTENT_TYPE, responseMediaType.toString());
-
-                try (OutputStream entityStream = muResponse.outputStream()) {
-                    messageBodyWriter.writeTo(obj.entity, obj.type, obj.genericType, annotations, responseMediaType, muHeadersToJaxObj(muResponse.headers()), entityStream);
-                }
-
             }
         } catch (NotFoundException e) {
             return false;
