@@ -17,11 +17,23 @@ public class RunLocal {
         MuServer server = muServer()
             .withHttpConnection(8080)
             .withHttpsConnection(8443, SSLContextBuilder.unsignedLocalhostCert())
+            .withGzipEnabled(false)
             .addHandler(ResourceHandler.fileHandler(BIG_FILE_DIR).build())
             .addHandler(ResourceHandler.fileOrClasspath("src/test/resources/sample-static", "/sample-static").build())
             .addHandler(Method.GET, "/api", (request, response, pathParams) -> {
                 response.contentType(ContentTypes.APPLICATION_JSON);
                 response.write("{ \"hello\": \"world                    this is something           to be gzipped\" }");
+            })
+            .addHandler(Method.GET, "/stream", (request, response, pathParams) -> {
+                response.contentType(ContentTypes.TEXT_PLAIN);
+                for (int i = 0; i < Integer.MAX_VALUE; i++) {
+                    if ((i % 100) == 0) {
+                        response.sendChunk("*");
+                    } else {
+                        response.sendChunk(".");
+                    }
+                    Thread.sleep(200);
+                }
             })
             .start();
 
