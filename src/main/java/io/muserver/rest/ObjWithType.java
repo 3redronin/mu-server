@@ -5,7 +5,7 @@ import javax.ws.rs.core.Response;
 import java.lang.reflect.Type;
 
 class ObjWithType {
-    static final ObjWithType EMPTY = new ObjWithType(null, null, null, null);
+    private static final ObjWithType EMPTY = new ObjWithType(null, null, null, null);
 
     final Class type;
     final Type genericType;

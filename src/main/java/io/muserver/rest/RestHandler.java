@@ -85,9 +85,9 @@ public class RestHandler implements MuHandler {
             ObjWithType obj = ObjWithType.objType(result);
             writeHeadersToResponse(muResponse, obj.response);
 
+            muResponse.status(obj.status());
 
             if (obj.entity == null) {
-                muResponse.status(204);
                 muResponse.headers().set(HeaderNames.CONTENT_LENGTH, 0);
             } else {
 
@@ -95,8 +95,6 @@ public class RestHandler implements MuHandler {
 
                 MediaType responseMediaType = MediaTypeDeterminer.determine(obj, mm.resourceMethod.resourceClass.produces, mm.resourceMethod.directlyProduces, entityProviders.writers, acceptHeaders);
                 MessageBodyWriter messageBodyWriter = entityProviders.selectWriter(obj.type, obj.genericType, annotations, responseMediaType);
-
-                muResponse.status(obj.status());
 
                 long size = messageBodyWriter.getSize(obj.entity, obj.type, obj.genericType, annotations, responseMediaType);
                 if (size > -1) {

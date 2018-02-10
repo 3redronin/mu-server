@@ -66,7 +66,7 @@ public class CookieTest {
             @GET
             @Path("set")
             public javax.ws.rs.core.Response setCookie() {
-                return javax.ws.rs.core.Response.ok().cookie(new NewCookie("Something", "This is a cookie value")).build();
+                return javax.ws.rs.core.Response.noContent().cookie(new NewCookie("Something", "This is a cookie value")).build();
             }
 
             @GET
