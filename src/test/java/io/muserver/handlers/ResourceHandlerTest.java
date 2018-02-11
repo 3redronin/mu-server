@@ -8,6 +8,7 @@ import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
 
+import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.List;
@@ -81,6 +82,28 @@ public class ResourceHandlerTest {
             assertThat(resp.code(), equalTo(302));
             assertThat(resp.header("location"), equalTo(server.uri().resolve("/file/images/").toString()));
             assertThat(resp.body().contentLength(), equalTo(0L));
+        }
+    }
+
+    @Test
+    public void filesCanHaveNoFileExtensions() throws IOException {
+        server = MuServerBuilder.httpsServer()
+            .withGzipEnabled(false)
+            .addHandler(ResourceHandler.classpathHandler("/sample-static").withPathToServeFrom("/classpath").build())
+            .addHandler(ResourceHandler.fileHandler("src/test/resources/sample-static").withPathToServeFrom("/file").build())
+            .start();
+
+        OkHttpClient client = newClient().followRedirects(false).build();
+        try (Response resp = client.newCall(request().url(server.uri().resolve("/file/filewithnoextension").toURL()).build()).execute()) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.header("Content-Type"), equalTo("application/octet-stream"));
+            assertThat(resp.body().string(), equalTo("I am not a directory"));
+        }
+
+        try (Response resp = client.newCall(request().url(server.uri().resolve("/classpath/filewithnoextension").toURL()).build()).execute()) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.header("Content-Type"), equalTo("application/octet-stream"));
+            assertThat(resp.body().string(), equalTo("I am not a directory"));
         }
     }
 

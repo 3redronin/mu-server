@@ -76,10 +76,10 @@ public class Mutils {
 
     public static String join(String one, String sep, String two) {
         boolean oneEnds = one.endsWith(sep);
-        boolean twoEnds = two.endsWith(sep);
-        if (oneEnds && twoEnds) {
+        boolean twoStarts = two.startsWith(sep);
+        if (oneEnds && twoStarts) {
             return one + two.substring(sep.length());
-        } else if (oneEnds || twoEnds) {
+        } else if (oneEnds || twoStarts) {
             return one + two;
         } else {
             return one + sep + two;

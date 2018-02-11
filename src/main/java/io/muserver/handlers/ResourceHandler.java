@@ -34,8 +34,8 @@ public class ResourceHandler implements MuHandler {
         }
 
         String pathWithoutWebPrefix = pathToServeFrom.equals("/")
-            ? "." + requestPath
-            : "." + requestPath.substring(pathToServeFrom.length());
+            ? requestPath
+            : requestPath.substring(pathToServeFrom.length());
 
         ResourceProvider provider = resourceProviderFactory.get(pathWithoutWebPrefix);
         if (!provider.exists()) {

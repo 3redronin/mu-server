@@ -2,9 +2,12 @@ package io.muserver.handlers;
 
 import io.muserver.MuResponse;
 import io.muserver.Mutils;
+import sun.net.www.protocol.file.FileURLConnection;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.net.JarURLConnection;
 import java.net.URL;
 import java.net.URLConnection;
 import java.nio.file.Files;
@@ -84,8 +87,24 @@ class ClasspathResourceProvider implements ResourceProvider {
             }
         }
         this.info = con;
-        // TODO: support files that don't have extensions
-        this.isDir = con != null && (path.lastIndexOf(".") < path.lastIndexOf("/"));
+        boolean isDir = false;
+        if (con != null) {
+            if (con instanceof JarURLConnection) {
+                JarURLConnection juc = (JarURLConnection) con;
+                try {
+                    isDir = juc.getJarEntry().isDirectory();
+                } catch (IOException e) {
+                    System.out.println("Error checking dir: " + e.getMessage());
+                }
+            } else if (con instanceof FileURLConnection) {
+                FileURLConnection fuc = (FileURLConnection) con;
+                isDir = new File(fuc.getURL().getFile()).isDirectory();
+            } else {
+                System.out.println("Unexpected jar entry type: " + con.getClass());
+            }
+
+        }
+        this.isDir = isDir;
     }
 
     public boolean exists() {
