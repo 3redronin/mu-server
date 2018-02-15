@@ -54,9 +54,9 @@ public class MuUriInfoTest {
     @Test
     public void getPathWorks() {
         MuUriInfo sample = create("http://example.org:8182/some%20path/path?query=yo#ha");
-        assertThat(sample.getPath(), equalTo("/some path/path"));
+        assertThat(sample.getPath(), equalTo("some path/path"));
         assertThat(sample.getPath(), equalTo(sample.getPath(true)));
-        assertThat(sample.getPath(false), equalTo("/some%20path/path"));
+        assertThat(sample.getPath(false), equalTo("some%20path/path"));
     }
 
     @Test
@@ -131,7 +131,9 @@ public class MuUriInfoTest {
     }
 
     private static MuUriInfo create(String uri, String baseUri) {
-        return new MuUriInfo(uri(baseUri), uri(uri), emptyList(), emptyList());
+        URI baseUri1 = uri(baseUri);
+        URI fullUri = uri(uri);
+        return new MuUriInfo(baseUri1, fullUri, fullUri.getRawPath().substring(baseUri1.getRawPath().length()), emptyList(), emptyList());
     }
 
     private static URI uri(String baseUri) {

@@ -11,6 +11,7 @@ import javax.ws.rs.core.Context;
 import javax.ws.rs.core.UriInfo;
 import java.util.stream.Collectors;
 
+import static java.util.Arrays.asList;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
@@ -27,7 +28,7 @@ public class ContextTest {
             @GET
             @Path("zample/{name}")
             public String get(@Context UriInfo uri) {
-                return String.join(", ",
+                return String.join("\n",
                     uri.getBaseUri().toString(), uri.getPath(), uri.getAbsolutePath().toString(), uri.getRequestUri().toString(),
                     uri.getQueryParameters(true).getFirst("hoo"), uri.getQueryParameters(false).getFirst("hoo"),
                     uri.getMatchedResources().get(0).toString(), uri.getMatchedURIs().stream().collect(Collectors.joining(":"))
@@ -41,9 +42,40 @@ public class ContextTest {
         }
         startServer(new Sample());
         try (Response resp = call(request().url(server.uri().resolve("/samples/zample/barmpit?hoo=har%20har").toString()))) {
-            assertThat(resp.body().string(), equalTo("https://localhost:50977/, /samples/zample/barmpit, https://localhost:50977/samples/zample/barmpit, " +
-                "https://localhost:50977/samples/zample/barmpit?hoo=har%20har, har har, har%20har, " +
-                "Sample Resource Class, samples/zample/barmpit:samples"));
+            assertThat(resp.body().string(), equalTo("https://localhost:50977/\nsamples/zample/barmpit\n" +
+                "https://localhost:50977/samples/zample/barmpit\n" +
+                "https://localhost:50977/samples/zample/barmpit?hoo=har%20har\nhar har\nhar%20har\n" +
+                "Sample Resource Class\nsamples/zample/barmpit:samples"));
+        }
+    }
+
+    @Test
+    public void uriInfoCanBeGottenWhenInContext() throws Exception {
+        @Path("samples")
+        class Sample {
+            @GET
+            @Path("zample/{name}")
+            public String get(@Context UriInfo uri) {
+                return String.join("\n",
+                    uri.getBaseUri().toString(), uri.getPath(), uri.getAbsolutePath().toString(), uri.getRequestUri().toString(),
+                    uri.getQueryParameters(true).getFirst("hoo"), uri.getQueryParameters(false).getFirst("hoo"),
+                    uri.getMatchedResources().get(0).toString(), uri.getMatchedURIs().stream().collect(Collectors.joining(":"))
+                );
+            }
+
+            @Override
+            public String toString() {
+                return "Sample Resource Class";
+            }
+        }
+        this.server = MuServerBuilder.httpsServer()
+            .withHttpsConnection(50977, SSLContextBuilder.unsignedLocalhostCert())
+            .addHandler(new ContextHandler("/ha ha/", asList(RestHandlerBuilder.create(new Sample())))).start();
+        try (Response resp = call(request().url(server.uri().resolve("/ha%20ha/samples/zample/barmpit?hoo=har%20har").toString()))) {
+            assertThat(resp.body().string(), equalTo("https://localhost:50977/ha%20ha/\nsamples/zample/barmpit\n" +
+                "https://localhost:50977/ha%20ha/samples/zample/barmpit\n" +
+                "https://localhost:50977/ha%20ha/samples/zample/barmpit?hoo=har%20har\nhar har\nhar%20har\n" +
+                "Sample Resource Class\nsamples/zample/barmpit:samples"));
         }
     }
 

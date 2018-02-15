@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 
-import static io.muserver.Mutils.urlEncode;
+import static io.muserver.Mutils.urlDecode;
 import static io.muserver.rest.ReadOnlyMultivaluedMap.readOnly;
 import static java.util.stream.Collectors.toList;
 
@@ -20,18 +20,16 @@ class MuUriInfo implements UriInfo {
 
     private final URI baseUri;
     private final URI requestUri;
+    private final String encodedRelativePath;
     private final List<String> matchedURIs;
     private final List<Object> matchedResources;
 
-    MuUriInfo(URI baseUri, URI requestUri, List<String> matchedURIs, List<Object> matchedResources) {
+    MuUriInfo(URI baseUri, URI requestUri, String encodedRelativePath, List<String> matchedURIs, List<Object> matchedResources) {
         this.baseUri = baseUri;
         this.requestUri = requestUri;
+        this.encodedRelativePath = encodedRelativePath;
         this.matchedURIs = matchedURIs;
         this.matchedResources = matchedResources;
-    }
-
-    private static String get(String value, boolean decode) {
-        return decode ? value : urlEncode(value);
     }
 
     @Override
@@ -41,7 +39,7 @@ class MuUriInfo implements UriInfo {
 
     @Override
     public String getPath(boolean decode) {
-        return decode ? requestUri.getPath() : requestUri.getRawPath();
+        return decode ? urlDecode(encodedRelativePath) : encodedRelativePath;
     }
 
     @Override

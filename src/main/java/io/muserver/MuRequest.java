@@ -12,6 +12,7 @@ import java.io.InputStream;
 import java.net.URI;
 import java.util.*;
 
+import static io.muserver.Mutils.urlEncode;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static io.muserver.Cookie.nettyToMu;
 import static java.util.Collections.emptySet;
@@ -128,6 +129,9 @@ public interface MuRequest {
      */
     Optional<String> cookie(String name);
 
+    String contextPath();
+    String relativePath();
+
 }
 
 class NettyRequestAdapter implements MuRequest {
@@ -141,11 +145,14 @@ class NettyRequestAdapter implements MuRequest {
     private QueryStringDecoder formDecoder;
     private boolean bodyRead = false;
     private Set<Cookie> cookies;
+    private String contextPath = "";
+    private String relativePath;
 
     public NettyRequestAdapter(String proto, HttpRequest request) {
         this.request = request;
         this.serverUri = URI.create(proto + "://" + request.headers().get(HeaderNames.HOST) + request.uri());
         this.uri = getUri(request, serverUri);
+        this.relativePath = this.uri.getRawPath();
         this.queryStringDecoder = new QueryStringDecoder(request.uri(), true);
         this.method = Method.fromNetty(request.method());
         this.headers = new Headers(request.headers());
@@ -274,6 +281,16 @@ class NettyRequestAdapter implements MuRequest {
         return Optional.empty();
     }
 
+    @Override
+    public String contextPath() {
+        return contextPath;
+    }
+
+    @Override
+    public String relativePath() {
+        return relativePath;
+    }
+
     private void ensureFormDataLoaded() throws IOException {
         if (formDecoder == null) {
             String body = readBodyAsString();
@@ -287,5 +304,16 @@ class NettyRequestAdapter implements MuRequest {
 
     public String toString() {
         return method().name() + " " + uri();
+    }
+
+    public void addContext(String contextToAdd) {
+        if (contextToAdd.endsWith("/")) {
+            contextToAdd = contextToAdd.substring(0, contextToAdd.length() - 1);
+        }
+        if (!contextToAdd.startsWith("/")) {
+            contextToAdd = "/" + contextToAdd;
+        }
+        this.contextPath = this.contextPath + contextToAdd;
+        this.relativePath = this.relativePath.substring(contextToAdd.length());
     }
 }

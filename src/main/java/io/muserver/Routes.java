@@ -10,7 +10,7 @@ public class Routes {
         return (request, response) -> {
 			boolean methodMatches = method == null || method.equals(request.method());
 			if (methodMatches) {
-                PathMatch matcher = uriPattern.matcher(request.uri());
+                PathMatch matcher = uriPattern.matcher(request.relativePath());
                 if (matcher.fullyMatches()) {
                     muHandler.handle(request, response, matcher.params());
                     return true;

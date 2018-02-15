@@ -15,4 +15,12 @@ public class MutilsTest {
         assertThat(join("/sample-static", "/", "something.txt"), equalTo("/sample-static/something.txt"));
     }
 
+    @Test
+    public void canTrim() {
+        assertThat(Mutils.trim("/sam/ple/", "/"), equalTo("sam/ple"));
+        assertThat(Mutils.trim("sam/ple/", "/"), equalTo("sam/ple"));
+        assertThat(Mutils.trim("/sam/ple", "/"), equalTo("sam/ple"));
+        assertThat(Mutils.trim("sam/ple", "/"), equalTo("sam/ple"));
+    }
+
 }

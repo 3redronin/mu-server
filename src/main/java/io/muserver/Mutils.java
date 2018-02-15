@@ -85,4 +85,15 @@ public class Mutils {
             return one + sep + two;
         }
     }
+
+    public static String trim(String value, String toTrim) {
+        int len = toTrim.length();
+        while (value.startsWith(toTrim)) {
+            value = value.substring(len);
+        }
+        while (value.endsWith(toTrim)) {
+            value = value.substring(0, value.length() - len);
+        }
+        return value;
+    }
 }

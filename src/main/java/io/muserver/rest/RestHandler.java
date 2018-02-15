@@ -44,11 +44,11 @@ public class RestHandler implements MuHandler {
 
     @Override
     public boolean handle(MuRequest request, MuResponse muResponse) throws Exception {
-        URI jaxURI = baseUri.relativize(URI.create(request.uri().getRawPath()));
+        String relativePath = Mutils.trim(request.relativePath(), "/");
         try {
             String requestContentType = request.headers().get(HeaderNames.CONTENT_TYPE);
             List<MediaType> acceptHeaders = MediaTypeDeterminer.parseAcceptHeaders(request.headers().getAll(HeaderNames.ACCEPT));
-            RequestMatcher.MatchedMethod mm = requestMatcher.findResourceMethod(request.method(), jaxURI, acceptHeaders, requestContentType);
+            RequestMatcher.MatchedMethod mm = requestMatcher.findResourceMethod(request.method(), relativePath, acceptHeaders, requestContentType);
             ResourceMethod rm = mm.resourceMethod;
             Object[] params = new Object[rm.methodHandle.getParameterCount()];
 
@@ -67,11 +67,13 @@ public class RestHandler implements MuHandler {
                     Class<?> type = param.parameterHandle.getType();
                     if (type.equals(UriInfo.class)) {
                         List<String> matchedURIs = new ArrayList<>();
-                        String methodUri = jaxURI.toString();
+                        String methodUri = relativePath;
                         matchedURIs.add(methodUri);
                         String methodSpecific = mm.pathMatch.regexMatcher().group();
                         matchedURIs.add(methodUri.replace("/" + methodSpecific, ""));
-                        paramValue = new MuUriInfo(request.uri().resolve("/"), request.uri(), matchedURIs, singletonList(rm.resourceClass.resourceInstance));
+                        paramValue = new MuUriInfo(request.uri().resolve(request.contextPath() + "/"), request.uri(),
+                            Mutils.trim(request.relativePath(), "/"), Collections.unmodifiableList(matchedURIs),
+                            Collections.unmodifiableList(singletonList(rm.resourceClass.resourceInstance)));
                     } else if (type.equals(MuResponse.class)) {
                         paramValue = muResponse;
                     } else if (type.equals(MuRequest.class)) {

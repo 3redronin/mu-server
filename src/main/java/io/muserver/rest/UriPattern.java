@@ -45,7 +45,10 @@ public class UriPattern {
      * and otherwise <code>false</code>.
      */
     public PathMatch matcher(URI input) {
-        String rawPath = input.getRawPath();
+        return matcher(input.getRawPath());
+    }
+
+    public PathMatch matcher(String rawPath) {
         if (rawPath.startsWith("/")) {
             rawPath = rawPath.substring(1);
         }

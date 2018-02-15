@@ -38,14 +38,14 @@ class RequestMatcher {
         this.roots = roots;
     }
 
-    public MatchedMethod findResourceMethod(Method httpMethod, URI uri, List<MediaType> acceptHeaders, String requestBodyContentType) throws NotFoundException, NotAllowedException, NotAcceptableException, NotSupportedException {
-        StepOneOutput stepOneOutput = stepOneIdentifyASetOfCandidateRootResourceClassesMatchingTheRequest(uri);
+    public MatchedMethod findResourceMethod(Method httpMethod, String path, List<MediaType> acceptHeaders, String requestBodyContentType) throws NotFoundException, NotAllowedException, NotAcceptableException, NotSupportedException {
+        StepOneOutput stepOneOutput = stepOneIdentifyASetOfCandidateRootResourceClassesMatchingTheRequest(path);
         URI methodURI = stepOneOutput.unmatchedGroup == null ? null : URI.create(UriPattern.trimSlashes(stepOneOutput.unmatchedGroup));
         Set<MatchedMethod> candidateMethods = stepTwoObtainASetOfCandidateResourceMethodsForTheRequest(methodURI, stepOneOutput.candidates);
         return stepThreeIdentifyTheMethodThatWillHandleTheRequest(httpMethod, candidateMethods, requestBodyContentType, acceptHeaders);
     }
 
-    public StepOneOutput stepOneIdentifyASetOfCandidateRootResourceClassesMatchingTheRequest(URI uri) throws NotFoundException {
+    public StepOneOutput stepOneIdentifyASetOfCandidateRootResourceClassesMatchingTheRequest(String uri) throws NotFoundException {
         List<MatchedClass> candidates = roots.stream()
             .map(rc -> new MatchedClass(rc, rc.pathPattern.matcher(uri)))
             .filter(rc -> {
