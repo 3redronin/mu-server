@@ -1,6 +1,5 @@
 package io.muserver;
 
-import io.muserver.rest.PathMatch;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpUtil;
@@ -10,11 +9,13 @@ import io.netty.handler.codec.http.cookie.ServerCookieDecoder;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
-import java.util.*;
+import java.util.Collections;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 
-import static io.muserver.Mutils.urlEncode;
-import static java.nio.charset.StandardCharsets.UTF_8;
 import static io.muserver.Cookie.nettyToMu;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Collections.emptySet;
 
 public interface MuRequest {

@@ -14,6 +14,7 @@ import java.net.URL;
 import java.util.List;
 import java.util.Map;
 
+import static io.muserver.ContextHandlerBuilder.context;
 import static io.muserver.handlers.ResourceType.getResourceTypes;
 import static io.muserver.handlers.ResourceType.gzippableMimeTypes;
 import static org.hamcrest.CoreMatchers.is;
@@ -48,6 +49,38 @@ public class ResourceHandlerTest {
         assertContentTypeAndContent("/index.html", "text/html", false);
 
         assertNotFound("/bad-path");
+    }
+
+
+
+    @Test
+    public void contextsCanBeUsed() throws Exception {
+        server = MuServerBuilder.httpsServer()
+            .withGzipEnabled(false)
+            .addHandler(
+                context("/a",
+                    context("/b",
+                        context("/c",
+                            ResourceHandler.classpathHandler("/sample-static")
+                            .withPathToServeFrom("/d")
+                        ))))
+            .start();
+
+        Map<String, List<String>> headersFromGET;
+        URL url = server.httpsUri().resolve("/a/b/c/d/index.html").toURL();
+        try (Response resp = call(request().get().url(url))) {
+            headersFromGET = resp.headers().toMultimap();
+            assertThat(resp.code(), is(200));
+            assertThat(resp.header("Content-Type"), is("text/html"));
+            assertThat(resp.body().string(), is(readResource("/sample-static/index.html")));
+        }
+        try (Response resp = call(request().head().url(url))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.headers().toMultimap(), equalTo(headersFromGET));
+            assertThat(resp.body().contentLength(), is(0L));
+        }
+
+        assertNotFound("/d/index.html");
     }
 
     @Test

@@ -90,3 +90,27 @@ MuServer server = MuServerBuilder.httpsServer()
 
 Making a `GET` request to `server.uri().resolve("/api/fruits/orange")` in this case would return the JSON
 snippet corresponding to the Orange case.
+
+## Context paths
+
+You can serve all requests from a base path by wrapping your handlers in context handlers. The following
+example serves requests to `/api/fruits` and `/api/info` with a CORS header added.
+
+````java
+server = httpsServer()
+    .addHandler(context("/api",
+        // First handler will run against any URL starting with "/api/"
+        (req, resp) -> {
+            resp.headers().set("Access-Control-Allow-Origin", "*");
+            return false; // Set not handled, so next handlers will continue
+        },
+        
+        // This will be used if the request is a GET for "/api/info"
+        Routes.route(Method.GET, "/info", (request, response, pathParams) -> {
+            response.write("Info");
+        }),
+        
+        // This is a JAX-RS Resource hosted at "/api/fruits"
+        RestHandlerBuilder.create(new Fruit())
+    )).start();
+````

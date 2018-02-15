@@ -9,6 +9,7 @@ import javax.ws.rs.GET;
 import javax.ws.rs.Path;
 import java.io.IOException;
 
+import static io.muserver.ContextHandlerBuilder.context;
 import static io.muserver.MuServerBuilder.httpsServer;
 import static java.util.Arrays.asList;
 import static org.hamcrest.CoreMatchers.equalTo;
@@ -33,23 +34,27 @@ public class ContextHandlerTest {
         }
 
         server = httpsServer()
-            .addHandler(new ContextHandler("some context",
-                    asList(
-                        Routes.route(Method.GET, "/bl ah", (request, response, pathParams) -> {
-                            response.write("context=" + request.contextPath() + ";relative=" + request.relativePath());
-                        }),
-                        RestHandlerBuilder.create(new Fruit())
-                    )
-                )
+            .addHandler(context("some context",
+                Routes.route(Method.GET, "/bl ah", (request, response, pathParams) -> {
+                    response.write("context=" + request.contextPath() + ";relative=" + request.relativePath());
+                }),
+                context("phase two",
+                    (request, response) -> {
+                        response.headers().add("X-Blah", "added in context");
+                        return false;
+                    },
+                    RestHandlerBuilder.create(new Fruit())
+                ).build())
             ).start();
 
         try (Response resp = call(request().url(server.uri().resolve("/some%20context/bl%20ah").toString()))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.body().string(), equalTo("context=/some%20context;relative=/bl%20ah"));
         }
-        try (Response resp = call(request().url(server.uri().resolve("/some%20context/fruits").toString()))) {
+        try (Response resp = call(request().url(server.uri().resolve("/some%20context/phase%20two/fruits").toString()))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.body().string(), equalTo("Fruity"));
+            assertThat(resp.header("X-Blah"), equalTo("added in context"));
         }
     }
 

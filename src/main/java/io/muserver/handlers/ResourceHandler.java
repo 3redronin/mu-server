@@ -25,7 +25,7 @@ public class ResourceHandler implements MuHandler {
 
     @Override
     public boolean handle(MuRequest request, MuResponse response) throws Exception {
-        String requestPath = request.uri().getPath();
+        String requestPath = request.relativePath();
         if (!requestPath.startsWith(pathToServeFrom)) {
             return false;
         }
