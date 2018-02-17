@@ -28,16 +28,39 @@ public class MuUriBuilderTest {
     }
 
     @Test
-    public void uri() {
+    public void fromUriObject() {
         UriBuilder builder = MuUriBuilder.fromUri(u("http://example.org/blah/?a=b"));
         assertThat(builder.build(), equalTo(u("http://example.org/blah?a=b")));
     }
 
     @Test
-    @Ignore("not working yet")
-    public void uri1() {
-        assertThat(new MuUriBuilder().uri(u("http://example.org/blah/?a=b")).build(),
-            equalTo(new MuUriBuilder().uri("http://example.org/blah?a=b").build()));
+    public void fromUriTemplate() {
+        assertThat(new MuUriBuilder().uri(u("http://user:pw@example.org:12000/blah/?a=b#hi")).build(),
+            equalTo(new MuUriBuilder().uri("http://user:pw@example.org:12000/blah?a=b#hi").build()));
+    }
+
+    @Test
+    public void fromUriTemplateWithPlaceholders() {
+        assertThat(new MuUriBuilder()
+                .uri("http://user:pw@example.org:12000/a/{name}/{ name }/{ nameWithRegex : [0-9]+ }/?a=b#hi")
+                .replacePath("/").build().toString(),
+            equalTo("http://user:pw@example.org:12000/?a=b#hi"));
+        assertThat(new MuUriBuilder()
+                .uri("http://user:pw@example.org:12000/a/{name}/{ name }/{ nameWithRegex : [0-9]+ }/?a=b")
+                .replacePath("/").build().toString(),
+            equalTo("http://user:pw@example.org:12000/?a=b"));
+        assertThat(new MuUriBuilder()
+                .uri("http://user:pw@example.org:12000/a/{name}/{ name }/{ nameWithRegex : [0-9]+ }/#hi")
+                .replacePath("/").build().toString(),
+            equalTo("http://user:pw@example.org:12000/#hi"));
+        assertThat(new MuUriBuilder()
+                .uri("http://user:pw@example.org:12000/")
+                .build().toString(),
+            equalTo("http://user:pw@example.org:12000/"));
+        assertThat(new MuUriBuilder()
+                .uri("http://user:pw@example.org:12000")
+                .build().toString(),
+            equalTo("http://user:pw@example.org:12000/"));
     }
 
     @Test
@@ -152,7 +175,7 @@ public class MuUriBuilderTest {
     public void replaceQueryParam() {
         URI uri = MuUriBuilder.fromUri(u("http://example.org/blah?a=b&c=d&e=f"))
             .replaceQueryParam("a", "newA")
-            .replaceQueryParam("c", (Object[])null)
+            .replaceQueryParam("c", (Object[]) null)
             .replaceQueryParam("g", "h")
             .build();
         assertThat(uri.toString(), equalTo("http://example.org/blah?a=newA&e=f&g=h"));
@@ -191,11 +214,9 @@ public class MuUriBuilderTest {
     }
 
     @Test
-    @Ignore("build from template not working")
-    public void buildFromMap1() {
+    public void buildFromMap() {
         UriBuilder builder = MuUriBuilder.fromUri("http://localhost:8123/{class}/{method}?some=thing");
-
-        Map<String, String> map = new HashMap<>();
+        Map<String, Object> map = new HashMap<>();
         map.put("class", "the Class");
         map.put("method", "the method");
         assertThat(builder.buildFromMap(map),
@@ -204,6 +225,12 @@ public class MuUriBuilderTest {
 
     @Test
     public void buildFromEncodedMap() {
+        UriBuilder builder = MuUriBuilder.fromUri("http://localhost:8123/{class}/{method}?some=thing");
+        Map<String, Object> map = new HashMap<>();
+        map.put("class", "the%20Class");
+        map.put("method", "the%20method");
+        assertThat(builder.buildFromEncodedMap(map),
+            equalTo(u("http://localhost:8123/the%20Class/the%20method?some=thing")));
     }
 
     @Test

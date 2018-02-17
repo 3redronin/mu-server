@@ -15,12 +15,12 @@ public class UriPattern {
 
     private static final String DEFAULT_CAPTURING_GROUP_PATTERN = "[^/]+?";
     private final Pattern pattern;
-    private final Set<String> namedGroups;
+    private final List<String> namedGroups;
     final int numberOfLiterals;
 
-    private UriPattern(Pattern pattern, Set<String> namedGroups, int numberOfLiterals) {
+    private UriPattern(Pattern pattern, List<String> namedGroups, int numberOfLiterals) {
         this.pattern = pattern;
-        this.namedGroups = Collections.unmodifiableSet(namedGroups);
+        this.namedGroups = Collections.unmodifiableList(namedGroups);
         this.numberOfLiterals = numberOfLiterals;
     }
 
@@ -32,9 +32,9 @@ public class UriPattern {
     }
 
     /**
-     * @return Returns the read-only set of path parameters in this pattern
+     * @return Returns the read-only set of path parameters in this pattern in the order they first appeared
      */
-    public Set<String> namedGroups() {
+    public List<String> namedGroups() {
         return namedGroups;
     }
 
@@ -83,7 +83,7 @@ public class UriPattern {
         template = trimSlashes(template);
 
         // Numbered comments are direct from the spec
-        Set<String> groupNames = new HashSet<>();
+        List<String> groupNames = new ArrayList<>();
 
         StringBuilder regex = new StringBuilder();
         int numberOfLiterals = 0;
@@ -127,7 +127,9 @@ public class UriPattern {
                 } else {
                     groupRegex = DEFAULT_CAPTURING_GROUP_PATTERN;
                 }
-                groupNames.add(groupName);
+                if (!groupNames.contains(groupName)) {
+                    groupNames.add(groupName);
+                }
                 regex.append("(?<").append(groupName).append(">").append(groupRegex).append(")");
                 curIndex = endOfRegex;
             }

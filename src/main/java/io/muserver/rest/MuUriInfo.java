@@ -7,6 +7,7 @@ import javax.ws.rs.core.*;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static io.muserver.Mutils.urlDecode;
@@ -49,10 +50,11 @@ class MuUriInfo implements UriInfo {
 
     @Override
     public List<PathSegment> getPathSegments(boolean decode) {
-        return pathStringToSegments(getPath(decode), false);
+        return pathStringToSegments(getPath(decode), false)
+            .collect(Collectors.toList());
     }
 
-    static List<PathSegment> pathStringToSegments(String path, boolean encodeSlashes) {
+    static Stream<MuPathSegment> pathStringToSegments(String path, boolean encodeSlashes) {
         Stream<String> stream = encodeSlashes ? Stream.of(path) : Stream.of(path.split("/"));
         return stream
             .filter(s -> !s.isEmpty())
@@ -71,8 +73,7 @@ class MuUriInfo implements UriInfo {
                     }
                 }
                 return new MuPathSegment(segments[0], params);
-            })
-            .collect(toList());
+            });
     }
 
     @Override

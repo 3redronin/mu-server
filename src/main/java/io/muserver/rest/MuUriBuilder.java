@@ -6,12 +6,15 @@ import javax.ws.rs.core.*;
 import java.lang.reflect.Method;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static io.muserver.Mutils.urlEncode;
+import static java.util.Collections.emptyMap;
 
 class MuUriBuilder extends UriBuilder {
     static {
@@ -22,13 +25,13 @@ class MuUriBuilder extends UriBuilder {
     private String userInfo;
     private String host;
     private int port;
-    private List<PathSegment> pathSegments = new ArrayList<>();
+    private List<MuPathSegment> pathSegments = new ArrayList<>();
     private MultivaluedMap<String, String> query = new MultivaluedHashMap<>();
     private String fragment;
 
-    public MuUriBuilder() {}
+    MuUriBuilder() {}
 
-    private MuUriBuilder(String scheme, String userInfo, String host, int port, List<PathSegment> pathSegments,
+    private MuUriBuilder(String scheme, String userInfo, String host, int port, List<MuPathSegment> pathSegments,
                          MultivaluedMap<String, String> query, String fragment) {
         this.scheme = scheme;
         this.userInfo = userInfo;
@@ -52,7 +55,7 @@ class MuUriBuilder extends UriBuilder {
         userInfo(uri.getUserInfo());
         host(uri.getHost());
         port(uri.getPort());
-        pathSegments = MuUriInfo.pathStringToSegments(uri.getPath(), false);
+        pathSegments = MuUriInfo.pathStringToSegments(uri.getPath(), false).collect(Collectors.toList());
 
         replaceQuery(uri.getQuery());
         fragment(uri.getFragment());
@@ -61,7 +64,21 @@ class MuUriBuilder extends UriBuilder {
 
     @Override
     public UriBuilder uri(String uriTemplate) {
-        throw NotImplementedException.notYet();
+        if (uriTemplate == null) {
+            throw new IllegalArgumentException("uriTemplate is null");
+        }
+        Pattern parts = Pattern.compile("(?<firstBit>[^/]*//[^/]*)(?<path>[^?#]*)(?<end>.*)");
+        Matcher matcher = parts.matcher(uriTemplate);
+        if (!matcher.matches()) {
+            throw new IllegalArgumentException(uriTemplate + " is not a valid URI");
+        }
+        String path = matcher.group("path");
+
+        UriBuilder builder = uri(URI.create(matcher.group("firstBit") + matcher.group("end")));
+        if (!path.isEmpty()) {
+            builder.replacePath(path);
+        }
+        return builder;
     }
 
     @Override
@@ -107,7 +124,7 @@ class MuUriBuilder extends UriBuilder {
 
     @Override
     public UriBuilder path(String path) {
-        this.pathSegments.addAll(MuUriInfo.pathStringToSegments(path, false));
+        this.pathSegments.addAll(MuUriInfo.pathStringToSegments(path, false).collect(Collectors.toList()));
         return this;
     }
 
@@ -129,7 +146,7 @@ class MuUriBuilder extends UriBuilder {
     @Override
     public UriBuilder segment(String... segments) {
         for (String segment : segments) {
-            this.pathSegments.addAll(MuUriInfo.pathStringToSegments(segment, true));
+            this.pathSegments.addAll(MuUriInfo.pathStringToSegments(segment, true).collect(Collectors.toList()));
         }
         return this;
     }
@@ -186,7 +203,7 @@ class MuUriBuilder extends UriBuilder {
 
     @Override
     public UriBuilder resolveTemplate(String name, Object value) {
-        throw NotImplementedException.notYet();
+        return resolveTemplate(name, value, true);
     }
 
     @Override
@@ -201,7 +218,7 @@ class MuUriBuilder extends UriBuilder {
 
     @Override
     public UriBuilder resolveTemplates(Map<String, Object> templateValues) {
-        throw NotImplementedException.notYet();
+        return resolveTemplates(templateValues, true);
     }
 
     @Override
@@ -216,26 +233,15 @@ class MuUriBuilder extends UriBuilder {
 
     @Override
     public URI buildFromMap(Map<String, ?> values) {
-        throw NotImplementedException.notYet();
+        return buildFromMap(values, true);
     }
 
     @Override
     public URI buildFromMap(Map<String, ?> values, boolean encodeSlashInPath) throws IllegalArgumentException, UriBuilderException {
-        throw NotImplementedException.notYet();
+        return buildIt(values, false, encodeSlashInPath);
     }
 
-    @Override
-    public URI buildFromEncodedMap(Map<String, ?> values) throws IllegalArgumentException, UriBuilderException {
-        throw NotImplementedException.notYet();
-    }
-
-    @Override
-    public URI build(Object... values) throws IllegalArgumentException, UriBuilderException {
-        return build(values, true);
-    }
-
-    @Override
-    public URI build(Object[] values, boolean encodeSlashInPath) throws IllegalArgumentException, UriBuilderException {
+    private URI buildIt(Map<String, ?> values, boolean encodeValues, boolean encodeSlashInPath) {
         StringBuilder sb = new StringBuilder();
         if (scheme != null) {
             sb.append(scheme).append("://");
@@ -250,7 +256,7 @@ class MuUriBuilder extends UriBuilder {
             sb.append(':').append(port);
         }
         String path = "/" + pathSegments.stream()
-            .map(Object::toString)
+            .map(muPathSegment -> muPathSegment.render(values, encodeValues, encodeSlashInPath))
             .collect(Collectors.joining("/"));
         sb.append(path);
         if (!query.isEmpty()) {
@@ -271,6 +277,28 @@ class MuUriBuilder extends UriBuilder {
             sb.append('#').append(urlEncode(fragment));
         }
         return URI.create(sb.toString());
+    }
+
+    @Override
+    public URI buildFromEncodedMap(Map<String, ?> values) throws IllegalArgumentException, UriBuilderException {
+        return buildIt(values, false, false);
+    }
+
+    @Override
+    public URI build(Object... values) throws IllegalArgumentException, UriBuilderException {
+        return build(values, true);
+    }
+
+    @Override
+    public URI build(Object[] values, boolean encodeSlashInPath) throws IllegalArgumentException, UriBuilderException {
+        return buildIt(valuesToMap(values), true, encodeSlashInPath);
+    }
+
+    private Map<String, ?> valuesToMap(Object[] values) {
+        if (values == null || values.length == 0) {
+            return emptyMap();
+        }
+        return new HashMap<>();
     }
 
     @Override
