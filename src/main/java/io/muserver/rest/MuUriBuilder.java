@@ -206,7 +206,19 @@ class MuUriBuilder extends UriBuilder {
 
     @Override
     public UriBuilder resolveTemplate(String name, Object value, boolean encodeSlashInPath) {
-        throw NotImplementedException.notYet();
+        notNull("name", name);
+        notNull("value", value);
+        Map<String, Object> map = Collections.singletonMap(name, value);
+        this.pathSegments = this.pathSegments.stream()
+            .flatMap(ps -> ps.resolve(map, encodeSlashInPath).stream())
+            .collect(Collectors.toList());
+        return this;
+    }
+
+    private static void notNull(String name, Object value) {
+        if (value == null) {
+            throw new IllegalArgumentException(name + " cannot be null");
+        }
     }
 
     @Override
@@ -301,7 +313,7 @@ class MuUriBuilder extends UriBuilder {
             .collect(Collectors.toCollection(TreeSet::new));
 
         if (sorted.size() != values.length) {
-            throw new IllegalArgumentException("There are " + sorted.size() + " paramters but " + values.length + " values were supplied.");
+            throw new IllegalArgumentException("There are " + sorted.size() + " parameters but " + values.length + " values were supplied.");
         }
         HashMap<String, Object> map = new HashMap<>();
 
