@@ -35,15 +35,22 @@ public class MuPathSegmentTest {
 
     @Test
     public void pathBitsCanContainTemplateParams() {
-        MuPathSegment segment = new MuPathSegment("{hello} world {suffix}", empty());
+        MuPathSegment segment = new MuPathSegment("{hello} wor/ld {suffix}", empty());
         assertThat(segment.pathParameters(), equalTo(asList("hello", "suffix")));
         Map<String,Object> values = new HashMap<>();
         values.put("hello", "ni/hao");
         values.put("suffix", "party%20people");
-        assertThat(segment.render(values, true, true), equalTo("ni%2Fhao%20world%20party%2520people"));
-        assertThat(segment.render(values, true, false), equalTo("ni/hao%20world%20party%2520people"));
-        assertThat(segment.render(values, false, true), equalTo("ni%2Fhao%20world%20party%20people"));
-        assertThat(segment.render(values, false, false), equalTo("ni/hao%20world%20party%20people"));
+        assertThat(segment.render(values, true, true, true), equalTo("ni%2Fhao%20wor%2Fld%20party%2520people"));
+        assertThat(segment.render(values, true, true, false), equalTo("ni/hao%20wor/ld%20party%2520people"));
+        assertThat(segment.render(values, true, false, true), equalTo("ni%2Fhao%20wor%2Fld%20party%20people"));
+        assertThat(segment.render(values, true, false, false), equalTo("ni/hao%20wor/ld%20party%20people"));
+
+        String unencoded = segment.render(values, false, false, false);
+        assertThat(unencoded, equalTo("ni/hao wor/ld party%20people"));
+        // The 2nd and 3rd booleans are ignored when encodePath is false
+        assertThat(segment.render(values, false, true, false), equalTo(unencoded));
+        assertThat(segment.render(values, false, false, true), equalTo(unencoded));
+        assertThat(segment.render(values, false, false, false), equalTo(unencoded));
     }
 
 }

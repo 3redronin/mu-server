@@ -38,7 +38,7 @@ class MuPathSegment implements PathSegment {
 
     @Override
     public String toString() {
-        return render(null, false, true);
+        return render(null, true, false, true);
     }
 
     @Override
@@ -58,21 +58,21 @@ class MuPathSegment implements PathSegment {
         return pathParams;
     }
 
-    public String render(Map<String, ?> values, boolean encodeValues, boolean encodeSlashInPath) {
+    public String render(Map<String, ?> values, boolean encodePath, boolean encodeValues, boolean encodeSlashInPath) {
         String cur = path;
         if (values != null) {
             for (String pathParam : pathParams) {
                 Object val = values.get(pathParam);
                 if (val != null) {
                     String replacement = val.toString();
-                    if (!encodeValues) {
+                    if (encodePath && !encodeValues) {
                         replacement = urlDecode(replacement);
                     }
                     cur = cur.replaceAll("\\{\\s*" + Pattern.quote(pathParam) + "\\s*(:[^}]*)?\\s*}", replacement);
                 }
             }
         }
-        String pathBit = urlEncode(cur);
+        String pathBit = encodePath ? urlEncode(cur) : cur;
         if (!encodeSlashInPath) {
             pathBit = pathBit.replace("%2F", "/");
         }

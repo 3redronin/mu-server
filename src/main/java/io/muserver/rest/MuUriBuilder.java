@@ -1,6 +1,5 @@
 package io.muserver.rest;
 
-import com.sun.deploy.util.OrderedHashSet;
 import io.netty.handler.codec.http.QueryStringDecoder;
 
 import javax.ws.rs.core.*;
@@ -10,7 +9,6 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static io.muserver.Mutils.urlEncode;
 import static java.util.Collections.emptyMap;
@@ -238,10 +236,10 @@ class MuUriBuilder extends UriBuilder {
 
     @Override
     public URI buildFromMap(Map<String, ?> values, boolean encodeSlashInPath) throws IllegalArgumentException, UriBuilderException {
-        return buildIt(values, false, encodeSlashInPath);
+        return URI.create(buildIt(values, true, false, encodeSlashInPath));
     }
 
-    private URI buildIt(Map<String, ?> values, boolean encodeValues, boolean encodeSlashInPath) {
+    private String buildIt(Map<String, ?> values, boolean encodePath, boolean encodeValues, boolean encodeSlashInPath) {
         StringBuilder sb = new StringBuilder();
         if (scheme != null) {
             sb.append(scheme).append("://");
@@ -256,7 +254,7 @@ class MuUriBuilder extends UriBuilder {
             sb.append(':').append(port);
         }
         String path = "/" + pathSegments.stream()
-            .map(muPathSegment -> muPathSegment.render(values, encodeValues, encodeSlashInPath))
+            .map(muPathSegment -> muPathSegment.render(values, encodePath, encodeValues, encodeSlashInPath))
             .collect(Collectors.joining("/"));
         sb.append(path);
         if (!query.isEmpty()) {
@@ -276,12 +274,12 @@ class MuUriBuilder extends UriBuilder {
         if (fragment != null) {
             sb.append('#').append(urlEncode(fragment));
         }
-        return URI.create(sb.toString());
+        return sb.toString();
     }
 
     @Override
     public URI buildFromEncodedMap(Map<String, ?> values) throws IllegalArgumentException, UriBuilderException {
-        return buildIt(values, false, false);
+        return URI.create(buildIt(values, true, false, false));
     }
 
     @Override
@@ -291,7 +289,7 @@ class MuUriBuilder extends UriBuilder {
 
     @Override
     public URI build(Object[] values, boolean encodeSlashInPath) throws IllegalArgumentException, UriBuilderException {
-        return buildIt(valuesToMap(values), true, encodeSlashInPath);
+        return URI.create(buildIt(valuesToMap(values), true, true, encodeSlashInPath));
     }
 
     private Map<String, ?> valuesToMap(Object[] values) {
@@ -321,11 +319,11 @@ class MuUriBuilder extends UriBuilder {
 
     @Override
     public URI buildFromEncoded(Object... values) throws IllegalArgumentException, UriBuilderException {
-        return buildIt(valuesToMap(values), false, true);
+        return URI.create(buildIt(valuesToMap(values), true, false, true));
     }
 
     @Override
     public String toTemplate() {
-        throw NotImplementedException.notYet();
+        return buildIt(null, false, false, false);
     }
 }

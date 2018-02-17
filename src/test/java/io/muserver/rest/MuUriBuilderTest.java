@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.hamcrest.CoreMatchers.equalTo;
+import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.MatcherAssert.assertThat;
 
@@ -259,6 +260,9 @@ public class MuUriBuilderTest {
 
     @Test
     public void toTemplate() {
+        UriBuilder uri = new MuUriBuilder()
+            .uri("http://user:pw@example.org:12000/a/{name}/{ nameWithRegex : [0-9]+ }/{ name }/?a=b#hi");
+        assertThat(uri.toTemplate(), equalTo("http://user:pw@example.org:12000/a/{name}/{ nameWithRegex : [0-9]+ }/{ name }?a=b#hi"));
     }
 
     private static URI u(String uri) {
