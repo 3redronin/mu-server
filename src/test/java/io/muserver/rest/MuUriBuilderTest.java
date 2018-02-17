@@ -1,6 +1,5 @@
 package io.muserver.rest;
 
-import org.junit.Ignore;
 import org.junit.Test;
 
 import javax.ws.rs.core.UriBuilder;
@@ -9,7 +8,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.MatcherAssert.assertThat;
 
@@ -218,9 +216,14 @@ public class MuUriBuilderTest {
         UriBuilder builder = MuUriBuilder.fromUri("http://localhost:8123/{class}/{method}?some=thing");
         Map<String, Object> map = new HashMap<>();
         map.put("class", "the Class");
-        map.put("method", "the method");
+        map.put("method", "the / method");
         assertThat(builder.buildFromMap(map),
-            equalTo(u("http://localhost:8123/the%20Class/the%20method?some=thing")));
+            equalTo(builder.buildFromMap(map, true)));
+        assertThat(builder.buildFromMap(map, true),
+            equalTo(u("http://localhost:8123/the%20Class/the%20%2F%20method?some=thing")));
+        assertThat(builder.buildFromMap(map, false),
+            equalTo(u("http://localhost:8123/the%20Class/the%20/%20method?some=thing")));
+
     }
 
     @Test
@@ -234,7 +237,24 @@ public class MuUriBuilderTest {
     }
 
     @Test
+    public void buildFromValues() {
+        UriBuilder uri = new MuUriBuilder()
+            .uri("http://user:pw@example.org:12000/a/{name}/{ nameWithRegex : [0-9]+ }/{ name }/?a=b#hi");
+        Object[] values = {"a / name", 1234};
+        assertThat(uri.build(values), equalTo(uri.build(values, true)));
+        assertThat(uri.build(values, true).toString(),
+            equalTo("http://user:pw@example.org:12000/a/a%20%2F%20name/1234/a%20%2F%20name?a=b#hi"));
+        assertThat(uri.build(values, false).toString(),
+            equalTo("http://user:pw@example.org:12000/a/a%20/%20name/1234/a%20/%20name?a=b#hi"));
+    }
+
+    @Test
     public void buildFromEncoded() {
+        UriBuilder uri = new MuUriBuilder()
+            .uri("http://user:pw@example.org:12000/a/{name}/{ nameWithRegex : [0-9]+ }/{ name }/?a=b#hi");
+        Object[] values = {"a%20%2F%20name", 1234};
+        assertThat(uri.buildFromEncoded(values).toString(),
+            equalTo("http://user:pw@example.org:12000/a/a%20%2F%20name/1234/a%20%2F%20name?a=b#hi"));
     }
 
     @Test

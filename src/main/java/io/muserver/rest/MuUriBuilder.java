@@ -1,17 +1,16 @@
 package io.muserver.rest;
 
+import com.sun.deploy.util.OrderedHashSet;
 import io.netty.handler.codec.http.QueryStringDecoder;
 
 import javax.ws.rs.core.*;
 import java.lang.reflect.Method;
 import java.net.URI;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static io.muserver.Mutils.urlEncode;
 import static java.util.Collections.emptyMap;
@@ -29,7 +28,8 @@ class MuUriBuilder extends UriBuilder {
     private MultivaluedMap<String, String> query = new MultivaluedHashMap<>();
     private String fragment;
 
-    MuUriBuilder() {}
+    MuUriBuilder() {
+    }
 
     private MuUriBuilder(String scheme, String userInfo, String host, int port, List<MuPathSegment> pathSegments,
                          MultivaluedMap<String, String> query, String fragment) {
@@ -298,12 +298,30 @@ class MuUriBuilder extends UriBuilder {
         if (values == null || values.length == 0) {
             return emptyMap();
         }
-        return new HashMap<>();
+        SortedSet<String> sorted = pathSegments.stream()
+            .flatMap(ps -> ps.pathParameters().stream())
+            .collect(Collectors.toCollection(TreeSet::new));
+
+        if (sorted.size() != values.length) {
+            throw new IllegalArgumentException("There are " + sorted.size() + " paramters but " + values.length + " values were supplied.");
+        }
+        HashMap<String, Object> map = new HashMap<>();
+
+        int index = 0;
+        for (String name : sorted) {
+            Object value = values[index];
+            if (value == null) {
+                throw new IllegalArgumentException("Value at index " + index + " was null");
+            }
+            map.put(name, value);
+            index++;
+        }
+        return map;
     }
 
     @Override
     public URI buildFromEncoded(Object... values) throws IllegalArgumentException, UriBuilderException {
-        throw NotImplementedException.notYet();
+        return buildIt(valuesToMap(values), false, true);
     }
 
     @Override

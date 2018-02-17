@@ -68,7 +68,7 @@ class MuPathSegment implements PathSegment {
                     if (!encodeValues) {
                         replacement = urlDecode(replacement);
                     }
-                    cur = cur.replaceAll("\\{\\s*" + Pattern.quote(pathParam) + "\\s*(:[^}])*}", replacement);
+                    cur = cur.replaceAll("\\{\\s*" + Pattern.quote(pathParam) + "\\s*(:[^}]*)?\\s*}", replacement);
                 }
             }
         }
