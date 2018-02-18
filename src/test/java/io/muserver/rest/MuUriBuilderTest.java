@@ -1,6 +1,5 @@
 package io.muserver.rest;
 
-import org.junit.Ignore;
 import org.junit.Test;
 
 import javax.ws.rs.core.UriBuilder;
@@ -8,9 +7,7 @@ import java.net.URI;
 import java.util.HashMap;
 import java.util.Map;
 
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.CoreMatchers.not;
+import static org.hamcrest.CoreMatchers.*;
 import static org.hamcrest.MatcherAssert.assertThat;
 
 public class MuUriBuilderTest {
@@ -19,7 +16,43 @@ public class MuUriBuilderTest {
     }
 
     @Test
-    @Ignore("Not working!!!")
+    public void prettyMuchEverythingCanHaveTemplateParameters() {
+        UriBuilder builder = new MuUriBuilder()
+            .scheme("http{s}")
+            .userInfo("{name}:{password}")
+            .host("www.example.{extension}")
+            .path("some-{path}")
+            .queryParam("{key}", "{value}")
+            .fragment("frag{ment}");
+
+        URI built = builder.build("s", "dan man", "p@sswor!", "org", "some thing", "a param", "a value", " a boo");
+        assertThat(built.toString(),
+            equalTo("https://dan%20man:p%40sswor%21@www.example.org/some-some%20thing?a%20param=a%20value#frag%20a%20boo"));
+
+        assertThat(builder.toTemplate(),
+            equalTo("http{s}://{name}:{password}@www.example.{extension}/some-{path}?{key}={value}#frag{ment}"));
+    }
+
+    @Test
+    public void templateParameterValuesCanBeUrlEncodedOrNot() {
+        UriBuilder builder = new MuUriBuilder()
+            .scheme("http{s}")
+            .userInfo("{name}:{password}")
+            .host("www.{domain}.org")
+            .path("some-{path}")
+            .queryParam("{key}", "{value}")
+            .fragment("frag{ment}");
+
+        URI built = builder.build("s", " %20", " %20", " %20", " %20", " %20", " %20", " %20");
+        assertThat(built.toString(),
+            equalTo("https://%20%20:%20%20@www.%20%20.org/some-%20%20?%20%20=%20%20#%20%20"));
+
+        assertThat(builder.toTemplate(),
+            equalTo("http{s}://{name}:{password}@www.example.{extension}/some-{path}?{key}={value}#frag{ment}"));
+    }
+
+
+    @Test
     public void examplesFromInternet() {
         assertThat(UriBuilder.fromUri("http://localhost:8080").queryParam("name", "{value}").build("%20").toString(),
             equalTo("http://localhost:8080?name=%2520"));
@@ -45,7 +78,6 @@ public class MuUriBuilderTest {
     }
 
     @Test
-    @Ignore("Not working!!!")
     public void buildWithEncodedOnlyAppliesToTemplateValues() {
         URI one = UriBuilder.fromUri("http://localhost:8080").queryParam("name", "%20").build();
         URI two = UriBuilder.fromUri("http://localhost:8080").queryParam("name", "%20").buildFromEncoded();
@@ -69,13 +101,13 @@ public class MuUriBuilderTest {
     @Test
     public void fromUriObject() {
         UriBuilder builder = MuUriBuilder.fromUri(u("http://example.org/blah/?a=b"));
-        assertThat(builder.build(), equalTo(u("http://example.org/blah?a=b")));
+        assertThat(builder.build(), equalTo(u("http://example.org/blah/?a=b")));
     }
 
     @Test
     public void fromUriTemplate() {
         assertThat(new MuUriBuilder().uri(u("http://user:pw@example.org:12000/blah/?a=b#hi")).build(),
-            equalTo(new MuUriBuilder().uri("http://user:pw@example.org:12000/blah?a=b#hi").build()));
+            equalTo(new MuUriBuilder().uri("http://user:pw@example.org:12000/blah/?a=b#hi").build()));
     }
 
     @Test
@@ -99,12 +131,12 @@ public class MuUriBuilderTest {
         assertThat(new MuUriBuilder()
                 .uri("http://user:pw@example.org:12000")
                 .build().toString(),
-            equalTo("http://user:pw@example.org:12000/"));
+            equalTo("http://user:pw@example.org:12000"));
     }
 
     @Test
     public void scheme() {
-        assertThat(MuUriBuilder.fromUri(u("http://example.org/blah/")).scheme("https").build().toString(),
+        assertThat(MuUriBuilder.fromUri(u("http://example.org/blah")).scheme("https").build().toString(),
             equalTo("https://example.org/blah"));
     }
 
@@ -117,7 +149,7 @@ public class MuUriBuilderTest {
 
     @Test
     public void userInfo() {
-        UriBuilder builder = MuUriBuilder.fromUri(u("http://example.org/blah/")).userInfo("ha:ho");
+        UriBuilder builder = MuUriBuilder.fromUri(u("http://example.org/blah")).userInfo("ha:ho");
         assertThat(builder.build().toString(), equalTo("http://ha:ho@example.org/blah"));
         assertThat(builder.userInfo(null).build().toString(), equalTo("http://example.org/blah"));
     }
@@ -125,12 +157,12 @@ public class MuUriBuilderTest {
     @Test
     public void host() {
         assertThat(MuUriBuilder.fromUri(u("http://example.org/blah/")).host("localhost").build().toString(),
-            equalTo("http://localhost/blah"));
+            equalTo("http://localhost/blah/"));
     }
 
     @Test
     public void port() {
-        UriBuilder builder = MuUriBuilder.fromUri(u("http://example.org/blah/")).port(8080);
+        UriBuilder builder = MuUriBuilder.fromUri(u("http://example.org/blah")).port(8080);
         assertThat(builder.build().toString(), equalTo("http://example.org:8080/blah"));
         assertThat(builder.port(-1).build().toString(), equalTo("http://example.org/blah"));
     }
@@ -150,6 +182,16 @@ public class MuUriBuilderTest {
             .path("hello world")
             .build();
         assertThat(uri.toString(), equalTo("http://example.org/blah/ha/har/hello%20world"));
+    }
+
+    @Test
+    public void urlsCanBeRelative() {
+        assertThat(UriBuilder.fromUri("/some/path").build().toString(), equalTo("/some/path"));
+    }
+    @Test
+    public void itRemembersTrailingSlashes() {
+        assertThat(UriBuilder.fromUri("http://localhost").build().toString(), equalTo("http://localhost"));
+        assertThat(UriBuilder.fromUri("http://localhost/").build().toString(), equalTo("http://localhost/"));
     }
 
     @Test
@@ -225,13 +267,13 @@ public class MuUriBuilderTest {
         URI uri = MuUriBuilder.fromUri(u("http://example.org"))
             .fragment("hello")
             .build();
-        assertThat(uri.toString(), equalTo("http://example.org/#hello"));
+        assertThat(uri.toString(), equalTo("http://example.org#hello"));
     }
 
     @Test
     public void resolveTemplateWithSlashEncoded() {
         UriBuilder uri = new MuUriBuilder()
-            .uri("http://user:pw@example.org:12000/a/{name}/{ nameWithRegex : [0-9]+ }/{ name }/?a=b#hi");
+            .uri("http://user:pw@example.org:12000/a/{name}/{ nameWithRegex : [0-9]+ }/{ name }?a=b#hi");
         uri.resolveTemplate("name", "a / name", true);
         assertThat(uri.build(1234).toString(),
             is("http://user:pw@example.org:12000/a/a%20%2F%20name/1234/a%20%2F%20name?a=b#hi"));
@@ -240,7 +282,7 @@ public class MuUriBuilderTest {
     @Test
     public void resolveTemplateWithSlashNotEncoded() {
         UriBuilder uri = new MuUriBuilder()
-            .uri("http://user:pw@example.org:12000/a/{name}/{ nameWithRegex : [0-9]+ }/{ name }/?a=b#hi");
+            .uri("http://user:pw@example.org:12000/a/{name}/{ nameWithRegex : [0-9]+ }/{ name }?a=b#hi");
         uri.resolveTemplate("name", "a / name", false);
         assertThat(uri.build(1234).toString(),
             is("http://user:pw@example.org:12000/a/a%20/%20name/1234/a%20/%20name?a=b#hi"));
@@ -294,15 +336,15 @@ public class MuUriBuilderTest {
         Object[] values = {"a / name", 1234};
         assertThat(uri.build(values), equalTo(uri.build(values, true)));
         assertThat(uri.build(values, true).toString(),
-            equalTo("http://user:pw@example.org:12000/a/a%20%2F%20name/1234/a%20%2F%20name?a=b#hi"));
+            equalTo("http://user:pw@example.org:12000/a/a%20%2F%20name/1234/a%20%2F%20name/?a=b#hi"));
         assertThat(uri.build(values, false).toString(),
-            equalTo("http://user:pw@example.org:12000/a/a%20/%20name/1234/a%20/%20name?a=b#hi"));
+            equalTo("http://user:pw@example.org:12000/a/a%20/%20name/1234/a%20/%20name/?a=b#hi"));
     }
 
     @Test
     public void buildFromEncoded() {
         UriBuilder uri = new MuUriBuilder()
-            .uri("http://user:pw@example.org:12000/a/{name}/{ nameWithRegex : [0-9]+ }/{ name }/?a=b#hi");
+            .uri("http://user:pw@example.org:12000/a/{name}/{ nameWithRegex : [0-9]+ }/{ name }?a=b#hi");
         Object[] values = {"a%20%2F%20name", 1234};
         assertThat(uri.buildFromEncoded(values).toString(),
             equalTo("http://user:pw@example.org:12000/a/a%20%2F%20name/1234/a%20%2F%20name?a=b#hi"));
@@ -312,7 +354,7 @@ public class MuUriBuilderTest {
     public void toTemplate() {
         UriBuilder uri = new MuUriBuilder()
             .uri("http://user:pw@example.org:12000/a/{name}/{ nameWithRegex : [0-9]+ }/{ name }/?a=b#hi");
-        assertThat(uri.toTemplate(), equalTo("http://user:pw@example.org:12000/a/{name}/{ nameWithRegex : [0-9]+ }/{ name }?a=b#hi"));
+        assertThat(uri.toTemplate(), equalTo("http://user:pw@example.org:12000/a/{name}/{ nameWithRegex : [0-9]+ }/{ name }/?a=b#hi"));
     }
 
     private static URI u(String uri) {

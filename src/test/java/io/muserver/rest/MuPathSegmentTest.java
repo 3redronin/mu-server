@@ -3,6 +3,7 @@ package io.muserver.rest;
 import org.junit.Test;
 
 import javax.ws.rs.core.MultivaluedHashMap;
+import javax.ws.rs.core.MultivaluedMap;
 
 import java.util.HashMap;
 import java.util.List;
@@ -14,6 +15,7 @@ import static java.util.Collections.emptyMap;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.hasSize;
 
 public class MuPathSegmentTest {
 
@@ -35,57 +37,35 @@ public class MuPathSegmentTest {
             equalTo("something;color=red;color=light%20blu;size=large"));
     }
 
-    @Test
-    public void pathBitsCanContainTemplateParams() {
-        MuPathSegment segment = new MuPathSegment("{hello} wor/ld {suffix}", empty());
-        assertThat(segment.pathParameters(), equalTo(asList("hello", "suffix")));
-        Map<String, Object> values = new HashMap<>();
-        values.put("hello", "ni/hao");
-        values.put("suffix", "party%20people");
-        assertThat(segment.render(values, true, true, true), equalTo("ni%2Fhao%20wor%2Fld%20party%2520people"));
-        assertThat(segment.render(values, true, true, false), equalTo("ni/hao%20wor/ld%20party%2520people"));
-        assertThat(segment.render(values, true, false, true), equalTo("ni%2Fhao%20wor%2Fld%20party%20people"));
-        assertThat(segment.render(values, true, false, false), equalTo("ni/hao%20wor/ld%20party%20people"));
-
-        assertThat(segment.render(values, false, false, false),
-            equalTo("ni/hao wor/ld party%20people"));
-        assertThat(segment.render(values, false, true, false), equalTo("ni/hao wor/ld party%2520people"));
-        assertThat(segment.render(values, false, false, true), equalTo("ni/hao wor/ld party%20people"));
-        assertThat(segment.render(values, false, false, false), equalTo("ni/hao wor/ld party%20people"));
-    }
 
     @Test
     public void resolveCreatesAMutatedOne() {
         MuPathSegment segment = new MuPathSegment("{hello} wor/ld {suffix}", empty());
 
-        Map<String, Object> values = new HashMap<>();
-        values.put("hello", "ni/hao");
-
-        List<MuPathSegment> resolved = segment.resolve(values, true);
+        List<MuPathSegment> resolved = segment.resolve("hello", "ni/hao", true);
 
         assertThat(resolved.size(), is(1));
-        assertThat(resolved.get(0).render(emptyMap(), false, true, true),
+        assertThat(resolved.get(0).toString(),
             equalTo("ni/hao wor/ld {suffix}"));
     }
 
 
 
     @Test
-    public void resolveWithEncodeSlashesFalseReturnsASegmentPerBit() {
-        MuPathSegment segment = new MuPathSegment("{hello} wor/ld {suffix}", empty());
+    public void resolveWithEncodeSlashesFalseReturnsASegmentPerBitWithMatrixParamsGoingToFirstSegment() {
+        MultivaluedMap<String, String> matrixParams = new MultivaluedHashMap<>();
+        matrixParams.add("color", "red");
+        MuPathSegment segment = new MuPathSegment("{hello} wor/ld {suffix}", matrixParams);
 
-        Map<String, Object> values = new HashMap<>();
-        values.put("hello", "ni/hao");
-
-        List<MuPathSegment> resolved = segment.resolve(values, false);
+        List<MuPathSegment> resolved = segment.resolve("hello", "ni/hao", false);
 
         assertThat(resolved.size(), is(3));
-        assertThat(resolved.get(0).render(emptyMap(), false, true, true),
-            equalTo("ni"));
-        assertThat(resolved.get(1).render(emptyMap(), false, true, true),
-            equalTo("hao wor"));
-        assertThat(resolved.get(2).render(emptyMap(), false, true, true),
-            equalTo("ld {suffix}"));
+        assertThat(resolved.get(0).toString(), equalTo("ni;color=red"));
+        assertThat(resolved.get(0).getMatrixParameters(), equalTo(matrixParams));
+        assertThat(resolved.get(1).toString(), equalTo("hao wor"));
+        assertThat(resolved.get(1).getMatrixParameters().entrySet(), hasSize(0));
+        assertThat(resolved.get(2).toString(), equalTo("ld {suffix}"));
+        assertThat(resolved.get(2).getMatrixParameters().entrySet(), hasSize(0));
     }
 
 }

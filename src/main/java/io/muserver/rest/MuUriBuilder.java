@@ -1,17 +1,20 @@
 package io.muserver.rest;
 
+import io.muserver.Mutils;
 import io.netty.handler.codec.http.QueryStringDecoder;
 
 import javax.ws.rs.core.*;
 import java.lang.reflect.Method;
 import java.net.URI;
 import java.util.*;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-import static io.muserver.Mutils.urlEncode;
+import static io.muserver.Mutils.urlDecode;
 import static java.util.Collections.emptyMap;
+import static java.util.stream.Collectors.toList;
 
 class MuUriBuilder extends UriBuilder {
     static {
@@ -21,21 +24,23 @@ class MuUriBuilder extends UriBuilder {
     private String scheme;
     private String userInfo;
     private String host;
-    private int port;
+    private int port = -1;
     private List<MuPathSegment> pathSegments = new ArrayList<>();
     private MultivaluedMap<String, String> query = new MultivaluedHashMap<>();
     private String fragment;
+    private boolean hasTrailingSlash = false;
 
     MuUriBuilder() {
     }
 
     private MuUriBuilder(String scheme, String userInfo, String host, int port, List<MuPathSegment> pathSegments,
-                         MultivaluedMap<String, String> query, String fragment) {
+                         boolean hasTrailingSlash, MultivaluedMap<String, String> query, String fragment) {
         this.scheme = scheme;
         this.userInfo = userInfo;
         this.host = host;
         this.port = port;
         this.pathSegments = new ArrayList<>(pathSegments);
+        this.hasTrailingSlash = hasTrailingSlash;
         MultivaluedMap<String, String> copy = new MultivaluedHashMap<>();
         copy.putAll(query);
         this.query = copy;
@@ -44,7 +49,7 @@ class MuUriBuilder extends UriBuilder {
 
     @Override
     public UriBuilder clone() {
-        return new MuUriBuilder(scheme, userInfo, host, port, pathSegments, query, fragment);
+        return new MuUriBuilder(scheme, userInfo, host, port, pathSegments, hasTrailingSlash, query, fragment);
     }
 
     @Override
@@ -53,8 +58,7 @@ class MuUriBuilder extends UriBuilder {
         userInfo(uri.getUserInfo());
         host(uri.getHost());
         port(uri.getPort());
-        pathSegments = MuUriInfo.pathStringToSegments(uri.getPath(), false).collect(Collectors.toList());
-
+        replacePath(uri.getPath());
         replaceQuery(uri.getQuery());
         fragment(uri.getFragment());
         return this;
@@ -65,17 +69,14 @@ class MuUriBuilder extends UriBuilder {
         if (uriTemplate == null) {
             throw new IllegalArgumentException("uriTemplate is null");
         }
-        Pattern parts = Pattern.compile("(?<firstBit>[^/]*//[^/]*)(?<path>[^?#]*)(?<end>.*)");
+        Pattern parts = Pattern.compile("(?<firstBit>[^/]*//[^/]*)?(?<path>[^?#]*)(?<end>.*)");
         Matcher matcher = parts.matcher(uriTemplate);
         if (!matcher.matches()) {
             throw new IllegalArgumentException(uriTemplate + " is not a valid URI");
         }
         String path = matcher.group("path");
-
         UriBuilder builder = uri(URI.create(matcher.group("firstBit") + matcher.group("end")));
-        if (!path.isEmpty()) {
             builder.replacePath(path);
-        }
         return builder;
     }
 
@@ -93,6 +94,7 @@ class MuUriBuilder extends UriBuilder {
         this.host = builder.host;
         this.port = builder.port;
         this.pathSegments = builder.pathSegments;
+        this.hasTrailingSlash = ssp.endsWith("/");
         return this;
     }
 
@@ -122,7 +124,8 @@ class MuUriBuilder extends UriBuilder {
 
     @Override
     public UriBuilder path(String path) {
-        this.pathSegments.addAll(MuUriInfo.pathStringToSegments(path, false).collect(Collectors.toList()));
+        this.hasTrailingSlash = path.endsWith("/");
+        this.pathSegments.addAll(MuUriInfo.pathStringToSegments(path, false).collect(toList()));
         return this;
     }
 
@@ -144,8 +147,9 @@ class MuUriBuilder extends UriBuilder {
     @Override
     public UriBuilder segment(String... segments) {
         for (String segment : segments) {
-            this.pathSegments.addAll(MuUriInfo.pathStringToSegments(segment, true).collect(Collectors.toList()));
+            this.pathSegments.addAll(MuUriInfo.pathStringToSegments(segment, true).collect(toList()));
         }
+        this.hasTrailingSlash = false;
         return this;
     }
 
@@ -208,10 +212,24 @@ class MuUriBuilder extends UriBuilder {
     public UriBuilder resolveTemplate(String name, Object value, boolean encodeSlashInPath) {
         notNull("name", name);
         notNull("value", value);
-        Map<String, Object> map = Collections.singletonMap(name, value);
-        this.pathSegments = this.pathSegments.stream()
-            .flatMap(ps -> ps.resolve(map, encodeSlashInPath).stream())
-            .collect(Collectors.toList());
+        String val = value.toString();
+
+        scheme = resolve(scheme, name, val);
+        userInfo = resolve(userInfo, name, val);
+        host = resolve(host, name, val);
+        pathSegments = pathSegments.stream()
+            .flatMap(ps -> ps.resolve(name, val, encodeSlashInPath).stream())
+            .collect(toList());
+        if (!query.isEmpty()) {
+            MultivaluedMap<String, String> nq = new MultivaluedHashMap<>();
+            for (Map.Entry<String, List<String>> entry : query.entrySet()) {
+                String key = resolve(entry.getKey(), name, val);
+                nq.addAll(key, entry.getValue().stream().map(s -> resolve(s, name, val)).collect(toList()));
+            }
+            query = nq;
+        }
+        fragment = resolve(fragment, name, val);
+
         return this;
     }
 
@@ -248,50 +266,85 @@ class MuUriBuilder extends UriBuilder {
 
     @Override
     public URI buildFromMap(Map<String, ?> values, boolean encodeSlashInPath) throws IllegalArgumentException, UriBuilderException {
-        return URI.create(buildIt(values, true, false, encodeSlashInPath));
+        MuUriBuilder resolved = cloneAndResolve(values, encodeSlashInPath, false);
+        return URI.create(resolved.buildIt(Mutils::urlEncode));
     }
 
-    private String buildIt(Map<String, ?> values, boolean encodePath, boolean encodeValues, boolean encodeSlashInPath) {
+    private MuUriBuilder cloneAndResolve(Map<String, ?> values, boolean encodeSlashInPath, boolean valuesAlreadyEncoded) {
+        if (values.isEmpty()) {
+            return this;
+        }
+        MuUriBuilder copy = (MuUriBuilder) clone();
+        for (Map.Entry<String, ?> entry : values.entrySet()) {
+            Object value = entry.getValue();
+            if (valuesAlreadyEncoded) {
+                value = urlDecode(value.toString());
+            }
+            copy.resolveTemplate(entry.getKey(), value, encodeSlashInPath);
+        }
+        return copy;
+    }
+
+    static String resolve(String template, String name, String value) {
+        if (template == null) {
+            return null;
+        }
+        return template.replaceAll("\\{\\s*" + Pattern.quote(name) + "\\s*(:[^}]*)?\\s*}", value);
+    }
+
+
+    private String buildIt(Function<String, String> encodeFunction) {
         StringBuilder sb = new StringBuilder();
         if (scheme != null) {
-            sb.append(scheme).append("://");
+            sb.append(encodeFunction.apply(scheme)).append("://");
         }
         if (userInfo != null) {
-            sb.append(userInfo).append('@');
+            String encodedUserInfo = encodeFunction.apply(userInfo);
+            // If there is a colon in a user:pw pair, no way to know if it belongs to
+            // the name or password, so just assume password.
+            encodedUserInfo = encodedUserInfo.replaceFirst("%3A", ":");
+            sb.append(encodedUserInfo).append('@');
         }
         if (host != null) {
-            sb.append(host);
+            sb.append(encodeFunction.apply(host));
         }
         if (port != -1) {
             sb.append(':').append(port);
         }
-        String path = "/" + pathSegments.stream()
-            .map(muPathSegment -> muPathSegment.render(values, encodePath, encodeValues, encodeSlashInPath))
-            .collect(Collectors.joining("/"));
-        sb.append(path);
+        if (!pathSegments.isEmpty()) {
+            String path = "/" + pathSegments.stream()
+                .map(muPathSegment -> encodeFunction.apply(muPathSegment.toString()))
+                .collect(Collectors.joining("/"));
+            sb.append(path);
+        }
+        if (hasTrailingSlash) {
+            sb.append('/');
+        }
         if (!query.isEmpty()) {
             sb.append('?');
             boolean isFirst = true;
             for (Map.Entry<String, List<String>> entry : query.entrySet()) {
-                String key = urlEncode(entry.getKey());
+                String key = encodeFunction.apply(entry.getKey());
                 for (String val : entry.getValue()) {
                     if (!isFirst) {
                         sb.append('&');
                     }
-                    sb.append(key).append('=').append(urlEncode(val));
+                    sb.append(key).append('=').append(encodeFunction.apply(val));
                     isFirst = false;
                 }
             }
         }
         if (fragment != null) {
-            sb.append('#').append(urlEncode(fragment));
+            sb.append('#').append(encodeFunction.apply(fragment));
         }
         return sb.toString();
     }
 
     @Override
     public URI buildFromEncodedMap(Map<String, ?> values) throws IllegalArgumentException, UriBuilderException {
-        return URI.create(buildIt(values, true, false, false));
+        MuUriBuilder resolved = cloneAndResolve(values, true, true);
+        return URI.create(resolved.buildIt(Mutils::urlEncode));
+
     }
 
     @Override
@@ -301,22 +354,37 @@ class MuUriBuilder extends UriBuilder {
 
     @Override
     public URI build(Object[] values, boolean encodeSlashInPath) throws IllegalArgumentException, UriBuilderException {
-        return URI.create(buildIt(valuesToMap(values), true, true, encodeSlashInPath));
+        Map<String, ?> valueMap = valuesToMap(values);
+        return buildFromMap(valueMap, encodeSlashInPath);
     }
 
     private Map<String, ?> valuesToMap(Object[] values) {
         if (values == null || values.length == 0) {
             return emptyMap();
         }
-        SortedSet<String> sorted = pathSegments.stream()
-            .flatMap(ps -> ps.pathParameters().stream())
-            .collect(Collectors.toCollection(TreeSet::new));
+        List<String> sorted = new ArrayList<>();
+        addTemplateNames(sorted, scheme);
+        addTemplateNames(sorted, userInfo);
+        addTemplateNames(sorted, host);
+        for (MuPathSegment pathSegment : pathSegments) {
+            for (String pspp : pathSegment.pathParameters()) {
+                if (!sorted.contains(pspp)) {
+                    sorted.add(pspp);
+                }
+            }
+        }
+        for (Map.Entry<String, List<String>> entry : query.entrySet()) {
+            addTemplateNames(sorted, entry.getKey());
+            for (String val : entry.getValue()) {
+                addTemplateNames(sorted, val);
+            }
+        }
+        addTemplateNames(sorted, fragment);
 
         if (sorted.size() != values.length) {
-            throw new IllegalArgumentException("There are " + sorted.size() + " parameters but " + values.length + " values were supplied.");
+            throw new IllegalArgumentException("There are " + sorted.size() + " parameters (" + sorted + ") but " + values.length + " values "+ Arrays.toString(values) + " were supplied.");
         }
         HashMap<String, Object> map = new HashMap<>();
-
         int index = 0;
         for (String name : sorted) {
             Object value = values[index];
@@ -329,13 +397,25 @@ class MuUriBuilder extends UriBuilder {
         return map;
     }
 
+    private static void addTemplateNames(List<String> sorted, String value) {
+        if (value != null) {
+            List<String> toAdd = UriPattern.uriTemplateToRegex(value).namedGroups();
+            for (String s : toAdd) {
+                if (!sorted.contains(s)) {
+                    sorted.add(s);
+                }
+            }
+        }
+    }
+
     @Override
     public URI buildFromEncoded(Object... values) throws IllegalArgumentException, UriBuilderException {
-        return URI.create(buildIt(valuesToMap(values), true, false, true));
+        Map<String, ?> valueMap = valuesToMap(values);
+        return buildFromEncodedMap(valueMap);
     }
 
     @Override
     public String toTemplate() {
-        return buildIt(null, false, false, false);
+        return buildIt(s -> s);
     }
 }
