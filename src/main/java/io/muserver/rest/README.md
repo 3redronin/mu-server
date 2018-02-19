@@ -349,3 +349,11 @@ None of this section is applicable to MuServer.
 ## 11 Runtime Delegate
 
 N/A
+
+## Interface implementations
+
+The following are not described by the spec but are interfaces defined in the jax-rs spec API that need to be implemented.
+
+- [ ] `UriBilder` mostly complete but missing lookups by resource methods and matrix params
+- [ ] `Link`
+- [ ] `VariantListBuilder`

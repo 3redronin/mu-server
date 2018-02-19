@@ -149,8 +149,10 @@ public class UriPattern {
     }
 
     private static String escapeRegex(String literal) {
-        String bit = literal.contains("%") ? literal : Mutils.urlEncode(literal);
-        return Pattern.quote(bit);
+        if (literal.contains("%")) {
+            literal = Jaxutils.leniantUrlDecode(literal);
+        }
+        return Pattern.quote(Mutils.urlEncode(literal));
     }
 
     static String trimSlashes(String url) {

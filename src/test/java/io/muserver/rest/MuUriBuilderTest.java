@@ -43,12 +43,11 @@ public class MuUriBuilderTest {
             .queryParam("{key}", "{value}")
             .fragment("frag{ment}");
 
-        URI built = builder.build("s", " %20", " %20", " %20", " %20", " %20", " %20", " %20");
-        assertThat(built.toString(),
-            equalTo("https://%20%20:%20%20@www.%20%20.org/some-%20%20?%20%20=%20%20#%20%20"));
+        assertThat(builder.build("s", " %20%2G", " %20%2G", " %20%2G", " %20%2G", " %20%2G", " %20%2G", " %20%2G").toString(),
+            equalTo("https://%20%2520%252G:%20%2520%252G@www.%20%2520%252G.org/some-%20%2520%252G?%20%2520%252G=%20%2520%252G#frag%20%2520%252G"));
 
-        assertThat(builder.toTemplate(),
-            equalTo("http{s}://{name}:{password}@www.example.{extension}/some-{path}?{key}={value}#frag{ment}"));
+        assertThat(builder.buildFromEncoded("s", " %20%2G", " %20%2G", " %20%2G", " %20%2G", " %20%2G", " %20%2G", " %20%2G").toString(),
+            equalTo("https://%20%20%252G:%20%20%252G@www.%20%20%252G.org/some-%20%20%252G?%20%20%252G=%20%20%252G#frag%20%20%252G"));
     }
 
 
