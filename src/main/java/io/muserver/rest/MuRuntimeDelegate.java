@@ -10,11 +10,12 @@ import java.util.Map;
 class MuRuntimeDelegate extends RuntimeDelegate {
 
     private static MuRuntimeDelegate singleton;
-    public static synchronized void ensureSet() {
+    public static synchronized MuRuntimeDelegate ensureSet() {
         if (singleton == null) {
             singleton = new MuRuntimeDelegate();
             RuntimeDelegate.setInstance(singleton);
         }
+        return singleton;
     }
 
     private final Map<Class<?>, HeaderDelegate> headerDelegates = new HashMap<>();

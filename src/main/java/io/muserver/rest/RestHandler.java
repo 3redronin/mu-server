@@ -16,7 +16,6 @@ import java.io.OutputStream;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.Type;
-import java.net.URI;
 import java.util.*;
 
 import static io.muserver.Mutils.hasValue;
@@ -27,7 +26,6 @@ import static java.util.Collections.singletonList;
 public class RestHandler implements MuHandler {
 
     private final Set<ResourceClass> resources;
-    private final URI baseUri = URI.create("/");
     private final RequestMatcher requestMatcher;
     private final EntityProviders entityProviders;
 
@@ -36,7 +34,6 @@ public class RestHandler implements MuHandler {
         for (Object restResource : restResources) {
             set.add(ResourceClass.fromObject(restResource, paramConverterProviders));
         }
-
         this.resources = Collections.unmodifiableSet(set);
         this.requestMatcher = new RequestMatcher(resources);
         this.entityProviders = entityProviders;
@@ -67,10 +64,9 @@ public class RestHandler implements MuHandler {
                     Class<?> type = param.parameterHandle.getType();
                     if (type.equals(UriInfo.class)) {
                         List<String> matchedURIs = new ArrayList<>();
-                        String methodUri = relativePath;
-                        matchedURIs.add(methodUri);
+                        matchedURIs.add(relativePath);
                         String methodSpecific = mm.pathMatch.regexMatcher().group();
-                        matchedURIs.add(methodUri.replace("/" + methodSpecific, ""));
+                        matchedURIs.add(relativePath.replace("/" + methodSpecific, ""));
                         paramValue = new MuUriInfo(request.uri().resolve(request.contextPath() + "/"), request.uri(),
                             Mutils.trim(request.relativePath(), "/"), Collections.unmodifiableList(matchedURIs),
                             Collections.unmodifiableList(singletonList(rm.resourceClass.resourceInstance)));
@@ -87,6 +83,8 @@ public class RestHandler implements MuHandler {
                 }
                 params[param.index] = paramValue;
             }
+
+
             Object result = rm.invoke(params);
             if (!muResponse.hasStartedSendingData()) {
                 ObjWithType obj = ObjWithType.objType(result);

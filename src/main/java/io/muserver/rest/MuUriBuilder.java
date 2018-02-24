@@ -3,6 +3,7 @@ package io.muserver.rest;
 import io.muserver.Mutils;
 import io.netty.handler.codec.http.QueryStringDecoder;
 
+import javax.ws.rs.Path;
 import javax.ws.rs.core.MultivaluedHashMap;
 import javax.ws.rs.core.MultivaluedMap;
 import javax.ws.rs.core.UriBuilder;
@@ -136,17 +137,44 @@ class MuUriBuilder extends UriBuilder {
 
     @Override
     public UriBuilder path(Class resource) {
-        throw NotImplementedException.notYet();
+        notNull("resource", resource);
+        return this.path(findResourcePath(resource));
+    }
+
+    private String findResourcePath(Class resource) {
+        Path pathAn = (Path)resource.getDeclaredAnnotation(Path.class);
+        if (pathAn == null) {
+            throw new IllegalArgumentException(resource + " is not a JAX-RS class");
+        }
+        return pathAn.value();
     }
 
     @Override
     public UriBuilder path(Class resource, String method) {
-        throw NotImplementedException.notYet();
+        Method selected = null;
+        for (Method m : resource.getDeclaredMethods()) {
+            if (m.getName().equals(method)) {
+                if (selected == null) {
+                    selected = m;
+                } else {
+                    throw new IllegalArgumentException("There is more than one method named " + method + " in " + resource);
+                }
+            }
+        }
+        if (selected != null) {
+            return path(selected);
+        }
+        throw new IllegalArgumentException("Could not find " + resource + "#" + method);
     }
 
     @Override
     public UriBuilder path(Method method) {
-        throw NotImplementedException.notYet();
+        path(method.getDeclaringClass());
+        Path methodPath = method.getDeclaredAnnotation(Path.class);
+        if (methodPath != null) {
+            path(methodPath.value());
+        }
+        return this;
     }
 
     @Override

@@ -1,14 +1,26 @@
 package io.muserver.rest;
 
+import io.muserver.ContextHandlerBuilder;
+import io.muserver.MuServer;
+import io.muserver.SSLContextBuilder;
+import okhttp3.Response;
 import org.junit.Test;
 
+import javax.ws.rs.GET;
+import javax.ws.rs.Path;
+import javax.ws.rs.core.Context;
 import javax.ws.rs.core.UriBuilder;
+import javax.ws.rs.core.UriInfo;
+import java.io.IOException;
 import java.net.URI;
 import java.util.HashMap;
 import java.util.Map;
 
+import static io.muserver.MuServerBuilder.httpsServer;
 import static org.hamcrest.CoreMatchers.*;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static scaffolding.ClientUtils.call;
+import static scaffolding.ClientUtils.request;
 
 public class MuUriBuilderTest {
     static {
@@ -194,15 +206,55 @@ public class MuUriBuilderTest {
     }
 
     @Test
-    public void path1() {
-    }
+    public void canLookUpResourcesBasedOnResourceClassesAndMethods() throws IOException {
+        @Path("v1/fruits")
+        class FruitResource {
+            @GET
+            @Path("{id}")
+            public void getOne() {}
+        }
+        @Path("v1/dogs")
+        class DogResource {
+            @GET
+            @Path("getResourceClass")
+            public String getResourceClass(@Context UriInfo info) {
+                return info.getBaseUriBuilder().path(FruitResource.class).build().toString();
+            }
+            @GET
+            @Path("getResourceMethod")
+            public String getResourceMethod(@Context UriInfo info) throws NoSuchMethodException {
+                UriBuilder getOne = info.getBaseUriBuilder().path(FruitResource.class.getDeclaredMethod("getOne"));
+                return getOne.build("some-id").toString();
+            }
+            @GET
+            @Path("getResourceMethodByName")
+            public String getResourceMethodByName(@Context UriInfo info) {
+                return info.getBaseUriBuilder().path(FruitResource.class, "getOne").build("some-id").toString();
+            }
 
-    @Test
-    public void path2() {
-    }
+        }
 
-    @Test
-    public void path3() {
+        assertThat(UriBuilder.fromResource(FruitResource.class).build().toString(), equalTo("v1/fruits"));
+        assertThat(UriBuilder.fromMethod(FruitResource.class, "getOne").build("some thing").toString(), equalTo("v1/fruits/some%20thing"));
+
+        MuServer server = httpsServer()
+            .withHttpsConnection(15647, SSLContextBuilder.unsignedLocalhostCert())
+            .addHandler(ContextHandlerBuilder.context("api",
+                RestHandlerBuilder.create(new FruitResource(), new DogResource())))
+            .start();
+        try {
+            try (Response resp = call(request().url(server.uri().resolve("/api/v1/dogs/getResourceClass").toString()))) {
+                assertThat(resp.body().string(), equalTo("https://localhost:15647/api/v1/fruits"));
+            }
+            try (Response resp = call(request().url(server.uri().resolve("/api/v1/dogs/getResourceMethodByName").toString()))) {
+                assertThat(resp.body().string(), equalTo("https://localhost:15647/api/v1/fruits/some-id"));
+            }
+            try (Response resp = call(request().url(server.uri().resolve("/api/v1/dogs/getResourceMethod").toString()))) {
+                assertThat(resp.body().string(), equalTo("https://localhost:15647/api/v1/fruits/some-id"));
+            }
+        } finally {
+            server.stop();
+        }
     }
 
     @Test
