@@ -4,6 +4,7 @@ import io.muserver.ContextHandlerBuilder;
 import io.muserver.MuServer;
 import io.muserver.SSLContextBuilder;
 import okhttp3.Response;
+import org.hamcrest.Matchers;
 import org.junit.Test;
 
 import javax.ws.rs.GET;
@@ -334,25 +335,45 @@ public class MuUriBuilderTest {
     public void resolveTemplateWithSlashNotEncoded() {
         UriBuilder uri = new MuUriBuilder()
             .uri("http://user:pw@example.org:12000/a/{name}/{ nameWithRegex : [0-9]+ }/{ name }?a=b#hi");
-        uri.resolveTemplate("name", "a / name", false);
+        uri.resolveTemplate("name", "a / name%25", false);
         assertThat(uri.build(1234).toString(),
-            is("http://user:pw@example.org:12000/a/a%20/%20name/1234/a%20/%20name?a=b#hi"));
+            is("http://user:pw@example.org:12000/a/a%20/%20name%2525/1234/a%20/%20name%2525?a=b#hi"));
     }
 
     @Test
     public void resolveTemplateFromEncoded() {
+        UriBuilder uri = new MuUriBuilder()
+            .uri("http://user:pw@example.org:12000/a/{name}/{ nameWithRegex : [0-9]+ }/{ name }?a=b#hi");
+        uri.resolveTemplateFromEncoded("name", "a / name%25");
+        assertThat(uri.build(1234).toString(),
+            is("http://user:pw@example.org:12000/a/a%20%2F%20name%25/1234/a%20%2F%20name%25?a=b#hi"));
     }
 
     @Test
     public void resolveTemplates() {
-    }
+        UriBuilder uri = new MuUriBuilder()
+            .uri("http://user:pw@example.org:12000/a/{name}/{ nameWithRegex : [0-9]+ }/{ name }?a=b#hi");
+        Map<String, Object> map = new HashMap<>();
+        map.put("name", "a / name");
+        map.put("nameWithRegex", 1234);
 
-    @Test
-    public void resolveTemplates1() {
+        assertThat(uri.clone().resolveTemplates(map).build().toString(),
+            equalTo(uri.clone().resolveTemplates(map, true).build().toString()));
+
+        assertThat(uri.clone().resolveTemplates(map, true).build().toString(),
+            is("http://user:pw@example.org:12000/a/a%20%2F%20name/1234/a%20%2F%20name?a=b#hi"));
+        assertThat(uri.clone().resolveTemplates(map, false).build().toString(),
+            is("http://user:pw@example.org:12000/a/a%20/%20name/1234/a%20/%20name?a=b#hi"));
     }
 
     @Test
     public void resolveTemplatesFromEncoded() {
+        UriBuilder uri = new MuUriBuilder()
+            .uri("http://user:pw@example.org:12000/a/{name}/{ nameWithRegex : [0-9]+ }/{ name }?a=b#hi");
+        Map<String, Object> map = new HashMap<>();
+        map.put("name", "a / name%25%");
+        map.put("nameWithRegex", 1234);
+        assertThat(uri.clone().resolveTemplatesFromEncoded(map).build(), Matchers.equalTo(uri.buildFromEncodedMap(map)));
     }
 
     @Test

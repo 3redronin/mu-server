@@ -245,27 +245,41 @@ class MuUriBuilder extends UriBuilder {
 
     @Override
     public UriBuilder resolveTemplate(String name, Object value) {
+        notNull("name", name);
+        notNull("value", value);
         return resolveTemplate(name, value, true);
     }
 
     @Override
     public UriBuilder resolveTemplateFromEncoded(String name, Object value) {
-        throw NotImplementedException.notYet();
+        notNull("name", name);
+        notNull("value", value);
+        String decoded = Jaxutils.leniantUrlDecode(value.toString());
+        return resolveTemplate(name, decoded, true);
     }
 
     @Override
     public UriBuilder resolveTemplates(Map<String, Object> templateValues) {
+        notNull("templateValues", templateValues);
         return resolveTemplates(templateValues, true);
     }
 
     @Override
     public UriBuilder resolveTemplates(Map<String, Object> templateValues, boolean encodeSlashInPath) throws IllegalArgumentException {
-        throw NotImplementedException.notYet();
+        notNull("templateValues", templateValues);
+        for (Map.Entry<String, Object> entry : templateValues.entrySet()) {
+            resolveTemplate(entry.getKey(), entry.getValue(), encodeSlashInPath);
+        }
+        return this;
     }
 
     @Override
     public UriBuilder resolveTemplatesFromEncoded(Map<String, Object> templateValues) {
-        throw NotImplementedException.notYet();
+        notNull("templateValues", templateValues);
+        for (Map.Entry<String, Object> entry : templateValues.entrySet()) {
+            resolveTemplateFromEncoded(entry.getKey(), entry.getValue());
+        }
+        return this;
     }
 
     @Override

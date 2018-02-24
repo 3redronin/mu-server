@@ -12,7 +12,7 @@ class ReadOnlyMultivaluedMap<K, V> implements MultivaluedMap<K, V>, Serializable
     private static final MultivaluedMap EMPTY = readOnly(new MultivaluedHashMap<>());
     private final MultivaluedMap<K, V> actual;
 
-    ReadOnlyMultivaluedMap(MultivaluedMap<K, V> actual) {
+    private ReadOnlyMultivaluedMap(MultivaluedMap<K, V> actual) {
         this.actual = actual;
     }
 
@@ -20,6 +20,7 @@ class ReadOnlyMultivaluedMap<K, V> implements MultivaluedMap<K, V>, Serializable
         return new ReadOnlyMultivaluedMap<>(map);
     }
 
+    @SuppressWarnings("unchecked")
     static <K, V> MultivaluedMap<K, V> empty() {
         return EMPTY;
     }
