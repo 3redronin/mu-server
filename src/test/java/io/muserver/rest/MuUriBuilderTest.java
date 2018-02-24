@@ -268,14 +268,40 @@ public class MuUriBuilderTest {
 
     @Test
     public void replaceMatrix() {
+        UriBuilder uriBuilder = UriBuilder.fromPath("/hello");
+        uriBuilder.matrixParam("color", "red", 12);
+        uriBuilder.matrixParam("frank");
+        uriBuilder.path("blah");
+        uriBuilder.matrixParam("another", "some;thi=ng");
+        uriBuilder.matrixParam("color", "black");
+
+        assertThat(uriBuilder.clone().replaceMatrix("color=blue;rat=cat;rat=1").build().toString(),
+            equalTo("/hello;color=red;color=12/blah;color=blue;rat=cat;rat=1"));
+
+        assertThat(uriBuilder.clone().replaceMatrix(null).build().toString(),
+            equalTo("/hello;color=red;color=12/blah"));
+
     }
 
     @Test
     public void matrixParam() {
+        UriBuilder uriBuilder = UriBuilder.fromPath("/hello");
+        uriBuilder.matrixParam("color", "red", 12);
+        uriBuilder.matrixParam("frank");
+        uriBuilder.path("blah");
+        uriBuilder.matrixParam("another", "some;thi=ng");
+        uriBuilder.matrixParam("color", "black");
+        assertThat(uriBuilder.build().toString(), equalTo("/hello;color=red;color=12/blah;another=some%3Bthi%3Dng;color=black"));
     }
 
     @Test
     public void replaceMatrixParam() {
+        UriBuilder uriBuilder = UriBuilder.fromPath("/hello");
+        uriBuilder.matrixParam("color", "red");
+        uriBuilder.path("blah");
+        uriBuilder.matrixParam("color", "black", "solid", "1px");
+        uriBuilder.replaceMatrixParam("color", "orange", "bright");
+        assertThat(uriBuilder.build().toString(), equalTo("/hello;color=red/blah;color=orange;color=bright"));
     }
 
     @Test

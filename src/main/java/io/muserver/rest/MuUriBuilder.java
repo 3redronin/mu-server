@@ -15,6 +15,7 @@ import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static java.util.Collections.emptyMap;
 import static java.util.stream.Collectors.toList;
@@ -190,17 +191,52 @@ class MuUriBuilder extends UriBuilder {
 
     @Override
     public UriBuilder replaceMatrix(String matrix) {
-        throw NotImplementedException.notYet();
+        MultivaluedMap<String, String> params = getOrCreateCurrentSegment().getMatrixParameters();
+        params.clear();
+        if (matrix != null) {
+            String[] parts = matrix.split(";");
+            for (String part : parts) {
+                String[] nameValue = part.split("=");
+                if (nameValue.length != 2) {
+                    throw new IllegalArgumentException("Not a valid matrix string: " + matrix);
+                }
+                matrixParam(nameValue[0], nameValue[1]);
+            }
+        }
+        return this;
     }
 
     @Override
     public UriBuilder matrixParam(String name, Object... values) {
-        throw NotImplementedException.notYet();
+        notNull("name", name);
+        notNull("values", values);
+
+        MultivaluedMap<String, String> params = getOrCreateCurrentSegment().getMatrixParameters();
+        for (Object value : values) {
+            params.add(name, decode(value));
+        }
+
+        return this;
     }
 
     @Override
     public UriBuilder replaceMatrixParam(String name, Object... values) {
-        throw NotImplementedException.notYet();
+        notNull("name", name);
+        notNull("values", values);
+        MultivaluedMap<String, String> params = getOrCreateCurrentSegment().getMatrixParameters();
+        params.replace(name, Stream.of(values).map(Object::toString).collect(toList()));
+        return this;
+    }
+
+    private MuPathSegment getOrCreateCurrentSegment() {
+        MuPathSegment ps;
+        if (pathSegments.isEmpty()) {
+            ps = new MuPathSegment("", new MultivaluedHashMap<>());
+            pathSegments.add(ps);
+        } else {
+            ps = pathSegments.get(pathSegments.size() - 1);
+        }
+        return ps;
     }
 
     @Override
@@ -394,7 +430,7 @@ class MuUriBuilder extends UriBuilder {
                 sb.append('/');
             }
             sb.append(pathSegments.stream()
-                .map(muPathSegment -> encodeFunction.apply(muPathSegment.toString()))
+                .map(muPathSegment -> muPathSegment.toString(encodeFunction))
                 .collect(Collectors.joining("/")));
         }
         if (hasTrailingSlash) {
@@ -470,12 +506,14 @@ class MuUriBuilder extends UriBuilder {
         }
     }
 
-    private static String decode(String value) {
-        return value == null ? null : Jaxutils.leniantUrlDecode(value);
+    private static String decode(Object value) {
+        return value == null ? null : Jaxutils.leniantUrlDecode(value.toString());
     }
 
     private void setSlashes(String path) {
-        this.hasPrecedingSlash = path.startsWith("/");
+        if (this.pathSegments.isEmpty()) {
+            this.hasPrecedingSlash = path.startsWith("/");
+        }
         this.hasTrailingSlash = path.endsWith("/");
     }
 

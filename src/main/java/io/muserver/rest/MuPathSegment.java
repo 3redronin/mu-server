@@ -4,8 +4,9 @@ import javax.ws.rs.core.MultivaluedHashMap;
 import javax.ws.rs.core.MultivaluedMap;
 import javax.ws.rs.core.PathSegment;
 import java.util.*;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
-import static io.muserver.Mutils.urlEncode;
 import static java.util.Collections.emptyList;
 
 class MuPathSegment implements PathSegment {
@@ -35,18 +36,24 @@ class MuPathSegment implements PathSegment {
 
     @Override
     public String toString() {
-        return path + getMatrixString();
+        return path + getMatrixString(s -> s);
+    }
+    public String toString(Function<String, String> encodeFunction) {
+        return encodeFunction.apply(path) + getMatrixString(encodeFunction);
     }
 
-    private String getMatrixString() {
+    private String getMatrixString(Function<String, String> encodeFunction) {
         if (params.isEmpty()) {
             return "";
         }
         StringBuilder sb = new StringBuilder();
-        for (Map.Entry<String, List<String>> param : params.entrySet()) {
-            String key = urlEncode(param.getKey());
+        List<Map.Entry<String, List<String>>> entries = params.entrySet().stream()
+            .sorted(Comparator.comparing(Map.Entry::getKey))
+            .collect(Collectors.toList());
+        for (Map.Entry<String, List<String>> param : entries) {
+            String encodedKey = encodeFunction.apply(param.getKey());
             for (String val : param.getValue()) {
-                sb.append(';').append(key).append('=').append(urlEncode(val));
+                sb.append(';').append(encodedKey).append('=').append(encodeFunction.apply(val));
             }
         }
         return sb.toString();

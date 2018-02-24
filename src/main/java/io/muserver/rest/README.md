@@ -354,6 +354,6 @@ N/A
 
 The following are not described by the spec but are interfaces defined in the jax-rs spec API that need to be implemented.
 
-- [ ] `UriBilder` mostly complete but missing lookups by resource methods and matrix params
+- [x] `UriBilder` mostly complete but missing lookups by resource methods and matrix params
 - [ ] `Link`
 - [ ] `VariantListBuilder`
