@@ -1,17 +1,13 @@
 package io.muserver.rest;
 
+import io.muserver.Mutils;
 import org.junit.Test;
 
 import javax.ws.rs.core.MultivaluedHashMap;
 import javax.ws.rs.core.MultivaluedMap;
-
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import static io.muserver.rest.ReadOnlyMultivaluedMap.empty;
-import static java.util.Arrays.asList;
-import static java.util.Collections.emptyMap;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -33,7 +29,7 @@ public class MuPathSegmentTest {
         params.add("color", "light blu");
         MuPathSegment segment = new MuPathSegment("something", params);
         assertThat(segment.pathParameters().isEmpty(), is(true));
-        assertThat(segment.toString(),
+        assertThat(segment.toString(Mutils::urlEncode),
             equalTo("something;color=red;color=light%20blu;size=large"));
     }
 
