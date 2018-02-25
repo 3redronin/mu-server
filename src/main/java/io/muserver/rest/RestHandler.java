@@ -2,15 +2,14 @@ package io.muserver.rest;
 
 import io.muserver.*;
 
-import javax.ws.rs.*;
-import javax.ws.rs.core.MediaType;
-import javax.ws.rs.core.NoContentException;
-import javax.ws.rs.core.Response;
-import javax.ws.rs.core.UriInfo;
+import javax.ws.rs.BadRequestException;
+import javax.ws.rs.NotFoundException;
+import javax.ws.rs.ServerErrorException;
+import javax.ws.rs.WebApplicationException;
+import javax.ws.rs.core.*;
 import javax.ws.rs.ext.MessageBodyReader;
 import javax.ws.rs.ext.MessageBodyWriter;
 import javax.ws.rs.ext.ParamConverterProvider;
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.annotation.Annotation;
@@ -25,7 +24,6 @@ import static java.util.Collections.singletonList;
 
 public class RestHandler implements MuHandler {
 
-    private final Set<ResourceClass> resources;
     private final RequestMatcher requestMatcher;
     private final EntityProviders entityProviders;
 
@@ -34,12 +32,12 @@ public class RestHandler implements MuHandler {
         for (Object restResource : restResources) {
             set.add(ResourceClass.fromObject(restResource, paramConverterProviders));
         }
-        this.resources = Collections.unmodifiableSet(set);
-        this.requestMatcher = new RequestMatcher(resources);
+        this.requestMatcher = new RequestMatcher(Collections.unmodifiableSet(set));
         this.entityProviders = entityProviders;
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public boolean handle(MuRequest request, MuResponse muResponse) throws Exception {
         String relativePath = Mutils.trim(request.relativePath(), "/");
         try {
@@ -61,22 +59,7 @@ public class RestHandler implements MuHandler {
                             + "- if this should be optional then specify an @DefaultValue annotation on the parameter");
                     }
                 } else if (param.source == ResourceMethodParam.ValueSource.CONTEXT) {
-                    Class<?> type = param.parameterHandle.getType();
-                    if (type.equals(UriInfo.class)) {
-                        List<String> matchedURIs = new ArrayList<>();
-                        matchedURIs.add(relativePath);
-                        String methodSpecific = mm.pathMatch.regexMatcher().group();
-                        matchedURIs.add(relativePath.replace("/" + methodSpecific, ""));
-                        paramValue = new MuUriInfo(request.uri().resolve(request.contextPath() + "/"), request.uri(),
-                            Mutils.trim(request.relativePath(), "/"), Collections.unmodifiableList(matchedURIs),
-                            Collections.unmodifiableList(singletonList(rm.resourceClass.resourceInstance)));
-                    } else if (type.equals(MuResponse.class)) {
-                        paramValue = muResponse;
-                    } else if (type.equals(MuRequest.class)) {
-                        paramValue = request;
-                    } else {
-                        throw new ServerErrorException("MuServer does not support @Context parameters with type " + type, 500);
-                    }
+                    paramValue = getContextParam(request, muResponse, relativePath, mm, param);
                 } else {
                     ResourceMethodParam.RequestBasedParam rbp = (ResourceMethodParam.RequestBasedParam) param;
                     paramValue = rbp.getValue(request, mm);
@@ -138,12 +121,37 @@ public class RestHandler implements MuHandler {
         return true;
     }
 
+    private static Object getContextParam(MuRequest request, MuResponse muResponse, String relativePath, RequestMatcher.MatchedMethod mm, ResourceMethodParam param) {
+        Object paramValue;
+        ResourceMethod rm = mm.resourceMethod;
+        Class<?> type = param.parameterHandle.getType();
+        if (type.equals(UriInfo.class)) {
+            List<String> matchedURIs = new ArrayList<>();
+            matchedURIs.add(relativePath);
+            String methodSpecific = mm.pathMatch.regexMatcher().group();
+            matchedURIs.add(relativePath.replace("/" + methodSpecific, ""));
+            paramValue = new MuUriInfo(request.uri().resolve(request.contextPath() + "/"), request.uri(),
+                Mutils.trim(request.relativePath(), "/"), Collections.unmodifiableList(matchedURIs),
+                Collections.unmodifiableList(singletonList(rm.resourceClass.resourceInstance)));
+        } else if (type.equals(MuResponse.class)) {
+            paramValue = muResponse;
+        } else if (type.equals(MuRequest.class)) {
+            paramValue = request;
+        } else if (type.equals(HttpHeaders.class)) {
+            paramValue = new JaxRsHttpHeadersAdapter(request);
+        } else {
+            throw new ServerErrorException("MuServer does not support @Context parameters with type " + type, 500);
+        }
+        return paramValue;
+    }
+
     private void writeHeadersToResponse(MuResponse muResponse, JaxRSResponse jaxResponse) {
         if (jaxResponse != null) {
             jaxResponse.writeToMuResponse(muResponse);
         }
     }
 
+    @SuppressWarnings("unchecked")
     private static Object readRequestEntity(MuRequest request, String requestContentType, ResourceMethod rm, Parameter parameter, InputStream inputStream, EntityProviders entityProviders) throws java.io.IOException {
         Annotation[] annotations = parameter.getDeclaredAnnotations();
 
@@ -167,19 +175,10 @@ public class RestHandler implements MuHandler {
         }
     }
 
-    private static Object getPathParamValue(RequestMatcher.MatchedMethod mm, Parameter parameter) {
-        PathParam pp = parameter.getAnnotation(PathParam.class);
-        if (pp != null) {
-            String paramName = pp.value();
-            return mm.pathParams.get(paramName);
-        }
-        return null;
-    }
-
     private static class EmptyInputStream extends InputStream {
         private static final InputStream INSTANCE = new EmptyInputStream();
         private EmptyInputStream() {}
-        public int read() throws IOException {
+        public int read() {
             return -1;
         }
     }

@@ -8,7 +8,10 @@ import org.junit.Test;
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
 import javax.ws.rs.core.Context;
+import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.UriInfo;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import static java.util.Arrays.asList;
@@ -94,6 +97,34 @@ public class ContextTest {
         try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.body().string(), equalTo("Hello world"));
+        }
+    }
+
+
+    @Test
+    public void httpHeadersCanBeGotten() throws Exception {
+        @Path("samples")
+        class Sample {
+            @GET
+            public String get(@Context HttpHeaders headers) {
+                StringBuilder sb = new StringBuilder();
+                for (Map.Entry<String, List<String>> entry : headers.getRequestHeaders().entrySet()) {
+                    String header = entry.getKey();
+                    if (header.startsWith("X-")) {
+                        sb.append(header).append("=").append(entry.getValue().get(0)).append(" ");
+                    }
+                }
+                return sb.toString();
+            }
+        }
+        startServer(new Sample());
+        try (Response resp = call(request()
+            .url(server.uri().resolve("/samples").toString())
+            .header("X-Something", "Blah")
+            .header("X-Something-Else", "Another blah")
+        )) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), equalTo("X-Something-Else=Another blah X-Something=Blah "));
         }
     }
 

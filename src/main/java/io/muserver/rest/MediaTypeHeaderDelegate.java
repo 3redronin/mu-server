@@ -9,7 +9,6 @@ class MediaTypeHeaderDelegate implements RuntimeDelegate.HeaderDelegate<MediaTyp
         MuRuntimeDelegate.ensureSet();
     }
 
-    private static final List<MediaType> wildcard = Collections.singletonList(MediaType.WILDCARD_TYPE);
     public static final MediaType NONE = new MediaType("-", "-");
 
 
@@ -31,8 +30,8 @@ class MediaTypeHeaderDelegate implements RuntimeDelegate.HeaderDelegate<MediaTyp
 
             String[] bits = value.substring(firstSemi + 1).split(";");
             params = new HashMap<>();
-            for (int i = 0; i < bits.length; i++) {
-                String[] pair = bits[i].split("=");
+            for (String bit : bits) {
+                String[] pair = bit.split("=");
                 params.put(pair[0].trim(), pair[1].trim());
             }
         }

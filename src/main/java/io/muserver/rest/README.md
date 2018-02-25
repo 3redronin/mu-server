@@ -292,34 +292,29 @@ N/A
 
 This applies to the types allowed using `@Context` in method parameters.
 
-- [ ] `javax.ws.rs.core.Application` - will never implement as `Application` is not supported by MuServer
-- [ ] `javax.ws.rs.core.HttpHeaders`
-- [ ] `javax.ws.rs.core.Request`
-- [ ] `javax.ws.rs.core.SecurityContext`
-- [x] `javax.ws.rs.core.UriInfo`
-- [ ] `javax.ws.rs.core.Configuration`
-- [ ] `javax.ws.rs.container.ResourceContext`
-- [ ] `javax.ws.rs.ext.Providers`
-
 ### 9.1 Concurrency 
 
-- [ ] Not yet implemented.
+- [x] All injected instances are threadsafe.
 
-### 9.2 Context Types 
+### 9.2 Context Types
 
-- [ ] Not yet implemented.
+This refers to the types of objects that are injectable as method parameters via
+the `@Context` annotation.
+
+Sections below describe the types required by the spec. Mu-Servers implementation also
+allows injection of `MuRequest` and `MuResponse`.
 
 #### 9.2.1 Application 
 
-- [ ] N/A. Will not implement, as there is no support for `Application`.
+N/A. Will not implement, as there is no support for `Application`.
 
 #### 9.2.2 URIs and URI Templates 
 
-- [ ] Not yet implemented.
+- [x] Implemented `@Context javax.ws.rs.core.UriInfo`
 
 #### 9.2.3 Headers 
 
-- [ ] Not yet implemented.
+- [x] Implemented `@Context javax.ws.rs.core.HttpHeaders`
 
 #### 9.2.4 Content Negotiation and Preconditions 
 
@@ -348,7 +343,7 @@ None of this section is applicable to MuServer.
 
 ## 11 Runtime Delegate
 
-N/A
+- [x] Implemented, although not that `createEndpoint` will never be supported.
 
 ## Interface implementations
 
