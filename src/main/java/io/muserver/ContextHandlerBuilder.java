@@ -13,6 +13,11 @@ public class ContextHandlerBuilder implements MuHandlerBuilder<ContextHandler> {
         return this;
     }
 
+    public static ContextHandlerBuilder context(String path) {
+        return new ContextHandlerBuilder()
+            .withPath(path);
+    }
+
     public static ContextHandlerBuilder context(String path, MuHandler... handlers) {
         return new ContextHandlerBuilder()
             .withPath(path)
