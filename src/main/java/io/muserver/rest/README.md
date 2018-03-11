@@ -3,7 +3,7 @@
 
 This section goes into detail about which parts of the spec are implemented, which parts may be implemented
 later, and which parts will never be implemented. The numbers and headers are taken directly from the
-[jaxrs-2.0 final spec](http://download.oracle.com/otn-pub/jcp/jaxrs-2_0-fr-eval-spec/jsr339-jaxrs-2.0-final-spec.pdf)
+[jaxrs-2.1 final spec](https://jcp.org/aboutJava/communityprocess/final/jsr370/index.html)
 provided by Oracle.
 
 
@@ -55,6 +55,8 @@ N/A Not applicable as only singletons supported
 - [x] Static valueOf method objects
 - [x] Single-string constructor objects
 - [x] `List<T>`, `Set<T>`, and `SortedSet<T>` for values satisfying above 3 cases. 
+- [x] `@DefaultValue`
+- [x] `@Encoded`
 
 #### 3.3.3 Return Type 
 
@@ -125,6 +127,10 @@ the `io.muserver.rest.RestHandlerBuilder` class.
 
 N/A as Mu will never instantiate user classes.
 
+#### 4.1.3 Priorities
+
+- [ ] `@Priority` Not yet implemented
+
 ### 4.2 Entity Providers 
 
 - [x] Implemented.
@@ -143,8 +149,18 @@ N/A as Mu will never instantiate user classes.
 
 #### 4.2.4 Standard Entity Providers 
 
-- [x] Non-XML types Implemented
-- [ ] Source and JAXB XML support.
+- [x] `byte[]` All media types (*/*)
+- [x] `java.lang.String` All media types (*/*)
+- [x] `java.io.InputStream` All media types (*/*)
+- [x] `java.io.Reader` All media types (*/*)
+- [x] `java.io.File` All media types (*/*)
+- [x] `javax.activation.DataSource` All media types (*/*)
+- [ ] `javax.xml.transform.Source` XML types (text/xml, application/xml and media types of the form application/*+xml)
+- [ ] `javax.xml.bind.JAXBElement` and application-supplied JAXB classes XML types (text/xml and application/xml and media types of the form application/*+xml)
+- [x] `MultivaluedMap<String,String>` Form content (application/x-www-form-urlencoded)
+- [x] `StreamingOutput` All media types (*/*), MessageBodyWriter only
+- [x] `java.lang.Boolean`, `java.lang.Character`, `java.lang.Number` Only for text/plain
+- [x] Corresponding primitive types supported via boxing/unboxing conversion.
 
 #### 4.2.5 Transfer Encoding 
 
@@ -288,15 +304,19 @@ N/A
 
 N/A
 
-## 9 Context
+## 9 Server-Sent Events
+
+- [ ] Not yet implemented
+
+## 10 Context
 
 This applies to the types allowed using `@Context` in method parameters.
 
-### 9.1 Concurrency 
+### 10.1 Concurrency 
 
 - [x] All injected instances are threadsafe.
 
-### 9.2 Context Types
+### 10.2 Context Types
 
 This refers to the types of objects that are injectable as method parameters via
 the `@Context` annotation.
@@ -304,44 +324,44 @@ the `@Context` annotation.
 Sections below describe the types required by the spec. Mu-Servers implementation also
 allows injection of `MuRequest` and `MuResponse`.
 
-#### 9.2.1 Application 
+#### 10.2.1 Application 
 
 N/A. Will not implement, as there is no support for `Application`.
 
-#### 9.2.2 URIs and URI Templates 
+#### 10.2.2 URIs and URI Templates 
 
 - [x] Implemented `@Context javax.ws.rs.core.UriInfo`
 
-#### 9.2.3 Headers 
+#### 10.2.3 Headers 
 
 - [x] Implemented `@Context javax.ws.rs.core.HttpHeaders`
 
-#### 9.2.4 Content Negotiation and Preconditions 
+#### 10.2.4 Content Negotiation and Preconditions 
 
 - [ ] Not yet implemented.
 
-#### 9.2.5 Security Context 
+#### 10.2.5 Security Context 
 
 - [ ] Not yet implemented.
 
-#### 9.2.6 Providers 
+#### 10.2.6 Providers 
 
 Will not implement.
 
-#### 9.2.7 Resource Context 
+#### 10.2.7 Resource Context 
 
 Will not implement as it violates principle of programmatic configuration. Users should pass any context 
 needed into sub-resource constructors explicitly.
 
-#### 9.2.8 Configuration 
+#### 10.2.8 Configuration 
 
 Will not implement. Configuration should be handled by the user.
 
-## 10 Environment
+## 11 Environment
 
-None of this section is applicable to MuServer.
+None of this section is applicable to MuServer as it does not manage your server's lifecycle.
 
-## 11 Runtime Delegate
+## 12 Runtime Delegate
 
 - [x] Implemented, although not that `createEndpoint` will never be supported.
 

@@ -48,7 +48,7 @@ MuServer server = MuServerBuilder.httpsServer()
 
 ## JAX-RS REST Resources
 
-Mu-Server provides a partial implementation of the [JAX-RS 2.0 spec](http://download.oracle.com/otn-pub/jcp/jaxrs-2_0-fr-eval-spec/jsr339-jaxrs-2.0-final-spec.pdf), 
+Mu-Server provides a partial implementation of the [JAX-RS 2.1 spec](https://jcp.org/aboutJava/communityprocess/final/jsr370/index.html), 
 which is a Java standard used to define REST resources.
 
 Following the principle that you should be in charge of your own config and class instantiation, any parts
@@ -58,6 +58,8 @@ See the [rest/README.md](https://github.com/3redronin/mu-server/blob/master/src/
 Example REST resource class:
 
 ````java
+import javax.ws.rs.*;
+
 @Path("api/fruits")
 public class Fruit {
 
@@ -75,7 +77,7 @@ public class Fruit {
             case "orange":
                 return "{ \"name\": \"orange\" }";
         }
-        throw new javax.ws.rs.NotFoundException();
+        throw new NotFoundException();
     }
 }
 ````
