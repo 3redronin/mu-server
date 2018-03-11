@@ -9,7 +9,6 @@ import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.*;
 import javax.ws.rs.ext.MessageBodyReader;
 import javax.ws.rs.ext.MessageBodyWriter;
-import javax.ws.rs.ext.ParamConverterProvider;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.annotation.Annotation;
@@ -26,19 +25,20 @@ public class RestHandler implements MuHandler {
 
     private final RequestMatcher requestMatcher;
     private final EntityProviders entityProviders;
+    private final MuHandler documentor;
 
-    RestHandler(EntityProviders entityProviders, List<ParamConverterProvider> paramConverterProviders, Object... restResources) {
-        HashSet<ResourceClass> set = new HashSet<>();
-        for (Object restResource : restResources) {
-            set.add(ResourceClass.fromObject(restResource, paramConverterProviders));
-        }
-        this.requestMatcher = new RequestMatcher(Collections.unmodifiableSet(set));
+    RestHandler(EntityProviders entityProviders, Set<ResourceClass> roots, MuHandler documentor) {
+        this.requestMatcher = new RequestMatcher(roots);
         this.entityProviders = entityProviders;
+        this.documentor = documentor;
     }
 
     @Override
     @SuppressWarnings("unchecked")
     public boolean handle(MuRequest request, MuResponse muResponse) throws Exception {
+        if (documentor.handle(request, muResponse)) {
+            return true;
+        }
         String relativePath = Mutils.trim(request.relativePath(), "/");
         try {
             String requestContentType = request.headers().get(HeaderNames.CONTENT_TYPE);

@@ -11,7 +11,6 @@ import java.io.IOException;
 
 import static io.muserver.ContextHandlerBuilder.context;
 import static io.muserver.MuServerBuilder.httpsServer;
-import static java.util.Arrays.asList;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -43,7 +42,7 @@ public class ContextHandlerTest {
                         response.headers().add("X-Blah", "added in context");
                         return false;
                     },
-                    RestHandlerBuilder.create(new Fruit())
+                    RestHandlerBuilder.restHandler(new Fruit()).build()
                 ).build())
             ).start();
 

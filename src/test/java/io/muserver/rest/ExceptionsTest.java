@@ -2,7 +2,6 @@ package io.muserver.rest;
 
 import io.muserver.MuServer;
 import io.muserver.MuServerBuilder;
-import io.muserver.SSLContextBuilder;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
@@ -10,9 +9,6 @@ import org.junit.Test;
 import javax.ws.rs.GET;
 import javax.ws.rs.NotFoundException;
 import javax.ws.rs.Path;
-import javax.ws.rs.core.Context;
-import javax.ws.rs.core.UriInfo;
-import java.util.stream.Collectors;
 
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -41,7 +37,7 @@ public class ExceptionsTest {
 
     private void startServer(Object restResource) {
         this.server = MuServerBuilder.httpsServer()
-            .addHandler(RestHandlerBuilder.create(restResource)).start();
+            .addHandler(RestHandlerBuilder.restHandler(restResource).build()).start();
     }
 
     @After

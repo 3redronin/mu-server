@@ -60,7 +60,7 @@ Example REST resource class:
 ````java
 import javax.ws.rs.*;
 
-@Path("api/fruits")
+@Path("fruits")
 public class Fruit {
 
     @GET
@@ -86,11 +86,11 @@ A web server with this registered can be created like so:
 
 ````java
 MuServer server = MuServerBuilder.httpsServer()
-    .addHandler(RestHandlerBuilder.restHandler(new Fruit()).build())
+    .addHandler(RestHandlerBuilder.restHandler(new Fruit()))
     .start();
 ````
 
-Making a `GET` request to `server.uri().resolve("/api/fruits/orange")` in this case would return the JSON
+Making a `GET` request to `server.uri().resolve("/fruits/orange")` in this case would return the JSON
 snippet corresponding to the Orange case.
 
 ## Context paths
@@ -113,6 +113,6 @@ server = httpsServer()
         }),
         
         // This is a JAX-RS Resource hosted at "/api/fruits"
-        RestHandlerBuilder.create(new Fruit())
+        RestHandlerBuilder.restHandler(new Fruit())
     )).start();
 ````

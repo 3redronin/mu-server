@@ -96,4 +96,10 @@ public class Mutils {
         }
         return value;
     }
+
+    public static void notNull(String name, Object value) {
+        if (value == null) {
+            throw new IllegalArgumentException(name + " cannot be null");
+        }
+    }
 }

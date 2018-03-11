@@ -124,7 +124,7 @@ class MuUriBuilder extends UriBuilder {
 
     @Override
     public UriBuilder path(String path) {
-        notNull("path", path);
+        Mutils.notNull("path", path);
         setSlashes(path);
         this.pathSegments.addAll(MuUriInfo.pathStringToSegments(decode(path), false).collect(toList()));
         return this;
@@ -138,7 +138,7 @@ class MuUriBuilder extends UriBuilder {
 
     @Override
     public UriBuilder path(Class resource) {
-        notNull("resource", resource);
+        Mutils.notNull("resource", resource);
         return this.path(findResourcePath(resource));
     }
 
@@ -180,9 +180,9 @@ class MuUriBuilder extends UriBuilder {
 
     @Override
     public UriBuilder segment(String... segments) {
-        notNull("segments", segments);
+        Mutils.notNull("segments", segments);
         for (String segment : segments) {
-            notNull("segment", segment);
+            Mutils.notNull("segment", segment);
             this.pathSegments.addAll(MuUriInfo.pathStringToSegments(decode(segment), true).collect(toList()));
         }
         this.hasTrailingSlash = false;
@@ -208,8 +208,8 @@ class MuUriBuilder extends UriBuilder {
 
     @Override
     public UriBuilder matrixParam(String name, Object... values) {
-        notNull("name", name);
-        notNull("values", values);
+        Mutils.notNull("name", name);
+        Mutils.notNull("values", values);
 
         MultivaluedMap<String, String> params = getOrCreateCurrentSegment().getMatrixParameters();
         for (Object value : values) {
@@ -221,8 +221,8 @@ class MuUriBuilder extends UriBuilder {
 
     @Override
     public UriBuilder replaceMatrixParam(String name, Object... values) {
-        notNull("name", name);
-        notNull("values", values);
+        Mutils.notNull("name", name);
+        Mutils.notNull("values", values);
         MultivaluedMap<String, String> params = getOrCreateCurrentSegment().getMatrixParameters();
         params.replace(name, Stream.of(values).map(Object::toString).collect(toList()));
         return this;
@@ -256,8 +256,8 @@ class MuUriBuilder extends UriBuilder {
 
     @Override
     public UriBuilder queryParam(String name, Object... values) {
-        notNull("name", name);
-        notNull("values", values);
+        Mutils.notNull("name", name);
+        Mutils.notNull("values", values);
         name = decode(name);
         for (Object value : values) {
             query.add(name, decode(value.toString()));
@@ -267,7 +267,7 @@ class MuUriBuilder extends UriBuilder {
 
     @Override
     public UriBuilder replaceQueryParam(String name, Object... values) {
-        notNull("name", name);
+        Mutils.notNull("name", name);
         query.remove(name);
         return values == null ? this : queryParam(name, values);
     }
@@ -281,28 +281,28 @@ class MuUriBuilder extends UriBuilder {
 
     @Override
     public UriBuilder resolveTemplate(String name, Object value) {
-        notNull("name", name);
-        notNull("value", value);
+        Mutils.notNull("name", name);
+        Mutils.notNull("value", value);
         return resolveTemplate(name, value, true);
     }
 
     @Override
     public UriBuilder resolveTemplateFromEncoded(String name, Object value) {
-        notNull("name", name);
-        notNull("value", value);
+        Mutils.notNull("name", name);
+        Mutils.notNull("value", value);
         String decoded = Jaxutils.leniantUrlDecode(value.toString());
         return resolveTemplate(name, decoded, true);
     }
 
     @Override
     public UriBuilder resolveTemplates(Map<String, Object> templateValues) {
-        notNull("templateValues", templateValues);
+        Mutils.notNull("templateValues", templateValues);
         return resolveTemplates(templateValues, true);
     }
 
     @Override
     public UriBuilder resolveTemplates(Map<String, Object> templateValues, boolean encodeSlashInPath) throws IllegalArgumentException {
-        notNull("templateValues", templateValues);
+        Mutils.notNull("templateValues", templateValues);
         for (Map.Entry<String, Object> entry : templateValues.entrySet()) {
             resolveTemplate(entry.getKey(), entry.getValue(), encodeSlashInPath);
         }
@@ -311,7 +311,7 @@ class MuUriBuilder extends UriBuilder {
 
     @Override
     public UriBuilder resolveTemplatesFromEncoded(Map<String, Object> templateValues) {
-        notNull("templateValues", templateValues);
+        Mutils.notNull("templateValues", templateValues);
         for (Map.Entry<String, Object> entry : templateValues.entrySet()) {
             resolveTemplateFromEncoded(entry.getKey(), entry.getValue());
         }
@@ -320,8 +320,8 @@ class MuUriBuilder extends UriBuilder {
 
     @Override
     public UriBuilder resolveTemplate(String name, Object value, boolean encodeSlashInPath) {
-        notNull("name", name);
-        notNull("value", value);
+        Mutils.notNull("name", name);
+        Mutils.notNull("value", value);
         String val = value.toString();
 
         scheme = resolve(scheme, name, val);
@@ -517,9 +517,4 @@ class MuUriBuilder extends UriBuilder {
         this.hasTrailingSlash = path.endsWith("/");
     }
 
-    private static void notNull(String name, Object value) {
-        if (value == null) {
-            throw new IllegalArgumentException(name + " cannot be null");
-        }
-    }
 }

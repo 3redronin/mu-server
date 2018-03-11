@@ -77,7 +77,7 @@ public class CookieTest {
         }
 
         server = MuServerBuilder.httpServer()
-            .addHandler(RestHandlerBuilder.create(new Biscuits())).start();
+            .addHandler(RestHandlerBuilder.restHandler(new Biscuits()).build()).start();
 
         try (Response setResp = client.newCall(request().url(server.uri().resolve("/biscuits/set").toString()).build()).execute()) {
             assertThat(setResp.code(), equalTo(204));

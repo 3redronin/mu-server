@@ -73,7 +73,7 @@ public class ContextTest {
         }
         this.server = MuServerBuilder.httpsServer()
             .withHttpsConnection(50977, SSLContextBuilder.unsignedLocalhostCert())
-            .addHandler(new ContextHandler("/ha ha/", asList(RestHandlerBuilder.create(new Sample())))).start();
+            .addHandler(new ContextHandler("/ha ha/", asList(RestHandlerBuilder.restHandler(new Sample()).build()))).start();
         try (Response resp = call(request().url(server.uri().resolve("/ha%20ha/samples/zample/barmpit?hoo=har%20har").toString()))) {
             assertThat(resp.body().string(), equalTo("https://localhost:50977/ha%20ha/\nsamples/zample/barmpit\n" +
                 "https://localhost:50977/ha%20ha/samples/zample/barmpit\n" +
@@ -131,7 +131,7 @@ public class ContextTest {
     private void startServer(Object restResource) {
         this.server = MuServerBuilder.httpsServer()
             .withHttpsConnection(50977, SSLContextBuilder.unsignedLocalhostCert())
-            .addHandler(RestHandlerBuilder.create(restResource)).start();
+            .addHandler(RestHandlerBuilder.restHandler(restResource).build()).start();
     }
 
     @After

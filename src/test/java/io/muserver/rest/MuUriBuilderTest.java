@@ -241,7 +241,7 @@ public class MuUriBuilderTest {
         MuServer server = httpsServer()
             .withHttpsConnection(15647, SSLContextBuilder.unsignedLocalhostCert())
             .addHandler(ContextHandlerBuilder.context("api",
-                RestHandlerBuilder.create(new FruitResource(), new DogResource())))
+                RestHandlerBuilder.restHandler(new FruitResource(), new DogResource()).build()))
             .start();
         try {
             try (Response resp = call(request().url(server.uri().resolve("/api/v1/dogs/getResourceClass").toString()))) {

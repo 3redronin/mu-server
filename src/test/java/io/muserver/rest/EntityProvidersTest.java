@@ -153,7 +153,7 @@ public class EntityProvidersTest {
     }
 
     private void startServer(Object restResource) {
-        this.server = MuServerBuilder.httpsServer().addHandler(RestHandlerBuilder.create(restResource)).start();
+        this.server = MuServerBuilder.httpsServer().addHandler(RestHandlerBuilder.restHandler(restResource).build()).start();
     }
 
     @After

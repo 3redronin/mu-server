@@ -39,7 +39,7 @@ public class RestHandlerTest {
 
     @Test(expected = IllegalArgumentException.class)
     public void throwsIfObjectDoesNotHavePathAnnotation() {
-        RestHandlerBuilder.create(new Object());
+        RestHandlerBuilder.restHandler(new Object()).build();
     }
 
     @Path("api/fruit bits")

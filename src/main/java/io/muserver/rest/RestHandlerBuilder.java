@@ -5,8 +5,8 @@ import io.muserver.MuHandlerBuilder;
 import javax.ws.rs.ext.MessageBodyReader;
 import javax.ws.rs.ext.MessageBodyWriter;
 import javax.ws.rs.ext.ParamConverterProvider;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
+import java.util.stream.Stream;
 
 public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
 
@@ -14,13 +14,14 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     private final List<MessageBodyWriter> customWriters = new ArrayList<>();
     private final List<MessageBodyReader> customReaders = new ArrayList<>();
     private final List<ParamConverterProvider> customParamConverterProviders = new ArrayList<>();
+    private String openApiJsonUrl = "/openapi.json";
 
     public RestHandlerBuilder(Object... resources) {
         this.resources = resources;
     }
 
-    public RestHandlerBuilder withResoures(Object... resources) {
-        this.resources = resources;
+    public RestHandlerBuilder addResource(Object... resources) {
+        this.resources = Stream.of(this.resources, resources).flatMap(Stream::of).toArray(Object[]::new);
         return this;
     }
 
@@ -36,7 +37,10 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
         customParamConverterProviders.add(paramConverterProvider);
         return this;
     }
-
+    public RestHandlerBuilder withOpenApiJsonUrl(String url) {
+        this.openApiJsonUrl = url;
+        return this;
+    }
 
     public RestHandler build() {
         List<MessageBodyReader> readers = EntityProviders.builtInReaders();
@@ -44,16 +48,26 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
         List<MessageBodyWriter> writers = EntityProviders.builtInWriters();
         writers.addAll(customWriters);
         EntityProviders entityProviders = new EntityProviders(readers, writers);
-        List<ParamConverterProvider> paramConverterProviders = new ArrayList<>();
-        paramConverterProviders.addAll(customParamConverterProviders);
+        List<ParamConverterProvider> paramConverterProviders = new ArrayList<>(customParamConverterProviders);
         paramConverterProviders.add(new BuiltInParamConverterProvider());
-        return new RestHandler(entityProviders, paramConverterProviders, resources);
+
+        HashSet<ResourceClass> set = new HashSet<>();
+        for (Object restResource : resources) {
+            set.add(ResourceClass.fromObject(restResource, paramConverterProviders));
+        }
+        Set<ResourceClass> roots = Collections.unmodifiableSet(set);
+        OpenApiDocumentor documentor = new OpenApiDocumentor(roots, entityProviders, openApiJsonUrl);
+        return new RestHandler(entityProviders, roots, documentor);
     }
 
     public static RestHandlerBuilder restHandler(Object... resources) {
         return new RestHandlerBuilder(resources);
     }
 
+    /**
+     * @deprecated Use restHandler(resources).build() instead.
+     */
+    @Deprecated
     public static RestHandler create(Object... resources) {
         return restHandler(resources).build();
     }
