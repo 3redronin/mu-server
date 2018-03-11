@@ -5,7 +5,7 @@ import java.io.IOException;
 import java.io.Writer;
 
 import static io.muserver.Mutils.notNull;
-import static io.muserver.openapi.OpenAPIDocument.append;
+import static io.muserver.openapi.Jsonizer.append;
 
 public class Info implements JsonWriter {
 

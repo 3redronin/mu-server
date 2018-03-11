@@ -30,7 +30,7 @@ public class OpenAPIDocumentTest {
 
         try (StringWriter writer = new StringWriter()) {
             doc.writeJson(writer);
-            assertThat(writer.toString(), equalTo("{}"));
+            assertThat(writer.toString(), equalTo("{\"openapi\":\"3.0.1\",\"info\":{\"title\":\"The Title\",\"description\":\"The description\",\"termsOfService\":\"Terms of service\",\"contact\":{\"name\":\"My name\",\"url\":\"http://muserver.io\",\"email\":\"support@muserver.io\"},\"license\":{\"name\":\"Apache 2.0\",\"url\":\"https://www.apache.org/licenses/LICENSE-2.0.html\"},\"version\":\"1.0\"},\"servers\":[{\"url\":\"http://muserver.io/api\",\"description\":\"Production\"},{\"url\":\"http://muserver.io/api{version}\",\"description\":\"Production\",\"variables\":{\"version\":{\"enum\":[\"1.0\",\"2.0\"],\"default\":\"2.0\",\"description\":\"API Version\"}}}]}"));
         }
 
 

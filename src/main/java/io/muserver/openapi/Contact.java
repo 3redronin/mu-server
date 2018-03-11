@@ -4,7 +4,7 @@ import java.io.IOException;
 import java.io.Writer;
 import java.net.URI;
 
-import static io.muserver.openapi.OpenAPIDocument.append;
+import static io.muserver.openapi.Jsonizer.append;
 
 public class Contact implements JsonWriter {
     public final String name;
