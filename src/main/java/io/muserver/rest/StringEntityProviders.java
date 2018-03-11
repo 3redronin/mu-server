@@ -33,8 +33,8 @@ class StringEntityProviders {
     );
 
 
-    @Produces("*/*")
-    @Consumes("*/*")
+    @Produces({"text/plain", "*/*"})
+    @Consumes({"text/plain", "*/*"})
     static class StringMessageReaderWriter implements MessageBodyWriter<String>, MessageBodyReader<String> {
         private StringMessageReaderWriter() {}
         public static final StringMessageReaderWriter INSTANCE = new StringMessageReaderWriter();
@@ -63,8 +63,8 @@ class StringEntityProviders {
         }
     }
 
-    @Produces("*/*")
-    @Consumes("*/*")
+    @Produces({"text/plain", "*/*"})
+    @Consumes({"text/plain", "*/*"})
     static class CharArrayReaderWriter implements MessageBodyWriter<char[]>, MessageBodyReader<char[]> {
         private CharArrayReaderWriter() {}
         public static final CharArrayReaderWriter INSTANCE = new CharArrayReaderWriter();

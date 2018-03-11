@@ -14,8 +14,8 @@ import java.io.OutputStream;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
 
-@Produces("*/*")
-@Consumes("*/*")
+@Produces({"text/plain", "*/*"})
+@Consumes({"text/plain", "*/*"})
 public class MyStringReaderWriter implements MessageBodyWriter<String>, MessageBodyReader<String> {
 
     // this is in a non-io.muserver package so that it gets classified as a customer reader/writer

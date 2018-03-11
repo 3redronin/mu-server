@@ -53,7 +53,8 @@ public class MediaTypeDeterminerTest {
 
     @Test
     public void applicationOctectStreamIsTheDefault() {
-        MediaType mediaType = determine(objType("Hello"), emptyList(), emptyList(), wrapped(builtInWriters()), emptyList());
+        class SomethingNotAString {}
+        MediaType mediaType = determine(objType(new SomethingNotAString()), emptyList(), emptyList(), wrapped(builtInWriters()), emptyList());
         assertThat(mediaType.toString(), equalTo("application/octet-stream"));
     }
 

@@ -46,10 +46,10 @@ public class EntityProvidersTest {
             }
         }
         startServer(new Sample());
-        stringCheck("text/plain", randomStringOfLength(128 * 1024), "application/octet-stream", "/samples");
+        stringCheck("text/plain", randomStringOfLength(128 * 1024), "text/plain", "/samples");
     }
     @Test
-    public void customConvertersComeBeforeBuiltInOnes() throws Exception {
+    public void customConvertersComeBeforeBuiltInOnesIfAllOtherThingsMatch() throws Exception {
         @Path("samples")
         class Sample {
             @POST
@@ -68,7 +68,7 @@ public class EntityProvidersTest {
             .url(server.uri().resolve("/samples").toString())
         )) {
             assertThat(resp.code(), equalTo(200));
-            assertThat(resp.header("Content-Type"), equalTo("application/octet-stream"));
+            assertThat(resp.header("Content-Type"), equalTo("text/plain"));
             assertThat(resp.body().string(), equalTo("--HELLO WORLD--"));
         }
     }
