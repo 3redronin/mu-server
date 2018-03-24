@@ -2,20 +2,21 @@ package io.muserver.openapi;
 
 import java.io.IOException;
 import java.io.Writer;
-import java.net.URI;
 
 import static io.muserver.Mutils.notNull;
 import static io.muserver.openapi.Jsonizer.append;
 
-public class License implements JsonWriter {
+public class TagObject implements JsonWriter {
 
     public final String name;
-    public final URI url;
+    public final String description;
+    public final ExternalDocumentationObject externalDocs;
 
-    public License(String name, URI url) {
+    public TagObject(String name, String description, ExternalDocumentationObject externalDocs) {
         notNull("name", name);
         this.name = name;
-        this.url = url;
+        this.description = description;
+        this.externalDocs = externalDocs;
     }
 
     @Override
@@ -23,7 +24,8 @@ public class License implements JsonWriter {
         writer.write('{');
         boolean isFirst = true;
         isFirst = !append(writer, "name", name, isFirst);
-        isFirst = !append(writer, "url", url, isFirst);
+        isFirst = !append(writer, "description", description, isFirst);
+        isFirst = !append(writer, "externalDocs", externalDocs, isFirst);
         writer.write('}');
     }
 }

@@ -30,7 +30,7 @@ public class Info implements JsonWriter {
 
     @Override
     public void writeJson(Writer writer) throws IOException {
-        writer.write("{");
+        writer.write('{');
         boolean isFirst = true;
         isFirst = !append(writer, "title", title, isFirst);
         isFirst = !append(writer, "description", description, isFirst);
@@ -38,6 +38,6 @@ public class Info implements JsonWriter {
         isFirst = !append(writer, "contact", contact, isFirst);
         isFirst = !append(writer, "license", license, isFirst);
         isFirst = !append(writer, "version", version, isFirst);
-        writer.write("}");
+        writer.write('}');
     }
 }
