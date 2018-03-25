@@ -18,17 +18,14 @@ public class OpenAPIObjectTest {
     @Test
     public void canWriteToJSON() throws IOException {
 
-        OpenAPIObject doc = new OpenAPIObject(
-            new InfoObject("The Title", "The description", "Terms of service",
-                new ContactObject("My name", URI.create("http://muserver.io"), "support@muserver.io"),
-                new LicenseObject("Apache 2.0", URI.create("https://www.apache.org/licenses/LICENSE-2.0.html")),
-                "1.0"
-            ),
-            asList(
-                new ServerObjectBuilder().withUrl("http://muserver.io/api").withDescription("Production").withVariables(null).build(),
-                new ServerObjectBuilder().withUrl("http://muserver.io/api{version}").withDescription("Production").withVariables(Collections.singletonMap("version", new ServerVariableObjectBuilder().withEnumValues(asList("1.0", "2.0")).withDefaultValue("2.0").withDescription("API Version").build())).build()
-            ),
-            new PathsObjectBuilder().withPathItemObjects(emptyMap()).build(), null, null, null, null);
+        OpenAPIObject doc = new OpenAPIObjectBuilder().withInfo(new InfoObject("The Title", "The description", "Terms of service",
+            new ContactObject("My name", URI.create("http://muserver.io"), "support@muserver.io"),
+            new LicenseObjectBuilder().withName("Apache 2.0").withUrl(URI.create("https://www.apache.org/licenses/LICENSE-2.0.html")).build(),
+            "1.0"
+        )).withServers(asList(
+            new ServerObjectBuilder().withUrl("http://muserver.io/api").withDescription("Production").withVariables(null).build(),
+            new ServerObjectBuilder().withUrl("http://muserver.io/api{version}").withDescription("Production").withVariables(Collections.singletonMap("version", new ServerVariableObjectBuilder().withEnumValues(asList("1.0", "2.0")).withDefaultValue("2.0").withDescription("API Version").build())).build()
+        )).withPaths(new PathsObjectBuilder().withPathItemObjects(emptyMap()).build()).withComponents(null).withSecurity(null).withTags(null).withExternalDocs(null).build();
 
         try (StringWriter writer = new StringWriter()) {
             doc.writeJson(writer);

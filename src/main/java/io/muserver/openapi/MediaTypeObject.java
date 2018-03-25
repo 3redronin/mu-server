@@ -4,6 +4,9 @@ import java.io.IOException;
 import java.io.Writer;
 import java.util.Map;
 
+/**
+ * @see MediaTypeObjectBuilder
+ */
 public class MediaTypeObject implements JsonWriter {
 
     public final SchemaObject schema;
@@ -11,7 +14,7 @@ public class MediaTypeObject implements JsonWriter {
     public final Map<String, ExampleObject> examples;
     public final Map<String, EncodingObject> encoding;
 
-    public MediaTypeObject(SchemaObject schema, Object example, Map<String, ExampleObject> examples, Map<String, EncodingObject> encoding) {
+    MediaTypeObject(SchemaObject schema, Object example, Map<String, ExampleObject> examples, Map<String, EncodingObject> encoding) {
         if (example != null && examples != null) {
             throw new IllegalArgumentException("Only one of 'example' and 'examples' can be supplied");
         }

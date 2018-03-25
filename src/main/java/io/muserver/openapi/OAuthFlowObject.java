@@ -8,6 +8,9 @@ import java.util.Map;
 import static io.muserver.Mutils.notNull;
 import static io.muserver.openapi.Jsonizer.append;
 
+/**
+ * @see OAuthFlowObjectBuilder
+ */
 public class OAuthFlowObject implements JsonWriter {
 
     public final URI authorizationUrl;
@@ -15,7 +18,7 @@ public class OAuthFlowObject implements JsonWriter {
     public final URI refreshUrl;
     public final Map<String, String> scopes;
 
-    public OAuthFlowObject(URI authorizationUrl, URI tokenUrl, URI refreshUrl, Map<String, String> scopes) {
+    OAuthFlowObject(URI authorizationUrl, URI tokenUrl, URI refreshUrl, Map<String, String> scopes) {
         notNull("authorizationUrl", authorizationUrl);
         notNull("tokenUrl", tokenUrl);
         notNull("scopes", scopes);

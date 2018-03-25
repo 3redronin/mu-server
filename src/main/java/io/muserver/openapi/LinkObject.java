@@ -6,6 +6,9 @@ import java.util.Map;
 
 import static io.muserver.openapi.Jsonizer.append;
 
+/**
+ * @see LinkObjectBuilder
+ */
 public class LinkObject implements JsonWriter {
 
     public final String operationId;
@@ -14,7 +17,7 @@ public class LinkObject implements JsonWriter {
     public final String description;
     public final ServerObject server;
 
-    public LinkObject(String operationId, Map<String, Object> parameters, Object requestBody, String description, ServerObject server) {
+    LinkObject(String operationId, Map<String, Object> parameters, Object requestBody, String description, ServerObject server) {
         this.operationId = operationId;
         this.parameters = parameters;
         this.requestBody = requestBody;

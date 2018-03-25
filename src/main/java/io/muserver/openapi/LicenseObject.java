@@ -7,12 +7,15 @@ import java.net.URI;
 import static io.muserver.Mutils.notNull;
 import static io.muserver.openapi.Jsonizer.append;
 
+/**
+ * @see LicenseObjectBuilder
+ */
 public class LicenseObject implements JsonWriter {
 
     public final String name;
     public final URI url;
 
-    public LicenseObject(String name, URI url) {
+    LicenseObject(String name, URI url) {
         notNull("name", name);
         this.name = name;
         this.url = url;

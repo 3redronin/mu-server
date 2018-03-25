@@ -5,6 +5,9 @@ import java.io.Writer;
 
 import static io.muserver.openapi.Jsonizer.append;
 
+/**
+ * @see OAuthFlowsObjectBuilder
+ */
 public class OAuthFlowsObject implements JsonWriter {
 
     public final OAuthFlowObject implicit;
@@ -12,7 +15,7 @@ public class OAuthFlowsObject implements JsonWriter {
     public final OAuthFlowObject clientCredentials;
     public final OAuthFlowObject authorizationCode;
 
-    public OAuthFlowsObject(OAuthFlowObject implicit, OAuthFlowObject password, OAuthFlowObject clientCredentials, OAuthFlowObject authorizationCode) {
+    OAuthFlowsObject(OAuthFlowObject implicit, OAuthFlowObject password, OAuthFlowObject clientCredentials, OAuthFlowObject authorizationCode) {
         this.implicit = implicit;
         this.password = password;
         this.clientCredentials = clientCredentials;
