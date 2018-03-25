@@ -10,13 +10,13 @@ class Jsonizer {
 
     private static String jsonEncode(String value) {
         return value
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
             .replace("\b", "\\b")
             .replace("\f", "\\f")
             .replace("\n", "\\n")
             .replace("\r", "\\r")
             .replace("\t", "\\t")
-            .replace("\"", "\\\"")
-            .replace("\\", "\\\\")
             ;
     }
 
