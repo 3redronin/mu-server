@@ -26,9 +26,9 @@ public class ServerVariableObject implements JsonWriter {
     public void writeJson(Writer writer) throws IOException {
         writer.write("{");
         boolean isFirst = true;
-        isFirst = !append(writer, "enum", enumValues, isFirst);
-        isFirst = !append(writer, "default", defaultValue, isFirst);
-        isFirst = !append(writer, "description", description, isFirst);
+        isFirst = append(writer, "enum", enumValues, isFirst);
+        isFirst = append(writer, "default", defaultValue, isFirst);
+        isFirst = append(writer, "description", description, isFirst);
         writer.write("}");
     }
 }

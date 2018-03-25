@@ -21,9 +21,9 @@ public class ContactObject implements JsonWriter {
     public void writeJson(Writer writer) throws IOException {
         writer.write("{");
         boolean isFirst = true;
-        isFirst = !append(writer, "name", name, isFirst);
-        isFirst = !append(writer, "url", url, isFirst);
-        isFirst = !append(writer, "email", email, isFirst);
+        isFirst = append(writer, "name", name, isFirst);
+        isFirst = append(writer, "url", url, isFirst);
+        isFirst = append(writer, "email", email, isFirst);
         writer.write("}");
     }
 }

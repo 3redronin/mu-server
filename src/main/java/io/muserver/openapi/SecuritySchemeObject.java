@@ -59,14 +59,14 @@ public class SecuritySchemeObject implements JsonWriter {
     public void writeJson(Writer writer) throws IOException {
         writer.write('{');
         boolean isFirst = true;
-        isFirst = !append(writer, "type", type, isFirst);
-        isFirst = !append(writer, "description", description, isFirst);
-        isFirst = !append(writer, "name", name, isFirst);
-        isFirst = !append(writer, "in", in, isFirst);
-        isFirst = !append(writer, "scheme", scheme, isFirst);
-        isFirst = !append(writer, "bearerFormat", bearerFormat, isFirst);
-        isFirst = !append(writer, "flows", flows, isFirst);
-        isFirst = !append(writer, "openIdConnectUrl", openIdConnectUrl, isFirst);
+        isFirst = append(writer, "type", type, isFirst);
+        isFirst = append(writer, "description", description, isFirst);
+        isFirst = append(writer, "name", name, isFirst);
+        isFirst = append(writer, "in", in, isFirst);
+        isFirst = append(writer, "scheme", scheme, isFirst);
+        isFirst = append(writer, "bearerFormat", bearerFormat, isFirst);
+        isFirst = append(writer, "flows", flows, isFirst);
+        isFirst = append(writer, "openIdConnectUrl", openIdConnectUrl, isFirst);
         writer.write('}');
     }
 }

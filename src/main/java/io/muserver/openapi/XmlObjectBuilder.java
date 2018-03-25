@@ -69,7 +69,7 @@ public class XmlObjectBuilder {
      * Creates a builder for a {@link XmlObject}
      * @return A new builder
      */
-    public static XmlObjectBuilder xml() {
+    public static XmlObjectBuilder xmlObject() {
         return new XmlObjectBuilder();
     }
 }

@@ -9,6 +9,9 @@ import static io.muserver.Mutils.notNull;
 import static io.muserver.openapi.Jsonizer.append;
 import static java.util.Arrays.asList;
 
+/**
+ * @see ParameterObjectBuilder
+ */
 public class ParameterObject implements JsonWriter {
     private static final List<String> allowedIns = asList("query", "header", "path", "cookie");
     static final List<String> allowedStyles = asList("matrix", "label", "form", "simple", "spaceDelimited", "pipeDelimited", "deepObject");
@@ -19,8 +22,15 @@ public class ParameterObject implements JsonWriter {
     private final boolean required;
     private final boolean deprecated;
     private final boolean allowEmptyValue;
+    private final String style;
+    private final String explode;
+    private final boolean allowReserved;
+    private final SchemaObject schema;
+    private final Object example;
+    private final Map<String, ExampleObject> examples;
+    private final Map<String, MediaTypeObject> content;
 
-    public ParameterObject(String name, String in, String description, boolean required, boolean deprecated, boolean allowEmptyValue,
+    ParameterObject(String name, String in, String description, boolean required, boolean deprecated, boolean allowEmptyValue,
                            String style, String explode, boolean allowReserved, SchemaObject schema, Object example,
                            Map<String, ExampleObject> examples, Map<String, MediaTypeObject> content) {
         notNull("name", name);
@@ -43,19 +53,32 @@ public class ParameterObject implements JsonWriter {
         this.required = required;
         this.deprecated = deprecated;
         this.allowEmptyValue = allowEmptyValue;
-        // TODO add non-fixed fields
+        this.style = style;
+        this.explode = explode;
+        this.allowReserved = allowReserved;
+        this.schema = schema;
+        this.example = example;
+        this.examples = examples;
+        this.content = content;
     }
 
     @Override
     public void writeJson(Writer writer) throws IOException {
         writer.write('{');
         boolean isFirst = true;
-        isFirst = !append(writer, "name", name, isFirst);
-        isFirst = !append(writer, "in", in, isFirst);
-        isFirst = !append(writer, "description", description, isFirst);
-        isFirst = !append(writer, "required", required, isFirst);
-        isFirst = !append(writer, "deprecated", deprecated, isFirst);
-        isFirst = !append(writer, "allowEmptyValue", allowEmptyValue, isFirst);
+        isFirst = append(writer, "name", name, isFirst);
+        isFirst = append(writer, "in", in, isFirst);
+        isFirst = append(writer, "description", description, isFirst);
+        isFirst = append(writer, "required", required, isFirst);
+        isFirst = append(writer, "deprecated", deprecated, isFirst);
+        isFirst = append(writer, "allowEmptyValue", allowEmptyValue, isFirst);
+        isFirst = append(writer, "style", style, isFirst);
+        isFirst = append(writer, "explode", explode, isFirst);
+        isFirst = append(writer, "allowReserved", allowReserved, isFirst);
+        isFirst = append(writer, "schema", schema, isFirst);
+        isFirst = append(writer, "example", example, isFirst);
+        isFirst = append(writer, "examples", examples, isFirst);
+        isFirst = append(writer, "content", content, isFirst);
         writer.write('}');
     }
 

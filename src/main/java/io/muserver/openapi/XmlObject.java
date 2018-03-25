@@ -29,11 +29,11 @@ public class XmlObject implements JsonWriter {
     public void writeJson(Writer writer) throws IOException {
         writer.write('{');
         boolean isFirst = true;
-        isFirst = !append(writer, "name", name, isFirst);
-        isFirst = !append(writer, "namespace", namespace, isFirst);
-        isFirst = !append(writer, "prefix", prefix, isFirst);
-        isFirst = !append(writer, "attribute", attribute, isFirst);
-        isFirst = !append(writer, "wrapped", wrapped, isFirst);
+        isFirst = append(writer, "name", name, isFirst);
+        isFirst = append(writer, "namespace", namespace, isFirst);
+        isFirst = append(writer, "prefix", prefix, isFirst);
+        isFirst = append(writer, "attribute", attribute, isFirst);
+        isFirst = append(writer, "wrapped", wrapped, isFirst);
         writer.write('}');
     }
 }

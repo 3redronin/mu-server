@@ -29,10 +29,10 @@ public class ResponseObject implements JsonWriter {
     public void writeJson(Writer writer) throws IOException {
         writer.write('{');
         boolean isFirst = true;
-        isFirst = !append(writer, "description", description, isFirst);
-        isFirst = !append(writer, "headers", headers, isFirst);
-        isFirst = !append(writer, "content", content, isFirst);
-        isFirst = !append(writer, "links", links, isFirst);
+        isFirst = append(writer, "description", description, isFirst);
+        isFirst = append(writer, "headers", headers, isFirst);
+        isFirst = append(writer, "content", content, isFirst);
+        isFirst = append(writer, "links", links, isFirst);
         writer.write('}');
     }
 }

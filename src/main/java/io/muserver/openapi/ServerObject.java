@@ -26,9 +26,9 @@ public class ServerObject implements JsonWriter {
     public void writeJson(Writer writer) throws IOException {
         writer.write("{");
         boolean isFirst = true;
-        isFirst = !append(writer, "url", url, isFirst);
-        isFirst = !append(writer, "description", description, isFirst);
-        isFirst = !append(writer, "variables", variables, isFirst);
+        isFirst = append(writer, "url", url, isFirst);
+        isFirst = append(writer, "description", description, isFirst);
+        isFirst = append(writer, "variables", variables, isFirst);
         writer.write("}");
     }
 }

@@ -32,12 +32,12 @@ public class InfoObject implements JsonWriter {
     public void writeJson(Writer writer) throws IOException {
         writer.write('{');
         boolean isFirst = true;
-        isFirst = !append(writer, "title", title, isFirst);
-        isFirst = !append(writer, "description", description, isFirst);
-        isFirst = !append(writer, "termsOfService", termsOfService, isFirst);
-        isFirst = !append(writer, "contact", contact, isFirst);
-        isFirst = !append(writer, "license", license, isFirst);
-        isFirst = !append(writer, "version", version, isFirst);
+        isFirst = append(writer, "title", title, isFirst);
+        isFirst = append(writer, "description", description, isFirst);
+        isFirst = append(writer, "termsOfService", termsOfService, isFirst);
+        isFirst = append(writer, "contact", contact, isFirst);
+        isFirst = append(writer, "license", license, isFirst);
+        isFirst = append(writer, "version", version, isFirst);
         writer.write('}');
     }
 }

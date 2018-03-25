@@ -26,9 +26,9 @@ public class TagObject implements JsonWriter {
     public void writeJson(Writer writer) throws IOException {
         writer.write('{');
         boolean isFirst = true;
-        isFirst = !append(writer, "name", name, isFirst);
-        isFirst = !append(writer, "description", description, isFirst);
-        isFirst = !append(writer, "externalDocs", externalDocs, isFirst);
+        isFirst = append(writer, "name", name, isFirst);
+        isFirst = append(writer, "description", description, isFirst);
+        isFirst = append(writer, "externalDocs", externalDocs, isFirst);
         writer.write('}');
     }
 }

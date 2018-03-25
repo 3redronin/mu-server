@@ -25,7 +25,7 @@ public class SecurityRequirementObject implements JsonWriter {
         writer.write('{');
         boolean isFirst = true;
         for (Map.Entry<String, List<String>> entry : requirements.entrySet()) {
-            isFirst = !append(writer, entry.getKey(), entry.getValue(), isFirst);
+            isFirst = append(writer, entry.getKey(), entry.getValue(), isFirst);
         }
         writer.write('}');
     }

@@ -11,7 +11,7 @@ import java.util.Map;
  * to be authorized. This enables support for scenarios where multiple query parameters or HTTP headers are required to
  * convey security information.</p>
  *
- * <p>When a list of Security Requirement Objects is defined on the {@link OpenAPIDocument} or
+ * <p>When a list of Security Requirement Objects is defined on the {@link OpenAPIObject} or
  * {@link OperationObject}, only one of Security Requirement Objects in the list needs to be
  * satisfied to authorize the request.</p>
  */
@@ -39,7 +39,7 @@ public class SecurityRequirementObjectBuilder {
      *
      * @return A new builder
      */
-    public static SecurityRequirementObjectBuilder securityRequirement() {
+    public static SecurityRequirementObjectBuilder securityRequirementObject() {
         return new SecurityRequirementObjectBuilder();
     }
 }

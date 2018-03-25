@@ -34,15 +34,15 @@ public class ComponentsObject implements JsonWriter {
     public void writeJson(Writer writer) throws IOException {
         writer.write('{');
         boolean isFirst = true;
-        isFirst = !append(writer, "schemas", schemas, isFirst);
-        isFirst = !append(writer, "responses", responses, isFirst);
-        isFirst = !append(writer, "parameters", parameters, isFirst);
-        isFirst = !append(writer, "examples", examples, isFirst);
-        isFirst = !append(writer, "requestBodies", requestBodies, isFirst);
-        isFirst = !append(writer, "headers", headers, isFirst);
-        isFirst = !append(writer, "securitySchemes", securitySchemes, isFirst);
-        isFirst = !append(writer, "links", links, isFirst);
-        isFirst = !append(writer, "callbacks", callbacks, isFirst);
+        isFirst = append(writer, "schemas", schemas, isFirst);
+        isFirst = append(writer, "responses", responses, isFirst);
+        isFirst = append(writer, "parameters", parameters, isFirst);
+        isFirst = append(writer, "examples", examples, isFirst);
+        isFirst = append(writer, "requestBodies", requestBodies, isFirst);
+        isFirst = append(writer, "headers", headers, isFirst);
+        isFirst = append(writer, "securitySchemes", securitySchemes, isFirst);
+        isFirst = append(writer, "links", links, isFirst);
+        isFirst = append(writer, "callbacks", callbacks, isFirst);
         writer.write('}');
     }
 }

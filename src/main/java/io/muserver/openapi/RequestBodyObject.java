@@ -27,9 +27,9 @@ public class RequestBodyObject implements JsonWriter {
     public void writeJson(Writer writer) throws IOException {
         writer.write('{');
         boolean isFirst = true;
-        isFirst = !append(writer, "description", description, isFirst);
-        isFirst = !append(writer, "content", content, isFirst);
-        isFirst = !append(writer, "required", required, isFirst);
+        isFirst = append(writer, "description", description, isFirst);
+        isFirst = append(writer, "content", content, isFirst);
+        isFirst = append(writer, "required", required, isFirst);
         writer.write('}');
     }
 }

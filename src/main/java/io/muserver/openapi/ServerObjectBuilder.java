@@ -48,7 +48,7 @@ public class ServerObjectBuilder {
      *
      * @return A new builder
      */
-    public static ServerObjectBuilder server() {
+    public static ServerObjectBuilder serverObject() {
         return new ServerObjectBuilder();
     }
 }

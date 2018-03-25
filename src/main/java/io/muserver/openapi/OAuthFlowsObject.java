@@ -23,10 +23,10 @@ public class OAuthFlowsObject implements JsonWriter {
     public void writeJson(Writer writer) throws IOException {
         writer.write('{');
         boolean isFirst = true;
-        isFirst = !append(writer, "implicit", implicit, isFirst);
-        isFirst = !append(writer, "password", password, isFirst);
-        isFirst = !append(writer, "clientCredentials", clientCredentials, isFirst);
-        isFirst = !append(writer, "authorizationCode", authorizationCode, isFirst);
+        isFirst = append(writer, "implicit", implicit, isFirst);
+        isFirst = append(writer, "password", password, isFirst);
+        isFirst = append(writer, "clientCredentials", clientCredentials, isFirst);
+        isFirst = append(writer, "authorizationCode", authorizationCode, isFirst);
         writer.write('}');
 
     }

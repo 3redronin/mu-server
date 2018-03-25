@@ -48,7 +48,7 @@ public class ResponsesObjectBuilder {
      *
      * @return A new builder
      */
-    public static ResponsesObjectBuilder responses() {
+    public static ResponsesObjectBuilder responsesObject() {
         return new ResponsesObjectBuilder();
     }
 }

@@ -26,11 +26,11 @@ public class LinkObject implements JsonWriter {
     public void writeJson(Writer writer) throws IOException {
         writer.write('{');
         boolean isFirst = true;
-        isFirst = !append(writer, "operationId", operationId, isFirst);
-        isFirst = !append(writer, "parameters", parameters, isFirst);
-        isFirst = !append(writer, "requestBody", requestBody, isFirst);
-        isFirst = !append(writer, "description", description, isFirst);
-        isFirst = !append(writer, "server", server, isFirst);
+        isFirst = append(writer, "operationId", operationId, isFirst);
+        isFirst = append(writer, "parameters", parameters, isFirst);
+        isFirst = append(writer, "requestBody", requestBody, isFirst);
+        isFirst = append(writer, "description", description, isFirst);
+        isFirst = append(writer, "server", server, isFirst);
         writer.write('}');
     }
 }

@@ -105,7 +105,7 @@ public class SecuritySchemeObjectBuilder {
      *
      * @return A new builder
      */
-    public static SecuritySchemeObjectBuilder securityScheme() {
+    public static SecuritySchemeObjectBuilder securitySchemeObject() {
         return new SecuritySchemeObjectBuilder();
     }
 }

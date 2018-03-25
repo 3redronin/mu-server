@@ -46,7 +46,7 @@ public class ServerVariableObjectBuilder {
      * Creates a builder for a {@link ServerVariableObjectBuilder}
      * @return A new builder
      */
-    public static ServerVariableObjectBuilder serverVariable() {
+    public static ServerVariableObjectBuilder serverVariableObject() {
         return new ServerVariableObjectBuilder();
     }
 }

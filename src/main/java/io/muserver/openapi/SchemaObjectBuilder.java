@@ -277,7 +277,7 @@ public class SchemaObjectBuilder {
      *
      * @return A new builder
      */
-    public static SchemaObjectBuilder schema() {
+    public static SchemaObjectBuilder schemaObject() {
         return new SchemaObjectBuilder();
     }
 }

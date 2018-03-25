@@ -44,7 +44,7 @@ public class TagObjectBuilder {
      * Creates a builder for a {@link TagObjectBuilder}
      * @return A new builder
      */
-    public static TagObjectBuilder tag() {
+    public static TagObjectBuilder tagObject() {
         return new TagObjectBuilder();
     }
 }

@@ -21,8 +21,8 @@ public class DiscriminatorObject implements JsonWriter {
     public void writeJson(Writer writer) throws IOException {
         writer.write('{');
         boolean isFirst = true;
-        isFirst = !append(writer, "propertyName", propertyName, isFirst);
-        isFirst = !append(writer, "mapping", mapping, isFirst);
+        isFirst = append(writer, "propertyName", propertyName, isFirst);
+        isFirst = append(writer, "mapping", mapping, isFirst);
         writer.write('}');
     }
 }

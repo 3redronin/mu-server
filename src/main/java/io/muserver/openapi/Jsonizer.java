@@ -22,14 +22,14 @@ class Jsonizer {
 
     static boolean append(Writer writer, String key, Object value, boolean isFirst) throws IOException {
         if (value == null) {
-            return false;
+            return isFirst;
         }
         if (!isFirst) {
             writer.append(',');
         }
         writer.append('"').append(jsonEncode(key)).append("\":");
         appendValue(writer, value);
-        return true;
+        return false;
     }
 
     private static void appendValue(Writer writer, Object value) throws IOException {
@@ -53,7 +53,7 @@ class Jsonizer {
             Map<String,?> map = (Map<String,?>)value;
             boolean isFirst = true;
             for (Map.Entry<String,?> entry : map.entrySet()) {
-                isFirst = !append(writer, entry.getKey(), entry.getValue(), isFirst);
+                isFirst = append(writer, entry.getKey(), entry.getValue(), isFirst);
             }
             writer.append('}');
         } else {

@@ -28,9 +28,9 @@ public class ResponsesObject implements JsonWriter {
     public void writeJson(Writer writer) throws IOException {
         writer.write('{');
         boolean isFirst = true;
-        isFirst = !append(writer, "default", defaultValue, isFirst);
+        isFirst = append(writer, "default", defaultValue, isFirst);
         for (Map.Entry<String, ResponseObject> entry : httpStatusCodes.entrySet()) {
-            isFirst = !append(writer, entry.getKey(), entry.getValue(), isFirst);
+            isFirst = append(writer, entry.getKey(), entry.getValue(), isFirst);
         }
         writer.write('}');
     }

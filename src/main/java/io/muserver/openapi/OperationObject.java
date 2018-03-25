@@ -8,6 +8,9 @@ import java.util.Map;
 import static io.muserver.Mutils.notNull;
 import static io.muserver.openapi.Jsonizer.append;
 
+/**
+ * @see OperationObjectBuilder
+ */
 public class OperationObject implements JsonWriter {
 
     private final List<String> tags;
@@ -23,7 +26,7 @@ public class OperationObject implements JsonWriter {
     private final List<SecurityRequirementObject> security;
     private final List<ServerObject> servers;
 
-    public OperationObject(List<String> tags, String summary, String description, ExternalDocumentationObject externalDocs,
+    OperationObject(List<String> tags, String summary, String description, ExternalDocumentationObject externalDocs,
                            String operationId, List<ParameterObject> parameters, RequestBodyObject requestBody, ResponsesObject responses,
                            Map<String, CallbackObject> callbacks, boolean deprecated, List<SecurityRequirementObject> security,
                            List<ServerObject> servers) {
@@ -46,18 +49,18 @@ public class OperationObject implements JsonWriter {
     public void writeJson(Writer writer) throws IOException {
         writer.write("{");
         boolean isFirst = true;
-        isFirst = !append(writer, "tags", tags, isFirst);
-        isFirst = !append(writer, "summary", summary, isFirst);
-        isFirst = !append(writer, "description", description, isFirst);
-        isFirst = !append(writer, "externalDocs", externalDocs, isFirst);
-        isFirst = !append(writer, "operationId", operationId, isFirst);
-        isFirst = !append(writer, "parameters", parameters, isFirst);
-        isFirst = !append(writer, "requestBody", requestBody, isFirst);
-        isFirst = !append(writer, "responses", responses, isFirst);
-        isFirst = !append(writer, "callbacks", callbacks, isFirst);
-        isFirst = !append(writer, "deprecated", deprecated, isFirst);
-        isFirst = !append(writer, "security", security, isFirst);
-        isFirst = !append(writer, "servers", servers, isFirst);
+        isFirst = append(writer, "tags", tags, isFirst);
+        isFirst = append(writer, "summary", summary, isFirst);
+        isFirst = append(writer, "description", description, isFirst);
+        isFirst = append(writer, "externalDocs", externalDocs, isFirst);
+        isFirst = append(writer, "operationId", operationId, isFirst);
+        isFirst = append(writer, "parameters", parameters, isFirst);
+        isFirst = append(writer, "requestBody", requestBody, isFirst);
+        isFirst = append(writer, "responses", responses, isFirst);
+        isFirst = append(writer, "callbacks", callbacks, isFirst);
+        isFirst = append(writer, "deprecated", deprecated, isFirst);
+        isFirst = append(writer, "security", security, isFirst);
+        isFirst = append(writer, "servers", servers, isFirst);
         writer.write("}");
     }
 }
