@@ -8,6 +8,9 @@ import java.util.regex.Pattern;
 
 import static io.muserver.openapi.Jsonizer.append;
 
+/**
+ * @see SchemaObjectBuilder
+ */
 public class SchemaObject implements JsonWriter {
 
     public final String title;
@@ -38,7 +41,7 @@ public class SchemaObject implements JsonWriter {
     public final String format;
     public final Object defaultValue;
     public final boolean nullable;
-    public final Discriminator discriminator;
+    public final DiscriminatorObject discriminator;
     public final boolean readOnly;
     public final boolean writeOnly;
     public final XmlObject xml;
@@ -46,7 +49,7 @@ public class SchemaObject implements JsonWriter {
     public final Object example;
     public final boolean deprecated;
 
-    public SchemaObject(String title, Double multipleOf, Double maximum, Boolean exclusiveMaximum, Double minimum, Boolean exclusiveMinimum, Integer maxLength, Integer minLength, Pattern pattern, Integer maxItems, Integer minItems, Boolean uniqueItems, Integer maxProperties, Integer minProperties, List<String> required, List<Object> enumValue, String type, List<SchemaObject> allOf, List<SchemaObject> oneOf, List<SchemaObject> anyOf, List<SchemaObject> not, SchemaObject items, Map<String, SchemaObject> properties, Object additionalProperties, String description, String format, Object defaultValue, boolean nullable, Discriminator discriminator, boolean readOnly, boolean writeOnly, XmlObject xml, ExternalDocumentationObject externalDocs, Object example, boolean deprecated) {
+    SchemaObject(String title, Double multipleOf, Double maximum, Boolean exclusiveMaximum, Double minimum, Boolean exclusiveMinimum, Integer maxLength, Integer minLength, Pattern pattern, Integer maxItems, Integer minItems, Boolean uniqueItems, Integer maxProperties, Integer minProperties, List<String> required, List<Object> enumValue, String type, List<SchemaObject> allOf, List<SchemaObject> oneOf, List<SchemaObject> anyOf, List<SchemaObject> not, SchemaObject items, Map<String, SchemaObject> properties, Object additionalProperties, String description, String format, Object defaultValue, boolean nullable, DiscriminatorObject discriminator, boolean readOnly, boolean writeOnly, XmlObject xml, ExternalDocumentationObject externalDocs, Object example, boolean deprecated) {
         this.title = title;
         this.multipleOf = multipleOf;
         this.maximum = maximum;

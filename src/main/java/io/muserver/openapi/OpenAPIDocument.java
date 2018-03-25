@@ -8,15 +8,15 @@ import static io.muserver.Mutils.notNull;
 
 public class OpenAPIDocument implements JsonWriter {
     public final String openapi = "3.0.1";
-    public final Info info;
-    public final List<Server> servers;
-    public final Paths paths;
-    public final Components components;
+    public final InfoObject info;
+    public final List<ServerObject> servers;
+    public final PathsObject paths;
+    public final ComponentsObject components;
     public final List<SecurityRequirementObject> security;
     public final List<TagObject> tags;
     public final ExternalDocumentationObject externalDocs;
 
-    public OpenAPIDocument(Info info, List<Server> servers, Paths paths, Components components, List<SecurityRequirementObject> security, List<TagObject> tags, ExternalDocumentationObject externalDocs) {
+    public OpenAPIDocument(InfoObject info, List<ServerObject> servers, PathsObject paths, ComponentsObject components, List<SecurityRequirementObject> security, List<TagObject> tags, ExternalDocumentationObject externalDocs) {
         this.components = components;
         this.security = security;
         this.tags = tags;

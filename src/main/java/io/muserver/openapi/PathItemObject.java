@@ -12,11 +12,11 @@ public class PathItemObject implements JsonWriter {
     private final String summary;
     private final String description;
     private final Map<String, OperationObject> operations;
-    private final List<Server> servers;
+    private final List<ServerObject> servers;
     private final List<ParameterObject> parameters;
 
     public PathItemObject(String summary, String description, Map<String, OperationObject> operations,
-                          List<Server> servers, List<ParameterObject> parameters) {
+                          List<ServerObject> servers, List<ParameterObject> parameters) {
         this.summary = summary;
         this.description = description;
         this.operations = operations;

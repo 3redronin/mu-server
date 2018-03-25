@@ -6,11 +6,14 @@ import java.util.Map;
 
 import static io.muserver.Mutils.notNull;
 
-public class Paths implements JsonWriter {
+/**
+ * @see PathsObjectBuilder
+ */
+public class PathsObject implements JsonWriter {
 
     public final Map<String, PathItemObject> pathItemObjects;
 
-    public Paths(Map<String, PathItemObject> pathItemObjects) {
+    PathsObject(Map<String, PathItemObject> pathItemObjects) {
         notNull("pathItemObjects", pathItemObjects);
         this.pathItemObjects = pathItemObjects;
     }

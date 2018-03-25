@@ -9,6 +9,9 @@ import static io.muserver.Mutils.notNull;
 import static io.muserver.openapi.Jsonizer.append;
 import static java.util.Arrays.asList;
 
+/**
+ * @see SecuritySchemeObjectBuilder
+ */
 public class SecuritySchemeObject implements JsonWriter {
     static final List<String> validTypes = asList("apiKey", "http", "oauth2", "openIdConnect");
 
@@ -21,7 +24,7 @@ public class SecuritySchemeObject implements JsonWriter {
     public final OAuthFlowsObject flows;
     public final URI openIdConnectUrl;
 
-    public SecuritySchemeObject(String type, String description, String name, String in, String scheme, String bearerFormat, OAuthFlowsObject flows, URI openIdConnectUrl) {
+    SecuritySchemeObject(String type, String description, String name, String in, String scheme, String bearerFormat, OAuthFlowsObject flows, URI openIdConnectUrl) {
         notNull("type", type);
         if (!validTypes.contains(type)) {
             throw new IllegalArgumentException("'type' must be one of " + validTypes + " but was " + type);

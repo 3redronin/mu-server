@@ -7,6 +7,9 @@ import java.util.Map;
 import static io.muserver.Mutils.notNull;
 import static io.muserver.openapi.Jsonizer.append;
 
+/**
+ * @see ResponseObjectBuilder
+ */
 public class ResponseObject implements JsonWriter {
 
     public final String description;
@@ -14,7 +17,7 @@ public class ResponseObject implements JsonWriter {
     public final Map<String, MediaTypeObject> content;
     public final Map<String, LinkObject> links;
 
-    public ResponseObject(String description, Map<String, HeaderObject> headers, Map<String, MediaTypeObject> content, Map<String, LinkObject> links) {
+    ResponseObject(String description, Map<String, HeaderObject> headers, Map<String, MediaTypeObject> content, Map<String, LinkObject> links) {
         notNull("description", description);
         this.description = description;
         this.headers = headers;

@@ -66,6 +66,8 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
 
     /**
      * @deprecated Use restHandler(resources).build() instead.
+     * @param resources Resources to register
+     * @return Returns a rest handler with the given resources.
      */
     @Deprecated
     public static RestHandler create(Object... resources) {

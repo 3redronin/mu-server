@@ -6,13 +6,16 @@ import java.io.Writer;
 import static io.muserver.Mutils.notNull;
 import static io.muserver.openapi.Jsonizer.append;
 
+/**
+ * @see TagObjectBuilder
+ */
 public class TagObject implements JsonWriter {
 
     public final String name;
     public final String description;
     public final ExternalDocumentationObject externalDocs;
 
-    public TagObject(String name, String description, ExternalDocumentationObject externalDocs) {
+    TagObject(String name, String description, ExternalDocumentationObject externalDocs) {
         notNull("name", name);
         this.name = name;
         this.description = description;

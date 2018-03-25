@@ -7,13 +7,16 @@ import java.util.Map;
 import static io.muserver.Mutils.notNull;
 import static io.muserver.openapi.Jsonizer.append;
 
+/**
+ * @see RequestBodyObjectBuilder
+ */
 public class RequestBodyObject implements JsonWriter {
 
     public final String description;
     public final Map<String, MediaTypeObject> content;
     public final boolean required;
 
-    public RequestBodyObject(String description, Map<String, MediaTypeObject> content, boolean required) {
+    RequestBodyObject(String description, Map<String, MediaTypeObject> content, boolean required) {
         notNull("content", content);
         this.description = description;
         this.content = content;

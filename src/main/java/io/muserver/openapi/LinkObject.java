@@ -12,9 +12,9 @@ public class LinkObject implements JsonWriter {
     public final Map<String, Object> parameters;
     public final Object requestBody;
     public final String description;
-    public final Server server;
+    public final ServerObject server;
 
-    public LinkObject(String operationId, Map<String, Object> parameters, Object requestBody, String description, Server server) {
+    public LinkObject(String operationId, Map<String, Object> parameters, Object requestBody, String description, ServerObject server) {
         this.operationId = operationId;
         this.parameters = parameters;
         this.requestBody = requestBody;

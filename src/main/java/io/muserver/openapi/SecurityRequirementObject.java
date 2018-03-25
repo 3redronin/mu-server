@@ -8,11 +8,14 @@ import java.util.Map;
 import static io.muserver.Mutils.notNull;
 import static io.muserver.openapi.Jsonizer.append;
 
+/**
+ * @see SecurityRequirementObjectBuilder
+ */
 public class SecurityRequirementObject implements JsonWriter {
 
     public final Map<String, List<String>> requirements;
 
-    public SecurityRequirementObject(Map<String, List<String>> requirements) {
+    SecurityRequirementObject(Map<String, List<String>> requirements) {
         notNull("requirements", requirements);
         this.requirements = requirements;
     }

@@ -7,17 +7,17 @@ import java.io.Writer;
 import static io.muserver.Mutils.notNull;
 import static io.muserver.openapi.Jsonizer.append;
 
-public class Info implements JsonWriter {
+public class InfoObject implements JsonWriter {
 
     public final String title;
     public final String description;
     public final String termsOfService;
-    public final Contact contact;
-    public final License license;
+    public final ContactObject contact;
+    public final LicenseObject license;
     public final String version;
 
 
-    public Info(String title, String description, String termsOfService, Contact contact, License license, String version) {
+    public InfoObject(String title, String description, String termsOfService, ContactObject contact, LicenseObject license, String version) {
         notNull("title", title);
         notNull("version", version);
         this.title = title;

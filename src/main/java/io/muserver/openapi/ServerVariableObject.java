@@ -7,12 +7,15 @@ import java.util.List;
 import static io.muserver.Mutils.notNull;
 import static io.muserver.openapi.Jsonizer.append;
 
+/**
+ * @see ServerVariableObjectBuilder
+ */
 public class ServerVariableObject implements JsonWriter {
     public final List<String> enumValues;
     public final String defaultValue;
     public final String description;
 
-    public ServerVariableObject(List<String> enumValues, String defaultValue, String description) {
+    ServerVariableObject(List<String> enumValues, String defaultValue, String description) {
         notNull("defaultValue", defaultValue);
         this.enumValues = enumValues;
         this.defaultValue = defaultValue;

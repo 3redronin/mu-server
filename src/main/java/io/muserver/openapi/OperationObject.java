@@ -21,12 +21,12 @@ public class OperationObject implements JsonWriter {
     private final Map<String, CallbackObject> callbacks;
     private final boolean deprecated;
     private final List<SecurityRequirementObject> security;
-    private final List<Server> servers;
+    private final List<ServerObject> servers;
 
     public OperationObject(List<String> tags, String summary, String description, ExternalDocumentationObject externalDocs,
                            String operationId, List<ParameterObject> parameters, RequestBodyObject requestBody, ResponsesObject responses,
                            Map<String, CallbackObject> callbacks, boolean deprecated, List<SecurityRequirementObject> security,
-                           List<Server> servers) {
+                           List<ServerObject> servers) {
         notNull("responses", responses);
         this.tags = tags;
         this.summary = summary;

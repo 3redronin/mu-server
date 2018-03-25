@@ -19,7 +19,7 @@ public class PathItemObjectTest {
     public void canWriteToJSON() throws IOException {
 
         Map<String, OperationObject> operations = new HashMap<>();
-        ResponsesObject responses = new ResponsesObject(null, Collections.singletonMap(200, new ResponseObject("Success", null, null, null)));
+        ResponsesObject responses = new ResponsesObjectBuilder().withDefaultValue(null).withHttpStatusCodes(Collections.singletonMap(200, new ResponseObjectBuilder().withDescription("Success").withHeaders(null).withContent(null).withLinks(null).build())).build();
 
         operations.put("get", new OperationObject(asList("pets"), "Find pets by ID", "Returns pets based on ID",
             new ExternalDocumentationObject("The docs on the web", URI.create("http://muserver.io")),

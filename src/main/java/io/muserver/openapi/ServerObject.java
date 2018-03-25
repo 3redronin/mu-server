@@ -7,12 +7,15 @@ import java.util.Map;
 import static io.muserver.Mutils.notNull;
 import static io.muserver.openapi.Jsonizer.append;
 
-public class Server implements JsonWriter {
+/**
+ * @see ServerObjectBuilder
+ */
+public class ServerObject implements JsonWriter {
     public final String url;
     public final String description;
     public final Map<String, ServerVariableObject> variables;
 
-    public Server(String url, String description, Map<String, ServerVariableObject> variables) {
+    ServerObject(String url, String description, Map<String, ServerVariableObject> variables) {
         notNull("url", url);
         this.url = url;
         this.description = description;
