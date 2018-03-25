@@ -7,11 +7,14 @@ import java.net.URI;
 import static io.muserver.Mutils.notNull;
 import static io.muserver.openapi.Jsonizer.append;
 
+/**
+ * @see ExternalDocumentationObjectBuilder
+ */
 public class ExternalDocumentationObject implements JsonWriter {
     public final String description;
     public final URI url;
 
-    public ExternalDocumentationObject(String description, URI url) {
+    ExternalDocumentationObject(String description, URI url) {
         notNull("url", url);
         this.description = description;
         this.url = url;

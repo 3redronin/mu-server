@@ -4,6 +4,9 @@ import java.io.IOException;
 import java.io.Writer;
 import java.net.URI;
 
+/**
+ * @see ExampleObjectBuilder
+ */
 public class ExampleObject implements JsonWriter {
 
     public final String summary;
@@ -11,7 +14,7 @@ public class ExampleObject implements JsonWriter {
     public final Object value;
     public final URI externalValue;
 
-    public ExampleObject(String summary, String description, Object value, URI externalValue) {
+    ExampleObject(String summary, String description, Object value, URI externalValue) {
         if (value != null && externalValue != null) {
             throw new IllegalArgumentException("Only one of 'value' or 'externalValue' can have a value");
         }

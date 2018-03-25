@@ -6,12 +6,15 @@ import java.net.URI;
 
 import static io.muserver.openapi.Jsonizer.append;
 
+/**
+ * @see ContactObjectBuilder
+ */
 public class ContactObject implements JsonWriter {
     public final String name;
     public final URI url;
     public final String email;
 
-    public ContactObject(String name, URI url, String email) {
+    ContactObject(String name, URI url, String email) {
         this.name = name;
         this.url = url;
         this.email = email;

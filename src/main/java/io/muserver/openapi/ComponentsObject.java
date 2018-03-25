@@ -6,6 +6,9 @@ import java.util.Map;
 
 import static io.muserver.openapi.Jsonizer.append;
 
+/**
+ * @see ComponentsObjectBuilder
+ */
 public class ComponentsObject implements JsonWriter {
 
     public final Map<String, SchemaObject> schemas;
@@ -18,7 +21,7 @@ public class ComponentsObject implements JsonWriter {
     public final Map<String, LinkObject> links;
     public final Map<String, CallbackObject> callbacks;
 
-    public ComponentsObject(Map<String, SchemaObject> schemas, Map<String, ResponseObject> responses, Map<String, ParameterObject> parameters, Map<String, ExampleObject> examples, Map<String, RequestBodyObject> requestBodies, Map<String, HeaderObject> headers, Map<String, SecuritySchemeObject> securitySchemes, Map<String, LinkObject> links, Map<String, CallbackObject> callbacks) {
+    ComponentsObject(Map<String, SchemaObject> schemas, Map<String, ResponseObject> responses, Map<String, ParameterObject> parameters, Map<String, ExampleObject> examples, Map<String, RequestBodyObject> requestBodies, Map<String, HeaderObject> headers, Map<String, SecuritySchemeObject> securitySchemes, Map<String, LinkObject> links, Map<String, CallbackObject> callbacks) {
         this.schemas = schemas;
         this.responses = responses;
         this.parameters = parameters;

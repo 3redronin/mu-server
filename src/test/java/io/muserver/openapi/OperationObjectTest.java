@@ -24,7 +24,7 @@ public class OperationObjectTest {
         OperationObject operation = operationObject().withTags(asList("pets"))
             .withSummary("Find pets by ID")
             .withDescription("Returns pets based on ID")
-            .withExternalDocs(new ExternalDocumentationObject("The docs on the web", URI.create("http://muserver.io")))
+            .withExternalDocs(new ExternalDocumentationObjectBuilder().withDescription("The docs on the web").withUrl(URI.create("http://muserver.io")).build())
             .withOperationId("some.unique.id")
             .withResponses(responses).build();
 

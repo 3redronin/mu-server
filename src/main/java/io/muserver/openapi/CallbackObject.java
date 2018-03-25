@@ -6,11 +6,14 @@ import java.util.Map;
 
 import static io.muserver.Mutils.notNull;
 
+/**
+ * @see CallbackObjectBuilder
+ */
 public class CallbackObject implements JsonWriter {
 
     private final Map<String, PathItemObject> callbacks;
 
-    public CallbackObject(Map<String, PathItemObject> callbacks) {
+    CallbackObject(Map<String, PathItemObject> callbacks) {
         notNull("callbacks", callbacks);
         this.callbacks = callbacks;
     }

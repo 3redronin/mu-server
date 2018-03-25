@@ -13,7 +13,7 @@ import static java.util.Arrays.asList;
  * @see ParameterObjectBuilder
  */
 public class ParameterObject implements JsonWriter {
-    private static final List<String> allowedIns = asList("query", "header", "path", "cookie");
+    static final List<String> allowedIns = asList("query", "header", "path", "cookie");
     static final List<String> allowedStyles = asList("matrix", "label", "form", "simple", "spaceDelimited", "pipeDelimited", "deepObject");
 
     private final String name;

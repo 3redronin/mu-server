@@ -6,6 +6,9 @@ import java.util.Map;
 
 import static io.muserver.openapi.ParameterObject.allowedStyles;
 
+/**
+ * @see EncodingObjectBuilder
+ */
 public class EncodingObject implements JsonWriter {
 
     public final String contentType;
@@ -14,7 +17,7 @@ public class EncodingObject implements JsonWriter {
     public final boolean explode;
     public final boolean allowReserved;
 
-    public EncodingObject(String contentType, Map<String, HeaderObject> headers, String style, boolean explode, boolean allowReserved) {
+    EncodingObject(String contentType, Map<String, HeaderObject> headers, String style, boolean explode, boolean allowReserved) {
         if (style != null && !allowedStyles.contains(style)) {
             throw new IllegalArgumentException("'style' must be one of " + allowedStyles + " but was " + style);
         }

@@ -7,11 +7,14 @@ import java.util.Map;
 import static io.muserver.Mutils.notNull;
 import static io.muserver.openapi.Jsonizer.append;
 
+/**
+ * @see DiscriminatorObjectBuilder
+ */
 public class DiscriminatorObject implements JsonWriter {
     public final String propertyName;
     public final Map<String, String> mapping;
 
-    public DiscriminatorObject(String propertyName, Map<String, String> mapping) {
+    DiscriminatorObject(String propertyName, Map<String, String> mapping) {
         notNull("propertyName", propertyName);
         this.propertyName = propertyName;
         this.mapping = mapping;

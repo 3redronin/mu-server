@@ -93,7 +93,7 @@ public class OpenAPIObjectBuilder {
      *
      * @return A new builder
      */
-    public static OpenAPIObjectBuilder openApiObject() {
+    public static OpenAPIObjectBuilder openAPIObject() {
         return new OpenAPIObjectBuilder();
     }
 }
