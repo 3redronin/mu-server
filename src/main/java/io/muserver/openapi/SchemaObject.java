@@ -2,6 +2,7 @@ package io.muserver.openapi;
 
 import java.io.IOException;
 import java.io.Writer;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -50,6 +51,39 @@ public class SchemaObject implements JsonWriter {
     public final boolean deprecated;
 
     SchemaObject(String title, Double multipleOf, Double maximum, Boolean exclusiveMaximum, Double minimum, Boolean exclusiveMinimum, Integer maxLength, Integer minLength, Pattern pattern, Integer maxItems, Integer minItems, Boolean uniqueItems, Integer maxProperties, Integer minProperties, List<String> required, List<Object> enumValue, String type, List<SchemaObject> allOf, List<SchemaObject> oneOf, List<SchemaObject> anyOf, List<SchemaObject> not, SchemaObject items, Map<String, SchemaObject> properties, Object additionalProperties, String description, String format, Object defaultValue, boolean nullable, DiscriminatorObject discriminator, boolean readOnly, boolean writeOnly, XmlObject xml, ExternalDocumentationObject externalDocs, Object example, boolean deprecated) {
+        if (readOnly && writeOnly) {
+            throw new IllegalArgumentException("A schema cannot be both read only and write only");
+        }
+        if ("array".equals(type) && items == null) {
+            throw new IllegalArgumentException("'items' cannot be null when type is 'array'");
+        }
+        if (defaultValue != null && type != null) {
+            Class<?> defaultClass = defaultValue.getClass();
+            switch (type) {
+                case "string":
+                    if (!CharSequence.class.isAssignableFrom(defaultClass)) {
+                        throw new IllegalArgumentException("The default value must be a string but was " + defaultClass);
+                    }
+                    break;
+                case "number":
+                    if (!Number.class.isAssignableFrom(defaultClass)) {
+                        throw new IllegalArgumentException("The default value must be a number but was " + defaultClass);
+                    }
+                    break;
+                case "boolean":
+                    if (!Boolean.class.isAssignableFrom(defaultClass)) {
+                        throw new IllegalArgumentException("The default value must be a boolean but was " + defaultClass);
+                    }
+                    break;
+                case "array":
+                    if (!Collection.class.isAssignableFrom(defaultClass) && !defaultClass.isArray()) {
+                        throw new IllegalArgumentException("The default value must be a boolean but was " + defaultClass);
+                    }
+                    break;
+
+
+            }
+        }
         this.title = title;
         this.multipleOf = multipleOf;
         this.maximum = maximum;
@@ -107,7 +141,7 @@ public class SchemaObject implements JsonWriter {
         isFirst = append(writer, "maxProperties", maxProperties, isFirst);
         isFirst = append(writer, "minProperties", minProperties, isFirst);
         isFirst = append(writer, "required", required, isFirst);
-        isFirst = append(writer, "enumValue", enumValue, isFirst);
+        isFirst = append(writer, "enum", enumValue, isFirst);
         isFirst = append(writer, "type", type, isFirst);
         isFirst = append(writer, "allOf", allOf, isFirst);
         isFirst = append(writer, "oneOf", oneOf, isFirst);
@@ -118,7 +152,7 @@ public class SchemaObject implements JsonWriter {
         isFirst = append(writer, "additionalProperties", additionalProperties, isFirst);
         isFirst = append(writer, "description", description, isFirst);
         isFirst = append(writer, "format", format, isFirst);
-        isFirst = append(writer, "defaultValue", defaultValue, isFirst);
+        isFirst = append(writer, "default", defaultValue, isFirst);
         isFirst = append(writer, "nullable", nullable, isFirst);
         isFirst = append(writer, "discriminator", discriminator, isFirst);
         isFirst = append(writer, "readOnly", readOnly, isFirst);

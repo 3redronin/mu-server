@@ -75,6 +75,8 @@ public class Mutils {
 
 
     public static String join(String one, String sep, String two) {
+        one = one == null ? "" : one;
+        two = two == null ? "" : two;
         boolean oneEnds = one.endsWith(sep);
         boolean twoStarts = two.startsWith(sep);
         if (oneEnds && twoStarts) {

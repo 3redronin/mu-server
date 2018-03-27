@@ -4,33 +4,41 @@ import java.io.IOException;
 import java.io.Writer;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static io.muserver.Mutils.notNull;
 import static io.muserver.openapi.Jsonizer.append;
+import static java.util.stream.Collectors.toSet;
 
 /**
  * @see OperationObjectBuilder
  */
 public class OperationObject implements JsonWriter {
 
-    private final List<String> tags;
-    private final String summary;
-    private final String description;
-    private final ExternalDocumentationObject externalDocs;
-    private final String operationId;
-    private final List<ParameterObject> parameters;
-    private final RequestBodyObject requestBody;
-    private final ResponsesObject responses;
-    private final Map<String, CallbackObject> callbacks;
-    private final boolean deprecated;
-    private final List<SecurityRequirementObject> security;
-    private final List<ServerObject> servers;
+    public final List<String> tags;
+    public final String summary;
+    public final String description;
+    public final ExternalDocumentationObject externalDocs;
+    public final String operationId;
+    public final List<ParameterObject> parameters;
+    public final RequestBodyObject requestBody;
+    public final ResponsesObject responses;
+    public final Map<String, CallbackObject> callbacks;
+    public final boolean deprecated;
+    public final List<SecurityRequirementObject> security;
+    public final List<ServerObject> servers;
 
     OperationObject(List<String> tags, String summary, String description, ExternalDocumentationObject externalDocs,
                            String operationId, List<ParameterObject> parameters, RequestBodyObject requestBody, ResponsesObject responses,
                            Map<String, CallbackObject> callbacks, boolean deprecated, List<SecurityRequirementObject> security,
                            List<ServerObject> servers) {
         notNull("responses", responses);
+        if (parameters != null) {
+            Set<String> nameIns = parameters.stream().map(p -> p.name + "\0" + p.in).collect(toSet());
+            if (nameIns.size() != parameters.size()) {
+                throw new IllegalArgumentException("Got duplicate parameter name and locations in " + parameters + " for operation with summary " + summary);
+            }
+        }
         this.tags = tags;
         this.summary = summary;
         this.description = description;

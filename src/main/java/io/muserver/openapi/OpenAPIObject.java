@@ -3,6 +3,7 @@ package io.muserver.openapi;
 import java.io.IOException;
 import java.io.Writer;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static io.muserver.Mutils.notNull;
 import static io.muserver.openapi.Jsonizer.append;
@@ -22,8 +23,10 @@ public class OpenAPIObject implements JsonWriter {
 
     OpenAPIObject(InfoObject info, List<ServerObject> servers, PathsObject paths, ComponentsObject components, List<SecurityRequirementObject> security, List<TagObject> tags, ExternalDocumentationObject externalDocs) {
         notNull("info", info);
-        notNull("servers", servers);
         notNull("paths", paths);
+        if (tags != null && tags.size() != tags.stream().map(t -> t.name).collect(Collectors.toSet()).size()) {
+            throw new IllegalArgumentException("Tags must have unique names");
+        }
         this.info = info;
         this.servers = servers;
         this.paths = paths;
@@ -41,6 +44,10 @@ public class OpenAPIObject implements JsonWriter {
         isFirst = append(writer, "info", info, isFirst);
         isFirst = append(writer, "servers", servers, isFirst);
         isFirst = append(writer, "paths", paths, isFirst);
+        isFirst = append(writer, "components", components, isFirst);
+        isFirst = append(writer, "security", security, isFirst);
+        isFirst = append(writer, "tags", tags, isFirst);
+        isFirst = append(writer, "externalDocs", externalDocs, isFirst);
         writer.write('}');
     }
 

@@ -1,6 +1,7 @@
 package io.muserver.openapi;
 
 import java.io.IOException;
+import java.io.StringWriter;
 import java.io.Writer;
 import java.util.List;
 import java.util.Map;
@@ -16,23 +17,23 @@ public class ParameterObject implements JsonWriter {
     static final List<String> allowedIns = asList("query", "header", "path", "cookie");
     static final List<String> allowedStyles = asList("matrix", "label", "form", "simple", "spaceDelimited", "pipeDelimited", "deepObject");
 
-    private final String name;
-    private final String in;
-    private final String description;
-    private final boolean required;
-    private final boolean deprecated;
-    private final boolean allowEmptyValue;
-    private final String style;
-    private final String explode;
-    private final boolean allowReserved;
-    private final SchemaObject schema;
-    private final Object example;
-    private final Map<String, ExampleObject> examples;
-    private final Map<String, MediaTypeObject> content;
+    public final String name;
+    public final String in;
+    public final String description;
+    public final boolean required;
+    public final boolean deprecated;
+    public final boolean allowEmptyValue;
+    public final String style;
+    public final boolean explode;
+    public final boolean allowReserved;
+    public final SchemaObject schema;
+    public final Object example;
+    public final Map<String, ExampleObject> examples;
+    public final Map<String, MediaTypeObject> content;
 
     ParameterObject(String name, String in, String description, boolean required, boolean deprecated, boolean allowEmptyValue,
-                           String style, String explode, boolean allowReserved, SchemaObject schema, Object example,
-                           Map<String, ExampleObject> examples, Map<String, MediaTypeObject> content) {
+                    String style, boolean explode, boolean allowReserved, SchemaObject schema, Object example,
+                    Map<String, ExampleObject> examples, Map<String, MediaTypeObject> content) {
         notNull("name", name);
         notNull("in", in);
         if (!allowedIns.contains(in)) {
@@ -46,6 +47,12 @@ public class ParameterObject implements JsonWriter {
         }
         if (example != null && examples != null) {
             throw new IllegalArgumentException("Only one of 'example' and 'examples' can be supplied");
+        }
+        if ("path".equals(in) && !required) {
+            throw new IllegalArgumentException("'required' must be true for " + name + " because in is '" + in + "'");
+        }
+        if (schema == null && content == null) {
+            throw new IllegalArgumentException("Either a schema or a content value must be specified");
         }
         this.name = name;
         this.in = in;
@@ -80,6 +87,17 @@ public class ParameterObject implements JsonWriter {
         isFirst = append(writer, "examples", examples, isFirst);
         isFirst = append(writer, "content", content, isFirst);
         writer.write('}');
+    }
+
+    @Override
+    public String toString() {
+        Writer writer = new StringWriter();
+        try {
+            writeJson(writer);
+        } catch (IOException e) {
+            return "Error from " + getClass() + " - " + e;
+        }
+        return writer.toString();
     }
 
 }

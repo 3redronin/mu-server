@@ -10,6 +10,8 @@ import java.io.IOException;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.Type;
+import java.util.Collection;
+import java.util.Date;
 import java.util.List;
 
 import static io.muserver.Mutils.urlEncode;
@@ -68,6 +70,39 @@ abstract class ResourceMethodParam {
             if (this.key.length() == 0) {
                 throw new WebApplicationException("No parameter specified for the " + source + " in " + parameterHandle);
             }
+        }
+
+        public String jsonType() {
+            Class<?> type = parameterHandle.getType();
+            if (type.equals(boolean.class) || type.equals(Boolean.class)) {
+                return "boolean";
+            } else if (type.equals(int.class) || type.equals(Integer.class) || type.equals(long.class) || type.equals(Long.class)) {
+                return "integer";
+            } else if (type.isAssignableFrom(Number.class)) {
+                return "number";
+            } else if (type.isAssignableFrom(CharSequence.class) || type.equals(byte.class) || type.equals(Byte.class) || type.isAssignableFrom(Date.class)) {
+                return "string";
+            } else if (type.isAssignableFrom(Collection.class) || type.isArray()) {
+                return "array";
+            }
+            return "object";
+        }
+        public String jsonFormat() {
+            Class<?> type = parameterHandle.getType();
+            if (type.equals(int.class) || type.equals(Integer.class)) {
+                return "int32";
+            } else if (type.equals(long.class) || type.equals(Long.class)) {
+                return "int64";
+            } else if (type.equals(float.class) || type.equals(Float.class)) {
+                return "float";
+            } else if (type.equals(double.class) || type.equals(Double.class)) {
+                return "double";
+            } else if (type.equals(byte.class) || type.equals(Byte.class)) {
+                return "byte";
+            } else if (type.equals(Date.class)) {
+                return "date-time";
+            }
+            return null;
         }
 
         public Object defaultValue() {
@@ -156,7 +191,13 @@ abstract class ResourceMethodParam {
     }
 
     enum ValueSource {
-        MESSAGE_BODY, QUERY_PARAM, MATRIX_PARAM, PATH_PARAM, COOKIE_PARAM, HEADER_PARAM, FORM_PARAM, CONTEXT
+        MESSAGE_BODY(null), QUERY_PARAM("query"), MATRIX_PARAM(null), PATH_PARAM("path"), COOKIE_PARAM("cookie"), HEADER_PARAM("header"), FORM_PARAM(null), CONTEXT(null);
+
+        final String openAPIIn;
+
+        ValueSource(String openAPIIn) {
+            this.openAPIIn = openAPIIn;
+        }
     }
 
     interface HasDefaultValue {

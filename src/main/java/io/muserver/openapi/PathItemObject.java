@@ -4,22 +4,30 @@ import java.io.IOException;
 import java.io.Writer;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static io.muserver.openapi.Jsonizer.append;
+import static java.util.stream.Collectors.toSet;
 
 /**
  * @see PathItemObjectBuilder
  */
 public class PathItemObject implements JsonWriter {
 
-    private final String summary;
-    private final String description;
-    private final Map<String, OperationObject> operations;
-    private final List<ServerObject> servers;
-    private final List<ParameterObject> parameters;
+    public final String summary;
+    public final String description;
+    public final Map<String, OperationObject> operations;
+    public final List<ServerObject> servers;
+    public final List<ParameterObject> parameters;
 
     PathItemObject(String summary, String description, Map<String, OperationObject> operations,
                           List<ServerObject> servers, List<ParameterObject> parameters) {
+        if (parameters != null) {
+            Set<String> nameIns = parameters.stream().map(p -> p.name + "\0" + p.in).collect(toSet());
+            if (nameIns.size() != parameters.size()) {
+                throw new IllegalArgumentException("Got duplicate parameter name and locations in " + parameters);
+            }
+        }
         this.summary = summary;
         this.description = description;
         this.operations = operations;

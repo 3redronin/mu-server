@@ -3,6 +3,7 @@ package io.muserver.openapi;
 import java.io.IOException;
 import java.io.Writer;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 import static io.muserver.openapi.Jsonizer.append;
 
@@ -22,6 +23,7 @@ public class ComponentsObject implements JsonWriter {
     public final Map<String, CallbackObject> callbacks;
 
     ComponentsObject(Map<String, SchemaObject> schemas, Map<String, ResponseObject> responses, Map<String, ParameterObject> parameters, Map<String, ExampleObject> examples, Map<String, RequestBodyObject> requestBodies, Map<String, HeaderObject> headers, Map<String, SecuritySchemeObject> securitySchemes, Map<String, LinkObject> links, Map<String, CallbackObject> callbacks) {
+        checkKey(schemas, responses, parameters, examples, requestBodies, headers, securitySchemes, links, callbacks);
         this.schemas = schemas;
         this.responses = responses;
         this.parameters = parameters;
@@ -31,6 +33,20 @@ public class ComponentsObject implements JsonWriter {
         this.securitySchemes = securitySchemes;
         this.links = links;
         this.callbacks = callbacks;
+    }
+
+    private void checkKey(Map<String, ?>... maps) {
+        Pattern keyPattern = Pattern.compile("^[a-zA-Z0-9.\\-_]+$");
+
+        for (Map<String, ?> map : maps) {
+            if (map != null) {
+                for (String key : map.keySet()) {
+                    if (!keyPattern.matcher(key).matches()) {
+                        throw new IllegalArgumentException("The value '" + key + "' is not a valid key. It must match " + keyPattern);
+                    }
+                }
+            }
+        }
     }
 
     @Override

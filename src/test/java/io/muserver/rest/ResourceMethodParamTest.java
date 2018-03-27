@@ -272,7 +272,6 @@ public class ResourceMethodParamTest {
             throw new RuntimeException("valueOf should be preferred");
         }
         public static DogWithValueOf valueOf(String value) {
-            System.out.println("DogWithValueOf.valueOf called with " + value);
             return new DogWithValueOf(value.split(",")[0], value.split(",")[1]);
         }
         public String toString() {

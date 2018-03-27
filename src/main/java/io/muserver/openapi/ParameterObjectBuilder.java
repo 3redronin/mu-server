@@ -22,11 +22,11 @@ public class ParameterObjectBuilder {
     private String name;
     private String in;
     private String description;
-    private boolean required;
+    private Boolean required;
     private boolean deprecated;
     private boolean allowEmptyValue;
     private String style;
-    private String explode;
+    private Boolean explode;
     private boolean allowReserved;
     private SchemaObject schema;
     private Object example;
@@ -76,7 +76,7 @@ public class ParameterObjectBuilder {
      *                 Otherwise, the property MAY be included and its default value is <code>false</code>.
      * @return The current builder
      */
-    public ParameterObjectBuilder withRequired(boolean required) {
+    public ParameterObjectBuilder withRequired(Boolean required) {
         this.required = required;
         return this;
     }
@@ -177,7 +177,7 @@ public class ParameterObjectBuilder {
      *                default value is <code>true</code>. For all other styles, the default value is <code>false</code>.
      * @return The current builder
      */
-    public ParameterObjectBuilder withExplode(String explode) {
+    public ParameterObjectBuilder withExplode(Boolean explode) {
         this.explode = explode;
         return this;
     }
@@ -242,7 +242,9 @@ public class ParameterObjectBuilder {
     }
 
     public ParameterObject build() {
-        return new ParameterObject(name, in, description, required, deprecated, allowEmptyValue, style, explode, allowReserved, schema, example, examples, content);
+        Boolean explodeVal = this.explode == null ? "form".equals(style) : this.explode;
+        Boolean requiredVal = this.required == null ? "path".equals(in) : this.required;
+        return new ParameterObject(name, in, description, requiredVal, deprecated, allowEmptyValue, style, explodeVal, allowReserved, schema, example, examples, content);
     }
 
     /**

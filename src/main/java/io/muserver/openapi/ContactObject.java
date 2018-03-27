@@ -15,6 +15,9 @@ public class ContactObject implements JsonWriter {
     public final String email;
 
     ContactObject(String name, URI url, String email) {
+        if (email != null && !email.contains("@")) {
+            throw new IllegalArgumentException("'email' must be a valid email address, but was " + email);
+        }
         this.name = name;
         this.url = url;
         this.email = email;
