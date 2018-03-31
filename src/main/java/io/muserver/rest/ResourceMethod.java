@@ -22,8 +22,10 @@ class ResourceMethod {
     final List<MediaType> directlyProduces;
     final List<MediaType> effectiveProduces;
     final List<ResourceMethodParam> params;
+    final DescriptionData descriptionData;
+    final boolean isDeprecated;
 
-    ResourceMethod(ResourceClass resourceClass, UriPattern pathPattern, java.lang.reflect.Method methodHandle, List<ResourceMethodParam> params, Method httpMethod, String pathTemplate, List<MediaType> produces, List<MediaType> consumes) {
+    ResourceMethod(ResourceClass resourceClass, UriPattern pathPattern, java.lang.reflect.Method methodHandle, List<ResourceMethodParam> params, Method httpMethod, String pathTemplate, List<MediaType> produces, List<MediaType> consumes, DescriptionData descriptionData, boolean isDeprecated) {
         this.resourceClass = resourceClass;
         this.pathPattern = pathPattern;
         this.methodHandle = methodHandle;
@@ -31,22 +33,23 @@ class ResourceMethod {
         this.httpMethod = httpMethod;
         this.pathTemplate = pathTemplate;
         this.directlyProduces = produces;
+        this.descriptionData = descriptionData;
+        this.isDeprecated = isDeprecated;
         this.effectiveProduces = !produces.isEmpty() ? produces : (!resourceClass.produces.isEmpty() ? resourceClass.produces : RequestMatcher.WILDCARD_AS_LIST);
         this.effectiveConsumes = !consumes.isEmpty() ? consumes : (!resourceClass.consumes.isEmpty() ? resourceClass.consumes : RequestMatcher.WILDCARD_AS_LIST);
     }
 
-    public boolean isSubResource() {
+    boolean isSubResource() {
         return pathPattern != null;
     }
 
-    public boolean isSubResourceLocator() {
+    boolean isSubResourceLocator() {
         return httpMethod == null;
     }
 
-    public Object invoke(Object... params) throws Exception, IllegalAccessException {
+    Object invoke(Object... params) throws Exception {
         try {
-            Object result = methodHandle.invoke(resourceClass.resourceInstance, params);
-            return result;
+            return methodHandle.invoke(resourceClass.resourceInstance, params);
         } catch (InvocationTargetException e) {
             Throwable cause = e.getCause();
             if (cause instanceof WebApplicationException) {
@@ -77,11 +80,11 @@ class ResourceMethod {
         return "ResourceMethod{" + resourceClass.resourceClassName() + "#" + methodHandle.getName() + "}";
     }
 
-    public boolean canProduceFor(List<MediaType> clientAccepts) {
+    boolean canProduceFor(List<MediaType> clientAccepts) {
         return MediaTypeHeaderDelegate.atLeastOneCompatible(effectiveProduces, clientAccepts);
     }
 
-    public boolean canConsume(MediaType requestBodyMediaType) {
+    boolean canConsume(MediaType requestBodyMediaType) {
         return MediaTypeHeaderDelegate.atLeastOneCompatible(effectiveConsumes, Collections.singletonList(requestBodyMediaType));
     }
 }

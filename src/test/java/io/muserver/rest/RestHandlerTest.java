@@ -3,7 +3,6 @@ package io.muserver.rest;
 import io.muserver.MuServer;
 import io.muserver.MuServerBuilder;
 import org.junit.After;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import javax.ws.rs.GET;
@@ -38,14 +37,6 @@ public class RestHandlerTest {
         }
     }
 
-    @Test
-    @Ignore("Test not implemented yet")
-    public void hasJsonEndpoint() throws IOException {
-        try (okhttp3.Response resp = call(request().url(server.uri().resolve("/openapi.json").toString()))) {
-            assertThat(resp.code(), is(200));
-            System.out.println(resp.body().string());
-        }
-    }
 
     @Test(expected = IllegalArgumentException.class)
     public void throwsIfObjectDoesNotHavePathAnnotation() {

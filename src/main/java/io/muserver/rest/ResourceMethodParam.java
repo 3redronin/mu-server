@@ -1,6 +1,7 @@
 package io.muserver.rest;
 
 import io.muserver.MuRequest;
+import io.muserver.openapi.ParameterObjectBuilder;
 
 import javax.ws.rs.*;
 import javax.ws.rs.core.Context;
@@ -10,31 +11,33 @@ import java.io.IOException;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.Type;
-import java.util.Collection;
-import java.util.Date;
 import java.util.List;
 
 import static io.muserver.Mutils.urlEncode;
+import static io.muserver.openapi.ParameterObjectBuilder.parameterObject;
+import static io.muserver.openapi.SchemaObjectBuilder.schemaObjectFrom;
 
 abstract class ResourceMethodParam {
 
     final int index;
-    protected final Parameter parameterHandle;
+    final Parameter parameterHandle;
     final ValueSource source;
+    final DescriptionData descriptionData;
 
-    ResourceMethodParam(int index, ValueSource source, Parameter parameterHandle) {
+    ResourceMethodParam(int index, ValueSource source, Parameter parameterHandle, DescriptionData descriptionData) {
         this.index = index;
         this.source = source;
         this.parameterHandle = parameterHandle;
+        this.descriptionData = descriptionData;
     }
 
+    static ResourceMethodParam fromParameter(int index, java.lang.reflect.Parameter parameterHandle, List<ParamConverterProvider> paramConverterProviders) {
 
-
-    public static ResourceMethodParam fromParameter(int index, java.lang.reflect.Parameter parameterHandle, List<ParamConverterProvider> paramConverterProviders) {
 
         ValueSource source = getSource(parameterHandle);
         if (source == ValueSource.MESSAGE_BODY) {
-            return new MessageBodyParam(index, source, parameterHandle);
+            DescriptionData descriptionData = DescriptionData.fromAnnotation(parameterHandle, parameterHandle.getName());
+            return new MessageBodyParam(index, source, parameterHandle, descriptionData);
         } else if (source == ValueSource.CONTEXT) {
             return new ContextParam(index, source, parameterHandle);
         } else {
@@ -42,7 +45,19 @@ abstract class ResourceMethodParam {
             ParamConverter<?> converter = getParamConverter(parameterHandle, paramConverterProviders);
             boolean lazyDefaultValue = converter.getClass().getDeclaredAnnotation(ParamConverter.Lazy.class) != null;
             Object defaultValue = getDefaultValue(parameterHandle, converter, lazyDefaultValue);
-            return new RequestBasedParam(index, source, parameterHandle, defaultValue, encodedRequested, lazyDefaultValue, converter);
+
+            String key = source == ValueSource.COOKIE_PARAM ? parameterHandle.getDeclaredAnnotation(CookieParam.class).value()
+                : source == ValueSource.HEADER_PARAM ? parameterHandle.getDeclaredAnnotation(HeaderParam.class).value()
+                : source == ValueSource.MATRIX_PARAM ? parameterHandle.getDeclaredAnnotation(MatrixParam.class).value()
+                : source == ValueSource.FORM_PARAM ? parameterHandle.getDeclaredAnnotation(FormParam.class).value()
+                : source == ValueSource.PATH_PARAM ? parameterHandle.getDeclaredAnnotation(PathParam.class).value()
+                : source == ValueSource.QUERY_PARAM ? parameterHandle.getDeclaredAnnotation(QueryParam.class).value()
+                : "";
+            if (key.length() == 0) {
+                throw new WebApplicationException("No parameter specified for the " + source + " in " + parameterHandle);
+            }
+            DescriptionData descriptionData = DescriptionData.fromAnnotation(parameterHandle, key);
+            return new RequestBasedParam(index, source, parameterHandle, defaultValue, encodedRequested, lazyDefaultValue, converter, descriptionData, key);
         }
     }
 
@@ -54,55 +69,27 @@ abstract class ResourceMethodParam {
         private final ParamConverter paramConverter;
         final String key;
 
-        RequestBasedParam(int index, ValueSource source, Parameter parameterHandle, Object defaultValue, boolean encodedRequested, boolean lazyDefaultValue, ParamConverter paramConverter) {
-            super(index, source, parameterHandle);
+        ParameterObjectBuilder createDocumentationBuilder() {
+            ParameterObjectBuilder builder = parameterObject()
+                .withIn(source.openAPIIn);
+            if (descriptionData != null) {
+                builder.withName(descriptionData.summary)
+                    .withDescription(descriptionData.description);
+            }
+            return builder.withSchema(
+                schemaObjectFrom(parameterHandle.getType())
+                    .withDefaultValue(defaultValue())
+                    .build()
+            );
+        }
+
+        RequestBasedParam(int index, ValueSource source, Parameter parameterHandle, Object defaultValue, boolean encodedRequested, boolean lazyDefaultValue, ParamConverter paramConverter, DescriptionData descriptionData, String key) {
+            super(index, source, parameterHandle, descriptionData);
             this.defaultValue = defaultValue;
             this.encodedRequested = encodedRequested;
             this.lazyDefaultValue = lazyDefaultValue;
             this.paramConverter = paramConverter;
-            this.key = source == ValueSource.COOKIE_PARAM ? parameterHandle.getDeclaredAnnotation(CookieParam.class).value()
-                : source == ValueSource.HEADER_PARAM ? parameterHandle.getDeclaredAnnotation(HeaderParam.class).value()
-                : source == ValueSource.MATRIX_PARAM ? parameterHandle.getDeclaredAnnotation(MatrixParam.class).value()
-                : source == ValueSource.FORM_PARAM ? parameterHandle.getDeclaredAnnotation(FormParam.class).value()
-                : source == ValueSource.PATH_PARAM ? parameterHandle.getDeclaredAnnotation(PathParam.class).value()
-                : source == ValueSource.QUERY_PARAM ? parameterHandle.getDeclaredAnnotation(QueryParam.class).value()
-                : "";
-            if (this.key.length() == 0) {
-                throw new WebApplicationException("No parameter specified for the " + source + " in " + parameterHandle);
-            }
-        }
-
-        public String jsonType() {
-            Class<?> type = parameterHandle.getType();
-            if (type.equals(boolean.class) || type.equals(Boolean.class)) {
-                return "boolean";
-            } else if (type.equals(int.class) || type.equals(Integer.class) || type.equals(long.class) || type.equals(Long.class)) {
-                return "integer";
-            } else if (type.isAssignableFrom(Number.class)) {
-                return "number";
-            } else if (type.isAssignableFrom(CharSequence.class) || type.equals(byte.class) || type.equals(Byte.class) || type.isAssignableFrom(Date.class)) {
-                return "string";
-            } else if (type.isAssignableFrom(Collection.class) || type.isArray()) {
-                return "array";
-            }
-            return "object";
-        }
-        public String jsonFormat() {
-            Class<?> type = parameterHandle.getType();
-            if (type.equals(int.class) || type.equals(Integer.class)) {
-                return "int32";
-            } else if (type.equals(long.class) || type.equals(Long.class)) {
-                return "int64";
-            } else if (type.equals(float.class) || type.equals(Float.class)) {
-                return "float";
-            } else if (type.equals(double.class) || type.equals(Double.class)) {
-                return "double";
-            } else if (type.equals(byte.class) || type.equals(Byte.class)) {
-                return "byte";
-            } else if (type.equals(Date.class)) {
-                return "date-time";
-            }
-            return null;
+            this.key = key;
         }
 
         public Object defaultValue() {
@@ -112,12 +99,12 @@ abstract class ResourceMethodParam {
         public Object getValue(MuRequest request, RequestMatcher.MatchedMethod matchedMethod) throws IOException {
             String specifiedValue =
                 source == ValueSource.COOKIE_PARAM ? request.cookie(key).orElse("") // TODO make request.cookie return a string and default it
-                : source == ValueSource.HEADER_PARAM ? String.join(",", request.headers().getAll(key))
-                : source == ValueSource.MATRIX_PARAM ? "" // TODO support matrix params
-                : source == ValueSource.FORM_PARAM ? String.join(",", request.formValue(key))
-                : source == ValueSource.PATH_PARAM ? matchedMethod.pathParams.get(key)
-                : source == ValueSource.QUERY_PARAM ? String.join(",", request.parameters(key))
-                : null;
+                    : source == ValueSource.HEADER_PARAM ? String.join(",", request.headers().getAll(key))
+                    : source == ValueSource.MATRIX_PARAM ? "" // TODO support matrix params
+                    : source == ValueSource.FORM_PARAM ? String.join(",", request.formValue(key))
+                    : source == ValueSource.PATH_PARAM ? matchedMethod.pathParams.get(key)
+                    : source == ValueSource.QUERY_PARAM ? String.join(",", request.parameters(key))
+                    : null;
             boolean isSpecified = specifiedValue != null && specifiedValue.length() > 0;
             if (isSpecified && encodedRequested) {
                 specifiedValue = urlEncode(specifiedValue);
@@ -127,14 +114,14 @@ abstract class ResourceMethodParam {
     }
 
     static class MessageBodyParam extends ResourceMethodParam {
-        MessageBodyParam(int index, ValueSource source, Parameter parameterHandle) {
-            super(index, source, parameterHandle);
+        MessageBodyParam(int index, ValueSource source, Parameter parameterHandle, DescriptionData descriptionData) {
+            super(index, source, parameterHandle, descriptionData);
         }
     }
 
     static class ContextParam extends ResourceMethodParam {
         ContextParam(int index, ValueSource source, Parameter parameterHandle) {
-            super(index, source, parameterHandle);
+            super(index, source, parameterHandle, null);
         }
     }
 

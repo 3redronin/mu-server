@@ -55,7 +55,7 @@ public class OperationObject implements JsonWriter {
 
     @Override
     public void writeJson(Writer writer) throws IOException {
-        writer.write("{");
+        writer.write('{');
         boolean isFirst = true;
         isFirst = append(writer, "tags", tags, isFirst);
         isFirst = append(writer, "summary", summary, isFirst);
@@ -69,6 +69,6 @@ public class OperationObject implements JsonWriter {
         isFirst = append(writer, "deprecated", deprecated, isFirst);
         isFirst = append(writer, "security", security, isFirst);
         isFirst = append(writer, "servers", servers, isFirst);
-        writer.write("}");
+        writer.write('}');
     }
 }

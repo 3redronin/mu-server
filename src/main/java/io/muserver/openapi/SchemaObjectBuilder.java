@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import java.util.Collection;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -280,4 +282,61 @@ public class SchemaObjectBuilder {
     public static SchemaObjectBuilder schemaObject() {
         return new SchemaObjectBuilder();
     }
+
+    /**
+     * Creates a builder for a {@link SchemaObject} with the type and format based on the given class
+     * @param from Type type to build from, e.g. if the type is <code>String.class</code> then the <code>type</code> will
+     *             be set as <code>string</code>.
+     * @return A new builder
+     */
+    public static SchemaObjectBuilder schemaObjectFrom(Class<?> from) {
+        String jsonType = jsonType(from);
+        return schemaObject()
+            .withType(jsonType)
+            .withFormat(jsonFormat(from))
+            .withNullable(!from.isPrimitive())
+            .withItems(itemsFor(from, "array".equals(jsonType)));
+    }
+
+    private static SchemaObject itemsFor(Class<?> from, boolean isJsonArray) {
+        Class<?> componentType = from.getComponentType();
+        if (componentType == null) {
+            return isJsonArray ? schemaObject().withType("object").build() : null;
+        }
+        return schemaObjectFrom(componentType).build();
+    }
+
+    private static String jsonType(Class<?> type) {
+        if (CharSequence.class.isAssignableFrom(type) || type.equals(byte.class) || type.equals(Byte.class) || type.isAssignableFrom(Date.class)) {
+            return "string";
+        } else if (type.equals(boolean.class) || type.equals(Boolean.class)) {
+            return "boolean";
+        } else if (type.equals(int.class) || type.equals(Integer.class) || type.equals(long.class) || type.equals(Long.class)) {
+            return "integer";
+        } else if (Number.class.isAssignableFrom(type) || type.equals(float.class) || type.equals(double.class)) {
+            return "number";
+        } else if (Collection.class.isAssignableFrom(type) || type.isArray()) {
+            return "array";
+        }
+        return "object";
+    }
+
+    private static String jsonFormat(Class<?> type) {
+        if (type.equals(int.class) || type.equals(Integer.class)) {
+            return "int32";
+        } else if (type.equals(long.class) || type.equals(Long.class)) {
+            return "int64";
+        } else if (type.equals(float.class) || type.equals(Float.class)) {
+            return "float";
+        } else if (type.equals(double.class) || type.equals(Double.class)) {
+            return "double";
+        } else if (type.equals(byte.class) || type.equals(Byte.class)) {
+            return "byte";
+        } else if (type.equals(Date.class)) {
+            return "date-time";
+        }
+        return null;
+    }
+
+
 }

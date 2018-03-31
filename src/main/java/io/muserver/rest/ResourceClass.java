@@ -1,6 +1,7 @@
 package io.muserver.rest;
 
 import io.muserver.Method;
+import io.muserver.openapi.TagObject;
 
 import javax.ws.rs.Consumes;
 import javax.ws.rs.Path;
@@ -23,25 +24,27 @@ class ResourceClass {
     final List<MediaType> consumes;
     Set<ResourceMethod> resourceMethods;
     final String pathTemplate;
+    final TagObject tag;
 
-    private ResourceClass(UriPattern pathPattern, String pathTemplate, Object resourceInstance, List<MediaType> consumes, List<MediaType> produces) {
+    private ResourceClass(UriPattern pathPattern, String pathTemplate, Object resourceInstance, List<MediaType> consumes, List<MediaType> produces, TagObject tag) {
         this.pathPattern = pathPattern;
         this.pathTemplate = pathTemplate;
         this.resourceClass = resourceInstance.getClass();
         this.resourceInstance = resourceInstance;
         this.consumes = consumes;
         this.produces = produces;
+        this.tag = tag;
     }
 
     public boolean matches(URI uri) {
         return pathPattern.matcher(uri).prefixMatches();
     }
 
-    public Set<ResourceMethod> nonSubResourceMethods() {
+    Set<ResourceMethod> nonSubResourceMethods() {
         return resourceMethods.stream().filter(resourceMethod -> !resourceMethod.isSubResource()).collect(Collectors.toSet());
     }
 
-    public Set<ResourceMethod> subResourceMethods() {
+    Set<ResourceMethod> subResourceMethods() {
         return resourceMethods.stream().filter(ResourceMethod::isSubResource).collect(Collectors.toSet());
     }
 
@@ -71,12 +74,15 @@ class ResourceClass {
                 ResourceMethodParam resourceMethodParam = ResourceMethodParam.fromParameter(i, p, paramConverterProviders);
                 params.add(resourceMethodParam);
             }
-            resourceMethods.add(new ResourceMethod(this, pathPattern, restMethod, params, httpMethod, methodPath == null ? null : methodPath.value(), methodProduces, methodConsumes));
+            DescriptionData descriptionData = DescriptionData.fromAnnotation(restMethod, null);
+            String pathTemplate = methodPath == null ? null : methodPath.value();
+            boolean isDeprecated = annotationSource.isAnnotationPresent(Deprecated.class);
+            resourceMethods.add(new ResourceMethod(this, pathPattern, restMethod, params, httpMethod, pathTemplate, methodProduces, methodConsumes, descriptionData, isDeprecated));
         }
         this.resourceMethods = Collections.unmodifiableSet(resourceMethods);
     }
 
-    public static ResourceClass fromObject(Object restResource, List<ParamConverterProvider> paramConverterProviders) {
+    static ResourceClass fromObject(Object restResource, List<ParamConverterProvider> paramConverterProviders) {
         Class<?> annotationSource = JaxClassLocator.getClassWithJaxRSAnnotations(restResource.getClass());
         if (annotationSource == null) {
             throw new IllegalArgumentException("The restResource class " + restResource.getClass().getName() + " must have a " + Path.class.getName() + " annotation to be eligible as a REST resource.");
@@ -102,7 +108,9 @@ class ResourceClass {
         Consumes consumes = annotationSource.getAnnotation(Consumes.class);
         List<MediaType> consumesList = MediaTypeHeaderDelegate.fromStrings(consumes == null ? null : asList(consumes.value()));
 
-        ResourceClass resourceClass = new ResourceClass(pathPattern, path.value(), restResource, consumesList, producesList);
+
+        TagObject tag = DescriptionData.fromAnnotation(annotationSource, annotationSource.getSimpleName()).toTag();
+        ResourceClass resourceClass = new ResourceClass(pathPattern, path.value(), restResource, consumesList, producesList, tag);
         resourceClass.setupMethodInfo(paramConverterProviders);
         return resourceClass;
     }

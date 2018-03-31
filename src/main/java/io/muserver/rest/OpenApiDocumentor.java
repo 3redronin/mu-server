@@ -10,13 +10,12 @@ import java.util.*;
 
 import static io.muserver.openapi.InfoObjectBuilder.infoObject;
 import static io.muserver.openapi.OperationObjectBuilder.operationObject;
-import static io.muserver.openapi.ParameterObjectBuilder.parameterObject;
 import static io.muserver.openapi.PathItemObjectBuilder.pathItemObject;
 import static io.muserver.openapi.PathsObjectBuilder.pathsObject;
 import static io.muserver.openapi.ResponseObjectBuilder.responseObject;
 import static io.muserver.openapi.ResponsesObjectBuilder.responsesObject;
-import static io.muserver.openapi.SchemaObjectBuilder.schemaObject;
 import static io.muserver.openapi.ServerObjectBuilder.serverObject;
+import static java.util.Collections.singletonList;
 import static java.util.stream.Collectors.toList;
 
 class OpenApiDocumentor implements MuHandler {
@@ -37,25 +36,31 @@ class OpenApiDocumentor implements MuHandler {
             return false;
         }
 
+        List<TagObject> tags = new ArrayList<>();
+
         Map<String, PathItemObject> pathItems = new HashMap<>();
         for (ResourceClass root : roots) {
+
+            tags.add(root.tag);
+
+
             for (ResourceMethod method : root.resourceMethods) {
                 String path = "/" + Mutils.trim(Mutils.join(root.pathTemplate, "/", method.pathTemplate), "/");
-                Map<String, OperationObject> operations = new HashMap<>();
+
+                Map<String, OperationObject> operations;
+                if (pathItems.containsKey(path)) {
+                    operations = pathItems.get(path).operations;
+                } else {
+                    operations = new HashMap<>();
+                    PathItemObject pathItem = pathItemObject()
+                        .withOperations(operations)
+                        .build();
+                    pathItems.put(path, pathItem);
+                }
                 List<ParameterObject> parameters = method.params.stream()
                     .filter(p -> p.source.openAPIIn != null && p instanceof ResourceMethodParam.RequestBasedParam)
                     .map(ResourceMethodParam.RequestBasedParam.class::cast)
-                    .map(p -> parameterObject()
-                        .withName(p.key)
-                        .withIn(p.source.openAPIIn)
-                        .withSchema(
-                            schemaObject()
-                                .withType(p.jsonType())
-                                .withDefaultValue(p.defaultValue())
-                                .withFormat(p.jsonFormat())
-                                .build()
-                        )
-                        .build())
+                    .map(p -> p.createDocumentationBuilder().build())
                     .collect(toList());
                 Map<String, ResponseObject> httpStatusCodes = new HashMap<>();
                 httpStatusCodes.put("200", responseObject()
@@ -63,16 +68,17 @@ class OpenApiDocumentor implements MuHandler {
                     .build());
                 operations.put(method.httpMethod.name().toLowerCase(),
                     operationObject()
+                        .withTags(singletonList(root.tag.name))
+                        .withSummary(method.descriptionData.summary)
+                        .withDescription(method.descriptionData.description)
+                        .withExternalDocs(method.descriptionData.externalDocumentation)
+                        .withDeprecated(method.isDeprecated)
                         .withParameters(parameters)
                         .withResponses(
                             responsesObject()
                                 .withHttpStatusCodes(httpStatusCodes)
                                 .build())
                         .build());
-                PathItemObject pathItem = pathItemObject()
-                    .withOperations(operations)
-                    .build();
-                pathItems.put(path, pathItem);
             }
         }
 
@@ -83,7 +89,7 @@ class OpenApiDocumentor implements MuHandler {
                     .withVersion("1.0")
                     .build())
             .withServers(
-                Collections.singletonList(
+                singletonList(
                     serverObject()
                         .withUrl(Mutils.trim(request.uri().resolve(request.contextPath()).toString(), "/"))
                         .build())
@@ -93,6 +99,7 @@ class OpenApiDocumentor implements MuHandler {
                     .withPathItemObjects(pathItems)
                     .build()
             )
+            .withTags(tags)
             .build();
 
         response.contentType(ContentTypes.APPLICATION_JSON);
