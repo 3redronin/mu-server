@@ -16,7 +16,7 @@
 
 package org.example.petstore.resource;
 
-import io.muserver.Description;
+import io.muserver.rest.Description;
 import io.muserver.rest.ApiResponse;
 import io.muserver.rest.ApiResponses;
 import org.example.petstore.data.PetData;
@@ -50,7 +50,7 @@ public class PetResource {
 //    response = Pet.class,
 //    authorizations = @Authorization(value = "api_key")
 //  )
-    @ApiResponses(value = {@ApiResponse(code = 400, message = "Invalid ID supplied"), @ApiResponse(code = 404, message = "Pet not found")})
+    @ApiResponses(value = {@ApiResponse(code = "400", message = "Invalid ID supplied"), @ApiResponse(code = "404", message = "Pet not found")})
     public Response getPetById(
 //      @ApiParam(value = "ID of pet that needs to be fetched", allowableValues = "range[1,10]", required = true)
         @PathParam("petId") Long petId)
@@ -69,7 +69,7 @@ public class PetResource {
 //    response = Pet.class,
 //    authorizations = @Authorization(value = "api_key")
 //  )
-    @ApiResponses(value = {@ApiResponse(code = 400, message = "Invalid ID supplied"), @ApiResponse(code = 404, message = "Pet not found")})
+    @ApiResponses(value = {@ApiResponse(code = "400", message = "Invalid ID supplied"), @ApiResponse(code = "404", message = "Pet not found")})
     public Response downloadFile(
 //      @ApiParam(value = "ID of pet that needs to be fetched", allowableValues = "range[1,10]", required = true)
         @PathParam("petId") Long petId)
@@ -94,8 +94,8 @@ public class PetResource {
     @DELETE
     @Path("/{petId}")
     @Description("Deletes a pet")
-    @ApiResponses(value = {@ApiResponse(code = 400, message = "Invalid ID supplied"),
-        @ApiResponse(code = 404, message = "Pet not found")})
+    @ApiResponses(value = {@ApiResponse(code = "400", message = "Invalid ID supplied"),
+        @ApiResponse(code = "404", message = "Pet not found")})
     public Response deletePet(
         @HeaderParam("api_key")
             String apiKey,
@@ -111,7 +111,7 @@ public class PetResource {
     @POST
     @Consumes({MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML})
     @Description(value = "Add a new pet to the store")
-    @ApiResponses(value = {@ApiResponse(code = 405, message = "Invalid input", response = Pet.class)})
+    @ApiResponses(value = {@ApiResponse(code = "405", message = "Invalid input", response = Pet.class)})
     public Response addPet(
 //      @ApiParam(value = "Pet object that needs to be added to the store", required = true)
         Pet pet) {
@@ -122,9 +122,9 @@ public class PetResource {
     @PUT
     @Consumes({MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML})
     @Description("Update an existing pet")
-    @ApiResponses(value = {@ApiResponse(code = 400, message = "Invalid ID supplied"),
-        @ApiResponse(code = 404, message = "Pet not found"),
-        @ApiResponse(code = 405, message = "Validation exception")})
+    @ApiResponses(value = {@ApiResponse(code = "400", message = "Invalid ID supplied"),
+        @ApiResponse(code = "404", message = "Pet not found"),
+        @ApiResponse(code = "405", message = "Validation exception")})
     public Response updatePet(
 //      @ApiParam(value = "Pet object that needs to be added to the store", required = true)
         Pet pet) {
@@ -137,7 +137,7 @@ public class PetResource {
     @Description(value = "Finds Pets by status", details = "Multiple status values can be provided with comma separated strings")
 //    response = Pet.class,
 //    responseContainer = "List")
-    @ApiResponses(value = {@ApiResponse(code = 400, message = "Invalid status value")})
+    @ApiResponses(value = {@ApiResponse(code = "400", message = "Invalid status value")})
     public Response findPetsByStatus(
 //      @ApiParam(value = "Status values that need to be considered for filter", required = true, defaultValue = "available", allowableValues = "available,pending,sold", allowMultiple = true)
         @QueryParam("status") String status) {
@@ -150,7 +150,7 @@ public class PetResource {
 //    notes = "Multiple tags can be provided with comma separated strings. Use tag1, tag2, tag3 for testing.",
 //    response = Pet.class,
 //    responseContainer = "List")
-    @ApiResponses(value = {@ApiResponse(code = 400, message = "Invalid tag value")})
+    @ApiResponses(value = {@ApiResponse(code = "400", message = "Invalid tag value")})
     @Deprecated
     public Response findPetsByTags(
         @HeaderParam("api_key") String api_key,
@@ -164,7 +164,7 @@ public class PetResource {
     @Consumes({MediaType.APPLICATION_FORM_URLENCODED})
     @Description("Updates a pet in the store with form data")
     @ApiResponses(value = {
-        @ApiResponse(code = 405, message = "Invalid input")})
+        @ApiResponse(code = "405", message = "Invalid input")})
     public Response updatePetWithForm(
 //   @ApiParam(value = "ID of pet that needs to be updated", required = true)
         @PathParam("petId") Long petId,

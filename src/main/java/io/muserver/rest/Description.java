@@ -1,4 +1,4 @@
-package io.muserver;
+package io.muserver.rest;
 
 import java.lang.annotation.*;
 

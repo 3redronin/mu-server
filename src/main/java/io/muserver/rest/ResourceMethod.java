@@ -1,16 +1,23 @@
 package io.muserver.rest;
 
 import io.muserver.Method;
+import io.muserver.openapi.OperationObjectBuilder;
+import io.muserver.openapi.ResponseObject;
 
 import javax.ws.rs.HttpMethod;
 import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.MediaType;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.InvocationTargetException;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
+import java.util.stream.Stream;
 
+import static io.muserver.openapi.HeaderObjectBuilder.headerObject;
+import static io.muserver.openapi.MediaTypeObjectBuilder.mediaTypeObject;
+import static io.muserver.openapi.ResponseObjectBuilder.responseObject;
+import static io.muserver.openapi.ResponsesObjectBuilder.responsesObject;
 import static io.muserver.rest.MethodMapping.jaxToMu;
+import static java.util.stream.Collectors.toMap;
 
 class ResourceMethod {
     final ResourceClass resourceClass;
@@ -53,11 +60,63 @@ class ResourceMethod {
         } catch (InvocationTargetException e) {
             Throwable cause = e.getCause();
             if (cause instanceof WebApplicationException) {
-                throw (WebApplicationException)cause;
+                throw (WebApplicationException) cause;
             } else {
                 throw e;
             }
         }
+    }
+
+    OperationObjectBuilder createOperationBuilder() {
+        List<ApiResponse> apiResponseList = getApiResponses(methodHandle);
+
+
+        Map<String, ResponseObject> httpStatusCodes = new HashMap<>();
+        if (apiResponseList.isEmpty()) {
+            httpStatusCodes.put("200", responseObject()
+                .withDescription("Success")
+                .withContent(effectiveProduces.stream().collect(toMap(MediaType::toString,
+                    mt -> mediaTypeObject()
+                        .build()))
+                )
+                .build());
+        } else {
+            for (ApiResponse apiResponse : apiResponseList) {
+                httpStatusCodes.put(apiResponse.code(), responseObject()
+                    .withDescription(apiResponse.message())
+                    .withHeaders(Stream.of(apiResponse.responseHeaders()).collect(
+                        toMap(ResponseHeader::name,
+                            rh -> headerObject().withDescription(rh.description()).withDeprecated(rh.deprecated()).withExample(rh.example()).build()
+                        )))
+                    .build());
+            }
+        }
+
+        return createOperationBuilder()
+            .withSummary(descriptionData.summary)
+            .withDescription(descriptionData.description)
+            .withExternalDocs(descriptionData.externalDocumentation)
+            .withDeprecated(isDeprecated)
+            .withResponses(
+                responsesObject()
+                    .withHttpStatusCodes(httpStatusCodes)
+                    .build())
+            ;
+    }
+
+    private static List<ApiResponse> getApiResponses(java.lang.reflect.Method methodHandle) {
+        ApiResponses apiResponses = methodHandle.getDeclaredAnnotation(ApiResponses.class);
+        List<ApiResponse> apiResponseList;
+        if (apiResponses != null) {
+            apiResponseList = new ArrayList<>(Arrays.asList(apiResponses.value()));
+        } else {
+            apiResponseList = new ArrayList<>();
+        }
+        ApiResponse apiResponse = methodHandle.getDeclaredAnnotation(ApiResponse.class);
+        if (apiResponse != null) {
+            apiResponseList.add(apiResponse);
+        }
+        return apiResponseList;
     }
 
     static Method getMuMethod(java.lang.reflect.Method restMethod) {

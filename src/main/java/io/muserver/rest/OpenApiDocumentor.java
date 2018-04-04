@@ -9,11 +9,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 import static io.muserver.openapi.InfoObjectBuilder.infoObject;
-import static io.muserver.openapi.OperationObjectBuilder.operationObject;
 import static io.muserver.openapi.PathItemObjectBuilder.pathItemObject;
 import static io.muserver.openapi.PathsObjectBuilder.pathsObject;
 import static io.muserver.openapi.ResponseObjectBuilder.responseObject;
-import static io.muserver.openapi.ResponsesObjectBuilder.responsesObject;
 import static io.muserver.openapi.ServerObjectBuilder.serverObject;
 import static java.util.Collections.singletonList;
 import static java.util.stream.Collectors.toList;
@@ -62,22 +60,10 @@ class OpenApiDocumentor implements MuHandler {
                     .map(ResourceMethodParam.RequestBasedParam.class::cast)
                     .map(p -> p.createDocumentationBuilder().build())
                     .collect(toList());
-                Map<String, ResponseObject> httpStatusCodes = new HashMap<>();
-                httpStatusCodes.put("200", responseObject()
-                    .withDescription("Success")
-                    .build());
                 operations.put(method.httpMethod.name().toLowerCase(),
-                    operationObject()
+                    method.createOperationBuilder()
                         .withTags(singletonList(root.tag.name))
-                        .withSummary(method.descriptionData.summary)
-                        .withDescription(method.descriptionData.description)
-                        .withExternalDocs(method.descriptionData.externalDocumentation)
-                        .withDeprecated(method.isDeprecated)
                         .withParameters(parameters)
-                        .withResponses(
-                            responsesObject()
-                                .withHttpStatusCodes(httpStatusCodes)
-                                .build())
                         .build());
             }
         }

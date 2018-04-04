@@ -13,10 +13,10 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 public @interface ApiResponse {
     /**
-     * The HTTP status code of the response.
+     * The HTTP status code of the response. This is a String to allow values such as "2XX" to cover all 200-299 codes.
      * @return The code
      */
-    int code();
+    String code();
 
     /**
      * A short description of the response.
@@ -31,7 +31,7 @@ public @interface ApiResponse {
      *
      * @return a list of response headers.
      */
-    ResponseHeader[] responseHeaders() default @ResponseHeader();
+    ResponseHeader[] responseHeaders() default {};
 
     /**
      * The type of the repsonse body.

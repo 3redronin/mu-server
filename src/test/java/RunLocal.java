@@ -3,6 +3,11 @@ import io.muserver.Method;
 import io.muserver.MuServer;
 import io.muserver.SSLContextBuilder;
 import io.muserver.handlers.ResourceHandler;
+import io.muserver.rest.RestHandlerBuilder;
+import org.example.petstore.resource.PetResource;
+import org.example.petstore.resource.PetStoreResource;
+import org.example.petstore.resource.UserResource;
+import org.example.petstore.resource.VehicleResource;
 
 import java.io.File;
 import java.net.URI;
@@ -23,6 +28,9 @@ public class RunLocal {
                 response.contentType(ContentTypes.APPLICATION_JSON);
                 response.write("{ \"hello\": \"world                    this is something           to be gzipped\" }");
             })
+            .addHandler(RestHandlerBuilder.restHandler(
+                new PetResource(), new PetStoreResource(), new UserResource(), new VehicleResource()
+            ))
             .addHandler(Method.GET, "/stream", (request, response, pathParams) -> {
                 response.contentType(ContentTypes.TEXT_PLAIN);
                 for (int i = 0; i < Integer.MAX_VALUE; i++) {
@@ -37,6 +45,7 @@ public class RunLocal {
             .start();
 
         System.out.println("Started at " + server.httpUri() + " and " + server.httpsUri());
+        System.out.println("Open API JSON available at " + server.httpUri().resolve("/openapi.json"));
 
         File[] files = BIG_FILE_DIR.listFiles(File::isFile);
         for (File file : files) {

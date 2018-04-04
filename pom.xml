@@ -6,10 +6,10 @@
 
     <groupId>io.muserver</groupId>
     <artifactId>mu-server</artifactId>
-    <version>0.4-SNAPSHOT</version>
+    <version>0.5-SNAPSHOT</version>
 
     <name>mu-server</name>
-    <description>A fluent web server framework</description>
+    <description>A simple but powerful web server framework</description>
     <url>https://github.com/3redronin/mu-server</url>
 
     <properties>

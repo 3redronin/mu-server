@@ -1,6 +1,5 @@
 package io.muserver.rest;
 
-import io.muserver.Description;
 import io.muserver.openapi.ExternalDocumentationObject;
 import io.muserver.openapi.TagObject;
 
