@@ -14,8 +14,7 @@ public class HttpsTest {
     private MuServer server;
 
     @Test public void canCreate() throws Exception {
-        server = MuServerBuilder.httpsServer()
-            .withHttpsConnection(9443, SSLContextBuilder.unsignedLocalhostCert())
+        server = MuServerBuilder.httpsServer().withHttpsPort(9443).withHttpsConfig(SSLContextBuilder.unsignedLocalhostCert())
             .addHandler((request, response) -> {
                 response.contentType(ContentTypes.TEXT_PLAIN);
                 response.write("This is encrypted and the URL is " + request.uri());

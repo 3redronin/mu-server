@@ -104,7 +104,7 @@ public class HeadersTest {
 	@Test public void ifXForwardedHeadersAreSpecifiedThenRequestUriUsesThem() {
 		URI[] actual = new URI[2];
 		server = MuServerBuilder.httpServer()
-				.withHttpConnection(12752)
+				.withHttpPort(12752)
 				.withMaxHeadersSize(1024)
 				.addHandler((request, response) -> {
 					actual[0] = request.uri();

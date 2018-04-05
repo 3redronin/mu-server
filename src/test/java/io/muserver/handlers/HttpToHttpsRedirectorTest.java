@@ -1,5 +1,6 @@
 package io.muserver.handlers;
 
+import io.muserver.MuServerBuilder;
 import okhttp3.OkHttpClient;
 import okhttp3.Response;
 import org.junit.After;
@@ -15,7 +16,6 @@ import java.net.URI;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
 import static io.muserver.MuServerBuilder.httpServer;
-import static io.muserver.MuServerBuilder.muServer;
 import static scaffolding.ClientUtils.request;
 import static scaffolding.ClientUtils.sslContextForTesting;
 import static scaffolding.ClientUtils.veryTrustingTrustManager;
@@ -34,9 +34,8 @@ public class HttpToHttpsRedirectorTest {
     }
 
     @Test public void httpRequestsAreRedirectedToTheHttpsUrl() throws IOException {
-        server = muServer()
-            .withHttpConnection(11080)
-            .withHttpsConnection(11443, SSLContextBuilder.unsignedLocalhostCert())
+        server = new MuServerBuilder().withHttpPort(0).withHttpsPort(0)
+            .withHttpPort(11080).withHttpsPort(11443).withHttpsConfig(SSLContextBuilder.unsignedLocalhostCert())
             .addAsyncHandler(new HttpToHttpsRedirector(11443))
             .addHandler(Method.GET, "/blah", (request, response, pathParams) -> {
                 response.write("Hello from " + request.uri());

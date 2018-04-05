@@ -1,7 +1,4 @@
-import io.muserver.ContentTypes;
-import io.muserver.Method;
-import io.muserver.MuServer;
-import io.muserver.SSLContextBuilder;
+import io.muserver.*;
 import io.muserver.handlers.ResourceHandler;
 import io.muserver.rest.RestHandlerBuilder;
 import org.example.petstore.resource.PetResource;
@@ -12,16 +9,14 @@ import org.example.petstore.resource.VehicleResource;
 import java.io.File;
 import java.net.URI;
 
-import static io.muserver.MuServerBuilder.muServer;
 import static io.muserver.Mutils.urlEncode;
 import static io.muserver.handlers.FileProviderTest.BIG_FILE_DIR;
 
 public class RunLocal {
 
     public static void main(String[] args) {
-        MuServer server = muServer()
-            .withHttpConnection(18080)
-            .withHttpsConnection(18443, SSLContextBuilder.unsignedLocalhostCert())
+        MuServer server = new MuServerBuilder().withHttpPort(0).withHttpsPort(0)
+            .withHttpPort(18080).withHttpsPort(18443).withHttpsConfig(SSLContextBuilder.unsignedLocalhostCert())
             .addHandler(ResourceHandler.fileHandler(BIG_FILE_DIR).build())
             .addHandler(ResourceHandler.fileOrClasspath("src/test/resources/sample-static", "/sample-static").build())
             .addHandler(Method.GET, "/api", (request, response, pathParams) -> {

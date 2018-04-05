@@ -42,7 +42,7 @@ public class MuServerTest {
 		List<String> handlersHit = new ArrayList<>();
 
 		server = httpServer()
-				.withHttpConnection(12808)
+				.withHttpPort(12808)
 				.addHandler((request, response) -> {
 					handlersHit.add("Logger");
 					return false;
@@ -66,7 +66,7 @@ public class MuServerTest {
 
 	@Test public void asyncHandlersSupported() throws IOException {
 		server = httpServer()
-				.withHttpConnection(12808)
+				.withHttpPort(12808)
 				.addAsyncHandler(new AsyncMuHandler() {
 					public boolean onHeaders(AsyncContext ctx, Headers headers) {
 						System.out.println("I am a logging handler and saw " + ctx.request);

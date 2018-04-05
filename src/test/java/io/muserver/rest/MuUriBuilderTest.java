@@ -238,8 +238,7 @@ public class MuUriBuilderTest {
         assertThat(UriBuilder.fromResource(FruitResource.class).build().toString(), equalTo("v1/fruits"));
         assertThat(UriBuilder.fromMethod(FruitResource.class, "getOne").build("some thing").toString(), equalTo("v1/fruits/some%20thing"));
 
-        MuServer server = httpsServer()
-            .withHttpsConnection(15647, SSLContextBuilder.unsignedLocalhostCert())
+        MuServer server = httpsServer().withHttpsPort(15647).withHttpsConfig(SSLContextBuilder.unsignedLocalhostCert())
             .addHandler(ContextHandlerBuilder.context("api",
                 RestHandlerBuilder.restHandler(new FruitResource(), new DogResource()).build()))
             .start();

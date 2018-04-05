@@ -28,8 +28,8 @@ import static io.muserver.MuServerHandler.PROTO_ATTRIBUTE;
 public class MuServerBuilder {
     private static final int LENGTH_OF_METHOD_AND_PROTOCOL = 17; // e.g. "OPTIONS HTTP/1.1 "
     private long minimumGzipSize = 1400;
-    private int httpPort = 0;
-    private int httpsPort = 0;
+    private int httpPort = -1;
+    private int httpsPort = -1;
     private int maxHeadersSize = 8192;
     private int maxUrlSize = 8192 - LENGTH_OF_METHOD_AND_PROTOCOL;
     private List<AsyncMuHandler> asyncHandlers = new ArrayList<>();
@@ -38,9 +38,25 @@ public class MuServerBuilder {
     private boolean gzipEnabled = true;
     private Set<String> mimeTypesToGzip = ResourceType.gzippableMimeTypes(ResourceType.getResourceTypes());
 
-    public MuServerBuilder withHttpConnection(int port) {
+    /**
+     * @param port The HTTP port to use. A value of 0 will have a random port assigned; a value of -1 will
+     *             result in no HTTP connector.
+     * @return The current Mu-Server Builder
+     */
+    public MuServerBuilder withHttpPort(int port) {
         this.httpPort = port;
         return this;
+    }
+
+    /**
+     * @param port The HTTP port to use. A value of 0 will have a random port assigned; a value of -1 will
+     *             result in no HTTP connector.
+     * @return The current Mu-Server Builder
+     * @deprecated Use {@link #withHttpPort(int)} instead
+     */
+    @Deprecated
+    public MuServerBuilder withHttpConnection(int port) {
+        return withHttpPort(port);
     }
 
     public MuServerBuilder withGzipEnabled(boolean enabled) {
@@ -59,11 +75,49 @@ public class MuServerBuilder {
         return this;
     }
 
+    /**
+     * @param port The port
+     * @param sslEngine The SSL Context
+     * @return The builder
+     * @deprecated use {@link #withHttpsPort(int)} and {@link #withHttpsConfig(SSLContext)} instead.
+     */
+    @Deprecated
     public MuServerBuilder withHttpsConnection(int port, SSLContext sslEngine) {
-        this.httpsPort = port;
-        this.sslContext = sslEngine;
+        return withHttpsPort(port).withHttpsConfig(sslEngine);
+    }
+
+    /**
+     * Sets the HTTPS config. Defaults to {@link SSLContextBuilder#unsignedLocalhostCert()}
+     * @see SSLContextBuilder
+     * @param sslContext An SSL Context.
+     * @return The current Mu-Server Builder
+     */
+    public MuServerBuilder withHttpsConfig(SSLContext sslContext) {
+        this.sslContext = sslContext;
         return this;
     }
+
+    /**
+     * Sets the HTTPS config. Defaults to {@link SSLContextBuilder#unsignedLocalhostCert()}
+     * @see SSLContextBuilder
+     * @param sslContext An SSL Context builder.
+     * @return The current Mu-Server Builder
+     */
+    public MuServerBuilder withHttpsConfig(SSLContextBuilder sslContext) {
+        return withHttpsConfig(sslContext.build());
+    }
+
+    /**
+     * Sets the HTTPS port to use. To set the SSL certificate config, see {@link }
+     * @param port A value of 0 will result in a random port being assigned; a value of -1 will
+     * disable HTTPS.
+     * @return The current Mu-Server builder
+     */
+    public MuServerBuilder withHttpsPort(int port) {
+        this.httpsPort = port;
+        return this;
+    }
+
 
     public MuServerBuilder withHttpsDisabled() {
         this.httpsPort = -1;
@@ -81,6 +135,10 @@ public class MuServerBuilder {
         return this;
     }
 
+    /**
+     * @param handler An Async Handler
+     * @return The builder
+     */
     public MuServerBuilder addAsyncHandler(AsyncMuHandler handler) {
         asyncHandlers.add(handler);
         return this;
@@ -134,7 +192,13 @@ public class MuServerBuilder {
 
         try {
             Channel httpChannel = httpPort < 0 ? null : createChannel(bossGroup, workerGroup, httpPort, null);
-            Channel httpsChannel = sslContext == null ? null : createChannel(bossGroup, workerGroup, httpsPort, sslContext);
+            Channel httpsChannel;
+            if (httpsPort < 0) {
+                httpsChannel = null;
+            } else {
+                SSLContext sslContextToUse = this.sslContext != null ? this.sslContext : SSLContextBuilder.unsignedLocalhostCert();
+                httpsChannel = createChannel(bossGroup, workerGroup, httpsPort, sslContextToUse);
+            }
             URI uri = null;
             if (httpChannel != null) {
                 channels.add(httpChannel);
@@ -192,19 +256,28 @@ public class MuServerBuilder {
         return b.bind(port).sync().channel();
     }
 
+    /**
+     * Creates a new server builder. Call {@link #withHttpsPort(int)} or {@link #withHttpPort(int)} to specify
+     * the port to use, and call {@link #start()} to start the server.
+     * @return A new Mu-Server builder
+     */
     public static MuServerBuilder muServer() {
-        return new MuServerBuilder()
-            .withHttpsDisabled();
+        return new MuServerBuilder();
     }
 
+    /**
+     * Creates a new server builder which will run as HTTP on a random port.
+     * @return A new Mu-Server builder with the HTTP port set to 0
+     */
     public static MuServerBuilder httpServer() {
-        return new MuServerBuilder()
-            .withHttpsDisabled();
+        return muServer().withHttpPort(0);
     }
 
+    /**
+     * Creates a new server builder which will run as HTTPS on a random port.
+     * @return A new Mu-Server builder with the HTTPS port set to 0
+     */
     public static MuServerBuilder httpsServer() {
-        return new MuServerBuilder()
-            .withHttpsConnection(0, SSLContextBuilder.unsignedLocalhostCert())
-            .withHttpDisabled();
+        return muServer().withHttpsPort(0);
     }
 }

@@ -1,6 +1,7 @@
 package io.muserver.handlers;
 
 import io.muserver.MuServer;
+import io.muserver.MuServerBuilder;
 import okhttp3.Response;
 import org.hamcrest.Matchers;
 import org.junit.After;
@@ -15,7 +16,6 @@ import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 
-import static io.muserver.MuServerBuilder.muServer;
 import static io.muserver.Mutils.urlEncode;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -31,8 +31,8 @@ public class FileProviderTest {
     @Ignore("too slow")
     public void canReadFilesFromFileSystem() throws Exception {
 
-        server = muServer()
-            .withHttpConnection(12080)
+        server = new MuServerBuilder().withHttpPort(0).withHttpsPort(0)
+            .withHttpPort(12080)
             .addHandler(ResourceHandler.fileHandler(BIG_FILE_DIR))
             .start();
 
