@@ -37,7 +37,7 @@ class SyncHandlerAdapter implements AsyncMuHandler {
                     MuServerHandler.send404(ctx);
                 }
 
-            } catch (Exception ex) {
+            } catch (Throwable ex) {
                 System.out.println("Error from handler: " + ex.getMessage());
                 ex.printStackTrace();
             } finally {

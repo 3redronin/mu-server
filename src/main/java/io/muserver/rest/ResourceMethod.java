@@ -14,6 +14,7 @@ import java.util.stream.Stream;
 
 import static io.muserver.openapi.HeaderObjectBuilder.headerObject;
 import static io.muserver.openapi.MediaTypeObjectBuilder.mediaTypeObject;
+import static io.muserver.openapi.OperationObjectBuilder.operationObject;
 import static io.muserver.openapi.ResponseObjectBuilder.responseObject;
 import static io.muserver.openapi.ResponsesObjectBuilder.responsesObject;
 import static io.muserver.rest.MethodMapping.jaxToMu;
@@ -92,7 +93,7 @@ class ResourceMethod {
             }
         }
 
-        return createOperationBuilder()
+        return operationObject()
             .withSummary(descriptionData.summary)
             .withDescription(descriptionData.description)
             .withExternalDocs(descriptionData.externalDocumentation)

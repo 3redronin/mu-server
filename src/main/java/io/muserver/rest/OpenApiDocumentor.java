@@ -11,7 +11,6 @@ import java.util.*;
 import static io.muserver.openapi.InfoObjectBuilder.infoObject;
 import static io.muserver.openapi.PathItemObjectBuilder.pathItemObject;
 import static io.muserver.openapi.PathsObjectBuilder.pathsObject;
-import static io.muserver.openapi.ResponseObjectBuilder.responseObject;
 import static io.muserver.openapi.ServerObjectBuilder.serverObject;
 import static java.util.Collections.singletonList;
 import static java.util.stream.Collectors.toList;

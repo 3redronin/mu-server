@@ -31,8 +31,8 @@ public class OpenApiDocumentorTest {
     public void hasJsonEndpoint() throws IOException {
         try (okhttp3.Response resp = call(request().url(server.uri().resolve("/openapi.json").toString()))) {
             assertThat(resp.code(), is(200));
-            JSONObject json = new JSONObject(resp.body().string());
-            System.out.println(json.toString(4));
+            String responseBody = resp.body().string();
+            JSONObject json = new JSONObject(responseBody);
             JSONObject paths = json.getJSONObject("paths");
 
             JSONObject pet = paths.getJSONObject("/pet");
@@ -53,7 +53,6 @@ public class OpenApiDocumentorTest {
             assertThat(findByTagsParam.getString("in"), equalTo("query"));
             assertThat(findByTagsParam.getJSONObject("schema").getString("type"), equalTo("string"));
 
-            System.out.println(findByTagsParam.toString(4));
         }
     }
 

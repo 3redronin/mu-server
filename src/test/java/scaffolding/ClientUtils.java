@@ -6,6 +6,8 @@ import okio.BufferedSink;
 
 import javax.net.ssl.*;
 import java.io.IOException;
+import java.lang.management.ManagementFactory;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -21,8 +23,10 @@ public class ClientUtils {
     }
 
     public static OkHttpClient.Builder newClient() {
+        boolean isDebug = ManagementFactory.getRuntimeMXBean().getInputArguments().toString().contains("jdwp");
         return new OkHttpClient.Builder()
             .hostnameVerifier((hostname, session) -> true)
+            .readTimeout(isDebug ? 120 : 10, TimeUnit.SECONDS)
             .sslSocketFactory(sslContextForTesting(veryTrustingTrustManager).getSocketFactory(), veryTrustingTrustManager);
     }
 
