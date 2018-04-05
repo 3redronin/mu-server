@@ -25,6 +25,10 @@ import java.util.concurrent.TimeUnit;
 
 import static io.muserver.MuServerHandler.PROTO_ATTRIBUTE;
 
+/**
+ * <p>A builder for creating a web server.</p>
+ * <p>Use the <code>withXXX()</code> methods to set the ports, config, and request handlers needed.</p>
+ */
 public class MuServerBuilder {
     private static final int LENGTH_OF_METHOD_AND_PROTOCOL = 17; // e.g. "OPTIONS HTTP/1.1 "
     private long minimumGzipSize = 1400;
@@ -59,10 +63,29 @@ public class MuServerBuilder {
         return withHttpPort(port);
     }
 
+    /**
+     * Enables gzip for certain resource types. The default is <code>true</code>. By default, the
+     * gzippable resource types are taken from {@link ResourceType#getResourceTypes()} where
+     * {@link ResourceType#gzip} is <code>true</code>.
+     * @see #withGzip(long, Set)
+     * @param enabled True to enable; false to disable
+     * @return The current Mu-Server builder
+     */
     public MuServerBuilder withGzipEnabled(boolean enabled) {
         this.gzipEnabled = enabled;
         return this;
     }
+
+    /**
+     * Enables gzip for files of at least the specified size that match the given mime-types.
+     * By default, gzip is enabled for text-based mime types over 1400 bytes. It is recommended
+     * to keep the defaults and only use this method if you have very specific requirements
+     * around GZIP.
+     * @param minimumGzipSize The size in bytes before gzip is used. The default is 1400.
+     * @param mimeTypesToGzip The mime-types that should be gzipped. In general, only text
+     *                        files should be gzipped.
+     * @return The current Mu-Server Builder
+     */
     public MuServerBuilder withGzip(long minimumGzipSize, Set<String> mimeTypesToGzip) {
         this.gzipEnabled = true;
         this.mimeTypesToGzip = mimeTypesToGzip;
@@ -70,6 +93,12 @@ public class MuServerBuilder {
         return this;
     }
 
+    /**
+     * Turns off HTTP.
+     * @return The current builder.
+     * @deprecated It is off by default so this is not needed.
+     */
+    @Deprecated
     public MuServerBuilder withHttpDisabled() {
         this.httpPort = -1;
         return this;
@@ -118,35 +147,67 @@ public class MuServerBuilder {
         return this;
     }
 
-
-    public MuServerBuilder withHttpsDisabled() {
-        this.httpsPort = -1;
-        this.sslContext = null;
-        return this;
-    }
-
+    /**
+     * <p>Specifies the maximum size in bytes of the HTTP request headers. Defaults to 8192.</p>
+     * <p>If a request has headers exceeding this value, it will be rejected and a <code>431</code>
+     * status code will be returned. Large values increase the risk of Denial-of-Service attacks
+     * due to the extra memory allocated in each request.</p>
+     * <p>It is recommended to not specify a value unless you are finding legitimate requests are
+     * being rejected with <code>413</code> errors.</p>
+     * @param size The maximum size in bytes that can be used for headers.
+     * @return The current Mu-Server builder.
+     */
     public MuServerBuilder withMaxHeadersSize(int size) {
         this.maxHeadersSize = size;
         return this;
     }
 
+    /**
+     * The maximum length that a URL can be. If it exceeds this value, a <code>414</code> error is
+     * returned to the client. The default value is 8175.
+     * @param size The maximum number of characters allowed in URLs sent to this server.
+     * @return The current Mu-Server builder
+     */
     public MuServerBuilder withMaxUrlSize(int size) {
         this.maxUrlSize = size;
         return this;
     }
 
     /**
+     * <p>xAdds a new Asynchronous handler. This is for cases where async handling of requests and
+     * responses is required; in other cases use {@link #addHandler(MuHandler)},
+     * {@link #addHandler(MuHandlerBuilder)} or {@link #addHandler(Method, String, RouteHandler)}.</p>
+     * <p>Note that async handlers are executed in the order added to the builder, but all async
+     * handlers are executed before synchronous handlers.</p>
      * @param handler An Async Handler
-     * @return The builder
+     * @return The current Mu-Server builder
      */
     public MuServerBuilder addAsyncHandler(AsyncMuHandler handler) {
         asyncHandlers.add(handler);
         return this;
     }
 
+    /**
+     * <p>Adds a request handler.</p>
+     * <p>Note that handlers are executed in the order added to the builder, but all async
+     * handlers are executed before synchronous handlers.</p>
+     * @see #addHandler(Method, String, RouteHandler)
+     * @param handler A handler builder. The <code>build()</code> method will be called on this
+     *                to create the handler.
+     * @return The current Mu-Server Handler.
+     */
     public MuServerBuilder addHandler(MuHandlerBuilder handler) {
         return addHandler(handler.build());
     }
+
+    /**
+     * <p>Adds a request handler.</p>
+     * <p>Note that handlers are executed in the order added to the builder, but all async
+     * handlers are executed before synchronous handlers.</p>
+     * @see #addHandler(Method, String, RouteHandler)
+     * @param handler The handler to add.
+     * @return The current Mu-Server Handler.
+     */
     public MuServerBuilder addHandler(MuHandler handler) {
         handlers.add(handler);
         return this;
@@ -168,6 +229,10 @@ public class MuServerBuilder {
     }
 
 
+    /**
+     * Creates and starts this server. An exception is thrown if it fails to start.
+     * @return The running server.
+     */
     public MuServer start() {
         if (!handlers.isEmpty()) {
             asyncHandlers.add(new SyncHandlerAdapter(handlers));
