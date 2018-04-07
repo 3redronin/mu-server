@@ -33,17 +33,19 @@ public class ContextHandlerTest {
         }
 
         server = httpsServer()
-            .addHandler(context("some context",
-                Routes.route(Method.GET, "/bl ah", (request, response, pathParams) -> {
-                    response.write("context=" + request.contextPath() + ";relative=" + request.relativePath());
-                }),
-                context("phase two",
-                    (request, response) -> {
-                        response.headers().add("X-Blah", "added in context");
-                        return false;
-                    },
-                    RestHandlerBuilder.restHandler(new Fruit()).build()
-                ).build())
+            .addHandler(
+                context("some context")
+                    .addHandler(
+                        Routes.route(Method.GET, "/bl ah", (request, response, pathParams) -> {
+                            response.write("context=" + request.contextPath() + ";relative=" + request.relativePath());
+                        }))
+                    .addHandler(
+                        context("phase two")
+                            .addHandler((request, response) -> {
+                                response.headers().add("X-Blah", "added in context. " + "context=" + request.contextPath() + ";relative=" + request.relativePath());
+                                return false;
+                            })
+                            .addHandler(RestHandlerBuilder.restHandler(new Fruit())))
             ).start();
 
         try (Response resp = call(request().url(server.uri().resolve("/some%20context/bl%20ah").toString()))) {
@@ -53,7 +55,65 @@ public class ContextHandlerTest {
         try (Response resp = call(request().url(server.uri().resolve("/some%20context/phase%20two/fruits").toString()))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.body().string(), equalTo("Fruity"));
-            assertThat(resp.header("X-Blah"), equalTo("added in context"));
+            assertThat(resp.header("X-Blah"), equalTo("added in context. context=/some%20context/phase%20two;relative=/fruits"));
+        }
+    }
+
+    @Test
+    public void slashesAreAllowable() throws IOException {
+
+        @Path("/fruits")
+        class Fruit {
+            @GET
+            public String get() {
+                return "Fruity";
+            }
+        }
+
+        server = httpsServer()
+            .addHandler(
+                context("/some context/")
+                    .addHandler(
+                        Routes.route(Method.GET, "/bl ah", (request, response, pathParams) -> {
+                            response.write("context=" + request.contextPath() + ";relative=" + request.relativePath());
+                        }))
+                    .addHandler(
+                        context("/phase two/")
+                            .addHandler((request, response) -> {
+                                response.headers().add("X-Blah", "added in context. " + "context=" + request.contextPath() + ";relative=" + request.relativePath());
+                                return false;
+                            })
+                            .addHandler(RestHandlerBuilder.restHandler(new Fruit())))
+            ).start();
+
+        try (Response resp = call(request().url(server.uri().resolve("/some%20context/bl%20ah").toString()))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), equalTo("context=/some%20context;relative=/bl%20ah"));
+        }
+        try (Response resp = call(request().url(server.uri().resolve("/some%20context/phase%20two/fruits").toString()))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), equalTo("Fruity"));
+            assertThat(resp.header("X-Blah"), equalTo("added in context. context=/some%20context/phase%20two;relative=/fruits"));
+        }
+    }
+
+    @Test
+    public void contextIsEmptyStringIfNotUsed() throws IOException {
+
+        server = httpsServer()
+            .addHandler(
+                Routes.route(Method.GET, "/", (request, response, pathParams) -> {
+                    response.write("context=" + request.contextPath() + ";relative=" + request.relativePath());
+                }))
+            .start();
+
+        try (Response resp = call(request().url(server.uri().resolve("/").toString()))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), equalTo("context=;relative=/"));
+        }
+        try (Response resp = call(request().url(server.uri().resolve("").toString()))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), equalTo("context=;relative=/"));
         }
     }
 

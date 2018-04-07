@@ -100,19 +100,22 @@ example serves requests to `/api/fruits` and `/api/info` with a CORS header adde
 
 ````java
 server = httpsServer()
-    .addHandler(context("/api",
+    .addHandler(context("/api")
         // First handler will run against any URL starting with "/api/"
-        (req, resp) -> {
-            resp.headers().set("Access-Control-Allow-Origin", "*");
-            return false; // Set not handled, so next handlers will continue
-        },
-        
+        .addHandler(
+            (req, resp) -> {
+                resp.headers().set("Access-Control-Allow-Origin", "*");
+                return false; // Set not handled, so next handlers will run
+            })
+
         // This will be used if the request is a GET for "/api/info"
-        Routes.route(Method.GET, "/info", (request, response, pathParams) -> {
-            response.write("Info");
-        }),
-        
+        .addHandler(
+            Routes.route(Method.GET, "/info", (request, response, pathParams) -> {
+                response.write("Info");
+            })
+        )
+
         // This is a JAX-RS Resource hosted at "/api/fruits"
-        RestHandlerBuilder.restHandler(new Fruit())
-    )).start();
+        .addHandler(RestHandlerBuilder.restHandler(new Fruit()))
+    ).start();
 ````
