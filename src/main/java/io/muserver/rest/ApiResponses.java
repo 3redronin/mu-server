@@ -7,6 +7,7 @@ import java.lang.annotation.Target;
 
 /**
  * Describes response codes and descriptions for an API method, for documentation purposes.
+ *
  * @see ApiResponse
  */
 @Target({ElementType.METHOD, ElementType.TYPE})
@@ -14,6 +15,7 @@ import java.lang.annotation.Target;
 public @interface ApiResponses {
     /**
      * A list of {@link ApiResponse}s provided by the API operation.
+     *
      * @return the responses
      */
     ApiResponse[] value();

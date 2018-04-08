@@ -84,6 +84,10 @@ class ResourceMethod {
         } else {
             for (ApiResponse apiResponse : apiResponseList) {
                 httpStatusCodes.put(apiResponse.code(), responseObject()
+                    .withContent(effectiveProduces.stream().collect(toMap(MediaType::toString,
+                        mt -> mediaTypeObject()
+                            .build()))
+                    )
                     .withDescription(apiResponse.message())
                     .withHeaders(Stream.of(apiResponse.responseHeaders()).collect(
                         toMap(ResponseHeader::name,

@@ -36,7 +36,7 @@ abstract class ResourceMethodParam {
 
         ValueSource source = getSource(parameterHandle);
         if (source == ValueSource.MESSAGE_BODY) {
-            DescriptionData descriptionData = DescriptionData.fromAnnotation(parameterHandle, parameterHandle.getName());
+            DescriptionData descriptionData = getDescriptionDataForParameter(parameterHandle, "requestBody");
             return new MessageBodyParam(index, source, parameterHandle, descriptionData);
         } else if (source == ValueSource.CONTEXT) {
             return new ContextParam(index, source, parameterHandle);
@@ -56,9 +56,21 @@ abstract class ResourceMethodParam {
             if (key.length() == 0) {
                 throw new WebApplicationException("No parameter specified for the " + source + " in " + parameterHandle);
             }
-            DescriptionData descriptionData = DescriptionData.fromAnnotation(parameterHandle, key);
+            DescriptionData descriptionData = getDescriptionDataForParameter(parameterHandle, key);
             return new RequestBasedParam(index, source, parameterHandle, defaultValue, encodedRequested, lazyDefaultValue, converter, descriptionData, key);
         }
+    }
+
+    private static DescriptionData getDescriptionDataForParameter(Parameter parameterHandle, String key) {
+        DescriptionData descriptionData = DescriptionData.fromAnnotation(parameterHandle, key);
+        if (!key.equals(descriptionData.summary)) {
+            String paramDesc = descriptionData.summary;
+            if (descriptionData.description != null) {
+                paramDesc += "\n" + descriptionData.description;
+            }
+            descriptionData = new DescriptionData(key, paramDesc, descriptionData.externalDocumentation);
+        }
+        return descriptionData;
     }
 
     static class RequestBasedParam extends ResourceMethodParam {

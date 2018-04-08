@@ -1,16 +1,14 @@
 package io.muserver.rest;
 
-import java.lang.annotation.ElementType;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-import java.lang.annotation.Target;
+import java.lang.annotation.*;
 
 /**
  *
  * @see ApiResponses
  */
-@Target(ElementType.METHOD)
+@Target({ElementType.METHOD, ElementType.TYPE})
 @Retention(RetentionPolicy.RUNTIME)
+@Repeatable(ApiResponses.class)
 public @interface ApiResponse {
     /**
      * The HTTP status code of the response. This is a String to allow values such as "2XX" to cover all 200-299 codes.
@@ -34,7 +32,7 @@ public @interface ApiResponse {
     ResponseHeader[] responseHeaders() default {};
 
     /**
-     * The type of the repsonse body.
+     * The type of the response body.
      * @return The type
      */
     Class<?> response() default Void.class;

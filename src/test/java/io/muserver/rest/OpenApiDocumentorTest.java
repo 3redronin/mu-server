@@ -1,6 +1,10 @@
 package io.muserver.rest;
 
 import io.muserver.MuServer;
+import io.muserver.openapi.InfoObjectBuilder;
+import io.muserver.openapi.LicenseObjectBuilder;
+import io.muserver.openapi.OpenAPIObjectBuilder;
+import io.muserver.openapi.PathsObjectBuilder;
 import org.example.petstore.resource.PetResource;
 import org.example.petstore.resource.PetStoreResource;
 import org.example.petstore.resource.UserResource;
@@ -9,9 +13,13 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.Test;
 
+import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
+import java.net.URI;
 
 import static io.muserver.MuServerBuilder.httpServer;
+import static io.muserver.openapi.ExternalDocumentationObjectBuilder.externalDocumentationObject;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsInAnyOrder;
@@ -24,13 +32,29 @@ public class OpenApiDocumentorTest {
     private final MuServer server = httpServer()
         .addHandler(RestHandlerBuilder.restHandler(
             new PetResource(), new PetStoreResource(), new UserResource(), new VehicleResource()
-        ))
+        ).withOpenApiDocument(OpenAPIObjectBuilder.openAPIObject()
+            .withInfo(InfoObjectBuilder.infoObject()
+                .withTitle("Mu Server Sample API")
+                .withVersion("1.0")
+                .withLicense(LicenseObjectBuilder.Apache2_0())
+                .withDescription("This is the **description**\n\nWhich is markdown")
+                .withTermsOfService(URI.create("http://swagger.io/terms/"))
+                .build())
+            .withExternalDocs(externalDocumentationObject()
+                .withDescription("The swagger version of this API")
+                .withUrl(URI.create("http://petstore.swagger.io"))
+                .build())
+            .withPaths(PathsObjectBuilder.pathsObject().build())
+            .build())
+
+        )
         .start();
 
     @Test
     public void hasJsonEndpoint() throws IOException {
         try (okhttp3.Response resp = call(request().url(server.uri().resolve("/openapi.json").toString()))) {
             assertThat(resp.code(), is(200));
+            assertThat(resp.header("Content-Type"), equalTo("application/json"));
             String responseBody = resp.body().string();
             JSONObject json = new JSONObject(responseBody);
             JSONObject paths = json.getJSONObject("paths");
@@ -44,6 +68,7 @@ public class OpenApiDocumentorTest {
             assertThat(downloadParams.length(), is(1));
             JSONObject downloadParam1 = downloadParams.getJSONObject(0);
             assertThat(downloadParam1.getString("name"), equalTo("petId"));
+            assertThat(downloadParam1.getString("description"), equalTo("ID of pet that needs to be fetched"));
 
 
             JSONObject findByTags = paths.getJSONObject("/pet/findByTags").getJSONObject("get");
@@ -52,9 +77,22 @@ public class OpenApiDocumentorTest {
             assertThat(findByTagsParam.getString("name"), equalTo("tags"));
             assertThat(findByTagsParam.getString("in"), equalTo("query"));
             assertThat(findByTagsParam.getJSONObject("schema").getString("type"), equalTo("string"));
-
         }
     }
 
+    @Test
+    public void canGenerateHtml() throws IOException {
+        try (okhttp3.Response resp = call(request().url(server.uri().resolve("/openapi.html").toString()))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.header("Content-Type"), equalTo("text/html"));
+            String responseBody = resp.body().string();
+            File outputFile = new File("target/openapi.html");
+            System.out.println("Creating " + outputFile.getCanonicalPath() + " which is the sample API documentation for your viewing pleasure.");
+            try (FileWriter fw = new FileWriter(outputFile)) {
+                fw.write(responseBody);
+            }
+        }
+
+    }
 
 }

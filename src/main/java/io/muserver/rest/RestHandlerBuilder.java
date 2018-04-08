@@ -1,10 +1,12 @@
 package io.muserver.rest;
 
 import io.muserver.MuHandlerBuilder;
+import io.muserver.openapi.OpenAPIObject;
 
 import javax.ws.rs.ext.MessageBodyReader;
 import javax.ws.rs.ext.MessageBodyWriter;
 import javax.ws.rs.ext.ParamConverterProvider;
+import java.io.InputStream;
 import java.util.*;
 import java.util.stream.Stream;
 
@@ -15,6 +17,8 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     private final List<MessageBodyReader> customReaders = new ArrayList<>();
     private final List<ParamConverterProvider> customParamConverterProviders = new ArrayList<>();
     private String openApiJsonUrl = "/openapi.json";
+    private OpenAPIObject openAPIObject;
+    private String openApiHtmlCss = null;
 
     public RestHandlerBuilder(Object... resources) {
         this.resources = resources;
@@ -42,6 +46,11 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
         return this;
     }
 
+    public RestHandlerBuilder withOpenApiDocument(OpenAPIObject openAPIObject) {
+        this.openAPIObject = openAPIObject;
+        return this;
+    }
+
     public RestHandler build() {
         List<MessageBodyReader> readers = EntityProviders.builtInReaders();
         readers.addAll(customReaders);
@@ -56,7 +65,13 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
             set.add(ResourceClass.fromObject(restResource, paramConverterProviders));
         }
         Set<ResourceClass> roots = Collections.unmodifiableSet(set);
-        OpenApiDocumentor documentor = new OpenApiDocumentor(roots, entityProviders, openApiJsonUrl);
+
+        InputStream cssStream = RestHandlerBuilder.class.getResourceAsStream("/io/muserver/resources/api.css");
+        if (openApiHtmlCss == null) {
+            openApiHtmlCss = new Scanner(cssStream, "UTF-8").useDelimiter("\\A").next();
+        }
+
+        OpenApiDocumentor documentor = new OpenApiDocumentor(roots, entityProviders, openApiJsonUrl, openAPIObject, openApiHtmlCss);
         return new RestHandler(entityProviders, roots, documentor);
     }
 

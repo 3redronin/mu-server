@@ -39,4 +39,8 @@ public class LicenseObjectBuilder {
     public static LicenseObjectBuilder licenseObject() {
         return new LicenseObjectBuilder();
     }
+
+    public static LicenseObject Apache2_0() {
+        return licenseObject().withName("Apache 2.0").withUrl(URI.create("http://www.apache.org/licenses/LICENSE-2.0.html")).build();
+    }
 }

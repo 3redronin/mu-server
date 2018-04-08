@@ -1,0 +1,82 @@
+html {
+    box-sizing: border-box;
+    padding: 0;
+    margin: 0;
+}
+*, *:before, *:after {
+    box-sizing: inherit;
+}
+
+body {
+    background-color: #e2e1e0;
+    padding: 0;
+    margin: 0;
+    font-family: "Lucida Sans Unicode", "Lucida Grande", Sans-Serif, serif;
+}
+
+h1 {
+    margin: 0;
+    padding: 20px 4px;
+    background-color: #283593;
+    color: white;
+    text-align: center;
+}
+
+.preamble {
+    padding: 4%;
+}
+
+.apiMetaData {
+    font-size: smaller;
+    color: #202b4d
+}
+
+.tagContainer {
+    margin-top: 30px;
+    margin-bottom: 30px;
+}
+
+h2 {
+    background-color: #3F51B5;
+    color: White;
+    padding: 20px 10PX;
+    font-size: 17pt;
+}
+
+.operation {
+    background-color: white;
+    margin: 4%;
+    padding: 4%;
+    border-radius: 2px;
+    box-shadow: 0 10px 20px rgba(0,0,0,0.19), 0 6px 6px rgba(0,0,0,0.23);
+}
+.deprecated {
+    color: #AAAAAA;
+}
+
+table.parameterTable, table.responseTable {
+    background: #fff;
+    width: 90%;
+    border-collapse: collapse;
+    text-align: left;
+    margin: 20px 5%;
+    table-layout: fixed;
+}
+
+.responseTable th, .parameterTable th {
+    font-size: 14px;
+    font-weight: normal;
+    color: #1A237E;
+    border-bottom: 2px solid #3949AB;
+    padding: 10px 8px;
+}
+
+.responseTable tbody tr:hover td, .parameterTable tbody tr:hover td {
+    color: #1A237E;
+}
+
+.responseTable td, .parameterTable td {
+    color: #283593;
+    padding: 9px 8px 0;
+}
+

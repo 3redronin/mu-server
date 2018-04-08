@@ -16,9 +16,9 @@
 
 package org.example.petstore.resource;
 
-import io.muserver.rest.Description;
 import io.muserver.rest.ApiResponse;
 import io.muserver.rest.ApiResponses;
+import io.muserver.rest.Description;
 import org.example.petstore.data.PetData;
 import org.example.petstore.model.Pet;
 
@@ -52,7 +52,8 @@ public class PetResource {
 //  )
     @ApiResponses(value = {@ApiResponse(code = "400", message = "Invalid ID supplied"), @ApiResponse(code = "404", message = "Pet not found")})
     public Response getPetById(
-//      @ApiParam(value = "ID of pet that needs to be fetched", allowableValues = "range[1,10]", required = true)
+        @Description("ID of pet that needs to be fetched")
+//      @ApiParam(allowableValues = "range[1,10]", required = true)
         @PathParam("petId") Long petId)
         throws NotFoundException {
         Pet pet = petData.getPetById(petId);
@@ -69,9 +70,11 @@ public class PetResource {
 //    response = Pet.class,
 //    authorizations = @Authorization(value = "api_key")
 //  )
-    @ApiResponses(value = {@ApiResponse(code = "400", message = "Invalid ID supplied"), @ApiResponse(code = "404", message = "Pet not found")})
+    @ApiResponse(code = "400", message = "Invalid ID supplied")
+    @ApiResponse(code = "404", message = "Pet not found")
     public Response downloadFile(
-//      @ApiParam(value = "ID of pet that needs to be fetched", allowableValues = "range[1,10]", required = true)
+//      @ApiParam(allowableValues = "range[1,10]", required = true)
+        @Description("ID of pet that needs to be fetched")
         @PathParam("petId") Long petId)
         throws NotFoundException {
         StreamingOutput stream = new StreamingOutput() {

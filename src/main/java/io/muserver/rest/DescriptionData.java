@@ -16,7 +16,7 @@ class DescriptionData {
     final String description;
     final ExternalDocumentationObject externalDocumentation;
 
-    private DescriptionData(String summary, String description, ExternalDocumentationObject externalDocumentation) {
+    DescriptionData(String summary, String description, ExternalDocumentationObject externalDocumentation) {
         this.summary = summary;
         this.description = description;
         this.externalDocumentation = externalDocumentation;
