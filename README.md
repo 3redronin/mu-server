@@ -16,7 +16,7 @@ Experimental web server, very much under construction
 <dependency>
     <groupId>io.muserver</groupId>
     <artifactId>mu-server</artifactId>
-    <version>0.5.1</version>
+    <version>0.5.2</version>
 </dependency>
 ````
 
