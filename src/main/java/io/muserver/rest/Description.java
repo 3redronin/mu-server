@@ -28,4 +28,9 @@ public @interface Description {
      */
     String documentationUrl() default "";
 
+    /**
+     * An example value
+     * @return An example value
+     */
+    String example() default "";
 }

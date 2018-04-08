@@ -41,6 +41,7 @@ public class MuServerBuilder {
     private SSLContext sslContext;
     private boolean gzipEnabled = true;
     private Set<String> mimeTypesToGzip = ResourceType.gzippableMimeTypes(ResourceType.getResourceTypes());
+    private boolean addShutdownHook = false;
 
     /**
      * @param port The HTTP port to use. A value of 0 will have a random port assigned; a value of -1 will
@@ -49,6 +50,15 @@ public class MuServerBuilder {
      */
     public MuServerBuilder withHttpPort(int port) {
         this.httpPort = port;
+        return this;
+    }
+
+    /**
+     * @param stopServerOnShutdown If true, then a shutdown hook which stops this server will be added to the JVM Runtime
+     * @return The current Mu-Server Builder
+     */
+    public MuServerBuilder addShutdownHook(boolean stopServerOnShutdown) {
+        this.addShutdownHook = stopServerOnShutdown;
         return this;
     }
 
@@ -275,7 +285,11 @@ public class MuServerBuilder {
                 httpsUri = getUriFromChannel(httpsChannel, "https");
             }
 
-            return new MuServer(uri, httpsUri, shutdown);
+            MuServer server = new MuServer(uri, httpsUri, shutdown);
+            if (addShutdownHook) {
+                Runtime.getRuntime().addShutdownHook(new Thread(server::stop));
+            }
+            return server;
 
         } catch (Exception ex) {
             shutdown.run();

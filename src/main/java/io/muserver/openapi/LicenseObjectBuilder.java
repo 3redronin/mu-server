@@ -40,7 +40,24 @@ public class LicenseObjectBuilder {
         return new LicenseObjectBuilder();
     }
 
+    /**
+     * @return A license with name "Apache 2.0" and URL <a href="http://www.apache.org/licenses/LICENSE-2.0.html">http://www.apache.org/licenses/LICENSE-2.0.html</a>
+     */
     public static LicenseObject Apache2_0() {
         return licenseObject().withName("Apache 2.0").withUrl(URI.create("http://www.apache.org/licenses/LICENSE-2.0.html")).build();
+    }
+
+    /**
+     * @return A license with name "MIT License" and URL <a href="https://opensource.org/licenses/mit-license.php">https://opensource.org/licenses/mit-license.php</a>
+     */
+    public static LicenseObject MITLicense() {
+        return licenseObject().withName("MIT License").withUrl(URI.create("https://opensource.org/licenses/mit-license.php")).build();
+    }
+
+    /**
+     * @return A license with name "The Unlicense" and URL <a href="https://unlicense.org">https://unlicense.org</a>
+     */
+    public static LicenseObject TheUnlicense() {
+        return licenseObject().withName("The Unlicense").withUrl(URI.create("https://unlicense.org")).build();
     }
 }

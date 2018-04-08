@@ -93,6 +93,25 @@ MuServer server = MuServerBuilder.httpsServer()
 Making a `GET` request to `server.uri().resolve("/fruits/orange")` in this case would return the JSON
 snippet corresponding to the Orange case.
 
+### API documentation
+
+With REST services, Open API spec JSON and documentation HTML can be automatically generated and served by
+your server by specifying some documentation data:
+
+````java
+MuServer server = MuServerBuilder.httpsServer()
+    .addHandler(
+        RestHandlerBuilder.restHandler(new Fruit())
+            .withDocumentation()
+            .withOpenApiHtmlUrl("/docs.html")
+            .withOpenApiJsonUrl("/api.json")
+    ).start();
+
+System.out.println("Browse documentation at " + server.uri().resolve("/docs.html") 
+    + " and " + server.uri().resolve("/api.json"));
+````
+
+
 ## Context paths
 
 You can serve all requests from a base path by wrapping your handlers in context handlers. The following

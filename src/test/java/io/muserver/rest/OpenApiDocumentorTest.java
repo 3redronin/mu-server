@@ -4,7 +4,6 @@ import io.muserver.MuServer;
 import io.muserver.openapi.InfoObjectBuilder;
 import io.muserver.openapi.LicenseObjectBuilder;
 import io.muserver.openapi.OpenAPIObjectBuilder;
-import io.muserver.openapi.PathsObjectBuilder;
 import org.example.petstore.resource.PetResource;
 import org.example.petstore.resource.PetStoreResource;
 import org.example.petstore.resource.UserResource;
@@ -32,23 +31,21 @@ public class OpenApiDocumentorTest {
     private final MuServer server = httpServer()
         .addHandler(RestHandlerBuilder.restHandler(
             new PetResource(), new PetStoreResource(), new UserResource(), new VehicleResource()
-        ).withOpenApiDocument(OpenAPIObjectBuilder.openAPIObject()
-            .withInfo(InfoObjectBuilder.infoObject()
-                .withTitle("Mu Server Sample API")
-                .withVersion("1.0")
-                .withLicense(LicenseObjectBuilder.Apache2_0())
-                .withDescription("This is the **description**\n\nWhich is markdown")
-                .withTermsOfService(URI.create("http://swagger.io/terms/"))
-                .build())
-            .withExternalDocs(externalDocumentationObject()
-                .withDescription("The swagger version of this API")
-                .withUrl(URI.create("http://petstore.swagger.io"))
-                .build())
-            .withPaths(PathsObjectBuilder.pathsObject().build())
-            .build())
-
+            ).withOpenApiDocument(OpenAPIObjectBuilder.openAPIObject()
+                .withInfo(InfoObjectBuilder.infoObject()
+                    .withTitle("Mu Server Sample API")
+                    .withVersion("1.0")
+                    .withLicense(LicenseObjectBuilder.Apache2_0())
+                    .withDescription("This is the **description**\n\nWhich is markdown")
+                    .withTermsOfService(URI.create("http://swagger.io/terms/"))
+                    .build())
+                .withExternalDocs(externalDocumentationObject()
+                    .withDescription("The swagger version of this API")
+                    .withUrl(URI.create("http://petstore.swagger.io"))
+                    .build()))
         )
         .start();
+
 
     @Test
     public void hasJsonEndpoint() throws IOException {
@@ -82,7 +79,7 @@ public class OpenApiDocumentorTest {
 
     @Test
     public void canGenerateHtml() throws IOException {
-        try (okhttp3.Response resp = call(request().url(server.uri().resolve("/openapi.html").toString()))) {
+        try (okhttp3.Response resp = call(request().url(server.uri().resolve("/api.html").toString()))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.header("Content-Type"), equalTo("text/html"));
             String responseBody = resp.body().string();

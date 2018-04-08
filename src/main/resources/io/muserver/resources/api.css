@@ -9,7 +9,7 @@ html {
 
 body {
     background-color: #e2e1e0;
-    padding: 0;
+    padding: 0 0 200px;
     margin: 0;
     font-family: "Lucida Sans Unicode", "Lucida Grande", Sans-Serif, serif;
 }
@@ -39,8 +39,9 @@ h1 {
 h2 {
     background-color: #3F51B5;
     color: White;
-    padding: 20px 10PX;
+    padding: 20px 10px;
     font-size: 17pt;
+    margin: 100px 0 0;
 }
 
 .operation {
@@ -49,6 +50,7 @@ h2 {
     padding: 4%;
     border-radius: 2px;
     box-shadow: 0 10px 20px rgba(0,0,0,0.19), 0 6px 6px rgba(0,0,0,0.23);
+    max-width: 2000px;
 }
 .deprecated {
     color: #AAAAAA;

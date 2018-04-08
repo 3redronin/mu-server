@@ -50,7 +50,8 @@ public class PetResource {
 //    response = Pet.class,
 //    authorizations = @Authorization(value = "api_key")
 //  )
-    @ApiResponses(value = {@ApiResponse(code = "400", message = "Invalid ID supplied"), @ApiResponse(code = "404", message = "Pet not found")})
+    @ApiResponse(code = "400", message = "Invalid ID supplied")
+    @ApiResponse(code = "404", message = "Pet not found")
     public Response getPetById(
         @Description("ID of pet that needs to be fetched")
 //      @ApiParam(allowableValues = "range[1,10]", required = true)

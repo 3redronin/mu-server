@@ -36,7 +36,7 @@ public class RestHandler implements MuHandler {
     @Override
     @SuppressWarnings("unchecked")
     public boolean handle(MuRequest request, MuResponse muResponse) throws Exception {
-        if (documentor.handle(request, muResponse)) {
+        if (documentor != null && documentor.handle(request, muResponse)) {
             return true;
         }
         String relativePath = Mutils.trim(request.relativePath(), "/");

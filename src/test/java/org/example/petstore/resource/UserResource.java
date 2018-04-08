@@ -104,10 +104,11 @@ public class UserResource {
     @Description("Get user by user name")
 //    response = User.class,
 //    position = 0)
+    @ApiResponse(code = "200", message = "Successful operation", response=User.class)
     @ApiResponse(code = "400", message = "Invalid username supplied")
     @ApiResponse(code = "404", message = "User not found")
     public Response getUserByName(
-        @Description(value = "The name that needs to be fetched. Use user1 for testing.") //, required = true)
+        @Description(value = "The name that needs to be fetched. Use user1 for testing.")
         @PathParam("username") String username)
         throws ApiException {
         User user = userData.findUserByName(username);

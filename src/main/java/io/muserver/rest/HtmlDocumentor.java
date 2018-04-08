@@ -5,6 +5,7 @@ import io.muserver.openapi.*;
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -31,7 +32,6 @@ class HtmlDocumentor {
 
         render("title", api.info.title);
 
-        //language=CSS
         new El("style").open().contentRaw(css).close();
 
         head.close();
@@ -84,6 +84,37 @@ class HtmlDocumentor {
         preamble.close();
 
 
+        El nav = new El("ul").open(singletonMap("class", "nav"));
+        for (TagObject tag : api.tags) {
+            El li = new El("li").open();
+            new El("a").open(singletonMap("href", "#" + htmlEscape(tag.name))).content(tag.name).close();
+
+            El subNav = new El("ul").open(singletonMap("class", "subNav"));
+            for (Map.Entry<String, PathItemObject> entry : api.paths.pathItemObjects.entrySet()) {
+                String url = entry.getKey();
+                PathItemObject item = entry.getValue();
+                for (Map.Entry<String, OperationObject> operationObjectEntry : item.operations.entrySet()) {
+                    String method = operationObjectEntry.getKey();
+                    OperationObject operation = operationObjectEntry.getValue();
+                    if (operation.tags.contains(tag.name)) {
+
+                        El subNavLi = new El("li").open();
+                        new El("a").open(singletonMap("href", "#" + htmlEscape(operation.operationId))).content(method.toUpperCase() + " " + url).close();
+                        subNavLi.close();
+
+                    }
+                }
+            }
+
+
+            subNav.close();
+            li.close();
+
+
+        }
+        nav.close();
+
+
         for (TagObject tag : api.tags) {
             El tagContainer = new El("div").open(singletonMap("class", "tagContainer"));
             new El("h2").open(singletonMap("id", htmlEscape(tag.name))).content(tag.name).close();
@@ -97,7 +128,10 @@ class HtmlDocumentor {
                     OperationObject operation = operationObjectEntry.getValue();
                     if (operation.tags.contains(tag.name)) {
 
-                        El operationDiv = new El("div").open(singletonMap("class", "operation" + (operation.deprecated ? " deprecated" : "")));
+                        Map<String, String> operationAttributes = new HashMap<>();
+                        operationAttributes.put("id", htmlEscape(operation.operationId));
+                        operationAttributes.put("class", "operation");
+                        El operationDiv = new El("div").open(operationAttributes);
 
                         new El("h3").open().content(method.toUpperCase() + " " + url).close();
                         renderIfValue("p", operation.summary);
@@ -184,9 +218,10 @@ class HtmlDocumentor {
                         }
 
 
-
                         if (!operation.responses.httpStatusCodes.isEmpty()) {
                             render("h4", "Responses");
+
+
                             El table = new El("table").open(singletonMap("class", "responseTable"));
 
                             El thead = new El("thead").open();
@@ -215,8 +250,6 @@ class HtmlDocumentor {
                             tbody.close();
                             table.close();
                         }
-
-
 
 
                         operationDiv.close();

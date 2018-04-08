@@ -9,7 +9,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 import static io.muserver.Mutils.notNull;
-import static io.muserver.openapi.InfoObjectBuilder.infoObject;
 import static io.muserver.openapi.MediaTypeObjectBuilder.mediaTypeObject;
 import static io.muserver.openapi.PathItemObjectBuilder.pathItemObject;
 import static io.muserver.openapi.PathsObjectBuilder.pathsObject;
@@ -21,17 +20,16 @@ import static java.util.stream.Collectors.toList;
 
 class OpenApiDocumentor implements MuHandler {
     private final Set<ResourceClass> roots;
-    private final EntityProviders entityProviders;
     private final String openApiJsonUrl;
     private final OpenAPIObject openAPIObject;
-    private final String openApiHtmlUrl = "openapi.html";
+    private final String openApiHtmlUrl;
     private final String openApiHtmlCss;
 
-    OpenApiDocumentor(Set<ResourceClass> roots, EntityProviders entityProviders, String openApiJsonUrl, OpenAPIObject openAPIObject, String openApiHtmlCss) {
+    OpenApiDocumentor(Set<ResourceClass> roots, String openApiJsonUrl, String openApiHtmlUrl, OpenAPIObject openAPIObject, String openApiHtmlCss) {
         notNull("openAPIObject", openAPIObject);
         this.roots = roots;
-        this.entityProviders = entityProviders;
         this.openApiJsonUrl = Mutils.trim(openApiJsonUrl, "/");
+        this.openApiHtmlUrl = Mutils.trim(openApiHtmlUrl, "/");
         this.openAPIObject = openAPIObject;
         this.openApiHtmlCss = openApiHtmlCss;
     }
@@ -73,6 +71,7 @@ class OpenApiDocumentor implements MuHandler {
 
                 operations.put(method.httpMethod.name().toLowerCase(),
                     method.createOperationBuilder()
+                        .withOperationId(method.httpMethod.name() + "_" + Mutils.trim(Mutils.join(root.pathTemplate, "/", method.pathTemplate), "/").replace("/", "_"))
                         .withTags(singletonList(root.tag.name))
                         .withParameters(parameters)
                         .withRequestBody(
@@ -89,37 +88,19 @@ class OpenApiDocumentor implements MuHandler {
             }
         }
 
-        OpenAPIObjectBuilder api = OpenAPIObjectBuilder.openAPIObject();
 
-        if (openAPIObject.info == null) {
-            api.withInfo(infoObject()
-                .withTitle("Title")
-                .withVersion("1.0")
-                .build());
-        } else {
-            api.withInfo(openAPIObject.info);
-        }
-
-
-        api.withExternalDocs(openAPIObject.externalDocs);
-        api.withSecurity(openAPIObject.security);
-
-
-        api.withServers(
-            singletonList(
-                serverObject()
-                    .withUrl(Mutils.trim(request.uri().resolve(request.contextPath()).toString(), "/"))
-                    .build())
-        );
-
-        api
-            .withPaths(
-                pathsObject()
-                    .withPathItemObjects(pathItems)
-                    .build()
+        OpenAPIObjectBuilder api = OpenAPIObjectBuilder.openAPIObject()
+            .withInfo(openAPIObject.info)
+            .withExternalDocs(openAPIObject.externalDocs)
+            .withSecurity(openAPIObject.security)
+            .withServers(
+                singletonList(
+                    serverObject()
+                        .withUrl(Mutils.trim(request.uri().resolve(request.contextPath()).toString(), "/"))
+                        .build())
             )
-            .withTags(tags)
-            .build();
+            .withPaths(pathsObject().withPathItemObjects(pathItems).build())
+            .withTags(tags);
 
         OpenAPIObject builtApi = api.build();
 

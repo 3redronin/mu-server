@@ -7,15 +7,15 @@ import java.net.URI;
  * in editing or documentation generation tools for convenience.
  */
 public class InfoObjectBuilder {
-    private String title;
+    private String title = "API Documentation";
     private String description;
     private URI termsOfService;
     private ContactObject contact;
     private LicenseObject license;
-    private String version;
+    private String version = "1.0";
 
     /**
-     * @param title <strong>REQUIRED</strong>. The title of the application.
+     * @param title <strong>REQUIRED</strong>. The title of the application. Default value is <code>API Documentation</code>
      * @return The current builder
      */
     public InfoObjectBuilder withTitle(String title) {
@@ -61,7 +61,7 @@ public class InfoObjectBuilder {
     }
 
     /**
-     * @param version <strong>REQUIRED</strong>. The version of the OpenAPI document
+     * @param version <strong>REQUIRED</strong>. The version of the OpenAPI document. Default value is <code>1.0</code>
      * @return The current builder
      */
     public InfoObjectBuilder withVersion(String version) {

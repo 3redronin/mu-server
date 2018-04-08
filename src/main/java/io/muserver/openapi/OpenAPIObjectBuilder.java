@@ -2,6 +2,8 @@ package io.muserver.openapi;
 
 import java.util.List;
 
+import static io.muserver.openapi.InfoObjectBuilder.infoObject;
+
 /**
  * This is the root document object of the OpenAPI document.
  */
@@ -85,7 +87,8 @@ public class OpenAPIObjectBuilder {
     }
 
     public OpenAPIObject build() {
-        return new OpenAPIObject(info, servers, paths, components, security, tags, externalDocs);
+        InfoObject infoToUse = this.info == null ? infoObject().build() : this.info;
+        return new OpenAPIObject(infoToUse, servers, paths, components, security, tags, externalDocs);
     }
 
     /**
