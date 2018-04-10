@@ -43,6 +43,8 @@ public class OpenApiDocumentorTest {
                     .withDescription("The swagger version of this API")
                     .withUrl(URI.create("http://petstore.swagger.io"))
                     .build()))
+            .withOpenApiJsonUrl("/openapi.json")
+            .withOpenApiHtmlUrl("/api.html")
         )
         .start();
 
