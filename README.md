@@ -96,21 +96,23 @@ snippet corresponding to the Orange case.
 ### API documentation
 
 With REST services, Open API spec JSON and documentation HTML can be automatically generated and served by
-your server by specifying some documentation data:
+your server by specifying one or more documenation URLs:
 
 ````java
 MuServer server = MuServerBuilder.httpsServer()
     .addHandler(
         RestHandlerBuilder.restHandler(new Fruit())
-            .withDocumentation()
             .withOpenApiHtmlUrl("/docs.html")
-            .withOpenApiJsonUrl("/api.json")
+            .withOpenApiJsonUrl("/openapi.json")
     ).start();
 
 System.out.println("Browse documentation at " + server.uri().resolve("/docs.html") 
-    + " and " + server.uri().resolve("/api.json"));
+    + " and " + server.uri().resolve("/openapi.json"));
 ````
 
+The HTML endpoint provides a simple documentation page for the rest resources added to the rest handler builder.
+For more advanced REST documentation, you can use a UI such as swagger-ui and point it at the JSON end point.
+Also see the `withOpenApiDocument` method on the builder to set the API title, description, and other extra info.
 
 ## Context paths
 

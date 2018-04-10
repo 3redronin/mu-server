@@ -19,8 +19,8 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     private final List<MessageBodyWriter> customWriters = new ArrayList<>();
     private final List<MessageBodyReader> customReaders = new ArrayList<>();
     private final List<ParamConverterProvider> customParamConverterProviders = new ArrayList<>();
-    private String openApiJsonUrl = "/openapi.json";
-    private String openApiHtmlUrl = "/api.html";
+    private String openApiJsonUrl = null;
+    private String openApiHtmlUrl = null;
     private OpenAPIObjectBuilder openAPIObject;
     private String openApiHtmlCss = null;
 
@@ -37,20 +37,25 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
         customWriters.add(writer);
         return this;
     }
+
     public RestHandlerBuilder addCustomReader(MessageBodyReader reader) {
         customReaders.add(reader);
         return this;
     }
+
     public RestHandlerBuilder addCustomParamConverterProvider(ParamConverterProvider paramConverterProvider) {
         customParamConverterProviders.add(paramConverterProvider);
         return this;
     }
 
     /**
-     * If {@link #withOpenApiDocument(OpenAPIObjectBuilder)} is set, this specifies the OPEN API JSON URL
-     * (relative to any contexts).
-     * @param url The URL to serve from, or <code>null</code> to disable the JSON endpoint. By default it is <code>/openapi.json</code>
+     * Enables an <a href="https://www.openapis.org">Open API</a> JSON URL at the specified endpoint. This JSON describes the API exposed
+     * by the rest resources declared by this builder, and can be used by UIs such as Swagger.
+     *
+     * @param url The URL to serve from, for example <code>/openapi.json</code> or <code>null</code> to disable the JSON endpoint. Disabled by default.
      * @return The current Rest Handler Builder
+     * @see #withOpenApiDocument(OpenAPIObjectBuilder)
+     * @see #withOpenApiHtmlUrl(String)
      */
     public RestHandlerBuilder withOpenApiJsonUrl(String url) {
         this.openApiJsonUrl = url;
@@ -58,10 +63,13 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     }
 
     /**
-     * If {@link #withOpenApiDocument(OpenAPIObjectBuilder)} is set, this specifies the HTML API documentation URL
-     * (relative to any contexts).
-     * @param url The URL to serve from, or <code>null</code> to disable the HTML endpoint. By default it is <code>/api.html</code>
+     * Enables a simple HTML endpoint that documents the API exposed by the rest resources declared by this builder.
+     *
+     * @param url The URL to serve from, for example <code>/api.html</code> or <code>null</code> to disable the HTML endpoint. Disabled by default.
      * @return The current Rest Handler Builder
+     * @see #withOpenApiDocument(OpenAPIObjectBuilder)
+     * @see #withOpenApiJsonUrl(String)
+     * @see #withOpenApiHtmlCss(String)
      */
     public RestHandlerBuilder withOpenApiHtmlUrl(String url) {
         this.openApiHtmlUrl = url;
@@ -71,6 +79,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     /**
      * When using the HTML endpoint made available by calling {@link #withOpenApiDocument(OpenAPIObjectBuilder)}
      * this allows you to override the default CSS that is used.
+     *
      * @param css A string containing a style sheet definition.
      * @return The current Rest Handler Builder
      */
@@ -107,11 +116,12 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * <p>The path information and operation information will be automatically generated. By default, you can access
      * the Open API specification of your rest service at <code>/openapi.json</code> or view the HTML at
      * <code>/api.html</code></p>
+     *
+     * @param openAPIObject An API Object builder with the {@link OpenAPIObjectBuilder#withInfo(InfoObject)} set.
+     * @return The current Rest Handler Builder
      * @see OpenAPIObjectBuilder#openAPIObject()
      * @see #withOpenApiJsonUrl(String)
      * @see #withOpenApiHtmlUrl(String)
-     * @param openAPIObject An API Object builder with the {@link OpenAPIObjectBuilder#withInfo(InfoObject)} set.
-     * @return The current Rest Handler Builder
      */
     public RestHandlerBuilder withOpenApiDocument(OpenAPIObjectBuilder openAPIObject) {
         this.openAPIObject = openAPIObject;
@@ -119,12 +129,12 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     }
 
     /**
-     * <p>Enables documentation generation. This is a shorthand for <code>withOpenApiDocument(OpenAPIObjectBuilder.openAPIObject())</code></p>
-     * <p>For more advanced options, use {@link #withOpenApiDocument(OpenAPIObjectBuilder)} directly.</p>
      * @return The current Rest Handler Builder
+     * @deprecated This does nothing. To expose API endpoints, use {@link #withOpenApiJsonUrl(String)} and/or {@link #withOpenApiHtmlUrl(String)}
      */
+    @Deprecated
     public RestHandlerBuilder withDocumentation() {
-        return this.withOpenApiDocument(OpenAPIObjectBuilder.openAPIObject());
+        return this;
     }
 
     public RestHandler build() {
@@ -143,14 +153,16 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
         Set<ResourceClass> roots = Collections.unmodifiableSet(set);
 
         OpenApiDocumentor documentor = null;
-        if (openAPIObject != null) {
+        if (openApiHtmlUrl != null || openApiJsonUrl != null) {
             if (openApiHtmlCss == null) {
                 InputStream cssStream = RestHandlerBuilder.class.getResourceAsStream("/io/muserver/resources/api.css");
                 openApiHtmlCss = new Scanner(cssStream, "UTF-8").useDelimiter("\\A").next();
             }
-            openAPIObject.withPaths(pathsObject().build());
-            documentor = new OpenApiDocumentor(roots, openApiJsonUrl, openApiHtmlUrl, openAPIObject.build(), openApiHtmlCss);
+            OpenAPIObjectBuilder openAPIObjectToUse = this.openAPIObject == null ? OpenAPIObjectBuilder.openAPIObject() : this.openAPIObject;
+            openAPIObjectToUse.withPaths(pathsObject().build());
+            documentor = new OpenApiDocumentor(roots, openApiJsonUrl, openApiHtmlUrl, openAPIObjectToUse.build(), openApiHtmlCss);
         }
+
         return new RestHandler(entityProviders, roots, documentor);
     }
 
@@ -159,9 +171,9 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     }
 
     /**
-     * @deprecated Use restHandler(resources).build() instead.
      * @param resources Resources to register
      * @return Returns a rest handler with the given resources.
+     * @deprecated Use restHandler(resources).build() instead.
      */
     @Deprecated
     public static RestHandler create(Object... resources) {

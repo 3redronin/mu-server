@@ -15,14 +15,13 @@ public class DocumentationExamples {
             }
         }
 
-MuServer server = MuServerBuilder.httpsServer()
-    .addHandler(
-        RestHandlerBuilder.restHandler(new Fruit())
-            .withDocumentation()
-            .withOpenApiHtmlUrl("/docs.html")
-            .withOpenApiJsonUrl("/api.json")
-    ).start();
-System.out.println("Browse documentation at " + server.uri().resolve("/docs.html")
-    + " and " + server.uri().resolve("/api.json"));
+        MuServer server = MuServerBuilder.httpsServer()
+            .addHandler(
+                RestHandlerBuilder.restHandler(new Fruit())
+                    .withOpenApiHtmlUrl("/docs.html")
+                    .withOpenApiJsonUrl("/api.json")
+            ).start();
+        System.out.println("Browse documentation at " + server.uri().resolve("/docs.html")
+            + " and " + server.uri().resolve("/api.json"));
     }
 }
