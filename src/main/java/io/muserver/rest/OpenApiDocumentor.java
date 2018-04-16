@@ -28,8 +28,8 @@ class OpenApiDocumentor implements MuHandler {
     OpenApiDocumentor(Set<ResourceClass> roots, String openApiJsonUrl, String openApiHtmlUrl, OpenAPIObject openAPIObject, String openApiHtmlCss) {
         notNull("openAPIObject", openAPIObject);
         this.roots = roots;
-        this.openApiJsonUrl = Mutils.trim(openApiJsonUrl, "/");
-        this.openApiHtmlUrl = Mutils.trim(openApiHtmlUrl, "/");
+        this.openApiJsonUrl = openApiJsonUrl == null ? null : Mutils.trim(openApiJsonUrl, "/");
+        this.openApiHtmlUrl = openApiHtmlUrl == null ? null : Mutils.trim(openApiHtmlUrl, "/");
         this.openAPIObject = openAPIObject;
         this.openApiHtmlCss = openApiHtmlCss;
     }

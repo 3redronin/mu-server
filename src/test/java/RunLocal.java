@@ -23,9 +23,13 @@ public class RunLocal {
                 response.contentType(ContentTypes.APPLICATION_JSON);
                 response.write("{ \"hello\": \"world                    this is something           to be gzipped\" }");
             })
-            .addHandler(RestHandlerBuilder.restHandler(
-                new PetResource(), new PetStoreResource(), new UserResource(), new VehicleResource()
-            ))
+            .addHandler(
+                RestHandlerBuilder.restHandler(
+                    new PetResource(), new PetStoreResource(), new UserResource(), new VehicleResource()
+                )
+                    .withOpenApiJsonUrl("/openapi.json")
+                    .withOpenApiHtmlUrl("/api.html")
+            )
             .addHandler(Method.GET, "/stream", (request, response, pathParams) -> {
                 response.contentType(ContentTypes.TEXT_PLAIN);
                 for (int i = 0; i < Integer.MAX_VALUE; i++) {
@@ -40,7 +44,7 @@ public class RunLocal {
             .start();
 
         System.out.println("Started at " + server.httpUri() + " and " + server.httpsUri());
-        System.out.println("Open API JSON available at " + server.httpUri().resolve("/openapi.json"));
+        System.out.println("REST docs available at " + server.httpUri().resolve("/api.html") + " and OpenAPI JSON at " + server.httpUri().resolve("/openapi.json"));
 
         File[] files = BIG_FILE_DIR.listFiles(File::isFile);
         for (File file : files) {
