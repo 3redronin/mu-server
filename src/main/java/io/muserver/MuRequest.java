@@ -1,24 +1,27 @@
 package io.muserver;
 
-import io.netty.handler.codec.http.HttpHeaders;
-import io.netty.handler.codec.http.HttpRequest;
-import io.netty.handler.codec.http.HttpUtil;
-import io.netty.handler.codec.http.QueryStringDecoder;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import io.netty.handler.codec.http.*;
 import io.netty.handler.codec.http.cookie.ServerCookieDecoder;
+import io.netty.handler.codec.http.multipart.Attribute;
+import io.netty.handler.codec.http.multipart.FileUpload;
+import io.netty.handler.codec.http.multipart.HttpPostMultipartRequestDecoder;
+import io.netty.handler.codec.http.multipart.InterfaceHttpData;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
-import java.util.Collections;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 
 import static io.muserver.Cookie.nettyToMu;
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.Collections.emptyList;
 import static java.util.Collections.emptySet;
 
 public interface MuRequest {
+
+    String contentType();
 
     /**
      * @return The request method, e.g. GET or POST
@@ -74,9 +77,29 @@ public interface MuRequest {
     String readBodyAsString() throws IOException;
 
     /**
-     * Gets the querystring value with the given name, or empty string if there is no parameter with that name.
-     * <p>
-     * If there are multiple parameters with the same name, the first one is returned.
+     * Gets all the uploaded files with the given name, or an empty list if none are found.
+     *
+     * @param name The file input name to get
+     * @return All the files with the given name
+     * @throws IOException Thrown when there is an error while reading the file, e.g. if a user closes their
+     *                     browser before the upload is complete.
+     */
+    List<UploadedFile> uploadedFiles(String name) throws IOException;
+
+    /**
+     * <p>Gets the uploaded file with the given name, or null if there is no upload with that name.</p>
+     * <p>If there are multiple files with the same name, the first one is returned.</p>
+     *
+     * @param name The querystring parameter name to get
+     * @return The querystring value, or an empty string
+     * @throws IOException Thrown when there is an error while reading the file, e.g. if a user closes their
+     *                     browser before the upload is complete.
+     */
+    UploadedFile uploadedFile(String name) throws IOException;
+
+    /**
+     * <p>Gets the querystring value with the given name, or empty string if there is no parameter with that name.</p>
+     * <p>If there are multiple parameters with the same name, the first one is returned.</p>
      *
      * @param name The querystring parameter name to get
      * @return The querystring value, or an empty string
@@ -119,18 +142,21 @@ public interface MuRequest {
 
     /**
      * Gets all the client-sent cookies
+     *
      * @return A set of cookie objects
      */
     Set<Cookie> cookies();
 
     /**
      * Gets the value of the client-sent cookie with the given name
+     *
      * @param name The name of the cookie
      * @return The cookie, or {@link Optional#empty()} if there is no cookie with that name.
      */
     Optional<String> cookie(String name);
 
     String contextPath();
+
     String relativePath();
 
 }
@@ -148,8 +174,10 @@ class NettyRequestAdapter implements MuRequest {
     private Set<Cookie> cookies;
     private String contextPath = "";
     private String relativePath;
+    private HttpPostMultipartRequestDecoder multipartRequestDecoder;
+    private HashMap<String, List<UploadedFile>> uploads;
 
-    public NettyRequestAdapter(String proto, HttpRequest request) {
+    NettyRequestAdapter(String proto, HttpRequest request) {
         this.request = request;
         this.serverUri = URI.create(proto + "://" + request.headers().get(HeaderNames.HOST) + request.uri());
         this.uri = getUri(request, serverUri);
@@ -172,6 +200,15 @@ class NettyRequestAdapter implements MuRequest {
         return URI.create(proto + "://" + host + portString + request.uri());
     }
 
+    @Override
+    public String contentType() {
+        String c = headers.get(HttpHeaderNames.CONTENT_TYPE);
+        if (c == null) return null;
+        if (c.contains(";")) {
+            return c.split(";")[0];
+        }
+        return c;
+    }
 
     public Method method() {
         return method;
@@ -202,15 +239,18 @@ class NettyRequestAdapter implements MuRequest {
         }
     }
 
-
-    public String readBodyAsString() throws IOException {
+    private byte[] readBodyAsBytes() throws IOException {
         if (inputStream != null) {
             claimingBodyRead();
-            byte[] bytes = Mutils.toByteArray(inputStream, 2048);
-            return new String(bytes, UTF_8); // TODO: respect the charset of the content-type if provided
+            return Mutils.toByteArray(inputStream, 2048);
         } else {
-            return "";
+            return new byte[0];
         }
+    }
+
+
+    public String readBodyAsString() throws IOException {
+        return new String(readBodyAsBytes(), UTF_8); // TODO: respect the charset of the content-type if provided
     }
 
     private void claimingBodyRead() {
@@ -220,6 +260,25 @@ class NettyRequestAdapter implements MuRequest {
         bodyRead = true;
     }
 
+    @Override
+    public List<UploadedFile> uploadedFiles(String name) throws IOException {
+        ensureFormDataLoaded();
+        List<UploadedFile> list = uploads.get(name);
+        return list == null ? emptyList() : list;
+    }
+
+    @Override
+    public UploadedFile uploadedFile(String name) throws IOException {
+        List<UploadedFile> uploadedFiles = uploadedFiles(name);
+        return uploadedFiles.isEmpty() ? null : uploadedFiles.get(0);
+    }
+
+    private void addFile(String name, UploadedFile file) {
+        if (!uploads.containsKey(name)) {
+            uploads.put(name, new ArrayList<>());
+        }
+        uploads.get(name).add(file);
+    }
 
     public String parameter(String name) {
         return getSingleParam(name, queryStringDecoder);
@@ -241,7 +300,7 @@ class NettyRequestAdapter implements MuRequest {
     private static List<String> getMultipleParams(String name, QueryStringDecoder queryStringDecoder) {
         List<String> values = queryStringDecoder.parameters().get(name);
         if (values == null) {
-            return Collections.emptyList();
+            return emptyList();
         }
         return values;
     }
@@ -294,8 +353,43 @@ class NettyRequestAdapter implements MuRequest {
 
     private void ensureFormDataLoaded() throws IOException {
         if (formDecoder == null) {
-            String body = readBodyAsString();
-            formDecoder = new QueryStringDecoder(body, false);
+            if (contentType().startsWith("multipart/")) {
+                multipartRequestDecoder = new HttpPostMultipartRequestDecoder(request);
+                if (inputStream != null) {
+                    claimingBodyRead();
+
+                    byte[] buffer = new byte[16 * 1024];
+                    int read;
+                    while ((read = inputStream.read(buffer)) > -1) {
+                        if (read > 0) {
+                            ByteBuf content = Unpooled.copiedBuffer(buffer, 0, read);
+                            multipartRequestDecoder.offer(new DefaultHttpContent(content));
+                        }
+                    }
+                }
+                multipartRequestDecoder.offer(new DefaultLastHttpContent());
+                uploads = new HashMap<>();
+
+                List<InterfaceHttpData> bodyHttpDatas = multipartRequestDecoder.getBodyHttpDatas();
+                QueryStringEncoder qse = new QueryStringEncoder("/");
+
+                for (InterfaceHttpData bodyHttpData : bodyHttpDatas) {
+                    if (bodyHttpData instanceof FileUpload) {
+                        FileUpload fileUpload = (FileUpload) bodyHttpData;
+                        UploadedFile uploadedFile = new MuUploadedFile(fileUpload);
+                        addFile(fileUpload.getName(), uploadedFile);
+                    } else if (bodyHttpData instanceof Attribute) {
+                        Attribute a = (Attribute) bodyHttpData;
+                        qse.addParam(a.getName(), a.getValue());
+                    } else {
+                        System.out.println("Unrecognised body part: " + bodyHttpData.getClass());
+                    }
+                }
+                formDecoder = new QueryStringDecoder(qse.toString());
+            } else {
+                String body = readBodyAsString();
+                formDecoder = new QueryStringDecoder(body, false);
+            }
         }
     }
 
@@ -316,5 +410,11 @@ class NettyRequestAdapter implements MuRequest {
         }
         this.contextPath = this.contextPath + contextToAdd;
         this.relativePath = this.relativePath.substring(contextToAdd.length());
+    }
+
+    void clean() {
+        if (multipartRequestDecoder != null) {
+            multipartRequestDecoder.destroy();
+        }
     }
 }

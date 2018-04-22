@@ -7,6 +7,8 @@ import org.example.petstore.resource.UserResource;
 import org.example.petstore.resource.VehicleResource;
 
 import java.io.File;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.URI;
 
 import static io.muserver.Mutils.urlEncode;
@@ -30,6 +32,16 @@ public class RunLocal {
                     .withOpenApiJsonUrl("/openapi.json")
                     .withOpenApiHtmlUrl("/api.html")
             )
+            .addHandler(Method.POST, "/upload", (request, response, pathParams) -> {
+                UploadedFile file = request.uploadedFile("theFile");
+                response.contentType(file.contentType());
+                response.headers().set(HeaderNames.CONTENT_LENGTH, file.size());
+                System.out.println("Going to send " + file.size() + " bytes as " + file.contentType());
+                try (InputStream fileStream = file.asStream();
+                     OutputStream out = response.outputStream()) {
+                    Mutils.copy(fileStream, out, 8192);
+                }
+            })
             .addHandler(Method.GET, "/stream", (request, response, pathParams) -> {
                 response.contentType(ContentTypes.TEXT_PLAIN);
                 for (int i = 0; i < Integer.MAX_VALUE; i++) {

@@ -1,6 +1,7 @@
 package io.muserver.rest;
 
 import io.muserver.*;
+import io.netty.handler.codec.http.HttpHeaderNames;
 import org.junit.Test;
 
 import javax.ws.rs.core.MediaType;
@@ -115,6 +116,11 @@ public class JaxRsHttpHeadersAdapterTest {
         return new MuRequest() {
 
             @Override
+            public String contentType() {
+                return reqHeaders.get(HttpHeaderNames.CONTENT_TYPE);
+            }
+
+            @Override
             public Method method() {
                 return Method.POST;
             }
@@ -141,6 +147,16 @@ public class JaxRsHttpHeadersAdapterTest {
 
             @Override
             public String readBodyAsString() throws IOException {
+                throw new NotImplementedException("mock");
+            }
+
+            @Override
+            public List<UploadedFile> uploadedFiles(String name) {
+                throw new NotImplementedException("mock");
+            }
+
+            @Override
+            public UploadedFile uploadedFile(String name) {
                 throw new NotImplementedException("mock");
             }
 

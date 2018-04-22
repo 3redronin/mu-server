@@ -1,6 +1,5 @@
 package io.muserver;
 
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -11,7 +10,7 @@ class SyncHandlerAdapter implements AsyncMuHandler {
     private final List<MuHandler> muHandlers;
     private final ExecutorService executor = Executors.newCachedThreadPool();
 
-    public SyncHandlerAdapter(List<MuHandler> muHandlers) {
+    SyncHandlerAdapter(List<MuHandler> muHandlers) {
         this.muHandlers = muHandlers;
     }
 
@@ -37,6 +36,8 @@ class SyncHandlerAdapter implements AsyncMuHandler {
                     MuServerHandler.send404(ctx);
                 }
 
+                ((NettyRequestAdapter)ctx.request).clean();
+
             } catch (Throwable ex) {
                 System.out.println("Error from handler: " + ex.getMessage());
                 ex.printStackTrace();
@@ -58,8 +59,8 @@ class SyncHandlerAdapter implements AsyncMuHandler {
             if (state != null) {
                 state.close();
             }
-        } catch (IOException e) {
-            System.out.println("This can't happen");
+        } catch (Exception e) {
+            System.out.println("Error while cleaning up request: " + e);
         }
     }
 
