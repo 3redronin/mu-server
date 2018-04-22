@@ -2,6 +2,7 @@ package io.muserver.handlers;
 
 import io.muserver.MuServer;
 import io.muserver.MuServerBuilder;
+import io.muserver.Mutils;
 import okhttp3.Headers;
 import okhttp3.OkHttpClient;
 import okhttp3.Response;
@@ -15,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 
 import static io.muserver.ContextHandlerBuilder.context;
+import static io.muserver.Mutils.urlDecode;
 import static io.muserver.handlers.ResourceType.getResourceTypes;
 import static io.muserver.handlers.ResourceType.gzippableMimeTypes;
 import static org.hamcrest.CoreMatchers.is;
@@ -35,6 +37,8 @@ public class ResourceHandlerTest {
             .start();
 
         assertContentTypeAndContent("/index.html", "text/html", false);
+        assertContentTypeAndContent("/images/" + Mutils.urlEncode("guangzhou.jpeg"), "image/jpeg", false);
+        assertContentTypeAndContent("/images/" + Mutils.urlEncode("guangzhou, china.jpeg"), "image/jpeg", false);
 
         assertNotFound("/bad-path");
     }
@@ -47,11 +51,11 @@ public class ResourceHandlerTest {
             .start();
 
         assertContentTypeAndContent("/index.html", "text/html", false);
+        assertContentTypeAndContent("/images/" + Mutils.urlEncode("guangzhou.jpeg"), "image/jpeg", false);
+        assertContentTypeAndContent("/images/" + Mutils.urlEncode("guangzhou, china.jpeg"), "image/jpeg", false);
 
         assertNotFound("/bad-path");
     }
-
-
 
     @Test
     public void contextsCanBeUsed() throws Exception {
@@ -207,7 +211,7 @@ public class ResourceHandlerTest {
             headersFromGET = resp.headers().toMultimap();
             assertThat(resp.code(), is(200));
             assertThat(resp.header("Content-Type"), is(expectedContentType));
-            assertThat(resp.body().string(), is(readResource("/sample-static" + relativePath)));
+            assertThat(resp.body().string(), is(readResource("/sample-static" + urlDecode(relativePath))));
         }
         try (Response resp = call(request().head().url(url))) {
             assertThat(resp.code(), is(200));

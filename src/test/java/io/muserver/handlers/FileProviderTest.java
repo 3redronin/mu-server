@@ -27,8 +27,10 @@ public class FileProviderTest {
     private MuServer server;
     public static final File BIG_FILE_DIR = new File("src/test/big-files");
 
+    // Skipping large files is a good idea if the test is too slow
+    private static final boolean SKIP_LARGE_FILES = true;
+
     @Test
-    @Ignore("too slow")
     public void canReadFilesFromFileSystem() throws Exception {
 
         server = new MuServerBuilder().withHttpPort(0).withHttpsPort(0)
@@ -39,6 +41,10 @@ public class FileProviderTest {
         File[] files = BIG_FILE_DIR.listFiles(File::isFile);
         assertThat(files.length, Matchers.greaterThanOrEqualTo(2));
         for (File file : files) {
+            if (SKIP_LARGE_FILES && file.length() > 10000000L) {
+                System.out.println("Skipping " + file.getName() + " as it is too large");
+                continue;
+            }
             URI downloadUri = server.httpUri().resolve("/" + urlEncode(file.getName()));
             System.out.println("Going to test " + file.getName() + " from " + downloadUri);
 

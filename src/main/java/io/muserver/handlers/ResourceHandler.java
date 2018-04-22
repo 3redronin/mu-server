@@ -37,7 +37,8 @@ public class ResourceHandler implements MuHandler {
             ? requestPath
             : requestPath.substring(pathToServeFrom.length());
 
-        ResourceProvider provider = resourceProviderFactory.get(pathWithoutWebPrefix);
+        String decodedRelativePath = Mutils.urlDecode(pathWithoutWebPrefix);
+        ResourceProvider provider = resourceProviderFactory.get(decodedRelativePath);
         if (!provider.exists()) {
             return false;
         }
