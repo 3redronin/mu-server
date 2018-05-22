@@ -6,6 +6,7 @@ import java.io.BufferedWriter;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -142,7 +143,7 @@ class HtmlDocumentor {
                         }
 
                         RequestBodyObject requestBody = operation.requestBody;
-                        if (!operation.parameters.isEmpty() || requestBody != null) {
+                        if (!operation.parameters.isEmpty()) {
                             render("h4", "Parameters");
                             El table = new El("table").open(singletonMap("class", "parameterTable"));
 
@@ -178,43 +179,81 @@ class HtmlDocumentor {
                                 }
                                 paramDesc.content(parameter.description);
 
-                                if (parameter.example != null) {
-                                    render("p", "Example:\n\n" + parameter.example);
-                                } else if (parameter.examples != null) {
-                                    for (Map.Entry<String, ExampleObject> exampleEntry : parameter.examples.entrySet()) {
-                                        El div = new El("div").open();
+                                renderExamples(parameter.example, parameter.examples);
 
-                                        new El("code").open().content(exampleEntry.getKey()).close();
-                                        ExampleObject example = exampleEntry.getValue();
-                                        new El("span").open().content(" ", example.summary, " ", example.description).close();
-                                        new El("pre").open().content(example.value).close();
-
-                                        div.close();
-
-                                    }
-                                }
-
-                                paramDesc.close();
-                                row.close();
-                            }
-
-
-                            if (requestBody != null) {
-                                El row = new El("tr").open();
-                                render("td", "body");
-                                render("td", requestBody.content.keySet().stream().collect(Collectors.joining(" OR ")));
-
-                                El paramDesc = new El("td").open();
-                                if (requestBody.required) {
-                                    render("strong", "REQUIRED. ");
-                                }
-                                paramDesc.content(requestBody.description);
                                 paramDesc.close();
                                 row.close();
                             }
 
                             tbody.close();
                             table.close();
+                        }
+
+                        if (requestBody != null) {
+                            render("h4", "Request body");
+
+                            renderIfValue("p", requestBody.description);
+
+                            for (Map.Entry<String, MediaTypeObject> bodyEntry : requestBody.content.entrySet()) {
+                                String mediaType = bodyEntry.getKey();
+                                MediaTypeObject value = bodyEntry.getValue();
+                                render("h5", mediaType);
+
+                                renderExamples(value.example, value.examples);
+
+                                if (value.schema == null) {
+                                    continue;
+                                }
+
+                                El table = new El("table").open(singletonMap("class", "parameterTable"));
+                                El thead = new El("thead").open();
+                                El theadRow = new El("tr").open();
+                                render("th", "Name");
+                                render("th", "Type");
+                                render("th", "Description");
+                                theadRow.close();
+                                thead.close();
+
+                                El tbody = new El("tbody").open();
+
+
+                                List<String> requiredParams = value.schema.required;
+                                for (Map.Entry<String, SchemaObject> props : value.schema.properties.entrySet()) {
+                                    String formName = props.getKey();
+                                    SchemaObject schema = props.getValue();
+                                    El row = new El("tr").open();
+                                    render("td", formName);
+
+                                    String type = schema.type;
+                                    if (schema.format != null) {
+                                        type += " (" + schema.format + ")";
+                                    }
+                                    render("td", type);
+
+                                    El paramDesc = new El("td").open();
+                                    if (schema.deprecated) {
+                                        render("strong", "DEPRECATED. ");
+                                    }
+                                    if (requiredParams != null && requiredParams.contains(formName)) {
+                                        render("strong", "REQUIRED. ");
+                                    }
+                                    paramDesc.content(schema.description);
+
+                                    if (schema.example != null) {
+                                        render("p", "Example:\n\n" + schema.example);
+                                    }
+
+                                    paramDesc.close();
+                                    row.close();
+
+                                }
+
+                                tbody.close();
+                                table.close();
+                            }
+
+
+
                         }
 
 
@@ -261,6 +300,23 @@ class HtmlDocumentor {
 
         body.close();
         html.close();
+    }
+
+    private void renderExamples(Object example, Map<String, ExampleObject> examples) throws IOException {
+        if (example != null) {
+            render("p", "Example:\n\n" + example);
+        } else if (examples != null) {
+            for (Map.Entry<String, ExampleObject> exampleEntry : examples.entrySet()) {
+                El div = new El("div").open();
+
+                new El("code").open().content(exampleEntry.getKey()).close();
+                ExampleObject ex = exampleEntry.getValue();
+                new El("span").open().content(" ", ex.summary, " ", ex.description).close();
+                new El("pre").open().content(ex.value).close();
+
+                div.close();
+            }
+        }
     }
 
     private void renderIfValue(String tag, String value) throws IOException {

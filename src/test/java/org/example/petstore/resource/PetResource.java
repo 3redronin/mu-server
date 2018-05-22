@@ -170,11 +170,14 @@ public class PetResource {
     @ApiResponses(value = {
         @ApiResponse(code = "405", message = "Invalid input")})
     public Response updatePetWithForm(
-//   @ApiParam(value = "ID of pet that needs to be updated", required = true)
+//   @ApiParam(value = "", required = true)
+        @Description("ID of pet that needs to be updated")
         @PathParam("petId") Long petId,
-//   @ApiParam(value = "Updated name of the pet", required = false)
+//   @ApiParam(value = "", required = false)
+        @Description("Updated name of the pet")
         @FormParam("name") String name,
-//   @ApiParam(value = "Updated status of the pet", required = false)
+//   @ApiParam(value = "", required = false)
+        @Description("Updated status of the pet")
         @FormParam("status") String status) {
         Pet pet = petData.getPetById(petId);
         if (pet != null) {

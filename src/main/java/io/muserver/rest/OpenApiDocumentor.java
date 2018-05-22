@@ -74,16 +74,6 @@ class OpenApiDocumentor implements MuHandler {
                         .withOperationId(method.httpMethod.name() + "_" + Mutils.trim(Mutils.join(root.pathTemplate, "/", method.pathTemplate), "/").replace("/", "_"))
                         .withTags(singletonList(root.tag.name))
                         .withParameters(parameters)
-                        .withRequestBody(
-                            method.params.stream()
-                                .filter(p -> p instanceof ResourceMethodParam.MessageBodyParam).map(ResourceMethodParam.MessageBodyParam.class::cast)
-                                .map(messageBodyParam -> requestBodyObject()
-                                    .withContent(singletonMap(method.effectiveConsumes.get(0).toString(), mediaTypeObject()
-                                        .build()))
-                                    .withDescription(messageBodyParam.descriptionData.description)
-                                    .build())
-                                .findFirst().orElse(null)
-                        )
                         .build());
             }
         }

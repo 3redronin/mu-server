@@ -17,6 +17,7 @@
 package org.example.petstore.resource;
 
 
+import io.muserver.rest.Description;
 import org.example.petstore.data.VehicleData;
 import org.example.petstore.model.Vehicle;
 
@@ -96,9 +97,10 @@ public class VehicleResource {
 //  @ApiResponses(value = { @ApiResponse(code = 400, message = "Invalid ID supplied"),
 //          @ApiResponse(code = 404, message = "Vehicle not found")})
   public Response deleteVehicle(
-//    @ApiParam() @HeaderParam("api_key")
+        @HeaderParam("api_key")
 		    String apiKey,
-//    @ApiParam(value = "Vehicle id to delete", required = true)
+//    @ApiParam(value = "", required = true)
+        @Description("Vehicle id to delete")
     @PathParam("vehicleId") Long vehicleId) {
       if (vehicleData.deleteVehicle(vehicleId)) {
         return Response.ok().build();
@@ -139,11 +141,14 @@ public class VehicleResource {
 //  @ApiResponses(value = {
 //    @ApiResponse(code = 405, message = "Invalid input")})
   public Response updateVehicleWithForm (
-//   @ApiParam(value = "ID of vehicle that needs to be updated", required = true)@PathParam("vehicleId")
+//   @ApiParam(value = "ID of vehicle that needs to be updated", required = true)
+@PathParam("vehicleId")
 		   Long vehicleId,
-//   @ApiParam(value = "Updated name of the vehicle", required = false)@FormParam("name")
+//   @ApiParam(value = "Updated name of the vehicle", required = false)
+@FormParam("name")
 		   String name,
-//   @ApiParam(value = "Updated status of the vehicle", required = false)@FormParam("status")
+//   @ApiParam(value = "Updated status of the vehicle", required = false)
+@FormParam("status")
 				   String status) {
     Vehicle vehicle = vehicleData.getVehicleById(vehicleId);
     if(vehicle != null) {

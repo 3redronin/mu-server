@@ -2,6 +2,8 @@ package io.muserver.rest;
 
 import io.muserver.Method;
 import io.muserver.openapi.OperationObjectBuilder;
+import io.muserver.openapi.RequestBodyObject;
+import io.muserver.openapi.RequestBodyObjectBuilder;
 import io.muserver.openapi.ResponseObject;
 
 import javax.ws.rs.HttpMethod;
@@ -10,14 +12,19 @@ import javax.ws.rs.core.MediaType;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.InvocationTargetException;
 import java.util.*;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static io.muserver.openapi.HeaderObjectBuilder.headerObject;
 import static io.muserver.openapi.MediaTypeObjectBuilder.mediaTypeObject;
 import static io.muserver.openapi.OperationObjectBuilder.operationObject;
+import static io.muserver.openapi.RequestBodyObjectBuilder.requestBodyObject;
 import static io.muserver.openapi.ResponseObjectBuilder.responseObject;
 import static io.muserver.openapi.ResponsesObjectBuilder.responsesObject;
+import static io.muserver.openapi.SchemaObjectBuilder.schemaObject;
+import static io.muserver.openapi.SchemaObjectBuilder.schemaObjectFrom;
 import static io.muserver.rest.MethodMapping.jaxToMu;
+import static java.util.Collections.singletonMap;
 import static java.util.stream.Collectors.toMap;
 
 class ResourceMethod {
@@ -97,11 +104,51 @@ class ResourceMethod {
             }
         }
 
+        RequestBodyObject requestBody = params.stream()
+            .filter(p -> p instanceof ResourceMethodParam.MessageBodyParam)
+            .map(ResourceMethodParam.MessageBodyParam.class::cast)
+            .map(messageBodyParam -> requestBodyObject()
+                .withContent(singletonMap(effectiveConsumes.get(0).toString(), mediaTypeObject()
+                    .build()))
+                .withDescription(messageBodyParam.descriptionData.description)
+                .build())
+            .findFirst().orElse(null);
+
+        if (requestBody == null) {
+            List<ResourceMethodParam.RequestBasedParam> formParams = params.stream()
+                .filter(p -> p instanceof ResourceMethodParam.RequestBasedParam)
+                .map(ResourceMethodParam.RequestBasedParam.class::cast)
+                .filter(p -> p.source == ResourceMethodParam.ValueSource.FORM_PARAM)
+                .collect(Collectors.toList());
+            if (!formParams.isEmpty()) {
+                requestBody = requestBodyObject()
+                    .withContent(Collections.singletonMap(effectiveConsumes.get(0).toString(),
+                        mediaTypeObject()
+                            .withSchema(
+                                schemaObject()
+                                    .withType("object")
+                                    .withProperties(
+                                        formParams.stream().collect(
+                                            toMap(n -> n.key,
+                                                n -> schemaObjectFrom(n.parameterHandle.getType())
+                                                    .withDeprecated(n.isDeprecated)
+                                                    .withDefaultValue(n.defaultValue())
+                                                    .withDescription(n.descriptionData == null ? null : n.descriptionData.description).build()))
+                                    )
+                                .build()
+                            )
+                            .build()
+                    ))
+                    .build();
+            }
+        }
+
         return operationObject()
             .withSummary(descriptionData.summary)
             .withDescription(descriptionData.description)
             .withExternalDocs(descriptionData.externalDocumentation)
             .withDeprecated(isDeprecated)
+            .withRequestBody(requestBody)
             .withResponses(
                 responsesObject()
                     .withHttpStatusCodes(httpStatusCodes)

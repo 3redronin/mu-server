@@ -33,7 +33,6 @@ abstract class ResourceMethodParam {
 
     static ResourceMethodParam fromParameter(int index, java.lang.reflect.Parameter parameterHandle, List<ParamConverterProvider> paramConverterProviders) {
 
-
         ValueSource source = getSource(parameterHandle);
         if (source == ValueSource.MESSAGE_BODY) {
             DescriptionData descriptionData = getDescriptionDataForParameter(parameterHandle, "requestBody");
@@ -42,6 +41,7 @@ abstract class ResourceMethodParam {
             return new ContextParam(index, source, parameterHandle);
         } else {
             boolean encodedRequested = hasDeclared(parameterHandle, Encoded.class);
+            boolean isDeprecated = hasDeclared(parameterHandle, Deprecated.class);
             ParamConverter<?> converter = getParamConverter(parameterHandle, paramConverterProviders);
             boolean lazyDefaultValue = converter.getClass().getDeclaredAnnotation(ParamConverter.Lazy.class) != null;
             Object defaultValue = getDefaultValue(parameterHandle, converter, lazyDefaultValue);
@@ -57,7 +57,7 @@ abstract class ResourceMethodParam {
                 throw new WebApplicationException("No parameter specified for the " + source + " in " + parameterHandle);
             }
             DescriptionData descriptionData = getDescriptionDataForParameter(parameterHandle, key);
-            return new RequestBasedParam(index, source, parameterHandle, defaultValue, encodedRequested, lazyDefaultValue, converter, descriptionData, key);
+            return new RequestBasedParam(index, source, parameterHandle, defaultValue, encodedRequested, lazyDefaultValue, converter, descriptionData, key, isDeprecated);
         }
     }
 
@@ -80,10 +80,12 @@ abstract class ResourceMethodParam {
         private final boolean lazyDefaultValue;
         private final ParamConverter paramConverter;
         final String key;
+        final boolean isDeprecated;
 
         ParameterObjectBuilder createDocumentationBuilder() {
             ParameterObjectBuilder builder = parameterObject()
-                .withIn(source.openAPIIn);
+                .withIn(source.openAPIIn)
+                .withDeprecated(isDeprecated);
             if (descriptionData != null) {
                 builder.withName(descriptionData.summary)
                     .withDescription(descriptionData.description);
@@ -95,13 +97,14 @@ abstract class ResourceMethodParam {
             );
         }
 
-        RequestBasedParam(int index, ValueSource source, Parameter parameterHandle, Object defaultValue, boolean encodedRequested, boolean lazyDefaultValue, ParamConverter paramConverter, DescriptionData descriptionData, String key) {
+        RequestBasedParam(int index, ValueSource source, Parameter parameterHandle, Object defaultValue, boolean encodedRequested, boolean lazyDefaultValue, ParamConverter paramConverter, DescriptionData descriptionData, String key, boolean isDeprecated) {
             super(index, source, parameterHandle, descriptionData);
             this.defaultValue = defaultValue;
             this.encodedRequested = encodedRequested;
             this.lazyDefaultValue = lazyDefaultValue;
             this.paramConverter = paramConverter;
             this.key = key;
+            this.isDeprecated = isDeprecated;
         }
 
         public Object defaultValue() {
