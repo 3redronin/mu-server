@@ -41,7 +41,8 @@ public class FileProviderTest {
         File[] files = BIG_FILE_DIR.listFiles(File::isFile);
         assertThat(files.length, Matchers.greaterThanOrEqualTo(2));
         for (File file : files) {
-            if (SKIP_LARGE_FILES && file.length() > 10000000L) {
+            boolean isLarge = file.length() > 10000000L;
+            if (SKIP_LARGE_FILES && isLarge) {
                 System.out.println("Skipping " + file.getName() + " as it is too large");
                 continue;
             }
@@ -62,7 +63,9 @@ public class FileProviderTest {
                     int nowPercent = (int) (100.0 * (soFar / (double)total));
                     if (percent != nowPercent) {
                         percent = nowPercent;
-                        System.out.println(file.getName() + " percent = " + percent);
+                        if (isLarge) {
+                            System.out.println(file.getName() + " percent = " + percent);
+                        }
                     }
                 }
 //                assertThat(isEqual(new FileInputStream(file), resp.body().byteStream()), is(true));

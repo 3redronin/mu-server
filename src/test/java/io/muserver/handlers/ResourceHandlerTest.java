@@ -61,11 +61,10 @@ public class ResourceHandlerTest {
     public void contextsCanBeUsed() throws Exception {
         server = MuServerBuilder.httpsServer()
             .withGzipEnabled(false)
-            .addHandler(
-                context("/a",
-                    context("/b",
-                        context("/c",
-                            ResourceHandler.classpathHandler("/sample-static")
+            .addHandler(context("/a")
+                .addHandler(context("/b")
+                    .addHandler(context("/c")
+                        .addHandler(ResourceHandler.classpathHandler("/sample-static")
                             .withPathToServeFrom("/d")
                         ))))
             .start();
@@ -118,6 +117,23 @@ public class ResourceHandlerTest {
         try (Response resp = client.newCall(request().url(server.uri().resolve("/file/images").toURL()).build()).execute()) {
             assertThat(resp.code(), equalTo(302));
             assertThat(resp.header("location"), equalTo(server.uri().resolve("/file/images/").toString()));
+            assertThat(resp.body().contentLength(), equalTo(0L));
+        }
+    }
+
+    @Test
+    public void callsToContextNamesWithoutTrailingSlashesResultIn302() throws Exception {
+        server = MuServerBuilder.httpsServer()
+            .addHandler(context("my-app")
+                .addHandler(ResourceHandler.classpathHandler("/sample-static"))
+            )
+            .start();
+        OkHttpClient client = newClient().followRedirects(false).build();
+
+        URL url = server.httpsUri().resolve("/my-app?hello=world").toURL();
+        try (Response resp = client.newCall(request().get().url(url).build()).execute()) {
+            assertThat(resp.code(), equalTo(302));
+            assertThat(resp.header("location"), equalTo(server.uri().resolve("/my-app/?hello=world").toString()));
             assertThat(resp.body().contentLength(), equalTo(0L));
         }
     }

@@ -12,6 +12,7 @@ import io.netty.handler.codec.http.multipart.InterfaceHttpData;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.*;
 
 import static io.muserver.Cookie.nettyToMu;
@@ -251,8 +252,12 @@ class NettyRequestAdapter implements MuRequest {
         String proto = h.get(HeaderNames.X_FORWARDED_PROTO, serverUri.getScheme());
         String host = h.get(HeaderNames.X_FORWARDED_HOST, serverUri.getHost());
         int port = h.getInt(HeaderNames.X_FORWARDED_PORT, serverUri.getPort());
-        String portString = (port != 80 && port != 443 && port > 0) ? ":" + port : "";
-        return URI.create(proto + "://" + host + portString + request.uri());
+        port = (port != 80 && port != 443 && port > 0) ? port : -1;
+        try {
+            return new URI(proto, serverUri.getUserInfo(), host, port, serverUri.getPath(), serverUri.getQuery(), serverUri.getFragment());
+        } catch (URISyntaxException e) {
+            throw new IllegalArgumentException("Could not convert " + request.uri() + " into a URI object", e);
+        }
     }
 
     @Override
