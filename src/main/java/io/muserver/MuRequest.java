@@ -19,8 +19,25 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Collections.emptyList;
 import static java.util.Collections.emptySet;
 
+/**
+ * <p>An HTTP request from a client.</p>
+ * <p>Call {@link #method()} and {@link #uri()} to find the method and URL of this request.</p>
+ * <p>To read query string parameters, see {@link #parameter(String)}.</p>
+ * <p>Request headers can be accessed by the {@link #headers()} method.</p>
+ * <p>You can read the body as an input stream with {@link #inputStream()} or if you expect a string call {@link #readBodyAsString()}.
+ * If form values were posted as the request, see {@link #formValue(String)}</p>
+ * <p>Getting the value of a cookie by name is done by calling {@link #cookie(String)}</p>
+ * <p>If you need to share request-specific data between handlers, use {@link #state(Object)} to set and {@link #state()} to get.</p>
+ */
 public interface MuRequest {
 
+    /**
+     * <p>Gets the content type of the request body, for example <code>application/json</code> or <code>null</code>
+     * if there is no body.</p>
+     * <p>Note: If the Content-Type header included a charset, then this will NOT be returned by this method.</p>
+     * @return The content type of the request body (specified by the <code>Content-Type</code> request header),
+     * or <code>null</code> if there is no body.
+     */
     String contentType();
 
     /**
@@ -155,9 +172,46 @@ public interface MuRequest {
      */
     Optional<String> cookie(String name);
 
+    /**
+     * <p>If this handler was added to a {@link ContextHandlerBuilder#context(String)} then this
+     * will return the value of the context pre-pended with a '<code>/</code>'.</p>
+     * <p>For example,
+     * if this handler was added to <code>ContextHandlerBuilder.context(&quot;some context&quot;)</code>
+     * this this method will return <code>/some%20context</code></p>
+     *
+     * @return The context of the current handler or '<code>/</code>' if there is no context.
+     * @see #relativePath()
+     */
     String contextPath();
 
+    /**
+     * <p>The path of this request (without query string) relative to the context. If this handler is not
+     * nested within a context then it simply returns the full path of the request, otherwise it is
+     * the path relative to {@link #contextPath()}.</p>
+     * <p>For example, if there is a context <code>some context</code>
+     * and there is a request to <code>/some%20context/some%20path</code> then this method will return
+     * <code>/some%20path</code></p>
+     *
+     * @return The relative path of this request.
+     * @see #contextPath()
+     */
     String relativePath();
+
+    /**
+     * <p>Gets request-specific state that was added with {@link #state(Object)}.</p>
+     * <p>An example is getting user information in a view handler that was previously set by an authentication handler.</p>
+     * @return An object previously set by {@link #state(Object)}, or <code>null</code> if it was never set.
+     */
+    Object state();
+
+    /**
+     * <p>This associates an arbitrary object with the current request. Use this to pass request-specific data between
+     * handlers.</p>
+     * <p>An example use case is if you have a authentication handler that uses this method to set user information on
+     * the request, and then a subsequent handler calls {@link #state()} to get the user info.</p>
+     * @param value Any object to store as state.
+     */
+    void state(Object value);
 
 }
 
@@ -176,6 +230,7 @@ class NettyRequestAdapter implements MuRequest {
     private String relativePath;
     private HttpPostMultipartRequestDecoder multipartRequestDecoder;
     private HashMap<String, List<UploadedFile>> uploads;
+    private Object state;
 
     NettyRequestAdapter(String proto, HttpRequest request) {
         this.request = request;
@@ -349,6 +404,16 @@ class NettyRequestAdapter implements MuRequest {
     @Override
     public String relativePath() {
         return relativePath;
+    }
+
+    @Override
+    public Object state() {
+        return state;
+    }
+
+    @Override
+    public void state(Object value) {
+        this.state = value;
     }
 
     private void ensureFormDataLoaded() throws IOException {

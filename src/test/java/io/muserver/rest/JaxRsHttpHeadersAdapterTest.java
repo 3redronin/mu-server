@@ -199,6 +199,16 @@ public class JaxRsHttpHeadersAdapterTest {
             public String relativePath() {
                 return null;
             }
+
+            @Override
+            public Object state() {
+                throw new NotImplementedException();
+            }
+
+            @Override
+            public void state(Object value) {
+                throw new NotImplementedException();
+            }
         };
     }
 
