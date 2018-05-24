@@ -26,15 +26,8 @@ public class HttpsTest {
         assertThat(resp.body().string(), equalTo("This is encrypted and the URL is https://localhost:9443/"));
     }
 
-    @Test public void httpCanBeDisabled() {
-        server = MuServerBuilder.httpsServer()
-            .withHttpDisabled()
-            .addHandler((request, response) -> {
-                response.write("This is encrypted");
-                return true;
-            })
-            .start();
-
+    @Test public void httpIsNotAvailableUnlessRequested() {
+        server = MuServerBuilder.httpsServer().start();
         assertThat(server.httpUri(), is(nullValue()));
     }
 
