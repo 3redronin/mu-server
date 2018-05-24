@@ -8,6 +8,8 @@ import io.netty.handler.codec.TooLongFrameException;
 import io.netty.handler.codec.http.*;
 import io.netty.util.Attribute;
 import io.netty.util.AttributeKey;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
 import java.util.List;
@@ -17,6 +19,7 @@ import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 class MuServerHandler extends SimpleChannelInboundHandler<Object> {
+    private static final Logger log = LoggerFactory.getLogger(MuServerHandler.class);
     static final AttributeKey<String> PROTO_ATTRIBUTE = AttributeKey.newInstance("proto");
     private static final AttributeKey<State> STATE_ATTRIBUTE = AttributeKey.newInstance("state");
 
@@ -66,8 +69,7 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
 			HttpContent content = (HttpContent) msg;
 			State state = ctx.channel().attr(STATE_ATTRIBUTE).get();
 			if (state == null) {
-				// This can happen when a request is rejected based on headers, and then the rejected body arrives
-				System.out.println("Got a chunk of message for an unknown request");
+				log.info("Got a chunk of message for an unknown request. This can happen when a request is rejected based on headers, and then the rejected body arrives.");
 			} else {
 				ByteBuf byteBuf = content.content();
 				if (byteBuf.capacity() > 0) {
@@ -88,6 +90,7 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
     public static void send404(AsyncContext asyncContext) {
         sendPlainText(asyncContext, "404 Not Found", 404);
     }
+
 
     public static void sendPlainText(AsyncContext asyncContext, String message, int statusCode) {
         MuResponse resp = asyncContext.response;

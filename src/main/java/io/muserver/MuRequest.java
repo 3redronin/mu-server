@@ -8,6 +8,8 @@ import io.netty.handler.codec.http.multipart.Attribute;
 import io.netty.handler.codec.http.multipart.FileUpload;
 import io.netty.handler.codec.http.multipart.HttpPostMultipartRequestDecoder;
 import io.netty.handler.codec.http.multipart.InterfaceHttpData;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -217,6 +219,7 @@ public interface MuRequest {
 }
 
 class NettyRequestAdapter implements MuRequest {
+    private static final Logger log = LoggerFactory.getLogger(NettyRequestAdapter.class);
     private final HttpRequest request;
     private final URI serverUri;
     private final URI uri;
@@ -452,7 +455,7 @@ class NettyRequestAdapter implements MuRequest {
                         Attribute a = (Attribute) bodyHttpData;
                         qse.addParam(a.getName(), a.getValue());
                     } else {
-                        System.out.println("Unrecognised body part: " + bodyHttpData.getClass());
+                        log.warn("Unrecognised body part: " + bodyHttpData.getClass() + " from " + this + " - this may mean some of the request data is lost.");
                     }
                 }
                 formDecoder = new QueryStringDecoder(qse.toString());

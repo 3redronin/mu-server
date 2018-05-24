@@ -200,6 +200,7 @@ public class MuUriBuilderTest {
     public void urlsCanBeRelative() {
         assertThat(UriBuilder.fromUri("/some/path").build().toString(), equalTo("/some/path"));
     }
+
     @Test
     public void itRemembersTrailingSlashes() {
         assertThat(UriBuilder.fromUri("http://localhost").build().toString(), equalTo("http://localhost"));
@@ -212,7 +213,8 @@ public class MuUriBuilderTest {
         class FruitResource {
             @GET
             @Path("{id}")
-            public void getOne() {}
+            public void getOne() {
+            }
         }
         @Path("v1/dogs")
         class DogResource {
@@ -221,12 +223,14 @@ public class MuUriBuilderTest {
             public String getResourceClass(@Context UriInfo info) {
                 return info.getBaseUriBuilder().path(FruitResource.class).build().toString();
             }
+
             @GET
             @Path("getResourceMethod")
             public String getResourceMethod(@Context UriInfo info) throws NoSuchMethodException {
                 UriBuilder getOne = info.getBaseUriBuilder().path(FruitResource.class.getDeclaredMethod("getOne"));
                 return getOne.build("some-id").toString();
             }
+
             @GET
             @Path("getResourceMethodByName")
             public String getResourceMethodByName(@Context UriInfo info) {
@@ -239,8 +243,8 @@ public class MuUriBuilderTest {
         assertThat(UriBuilder.fromMethod(FruitResource.class, "getOne").build("some thing").toString(), equalTo("v1/fruits/some%20thing"));
 
         MuServer server = httpsServer().withHttpsPort(15647).withHttpsConfig(SSLContextBuilder.unsignedLocalhostCert())
-            .addHandler(ContextHandlerBuilder.context("api",
-                RestHandlerBuilder.restHandler(new FruitResource(), new DogResource()).build()))
+            .addHandler(ContextHandlerBuilder.context("api")
+                .addHandler(RestHandlerBuilder.restHandler(new FruitResource(), new DogResource()).build()))
             .start();
         try {
             try (Response resp = call(request().url(server.uri().resolve("/api/v1/dogs/getResourceClass").toString()))) {

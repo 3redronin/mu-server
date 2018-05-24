@@ -1,5 +1,8 @@
 package io.muserver;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import java.io.*;
@@ -7,7 +10,7 @@ import java.security.KeyStore;
 import java.security.NoSuchAlgorithmException;
 
 public class SSLContextBuilder {
-
+    private static final Logger log = LoggerFactory.getLogger(SSLContextBuilder.class);
 
     private String keystoreType = "JKS";
     private char[] keystorePassword = new char[0];
@@ -92,7 +95,7 @@ public class SSLContextBuilder {
                 try {
                     keystoreStream.close();
                 } catch (IOException e) {
-                    System.out.println("Error while closing keystore stream: " + e.getMessage());
+                    log.info("Error while closing keystore stream: " + e.getMessage());
                 }
             }
         }

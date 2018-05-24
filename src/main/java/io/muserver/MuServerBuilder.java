@@ -14,6 +14,8 @@ import io.netty.handler.codec.http.HttpResponseEncoder;
 import io.netty.handler.ssl.ClientAuth;
 import io.netty.handler.ssl.JdkSslContext;
 import io.netty.util.Attribute;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.net.ssl.SSLContext;
 import java.net.InetSocketAddress;
@@ -30,6 +32,7 @@ import static io.muserver.MuServerHandler.PROTO_ATTRIBUTE;
  * <p>Use the <code>withXXX()</code> methods to set the ports, config, and request handlers needed.</p>
  */
 public class MuServerBuilder {
+    private static final Logger log = LoggerFactory.getLogger(MuServerBuilder.class);
     private static final int LENGTH_OF_METHOD_AND_PROTOCOL = 17; // e.g. "OPTIONS HTTP/1.1 "
     private long minimumGzipSize = 1400;
     private int httpPort = -1;
@@ -260,7 +263,7 @@ public class MuServerBuilder {
                 workerGroup.shutdownGracefully(0, 0, TimeUnit.MILLISECONDS).sync();
 
             } catch (Exception e) {
-                System.out.println("Error while shutting down. Will ignore. Error was: " + e.getMessage());
+                log.info("Error while shutting down. Will ignore. Error was: " + e.getMessage());
             }
         };
 

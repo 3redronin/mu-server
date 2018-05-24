@@ -1,6 +1,8 @@
 package io.muserver.rest;
 
 import io.muserver.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.ws.rs.BadRequestException;
 import javax.ws.rs.NotFoundException;
@@ -22,6 +24,7 @@ import static io.muserver.rest.JaxRSResponse.muHeadersToJaxObj;
 import static java.util.Collections.singletonList;
 
 public class RestHandler implements MuHandler {
+    private static final Logger log = LoggerFactory.getLogger(RestHandler.class);
 
     private final RequestMatcher requestMatcher;
     private final EntityProviders entityProviders;
@@ -101,8 +104,7 @@ public class RestHandler implements MuHandler {
             return false;
         } catch (WebApplicationException e) {
             if (e instanceof ServerErrorException) {
-                System.out.println("Server error: " + e);
-                e.printStackTrace();
+                log.info("Server error for " + request, e);
             }
             Response r = e.getResponse();
             muResponse.status(r.getStatus());
@@ -110,13 +112,18 @@ public class RestHandler implements MuHandler {
             Response.StatusType statusInfo = r.getStatusInfo();
             muResponse.write(statusInfo.getStatusCode() + " " + statusInfo.getReasonPhrase() + " - " + e.getMessage());
         } catch (Exception ex) {
-            try {
-                muResponse.status(500);
-            } catch (IllegalStateException ise) {
-                System.out.println("Tried to change the response code to 500 but it's already been written so the response will be sent as " + muResponse.status());
+            log.warn("Unhandled error from handler for " + request, ex);
+            if (!muResponse.hasStartedSendingData()) {
+                String errorID = "ERR-" + UUID.randomUUID().toString();
+                log.info("Sending a 500 to the client with ErrorID=" + errorID);
+                try {
+                    muResponse.status(500);
+                    muResponse.contentType(ContentTypes.TEXT_PLAIN);
+                    muResponse.write("500 Server Error - ErrorID=" + errorID);
+                } catch (Exception ex2) {
+                    log.info("Error while trying to send error message to client, probably because the connection is already lost.", ex2);
+                }
             }
-            System.out.println("Unexpected server error: " + ex);
-            ex.printStackTrace();
         }
         return true;
     }

@@ -2,6 +2,8 @@ package io.muserver.handlers;
 
 import io.muserver.MuResponse;
 import io.muserver.Mutils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import sun.net.www.protocol.file.FileURLConnection;
 
 import java.io.File;
@@ -24,6 +26,7 @@ public interface ResourceProvider {
 }
 
 class FileProvider implements ResourceProvider {
+    private static final Logger log = LoggerFactory.getLogger(FileProvider.class);
     private final Path localPath;
 
     FileProvider(Path baseDirectory, String relativePath) {
@@ -50,7 +53,7 @@ class FileProvider implements ResourceProvider {
             }
             return size;
         } catch (IOException e) {
-            System.out.println("Error finding file size: " + e.getMessage());
+            log.error("Error finding file size: " + e.getMessage());
             return null;
         }
     }
@@ -69,6 +72,7 @@ class FileProvider implements ResourceProvider {
 }
 
 class ClasspathResourceProvider implements ResourceProvider {
+    private static final Logger log = LoggerFactory.getLogger(ClasspathResourceProvider.class);
     private final URLConnection info;
     private final boolean isDir;
 
@@ -82,7 +86,7 @@ class ClasspathResourceProvider implements ResourceProvider {
             try {
                 con = resource.openConnection();
             } catch (IOException e) {
-                System.out.println("Error " + e.getMessage());
+                log.error("Error opening " + resource, e);
                 con = null;
             }
         }
@@ -94,13 +98,13 @@ class ClasspathResourceProvider implements ResourceProvider {
                 try {
                     isDir = juc.getJarEntry().isDirectory();
                 } catch (IOException e) {
-                    System.out.println("Error checking dir: " + e.getMessage());
+                    log.error("Error checking if " + resource + " is a directory", e);
                 }
             } else if (con instanceof FileURLConnection) {
                 FileURLConnection fuc = (FileURLConnection) con;
                 isDir = new File(fuc.getURL().getFile()).isDirectory();
             } else {
-                System.out.println("Unexpected jar entry type: " + con.getClass());
+                log.warn("Unexpected jar entry type for " + resource + ": " + con.getClass());
             }
 
         }
