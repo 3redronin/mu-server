@@ -16,7 +16,7 @@ Experimental web server, very much under construction
 <dependency>
     <groupId>io.muserver</groupId>
     <artifactId>mu-server</artifactId>
-    <version>0.6.1</version>
+    <version>0.8.0</version>
 </dependency>
 ````
 
@@ -45,6 +45,27 @@ MuServer server = MuServerBuilder.httpsServer()
         })
     .start();
 ````
+
+## Headers, Querystrings, Forms, Files and Cookies
+
+These can all be accessed from the Request object. Below are some examples:
+
+````java
+String requestID = request.headers().get("X-Request-ID");
+
+String name = request.query().get("name");
+int age = request.query().getInt("age", -1);
+
+String message = request.form().get("message");
+boolean checked = request.form().get("checkbox");
+
+UploadedFile photo = request.uploadedFile("photo");
+photo.saveTo(new File("target/location.ext"));
+
+Optional<String> cookieValue = request.cookie("cookieName");
+````
+
+The request documentation has more details.
 
 ## JAX-RS REST Resources
 

@@ -27,11 +27,11 @@ class NettyRequestAdapter implements MuRequest {
     private final HttpRequest request;
     private final URI serverUri;
     private final URI uri;
-    private final QueryStringDecoder queryStringDecoder;
     private final Method method;
     private final Headers headers;
     private InputStream inputStream;
-    private QueryStringDecoder formDecoder;
+    private final RequestParameters query;
+    private RequestParameters form;
     private boolean bodyRead = false;
     private Set<Cookie> cookies;
     private String contextPath = "";
@@ -45,7 +45,7 @@ class NettyRequestAdapter implements MuRequest {
         this.serverUri = URI.create(proto + "://" + request.headers().get(HeaderNames.HOST) + request.uri());
         this.uri = getUri(request, serverUri);
         this.relativePath = this.uri.getRawPath();
-        this.queryStringDecoder = new QueryStringDecoder(request.uri(), true);
+        this.query = new NettyRequestParameters(new QueryStringDecoder(request.uri(), true));
         this.method = Method.fromNetty(request.method());
         this.headers = new Headers(request.headers());
     }
@@ -122,7 +122,7 @@ class NettyRequestAdapter implements MuRequest {
 
     private void claimingBodyRead() {
         if (bodyRead) {
-            throw new IllegalStateException("The body of the request message cannot be read twice. This can happen when calling any 2 of inputStream(), readBodyAsString(), or getFormValue() methods.");
+            throw new IllegalStateException("The body of the request message cannot be read twice. This can happen when calling any 2 of inputStream(), readBodyAsString(), or form() methods.");
         }
         bodyRead = true;
     }
@@ -148,40 +148,31 @@ class NettyRequestAdapter implements MuRequest {
     }
 
     public String parameter(String name) {
-        return getSingleParam(name, queryStringDecoder);
+        return query().get(name);
     }
 
-    private static String getSingleParam(String name, QueryStringDecoder queryStringDecoder) {
-        List<String> values = queryStringDecoder.parameters().get(name);
-        if (values == null) {
-            return "";
-        }
-        return values.get(0);
+    @Override
+    public RequestParameters query() {
+        return query;
     }
 
+    @Override
+    public RequestParameters form() throws IOException {
+        ensureFormDataLoaded();
+        return form;
+    }
 
     public List<String> parameters(String name) {
-        return getMultipleParams(name, queryStringDecoder);
+        return query.getAll(name);
     }
-
-    private static List<String> getMultipleParams(String name, QueryStringDecoder queryStringDecoder) {
-        List<String> values = queryStringDecoder.parameters().get(name);
-        if (values == null) {
-            return emptyList();
-        }
-        return values;
-    }
-
 
     public String formValue(String name) throws IOException {
-        ensureFormDataLoaded();
-        return getSingleParam(name, formDecoder);
+        return form().get(name);
     }
 
 
     public List<String> formValues(String name) throws IOException {
-        ensureFormDataLoaded();
-        return getMultipleParams(name, formDecoder);
+        return form().getAll(name);
     }
 
     @Override
@@ -229,7 +220,7 @@ class NettyRequestAdapter implements MuRequest {
     }
 
     private void ensureFormDataLoaded() throws IOException {
-        if (formDecoder == null) {
+        if (form == null) {
             if (contentType().startsWith("multipart/")) {
                 multipartRequestDecoder = new HttpPostMultipartRequestDecoder(request);
                 if (inputStream != null) {
@@ -262,10 +253,10 @@ class NettyRequestAdapter implements MuRequest {
                         log.warn("Unrecognised body part: " + bodyHttpData.getClass() + " from " + this + " - this may mean some of the request data is lost.");
                     }
                 }
-                formDecoder = new QueryStringDecoder(qse.toString());
+                form = new NettyRequestParameters(new QueryStringDecoder(qse.toString()));
             } else {
                 String body = readBodyAsString();
-                formDecoder = new QueryStringDecoder(body, false);
+                form = new NettyRequestParameters(new QueryStringDecoder(body, false));
             }
         }
     }
@@ -278,7 +269,7 @@ class NettyRequestAdapter implements MuRequest {
         return method().name() + " " + uri();
     }
 
-    public void addContext(String contextToAdd) {
+    void addContext(String contextToAdd) {
         if (contextToAdd.endsWith("/")) {
             contextToAdd = contextToAdd.substring(0, contextToAdd.length() - 1);
         }

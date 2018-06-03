@@ -1,34 +1,19 @@
 package io.muserver;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
-import io.netty.handler.codec.http.*;
-import io.netty.handler.codec.http.cookie.ServerCookieDecoder;
-import io.netty.handler.codec.http.multipart.Attribute;
-import io.netty.handler.codec.http.multipart.FileUpload;
-import io.netty.handler.codec.http.multipart.HttpPostMultipartRequestDecoder;
-import io.netty.handler.codec.http.multipart.InterfaceHttpData;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
-import java.net.URISyntaxException;
-import java.util.*;
-
-import static io.muserver.Cookie.nettyToMu;
-import static java.nio.charset.StandardCharsets.UTF_8;
-import static java.util.Collections.emptyList;
-import static java.util.Collections.emptySet;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 
 /**
  * <p>An HTTP request from a client.</p>
  * <p>Call {@link #method()} and {@link #uri()} to find the method and URL of this request.</p>
- * <p>To read query string parameters, see {@link #parameter(String)}.</p>
+ * <p>To read query string parameters, see {@link #query()}.</p>
  * <p>Request headers can be accessed by the {@link #headers()} method.</p>
  * <p>You can read the body as an input stream with {@link #inputStream()} or if you expect a string call {@link #readBodyAsString()}.
- * If form values were posted as the request, see {@link #formValue(String)}</p>
+ * If form values were posted as the request, see {@link #form()}</p>
  * <p>Getting the value of a cookie by name is done by calling {@link #cookie(String)}</p>
  * <p>If you need to share request-specific data between handlers, use {@link #state(Object)} to set and {@link #state()} to get.</p>
  */
@@ -75,7 +60,7 @@ public interface MuRequest {
     /**
      * The input stream of the request, if there was a request body.
      * <p>
-     * Note: this can only be read once and cannot be used with {@link #readBodyAsString()}, {@link #formValue(String)} or {@link #formValues(String)}.
+     * Note: this can only be read once and cannot be used with {@link #readBodyAsString()} or {@link #form()}.
      *
      * @return {@link Optional#empty()} if there is no request body; otherwise the input stream of the request body.
      */
@@ -89,7 +74,7 @@ public interface MuRequest {
      * <p>
      * The content type of the request body is assumed to be UTF-8.
      * <p>
-     * Note: this can only be read once and cannot be used with {@link #inputStream()} ()}, {@link #formValue(String)} or {@link #formValues(String)}.
+     * Note: this can only be read once and cannot be used with {@link #inputStream()} ()} or {@link #form()}.
      *
      * @return The content of the request body, or an empty string if there is no request body
      * @throws IOException if there is an exception during reading the request, e.g. if the HTTP connection is stopped during a request
@@ -118,46 +103,62 @@ public interface MuRequest {
     UploadedFile uploadedFile(String name) throws IOException;
 
     /**
-     * <p>Gets the querystring value with the given name, or empty string if there is no parameter with that name.</p>
-     * <p>If there are multiple parameters with the same name, the first one is returned.</p>
+     * <p>Gets the querystring parameters for this request.</p>
+     * @return Returns an object allowing you to access the querystring parameters of this request.
+     */
+    RequestParameters query();
+
+    /**
+     * <p>Gets the form parameters for this request.</p>
+     * <p>Note: this cannot be called after a call to {@link #inputStream()} or {@link #readBodyAsString()}</p>
+     * @throws IOException Thrown when there is an error while reading the form, e.g. if a user closes their
+     *                     browser before the form is fully read into memory.
+     * @return Returns an object allowing you to access the form parameters of this request.
+     */
+    RequestParameters form() throws IOException;
+
+    /**
+     * Deprecated since 1.8
      *
      * @param name The querystring parameter name to get
      * @return The querystring value, or an empty string
+     * @deprecated Use <code>query().get(name)</code> instead
      */
+    @Deprecated
     String parameter(String name);
 
     /**
-     * Gets all the querystring parameters with the given name, or an empty list if none are found.
+     * Deprecated since 1.8
      *
      * @param name The querystring parameter name to get
      * @return All values of the parameter with the given name
+     * @deprecated Use <code>query().getAll(name)</code> instead
      */
+    @Deprecated
     List<String> parameters(String name);
 
     /**
-     * Gets the form value with the given name, or empty string if there is no form value with that name.
-     * <p>
-     * If there are multiple form elements with the same name, the first one is returned.
-     * <p>
-     * Note: this cannot be called after a call to {@link #inputStream()} or {@link #readBodyAsString()}
+     * Deprecated since 1.8
      *
      * @param name The name of the form element to get
      * @return The value of the form element with the given name, or an empty string
      * @throws IOException Thrown when there is an error while reading the form, e.g. if a user closes their
      *                     browser before the form is fully read into memory.
+     * @deprecated Use <code>form().get(name)</code> instead
      */
+    @Deprecated
     String formValue(String name) throws IOException;
 
     /**
-     * Gets the form values with the given name, or empty list if there is no form value with that name.
-     * <p>
-     * Note: this cannot be called after a call to {@link #inputStream()} or {@link #readBodyAsString()}
+     * Deprecated since 1.8
      *
      * @param name The name of the form element to get
      * @return All values of the form element with the given name
      * @throws IOException Thrown when there is an error while reading the form, e.g. if a user closes their
      *                     browser before the form is fully read into memory.
+     * @deprecated Use <code>form().getAll(name)</code> instead
      */
+    @Deprecated
     List<String> formValues(String name) throws IOException;
 
     /**

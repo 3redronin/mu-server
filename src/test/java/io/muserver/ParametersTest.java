@@ -22,9 +22,9 @@ public class ParametersTest {
 	@Test public void queryStringsCanBeGot() throws MalformedURLException {
 		Object[] actual = new Object[4];
 		server = MuServerBuilder.httpServer().addHandler((request, response) -> {
-			actual[0] = request.parameter("value1");
-			actual[1] = request.parameter("value2");
-			actual[2] = request.parameter("unspecified");
+			actual[0] = request.query().get("value1");
+			actual[1] = request.query().get("value2");
+			actual[2] = request.query().get("unspecified");
 			actual[3] = request.uri().getPath();
 			return true;
 		}).start();
@@ -39,9 +39,9 @@ public class ParametersTest {
 	@Test public void queryStringParametersCanAppearMultipleTimes() throws MalformedURLException {
 		Object[] actual = new Object[3];
 		server = MuServerBuilder.httpServer().addHandler((request, response) -> {
-			actual[0] = request.parameters("value1");
-			actual[1] = request.parameters("value2");
-			actual[2] = request.parameters("unspecified");
+			actual[0] = request.query().getAll("value1");
+			actual[1] = request.query().getAll("value2");
+			actual[2] = request.query().getAll("unspecified");
 			return true;
 		}).start();
 
@@ -54,9 +54,9 @@ public class ParametersTest {
     @Test public void formParametersCanBeGot() throws MalformedURLException {
         Object[] actual = new Object[3];
         server = MuServerBuilder.httpServer().addHandler((request, response) -> {
-            actual[0] = request.formValue("value1");
-            actual[1] = request.formValue("value2");
-            actual[2] = request.formValue("unspecified");
+            actual[0] = request.form().get("value1");
+            actual[1] = request.form().get("value2");
+            actual[2] = request.form().get("unspecified");
             return true;
         }).start();
 
@@ -77,9 +77,9 @@ public class ParametersTest {
     @Test public void formParametersWithMultipleValuesCanBeGot() throws MalformedURLException {
         Object[] actual = new Object[3];
         server = MuServerBuilder.httpServer().addHandler((request, response) -> {
-            actual[0] = request.formValues("value1");
-            actual[1] = request.formValues("value2");
-            actual[2] = request.formValues("unspecified");
+            actual[0] = request.form().getAll("value1");
+            actual[1] = request.form().getAll("value2");
+            actual[2] = request.form().getAll("unspecified");
             return true;
         }).start();
 
@@ -99,7 +99,7 @@ public class ParametersTest {
     @Test public void exceptionsThrownWhenTryingToReadBodyAfterReadingFormData() {
         Throwable[] actual = new Throwable[1];
         server = MuServerBuilder.httpServer().addHandler((request, response) -> {
-            request.formValue("blah");
+            request.form().get("blah");
             try {
                 request.readBodyAsString();
             } catch (Throwable t) {
@@ -115,7 +115,7 @@ public class ParametersTest {
                 .build())
         );
         assertThat(actual[0], instanceOf(IllegalStateException.class));
-        assertThat(actual[0].getMessage(), equalTo("The body of the request message cannot be read twice. This can happen when calling any 2 of inputStream(), readBodyAsString(), or getFormValue() methods."));
+        assertThat(actual[0].getMessage(), equalTo("The body of the request message cannot be read twice. This can happen when calling any 2 of inputStream(), readBodyAsString(), or form() methods."));
     }
 
 	@After public void stopIt() {

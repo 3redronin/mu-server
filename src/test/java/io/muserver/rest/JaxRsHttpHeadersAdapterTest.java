@@ -166,6 +166,16 @@ public class JaxRsHttpHeadersAdapterTest {
             }
 
             @Override
+            public RequestParameters query() {
+                throw new NotImplementedException("mock");
+            }
+
+            @Override
+            public RequestParameters form() throws IOException {
+                throw new NotImplementedException("mock");
+            }
+
+            @Override
             public List<String> parameters(String name) {
                 return null;
             }
