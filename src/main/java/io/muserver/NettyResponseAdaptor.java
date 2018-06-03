@@ -26,12 +26,14 @@ class NettyResponseAdaptor implements MuResponse {
     private final Headers headers = new Headers();
     private ChannelFuture lastAction;
     private int status = 200;
+    private PrintWriter writer;
+    private ChunkedHttpOutputStream outputStream;
 
     private enum OutputState {
         NOTHING, FULL_SENT, CHUNKING
     }
 
-    public NettyResponseAdaptor(ChannelHandlerContext ctx, NettyRequestAdapter request) {
+    NettyResponseAdaptor(ChannelHandlerContext ctx, NettyRequestAdapter request) {
         this.ctx = ctx;
         this.request = request;
         this.isHead = request.method() == Method.HEAD;
@@ -130,12 +132,18 @@ class NettyResponseAdaptor implements MuResponse {
     }
 
     public OutputStream outputStream() {
-        startChunking();
-        return new ChunkedHttpOutputStream(ctx);
+        if (this.outputStream == null) {
+            startChunking();
+            this.outputStream = new ChunkedHttpOutputStream(ctx);
+        }
+        return this.outputStream;
     }
 
     public PrintWriter writer() {
-        return new PrintWriter(new OutputStreamWriter(outputStream(), StandardCharsets.UTF_8));
+        if (this.writer == null) {
+            this.writer = new PrintWriter(new OutputStreamWriter(outputStream(), StandardCharsets.UTF_8));
+        }
+        return this.writer;
     }
 
     @Override
@@ -143,7 +151,7 @@ class NettyResponseAdaptor implements MuResponse {
         return outputState != OutputState.NOTHING;
     }
 
-    public Future<Void> complete() {
+    Future<Void> complete() {
         if (outputState == OutputState.NOTHING) {
             HttpResponse msg = isHead ?
                 new EmptyHttpResponse(httpStatus()) :
