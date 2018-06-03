@@ -36,6 +36,8 @@ public class RunLocal {
                 UploadedFile file = request.uploadedFile("theFile");
                 response.contentType(file.contentType());
                 response.headers().set(HeaderNames.CONTENT_LENGTH, file.size());
+                boolean ticked = request.form().getBoolean("ticked");
+                System.out.println("Form parameters: " + request.form().get("blah") + " - " + ticked);
                 System.out.println("Going to send " + file.size() + " bytes as " + file.contentType());
                 try (InputStream fileStream = file.asStream();
                      OutputStream out = response.outputStream()) {
