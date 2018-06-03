@@ -9,6 +9,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 import static java.util.Arrays.asList;
 import static org.hamcrest.CoreMatchers.is;
@@ -57,19 +58,21 @@ public class MuServerTest {
 
 
     @Test
-    public void syncHandlersSupported() throws IOException {
+    public void syncHandlersSupportedAndStateCanBePassedThroughHandlers() throws IOException {
         List<String> handlersHit = new ArrayList<>();
+        String randomText = UUID.randomUUID().toString();
 
         server = httpServer()
-            .withHttpPort(12808)
+            .withHttpPort(12809)
             .addHandler((request, response) -> {
                 handlersHit.add("Logger");
+                request.state(randomText);
                 return false;
             })
             .addHandler(Method.GET, "/blah", (request, response, pathParams) -> {
                 handlersHit.add("BlahHandler");
                 response.status(202);
-                response.write("This is a test");
+                response.write("This is a test and this is the state: " + request.state());
             })
             .addHandler((request, response) -> {
                 handlersHit.add("LastHandler");
@@ -77,9 +80,9 @@ public class MuServerTest {
             })
             .start();
 
-        Response resp = call(request().url("http://localhost:12808/blah"));
+        Response resp = call(request().url("http://localhost:12809/blah"));
         assertThat(resp.code(), is(202));
-        assertThat(resp.body().string(), equalTo("This is a test"));
+        assertThat(resp.body().string(), equalTo("This is a test and this is the state: " + randomText));
         assertThat(handlersHit, equalTo(asList("Logger", "BlahHandler")));
     }
 

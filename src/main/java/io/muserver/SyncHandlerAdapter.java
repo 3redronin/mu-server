@@ -71,7 +71,6 @@ class SyncHandlerAdapter implements AsyncMuHandler {
             if (state != null) {
                 state.close();
             }
-            ctx.request.state(null);
         } catch (Exception e) {
             log.info("Error while cleaning up request. It may mean the client did not receive the full response for " + ctx.request, e);
         }
