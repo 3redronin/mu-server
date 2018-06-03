@@ -33,12 +33,48 @@ public interface RequestParameters {
      */
     String get(String name, String defaultValue);
 
+    /**
+     * Gets the parameter as an integer, or returns the default value if it was not specified or was in an invalid format.
+     * @param name The name of the parameter.
+     * @param defaultValue The value to use if none was specified, or an invalid format was used.
+     * @return Returns the parameter value as an integer.
+     */
     int getInt(String name, int defaultValue);
-    long getLong(String name, long defaultValue);
-    boolean getBoolean(String name);
 
+
+    /**
+     * Gets the parameter as a long, or returns the default value if it was not specified or was in an invalid format.
+     * @param name The name of the parameter.
+     * @param defaultValue The value to use if none was specified, or an invalid format was used.
+     * @return Returns the parameter value as a long.
+     */
+    long getLong(String name, long defaultValue);
+
+
+    /**
+     * Gets the parameter as a float, or returns the default value if it was not specified or was in an invalid format.
+     * @param name The name of the parameter.
+     * @param defaultValue The value to use if none was specified, or an invalid format was used.
+     * @return Returns the parameter value as a float.
+     */
     float getFloat(String name, float defaultValue);
+
+    /**
+     * Gets the parameter as a double, or returns the default value if it was not specified or was in an invalid format.
+     * @param name The name of the parameter.
+     * @param defaultValue The value to use if none was specified, or an invalid format was used.
+     * @return Returns the parameter value as a double.
+     */
     double getDouble(String name, double defaultValue);
+
+    /**
+     * <p>Gets a parameter as a boolean, where values such as <code>true</code>, <code>on</code> and <code>yes</code> as
+     * considered true, and other values (or no parameter with the name) is considered false.</p>
+     * <p>This can be used to access checkbox values as booleans.</p>
+     * @param name The name of the parameter.
+     * @return Returns true if the value was truthy, or false if it was falsy or not specified.
+     */
+    boolean getBoolean(String name);
 
     /**
      * Gets all the querystring parameters with the given name, or an empty list if none are found.
