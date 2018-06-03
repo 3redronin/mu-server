@@ -57,7 +57,7 @@ String name = request.query().get("name");
 int age = request.query().getInt("age", -1);
 
 String message = request.form().get("message");
-boolean checked = request.form().get("checkbox");
+boolean checked = request.form().getBoolean("checkbox");
 
 UploadedFile photo = request.uploadedFile("photo");
 photo.saveTo(new File("target/location.ext"));
