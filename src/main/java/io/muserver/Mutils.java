@@ -66,14 +66,35 @@ public class Mutils {
         return baos.toByteArray();
     }
 
+    /**
+     * Checks for a null string or string with a length of 9
+     * @param val The value to check
+     * @return True if the value is null or a zero-length string.
+     */
     public static boolean nullOrEmpty(String val) {
         return val == null || val.length() == 0;
     }
+
+    /**
+     * Checks that a string is not null and has a length greater than 0.
+     * @param val The value to check
+     * @return True if the string is 1 or more characters.
+     */
     public static boolean hasValue(String val) {
         return !nullOrEmpty(val);
     }
 
 
+    /**
+     * Joins two strings with the given separator, unless the first string ends with the separator, or the second
+     * string begins with it. For example, the output <code>one/two</code> would be returned from <code>join("one", "two", "/")</code>
+     * or <code>join("one/", "/two", "/")</code> or <code>join("one/", "two", "/")</code> or
+     * <code>join("one", "/two", "/")</code>
+     * @param one The prefix
+     * @param sep The separator to put between the two strings, if it is not there already
+     * @param two The suffix
+     * @return The joined strings
+     */
     public static String join(String one, String sep, String two) {
         one = one == null ? "" : one;
         two = two == null ? "" : two;
@@ -88,6 +109,12 @@ public class Mutils {
         }
     }
 
+    /**
+     * Trims the given string from the given value
+     * @param value The value to be trimmed
+     * @param toTrim The string to trim
+     * @return The value with any occurrences of toTrim removed from the start and end of the value
+     */
     public static String trim(String value, String toTrim) {
         int len = toTrim.length();
         while (value.startsWith(toTrim)) {
@@ -99,9 +126,28 @@ public class Mutils {
         return value;
     }
 
+    /**
+     * Throws an {@link IllegalArgumentException} if the given value is null
+     * @param name The name of the variable to check
+     * @param value The value to check
+     */
     public static void notNull(String name, Object value) {
         if (value == null) {
             throw new IllegalArgumentException(name + " cannot be null");
+        }
+    }
+
+    /**
+     * Gets the canonical path of the given file, or if that throws an exception then gets the absolute path.
+     * @param file The file to check
+     * @return The canonical or absolute path of the given file
+     */
+    public static String fullPath(File file) {
+        notNull("file", file);
+        try {
+            return file.getCanonicalPath();
+        } catch (IOException e) {
+            return file.getAbsolutePath();
         }
     }
 }

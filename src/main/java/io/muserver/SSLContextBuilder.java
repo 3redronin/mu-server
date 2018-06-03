@@ -47,7 +47,7 @@ public class SSLContextBuilder {
 
     public SSLContextBuilder withKeystore(File file) {
         if (!file.isFile()) {
-            throw new IllegalArgumentException(path(file) + " does not exist");
+            throw new IllegalArgumentException(Mutils.fullPath(file) + " does not exist");
         }
         try {
             this.keystoreStream = new FileInputStream(file);
@@ -63,14 +63,6 @@ public class SSLContextBuilder {
             throw new IllegalArgumentException("Could not find " + classpath);
         }
         return this;
-    }
-
-    public static String path(File file) {
-        try {
-            return file.getCanonicalPath();
-        } catch (IOException e) {
-            return file.getAbsolutePath();
-        }
     }
 
     public SSLContext build() {
