@@ -50,7 +50,11 @@ class SyncHandlerAdapter implements AsyncMuHandler {
                     MuServerHandler.sendPlainText(ctx, "500 Server Error. ErrorID=" + errorID, 500);
                 }
             } finally {
-                ctx.complete();
+                try {
+                    ctx.complete();
+                } catch (Throwable e) {
+                    log.info("Error while completing request", e);
+                }
             }
         });
         return true;

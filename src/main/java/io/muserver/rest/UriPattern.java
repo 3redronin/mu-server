@@ -7,6 +7,8 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static io.muserver.Mutils.urlDecode;
+
 /**
  * A pattern representing a URI template, such as <code>/fruit</code> or <code>/fruit/{name}</code> etc.
  * To create a new pattern, call the static {@link #uriTemplateToRegex(String)} method.
@@ -48,6 +50,12 @@ public class UriPattern {
         return matcher(input.getRawPath());
     }
 
+    /**
+     * Matches the given raw path against this pattern.
+     * @param rawPath The URL-encoded path to match, for example <code>/example/some%20path</code>
+     * @return Returns a {@link PathMatch} where {@link PathMatch#prefixMatches()} is <code>true</code> if the URI matches
+     * and otherwise <code>false</code>.
+     */
     public PathMatch matcher(String rawPath) {
         if (rawPath.startsWith("/")) {
             rawPath = rawPath.substring(1);
@@ -56,7 +64,7 @@ public class UriPattern {
         if (matcher.matches()) {
             HashMap<String, String> params = new HashMap<>();
             for (String namedGroup : namedGroups) {
-                params.put(namedGroup, matcher.group(namedGroup));
+                params.put(namedGroup, urlDecode(matcher.group(namedGroup)));
             }
             return new PathMatch(true, params, matcher);
         } else {
@@ -102,8 +110,7 @@ public class UriPattern {
                     regex.append(escapeRegex(literal));
                 } else {
                     String[] segments = literal.split("/");
-                    for (int i = 0; i < segments.length; i++) {
-                        String segment = segments[i];
+                    for (String segment : segments) {
                         if (!segment.isEmpty()) {
                             regex.append(escapeRegex(segment));
                         }

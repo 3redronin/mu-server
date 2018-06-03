@@ -49,9 +49,7 @@ public class RoutesTest {
     public void jaxrsTemplatesCanBeUsed() throws IOException {
         server = httpsServer()
             .addHandler(Method.GET, "/blah/{id : [0-9]+}/ha",
-                (request, response, pathParams) -> {
-                    response.write(pathParams.get("id"));
-                })
+                (request, response, pathParams) -> response.write(pathParams.get("id")))
             .start();
 
         assertThat(call(Method.GET, "/blah/1/ha/ooh"), is(404));
@@ -65,6 +63,16 @@ public class RoutesTest {
 
         assertThat(respBody(Method.GET, "/blah/12345/ha?oh=yeah"),
             equalTo("12345"));
+    }
+
+    @Test
+    public void pathParametersAreUrlDecoded() throws IOException {
+        server = httpsServer()
+            .addHandler(Method.GET, "/blah ha/{name}/ha",
+                (request, response, pathParams) -> response.write(pathParams.get("name")))
+            .start();
+        assertThat(respBody(Method.GET, "/blah%20ha/hello%20goodbye/ha"),
+            equalTo("hello goodbye"));
     }
 
     private int call(Method method, String path) {
