@@ -86,62 +86,6 @@ public class MuServerTest {
         assertThat(handlersHit, equalTo(asList("Logger", "BlahHandler")));
     }
 
-    @Test
-    public void asyncHandlersSupported() throws IOException {
-        server = httpServer()
-            .withHttpPort(12808)
-            .addAsyncHandler(new AsyncMuHandler() {
-                public boolean onHeaders(AsyncContext ctx, Headers headers) {
-                    System.out.println("I am a logging handler and saw " + ctx.request);
-                    return false;
-                }
-
-                public void onRequestData(AsyncContext ctx, ByteBuffer buffer) {
-                }
-
-                public void onRequestComplete(AsyncContext ctx) {
-                }
-            })
-            .addAsyncHandler(new AsyncMuHandler() {
-                public boolean onHeaders(AsyncContext ctx, Headers headers) {
-                    System.out.println("Request starting");
-                    ctx.response.status(201);
-                    return true;
-                }
-
-                public void onRequestData(AsyncContext ctx, ByteBuffer buffer) {
-                    String text = StandardCharsets.UTF_8.decode(buffer).toString();
-                    ctx.response.writeAsync(text);
-                }
-
-                public void onRequestComplete(AsyncContext ctx) {
-                    System.out.println("Request complete");
-                    ctx.complete();
-                }
-            })
-            .addAsyncHandler(new AsyncMuHandler() {
-                public boolean onHeaders(AsyncContext ctx, Headers headers) {
-                    throw new RuntimeException("This should never get here");
-                }
-
-                public void onRequestData(AsyncContext ctx, ByteBuffer buffer) {
-                }
-
-                public void onRequestComplete(AsyncContext ctx) {
-                }
-            })
-            .start();
-
-        StringBuffer expected = new StringBuffer();
-
-        Response resp = call(request()
-            .url("http://localhost:12808")
-            .post(largeRequestBody(expected))
-        );
-
-        assertThat(resp.code(), is(201));
-        assertThat(resp.body().string(), equalTo(expected.toString()));
-    }
 
     @After
     public void stopIt() {

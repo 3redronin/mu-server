@@ -270,6 +270,12 @@ public final class HeaderNames {
      * {@code "set-cookie2"}
      */
     public static final CharSequence SET_COOKIE2 = HttpHeaderNames.SET_COOKIE2;
+
+    /**
+     * {@code "te"}
+     */
+    public static final CharSequence STRICT_TRANSPORT_SECURITY = AsciiString.cached("strict-transport-security");
+
     /**
      * {@code "te"}
      */

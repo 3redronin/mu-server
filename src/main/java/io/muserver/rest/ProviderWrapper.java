@@ -54,6 +54,7 @@ class ProviderWrapper<T> implements Comparable<ProviderWrapper<T>> {
         return Boolean.compare(this.isBuiltIn, o.isBuiltIn);
     }
 
+    @SuppressWarnings("unchecked")
     public static int compareTo(ProviderWrapper<MessageBodyWriter<?>> o1, ProviderWrapper<MessageBodyWriter<?>> o2, Type genericType) {
         if (o1.genericType.equals(o2.genericType)) {
             return 0;

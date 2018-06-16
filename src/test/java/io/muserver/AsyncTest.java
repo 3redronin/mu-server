@@ -11,9 +11,7 @@ import java.util.Random;
 
 import static io.muserver.MuServerBuilder.httpsServer;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.nullValue;
+import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 
@@ -24,6 +22,8 @@ public class AsyncTest {
     @Test
     public void responsesCanBeAsync() throws IOException {
 
+        DatabaseListenerSimulator changeListener = new DatabaseListenerSimulator();
+
         server = httpsServer()
             .addHandler((request, response) -> {
                 response.headers().add("X-Pre-Header", "Hello");
@@ -33,7 +33,6 @@ public class AsyncTest {
                 AsyncHandle ctx = request.handleAsync();
 
 
-                DatabaseListenerSimulator changeListener = new DatabaseListenerSimulator();
                 changeListener.addListener(new ChangeListener() {
                     @Override
                     public void onData(String data) {
@@ -46,6 +45,8 @@ public class AsyncTest {
                     }
                 });
 
+                changeListener.start();
+
                 return true;
             })
             .addHandler((request, response) -> {
@@ -55,11 +56,13 @@ public class AsyncTest {
             .start();
 
         try (Response resp = call(request().url(server.uri().toString()))) {
+            assertThat(changeListener.errors, is(empty()));
             assertThat(resp.code(), equalTo(200));
             assertThat(resp.header("X-Pre-Header"), equalTo("Hello"));
             assertThat(resp.header("X-Post-Header"), is(nullValue()));
             assertThat(resp.body().string(), equalTo("Loop 0\nLoop 1\nLoop 2\nLoop 3\nLoop 4\nLoop 5\nLoop 6\nLoop 7\nLoop 8\nLoop 9\n"));
         }
+
 
     }
 
@@ -75,7 +78,7 @@ public class AsyncTest {
         private final Random rng = new Random();
         public final List<Throwable> errors = new ArrayList<>();
 
-        public DatabaseListenerSimulator() {
+        public void start() {
             new Thread(new Runnable() {
                 @Override
                 public void run() {

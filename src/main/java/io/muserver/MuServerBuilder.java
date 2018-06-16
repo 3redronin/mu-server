@@ -193,8 +193,10 @@ public class MuServerBuilder {
      * <p>Note that async handlers are executed in the order added to the builder, but all async
      * handlers are executed before synchronous handlers.</p>
      * @param handler An Async Handler
+     * @deprecated For async handling, add a normal {@link MuHandler} and call {@link MuRequest#handleAsync()}
      * @return The current Mu-Server builder
      */
+    @Deprecated
     public MuServerBuilder addAsyncHandler(AsyncMuHandler handler) {
         asyncHandlers.add(handler);
         return this;

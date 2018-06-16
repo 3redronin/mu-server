@@ -8,18 +8,9 @@ import java.net.URI;
 import java.nio.ByteBuffer;
 
 /**
- * Sends any HTTP requests to the same HTTPS address at the supplied port.
- * <p>
- * Add as an async handler to enable. Sample usage:
- * <pre>
- *     server = MuServerBuilder.muServer()
- *                 .withHttpConnection(8080)
- *                 .withHttpsConnection(80443, SSLContextBuilder.unsignedLocalhostCert())
- *                 .addAsyncHandler(new HttpToHttpsRedirector(80443))
- *                 .addHandler( ... your handler ... )
- *                 .start();
- * </pre>
+ * @deprecated Use {@link HttpsRedirector#toHttpsPort(int)} instead and add it as standard handler.
  */
+@Deprecated
 public class HttpToHttpsRedirector implements AsyncMuHandler {
 
     private final int httpsPort;
