@@ -141,7 +141,8 @@ class NettyResponseAdaptor implements MuResponse {
 
     public PrintWriter writer() {
         if (this.writer == null) {
-            this.writer = new PrintWriter(new OutputStreamWriter(outputStream(), StandardCharsets.UTF_8));
+            OutputStreamWriter os = new OutputStreamWriter(outputStream(), StandardCharsets.UTF_8);
+            this.writer = new PrintWriter(os);
         }
         return this.writer;
     }
@@ -162,6 +163,9 @@ class NettyResponseAdaptor implements MuResponse {
             }
             lastAction = ctx.writeAndFlush(msg);
         } else if (outputState == OutputState.CHUNKING && !isHead) {
+            if (writer != null) {
+                writer.close();
+            }
             lastAction = ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
         }
         if (!request.isKeepAliveRequested()) {

@@ -26,7 +26,7 @@ public class ClientUtils {
         boolean isDebug = ManagementFactory.getRuntimeMXBean().getInputArguments().toString().contains("jdwp");
         return new OkHttpClient.Builder()
             .hostnameVerifier((hostname, session) -> true)
-            .readTimeout(isDebug ? 120 : 10, TimeUnit.SECONDS)
+            .readTimeout(isDebug ? 180 : 20, TimeUnit.SECONDS)
             .sslSocketFactory(sslContextForTesting(veryTrustingTrustManager).getSocketFactory(), veryTrustingTrustManager);
     }
 

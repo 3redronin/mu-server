@@ -20,12 +20,15 @@ class SyncHandlerAdapter implements AsyncMuHandler {
 
 
     public boolean onHeaders(AsyncContext ctx, Headers headers) throws Exception {
+
+        NettyRequestAdapter request = (NettyRequestAdapter) ctx.request;
         if (headers.contains(HeaderNames.TRANSFER_ENCODING) || headers.getInt(HeaderNames.CONTENT_LENGTH, -1) > 0) {
             // There will be a request body, so set the streams
             GrowableByteBufferInputStream requestBodyStream = new GrowableByteBufferInputStream();
-            ((NettyRequestAdapter) ctx.request).inputStream(requestBodyStream);
+            request.inputStream(requestBodyStream);
             ctx.state = requestBodyStream;
         }
+        request.nettyAsyncContext = ctx;
         executor.submit(() -> {
             try {
 
@@ -35,12 +38,15 @@ class SyncHandlerAdapter implements AsyncMuHandler {
                     if (handled) {
                         break;
                     }
+                    if (request.isAsync()) {
+                        throw new IllegalStateException(muHandler.getClass() + " returned false however this is not allowed after starting to handle a request asynchronously.");
+                    }
                 }
                 if (!handled) {
                     MuServerHandler.send404(ctx);
                 }
 
-                ((NettyRequestAdapter)ctx.request).clean();
+                request.clean();
 
             } catch (Throwable ex) {
                 log.warn("Unhandled error from handler for " + this, ex);
@@ -50,10 +56,12 @@ class SyncHandlerAdapter implements AsyncMuHandler {
                     MuServerHandler.sendPlainText(ctx, "500 Server Error. ErrorID=" + errorID, 500);
                 }
             } finally {
-                try {
-                    ctx.complete();
-                } catch (Throwable e) {
-                    log.info("Error while completing request", e);
+                if (!request.isAsync()) {
+                    try {
+                        ctx.complete();
+                    } catch (Throwable e) {
+                        log.info("Error while completing request", e);
+                    }
                 }
             }
         });

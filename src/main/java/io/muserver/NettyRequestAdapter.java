@@ -29,6 +29,7 @@ class NettyRequestAdapter implements MuRequest {
     private final URI uri;
     private final Method method;
     private final Headers headers;
+    AsyncContext nettyAsyncContext;
     private InputStream inputStream;
     private final RequestParameters query;
     private RequestParameters form;
@@ -39,6 +40,7 @@ class NettyRequestAdapter implements MuRequest {
     private HttpPostMultipartRequestDecoder multipartRequestDecoder;
     private HashMap<String, List<UploadedFile>> uploads;
     private Object state;
+    private boolean isAsync = false;
 
     NettyRequestAdapter(String proto, HttpRequest request) {
         this.request = request;
@@ -48,6 +50,10 @@ class NettyRequestAdapter implements MuRequest {
         this.query = new NettyRequestParameters(new QueryStringDecoder(request.uri(), true));
         this.method = Method.fromNetty(request.method());
         this.headers = new Headers(request.headers());
+    }
+
+    boolean isAsync() {
+        return isAsync;
     }
 
     boolean isKeepAliveRequested() {
@@ -217,6 +223,17 @@ class NettyRequestAdapter implements MuRequest {
     @Override
     public void state(Object value) {
         this.state = value;
+    }
+
+    @Override
+    public AsyncHandle handleAsync() {
+        isAsync = true;
+        return new AsyncHandle() {
+            @Override
+            public void complete() {
+                nettyAsyncContext.complete();
+            }
+        };
     }
 
     private void ensureFormDataLoaded() throws IOException {

@@ -1,6 +1,5 @@
 package io.muserver;
 
-import io.muserver.handlers.ResourceHandler;
 import io.muserver.rest.RestHandlerBuilder;
 import okhttp3.OkHttpClient;
 import okhttp3.Response;
@@ -18,9 +17,7 @@ import static io.muserver.MuServerBuilder.httpsServer;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static scaffolding.ClientUtils.call;
-import static scaffolding.ClientUtils.newClient;
-import static scaffolding.ClientUtils.request;
+import static scaffolding.ClientUtils.*;
 
 public class ContextHandlerTest {
 

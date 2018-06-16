@@ -219,6 +219,11 @@ public class JaxRsHttpHeadersAdapterTest {
             public void state(Object value) {
                 throw new NotImplementedException();
             }
+
+            @Override
+            public AsyncHandle handleAsync() {
+                throw new NotImplementedException();
+            }
         };
     }
 

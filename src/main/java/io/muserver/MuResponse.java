@@ -32,6 +32,12 @@ public interface MuResponse {
      */
     void status(int value);
 
+    /**
+     * @deprecated For async handling, call {@link MuRequest#handleAsync()}
+     * @param text Text to send
+     * @return Returns a future
+     */
+    @Deprecated
     Future<Void> writeAsync(String text);
 
     /**

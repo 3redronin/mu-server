@@ -305,6 +305,10 @@ public class ContentTypes {
      */
     public static final CharSequence APPLICATION_X_7Z_COMPRESSED = AsciiString.cached("application/x-7z-compressed");
 
+    /**
+     * Server-Sent-Events, a.k.a. SSE, a.k.a. Event Streams: {@code "text/event-stream"}
+     */
+    public static final CharSequence EVENT_STREAM = AsciiString.cached("text/event-stream");
 
     private ContentTypes() {}
 }
