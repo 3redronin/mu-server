@@ -26,10 +26,11 @@ class SyncHandlerAdapter implements AsyncMuHandler {
             // There will be a request body, so set the streams
             GrowableByteBufferInputStream requestBodyStream = new GrowableByteBufferInputStream();
             request.inputStream(requestBodyStream);
-            ctx.state = requestBodyStream;
+            ctx.requestBody = requestBodyStream;
         }
         request.nettyAsyncContext = ctx;
         executor.submit(() -> {
+            boolean error = false;
             try {
 
                 boolean handled = false;
@@ -49,6 +50,7 @@ class SyncHandlerAdapter implements AsyncMuHandler {
                 request.clean();
 
             } catch (Throwable ex) {
+                error = true;
                 log.warn("Unhandled error from handler for " + this, ex);
                 if (!ctx.response.hasStartedSendingData()) {
                     String errorID = "ERR-" + UUID.randomUUID().toString();
@@ -56,7 +58,7 @@ class SyncHandlerAdapter implements AsyncMuHandler {
                     MuServerHandler.sendPlainText(ctx, "500 Server Error. ErrorID=" + errorID, 500);
                 }
             } finally {
-                if (!request.isAsync()) {
+                if (error || !request.isAsync()) {
                     try {
                         ctx.complete();
                     } catch (Throwable e) {
@@ -69,15 +71,14 @@ class SyncHandlerAdapter implements AsyncMuHandler {
     }
 
     public void onRequestData(AsyncContext ctx, ByteBuffer buffer) {
-        GrowableByteBufferInputStream state = (GrowableByteBufferInputStream) ctx.state;
-        state.handOff(buffer);
+        ctx.requestBody.handOff(buffer);
     }
 
     public void onRequestComplete(AsyncContext ctx) {
         try {
-            GrowableByteBufferInputStream state = (GrowableByteBufferInputStream) ctx.state;
-            if (state != null) {
-                state.close();
+            GrowableByteBufferInputStream inputBuffer = ctx.requestBody;
+            if (inputBuffer != null) {
+                inputBuffer.close();
             }
         } catch (Exception e) {
             log.info("Error while cleaning up request. It may mean the client did not receive the full response for " + ctx.request, e);

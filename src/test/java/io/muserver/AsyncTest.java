@@ -1,10 +1,15 @@
 package io.muserver;
 
+import okhttp3.MediaType;
+import okhttp3.Request;
+import okhttp3.RequestBody;
 import okhttp3.Response;
+import okio.BufferedSink;
 import org.junit.After;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
@@ -63,6 +68,69 @@ public class AsyncTest {
             assertThat(resp.body().string(), equalTo("Loop 0\nLoop 1\nLoop 2\nLoop 3\nLoop 4\nLoop 5\nLoop 6\nLoop 7\nLoop 8\nLoop 9\n"));
         }
 
+
+    }
+
+    @Test
+    public void requestBodiesCanBeReadAsynchronously() throws IOException {
+        List<Throwable> errors = new ArrayList<>();
+        server = httpsServer()
+            .addHandler((request, response) -> {
+                AsyncHandle ctx = request.handleAsync();
+                ctx.setReadListener(new RequestBodyListener() {
+                    @Override
+                    public void onDataReceived(ByteBuffer bb) {
+                        byte[] b = new byte[bb.remaining()];
+                        bb.get(b);
+                        try {
+                            response.outputStream().write(b);
+                        } catch (IOException e) {
+                            errors.add(e);
+                        }
+                    }
+
+                    @Override
+                    public void onComplete() {
+                        ctx.complete();
+                    }
+
+                    @Override
+                    public void onError(Throwable t) {
+                        errors.add(t);
+                    }
+                });
+
+                return true;
+            })
+            .start();
+
+        Request.Builder request = request()
+            .url(server.uri().toString())
+            .post(new RequestBody() {
+                @Override
+                public MediaType contentType() {
+                    return MediaType.parse("text/plain");
+                }
+
+                @Override
+                public void writeTo(BufferedSink sink) throws IOException {
+                    for (int i = 0; i < 10; i++) {
+                        sink.writeUtf8("Loop " + i + "\n");
+                        try {
+                            Thread.sleep(70);
+                        } catch (InterruptedException e) {
+                            errors.add(e);
+                        }
+                    }
+                }
+            })
+            ;
+
+        try (Response resp = call(request)) {
+            assertThat(errors, is(empty()));
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.body().string(), equalTo("Loop 0\nLoop 1\nLoop 2\nLoop 3\nLoop 4\nLoop 5\nLoop 6\nLoop 7\nLoop 8\nLoop 9\n"));
+        }
 
     }
 

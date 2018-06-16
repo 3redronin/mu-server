@@ -30,7 +30,7 @@ class NettyRequestAdapter implements MuRequest {
     private final Method method;
     private final Headers headers;
     AsyncContext nettyAsyncContext;
-    private InputStream inputStream;
+    private GrowableByteBufferInputStream inputStream;
     private final RequestParameters query;
     private RequestParameters form;
     private boolean bodyRead = false;
@@ -230,6 +230,17 @@ class NettyRequestAdapter implements MuRequest {
         isAsync = true;
         return new AsyncHandle() {
             @Override
+            public void setReadListener(RequestBodyListener readListener) {
+                if (readListener != null) {
+                    if (inputStream == null) {
+                        readListener.onComplete();
+                    } else {
+                        inputStream.switchToListener(readListener);
+                    }
+                }
+            }
+
+            @Override
             public void complete() {
                 nettyAsyncContext.complete();
             }
@@ -278,7 +289,7 @@ class NettyRequestAdapter implements MuRequest {
         }
     }
 
-    void inputStream(InputStream stream) {
+    void inputStream(GrowableByteBufferInputStream stream) {
         this.inputStream = stream;
     }
 

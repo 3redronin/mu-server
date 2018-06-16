@@ -3,6 +3,7 @@ package io.muserver;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -13,8 +14,10 @@ class GrowableByteBufferInputStream extends InputStream {
 	private static final ByteBuffer LAST = ByteBuffer.allocate(0);
 	private final BlockingQueue<ByteBuffer> queue = new LinkedBlockingQueue<>(); // TODO add config for this which is like a request size upload limit (sort of)
 	private volatile ByteBuffer current = EMPTY;
+    private RequestBodyListener listener;
+    private final Object listenerLock = new Object();
 
-	private ByteBuffer cycleIfNeeded() throws IOException {
+    private ByteBuffer cycleIfNeeded() throws IOException {
 		if (current == LAST) {
 			return current;
 		}
@@ -62,11 +65,44 @@ class GrowableByteBufferInputStream extends InputStream {
 
 	public void close() throws IOException {
 		// This is called from the main netty accepter thread so must be non-blocking
-		queue.add(LAST);
+        synchronized (listenerLock) {
+            if (listener == null) {
+                queue.add(LAST);
+            } else {
+                sendToListener(listener, LAST);
+            }
+        }
 	}
 
-	public void handOff(ByteBuffer buffer) {
+	void handOff(ByteBuffer buffer) {
 		// This is called from the main netty accepter thread so must be non-blocking
-		queue.add(buffer);
+        synchronized (listenerLock) {
+            if (listener == null) {
+                queue.add(buffer);
+            } else {
+                sendToListener(listener, buffer);
+            }
+        }
 	}
+
+    void switchToListener(RequestBodyListener readListener) {
+	    synchronized (listenerLock) {
+	        while (!queue.isEmpty()) {
+                ArrayList<ByteBuffer> existing = new ArrayList<>(queue.size());
+                queue.drainTo(existing);
+                for (ByteBuffer byteBuffer : existing) {
+                    sendToListener(readListener, byteBuffer);
+                }
+            }
+            this.listener = readListener;
+        }
+    }
+
+    private static void sendToListener(RequestBodyListener readListener, ByteBuffer byteBuffer) {
+        if (byteBuffer == LAST) {
+            readListener.onComplete();
+        } else {
+            readListener.onDataReceived(byteBuffer);
+        }
+    }
 }
