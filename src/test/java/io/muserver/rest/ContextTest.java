@@ -1,6 +1,9 @@
 package io.muserver.rest;
 
-import io.muserver.*;
+import io.muserver.MuRequest;
+import io.muserver.MuResponse;
+import io.muserver.MuServer;
+import io.muserver.MuServerBuilder;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
@@ -14,7 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static java.util.Arrays.asList;
+import static io.muserver.ContextHandlerBuilder.context;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
@@ -43,7 +46,10 @@ public class ContextTest {
                 return "Sample Resource Class";
             }
         }
-        startServer(new Sample());
+        this.server = MuServerBuilder.muServer()
+            .withHttpsPort(50977)
+            .addHandler(RestHandlerBuilder.restHandler((Object) new Sample()))
+            .start();
         try (Response resp = call(request().url(server.uri().resolve("/samples/zample/barmpit?hoo=har%20har").toString()))) {
             assertThat(resp.body().string(), equalTo("https://localhost:50977/\nsamples/zample/barmpit\n" +
                 "https://localhost:50977/samples/zample/barmpit\n" +
@@ -71,16 +77,19 @@ public class ContextTest {
                 return "Sample Resource Class";
             }
         }
-        this.server = MuServerBuilder.httpsServer().withHttpsPort(50977).withHttpsConfig(SSLContextBuilder.unsignedLocalhostCert())
-            .addHandler(new ContextHandler("/ha ha/", asList(RestHandlerBuilder.restHandler(new Sample()).build()))).start();
+        this.server = MuServerBuilder.muServer()
+            .withHttpsPort(50978)
+            .addHandler(
+                context("/ha ha/").addHandler(RestHandlerBuilder.restHandler(new Sample()))
+            )
+            .start();
         try (Response resp = call(request().url(server.uri().resolve("/ha%20ha/samples/zample/barmpit?hoo=har%20har").toString()))) {
-            assertThat(resp.body().string(), equalTo("https://localhost:50977/ha%20ha/\nsamples/zample/barmpit\n" +
-                "https://localhost:50977/ha%20ha/samples/zample/barmpit\n" +
-                "https://localhost:50977/ha%20ha/samples/zample/barmpit?hoo=har%20har\nhar har\nhar%20har\n" +
+            assertThat(resp.body().string(), equalTo("https://localhost:50978/ha%20ha/\nsamples/zample/barmpit\n" +
+                "https://localhost:50978/ha%20ha/samples/zample/barmpit\n" +
+                "https://localhost:50978/ha%20ha/samples/zample/barmpit?hoo=har%20har\nhar har\nhar%20har\n" +
                 "Sample Resource Class\nsamples/zample/barmpit:samples"));
         }
     }
-
 
     @Test
     public void muResponseCanBeGotten() throws Exception {
@@ -92,7 +101,9 @@ public class ContextTest {
                 resp.sendChunk(" world");
             }
         }
-        startServer(new Sample());
+        this.server = MuServerBuilder.httpsServer()
+            .addHandler(RestHandlerBuilder.restHandler((Object) new Sample()))
+            .start();
         try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.body().string(), equalTo("Hello world"));
@@ -116,7 +127,9 @@ public class ContextTest {
                 return sb.toString();
             }
         }
-        startServer(new Sample());
+        this.server = MuServerBuilder.httpsServer()
+            .addHandler(RestHandlerBuilder.restHandler((Object) new Sample()))
+            .start();
         try (Response resp = call(request()
             .url(server.uri().resolve("/samples").toString())
             .header("X-Something", "Blah")
@@ -125,11 +138,6 @@ public class ContextTest {
             assertThat(resp.code(), is(200));
             assertThat(resp.body().string(), equalTo("X-Something-Else=Another blah X-Something=Blah "));
         }
-    }
-
-    private void startServer(Object restResource) {
-        this.server = MuServerBuilder.httpsServer().withHttpsPort(50977).withHttpsConfig(SSLContextBuilder.unsignedLocalhostCert())
-            .addHandler(RestHandlerBuilder.restHandler(restResource).build()).start();
     }
 
     @After

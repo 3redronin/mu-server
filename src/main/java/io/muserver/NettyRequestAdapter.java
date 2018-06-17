@@ -231,6 +231,7 @@ class NettyRequestAdapter implements MuRequest {
         return new AsyncHandle() {
             @Override
             public void setReadListener(RequestBodyListener readListener) {
+                claimingBodyRead();
                 if (readListener != null) {
                     if (inputStream == null) {
                         readListener.onComplete();
@@ -311,6 +312,8 @@ class NettyRequestAdapter implements MuRequest {
     void clean() {
         state(null);
         if (multipartRequestDecoder != null) {
+            // need to clear the datas before destorying. See https://github.com/netty/netty/issues/7814#issuecomment-397855311
+            multipartRequestDecoder.getBodyHttpDatas().clear();
             multipartRequestDecoder.destroy();
             multipartRequestDecoder = null;
         }

@@ -50,10 +50,12 @@ class SyncHandlerAdapter implements AsyncMuHandler {
 
             } catch (Throwable ex) {
                 error = true;
-                log.warn("Unhandled error from handler for " + this, ex);
-                if (!ctx.response.hasStartedSendingData()) {
+
+                if (ctx.response.hasStartedSendingData()) {
+                    log.warn("Unhandled error from handler for " + request + " (note that a " + ctx.response.status() + " was already sent to the client before the error occurred)", ex);
+                } else {
                     String errorID = "ERR-" + UUID.randomUUID().toString();
-                    log.info("Sending a 500 to the client with ErrorID=" + errorID);
+                    log.info("Sending a 500 to the client with ErrorID=" + errorID + " for " + request, ex);
                     MuServerHandler.sendPlainText(ctx, "500 Server Error. ErrorID=" + errorID, 500);
                 }
             } finally {
