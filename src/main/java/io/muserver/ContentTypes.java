@@ -308,7 +308,7 @@ public class ContentTypes {
     /**
      * Server-Sent-Events, a.k.a. SSE, a.k.a. Event Streams: {@code "text/event-stream"}
      */
-    public static final CharSequence EVENT_STREAM = AsciiString.cached("text/event-stream");
+    public static final CharSequence TEXT_EVENT_STREAM = AsciiString.cached("text/event-stream");
 
     private ContentTypes() {}
 }

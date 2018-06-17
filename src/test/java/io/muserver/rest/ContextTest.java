@@ -18,6 +18,8 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static io.muserver.ContextHandlerBuilder.context;
+import static io.muserver.MuServerBuilder.muServer;
+import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
@@ -46,9 +48,9 @@ public class ContextTest {
                 return "Sample Resource Class";
             }
         }
-        this.server = MuServerBuilder.muServer()
+        this.server = muServer()
             .withHttpsPort(50977)
-            .addHandler(RestHandlerBuilder.restHandler((Object) new Sample()))
+            .addHandler(restHandler(new Sample()))
             .start();
         try (Response resp = call(request().url(server.uri().resolve("/samples/zample/barmpit?hoo=har%20har").toString()))) {
             assertThat(resp.body().string(), equalTo("https://localhost:50977/\nsamples/zample/barmpit\n" +
@@ -77,10 +79,10 @@ public class ContextTest {
                 return "Sample Resource Class";
             }
         }
-        this.server = MuServerBuilder.muServer()
+        this.server = muServer()
             .withHttpsPort(50978)
             .addHandler(
-                context("/ha ha/").addHandler(RestHandlerBuilder.restHandler(new Sample()))
+                context("/ha ha/").addHandler(restHandler(new Sample()))
             )
             .start();
         try (Response resp = call(request().url(server.uri().resolve("/ha%20ha/samples/zample/barmpit?hoo=har%20har").toString()))) {
@@ -102,7 +104,7 @@ public class ContextTest {
             }
         }
         this.server = MuServerBuilder.httpsServer()
-            .addHandler(RestHandlerBuilder.restHandler((Object) new Sample()))
+            .addHandler(restHandler(new Sample()))
             .start();
         try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
             assertThat(resp.code(), is(200));
@@ -128,7 +130,7 @@ public class ContextTest {
             }
         }
         this.server = MuServerBuilder.httpsServer()
-            .addHandler(RestHandlerBuilder.restHandler((Object) new Sample()))
+            .addHandler(restHandler(new Sample()))
             .start();
         try (Response resp = call(request()
             .url(server.uri().resolve("/samples").toString())

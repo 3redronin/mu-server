@@ -9,6 +9,7 @@ import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -43,15 +44,12 @@ public class FileProviderTest {
         for (File file : files) {
             boolean isLarge = file.length() > 10000000L;
             if (SKIP_LARGE_FILES && isLarge) {
-                System.out.println("Skipping " + file.getName() + " as it is too large");
                 continue;
             }
             URI downloadUri = server.httpUri().resolve("/" + urlEncode(file.getName()));
-            System.out.println("Going to test " + file.getName() + " from " + downloadUri);
 
             try (Response resp = call(request().url(downloadUri.toString()))) {
                 assertThat(resp.code(), is(200));
-                System.out.println("resp.headers() = " + resp.headers());
                 InputStream inputStream = resp.body().byteStream();
                 long soFar = 0;
                 long total = file.length();

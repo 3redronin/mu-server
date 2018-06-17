@@ -17,7 +17,6 @@ public class EncodingObjectTest {
     public void defaultsSetCorrectlyForQuery() throws IOException {
         EncodingObject obj = encodingObject().build();
         obj.writeJson(writer);
-        System.out.println(writer);
         assertThat(writer.toString(), equalTo("{\"explode\":false,\"allowReserved\":false}"));
     }
 

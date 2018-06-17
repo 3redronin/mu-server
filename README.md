@@ -67,6 +67,30 @@ Optional<String> cookieValue = request.cookie("cookieName");
 
 The request documentation has more details.
 
+## Server-Sent Events (SSE)
+
+In a handler, create a new SsePublisher which will allow you to asynchronously publish to an event strem:
+
+````java
+MuServer server = httpsServer()
+    .addHandler(Method.GET, "/streamer", (request, response, pathParams) -> {
+        SsePublisher ssePublisher = SsePublisher.start(request, response);
+        new Thread(() -> {
+            try {
+                for (int i = 0; i < 100; i++) {
+                    ssePublisher.send("This is message " + i);
+                    Thread.sleep(1000);
+                }
+            } catch (Exception e) {
+                // the user has probably disconnected; stop publishing
+            } finally {
+                ssePublisher.close();
+            }
+        }).start();
+    })
+    .start();
+````
+
 ## JAX-RS REST Resources
 
 Mu-Server provides a partial implementation of the [JAX-RS 2.1 spec](https://jcp.org/aboutJava/communityprocess/final/jsr370/index.html), 

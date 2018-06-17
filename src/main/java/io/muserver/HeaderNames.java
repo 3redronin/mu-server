@@ -179,6 +179,10 @@ public final class HeaderNames {
      */
     public static final CharSequence IF_UNMODIFIED_SINCE = HttpHeaderNames.IF_UNMODIFIED_SINCE;
     /**
+     * {@code "last-event-id"}
+     */
+    public static final CharSequence LAST_EVENT_ID = AsciiString.cached("last-event-id");
+    /**
      * {@code "last-modified"}
      */
     public static final CharSequence LAST_MODIFIED = HttpHeaderNames.LAST_MODIFIED;

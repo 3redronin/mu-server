@@ -74,7 +74,10 @@ class NettyResponseAdaptor implements MuResponse {
     }
 
     public Future<Void> writeAsync(String text) {
-        sendChunk(text);
+        if (outputState == OutputState.NOTHING) {
+            startChunking();
+        }
+        lastAction = ctx.writeAndFlush(new DefaultHttpContent(textToBuffer(text)));
         return lastAction;
     }
 
@@ -98,7 +101,7 @@ class NettyResponseAdaptor implements MuResponse {
         if (outputState == OutputState.NOTHING) {
             startChunking();
         }
-        lastAction = ctx.writeAndFlush(new DefaultHttpContent(textToBuffer(text)));
+        lastAction = ctx.writeAndFlush(new DefaultHttpContent(textToBuffer(text))).syncUninterruptibly();
     }
 
     private static ByteBuf textToBuffer(String text) {
