@@ -312,6 +312,7 @@ class NettyRequestAdapter implements MuRequest {
         state(null);
         if (multipartRequestDecoder != null) {
             multipartRequestDecoder.destroy();
+            multipartRequestDecoder = null;
         }
     }
 }

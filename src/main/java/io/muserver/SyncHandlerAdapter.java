@@ -47,7 +47,6 @@ class SyncHandlerAdapter implements AsyncMuHandler {
                     MuServerHandler.send404(ctx);
                 }
 
-                request.clean();
 
             } catch (Throwable ex) {
                 error = true;
@@ -58,6 +57,7 @@ class SyncHandlerAdapter implements AsyncMuHandler {
                     MuServerHandler.sendPlainText(ctx, "500 Server Error. ErrorID=" + errorID, 500);
                 }
             } finally {
+                request.clean();
                 if (error || !request.isAsync()) {
                     try {
                         ctx.complete();
