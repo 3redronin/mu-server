@@ -11,6 +11,7 @@ import java.net.URI;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static io.muserver.MuServerBuilder.httpServer;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -153,6 +154,43 @@ public class HeadersTest {
         assertThat(resp.code(), is(200));
         assertThat(resp.header("Content-Length"), is(nullValue()));
         assertThat(resp.header("Transfer-Encoding"), is("chunked"));
+    }
+
+    @Test public void anXForwardHostHeaderDontThrowException() {
+        server = httpServer()
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.status(200);
+                response.writer().print("Hello");
+            })
+            .start();
+        try (Response resp = call(request().header(HeaderNames.X_FORWARDED_HOST.toString(), "mu-server-io:1234").url(server.uri().toString()))) {
+            assertThat(resp.code(), is(200));
+        }
+    }
+
+
+    @Test public void anErrorXForwardHostHeaderDontThrowException() {
+        server = httpServer()
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.status(200);
+                response.writer().print("Hello");
+            })
+            .start();
+        try (Response resp = call(request().header(HeaderNames.X_FORWARDED_HOST.toString(), "mu-server-io(error):1234").url(server.uri().toString()))) {
+            assertThat(resp.code(), is(200));
+        }
+    }
+
+    @Test public void anIPv6XForwardHostHeaderDontThrowException() {
+        server = httpServer()
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.status(200);
+                response.writer().print("Hello");
+            })
+            .start();
+        try (Response resp = call(request().header(HeaderNames.X_FORWARDED_HOST.toString(), "[2001:0db8:85a3:08d3:1319:8a2e:0370:7344]:1234").url(server.uri().toString()))) {
+            assertThat(resp.code(), is(200));
+        }
     }
 
 

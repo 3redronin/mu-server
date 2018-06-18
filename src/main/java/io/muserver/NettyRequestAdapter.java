@@ -63,13 +63,28 @@ class NettyRequestAdapter implements MuRequest {
     private static URI getUri(HttpRequest request, URI serverUri) {
         HttpHeaders h = request.headers();
         String proto = h.get(HeaderNames.X_FORWARDED_PROTO, serverUri.getScheme());
-        String host = h.get(HeaderNames.X_FORWARDED_HOST, serverUri.getHost());
-        int port = h.getInt(HeaderNames.X_FORWARDED_PORT, serverUri.getPort());
-        port = (port != 80 && port != 443 && port > 0) ? port : -1;
+        String rawHost = h.get(HeaderNames.X_FORWARDED_HOST, serverUri.getHost());
         try {
+            String host, portFromHost = null;
+            int ipv6CheckAndIndex = rawHost.lastIndexOf("]");
+            int lastColonCheckAndIndex = rawHost.lastIndexOf(":");
+            if (ipv6CheckAndIndex != -1) {      // IPv6
+                host = rawHost.substring(0, ipv6CheckAndIndex + 1);
+                if (ipv6CheckAndIndex < lastColonCheckAndIndex) { // has port
+                    portFromHost = rawHost.substring(lastColonCheckAndIndex + 1, rawHost.length());
+                }
+            } else if(lastColonCheckAndIndex != -1) { // IPv4 or domain and has port
+                host = rawHost.substring(0, lastColonCheckAndIndex);
+                portFromHost = rawHost.substring(lastColonCheckAndIndex + 1, rawHost.length());
+            } else {  // no port
+                host = rawHost;
+            }
+            int port = h.getInt(HeaderNames.X_FORWARDED_PORT, Optional.ofNullable(portFromHost).isPresent() ? Integer.valueOf(portFromHost) : serverUri.getPort());
+            port = (port != 80 && port != 443 && port > 0) ? port : -1;
             return new URI(proto, serverUri.getUserInfo(), host, port, serverUri.getPath(), serverUri.getQuery(), serverUri.getFragment());
         } catch (URISyntaxException e) {
-            throw new IllegalArgumentException("Could not convert " + request.uri() + " into a URI object", e);
+            log.warn("Could not convert " + request.uri() + " into a URI object", e);
+            return serverUri;
         }
     }
 
