@@ -1,6 +1,6 @@
 # mu-server
 
-Experimental web server, very much under construction
+A modern Java web server, based on Netty. Currently in beta.
 
 ## Principles
 
@@ -16,7 +16,7 @@ Experimental web server, very much under construction
 <dependency>
     <groupId>io.muserver</groupId>
     <artifactId>mu-server</artifactId>
-    <version>0.8.0</version>
+    <version>0.9.1</version>
 </dependency>
 ````
 
