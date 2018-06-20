@@ -5,6 +5,7 @@ import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
 
+import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.MalformedURLException;
 import java.net.URI;
@@ -156,40 +157,117 @@ public class HeadersTest {
         assertThat(resp.header("Transfer-Encoding"), is("chunked"));
     }
 
-    @Test public void anXForwardHostHeaderDontThrowException() {
+    @Test public void aRequestHasXForwardHostHeaderDontThrowException() throws IOException {
+        final String host = "mu-server-io:1234";
         server = httpServer()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
-                response.writer().print("Hello");
+                response.writer().print(request.uri());
             })
             .start();
-        try (Response resp = call(request().header(HeaderNames.X_FORWARDED_HOST.toString(), "mu-server-io:1234").url(server.uri().toString()))) {
+        try (Response resp = call(request().header(HeaderNames.X_FORWARDED_HOST.toString(), host).url(server.uri().toString()))) {
             assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), equalTo("http://"+host+"/"));
+        }
+    }
+
+    @Test public void aRequestHasXForwardHostAndHasNoPortDontThrowException() throws IOException {
+        final String host = "mu-server-io";
+        server = httpServer()
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.status(200);
+                response.writer().print(request.uri());
+            })
+            .start();
+        try (Response resp = call(request().header(HeaderNames.X_FORWARDED_HOST.toString(), host).url(server.uri().toString()))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), equalTo("http://"+host+"/"));
+        }
+    }
+
+    @Test public void aRequestHasXForwardHostAndXForwardedPortDontThrowExceptionAndUserPort() throws IOException {
+        final String host = "mu-server-io:9999";
+        final String port = "8888";
+        server = httpServer()
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.status(200);
+                response.writer().print(request.uri());
+            })
+            .start();
+        try (Response resp = call(request().header(HeaderNames.X_FORWARDED_HOST.toString(), host).header(HeaderNames.X_FORWARDED_PORT.toString(), port).url(server.uri().toString()))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), equalTo("http://"+host.substring(0, host.lastIndexOf(":") + 1)+port+"/"));
         }
     }
 
 
-    @Test public void anErrorXForwardHostHeaderDontThrowException() {
+    @Test public void aRquestWithErrorXForwardHostHeaderDontThrowException() throws IOException {
+        final String host = "mu-server-io(error):1234";
         server = httpServer()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
-                response.writer().print("Hello");
+                response.writer().print(request.uri());
             })
             .start();
-        try (Response resp = call(request().header(HeaderNames.X_FORWARDED_HOST.toString(), "mu-server-io(error):1234").url(server.uri().toString()))) {
+        try (Response resp = call(request().header(HeaderNames.X_FORWARDED_HOST.toString(), host).url(server.uri().toString()))) {
             assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), equalTo(server.uri().toString()+"/"));
         }
     }
 
-    @Test public void anIPv6XForwardHostHeaderDontThrowException() {
+    @Test public void aRequestHasIPv6XForwardHostHeaderDontThrowException() throws IOException {
+        final String host = "[2001:0db8:85a3:08d3:1319:8a2e:0370:7344]:1234";
         server = httpServer()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
-                response.writer().print("Hello");
+                response.writer().print(request.uri());
             })
             .start();
-        try (Response resp = call(request().header(HeaderNames.X_FORWARDED_HOST.toString(), "[2001:0db8:85a3:08d3:1319:8a2e:0370:7344]:1234").url(server.uri().toString()))) {
+        try (Response resp = call(request().header(HeaderNames.X_FORWARDED_HOST.toString(), host).url(server.uri().toString()))) {
             assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), equalTo("http://"+host+"/"));
+        }
+    }
+
+    @Test public void anIPv6XForwardHostHeaderHasNoPortDontThrowException() throws IOException {
+        final String host = "[2001:0db8:85a3:08d3:1319:8a2e:0370:7344]";
+        server = httpServer()
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.status(200);
+                response.writer().print(request.uri());
+            })
+            .start();
+        try (Response resp = call(request().header(HeaderNames.X_FORWARDED_HOST.toString(), host).url(server.uri().toString()))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), equalTo("http://"+host+"/"));
+        }
+    }
+
+    @Test public void anIPv4XForwardHostHeaderDontThrowException() throws IOException {
+        final String host = "192.168.1.1:1234";
+        server = httpServer()
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.status(200);
+                response.writer().print(request.uri());
+            })
+            .start();
+        try (Response resp = call(request().header(HeaderNames.X_FORWARDED_HOST.toString(), host).url(server.uri().toString()))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), equalTo("http://"+host+"/"));
+        }
+    }
+
+    @Test public void anIPv4XForwardHostHeaderHasNoPortDontThrowException() throws IOException {
+        final String host = "192.168.1.1";
+        server = httpServer()
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.status(200);
+                response.writer().print(request.uri());
+            })
+            .start();
+        try (Response resp = call(request().header(HeaderNames.X_FORWARDED_HOST.toString(), host).url(server.uri().toString()))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), equalTo("http://"+host+"/"));
         }
     }
 
