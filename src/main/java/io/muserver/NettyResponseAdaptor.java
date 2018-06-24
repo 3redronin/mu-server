@@ -94,7 +94,7 @@ class NettyResponseAdaptor implements MuResponse {
 
         writeHeaders(resp, this.headers, request);
         HttpUtil.setContentLength(resp, text.length());
-        lastAction = ctx.writeAndFlush(resp);
+        lastAction = ctx.writeAndFlush(resp).syncUninterruptibly();
     }
 
     public void sendChunk(String text) {
