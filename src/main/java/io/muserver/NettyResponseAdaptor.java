@@ -13,6 +13,7 @@ import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.net.URI;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.Future;
 
@@ -78,6 +79,14 @@ class NettyResponseAdaptor implements MuResponse {
             startChunking();
         }
         lastAction = ctx.writeAndFlush(new DefaultHttpContent(textToBuffer(text)));
+        return lastAction;
+    }
+
+    ChannelFuture write(ByteBuffer data) {
+        if (outputState == OutputState.NOTHING) {
+            startChunking();
+        }
+        lastAction = ctx.writeAndFlush(new DefaultHttpContent(Unpooled.wrappedBuffer(data)));
         return lastAction;
     }
 

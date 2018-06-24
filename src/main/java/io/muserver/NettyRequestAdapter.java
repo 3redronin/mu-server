@@ -2,6 +2,7 @@ package io.muserver;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import io.netty.channel.ChannelFuture;
 import io.netty.handler.codec.http.*;
 import io.netty.handler.codec.http.cookie.ServerCookieDecoder;
 import io.netty.handler.codec.http.multipart.Attribute;
@@ -15,7 +16,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.ByteBuffer;
 import java.util.*;
+import java.util.concurrent.Future;
 
 import static io.muserver.Cookie.nettyToMu;
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -247,24 +250,7 @@ class NettyRequestAdapter implements MuRequest {
     @Override
     public AsyncHandle handleAsync() {
         isAsync = true;
-        return new AsyncHandle() {
-            @Override
-            public void setReadListener(RequestBodyListener readListener) {
-                claimingBodyRead();
-                if (readListener != null) {
-                    if (inputStream == null) {
-                        readListener.onComplete();
-                    } else {
-                        inputStream.switchToListener(readListener);
-                    }
-                }
-            }
-
-            @Override
-            public void complete() {
-                nettyAsyncContext.complete();
-            }
-        };
+        return new AsyncHandleImpl(this);
     }
 
     private void ensureFormDataLoaded() throws IOException {
@@ -335,6 +321,55 @@ class NettyRequestAdapter implements MuRequest {
             multipartRequestDecoder.getBodyHttpDatas().clear();
             multipartRequestDecoder.destroy();
             multipartRequestDecoder = null;
+        }
+    }
+
+    private static class AsyncHandleImpl implements AsyncHandle {
+
+        private final NettyRequestAdapter request;
+
+        private AsyncHandleImpl(NettyRequestAdapter request) {
+            this.request = request;
+        }
+
+        @Override
+        public void setReadListener(RequestBodyListener readListener) {
+            request.claimingBodyRead();
+            if (readListener != null) {
+                if (request.inputStream == null) {
+                    readListener.onComplete();
+                } else {
+                    request.inputStream.switchToListener(readListener);
+                }
+            }
+        }
+
+        @Override
+        public void complete() {
+            request.nettyAsyncContext.complete();
+        }
+
+        @Override
+        public void write(ByteBuffer data, WriteCallback callback) {
+            ChannelFuture writeFuture = (ChannelFuture) write(data);
+            writeFuture.addListener(future -> {
+                try {
+                    if (future.isSuccess()) {
+                        callback.onSuccess();
+                    } else {
+                        callback.onFailure(future.cause());
+                    }
+                } catch (Exception e) {
+                    log.warn("Unhandled exception from write callback", e);
+                    complete();
+                }
+            });
+        }
+
+        @Override
+        public Future<Void> write(ByteBuffer data) {
+            NettyResponseAdaptor response = (NettyResponseAdaptor) request.nettyAsyncContext.response;
+            return response.write(data);
         }
     }
 }

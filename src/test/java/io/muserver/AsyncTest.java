@@ -1,23 +1,29 @@
 package io.muserver;
 
-import okhttp3.MediaType;
-import okhttp3.Request;
-import okhttp3.RequestBody;
-import okhttp3.Response;
+import okhttp3.*;
 import okio.BufferedSink;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.MuServerBuilder.httpsServer;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.call;
+import static scaffolding.ClientUtils.client;
 import static scaffolding.ClientUtils.request;
 
 public class AsyncTest {
@@ -27,7 +33,7 @@ public class AsyncTest {
     @Test
     public void responsesCanBeAsync() throws IOException {
 
-        DatabaseListenerSimulator changeListener = new DatabaseListenerSimulator();
+        DatabaseListenerSimulator changeListener = new DatabaseListenerSimulator(10);
 
         server = httpsServer()
             .addHandler((request, response) -> {
@@ -37,11 +43,10 @@ public class AsyncTest {
             .addHandler((request, response) -> {
                 AsyncHandle ctx = request.handleAsync();
 
-
                 changeListener.addListener(new ChangeListener() {
                     @Override
                     public void onData(String data) {
-                        response.writer().write(data + "\n");
+                        ctx.write(ByteBuffer.wrap((data + "\n").getBytes(StandardCharsets.UTF_8)));
                     }
 
                     @Override
@@ -67,8 +72,94 @@ public class AsyncTest {
             assertThat(resp.header("X-Post-Header"), is(nullValue()));
             assertThat(resp.body().string(), equalTo("Loop 0\nLoop 1\nLoop 2\nLoop 3\nLoop 4\nLoop 5\nLoop 6\nLoop 7\nLoop 8\nLoop 9\n"));
         }
+    }
 
+    @Test
+    public void errorCallbacksHappenIfTheClientDisconnects() throws IOException, InterruptedException {
 
+        DatabaseListenerSimulator changeListener = new DatabaseListenerSimulator(Integer.MAX_VALUE);
+        CountDownLatch timedOutLatch = new CountDownLatch(1);
+        CountDownLatch ctxClosedLatch = new CountDownLatch(1);
+        List<Throwable> writeErrors = new ArrayList<>();
+
+        server = httpsServer()
+            .addHandler((request, response) -> {
+                AsyncHandle ctx = request.handleAsync();
+                changeListener.addListener(new ChangeListener() {
+                    public void onData(String data) {
+                        try {
+                            ByteBuffer text = ByteBuffer.wrap((data + "\n").getBytes(StandardCharsets.UTF_8));
+                            ctx.write(text, new WriteCallback() {
+                                @Override
+                                public void onFailure(Throwable reason) throws Exception {
+                                    changeListener.stop();
+                                    ctx.complete();
+                                    ctxClosedLatch.countDown();
+                                }
+                                @Override
+                                public void onSuccess() throws Exception {
+                                }
+                            });
+                        } catch (Throwable e) {
+                            writeErrors.add(e);
+                        }
+                    }
+                    public void onClose() {
+                    }
+                });
+
+                timedOutLatch.await(1, TimeUnit.MINUTES);
+                changeListener.start();
+
+                return true;
+            })
+            .start();
+
+        OkHttpClient impatientClient = client.newBuilder()
+            .readTimeout(100, TimeUnit.MILLISECONDS)
+            .build();
+        try (Response resp = impatientClient.newCall(request().url(server.uri().toString()).build()).execute()) {
+            assertThat(changeListener.errors, is(empty()));
+            assertThat(resp.code(), equalTo(200));
+            resp.body().string();
+            Assert.fail("Should have timeout out");
+        } catch (SocketTimeoutException to) {
+            timedOutLatch.countDown();
+            assertThat("Timed out waiting for failure callback to happen",
+                ctxClosedLatch.await(30, TimeUnit.SECONDS), is(true));
+            assertThat(writeErrors, is(empty()));
+        }
+    }
+
+    @Test
+    public void blockingWritesCanStillBeUsed() throws IOException {
+
+        DatabaseListenerSimulator changeListener = new DatabaseListenerSimulator(10);
+
+        server = httpsServer()
+            .addHandler((request, response) -> {
+                AsyncHandle ctx = request.handleAsync();
+
+                changeListener.addListener(new ChangeListener() {
+                    public void onData(String data) {
+                        response.writer().write(data + "\n");
+                    }
+                    public void onClose() {
+                        ctx.complete();
+                    }
+                });
+
+                changeListener.start();
+
+                return true;
+            })
+            .start();
+
+        try (Response resp = call(request().url(server.uri().toString()))) {
+            assertThat(changeListener.errors, is(empty()));
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.body().string(), equalTo("Loop 0\nLoop 1\nLoop 2\nLoop 3\nLoop 4\nLoop 5\nLoop 6\nLoop 7\nLoop 8\nLoop 9\n"));
+        }
     }
 
     @Test
@@ -141,16 +232,26 @@ public class AsyncTest {
     }
 
     static class DatabaseListenerSimulator {
+        private final int eventsToFire;
         private List<ChangeListener> listeners = new ArrayList<>();
 
         private final Random rng = new Random();
         public final List<Throwable> errors = new ArrayList<>();
+        private AtomicBoolean stopped = new AtomicBoolean(false);
+        private Thread thread;
+
+        DatabaseListenerSimulator(int eventsToFire) {
+            this.eventsToFire = eventsToFire;
+        }
 
         public void start() {
-            new Thread(new Runnable() {
+            thread = new Thread(new Runnable() {
                 @Override
                 public void run() {
-                    for (int i = 0; i < 10; i++) {
+                    for (int i = 0; i < eventsToFire; i++) {
+                        if (stopped.get()) {
+                            break;
+                        }
                         try {
                             Thread.sleep(rng.nextInt(100));
                         } catch (InterruptedException e) {
@@ -173,11 +274,17 @@ public class AsyncTest {
                     }
 
                 }
-            }).start();
+            });
+            thread.start();
         }
 
         public void addListener(ChangeListener listener) {
             this.listeners.add(listener);
+        }
+
+        public void stop() throws InterruptedException {
+            stopped.set(true);
+            thread.join();
         }
     }
 
