@@ -12,6 +12,7 @@ import java.io.File;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URI;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.Mutils.urlEncode;
 import static io.muserver.handlers.FileProviderTest.BIG_FILE_DIR;
@@ -20,6 +21,7 @@ public class RunLocal {
     private static final Logger log = LoggerFactory.getLogger(RunLocal.class);
 
     public static void main(String[] args) {
+        AtomicReference<MuStats> stats = new AtomicReference<>();
         MuServer server = new MuServerBuilder().withHttpPort(0).withHttpsPort(0)
             .withHttpPort(18080).withHttpsPort(18443).withHttpsConfig(SSLContextBuilder.unsignedLocalhostCert())
             .addHandler(ResourceHandler.fileHandler(BIG_FILE_DIR).build())
@@ -78,9 +80,17 @@ public class RunLocal {
                     }
                 }).start();
             })
-
-
+            .addHandler(Method.GET, "/stats", (request, response, pathParams) -> {
+                response.contentType(ContentTypes.TEXT_PLAIN);
+                response.sendChunk(stats.get().toString());
+                response.sendChunk("\n\n");
+                for (MuRequest muRequest : stats.get().activeRequests()) {
+                    response.sendChunk(muRequest + "\r\n");
+                }
+            })
             .start();
+
+        stats.set(server.stats());
 
         log.info("Started at " + server.httpUri() + " and " + server.httpsUri());
         log.info("REST docs available at " + server.httpUri().resolve("/api.html") + " and OpenAPI JSON at " + server.httpUri().resolve("/openapi.json"));

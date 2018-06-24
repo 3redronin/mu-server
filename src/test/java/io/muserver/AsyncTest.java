@@ -15,16 +15,13 @@ import java.util.List;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static io.muserver.MuServerBuilder.httpsServer;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
-import static scaffolding.ClientUtils.call;
-import static scaffolding.ClientUtils.client;
-import static scaffolding.ClientUtils.request;
+import static scaffolding.ClientUtils.*;
 
 public class AsyncTest {
     private MuServer server;
@@ -82,9 +79,12 @@ public class AsyncTest {
         CountDownLatch ctxClosedLatch = new CountDownLatch(1);
         List<Throwable> writeErrors = new ArrayList<>();
 
+        AtomicLong connectionsDuringListening = new AtomicLong();
+
         server = httpsServer()
             .addHandler((request, response) -> {
                 AsyncHandle ctx = request.handleAsync();
+                connectionsDuringListening.set(server.stats().activeConnections());
                 changeListener.addListener(new ChangeListener() {
                     public void onData(String data) {
                         try {
@@ -129,6 +129,10 @@ public class AsyncTest {
                 ctxClosedLatch.await(30, TimeUnit.SECONDS), is(true));
             assertThat(writeErrors, is(empty()));
         }
+
+        assertThat(connectionsDuringListening.get(), is(1L));
+        assertThat(server.stats().activeConnections(), is(0L));
+        assertThat(server.stats().completedRequests(), is(1L));
     }
 
     @Test

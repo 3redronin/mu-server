@@ -24,10 +24,12 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
     private static final AttributeKey<State> STATE_ATTRIBUTE = AttributeKey.newInstance("state");
 
     private final List<AsyncMuHandler> handlers;
+    private final MuStatsImpl stats;
 
-	public MuServerHandler(List<AsyncMuHandler> handlers) {
+    public MuServerHandler(List<AsyncMuHandler> handlers, MuStatsImpl stats) {
 	    this.handlers = handlers;
-	}
+        this.stats = stats;
+    }
 
 	private static final class State {
 		public final AsyncContext asyncContext;
@@ -38,19 +40,21 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
 		}
 	}
 
-	protected void channelRead0(ChannelHandlerContext ctx, Object msg) throws Exception {
+    protected void channelRead0(ChannelHandlerContext ctx, Object msg) throws Exception {
 		if (msg instanceof HttpRequest) {
 			HttpRequest request = (HttpRequest) msg;
 
 			if (request.decoderResult().isFailure()) {
+			    stats.onInvalidRequest();
 				handleHttpRequestDecodeFailure(ctx, request.decoderResult().cause());
 			} else {
-
 				boolean handled = false;
                 Attribute<String> proto = ctx.channel().attr(PROTO_ATTRIBUTE);
 
                 NettyRequestAdapter muRequest = new NettyRequestAdapter(proto.get(), request);
-                AsyncContext asyncContext = new AsyncContext(muRequest, new NettyResponseAdaptor(ctx, muRequest));
+                stats.onRequestStarted(muRequest);
+
+                AsyncContext asyncContext = new AsyncContext(muRequest, new NettyResponseAdaptor(ctx, muRequest), stats);
 
 				for (AsyncMuHandler handler : handlers) {
 					handled = handler.onHeaders(asyncContext, asyncContext.request.headers());
@@ -73,7 +77,6 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
 			} else {
 				ByteBuf byteBuf = content.content();
 				if (byteBuf.capacity() > 0) {
-					// TODO: why does the buffer need to be copied? Does this only need to happen for sync processing?
                     ByteBuf copy = byteBuf.copy();
                     ByteBuffer byteBuffer = ByteBuffer.allocate(byteBuf.capacity());
                     copy.readBytes(byteBuffer).release();

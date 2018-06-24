@@ -11,9 +11,11 @@ public class MuServer {
 	private final URI httpUri;
     private final URI httpsUri;
     private final Runnable shutdown;
+    private final MuStats stats;
 
-    MuServer(URI httpUri, URI httpsUri, Runnable shutdown) {
-	    if (httpUri == null && httpsUri == null) {
+    MuServer(URI httpUri, URI httpsUri, Runnable shutdown, MuStats stats) {
+        this.stats = stats;
+        if (httpUri == null && httpsUri == null) {
             throw new IllegalArgumentException("One of httpUri and httpsUri must not be null");
         }
 		this.httpUri = httpUri;
@@ -46,4 +48,7 @@ public class MuServer {
         return httpsUri;
     }
 
+    public MuStats stats() {
+        return stats;
+    }
 }
