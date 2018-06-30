@@ -12,6 +12,7 @@ import static io.muserver.rest.JaxMethodLocator.getMethodThatHasJaxRSAnnotations
 
 public class JaxMethodLocatorTest {
 
+    @SuppressWarnings("unused")
     private @interface NonJaxAnnotation {}
 
     @Path("hi")

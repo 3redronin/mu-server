@@ -7,10 +7,20 @@ import javax.ws.rs.ext.RuntimeDelegate;
 import java.util.HashMap;
 import java.util.Map;
 
-class MuRuntimeDelegate extends RuntimeDelegate {
+/**
+ * <p>The JAX-RS runtime delegate for mu-server.</p>
+ * <p>In most cases this class should not be used, however in cases where you want to test JaxRS classes outside of
+ * mu-server you may need to make sure a JAX-RS RuntimeDelegate is set, in which case you can call {@link #ensureSet()}.</p>
+ */
+public class MuRuntimeDelegate extends RuntimeDelegate {
 
     private static MuRuntimeDelegate singleton;
-    public static synchronized MuRuntimeDelegate ensureSet() {
+
+    /**
+     * Registers the mu RuntimeDelegate with jax-rs, if it was not already.
+     * @return Returns the runtime delegate.
+     */
+    public static synchronized RuntimeDelegate ensureSet() {
         if (singleton == null) {
             singleton = new MuRuntimeDelegate();
             RuntimeDelegate.setInstance(singleton);
