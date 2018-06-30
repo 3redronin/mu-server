@@ -11,6 +11,7 @@ import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.*;
 import javax.ws.rs.ext.MessageBodyReader;
 import javax.ws.rs.ext.MessageBodyWriter;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.annotation.Annotation;
@@ -94,9 +95,30 @@ public class RestHandler implements MuHandler {
 
                     muResponse.headers().set(HeaderNames.CONTENT_TYPE, responseMediaType.toString());
 
-                    try (OutputStream entityStream = muResponse.outputStream()) {
-                        messageBodyWriter.writeTo(obj.entity, obj.type, obj.genericType, annotations, responseMediaType, muHeadersToJaxObj(muResponse.headers()), entityStream);
-                    }
+                    // This weird thing stops the output stream being created until it's actually written to
+                    OutputStream entityStream = new OutputStream() {
+                        @Override
+                        public void write(int b) throws IOException {
+                            muResponse.outputStream().write(b);
+                        }
+
+                        @Override
+                        public void write(byte[] b, int off, int len) throws IOException {
+                            muResponse.outputStream().write(b, off, len);
+                        }
+
+                        @Override
+                        public void flush() throws IOException {
+                            muResponse.outputStream().flush();
+                        }
+
+                        @Override
+                        public void close() throws IOException {
+                            muResponse.outputStream().close();
+                        }
+                    };
+
+                    messageBodyWriter.writeTo(obj.entity, obj.type, obj.genericType, annotations, responseMediaType, muHeadersToJaxObj(muResponse.headers()), entityStream);
 
                 }
             }
@@ -106,11 +128,15 @@ public class RestHandler implements MuHandler {
             if (e instanceof ServerErrorException) {
                 log.info("Server error for " + request, e);
             }
-            Response r = e.getResponse();
-            muResponse.status(r.getStatus());
-            muResponse.contentType(ContentTypes.TEXT_PLAIN);
-            Response.StatusType statusInfo = r.getStatusInfo();
-            muResponse.write(statusInfo.getStatusCode() + " " + statusInfo.getReasonPhrase() + " - " + e.getMessage());
+            if (muResponse.hasStartedSendingData()) {
+                log.warn("A web application exception " + e + " was thrown for " + request + ", however the response code and message cannot be sent to the client as some data was already sent.");
+            } else {
+                Response r = e.getResponse();
+                muResponse.status(r.getStatus());
+                muResponse.contentType(ContentTypes.TEXT_PLAIN);
+                Response.StatusType statusInfo = r.getStatusInfo();
+                muResponse.write(statusInfo.getStatusCode() + " " + statusInfo.getReasonPhrase() + " - " + e.getMessage());
+            }
         } catch (Exception ex) {
             log.warn("Unhandled error from handler for " + request, ex);
             if (!muResponse.hasStartedSendingData()) {
@@ -184,7 +210,10 @@ public class RestHandler implements MuHandler {
 
     private static class EmptyInputStream extends InputStream {
         private static final InputStream INSTANCE = new EmptyInputStream();
-        private EmptyInputStream() {}
+
+        private EmptyInputStream() {
+        }
+
         public int read() {
             return -1;
         }

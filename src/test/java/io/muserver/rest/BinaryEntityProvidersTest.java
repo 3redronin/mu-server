@@ -6,16 +6,14 @@ import io.muserver.Mutils;
 import okhttp3.MediaType;
 import okhttp3.RequestBody;
 import okhttp3.Response;
+import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.StringUtils;
 
 import javax.activation.DataSource;
 import javax.activation.FileDataSource;
-import javax.ws.rs.GET;
-import javax.ws.rs.POST;
-import javax.ws.rs.Path;
-import javax.ws.rs.Produces;
+import javax.ws.rs.*;
 import javax.ws.rs.core.StreamingOutput;
 import java.io.*;
 import java.util.concurrent.CountDownLatch;
@@ -167,6 +165,29 @@ public class BinaryEntityProvidersTest {
         }
 
         assertThat(errors.toString(), equalTo(""));
+    }
+
+    @Test
+    public void exceptionsFromStreamingAreBubbledToResponse() throws IOException {
+        @Path("samples")
+        class Sample {
+            @GET
+            @Produces("text/plain")
+            public javax.ws.rs.core.Response streamStuff() {
+                StreamingOutput streamingOutput = new StreamingOutput() {
+                    @Override
+                    public void write(OutputStream output) throws IOException, WebApplicationException {
+                        throw new WebApplicationException("This is your fault", 400);
+                    }
+                };
+                return javax.ws.rs.core.Response.ok(streamingOutput).build();
+            }
+        }
+        startServer(new Sample());
+        try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
+            assertThat(resp.code(), Matchers.is(400));
+            assertThat(resp.body().string(), equalTo("400 Bad Request - This is your fault"));
+        }
     }
 
 
