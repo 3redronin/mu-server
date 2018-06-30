@@ -3,6 +3,7 @@ package io.muserver;
 import io.muserver.handlers.ResourceType;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -46,6 +47,7 @@ public class MuServerBuilder {
     private boolean gzipEnabled = true;
     private Set<String> mimeTypesToGzip = ResourceType.gzippableMimeTypes(ResourceType.getResourceTypes());
     private boolean addShutdownHook = false;
+    private String host;
 
     /**
      * @param port The HTTP port to use. A value of 0 will have a random port assigned; a value of -1 will
@@ -54,6 +56,17 @@ public class MuServerBuilder {
      */
     public MuServerBuilder withHttpPort(int port) {
         this.httpPort = port;
+        return this;
+    }
+
+    /**
+     * Use this to specify which network interface to bind to.
+     * @param host The host to bind to, for example <code>"127.0.0.1"</code> to restrict connections from localhost
+     *             only, or <code>"0.0.0.0"</code> to allow connections from the local network.
+     * @return The current Mu-Server Builder
+     */
+    public MuServerBuilder withInterface(String host) {
+        this.host = host;
         return this;
     }
 
@@ -275,13 +288,13 @@ public class MuServerBuilder {
             GlobalTrafficShapingHandler trafficShapingHandler = new GlobalTrafficShapingHandler(workerGroup, 0, 0, 1000);
             MuStatsImpl stats = new MuStatsImpl(trafficShapingHandler.trafficCounter());
 
-            Channel httpChannel = httpPort < 0 ? null : createChannel(bossGroup, workerGroup, httpPort, null, trafficShapingHandler, stats);
+            Channel httpChannel = httpPort < 0 ? null : createChannel(bossGroup, workerGroup, host, httpPort, null, trafficShapingHandler, stats);
             Channel httpsChannel;
             if (httpsPort < 0) {
                 httpsChannel = null;
             } else {
                 SSLContext sslContextToUse = this.sslContext != null ? this.sslContext : SSLContextBuilder.unsignedLocalhostCert();
-                httpsChannel = createChannel(bossGroup, workerGroup, httpsPort, sslContextToUse, trafficShapingHandler, stats);
+                httpsChannel = createChannel(bossGroup, workerGroup, host, httpsPort, sslContextToUse, trafficShapingHandler, stats);
             }
             URI uri = null;
             if (httpChannel != null) {
@@ -312,7 +325,7 @@ public class MuServerBuilder {
         return URI.create(protocol + "://localhost:" + a.getPort());
     }
 
-    private Channel createChannel(NioEventLoopGroup bossGroup, NioEventLoopGroup workerGroup, int port, SSLContext rawSSLContext, GlobalTrafficShapingHandler trafficShapingHandler, MuStatsImpl stats) throws InterruptedException {
+    private Channel createChannel(NioEventLoopGroup bossGroup, NioEventLoopGroup workerGroup, String host, int port, SSLContext rawSSLContext, GlobalTrafficShapingHandler trafficShapingHandler, MuStatsImpl stats) throws InterruptedException {
         boolean usesSsl = rawSSLContext != null;
         JdkSslContext sslContext = usesSsl ? new JdkSslContext(rawSSLContext, false, ClientAuth.NONE) : null;
 
@@ -342,7 +355,8 @@ public class MuServerBuilder {
                     p.addLast("muhandler", new MuServerHandler(asyncHandlers, stats));
                 }
             });
-        return b.bind(port).sync().channel();
+        ChannelFuture bound = host == null ? b.bind(port) : b.bind(host, port);
+        return bound.sync().channel();
     }
 
     /**
