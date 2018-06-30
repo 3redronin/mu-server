@@ -19,6 +19,7 @@ package org.example.petstore.resource;
 import io.muserver.rest.ApiResponse;
 import io.muserver.rest.ApiResponses;
 import io.muserver.rest.Description;
+import io.muserver.rest.Required;
 import org.example.petstore.data.PetData;
 import org.example.petstore.model.Pet;
 
@@ -54,7 +55,8 @@ public class PetResource {
     @ApiResponse(code = "404", message = "Pet not found")
     public Response getPetById(
         @Description("ID of pet that needs to be fetched")
-//      @ApiParam(allowableValues = "range[1,10]", required = true)
+//      @ApiParam(allowableValues = "range[1,10]")
+        @Required
         @PathParam("petId") Long petId)
         throws NotFoundException {
         Pet pet = petData.getPetById(petId);
@@ -74,7 +76,8 @@ public class PetResource {
     @ApiResponse(code = "400", message = "Invalid ID supplied")
     @ApiResponse(code = "404", message = "Pet not found")
     public Response downloadFile(
-//      @ApiParam(allowableValues = "range[1,10]", required = true)
+//      @ApiParam(allowableValues = "range[1,10]")
+        @Required
         @Description("ID of pet that needs to be fetched")
         @PathParam("petId") Long petId)
         throws NotFoundException {
@@ -101,10 +104,8 @@ public class PetResource {
     @ApiResponses(value = {@ApiResponse(code = "400", message = "Invalid ID supplied"),
         @ApiResponse(code = "404", message = "Pet not found")})
     public Response deletePet(
-        @HeaderParam("api_key")
-            String apiKey,
-//    @ApiParam(value = "Pet id to delete", required = true)
-        @PathParam("petId") Long petId) {
+        @HeaderParam("api_key") String apiKey,
+        @Description(value = "Pet id to delete") @Required @PathParam("petId") Long petId) {
         if (petData.deletePet(petId)) {
             return Response.ok().build();
         } else {
@@ -117,8 +118,9 @@ public class PetResource {
     @Description(value = "Add a new pet to the store")
     @ApiResponses(value = {@ApiResponse(code = "405", message = "Invalid input", response = Pet.class)})
     public Response addPet(
-//      @ApiParam(value = "Pet object that needs to be added to the store", required = true)
-        Pet pet) {
+        @Description(value = "Pet object that needs to be added to the store")
+        @Required
+            Pet pet) {
         Pet updatedPet = petData.addPet(pet);
         return Response.ok().entity(updatedPet).build();
     }
@@ -130,8 +132,9 @@ public class PetResource {
         @ApiResponse(code = "404", message = "Pet not found"),
         @ApiResponse(code = "405", message = "Validation exception")})
     public Response updatePet(
-//      @ApiParam(value = "Pet object that needs to be added to the store", required = true)
-        Pet pet) {
+        @Description(value = "Pet object that needs to be added to the store")
+        @Required
+            Pet pet) {
         Pet updatedPet = petData.addPet(pet);
         return Response.ok().entity(updatedPet).build();
     }
@@ -143,22 +146,26 @@ public class PetResource {
 //    responseContainer = "List")
     @ApiResponses(value = {@ApiResponse(code = "400", message = "Invalid status value")})
     public Response findPetsByStatus(
-//      @ApiParam(value = "Status values that need to be considered for filter", required = true, defaultValue = "available", allowableValues = "available,pending,sold", allowMultiple = true)
+        @Description("Status values that need to be considered for filter")
+//      @ApiParam(, defaultValue = "available", allowableValues = "available,pending,sold", allowMultiple = true)
+        @Required
         @QueryParam("status") String status) {
         return Response.ok(petData.findPetByStatus(status)).build();
     }
 
     @GET
     @Path("/findByTags")
-//  @ApiOperation(value = "Finds Pets by tags",
-//    notes = "Multiple tags can be provided with comma separated strings. Use tag1, tag2, tag3 for testing.",
+    @Description(value = "Finds Pets by tags", details = "Multiple tags can be provided with comma separated strings. Use tag1, tag2, tag3 for testing.")
+//  @ApiOperation(value = "",
 //    response = Pet.class,
 //    responseContainer = "List")
     @ApiResponses(value = {@ApiResponse(code = "400", message = "Invalid tag value")})
     @Deprecated
     public Response findPetsByTags(
         @HeaderParam("api_key") String api_key,
-//      @ApiParam(value = "Tags to filter by", required = true, allowMultiple = true)
+        @Description("Tags to filter by")
+//      @ApiParam(, allowMultiple = true)
+        @Required
         @QueryParam("tags") String tags) {
         return Response.ok(petData.findPetByTags(tags)).build();
     }
@@ -170,13 +177,13 @@ public class PetResource {
     @ApiResponses(value = {
         @ApiResponse(code = "405", message = "Invalid input")})
     public Response updatePetWithForm(
-//   @ApiParam(value = "", required = true)
+        @Required
         @Description("ID of pet that needs to be updated")
         @PathParam("petId") Long petId,
-//   @ApiParam(value = "", required = false)
+        @Required
         @Description("Updated name of the pet")
         @FormParam("name") String name,
-//   @ApiParam(value = "", required = false)
+        @Required
         @Description("Updated status of the pet")
         @FormParam("status") String status) {
         Pet pet = petData.getPetById(petId);

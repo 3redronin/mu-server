@@ -16,6 +16,7 @@
 
 package org.example.petstore.resource;
 
+import io.muserver.rest.Required;
 import org.example.petstore.data.PetData;
 import org.example.petstore.data.StoreData;
 import org.example.petstore.model.Order;
@@ -52,7 +53,8 @@ public class PetStoreResource {
 //  @ApiResponses(value = { @ApiResponse(code = 400, message = "Invalid ID supplied"),
 //      @ApiResponse(code = 404, message = "Order not found") })
   public Response getOrderById(
-//      @ApiParam(value = "ID of pet that needs to be fetched", allowableValues = "range[1,10]", required = true)
+//      @ApiParam(value = "ID of pet that needs to be fetched", allowableValues = "range[1,10]", )
+      @Required
       @PathParam("orderId") Long orderId)
       throws NotFoundException {
     Order order = storeData.findOrderById(orderId);
@@ -68,7 +70,8 @@ public class PetStoreResource {
 //  @ApiOperation(value = "Place an order for a pet")
 //  @ApiResponses({ @ApiResponse(code = 400, message = "Invalid Order") })
   public Order placeOrder(
-//      @ApiParam(value = "order placed for purchasing the pet", required = true)
+//      @ApiParam(value = "order placed for purchasing the pet", )
+      @Required
 		      Order order) {
     storeData.placeOrder(order);
     return storeData.placeOrder(order);
@@ -81,7 +84,8 @@ public class PetStoreResource {
 //  @ApiResponses(value = { @ApiResponse(code = 400, message = "Invalid ID supplied"),
 //      @ApiResponse(code = 404, message = "Order not found") })
   public Response deleteOrder(
-//      @ApiParam(value = "ID of the order that needs to be deleted", allowableValues = "range[1,infinity]", required = true)
+//      @ApiParam(value = "ID of the order that needs to be deleted", allowableValues = "range[1,infinity]", )
+      @Required
       @PathParam("orderId") Long orderId) {
     if (storeData.deleteOrder(orderId)) {
       return Response.ok().entity("").build();

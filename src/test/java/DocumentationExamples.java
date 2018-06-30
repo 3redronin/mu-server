@@ -1,6 +1,10 @@
 import io.muserver.MuServer;
 import io.muserver.MuServerBuilder;
 import io.muserver.rest.RestHandlerBuilder;
+import org.example.petstore.resource.PetResource;
+import org.example.petstore.resource.PetStoreResource;
+import org.example.petstore.resource.UserResource;
+import org.example.petstore.resource.VehicleResource;
 
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
@@ -15,9 +19,10 @@ public class DocumentationExamples {
             }
         }
 
-        MuServer server = MuServerBuilder.httpsServer()
+        MuServer server = MuServerBuilder.muServer()
+            .withHttpPort(14400)
             .addHandler(
-                RestHandlerBuilder.restHandler(new Fruit())
+                RestHandlerBuilder.restHandler(new Fruit(), new PetResource(), new PetStoreResource(), new UserResource(), new VehicleResource())
                     .withOpenApiHtmlUrl("/docs.html")
                     .withOpenApiJsonUrl("/api.json")
             ).start();

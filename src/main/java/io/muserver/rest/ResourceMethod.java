@@ -111,6 +111,7 @@ class ResourceMethod {
                 .withContent(singletonMap(effectiveConsumes.get(0).toString(), mediaTypeObject()
                     .build()))
                 .withDescription(messageBodyParam.descriptionData.description)
+                .withRequired(messageBodyParam.isRequired)
                 .build())
             .findFirst().orElse(null);
 
@@ -121,21 +122,29 @@ class ResourceMethod {
                 .filter(p -> p.source == ResourceMethodParam.ValueSource.FORM_PARAM)
                 .collect(Collectors.toList());
             if (!formParams.isEmpty()) {
+                List<String> required = new ArrayList<>();
                 requestBody = requestBodyObject()
                     .withContent(Collections.singletonMap(effectiveConsumes.get(0).toString(),
                         mediaTypeObject()
                             .withSchema(
                                 schemaObject()
                                     .withType("object")
+                                    .withRequired(required)
                                     .withProperties(
                                         formParams.stream().collect(
                                             toMap(n -> n.key,
-                                                n -> schemaObjectFrom(n.parameterHandle.getType())
-                                                    .withDeprecated(n.isDeprecated)
-                                                    .withDefaultValue(n.defaultValue())
-                                                    .withDescription(n.descriptionData == null ? null : n.descriptionData.description).build()))
+                                                n -> {
+                                                    if (n.isRequired) {
+                                                        required.add(n.key);
+                                                    }
+                                                    return schemaObjectFrom(n.parameterHandle.getType())
+                                                        .withNullable(!n.isRequired)
+                                                        .withDeprecated(n.isDeprecated)
+                                                        .withDefaultValue(n.defaultValue())
+                                                        .withDescription(n.descriptionData == null ? null : n.descriptionData.description).build();
+                                                }))
                                     )
-                                .build()
+                                    .build()
                             )
                             .build()
                     ))

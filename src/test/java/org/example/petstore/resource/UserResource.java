@@ -17,7 +17,9 @@
 package org.example.petstore.resource;
 
 import io.muserver.rest.ApiResponse;
+import io.muserver.rest.ApiResponses;
 import io.muserver.rest.Description;
+import io.muserver.rest.Required;
 import org.example.petstore.data.UserData;
 import org.example.petstore.exception.ApiException;
 import org.example.petstore.model.User;
@@ -29,25 +31,27 @@ import javax.ws.rs.core.Response;
 @Description("Operations about user")
 @Produces({"application/json", "application/xml"})
 public class UserResource {
-    static UserData userData = new UserData();
+    private static UserData userData = new UserData();
 
     @POST
     @Description(value = "Create user", details = "This can only be done by the logged in user.")
 //    position = 1)
     public Response createUser(
-//      @ApiParam(value = "Created user object", required = true)
-        User user) {
+//      @ApiParam(value = "Created user object", )
+        @Required
+            User user) {
         userData.addUser(user);
         return Response.ok().entity("").build();
     }
 
     @POST
     @Path("/createWithArray")
-//  @ApiOperation(value = "Creates list of users with given input array",
+    @Description("Creates list of users with given input array")
 //    position = 2)
     public Response createUsersWithArrayInput(
-//  		@ApiParam(value = "List of user object", required = true)
-        User[] users) {
+//  		@ApiParam(value = "List of user object", )
+        @Required
+            User[] users) {
         for (User user : users) {
             userData.addUser(user);
         }
@@ -56,11 +60,12 @@ public class UserResource {
 
     @POST
     @Path("/createWithList")
-//  @ApiOperation(value = "Creates list of users with given input array",
+    @Description("Creates list of users with given input array")
 //    position = 3)
     public Response createUsersWithListInput(
-//  		@ApiParam(value = "List of user object", required = true)
-        java.util.List<User> users) {
+        @Description(value = "List of user object")
+        @Required
+            java.util.List<User> users) {
         for (User user : users) {
             userData.addUser(user);
         }
@@ -74,9 +79,11 @@ public class UserResource {
     @ApiResponse(code = "400", message = "Invalid user supplied")
     @ApiResponse(code = "404", message = "User not found")
     public Response updateUser(
-        @Description("name that need to be deleted") //, required = true)
+        @Description("name that need to be deleted")
+        @Required
         @PathParam("username") String username,
-        @Description("Updated user object") //, required = true)
+        @Description("Updated user object")
+        @Required
             User user) {
         userData.addUser(user);
         return Response.ok().entity("").build();
@@ -89,7 +96,7 @@ public class UserResource {
     @ApiResponse(code = "400", message = "Invalid username supplied")
     @ApiResponse(code = "404", message = "User not found")
     public Response deleteUser(
-//      @ApiParam(value = "The name that needs to be deleted", required = true)
+        @Required
         @Description("The name that needs to be deleted")
         @PathParam("username") String username) {
         if (userData.removeUser(username)) {
@@ -104,7 +111,7 @@ public class UserResource {
     @Description("Get user by user name")
 //    response = User.class,
 //    position = 0)
-    @ApiResponse(code = "200", message = "Successful operation", response=User.class)
+    @ApiResponse(code = "200", message = "Successful operation", response = User.class)
     @ApiResponse(code = "400", message = "Invalid username supplied")
     @ApiResponse(code = "404", message = "User not found")
     public Response getUserByName(
@@ -121,14 +128,16 @@ public class UserResource {
 
     @GET
     @Path("/login")
-//  @ApiOperation(value = "Logs user into the system",
+    @Description("Logs user into the system")
 //    response = String.class,
 //    position = 6)
-//  @ApiResponses(value = { @ApiResponse(code = 400, message = "Invalid username/password supplied") })
+    @ApiResponse(code = "400", message = "Invalid username/password supplied")
     public Response loginUser(
-//      @ApiParam(value = "The user name for login", required = true)
+        @Description(value = "The user name for login")
+        @Required
         @QueryParam("username") String username,
-//      @ApiParam(value = "The password for login in clear text", required = true)
+        @Description(value = "The password for login in clear text")
+        @Required
         @QueryParam("password") String password) {
         return Response.ok()
             .entity("logged in user session:" + System.currentTimeMillis())
@@ -137,8 +146,8 @@ public class UserResource {
 
     @GET
     @Path("/logout")
-//  @ApiOperation(value = "Logs out current logged in user session",
-//    position = 7)
+    @Description("Logs out current logged in user session")
+//  @ApiOperation(position = 7)
     public Response logoutUser() {
         return Response.ok().entity("").build();
     }

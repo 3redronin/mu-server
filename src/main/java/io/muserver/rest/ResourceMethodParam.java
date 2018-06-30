@@ -23,20 +23,23 @@ abstract class ResourceMethodParam {
     final Parameter parameterHandle;
     final ValueSource source;
     final DescriptionData descriptionData;
+    final boolean isRequired;
 
-    ResourceMethodParam(int index, ValueSource source, Parameter parameterHandle, DescriptionData descriptionData) {
+    ResourceMethodParam(int index, ValueSource source, Parameter parameterHandle, DescriptionData descriptionData, boolean isRequired) {
         this.index = index;
         this.source = source;
         this.parameterHandle = parameterHandle;
         this.descriptionData = descriptionData;
+        this.isRequired = isRequired;
     }
 
     static ResourceMethodParam fromParameter(int index, java.lang.reflect.Parameter parameterHandle, List<ParamConverterProvider> paramConverterProviders) {
 
         ValueSource source = getSource(parameterHandle);
+        boolean isRequired = source == ValueSource.PATH_PARAM || hasDeclared(parameterHandle, Required.class);
         if (source == ValueSource.MESSAGE_BODY) {
             DescriptionData descriptionData = getDescriptionDataForParameter(parameterHandle, "requestBody");
-            return new MessageBodyParam(index, source, parameterHandle, descriptionData);
+            return new MessageBodyParam(index, source, parameterHandle, descriptionData, isRequired);
         } else if (source == ValueSource.CONTEXT) {
             return new ContextParam(index, source, parameterHandle);
         } else {
@@ -57,7 +60,7 @@ abstract class ResourceMethodParam {
                 throw new WebApplicationException("No parameter specified for the " + source + " in " + parameterHandle);
             }
             DescriptionData descriptionData = getDescriptionDataForParameter(parameterHandle, key);
-            return new RequestBasedParam(index, source, parameterHandle, defaultValue, encodedRequested, lazyDefaultValue, converter, descriptionData, key, isDeprecated);
+            return new RequestBasedParam(index, source, parameterHandle, defaultValue, encodedRequested, lazyDefaultValue, converter, descriptionData, key, isDeprecated, isRequired);
         }
     }
 
@@ -85,6 +88,7 @@ abstract class ResourceMethodParam {
         ParameterObjectBuilder createDocumentationBuilder() {
             ParameterObjectBuilder builder = parameterObject()
                 .withIn(source.openAPIIn)
+                .withRequired(isRequired)
                 .withDeprecated(isDeprecated);
             if (descriptionData != null) {
                 builder.withName(descriptionData.summary)
@@ -97,8 +101,8 @@ abstract class ResourceMethodParam {
             );
         }
 
-        RequestBasedParam(int index, ValueSource source, Parameter parameterHandle, Object defaultValue, boolean encodedRequested, boolean lazyDefaultValue, ParamConverter paramConverter, DescriptionData descriptionData, String key, boolean isDeprecated) {
-            super(index, source, parameterHandle, descriptionData);
+        RequestBasedParam(int index, ValueSource source, Parameter parameterHandle, Object defaultValue, boolean encodedRequested, boolean lazyDefaultValue, ParamConverter paramConverter, DescriptionData descriptionData, String key, boolean isDeprecated, boolean isRequired) {
+            super(index, source, parameterHandle, descriptionData, isRequired);
             this.defaultValue = defaultValue;
             this.encodedRequested = encodedRequested;
             this.lazyDefaultValue = lazyDefaultValue;
@@ -129,14 +133,14 @@ abstract class ResourceMethodParam {
     }
 
     static class MessageBodyParam extends ResourceMethodParam {
-        MessageBodyParam(int index, ValueSource source, Parameter parameterHandle, DescriptionData descriptionData) {
-            super(index, source, parameterHandle, descriptionData);
+        MessageBodyParam(int index, ValueSource source, Parameter parameterHandle, DescriptionData descriptionData, boolean isRequired) {
+            super(index, source, parameterHandle, descriptionData, isRequired);
         }
     }
 
     static class ContextParam extends ResourceMethodParam {
         ContextParam(int index, ValueSource source, Parameter parameterHandle) {
-            super(index, source, parameterHandle, null);
+            super(index, source, parameterHandle, null, true);
         }
     }
 
