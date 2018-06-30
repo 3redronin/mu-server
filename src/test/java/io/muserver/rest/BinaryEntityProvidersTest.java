@@ -177,7 +177,8 @@ public class BinaryEntityProvidersTest {
                 StreamingOutput streamingOutput = new StreamingOutput() {
                     @Override
                     public void write(OutputStream output) throws IOException, WebApplicationException {
-                        throw new WebApplicationException("This is your fault", 400);
+                        javax.ws.rs.core.Response r = javax.ws.rs.core.Response.status(400).entity("This is your fault").build();
+                        throw new WebApplicationException(r);
                     }
                 };
                 return javax.ws.rs.core.Response.ok(streamingOutput).build();

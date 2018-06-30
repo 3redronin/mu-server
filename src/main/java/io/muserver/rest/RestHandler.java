@@ -135,7 +135,14 @@ public class RestHandler implements MuHandler {
                 muResponse.status(r.getStatus());
                 muResponse.contentType(ContentTypes.TEXT_PLAIN);
                 Response.StatusType statusInfo = r.getStatusInfo();
-                muResponse.write(statusInfo.getStatusCode() + " " + statusInfo.getReasonPhrase() + " - " + e.getMessage());
+                String message = statusInfo.getStatusCode() + " " + statusInfo.getReasonPhrase();
+                Object entity = r.getEntity();
+                if (entity != null) {
+                    message += " - " + entity.toString();
+                } else {
+                    message += " - " + e.getMessage();
+                }
+                muResponse.write(message);
             }
         } catch (Exception ex) {
             log.warn("Unhandled error from handler for " + request, ex);
