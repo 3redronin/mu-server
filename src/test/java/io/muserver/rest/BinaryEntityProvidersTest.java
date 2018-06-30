@@ -187,7 +187,7 @@ public class BinaryEntityProvidersTest {
         startServer(new Sample());
         try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
             assertThat(resp.code(), Matchers.is(400));
-            assertThat(resp.body().string(), equalTo("400 Bad Request - This is your fault"));
+            assertThat(resp.body().string(), equalTo("This is your fault"));
         }
     }
 

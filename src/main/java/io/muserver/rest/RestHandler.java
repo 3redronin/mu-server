@@ -134,13 +134,13 @@ public class RestHandler implements MuHandler {
                 Response r = e.getResponse();
                 muResponse.status(r.getStatus());
                 muResponse.contentType(ContentTypes.TEXT_PLAIN);
-                Response.StatusType statusInfo = r.getStatusInfo();
-                String message = statusInfo.getStatusCode() + " " + statusInfo.getReasonPhrase();
                 Object entity = r.getEntity();
+                String message;
                 if (entity != null) {
-                    message += " - " + entity.toString();
+                    message = entity.toString();
                 } else {
-                    message += " - " + e.getMessage();
+                    Response.StatusType statusInfo = r.getStatusInfo();
+                    message = statusInfo.getStatusCode() + " " + statusInfo.getReasonPhrase() + " - " + e.getMessage();
                 }
                 muResponse.write(message);
             }
