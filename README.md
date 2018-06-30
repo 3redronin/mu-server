@@ -2,6 +2,8 @@
 
 A modern Java web server, based on Netty. Currently in beta.
 
+[![Javadocs](https://www.javadoc.io/badge/io.muserver/mu-server.svg)](https://www.javadoc.io/doc/io.muserver/mu-server)
+
 ## Principles
 
 * HTTPS is as simple as HTTP
