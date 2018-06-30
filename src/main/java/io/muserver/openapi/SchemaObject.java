@@ -41,17 +41,17 @@ public class SchemaObject implements JsonWriter {
     public final String description;
     public final String format;
     public final Object defaultValue;
-    public final boolean nullable;
+    public final Boolean nullable;
     public final DiscriminatorObject discriminator;
-    public final boolean readOnly;
-    public final boolean writeOnly;
+    public final Boolean readOnly;
+    public final Boolean writeOnly;
     public final XmlObject xml;
     public final ExternalDocumentationObject externalDocs;
     public final Object example;
-    public final boolean deprecated;
+    public final Boolean deprecated;
 
-    SchemaObject(String title, Double multipleOf, Double maximum, Boolean exclusiveMaximum, Double minimum, Boolean exclusiveMinimum, Integer maxLength, Integer minLength, Pattern pattern, Integer maxItems, Integer minItems, Boolean uniqueItems, Integer maxProperties, Integer minProperties, List<String> required, List<Object> enumValue, String type, List<SchemaObject> allOf, List<SchemaObject> oneOf, List<SchemaObject> anyOf, List<SchemaObject> not, SchemaObject items, Map<String, SchemaObject> properties, Object additionalProperties, String description, String format, Object defaultValue, boolean nullable, DiscriminatorObject discriminator, boolean readOnly, boolean writeOnly, XmlObject xml, ExternalDocumentationObject externalDocs, Object example, boolean deprecated) {
-        if (readOnly && writeOnly) {
+    SchemaObject(String title, Double multipleOf, Double maximum, Boolean exclusiveMaximum, Double minimum, Boolean exclusiveMinimum, Integer maxLength, Integer minLength, Pattern pattern, Integer maxItems, Integer minItems, Boolean uniqueItems, Integer maxProperties, Integer minProperties, List<String> required, List<Object> enumValue, String type, List<SchemaObject> allOf, List<SchemaObject> oneOf, List<SchemaObject> anyOf, List<SchemaObject> not, SchemaObject items, Map<String, SchemaObject> properties, Object additionalProperties, String description, String format, Object defaultValue, Boolean nullable, DiscriminatorObject discriminator, Boolean readOnly, Boolean writeOnly, XmlObject xml, ExternalDocumentationObject externalDocs, Object example, Boolean deprecated) {
+        if (readOnly != null && readOnly && writeOnly != null && writeOnly) {
             throw new IllegalArgumentException("A schema cannot be both read only and write only");
         }
         if ("array".equals(type) && items == null) {

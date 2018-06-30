@@ -42,14 +42,14 @@ public class SchemaObjectBuilder {
     private String description;
     private String format;
     private Object defaultValue;
-    private boolean nullable;
+    private Boolean nullable;
     private DiscriminatorObject discriminator;
-    private boolean readOnly;
-    private boolean writeOnly;
+    private Boolean readOnly;
+    private Boolean writeOnly;
     private XmlObject xml;
     private ExternalDocumentationObject externalDocs;
     private Object example;
-    private boolean deprecated;
+    private Boolean deprecated;
 
     public SchemaObjectBuilder withTitle(String title) {
         this.title = title;
@@ -190,7 +190,7 @@ public class SchemaObjectBuilder {
      * @param nullable Allows sending a <code>null</code> value for the defined schema. Default value is <code>false</code>.
      * @return The current builder
      */
-    public SchemaObjectBuilder withNullable(boolean nullable) {
+    public SchemaObjectBuilder withNullable(Boolean nullable) {
         this.nullable = nullable;
         return this;
     }
@@ -212,7 +212,7 @@ public class SchemaObjectBuilder {
      *                 as both <code>readOnly</code> and <code>writeOnly</code> being <code>true</code>. Default value is <code>false</code>.
      * @return The current builder
      */
-    public SchemaObjectBuilder withReadOnly(boolean readOnly) {
+    public SchemaObjectBuilder withReadOnly(Boolean readOnly) {
         this.readOnly = readOnly;
         return this;
     }
@@ -226,7 +226,7 @@ public class SchemaObjectBuilder {
      *                  Default value is <code>false</code>.
      * @return The current builder
      */
-    public SchemaObjectBuilder withWriteOnly(boolean writeOnly) {
+    public SchemaObjectBuilder withWriteOnly(Boolean writeOnly) {
         this.writeOnly = writeOnly;
         return this;
     }
@@ -265,7 +265,7 @@ public class SchemaObjectBuilder {
      * @param deprecated Specifies that a schema is deprecated and SHOULD be transitioned out of usage. Default value is <code>false</code>.
      * @return The current builder
      */
-    public SchemaObjectBuilder withDeprecated(boolean deprecated) {
+    public SchemaObjectBuilder withDeprecated(Boolean deprecated) {
         this.deprecated = deprecated;
         return this;
     }

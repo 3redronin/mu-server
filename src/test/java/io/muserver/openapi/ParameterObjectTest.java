@@ -18,7 +18,7 @@ public class ParameterObjectTest {
     @Test
     public void defaultsSetCorrectlyForQuery() throws IOException {
         param.build().writeJson(writer);
-        assertThat(writer.toString(), equalTo("{\"name\":\"name\",\"in\":\"query\",\"required\":false,\"deprecated\":false,\"allowEmptyValue\":false,\"explode\":false,\"allowReserved\":false,\"schema\":{\"nullable\":false,\"readOnly\":false,\"writeOnly\":false,\"deprecated\":false}}"));
+        assertThat(writer.toString(), equalTo("{\"name\":\"name\",\"in\":\"query\",\"required\":false,\"deprecated\":false,\"allowEmptyValue\":false,\"explode\":false,\"allowReserved\":false,\"schema\":{}}"));
     }
 
     @Test

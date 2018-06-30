@@ -84,7 +84,7 @@ public class OpenApiDocumentorTest {
                 .getJSONObject("content")
                 .getJSONObject("application/x-www-form-urlencoded")
                 .getJSONObject("schema");
-            assertThat(updateByFormData.getBoolean("deprecated"), is(false));
+            assertThat(updateByFormData.has("deprecated"), is(false));
 
             JSONObject updateByFormDataName = updateByFormData.getJSONObject("properties")
                 .getJSONObject("name");
