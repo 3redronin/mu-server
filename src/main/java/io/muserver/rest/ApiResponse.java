@@ -3,7 +3,8 @@ package io.muserver.rest;
 import java.lang.annotation.*;
 
 /**
- *
+ * <p>Describes a response code and description for an API method, for documentation purposes.</p>
+ * <p>Multiple annotations can be added to cover multiple response types.</p>
  * @see ApiResponses
  */
 @Target({ElementType.METHOD, ElementType.TYPE})

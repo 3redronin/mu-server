@@ -7,7 +7,7 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * <p>Sends any HTTP requests to the same HTTPS address at the supplied port and optionally enables
- * <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Strict-Transport-Security#Preloading_Strict_Transport_Security">Strict-Transport-Security (HSTS)</a>
+ * <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Strict-Transport-Security" target="_blank">Strict-Transport-Security (HSTS)</a>
  * </p>
  * <p>Sample usage:</p>
  * <pre>

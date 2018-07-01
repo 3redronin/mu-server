@@ -6,7 +6,7 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 
-public interface ResourceProviderFactory {
+interface ResourceProviderFactory {
 
     ResourceProvider get(String relativePath);
 

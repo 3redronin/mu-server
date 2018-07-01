@@ -15,7 +15,7 @@ import java.net.URLConnection;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-public interface ResourceProvider {
+interface ResourceProvider {
     boolean exists();
 
     boolean isDirectory();

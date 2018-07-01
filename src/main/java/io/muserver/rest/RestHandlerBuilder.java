@@ -13,6 +13,10 @@ import java.util.stream.Stream;
 
 import static io.muserver.openapi.PathsObjectBuilder.pathsObject;
 
+/**
+ * Used to create a {@link RestHandler} for handling JAX-RS REST resources.
+ * @see #restHandler(Object...)
+ */
 public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
 
     private Object[] resources;

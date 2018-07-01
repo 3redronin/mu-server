@@ -6,7 +6,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Describes response codes and descriptions for an API method, for documentation purposes.
+ * Describes multiple response codes and descriptions for an API method, for documentation purposes.
  *
  * @see ApiResponse
  */

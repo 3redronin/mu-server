@@ -24,6 +24,10 @@ import static io.muserver.rest.JaxRSResponse.muHeadersToJax;
 import static io.muserver.rest.JaxRSResponse.muHeadersToJaxObj;
 import static java.util.Collections.singletonList;
 
+/**
+ * A handler that serves JAX-RS resources.
+ * @see RestHandlerBuilder#restHandler(Object...)
+ */
 public class RestHandler implements MuHandler {
     private static final Logger log = LoggerFactory.getLogger(RestHandler.class);
 
