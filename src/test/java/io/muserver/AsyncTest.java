@@ -84,7 +84,7 @@ public class AsyncTest {
         server = httpsServer()
             .addHandler((request, response) -> {
                 AsyncHandle ctx = request.handleAsync();
-                connectionsDuringListening.set(server.stats().activeConnections());
+                connectionsDuringListening.set(request.server().stats().activeConnections());
                 changeListener.addListener(new ChangeListener() {
                     public void onData(String data) {
                         try {

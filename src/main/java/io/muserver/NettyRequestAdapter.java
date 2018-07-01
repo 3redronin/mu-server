@@ -2,6 +2,7 @@ package io.muserver;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.handler.codec.http.*;
 import io.netty.handler.codec.http.cookie.ServerCookieDecoder;
@@ -14,11 +15,13 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.Cookie.nettyToMu;
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -27,7 +30,9 @@ import static java.util.Collections.emptySet;
 
 class NettyRequestAdapter implements MuRequest {
     private static final Logger log = LoggerFactory.getLogger(NettyRequestAdapter.class);
+    private final Channel channel;
     private final HttpRequest request;
+    private final AtomicReference<MuServer> serverRef;
     private final URI serverUri;
     private final URI uri;
     private final Method method;
@@ -45,8 +50,11 @@ class NettyRequestAdapter implements MuRequest {
     private Object state;
     private boolean isAsync = false;
 
-    NettyRequestAdapter(String proto, HttpRequest request) {
+    NettyRequestAdapter(Channel channel, HttpRequest request, AtomicReference<MuServer> serverRef) {
+        this.channel = channel;
         this.request = request;
+        this.serverRef = serverRef;
+        String proto = channel.attr(MuServerHandler.PROTO_ATTRIBUTE).get();
         this.serverUri = URI.create(proto + "://" + request.headers().get(HeaderNames.HOST) + request.uri());
         this.uri = getUri(request, serverUri);
         this.relativePath = this.uri.getRawPath();
@@ -251,6 +259,16 @@ class NettyRequestAdapter implements MuRequest {
     public AsyncHandle handleAsync() {
         isAsync = true;
         return new AsyncHandleImpl(this);
+    }
+
+    @Override
+    public String remoteAddress() {
+        return ((InetSocketAddress)channel.remoteAddress()).getAddress().getHostAddress();
+    }
+
+    @Override
+    public MuServer server() {
+        return serverRef.get();
     }
 
     private void ensureFormDataLoaded() throws IOException {

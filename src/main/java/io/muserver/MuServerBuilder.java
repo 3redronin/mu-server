@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.MuServerHandler.PROTO_ATTRIBUTE;
 
@@ -287,27 +288,30 @@ public class MuServerBuilder {
         try {
             GlobalTrafficShapingHandler trafficShapingHandler = new GlobalTrafficShapingHandler(workerGroup, 0, 0, 1000);
             MuStatsImpl stats = new MuStatsImpl(trafficShapingHandler.trafficCounter());
+            AtomicReference<MuServer> serverRef = new AtomicReference<>();
 
-            Channel httpChannel = httpPort < 0 ? null : createChannel(bossGroup, workerGroup, host, httpPort, null, trafficShapingHandler, stats);
+            Channel httpChannel = httpPort < 0 ? null : createChannel(bossGroup, workerGroup, host, httpPort, null, trafficShapingHandler, stats, serverRef);
             Channel httpsChannel;
             if (httpsPort < 0) {
                 httpsChannel = null;
             } else {
                 SSLContext sslContextToUse = this.sslContext != null ? this.sslContext : SSLContextBuilder.unsignedLocalhostCert();
-                httpsChannel = createChannel(bossGroup, workerGroup, host, httpsPort, sslContextToUse, trafficShapingHandler, stats);
+                httpsChannel = createChannel(bossGroup, workerGroup, host, httpsPort, sslContextToUse, trafficShapingHandler, stats, serverRef);
             }
             URI uri = null;
             if (httpChannel != null) {
                 channels.add(httpChannel);
-                uri = getUriFromChannel(httpChannel, "http");
+                uri = getUriFromChannel(httpChannel, "http", host);
             }
             URI httpsUri = null;
             if (httpsChannel != null) {
                 channels.add(httpsChannel);
-                httpsUri = getUriFromChannel(httpsChannel, "https");
+                httpsUri = getUriFromChannel(httpsChannel, "https", host);
             }
 
-            MuServer server = new MuServer(uri, httpsUri, shutdown, stats);
+            InetSocketAddress serverAddress = (InetSocketAddress) channels.get(0).localAddress();
+            MuServer server = new MuServerImpl(uri, httpsUri, shutdown, stats, serverAddress);
+            serverRef.set(server);
             if (addShutdownHook) {
                 Runtime.getRuntime().addShutdownHook(new Thread(server::stop));
             }
@@ -320,12 +324,13 @@ public class MuServerBuilder {
 
     }
 
-    private static URI getUriFromChannel(Channel httpChannel, String protocol) {
+    private static URI getUriFromChannel(Channel httpChannel, String protocol, String host) {
+        host = host == null ? "localhost" : host;
         InetSocketAddress a = (InetSocketAddress) httpChannel.localAddress();
-        return URI.create(protocol + "://localhost:" + a.getPort());
+        return URI.create(protocol + "://" + host.toLowerCase() + ":" + a.getPort());
     }
 
-    private Channel createChannel(NioEventLoopGroup bossGroup, NioEventLoopGroup workerGroup, String host, int port, SSLContext rawSSLContext, GlobalTrafficShapingHandler trafficShapingHandler, MuStatsImpl stats) throws InterruptedException {
+    private Channel createChannel(NioEventLoopGroup bossGroup, NioEventLoopGroup workerGroup, String host, int port, SSLContext rawSSLContext, GlobalTrafficShapingHandler trafficShapingHandler, MuStatsImpl stats, AtomicReference<MuServer> serverRef) throws InterruptedException {
         boolean usesSsl = rawSSLContext != null;
         JdkSslContext sslContext = usesSsl ? new JdkSslContext(rawSSLContext, false, ClientAuth.NONE) : null;
 
@@ -352,7 +357,7 @@ public class MuServerBuilder {
                     if (gzipEnabled) {
                         p.addLast("compressor", new SelectiveHttpContentCompressor(minimumGzipSize, mimeTypesToGzip));
                     }
-                    p.addLast("muhandler", new MuServerHandler(asyncHandlers, stats));
+                    p.addLast("muhandler", new MuServerHandler(asyncHandlers, stats, serverRef));
                 }
             });
         ChannelFuture bound = host == null ? b.bind(port) : b.bind(host, port);

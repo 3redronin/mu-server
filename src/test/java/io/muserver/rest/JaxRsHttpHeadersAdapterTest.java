@@ -224,6 +224,16 @@ public class JaxRsHttpHeadersAdapterTest {
             public AsyncHandle handleAsync() {
                 throw new NotImplementedException();
             }
+
+            @Override
+            public String remoteAddress() {
+                throw new NotImplementedException();
+            }
+
+            @Override
+            public MuServer server() {
+                throw new NotImplementedException();
+            }
         };
     }
 

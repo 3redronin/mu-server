@@ -6,27 +6,9 @@ import io.muserver.MuException;
 import javax.ws.rs.*;
 import java.lang.annotation.Annotation;
 
-public class MethodMapping {
+class MethodMapping {
 
-    public static Class<? extends Annotation> toJaxMethod(Method method) {
-        switch (method) {
-            case GET:
-                return GET.class;
-            case POST:
-                return POST.class;
-            case OPTIONS:
-                return OPTIONS.class;
-            case PUT:
-                return PUT.class;
-            case DELETE:
-                return DELETE.class;
-            case PATCH:
-                return PATCH.class;
-        }
-        throw new MuException(method + " is not supported by mu-server JAX RS");
-    }
-
-    public static Method jaxToMu(Class<? extends Annotation> jaxMethod) {
+    static Method jaxToMu(Class<? extends Annotation> jaxMethod) {
         if (GET.class.equals(jaxMethod)) {
             return Method.GET;
         } else if (POST.class.equals(jaxMethod)) {

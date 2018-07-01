@@ -222,4 +222,16 @@ public interface MuRequest {
      * @return AsyncHandle An object that you can use to mark the response as complete.
      */
     AsyncHandle handleAsync();
+
+    /**
+     * Gets the address that the request came from. Warning: this may not be the client's address and instead
+     * may be an intermediary such as a network gateway.
+     * @return The IP address of the client, or of a gateway with NAT, etc.
+     */
+    String remoteAddress();
+
+    /**
+     * @return Returns a reference to the mu server instance.
+     */
+    MuServer server();
 }

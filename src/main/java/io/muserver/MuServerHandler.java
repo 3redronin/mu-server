@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static io.netty.buffer.Unpooled.copiedBuffer;
 import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
@@ -25,10 +26,12 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
 
     private final List<AsyncMuHandler> handlers;
     private final MuStatsImpl stats;
+    private final AtomicReference<MuServer> serverRef;
 
-    public MuServerHandler(List<AsyncMuHandler> handlers, MuStatsImpl stats) {
+    public MuServerHandler(List<AsyncMuHandler> handlers, MuStatsImpl stats, AtomicReference<MuServer> serverRef) {
 	    this.handlers = handlers;
         this.stats = stats;
+        this.serverRef = serverRef;
     }
 
 	private static final class State {
@@ -49,9 +52,7 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
 				handleHttpRequestDecodeFailure(ctx, request.decoderResult().cause());
 			} else {
 				boolean handled = false;
-                Attribute<String> proto = ctx.channel().attr(PROTO_ATTRIBUTE);
-
-                NettyRequestAdapter muRequest = new NettyRequestAdapter(proto.get(), request);
+                NettyRequestAdapter muRequest = new NettyRequestAdapter(ctx.channel(), request, serverRef);
                 stats.onRequestStarted(muRequest);
 
                 AsyncContext asyncContext = new AsyncContext(muRequest, new NettyResponseAdaptor(ctx, muRequest), stats);

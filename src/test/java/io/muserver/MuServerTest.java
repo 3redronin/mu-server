@@ -6,20 +6,17 @@ import org.junit.*;
 import java.io.IOException;
 import java.net.ConnectException;
 import java.net.InetAddress;
-import java.net.UnknownHostException;
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import static io.muserver.MuServerBuilder.httpServer;
 import static java.util.Arrays.asList;
-import static org.hamcrest.CoreMatchers.instanceOf;
-import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.CoreMatchers.*;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.IsEqual.equalTo;
-import static io.muserver.MuServerBuilder.httpServer;
-import static scaffolding.ClientUtils.*;
+import static scaffolding.ClientUtils.call;
+import static scaffolding.ClientUtils.request;
 
 public class MuServerTest {
 
@@ -131,14 +128,53 @@ public class MuServerTest {
     }
 
     @Test
+    public void ifBoundToLocalhostThenLoopbackAddressIsUsed() throws IOException {
+        Assume.assumeNotNull(hostname);
+
+        for (String host : asList("127.0.0.1", "localhost")) {
+            MuServer server = httpServer()
+                .withInterface(host)
+                .addHandler(Method.GET, "/", (req, resp, pp) -> resp.write("Hello from " + req.server().address().getAddress().getHostAddress()))
+                .start();
+            try (Response resp = call(request().url(server.uri().toString()))) {
+                assertThat(resp.body().string(), equalTo("Hello from 127.0.0.1"));
+            } finally {
+                server.stop();
+            }
+        }
+    }
+
+    @Test
     public void ifBoundTo0000ThenExternalAccessIsPossible() throws IOException {
         Assume.assumeNotNull(hostname);
         server = httpServer()
             .withInterface("0.0.0.0")
-            .addHandler(Method.GET, "/", (req, resp, pp) -> resp.write("Hello"))
+            .addHandler(Method.GET, "/", (req, resp, pp) -> resp.write("Hello from " + server.address().getHostString()))
             .start();
         try (Response resp = call(request().url("http://" + hostname + ":" + server.uri().getPort()))) {
-            assertThat(resp.body().string(), equalTo("Hello"));
+            assertThat(resp.body().string(), startsWith("Hello from 0"));
+        }
+    }
+
+    @Test
+    public void ifBoundToHostnameThenExternalAccessIsPossible() throws IOException {
+        Assume.assumeNotNull(hostname);
+        server = httpServer()
+            .withInterface(hostname)
+            .addHandler(Method.GET, "/", (req, resp, pp) -> resp.write("Hello from " + server.uri().getHost()))
+            .start();
+        try (Response resp = call(request().url("http://" + hostname + ":" + server.uri().getPort()))) {
+            assertThat(resp.body().string(), equalTo("Hello from " + hostname));
+        }
+    }
+
+    @Test
+    public void theClientIpAddressOrSomethingLikeThatIsAvailable() throws IOException {
+        server = httpServer()
+            .addHandler(Method.GET, "/", (req, resp, pp) -> resp.write("Hello there " + req.remoteAddress()))
+            .start();
+        try (Response resp = call(request().url(server.uri().toString()))) {
+            assertThat(resp.body().string(), containsString("."));
         }
     }
 
