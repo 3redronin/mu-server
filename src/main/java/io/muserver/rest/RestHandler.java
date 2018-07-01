@@ -96,27 +96,7 @@ public class RestHandler implements MuHandler {
                     muResponse.headers().set(HeaderNames.CONTENT_TYPE, responseMediaType.toString());
 
                     // This weird thing stops the output stream being created until it's actually written to
-                    OutputStream entityStream = new OutputStream() {
-                        @Override
-                        public void write(int b) throws IOException {
-                            muResponse.outputStream().write(b);
-                        }
-
-                        @Override
-                        public void write(byte[] b, int off, int len) throws IOException {
-                            muResponse.outputStream().write(b, off, len);
-                        }
-
-                        @Override
-                        public void flush() throws IOException {
-                            muResponse.outputStream().flush();
-                        }
-
-                        @Override
-                        public void close() throws IOException {
-                            muResponse.outputStream().close();
-                        }
-                    };
+                    OutputStream entityStream = new LazyAccessOutputStream(muResponse);
 
                     messageBodyWriter.writeTo(obj.entity, obj.type, obj.genericType, annotations, responseMediaType, muHeadersToJaxObj(muResponse.headers()), entityStream);
 
@@ -226,4 +206,34 @@ public class RestHandler implements MuHandler {
         }
     }
 
+    /**
+     * An output stream based on the request output stream, but if no methods are called then the output stream is never created.
+     */
+    private static class LazyAccessOutputStream extends OutputStream {
+        private final MuResponse muResponse;
+
+        LazyAccessOutputStream(MuResponse muResponse) {
+            this.muResponse = muResponse;
+        }
+
+        @Override
+        public void write(int b) throws IOException {
+            muResponse.outputStream().write(b);
+        }
+
+        @Override
+        public void write(byte[] b, int off, int len) throws IOException {
+            muResponse.outputStream().write(b, off, len);
+        }
+
+        @Override
+        public void flush() throws IOException {
+            muResponse.outputStream().flush();
+        }
+
+        @Override
+        public void close() throws IOException {
+            muResponse.outputStream().close();
+        }
+    }
 }

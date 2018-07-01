@@ -84,5 +84,11 @@ public interface RequestParameters {
      */
     List<String> getAll(String name);
 
+    /**
+     * Returns true if the given parameter is specified with any value
+     * @param name The name of the value
+     * @return True if it's specified; otherwise false.
+     */
+    boolean contains(String name);
 }
 

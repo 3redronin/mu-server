@@ -69,6 +69,17 @@ public class MuServerTest {
         }
     }
 
+    @Test
+    public void queryToStringIsAUrlString() throws IOException {
+        server = httpServer()
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.write(request.query().toString());
+            })
+            .start();
+        try (Response resp = call(request().url(server.uri() + "?hi=a%20thing&b=another"))) {
+            assertThat(resp.body().string(), equalTo("hi=a%20thing&b=another"));
+        }
+    }
 
     @Test
     public void syncHandlersSupportedAndStateCanBePassedThroughHandlers() throws IOException {
