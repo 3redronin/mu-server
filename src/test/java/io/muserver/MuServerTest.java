@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static io.muserver.MuServerBuilder.httpServer;
+import static io.muserver.MuServerBuilder.muServer;
 import static java.util.Arrays.asList;
 import static org.hamcrest.CoreMatchers.*;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -175,6 +176,16 @@ public class MuServerTest {
             .start();
         try (Response resp = call(request().url(server.uri().toString()))) {
             assertThat(resp.body().string(), containsString("."));
+        }
+    }
+
+    @Test
+    public void ifNoPortsDefinedAFriendlyMessageIsReturned() {
+        try {
+            muServer().start();
+            Assert.fail("No exception thrown");
+        } catch (IllegalArgumentException e) {
+            assertThat(e.getMessage(), is(equalTo("No ports were configured. Please call MuServerBuilder.withHttpPort(int) or MuServerBuilder.withHttpsPort(int)")));
         }
     }
 

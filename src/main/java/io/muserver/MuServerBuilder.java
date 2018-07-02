@@ -264,6 +264,10 @@ public class MuServerBuilder {
      * @return The running server.
      */
     public MuServer start() {
+        if (httpPort < 0 && httpsPort < 0) {
+            throw new IllegalArgumentException("No ports were configured. Please call MuServerBuilder.withHttpPort(int) or MuServerBuilder.withHttpsPort(int)");
+        }
+
         if (!handlers.isEmpty()) {
             asyncHandlers.add(new SyncHandlerAdapter(handlers));
         }
