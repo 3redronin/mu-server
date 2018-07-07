@@ -93,7 +93,7 @@ public class RoutesTest {
 
     @After
     public void destroy() {
-        if (server != null) server.stop();
+        scaffolding.MuAssert.stopAndCheck(server);
     }
 
     private static class RequestCounter implements RouteHandler {

@@ -3,6 +3,7 @@ package io.muserver;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
+import scaffolding.MuAssert;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -95,6 +96,6 @@ public class StreamingTest {
 
 
 	@After public void stopIt() {
-		server.stop();
+        MuAssert.stopAndCheck(server);
 	}
 }

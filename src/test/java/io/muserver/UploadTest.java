@@ -66,7 +66,7 @@ public class UploadTest {
 
     @After
     public void stopIt() {
-        if (server != null) server.stop();
+        scaffolding.MuAssert.stopAndCheck(server);
     }
 
 }

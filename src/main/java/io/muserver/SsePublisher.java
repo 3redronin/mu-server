@@ -144,7 +144,16 @@ class SsePublisherImpl implements SsePublisher {
         }
         raw.append("\n");
 
-        response.sendChunk(raw.toString());
+        sendChunk(raw.toString());
+    }
+
+    private void sendChunk(String text) {
+        try {
+            response.sendChunk(text);
+        } catch (Throwable e) {
+            close();
+            throw e;
+        }
     }
 
     @Override
@@ -161,11 +170,11 @@ class SsePublisherImpl implements SsePublisher {
     @Override
     public void sendComment(String comment) {
         ensureNoLineBreaks(comment, "SSE Comments");
-        response.sendChunk(":" + comment + "\n\n");
+        sendChunk(":" + comment + "\n\n");
     }
 
     @Override
     public void setClientReconnectTime(long timeToWait, TimeUnit unit) {
-        response.sendChunk("retry: " + unit.toMillis(timeToWait) + '\n');
+        sendChunk("retry: " + unit.toMillis(timeToWait) + '\n');
     }
 }

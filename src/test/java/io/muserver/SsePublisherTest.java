@@ -117,12 +117,13 @@ public class SsePublisherTest {
 
         assertThat(thrownException.get(), is(notNullValue()));
         assertThat(thrownException.get(), is(instanceOf(IOException.class)));
+
     }
 
 
     @After
     public void destroy() {
-        if (server != null) server.stop();
+        scaffolding.MuAssert.stopAndCheck(server);
         if (listener != null) listener.cleanup();
     }
 

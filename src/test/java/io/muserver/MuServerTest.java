@@ -191,6 +191,6 @@ public class MuServerTest {
 
     @After
     public void stopIt() {
-        if (server != null) server.stop();
+        scaffolding.MuAssert.stopAndCheck(server);
     }
 }

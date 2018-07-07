@@ -3,6 +3,7 @@ package io.muserver;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
+import scaffolding.MuAssert;
 import scaffolding.StringUtils;
 
 import java.io.IOException;
@@ -91,6 +92,6 @@ public class TextSendingTest {
 
     @After
     public void stopIt() {
-        server.stop();
+        MuAssert.stopAndCheck(server);
     }
 }

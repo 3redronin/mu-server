@@ -295,7 +295,7 @@ public class AsyncTest {
 
     @After
     public void destroy() {
-        if (server != null) server.stop();
+        scaffolding.MuAssert.stopAndCheck(server);
     }
 
 }

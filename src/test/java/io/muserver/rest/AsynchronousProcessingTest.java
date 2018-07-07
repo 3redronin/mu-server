@@ -212,10 +212,7 @@ public class AsynchronousProcessingTest {
 
     @After
     public void stop() {
-        if (server != null) {
-            assertThat(server.stats().activeRequests(), is(empty()));
-            server.stop();
-        }
+        MuAssert.stopAndCheck(server);
     }
 
 }

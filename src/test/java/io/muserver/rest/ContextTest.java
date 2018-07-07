@@ -144,7 +144,7 @@ public class ContextTest {
 
     @After
     public void stop() {
-        if (server != null) server.stop();
+        scaffolding.MuAssert.stopAndCheck(server);
     }
 
 }

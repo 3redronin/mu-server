@@ -3,6 +3,7 @@ package io.muserver;
 import okhttp3.FormBody;
 import org.junit.After;
 import org.junit.Test;
+import scaffolding.MuAssert;
 
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -119,7 +120,7 @@ public class ParametersTest {
     }
 
 	@After public void stopIt() {
-        server.stop();
+        MuAssert.stopAndCheck(server);
 	}
 
     URL http(String str) throws MalformedURLException {

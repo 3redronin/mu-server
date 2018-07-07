@@ -4,6 +4,7 @@ import io.muserver.MuServer;
 import io.muserver.MuServerBuilder;
 import org.junit.After;
 import org.junit.Test;
+import scaffolding.MuAssert;
 
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
@@ -66,7 +67,7 @@ public class RestHandlerTest {
 
     @After
     public void stopIt() {
-        server.stop();
+        MuAssert.stopAndCheck(server);
     }
 
 

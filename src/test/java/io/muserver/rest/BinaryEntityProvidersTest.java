@@ -9,6 +9,7 @@ import okhttp3.Response;
 import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Test;
+import scaffolding.MuAssert;
 import scaffolding.StringUtils;
 
 import javax.activation.DataSource;
@@ -227,7 +228,7 @@ public class BinaryEntityProvidersTest {
 
     @After
     public void stop() {
-        if (server != null) server.stop();
+        MuAssert.stopAndCheck(server);
     }
 
 }

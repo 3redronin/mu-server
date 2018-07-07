@@ -7,6 +7,7 @@ import okhttp3.Response;
 import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Test;
+import scaffolding.MuAssert;
 
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
@@ -103,7 +104,7 @@ public class MediaTypesTest {
 
     @After
     public void stop() {
-        server.stop();
+        MuAssert.stopAndCheck(server);
     }
 
 }

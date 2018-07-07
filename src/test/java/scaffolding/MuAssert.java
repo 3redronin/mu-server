@@ -1,9 +1,12 @@
 package scaffolding;
 
+import io.muserver.MuServer;
+
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.is;
 
 public class MuAssert {
@@ -30,4 +33,10 @@ public class MuAssert {
         }
     }
 
+    public static void stopAndCheck(MuServer server) {
+        if (server != null) {
+            assertThat(server.stats().activeRequests(), is(empty()));
+            server.stop();
+        }
+    }
 }

@@ -7,6 +7,7 @@ import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Ignore;
 import org.junit.Test;
+import scaffolding.MuAssert;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -108,8 +109,6 @@ public class FileProviderTest {
 
     @After
     public void stop() {
-        if (server != null) {
-            server.stop();
-        }
+        MuAssert.stopAndCheck(server);
     }
 }

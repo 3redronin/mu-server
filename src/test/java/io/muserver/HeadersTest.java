@@ -4,6 +4,7 @@ import okhttp3.Request;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
+import scaffolding.MuAssert;
 
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -273,7 +274,7 @@ public class HeadersTest {
 
 
     @After public void stopIt() {
-		server.stop();
+        MuAssert.stopAndCheck(server);
 	}
 
 	Request.Builder xSomethingHeader(String value) {

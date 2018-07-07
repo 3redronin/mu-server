@@ -9,6 +9,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import scaffolding.ClientUtils;
+import scaffolding.MuAssert;
 
 import javax.ws.rs.CookieParam;
 import javax.ws.rs.GET;
@@ -149,7 +150,7 @@ public class CookieTest {
 
     @After
     public void stopIt() {
-        server.stop();
+        MuAssert.stopAndCheck(server);
     }
 
     private static class InMemoryCookieJar implements CookieJar {

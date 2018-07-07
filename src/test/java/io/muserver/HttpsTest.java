@@ -3,6 +3,7 @@ package io.muserver;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
+import scaffolding.MuAssert;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
@@ -32,6 +33,6 @@ public class HttpsTest {
     }
 
     @After public void stopIt() {
-        server.stop();
+        MuAssert.stopAndCheck(server);
     }
 }
