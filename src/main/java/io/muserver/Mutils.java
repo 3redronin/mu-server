@@ -1,8 +1,11 @@
 package io.muserver;
 
+import io.netty.handler.codec.DateFormatter;
+
 import java.io.*;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
+import java.util.Date;
 
 public class Mutils {
 
@@ -149,5 +152,16 @@ public class Mutils {
         } catch (IOException e) {
             return file.getAbsolutePath();
         }
+    }
+
+    /**
+     * Converts a date into a date string as used in HTTP headers (defined in RFC 7321), for example <code>Tue, 15 Nov 1994 08:12:31 GMT</code>
+     * @param date A date to format
+     * @return The date as a formatted string
+     * @throws IllegalArgumentException If the date is null
+     */
+    public static String toHttpDate(Date date) {
+        notNull("date", date);
+        return DateFormatter.format(date);
     }
 }

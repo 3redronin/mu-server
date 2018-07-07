@@ -18,6 +18,7 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.Type;
 import java.util.*;
+import java.util.function.Consumer;
 
 import static io.muserver.Mutils.hasValue;
 import static io.muserver.rest.JaxRSResponse.muHeadersToJax;
@@ -26,6 +27,7 @@ import static java.util.Collections.singletonList;
 
 /**
  * A handler that serves JAX-RS resources.
+ *
  * @see RestHandlerBuilder#restHandler(Object...)
  */
 public class RestHandler implements MuHandler {
@@ -55,6 +57,7 @@ public class RestHandler implements MuHandler {
             ResourceMethod rm = mm.resourceMethod;
             Object[] params = new Object[rm.methodHandle.getParameterCount()];
 
+            boolean isAsync = false;
             for (ResourceMethodParam param : rm.params) {
                 Object paramValue;
                 if (param.source == ResourceMethodParam.ValueSource.MESSAGE_BODY) {
@@ -68,6 +71,13 @@ public class RestHandler implements MuHandler {
                     }
                 } else if (param.source == ResourceMethodParam.ValueSource.CONTEXT) {
                     paramValue = getContextParam(request, muResponse, relativePath, mm, param);
+                } else if (param.source == ResourceMethodParam.ValueSource.SUSPENDED) {
+                    if (isAsync) {
+                        throw new MuException("A REST method can only have one @Suspended attribute. Error for " + rm);
+                    }
+                    isAsync = true;
+                    AsyncHandle asyncHandle = request.handleAsync();
+                    paramValue = new AsyncResponseAdapter(asyncHandle, response -> sendResponse(request, muResponse, acceptHeaders, mm, response));
                 } else {
                     ResourceMethodParam.RequestBasedParam rbp = (ResourceMethodParam.RequestBasedParam) param;
                     paramValue = rbp.getValue(request, mm);
@@ -77,8 +87,41 @@ public class RestHandler implements MuHandler {
 
 
             Object result = rm.invoke(params);
+            if (!isAsync) {
+                sendResponse(request, muResponse, acceptHeaders, mm, result);
+            }
+        } catch (NotFoundException e) {
+            return false;
+        } catch (Exception ex) {
+            dealWithUnhandledException(request, muResponse, ex);
+        }
+        return true;
+    }
+
+    static void dealWithUnhandledException(MuRequest request, MuResponse muResponse, Exception ex) {
+        log.warn("Unhandled error from handler for " + request, ex);
+        if (!muResponse.hasStartedSendingData()) {
+            String errorID = "ERR-" + UUID.randomUUID().toString();
+            log.info("Sending a 500 to the client with ErrorID=" + errorID);
+            try {
+                muResponse.status(500);
+                muResponse.contentType(ContentTypes.TEXT_PLAIN);
+                muResponse.write("500 Server Error - ErrorID=" + errorID);
+            } catch (Exception ex2) {
+                log.info("Error while trying to send error message to client, probably because the connection is already lost.", ex2);
+            }
+        }
+    }
+
+    void sendResponse(MuRequest request, MuResponse muResponse, List<MediaType> acceptHeaders, RequestMatcher.MatchedMethod mm, Object result) {
+        try {
             if (!muResponse.hasStartedSendingData()) {
                 ObjWithType obj = ObjWithType.objType(result);
+
+
+                if (obj.entity instanceof Exception) {
+                    throw (Exception) obj.entity;
+                }
 
                 writeHeadersToResponse(muResponse, obj.response);
                 muResponse.status(obj.status());
@@ -106,8 +149,6 @@ public class RestHandler implements MuHandler {
 
                 }
             }
-        } catch (NotFoundException e) {
-            return false;
         } catch (WebApplicationException e) {
             if (e instanceof ServerErrorException) {
                 log.info("Server error for " + request, e);
@@ -129,20 +170,8 @@ public class RestHandler implements MuHandler {
                 muResponse.write(message);
             }
         } catch (Exception ex) {
-            log.warn("Unhandled error from handler for " + request, ex);
-            if (!muResponse.hasStartedSendingData()) {
-                String errorID = "ERR-" + UUID.randomUUID().toString();
-                log.info("Sending a 500 to the client with ErrorID=" + errorID);
-                try {
-                    muResponse.status(500);
-                    muResponse.contentType(ContentTypes.TEXT_PLAIN);
-                    muResponse.write("500 Server Error - ErrorID=" + errorID);
-                } catch (Exception ex2) {
-                    log.info("Error while trying to send error message to client, probably because the connection is already lost.", ex2);
-                }
-            }
+            dealWithUnhandledException(request, muResponse, ex);
         }
-        return true;
     }
 
     private static Object getContextParam(MuRequest request, MuResponse muResponse, String relativePath, RequestMatcher.MatchedMethod mm, ResourceMethodParam param) {
@@ -240,4 +269,5 @@ public class RestHandler implements MuHandler {
             muResponse.outputStream().close();
         }
     }
+
 }

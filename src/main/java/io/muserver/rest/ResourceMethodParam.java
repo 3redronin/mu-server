@@ -4,6 +4,7 @@ import io.muserver.MuRequest;
 import io.muserver.openapi.ParameterObjectBuilder;
 
 import javax.ws.rs.*;
+import javax.ws.rs.container.Suspended;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.ext.ParamConverter;
 import javax.ws.rs.ext.ParamConverterProvider;
@@ -42,6 +43,8 @@ abstract class ResourceMethodParam {
             return new MessageBodyParam(index, source, parameterHandle, descriptionData, isRequired);
         } else if (source == ValueSource.CONTEXT) {
             return new ContextParam(index, source, parameterHandle);
+        } else if (source == ValueSource.SUSPENDED) {
+            return new SuspendedParam(index, source, parameterHandle);
         } else {
             boolean encodedRequested = hasDeclared(parameterHandle, Encoded.class);
             boolean isDeprecated = hasDeclared(parameterHandle, Deprecated.class);
@@ -144,6 +147,12 @@ abstract class ResourceMethodParam {
         }
     }
 
+    static class SuspendedParam extends ResourceMethodParam {
+        SuspendedParam(int index, ValueSource source, Parameter parameterHandle) {
+            super(index, source, parameterHandle, null, true);
+        }
+    }
+
     private static ValueSource getSource(Parameter p) {
         return hasDeclared(p, MatrixParam.class) ? ValueSource.MATRIX_PARAM
             : hasDeclared(p, QueryParam.class) ? ValueSource.QUERY_PARAM
@@ -152,6 +161,7 @@ abstract class ResourceMethodParam {
             : hasDeclared(p, CookieParam.class) ? ValueSource.COOKIE_PARAM
             : hasDeclared(p, HeaderParam.class) ? ValueSource.HEADER_PARAM
             : hasDeclared(p, Context.class) ? ValueSource.CONTEXT
+            : hasDeclared(p, Suspended.class) ? ValueSource.SUSPENDED
             : ValueSource.MESSAGE_BODY;
 
     }
@@ -197,7 +207,7 @@ abstract class ResourceMethodParam {
     }
 
     enum ValueSource {
-        MESSAGE_BODY(null), QUERY_PARAM("query"), MATRIX_PARAM(null), PATH_PARAM("path"), COOKIE_PARAM("cookie"), HEADER_PARAM("header"), FORM_PARAM(null), CONTEXT(null);
+        MESSAGE_BODY(null), QUERY_PARAM("query"), MATRIX_PARAM(null), PATH_PARAM("path"), COOKIE_PARAM("cookie"), HEADER_PARAM("header"), FORM_PARAM(null), CONTEXT(null), SUSPENDED(null);
 
         final String openAPIIn;
 
