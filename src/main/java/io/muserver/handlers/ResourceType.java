@@ -11,7 +11,7 @@ import static java.util.Arrays.asList;
 
 /**
  * <p>Used by the {@link ResourceHandler} to specify a mapping between file name extensions and mime types, and whether they should be gzipped or not.</p>
- * <p>A number of common mappings are provided by default. To specify your custom settings, use {@link ResourceHandler.Builder#withExtensionToResourceType(Map)}</p>
+ * <p>A number of common mappings are provided by default. To specify your custom settings, use {@link ResourceHandlerBuilder#withExtensionToResourceType(Map)}</p>
  */
 public class ResourceType {
     public static final Map<String, ResourceType> DEFAULT_EXTENSION_MAPPINGS;

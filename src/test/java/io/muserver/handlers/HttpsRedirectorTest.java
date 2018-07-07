@@ -24,7 +24,7 @@ public class HttpsRedirectorTest {
             .withHttpPort(12380)
             .withHttpsPort(12443)
             .addHandler(
-                HttpsRedirector.toHttpsPort(12443)
+                HttpsRedirectorBuilder.toHttpsPort(12443)
                     .withHSTSExpireTime(365, TimeUnit.DAYS)
                     .includeSubDomains(true)
             )

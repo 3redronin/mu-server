@@ -47,7 +47,7 @@ public class ResourceHandlerTest {
     public void classpathCanBeUsed() throws Exception {
         server = MuServerBuilder.httpsServer()
             .withGzipEnabled(false)
-            .addHandler(ResourceHandler.fileOrClasspath("src/test/resources/does-not-exist", "/sample-static").build())
+            .addHandler(ResourceHandlerBuilder.fileOrClasspath("src/test/resources/does-not-exist", "/sample-static").build())
             .start();
 
         assertContentTypeAndContent("/index.html", "text/html", false);
@@ -90,7 +90,7 @@ public class ResourceHandlerTest {
     public void requestsWithDotDotOrTildesResultIn404s() throws Exception {
         server = MuServerBuilder.httpsServer()
             .withGzipEnabled(false)
-            .addHandler(ResourceHandler.fileOrClasspath("src/test/resources/does-not-exist", "/sample-static").build())
+            .addHandler(ResourceHandlerBuilder.fileOrClasspath("src/test/resources/does-not-exist", "/sample-static").build())
             .start();
 
         assertNotFound("/../something.txt");
@@ -102,8 +102,8 @@ public class ResourceHandlerTest {
     public void directoriesResultIn302s() throws Exception {
         server = MuServerBuilder.httpsServer()
             .withGzipEnabled(false)
-            .addHandler(ResourceHandler.classpathHandler("/sample-static").withPathToServeFrom("/classpath").build())
-            .addHandler(ResourceHandler.fileHandler("src/test/resources/sample-static").withPathToServeFrom("/file").build())
+            .addHandler(ResourceHandlerBuilder.classpathHandler("/sample-static").withPathToServeFrom("/classpath").build())
+            .addHandler(ResourceHandlerBuilder.fileHandler("src/test/resources/sample-static").withPathToServeFrom("/file").build())
             .start();
 
         OkHttpClient client = newClient().followRedirects(false).build();

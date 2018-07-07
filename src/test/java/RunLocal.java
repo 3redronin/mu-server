@@ -1,5 +1,6 @@
 import io.muserver.*;
 import io.muserver.handlers.ResourceHandler;
+import io.muserver.handlers.ResourceHandlerBuilder;
 import io.muserver.rest.RestHandlerBuilder;
 import org.example.petstore.resource.PetResource;
 import org.example.petstore.resource.PetStoreResource;
@@ -24,8 +25,8 @@ public class RunLocal {
         AtomicReference<MuStats> stats = new AtomicReference<>();
         MuServer server = new MuServerBuilder().withHttpPort(0).withHttpsPort(0)
             .withHttpPort(18080).withHttpsPort(18443).withHttpsConfig(SSLContextBuilder.unsignedLocalhostCert())
-            .addHandler(ResourceHandler.fileHandler(BIG_FILE_DIR).build())
-            .addHandler(ResourceHandler.fileOrClasspath("src/test/resources/sample-static", "/sample-static").build())
+            .addHandler(ResourceHandlerBuilder.fileHandler(BIG_FILE_DIR).build())
+            .addHandler(ResourceHandlerBuilder.fileOrClasspath("src/test/resources/sample-static", "/sample-static").build())
             .addHandler(Method.GET, "/api", (request, response, pathParams) -> {
                 response.contentType(ContentTypes.APPLICATION_JSON);
                 response.write("{ \"hello\": \"world                    this is something           to be gzipped\" }");

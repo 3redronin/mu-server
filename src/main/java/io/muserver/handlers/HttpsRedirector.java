@@ -9,15 +9,7 @@ import java.util.concurrent.TimeUnit;
  * <p>Sends any HTTP requests to the same HTTPS address at the supplied port and optionally enables
  * <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Strict-Transport-Security" target="_blank">Strict-Transport-Security (HSTS)</a>
  * </p>
- * <p>Sample usage:</p>
- * <pre>
- *     server = MuServerBuilder.muServer()
- *                 .withHttpPort(80)
- *                 .withHttpsPort(443)
- *                 .addHandler(HttpsRedirector.toHttpsPort(80443).withHSTSExpireTime(365, TimeUnit.DAYS))
- *                 .addHandler( ... your handler ... )
- *                 .start();
- * </pre>
+ * @see HttpsRedirectorBuilder
  */
 public class HttpsRedirector implements MuHandler {
 
@@ -26,7 +18,7 @@ public class HttpsRedirector implements MuHandler {
     private final boolean includeSubDomainsForHSTS;
     private final boolean preload;
 
-    private HttpsRedirector(int httpsPort, long expireTimeInSeconds, boolean includeSubDomainsForHSTS, boolean preload) {
+    HttpsRedirector(int httpsPort, long expireTimeInSeconds, boolean includeSubDomainsForHSTS, boolean preload) {
         this.httpsPort = httpsPort;
         this.expireTimeInSeconds = expireTimeInSeconds;
         this.includeSubDomainsForHSTS = includeSubDomainsForHSTS;
@@ -56,70 +48,22 @@ public class HttpsRedirector implements MuHandler {
         return true;
     }
 
-    public static Builder toHttpsPort(int port) {
-        return new Builder()
-            .withPort(port);
+    /**
+     * @param port The port to redirect to
+     * @return A builder
+     * @deprecated Use {@link HttpsRedirectorBuilder#toHttpsPort(int)}
+     */
+    @Deprecated
+    public static HttpsRedirectorBuilder toHttpsPort(int port) {
+        return HttpsRedirectorBuilder.toHttpsPort(port);
     }
 
-    public static class Builder implements MuHandlerBuilder<HttpsRedirector> {
+    /**
+     * @deprecated Use {@link HttpsRedirectorBuilder}
+     */
+    @Deprecated
+    public static class Builder extends HttpsRedirectorBuilder {
 
-        private int port = -1;
-        private long expireTimeInSeconds = -1;
-        private boolean includeSubDomainsForHSTS = false;
-        private boolean preload = false;
-
-        @Override
-        public HttpsRedirector build() {
-            if (port < 1) {
-                throw new IllegalArgumentException("The HTTPS port to redirect to should be a positive number");
-            }
-            return new HttpsRedirector(port, expireTimeInSeconds, includeSubDomainsForHSTS, preload);
-        }
-
-        /**
-         * Sets the port to redirect HTTP requests to, for example <code>443</code>
-         * @param port The port that the HTTPS version of this website is available at.
-         * @return Returns this builder.
-         */
-        public Builder withPort(int port) {
-            this.port = port;
-            return this;
-        }
-
-        /**
-         * <p>Specifies that this website can be added to the HSTS preload lists.
-         * See <a href="https://hstspreload.org/">https://hstspreload.org/</a> for more info.</p>
-         * @param preload <code>true</code> to include the preload directive; <code>false</code> to not.
-         * @return Returns this builder.
-         */
-        public Builder withHSTSPreload(boolean preload) {
-            this.preload = preload;
-            return this;
-        }
-
-        /**
-         * <p>If set to a positive number, this will add a <code>Strict-Transport-Security</code> header to all HTTPS
-         * responses to indicate that clients should always use HTTPS to access this server.</p>
-         * <p>This is not enabled by default.</p>
-         * @param expireTime The time that the browser should remember that a site is only to be accessed using HTTPS.
-         * @param unit The unit of the expiry time.
-         * @return Returns this builder.
-         */
-        public Builder withHSTSExpireTime(int expireTime, TimeUnit unit) {
-            this.expireTimeInSeconds = unit.toSeconds(expireTime);
-            return this;
-        }
-
-
-        /**
-         * <p>Specifies that any subdomains should have HSTS enforced too.</p>
-         * @param includeSubDomainsForHSTS <code>true</code> to include the <code>includeSubDomains</code> directive in the <code>Strict-Transport-Security</code> header value.
-         * @return Returns this builder.
-         */
-        public Builder includeSubDomains(boolean includeSubDomainsForHSTS) {
-            this.includeSubDomainsForHSTS = includeSubDomainsForHSTS;
-            return this;
-        }
 
     }
 }

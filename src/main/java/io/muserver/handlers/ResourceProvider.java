@@ -1,5 +1,6 @@
 package io.muserver.handlers;
 
+import io.muserver.MuException;
 import io.muserver.MuResponse;
 import io.muserver.Mutils;
 import org.slf4j.Logger;
@@ -13,6 +14,7 @@ import java.net.JarURLConnection;
 import java.net.URL;
 import java.net.URLConnection;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 
 interface ResourceProvider {
@@ -24,6 +26,23 @@ interface ResourceProvider {
 
     void sendTo(MuResponse response, boolean sendBody) throws IOException;
 }
+
+interface ResourceProviderFactory {
+
+    ResourceProvider get(String relativePath);
+
+    static ResourceProviderFactory fileBased(Path baseDirectory) {
+        if (!Files.isDirectory(baseDirectory, LinkOption.NOFOLLOW_LINKS)) {
+            throw new MuException(baseDirectory + " is not a directory");
+        }
+        return relativePath -> new FileProvider(baseDirectory, relativePath);
+    }
+
+    static ResourceProviderFactory classpathBased(String classpathBase) {
+        return relativePath -> new ClasspathResourceProvider(classpathBase, relativePath);
+    }
+}
+
 
 class FileProvider implements ResourceProvider {
     private static final Logger log = LoggerFactory.getLogger(FileProvider.class);
