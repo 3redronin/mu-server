@@ -43,6 +43,15 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
 		}
 	}
 
+    @Override
+    public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+        State state = ctx.channel().attr(STATE_ATTRIBUTE).get();
+        if (state != null) {
+            state.asyncContext.onDisconnected();
+        }
+        super.channelInactive(ctx);
+    }
+
     protected void channelRead0(ChannelHandlerContext ctx, Object msg) throws Exception {
 		if (msg instanceof HttpRequest) {
 			HttpRequest request = (HttpRequest) msg;

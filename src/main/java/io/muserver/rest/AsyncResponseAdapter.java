@@ -3,6 +3,8 @@ package io.muserver.rest;
 import io.muserver.AsyncHandle;
 import io.muserver.HeaderNames;
 import io.muserver.Mutils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.container.AsyncResponse;
@@ -17,7 +19,8 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
-class AsyncResponseAdapter implements AsyncResponse {
+class AsyncResponseAdapter implements AsyncResponse, AsyncHandle.ResponseCompletedListener {
+    private static final Logger log = LoggerFactory.getLogger(AsyncResponseAdapter.class);
 
     private static ScheduledExecutorService ses = Executors.newSingleThreadScheduledExecutor();
 
@@ -37,6 +40,7 @@ class AsyncResponseAdapter implements AsyncResponse {
         isCancelled = false;
         isDone = false;
         this.resultConsumer = resultConsumer;
+        asyncHandle.setResponseCompletedHandler(this);
     }
 
     @Override
@@ -167,5 +171,25 @@ class AsyncResponseAdapter implements AsyncResponse {
             added.put(callbackClass, new HashSet<>());
         }
         added.get(callbackClass).addAll(registered);
+    }
+
+    @Override
+    public void onComplete(boolean responseWasCompleted) {
+        if (!responseWasCompleted) {
+            for (ConnectionCallback connectionCallback : connectionCallbacks) {
+                try {
+                    connectionCallback.onDisconnect(this);
+                } catch (Exception e) {
+                    log.warn("Exception from calling onDisconnect on " + connectionCallback);
+                }
+            }
+        }
+        for (CompletionCallback completionCallback : completionCallbacks) {
+            try {
+                completionCallback.onComplete(null);
+            } catch (Exception e) {
+                log.warn("Exception from calling onComplete on " + completionCallback);
+            }
+        }
     }
 }

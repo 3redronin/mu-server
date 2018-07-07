@@ -12,27 +12,39 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Deprecated
 public class AsyncContext {
     private static final Logger log = LoggerFactory.getLogger(AsyncContext.class);
-	public final MuRequest request;
-	public final MuResponse response;
+    public final MuRequest request;
+    public final MuResponse response;
     private final MuStatsImpl stats;
     public Object state;
-	GrowableByteBufferInputStream requestBody;
-	private AtomicBoolean completed = new AtomicBoolean(false);
+    GrowableByteBufferInputStream requestBody;
+    private AtomicBoolean completed = new AtomicBoolean(false);
 
-	public AsyncContext(MuRequest request, MuResponse response, MuStatsImpl stats) {
-		this.request = request;
-		this.response = response;
+    AsyncContext(MuRequest request, MuResponse response, MuStatsImpl stats) {
+        this.request = request;
+        this.response = response;
         this.stats = stats;
     }
 
-	public Future<Void> complete() {
+    public Future<Void> complete() {
         boolean wasCompleted = this.completed.getAndSet(true);
         if (wasCompleted) {
-	        log.info("AsyncContext.complete called twice for " + request);
-	        return null;
+            log.info("AsyncContext.complete called twice for " + request);
+            return null;
         } else {
             stats.onRequestEnded(request);
             return ((NettyResponseAdaptor) response).complete();
         }
-	}
+    }
+
+    boolean isComplete() {
+        return completed.get();
+    }
+
+    void onDisconnected() {
+        boolean wasCompleted = isComplete();
+        ((NettyRequestAdapter) request).onClientDisconnected(wasCompleted);
+        if (!wasCompleted) {
+            complete();
+        }
+    }
 }

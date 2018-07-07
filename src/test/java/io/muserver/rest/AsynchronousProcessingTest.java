@@ -1,36 +1,33 @@
 package io.muserver.rest;
 
 import io.muserver.MuServer;
-import io.muserver.Mutils;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Assert;
-import org.junit.Ignore;
 import org.junit.Test;
 import scaffolding.ClientUtils;
 import scaffolding.MuAssert;
-import scaffolding.StringUtils;
 
 import javax.ws.rs.*;
 import javax.ws.rs.container.AsyncResponse;
+import javax.ws.rs.container.CompletionCallback;
 import javax.ws.rs.container.ConnectionCallback;
 import javax.ws.rs.container.Suspended;
-import javax.ws.rs.container.TimeoutHandler;
-import javax.ws.rs.core.StreamingOutput;
 import java.io.IOException;
 import java.net.SocketTimeoutException;
 import java.util.Collection;
 import java.util.Date;
+import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.MuServerBuilder.httpServer;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
-import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.stream.Collectors.toSet;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.call;
@@ -65,6 +62,28 @@ public class AsynchronousProcessingTest {
         assertThat(captured[0].isSuspended(), is(false));
         assertThat(captured[0].isCancelled(), is(false));
         assertThat(captured[0].isDone(), is(true));
+    }
+
+
+    @Test
+    public void returningACompletionStageIsAlsoPossible() throws Exception {
+        @Path("samples")
+        class Sample {
+            @GET
+            public CompletionStage<javax.ws.rs.core.Response> go() {
+                CompletableFuture<javax.ws.rs.core.Response> cs = new CompletableFuture<>();
+                executor.submit(() -> {
+                    MuAssert.sleep(100);
+                    cs.complete(javax.ws.rs.core.Response.status(202).entity("The response body").build());
+                });
+                return cs;
+            }
+        }
+        this.server = httpServer().addHandler(restHandler(new Sample())).start();
+        try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
+            assertThat(resp.code(), is(202));
+            assertThat(resp.body().string(), equalTo("The response body"));
+        }
     }
 
 
@@ -166,27 +185,32 @@ public class AsynchronousProcessingTest {
 
 
     @Test
-    @Ignore("Not yet working")
     public void completionCallbacksCanBeRegistered() throws Exception {
+        CountDownLatch completedLatch = new CountDownLatch(1);
         CountDownLatch disconnectedLatch = new CountDownLatch(1);
-        AtomicReference<Collection<Class<?>>> registered = new AtomicReference<>();
+        AtomicReference<Map<Class<?>, Collection<Class<?>>>> registered = new AtomicReference<>();
 
         @Path("samples")
         class Sample {
             @GET
             public void go(@Suspended AsyncResponse ar, @QueryParam("retryDate") Long retryDate, @QueryParam("retrySeconds") Integer retrySeconds) {
-                registered.set(ar.register((ConnectionCallback) disconnected -> disconnectedLatch.countDown()));
+                registered.set(ar.register(
+                    (ConnectionCallback) disconnected -> disconnectedLatch.countDown(),
+                    (CompletionCallback) disconnected -> completedLatch.countDown())
+                );
             }
         }
         this.server = httpServer().addHandler(restHandler(new Sample())).start();
-        OkHttpClient impatientClient = ClientUtils.client.newBuilder().readTimeout(1, TimeUnit.MILLISECONDS).build();
+        OkHttpClient impatientClient = ClientUtils.client.newBuilder().readTimeout(200, TimeUnit.MILLISECONDS).build();
         try (Response ignored = impatientClient.newCall(request().url(server.uri().resolve("/samples").toString()).build()).execute()) {
             Assert.fail("This test expected a client timeout");
         } catch (SocketTimeoutException te) {
-            assertNotTimedOut("Timed out waiting for disconnect timeout", disconnectedLatch);
+            assertNotTimedOut("waiting for disconnect callback", disconnectedLatch);
+            assertNotTimedOut("waiting for completed callback", completedLatch);
         }
 
-        assertThat(registered.get(), contains(ConnectionCallback.class));
+        assertThat(registered.get().values().stream().flatMap(Collection::stream).collect(toSet()),
+            containsInAnyOrder(ConnectionCallback.class, CompletionCallback.class));
     }
 
     @Test

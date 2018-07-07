@@ -48,7 +48,7 @@ class NettyRequestAdapter implements MuRequest {
     private HttpPostMultipartRequestDecoder multipartRequestDecoder;
     private HashMap<String, List<UploadedFile>> uploads;
     private Object state;
-    private boolean isAsync = false;
+    private volatile AsyncHandleImpl asyncHandle;
 
     NettyRequestAdapter(Channel channel, HttpRequest request, AtomicReference<MuServer> serverRef) {
         this.channel = channel;
@@ -64,7 +64,7 @@ class NettyRequestAdapter implements MuRequest {
     }
 
     boolean isAsync() {
-        return isAsync;
+        return asyncHandle != null;
     }
 
     boolean isKeepAliveRequested() {
@@ -257,8 +257,11 @@ class NettyRequestAdapter implements MuRequest {
 
     @Override
     public AsyncHandle handleAsync() {
-        isAsync = true;
-        return new AsyncHandleImpl(this);
+        if (isAsync()) {
+            throw new IllegalStateException("handleAsync called twice for " + this);
+        }
+        asyncHandle = new AsyncHandleImpl(this);
+        return asyncHandle;
     }
 
     @Override
@@ -342,9 +345,16 @@ class NettyRequestAdapter implements MuRequest {
         }
     }
 
+    public void onClientDisconnected(boolean complete) {
+        if (asyncHandle != null) {
+            asyncHandle.onClientDisconnected(complete);
+        }
+    }
+
     private static class AsyncHandleImpl implements AsyncHandle {
 
         private final NettyRequestAdapter request;
+        private ResponseCompletedListener responseCompletedListener;
 
         private AsyncHandleImpl(NettyRequestAdapter request) {
             this.request = request;
@@ -388,6 +398,19 @@ class NettyRequestAdapter implements MuRequest {
         public Future<Void> write(ByteBuffer data) {
             NettyResponseAdaptor response = (NettyResponseAdaptor) request.nettyAsyncContext.response;
             return response.write(data);
+        }
+
+        @Override
+        public void setResponseCompletedHandler(ResponseCompletedListener responseCompletedListener) {
+            this.responseCompletedListener = responseCompletedListener;
+        }
+
+        void onClientDisconnected(boolean complete) {
+            ResponseCompletedListener listener = this.responseCompletedListener;
+            if (listener != null) {
+                listener.onComplete(complete);
+            }
+
         }
     }
 }

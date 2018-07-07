@@ -18,6 +18,7 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.Type;
 import java.util.*;
+import java.util.concurrent.CompletionStage;
 
 import static io.muserver.Mutils.hasValue;
 import static io.muserver.rest.JaxRSResponse.muHeadersToJax;
@@ -88,7 +89,16 @@ public class RestHandler implements MuHandler {
 
             Object result = rm.invoke(params);
             if (!isAsync) {
-                sendResponse(request, muResponse, acceptHeaders, mm, result);
+                if (result instanceof CompletionStage) {
+                    AsyncHandle asyncHandle1 = request.handleAsync();
+                    CompletionStage cs = (CompletionStage) result;
+                    cs.thenAccept(o -> {
+                        sendResponse(request, muResponse, acceptHeaders, mm, o);
+                        asyncHandle1.complete();
+                    });
+                } else {
+                    sendResponse(request, muResponse, acceptHeaders, mm, result);
+                }
             }
         } catch (NotFoundException e) {
             return false;

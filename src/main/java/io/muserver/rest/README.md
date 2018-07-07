@@ -282,19 +282,24 @@ N/A
 
 ## 8 Asynchronous Processing
 
-- [ ] Not yet implemented.
-
 ### 8.1 Introduction 
 
-- [ ] Not yet implemented.
+- [x] Implemented
 
 ### 8.2 Server API 
 
-- [ ] Not yet implemented.
+- [x] Parameter-based with `@Suspended AsyncResponse`
 
 #### 8.2.1 Timeouts and Callbacks
 
-- [ ] Not yet implemented. 
+- [x] Timeouts. 
+- [x] `CompletionCallback`
+- [ ] `CompletionCallback` with unhandled exception in callback parameter.
+- [x] `ConnectionCallback` (note that it is not always possible to detect these, especially where the client has not disconnected cleanly) 
+
+#### 8.2.2 CompletionStage
+
+- [x] Return a `CompletionStage` to indicate async processing.
 
 ### 8.3 EJB Resource Classes 
 
