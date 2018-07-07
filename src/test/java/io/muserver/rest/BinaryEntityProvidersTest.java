@@ -19,6 +19,8 @@ import javax.ws.rs.core.StreamingOutput;
 import java.io.*;
 import java.util.concurrent.CountDownLatch;
 
+import static io.muserver.MuServerBuilder.httpsServer;
+import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
@@ -218,12 +220,11 @@ public class BinaryEntityProvidersTest {
             assertThat(resp.code(), equalTo(400));
             assertThat(resp.body().string(), containsString("400 Bad Request"));
         }
-
     }
 
 
     private void startServer(Object restResource) {
-        this.server = MuServerBuilder.httpsServer().addHandler(RestHandlerBuilder.restHandler(restResource).build()).start();
+        this.server = httpsServer().addHandler(restHandler(restResource).build()).start();
     }
 
     @After

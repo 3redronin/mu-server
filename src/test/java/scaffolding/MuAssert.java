@@ -35,6 +35,11 @@ public class MuAssert {
 
     public static void stopAndCheck(MuServer server) {
         if (server != null) {
+            int count = 0;
+            while (count < 40 && !server.stats().activeRequests().isEmpty()) {
+                sleep(50);
+                count++;
+            }
             assertThat(server.stats().activeRequests(), is(empty()));
             server.stop();
         }

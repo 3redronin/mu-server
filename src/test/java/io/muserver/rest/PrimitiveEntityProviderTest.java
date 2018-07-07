@@ -172,33 +172,35 @@ public class PrimitiveEntityProviderTest {
             }
         }
         startServer(new Sample());
-        Response resp = call(ClientUtils.request()
+        try (Response resp = call(ClientUtils.request()
             .url(server.uri().resolve("/samples").toString())
-        );
-        assertThat(resp.code(), equalTo(200));
-        assertThat(resp.header("Content-Type"), equalTo("text/plain"));
-        assertThat(resp.body().string(), equalTo("123"));
+        )) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.header("Content-Type"), equalTo("text/plain"));
+            assertThat(resp.body().string(), equalTo("123"));
+        }
     }
 
 
     private void check(Object value) throws IOException {
         String content = String.valueOf(value);
-        Response resp = call(ClientUtils.request()
+        try (Response resp = call(ClientUtils.request()
             .post(RequestBody.create(MediaType.parse("text/plain"), content))
             .url(server.uri().resolve("/samples").toString())
-        );
-        assertThat(resp.code(), equalTo(200));
-        assertThat(resp.header("Content-Type"), equalTo("text/plain"));
-        assertThat(resp.body().string(), equalTo(content));
+        )) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.header("Content-Type"), equalTo("text/plain"));
+            assertThat(resp.body().string(), equalTo(content));
+        }
     }
     private void checkNoBody() throws IOException {
-        Response resp = call(ClientUtils.request()
+        try (Response resp = call(ClientUtils.request()
             .post(RequestBody.create(MediaType.parse("text/plain"), ""))
             .url(server.uri().resolve("/samples").toString())
-        );
-        assertThat(resp.code(), equalTo(400));
-        assertThat(resp.body().string(), containsString("400 Bad Request"));
-
+        )) {
+            assertThat(resp.code(), equalTo(400));
+            assertThat(resp.body().string(), containsString("400 Bad Request"));
+        }
     }
 
 
