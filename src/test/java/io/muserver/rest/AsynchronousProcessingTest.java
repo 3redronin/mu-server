@@ -2,7 +2,9 @@ package io.muserver.rest;
 
 import io.muserver.MuServer;
 import io.muserver.Mutils;
+import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
+import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Assert;
@@ -10,15 +12,15 @@ import org.junit.Ignore;
 import org.junit.Test;
 import scaffolding.ClientUtils;
 import scaffolding.MuAssert;
+import scaffolding.StringUtils;
 
-import javax.ws.rs.BadRequestException;
-import javax.ws.rs.GET;
-import javax.ws.rs.Path;
-import javax.ws.rs.QueryParam;
+import javax.ws.rs.*;
 import javax.ws.rs.container.AsyncResponse;
 import javax.ws.rs.container.ConnectionCallback;
 import javax.ws.rs.container.Suspended;
 import javax.ws.rs.container.TimeoutHandler;
+import javax.ws.rs.core.StreamingOutput;
+import java.io.IOException;
 import java.net.SocketTimeoutException;
 import java.util.Collection;
 import java.util.Date;
@@ -28,6 +30,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.MuServerBuilder.httpServer;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.call;
@@ -186,9 +189,33 @@ public class AsynchronousProcessingTest {
         assertThat(registered.get(), contains(ConnectionCallback.class));
     }
 
+    @Test
+    public void ifExceptionThrownAfterAsyncStartedButBeforeAsyncInvokedThenSomethingHappens() throws IOException {
+        AtomicBoolean methodCalled = new AtomicBoolean(false);
+        @Path("samples")
+        class Sample {
+            @POST
+            public void echo(@Suspended AsyncResponse ar, byte[] input) {
+                methodCalled.set(true);
+            }
+        }
+        this.server = httpServer().addHandler(restHandler(new Sample())).start();
+        try (Response resp = call(request()
+            .post(RequestBody.create(MediaType.parse("text/plain"), ""))
+            .url(server.uri().resolve("/samples").toString())
+        )) {
+            assertThat(resp.code(), equalTo(400));
+            assertThat(resp.body().string(), containsString("400 Bad Request"));
+        }
+        assertThat("Invalid request, but method was called", methodCalled.get(), is(false));
+    }
+
     @After
     public void stop() {
-        if (server != null) server.stop();
+        if (server != null) {
+            assertThat(server.stats().activeRequests(), is(empty()));
+            server.stop();
+        }
     }
 
 }

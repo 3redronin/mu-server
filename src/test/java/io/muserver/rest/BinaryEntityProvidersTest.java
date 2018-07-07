@@ -197,23 +197,26 @@ public class BinaryEntityProvidersTest {
     }
 
     private void check(byte[] value, String mimeType) throws IOException {
-        Response resp = call(request()
+        byte[] actual;
+        try (Response resp = call(request()
             .post(RequestBody.create(MediaType.parse(mimeType), value))
             .url(server.uri().resolve("/samples").toString())
-        );
-        assertThat(resp.code(), equalTo(200));
-        assertThat(resp.header("Content-Type"), equalTo(mimeType));
-        byte[] actual = resp.body().bytes();
+        )) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.header("Content-Type"), equalTo(mimeType));
+            actual = resp.body().bytes();
+        }
         assertThat("Expected " + value.length + " bytes; got " + actual.length, new String(actual, UTF_8), equalTo(new String(value, UTF_8)));
     }
 
     private void checkNoBody() throws IOException {
-        Response resp = call(request()
+        try (Response resp = call(request()
             .post(RequestBody.create(MediaType.parse("text/plain"), ""))
             .url(server.uri().resolve("/samples").toString())
-        );
-        assertThat(resp.code(), equalTo(400));
-        assertThat(resp.body().string(), containsString("400 Bad Request"));
+        )) {
+            assertThat(resp.code(), equalTo(400));
+            assertThat(resp.body().string(), containsString("400 Bad Request"));
+        }
 
     }
 

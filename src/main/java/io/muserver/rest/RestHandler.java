@@ -49,6 +49,7 @@ public class RestHandler implements MuHandler {
             return true;
         }
         String relativePath = Mutils.trim(request.relativePath(), "/");
+        AsyncHandle asyncHandle = null;
         try {
             String requestContentType = request.headers().get(HeaderNames.CONTENT_TYPE);
             List<MediaType> acceptHeaders = MediaTypeDeterminer.parseAcceptHeaders(request.headers().getAll(HeaderNames.ACCEPT));
@@ -75,7 +76,7 @@ public class RestHandler implements MuHandler {
                         throw new MuException("A REST method can only have one @Suspended attribute. Error for " + rm);
                     }
                     isAsync = true;
-                    AsyncHandle asyncHandle = request.handleAsync();
+                    asyncHandle = request.handleAsync();
                     paramValue = new AsyncResponseAdapter(asyncHandle, response -> sendResponse(request, muResponse, acceptHeaders, mm, response));
                 } else {
                     ResourceMethodParam.RequestBasedParam rbp = (ResourceMethodParam.RequestBasedParam) param;
@@ -91,10 +92,15 @@ public class RestHandler implements MuHandler {
             }
         } catch (NotFoundException e) {
             return false;
-        } catch (WebApplicationException e) {
-            dealWithWebApplicationException(request, muResponse, e);
         } catch (Exception ex) {
-            dealWithUnhandledException(request, muResponse, ex);
+            if (ex instanceof  WebApplicationException) {
+                dealWithWebApplicationException(request, muResponse, (WebApplicationException)ex);
+            } else {
+                dealWithUnhandledException(request, muResponse, ex);
+            }
+            if (asyncHandle != null) {
+                asyncHandle.complete();
+            }
         }
         return true;
     }
