@@ -18,7 +18,6 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.Type;
 import java.util.*;
-import java.util.function.Consumer;
 
 import static io.muserver.Mutils.hasValue;
 import static io.muserver.rest.JaxRSResponse.muHeadersToJax;
@@ -92,13 +91,15 @@ public class RestHandler implements MuHandler {
             }
         } catch (NotFoundException e) {
             return false;
+        } catch (WebApplicationException e) {
+            dealWithWebApplicationException(request, muResponse, e);
         } catch (Exception ex) {
             dealWithUnhandledException(request, muResponse, ex);
         }
         return true;
     }
 
-    static void dealWithUnhandledException(MuRequest request, MuResponse muResponse, Exception ex) {
+    private static void dealWithUnhandledException(MuRequest request, MuResponse muResponse, Exception ex) {
         log.warn("Unhandled error from handler for " + request, ex);
         if (!muResponse.hasStartedSendingData()) {
             String errorID = "ERR-" + UUID.randomUUID().toString();
@@ -113,7 +114,7 @@ public class RestHandler implements MuHandler {
         }
     }
 
-    void sendResponse(MuRequest request, MuResponse muResponse, List<MediaType> acceptHeaders, RequestMatcher.MatchedMethod mm, Object result) {
+    private void sendResponse(MuRequest request, MuResponse muResponse, List<MediaType> acceptHeaders, RequestMatcher.MatchedMethod mm, Object result) {
         try {
             if (!muResponse.hasStartedSendingData()) {
                 ObjWithType obj = ObjWithType.objType(result);
@@ -150,27 +151,31 @@ public class RestHandler implements MuHandler {
                 }
             }
         } catch (WebApplicationException e) {
-            if (e instanceof ServerErrorException) {
-                log.info("Server error for " + request, e);
-            }
-            if (muResponse.hasStartedSendingData()) {
-                log.warn("A web application exception " + e + " was thrown for " + request + ", however the response code and message cannot be sent to the client as some data was already sent.");
-            } else {
-                Response r = e.getResponse();
-                muResponse.status(r.getStatus());
-                muResponse.contentType(ContentTypes.TEXT_PLAIN);
-                Object entity = r.getEntity();
-                String message;
-                if (entity != null) {
-                    message = entity.toString();
-                } else {
-                    Response.StatusType statusInfo = r.getStatusInfo();
-                    message = statusInfo.getStatusCode() + " " + statusInfo.getReasonPhrase() + " - " + e.getMessage();
-                }
-                muResponse.write(message);
-            }
+            dealWithWebApplicationException(request, muResponse, e);
         } catch (Exception ex) {
             dealWithUnhandledException(request, muResponse, ex);
+        }
+    }
+
+    private void dealWithWebApplicationException(MuRequest request, MuResponse muResponse, WebApplicationException e) {
+        if (e instanceof ServerErrorException) {
+            log.info("Server error for " + request, e);
+        }
+        if (muResponse.hasStartedSendingData()) {
+            log.warn("A web application exception " + e + " was thrown for " + request + ", however the response code and message cannot be sent to the client as some data was already sent.");
+        } else {
+            Response r = e.getResponse();
+            muResponse.status(r.getStatus());
+            muResponse.contentType(ContentTypes.TEXT_PLAIN);
+            Object entity = r.getEntity();
+            String message;
+            if (entity != null) {
+                message = entity.toString();
+            } else {
+                Response.StatusType statusInfo = r.getStatusInfo();
+                message = statusInfo.getStatusCode() + " " + statusInfo.getReasonPhrase() + " - " + e.getMessage();
+            }
+            muResponse.write(message);
         }
     }
 
