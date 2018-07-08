@@ -166,4 +166,9 @@ class MuUriInfo implements UriInfo {
         URI requestUriDir = this.requestUri.resolve(URI.create("."));
         return requestUriDir.relativize(relToBase);
     }
+
+    @Override
+    public String toString() {
+        return getRequestUri().toString();
+    }
 }

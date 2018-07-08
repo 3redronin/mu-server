@@ -22,7 +22,7 @@ class SyncHandlerAdapter implements AsyncMuHandler {
     public boolean onHeaders(AsyncContext ctx, Headers headers) throws Exception {
 
         NettyRequestAdapter request = (NettyRequestAdapter) ctx.request;
-        if (headers.contains(HeaderNames.TRANSFER_ENCODING) || headers.getInt(HeaderNames.CONTENT_LENGTH, -1) > 0) {
+        if (headers.hasBody()) {
             // There will be a request body, so set the streams
             GrowableByteBufferInputStream requestBodyStream = new GrowableByteBufferInputStream();
             request.inputStream(requestBodyStream);

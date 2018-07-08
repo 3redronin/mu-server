@@ -239,4 +239,13 @@ public class Headers implements Iterable<Map.Entry<String, String>> {
 		return entries;
 	}
 
+    /**
+     * Returns true if the headers suggest there is a message body by checking if there is a {@link HeaderNames#TRANSFER_ENCODING}
+     * header or the {@link HeaderNames#CONTENT_LENGTH} is greater than 0.
+     * @return True if there should be a body; otherwise false;
+     */
+	public boolean hasBody() {
+        return contains(HeaderNames.TRANSFER_ENCODING) || getInt(HeaderNames.CONTENT_LENGTH, -1) > 0;
+    }
+
 }

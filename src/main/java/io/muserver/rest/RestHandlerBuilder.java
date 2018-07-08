@@ -4,6 +4,9 @@ import io.muserver.MuHandlerBuilder;
 import io.muserver.openapi.InfoObject;
 import io.muserver.openapi.OpenAPIObjectBuilder;
 
+import javax.ws.rs.container.ContainerRequestFilter;
+import javax.ws.rs.container.ContainerResponseFilter;
+import javax.ws.rs.container.PreMatching;
 import javax.ws.rs.ext.*;
 import java.io.InputStream;
 import java.lang.annotation.Annotation;
@@ -28,6 +31,9 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     private OpenAPIObjectBuilder openAPIObject;
     private String openApiHtmlCss = null;
     private Map<Class<? extends Throwable>, ExceptionMapper<? extends Throwable>> exceptionMappers = new HashMap<>();
+    private List<ContainerRequestFilter> preMatchRequestFilters = new ArrayList<>();
+    private List<ContainerRequestFilter> requestFilters = new ArrayList<>();
+    private List<ContainerResponseFilter> responseFilters = new ArrayList<>();
 
     public RestHandlerBuilder(Object... resources) {
         this.resources = resources;
@@ -233,7 +239,10 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
         }
 
         CustomExceptionMapper customExceptionMapper = new CustomExceptionMapper(exceptionMappers);
-        return new RestHandler(entityProviders, roots, documentor, customExceptionMapper);
+
+        FilterManagerThing filterManagerThing = new FilterManagerThing(preMatchRequestFilters, requestFilters, responseFilters);
+
+        return new RestHandler(entityProviders, roots, documentor, customExceptionMapper, filterManagerThing);
     }
 
     public static RestHandlerBuilder restHandler(Object... resources) {
@@ -248,5 +257,31 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     @Deprecated
     public static RestHandler create(Object... resources) {
         return restHandler(resources).build();
+    }
+
+    /**
+     * <p>Registers a request filter, which is run before a rest method is executed.</p>
+     * <p>It will be run after the method has been matched, or if the {@link PreMatching} annotation is applied to the
+     * filter then it will run before matching occurs.</p>
+     * @param filter The filter to register
+     * @return This builder
+     */
+    public RestHandlerBuilder addRequestFilter(ContainerRequestFilter filter) {
+        if (filter.getClass().getDeclaredAnnotation(PreMatching.class) != null) {
+            this.preMatchRequestFilters.add(filter);
+        } else {
+            this.requestFilters.add(filter);
+        }
+        return this;
+    }
+
+    /**
+     * Registers a response filter, which is called after execution of a method takes place.
+     * @param filter The filter to register
+     * @return This builder
+     */
+    public RestHandlerBuilder addResponseFilter(ContainerResponseFilter filter) {
+        this.responseFilters.add(filter);
+        return this;
     }
 }
