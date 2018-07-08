@@ -190,7 +190,7 @@ Call `RestHandlerBuilder.addExceptionMapper` to register mappers.
 
 #### 4.5.1 Server Runtime 
 
-- [ ] Implemente.
+- [x] Implemented.
 
 #### 4.5.2 Client Runtime 
 
@@ -304,7 +304,7 @@ N/A
 #### 8.2.2 CompletionStage
 
 - [x] Return a `CompletionStage` to indicate async processing.
-- [ ] The correct entity provider is used.
+- [x] The correct entity provider is used.
 
 ### 8.3 EJB Resource Classes 
 
@@ -373,12 +373,12 @@ None of this section is applicable to MuServer as it does not manage your server
 
 ## 12 Runtime Delegate
 
-- [x] Implemented, although not that `createEndpoint` will never be supported.
+- [x] Implemented, although note that `createEndpoint` will never be supported.
 
 ## Interface implementations
 
 The following are not described by the spec but are interfaces defined in the jax-rs spec API that need to be implemented.
 
-- [x] `UriBilder` mostly complete but missing lookups by resource methods and matrix params
+- [x] `UriBilder`
 - [ ] `Link`
 - [ ] `VariantListBuilder`
