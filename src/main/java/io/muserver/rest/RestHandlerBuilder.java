@@ -1,16 +1,12 @@
 package io.muserver.rest;
 
-import io.muserver.MuHandler;
 import io.muserver.MuHandlerBuilder;
 import io.muserver.openapi.InfoObject;
 import io.muserver.openapi.OpenAPIObjectBuilder;
 
-import javax.ws.rs.ext.ExceptionMapper;
-import javax.ws.rs.ext.MessageBodyReader;
-import javax.ws.rs.ext.MessageBodyWriter;
-import javax.ws.rs.ext.ParamConverterProvider;
+import javax.ws.rs.ext.*;
 import java.io.InputStream;
-import java.lang.reflect.ParameterizedType;
+import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
 import java.util.*;
 import java.util.stream.Stream;
@@ -37,24 +33,71 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
         this.resources = resources;
     }
 
+    /**
+     * Adds one or more rest resources to this handler
+     * @param resources One or more instances of classes that are decorated with {@link javax.ws.rs.Path} annotations.
+     * @return This builder
+     */
     public RestHandlerBuilder addResource(Object... resources) {
         this.resources = Stream.of(this.resources, resources).flatMap(Stream::of).toArray(Object[]::new);
         return this;
     }
 
-    public RestHandlerBuilder addCustomWriter(MessageBodyWriter writer) {
+    /**
+     * <p>Registers an object that can write custom classes to responses.</p>
+     * <p>For example, if you return an instance of <code>MyClass</code> from a REST method, you need to specify how
+     * that gets serialised with a <code>MessageBodyWriter&lt;MyClass&gt;</code> writer.</p>
+     * @param writer A response body writer
+     * @return This builder
+     */
+    public <T> RestHandlerBuilder addCustomWriter(MessageBodyWriter<T> writer) {
         customWriters.add(writer);
         return this;
     }
 
-    public RestHandlerBuilder addCustomReader(MessageBodyReader reader) {
+    /**
+     * <p>Registers an object that can deserialise request bodies into custom classes.</p>
+     * <p>For example, if you specify that the request body is a <code>MyClass</code>, you need to specify how
+     * that gets deserialised with a <code>MessageBodyReader&lt;MyClass&gt;</code> reader.</p>
+     * @param reader A request body reader
+     * @return This builder
+     */
+    public <T> RestHandlerBuilder addCustomReader(MessageBodyReader<T> reader) {
         customReaders.add(reader);
         return this;
     }
 
+    /**
+     * <p>Registers an object that can convert rest method parameters (e.g. querystring, header, form or path params)
+     * into custom classes.</p>
+     * <p>In most cases, it is easier to instead use {@link #addCustomParamConverter(Class, ParamConverter)}</p>
+     * @param paramConverterProvider A provider of parameter converters
+     * @return This builder
+     */
     public RestHandlerBuilder addCustomParamConverterProvider(ParamConverterProvider paramConverterProvider) {
         customParamConverterProviders.add(paramConverterProvider);
         return this;
+    }
+
+    /**
+     * <p>Registers a parameter converter class that convert strings to and from a custom class.</p>
+     * <p>This allows you to specify query string parameters, form values, header params and path params as custom classes.</p>
+     * <p>For more functionality, {@link #addCustomParamConverterProvider(ParamConverterProvider)} is also available.</p>
+     * @param paramClass The class that this converter is meant for.
+     * @param converter The converter
+     * @param <P> The type of the parameter
+     * @return This builder
+     */
+    public <P> RestHandlerBuilder addCustomParamConverter(Class<P> paramClass, ParamConverter<P> converter) {
+        return addCustomParamConverterProvider(new ParamConverterProvider() {
+            @Override
+            public <T> ParamConverter<T> getConverter(Class<T> rawType, Type genericType, Annotation[] annotations) {
+                if (!rawType.equals(paramClass)) {
+                    return null;
+                }
+                return (ParamConverter<T>) converter;
+            }
+        });
     }
 
     /**

@@ -7,8 +7,11 @@ import org.junit.After;
 import org.junit.Test;
 
 import javax.ws.rs.*;
+import javax.ws.rs.ext.ParamConverter;
 import javax.ws.rs.ext.ParamConverterProvider;
 import java.io.IOException;
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Type;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -18,6 +21,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static io.muserver.MuServerBuilder.httpsServer;
+import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.call;
@@ -83,7 +87,7 @@ public class ResourceMethodParamTest {
                 return one + " / " + two + " / " + three;
             }
         }
-        server = httpsServer().addHandler(RestHandlerBuilder.restHandler(new Sample()).build()).start();
+        server = httpsServer().addHandler(restHandler(new Sample())).start();
         try (Response resp = call(request().url(server.uri().resolve("/samples?one=some%20thing%2F&three=some%20thing%2F").toString()))) {
             assertThat(resp.body().string(), equalTo("some thing/ / Some default / some%20thing%2F"));
         }
@@ -107,7 +111,7 @@ public class ResourceMethodParamTest {
                 return bitey + " / " + shorty + " / " + inty + " / " + davidLongy + " / " + floater + " / " + doubleedoo + " / " + (charred == 0 ? '0' : charred) + " / " + boolyeah;
             }
         }
-        server = httpsServer().addHandler(RestHandlerBuilder.restHandler(new Sample()).build()).start();
+        server = httpsServer().addHandler(restHandler(new Sample())).start();
         try (Response resp = call(request().url(server.uri().resolve("/samples?bitey=127&shorty=1&inty=-10&long=2183748372&floater=123.34&doubleedoo=8753.1234&charred=C&boolyeah=true").toString()))) {
             assertThat(resp.body().string(), equalTo("127 / 1 / -10 / 2183748372 / 123.34 / 8753.1234 / C / true"));
         }
@@ -134,7 +138,7 @@ public class ResourceMethodParamTest {
                 return bitey + " / " + shorty + " / " + inty + " / " + davidLongy + " / " + floater + " / " + doubleedoo + " / " + (charred == 0 ? '0' : charred) + " / " + boolyeah;
             }
         }
-        server = httpsServer().addHandler(RestHandlerBuilder.restHandler(new Sample()).build()).start();
+        server = httpsServer().addHandler(restHandler(new Sample())).start();
         try (Response resp = call(request().url(server.uri().resolve("/samples?bitey=127&shorty=1&inty=-10&long=2183748372&floater=123.34&doubleedoo=8753.1234&charred=C&boolyeah=true").toString()))) {
             assertThat(resp.body().string(), equalTo("127 / 1 / -10 / 2183748372 / 123.34 / 8753.1234 / C / true"));
         }
@@ -161,7 +165,7 @@ public class ResourceMethodParamTest {
                 return bitey + " / " + shorty + " / " + inty + " / " + davidLongy + " / " + floater + " / " + doubleedoo + " / " + charred + " / " + boolyeah;
             }
         }
-        server = httpsServer().addHandler(RestHandlerBuilder.restHandler(new Sample()).build()).start();
+        server = httpsServer().addHandler(restHandler(new Sample())).start();
         try (Response resp = call(request().url(server.uri().resolve("/samples?bitey=127&shorty=1&inty=-10&long=2183748372&floater=123.34&doubleedoo=8753.1234&charred=C&boolyeah=true").toString()))) {
             assertThat(resp.body().string(), equalTo("127 / 1 / -10 / 2183748372 / 123.34 / 8753.1234 / C / true"));
         }
@@ -190,7 +194,7 @@ public class ResourceMethodParamTest {
                 return bitey + " / " + shorty + " / " + inty + " / " + davidLongy + " / " + floater + " / " + doubleedoo + " / " + (charred == 0 ? '0' : charred) + " / " + boolyeah;
             }
         }
-        server = httpsServer().addHandler(RestHandlerBuilder.restHandler(new Sample()).build()).start();
+        server = httpsServer().addHandler(restHandler(new Sample())).start();
         try (Response resp = call(request().url(server.uri().resolve("/samples?bitey=127&shorty=1&inty=-10&long=2183748372&floater=123.34&doubleedoo=8753.1234&charred=C&boolyeah=true").toString()))) {
             assertThat(resp.body().string(), equalTo("127 / 1 / -10 / 2183748372 / 123.34 / 8753.1234 / C / true"));
         }
@@ -208,7 +212,7 @@ public class ResourceMethodParamTest {
                 return something + " / " + something2;
             }
         }
-        server = httpsServer().addHandler(RestHandlerBuilder.restHandler(new Sample()).build()).start();
+        server = httpsServer().addHandler(restHandler(new Sample())).start();
         try (Response resp = call(request().url(server.uri().resolve("/samples").toString())
             .post(new FormBody.Builder().add("someThing", "Is here").build())
         )) {
@@ -242,7 +246,7 @@ public class ResourceMethodParamTest {
                 return breed1 + " / " + breed2 + " / " + breed3;
             }
         }
-        server = httpsServer().addHandler(RestHandlerBuilder.restHandler(new Sample()).build()).start();
+        server = httpsServer().addHandler(restHandler(new Sample())).start();
         try (Response resp = call(request().url(server.uri().resolve("/samples?breedOne=CHIHUAHUA").toString()))) {
             assertThat(resp.body().string(), equalTo("CHIHUAHUA / null / BIG_HAIRY"));
         }
@@ -260,6 +264,7 @@ public class ResourceMethodParamTest {
     public static class DogWithValueOf {
         final String name;
         final String breed;
+
         DogWithValueOf(String value) {
             throw new RuntimeException("Not called because not public");
         }
@@ -268,12 +273,15 @@ public class ResourceMethodParamTest {
             this.name = name;
             this.breed = breed;
         }
+
         public static DogWithValueOf fromString(String dummy) {
             throw new RuntimeException("valueOf should be preferred");
         }
+
         public static DogWithValueOf valueOf(String value) {
             return new DogWithValueOf(value.split(",")[0], value.split(",")[1]);
         }
+
         public String toString() {
             return this.breed + " - " + this.name;
         }
@@ -291,7 +299,7 @@ public class ResourceMethodParamTest {
                 return dog + " / " + dog2 + " / " + dog3;
             }
         }
-        server = httpsServer().addHandler(RestHandlerBuilder.restHandler(new Dogs()).build()).start();
+        server = httpsServer().addHandler(restHandler(new Dogs())).start();
         try (Response resp = call(request().url(server.uri().resolve("/dogs?dogValue=Little,Chihuahua").toString()))) {
             assertThat(resp.body().string(), equalTo("Chihuahua - Little / null / Twinkle - Pinkle"));
         }
@@ -302,19 +310,24 @@ public class ResourceMethodParamTest {
     public static class DogWithFromString {
         final String name;
         final String breed;
+
         DogWithFromString(String value) {
             throw new RuntimeException("Not called because not public");
         }
+
         private DogWithFromString(String name, String breed) {
             this.name = name;
             this.breed = breed;
         }
+
         public static DogWithFromString fromString(String value) {
             return new DogWithFromString(value.split(",")[0], value.split(",")[1]);
         }
+
         public String valueOf(String dummy) {
             throw new RuntimeException("This should not be called because it does not return the correct type");
         }
+
         public String toString() {
             return this.breed + " - " + this.name;
         }
@@ -332,7 +345,7 @@ public class ResourceMethodParamTest {
                 return dog + " / " + dog2 + " / " + dog3;
             }
         }
-        server = httpsServer().addHandler(RestHandlerBuilder.restHandler(new Dogs()).build()).start();
+        server = httpsServer().addHandler(restHandler(new Dogs())).start();
         try (Response resp = call(request().url(server.uri().resolve("/dogs?dogValue=Little,Chihuahua").toString()))) {
             assertThat(resp.body().string(), equalTo("Chihuahua - Little / null / Twinkle - Pinkle"));
         }
@@ -343,16 +356,20 @@ public class ResourceMethodParamTest {
     public static class DogWithConstructor {
         final String name;
         final String breed;
+
         public DogWithConstructor(String value) {
             this.name = value.split(",")[0];
             this.breed = value.split(",")[1];
         }
+
         public static DogWithConstructor fromString(String dummy) {
             throw new RuntimeException("Constructor should be preferred");
         }
+
         public static DogWithConstructor valueOf(String value) {
             throw new RuntimeException("Constructor should be preferred");
         }
+
         public String toString() {
             return this.breed + " - " + this.name;
         }
@@ -370,7 +387,7 @@ public class ResourceMethodParamTest {
                 return dog + " / " + dog2 + " / " + dog3;
             }
         }
-        server = httpsServer().addHandler(RestHandlerBuilder.restHandler(new Dogs()).build()).start();
+        server = httpsServer().addHandler(restHandler(new Dogs())).start();
         try (Response resp = call(request().url(server.uri().resolve("/dogs?dogValue=Little,Chihuahua").toString()))) {
             assertThat(resp.body().string(), equalTo("Chihuahua - Little / null / Twinkle - Pinkle"));
         }
@@ -379,9 +396,11 @@ public class ResourceMethodParamTest {
 
     static class Cat implements Comparable<Cat> {
         final String name;
+
         public Cat(String name) {
             this.name = name;
         }
+
         @Override
         public int compareTo(Cat o) {
             return name.compareTo(o.name);
@@ -398,12 +417,14 @@ public class ResourceMethodParamTest {
                 @QueryParam("cats") List<Cat> cats) {
                 return cats.stream().map(d -> d.name).collect(Collectors.joining(", "));
             }
+
             @GET
             @Path("set")
             public String getSet(
                 @QueryParam("cats") Set<Cat> cats) {
                 return cats.stream().map(d -> d.name).sorted().collect(Collectors.joining(", "));
             }
+
             @GET
             @Path("sortedSet")
             public String getSortedSet(
@@ -411,7 +432,7 @@ public class ResourceMethodParamTest {
                 return cats.stream().map(d -> d.name).collect(Collectors.joining(", "));
             }
         }
-        server = httpsServer().addHandler(RestHandlerBuilder.restHandler(new Cats()).build()).start();
+        server = httpsServer().addHandler(restHandler(new Cats())).start();
         try (Response resp = call(request().url(server.uri().resolve("/cats/list?cats=Little&cats=Twinkle").toString()))) {
             assertThat(resp.body().string(), equalTo("Little, Twinkle"));
         }
@@ -420,6 +441,45 @@ public class ResourceMethodParamTest {
         }
         try (Response resp = call(request().url(server.uri().resolve("/cats/sortedSet?cats=Twinkle&cats=Little").toString()))) {
             assertThat(resp.body().string(), equalTo("Little, Twinkle"));
+        }
+    }
+
+    @Test
+    public void customProvidersCanBeSpecified() throws IOException {
+        class Tail {
+            final int lengthInCM;
+            final boolean isFuzzy;
+
+            Tail(int lengthInCM, boolean isFuzzy) {
+                this.lengthInCM = lengthInCM;
+                this.isFuzzy = isFuzzy;
+            }
+        }
+        @Path("tails")
+        class Dogs {
+            @GET
+            @Path("{tail}")
+            public String getIt(@PathParam("tail") Tail tail) {
+                return tail.lengthInCM + "cm - is " + (tail.isFuzzy ? "" : "not ") + "fuzzy";
+            }
+        }
+        ParamConverter<Tail> converter = new ParamConverter<Tail>() {
+            public Tail fromString(String value) {
+                String[] bits = value.split("-");
+                return new Tail(Integer.parseInt(bits[0]), bits[1].equalsIgnoreCase("true"));
+            }
+            public String toString(Tail value) {
+                return "A tail";
+            }
+        };
+
+        server = httpsServer()
+            .addHandler(restHandler(new Dogs()).addCustomParamConverter(Tail.class, converter)).start();
+        try (Response resp = call(request().url(server.uri().resolve("/tails/30-true").toString()))) {
+            assertThat(resp.body().string(), equalTo("30cm - is fuzzy"));
+        }
+        try (Response resp = call(request().url(server.uri().resolve("/tails/3-false").toString()))) {
+            assertThat(resp.body().string(), equalTo("3cm - is not fuzzy"));
         }
     }
 

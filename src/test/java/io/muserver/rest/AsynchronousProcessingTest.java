@@ -16,7 +16,12 @@ import javax.ws.rs.container.AsyncResponse;
 import javax.ws.rs.container.CompletionCallback;
 import javax.ws.rs.container.ConnectionCallback;
 import javax.ws.rs.container.Suspended;
+import javax.ws.rs.core.MultivaluedMap;
+import javax.ws.rs.ext.MessageBodyWriter;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Type;
 import java.net.SocketTimeoutException;
 import java.util.Collection;
 import java.util.Date;
@@ -134,15 +139,32 @@ public class AsynchronousProcessingTest {
 
     @Test
     public void aCustomTimeoutHandlerCanBeUsed() throws Exception {
+        class Hawk {
+            String toHawker() {
+                return "Oops, this is Hawkward";
+            }
+        }
         @Path("samples")
         class Sample {
             @GET
             public void go(@Suspended AsyncResponse ar) {
-                ar.setTimeoutHandler(asyncResponse -> asyncResponse.resume("Oops, this is Hawkward"));
+                ar.setTimeoutHandler(asyncResponse -> asyncResponse.resume(new Hawk()));
                 ar.setTimeout(10, TimeUnit.MILLISECONDS);
             }
         }
-        this.server = httpServer().addHandler(restHandler(new Sample())).start();
+        this.server = httpServer()
+            .addHandler(restHandler(new Sample())
+                .addCustomWriter(new MessageBodyWriter<Hawk>() {
+                    public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, javax.ws.rs.core.MediaType mediaType) {
+                        return type.equals(Hawk.class);
+                    }
+
+                    public void writeTo(Hawk hawk, Class<?> type, Type genericType, Annotation[] annotations, javax.ws.rs.core.MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException, WebApplicationException {
+                        entityStream.write(hawk.toHawker().getBytes("UTF-8"));
+                    }
+                })
+            )
+            .start();
         try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.body().string(), equalTo("Oops, this is Hawkward"));

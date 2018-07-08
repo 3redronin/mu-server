@@ -298,7 +298,7 @@ N/A
 
 - [x] Timeouts. 
 - [x] `CompletionCallback`
-- [ ] `CompletionCallback` with unhandled exception in callback parameter.
+- [x] `CompletionCallback` with unhandled exception in callback parameter.
 - [x] `ConnectionCallback` (note that it is not always possible to detect these, especially where the client has not disconnected cleanly) 
 
 #### 8.2.2 CompletionStage
