@@ -67,11 +67,10 @@ class ResourceMethod {
             return methodHandle.invoke(resourceClass.resourceInstance, params);
         } catch (InvocationTargetException e) {
             Throwable cause = e.getCause();
-            if (cause instanceof WebApplicationException) {
-                throw (WebApplicationException) cause;
-            } else {
-                throw e;
+            if (cause instanceof Exception) {
+                throw (Exception)cause;
             }
+            throw e;
         }
     }
 

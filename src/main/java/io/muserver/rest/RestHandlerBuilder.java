@@ -1,13 +1,17 @@
 package io.muserver.rest;
 
+import io.muserver.MuHandler;
 import io.muserver.MuHandlerBuilder;
 import io.muserver.openapi.InfoObject;
 import io.muserver.openapi.OpenAPIObjectBuilder;
 
+import javax.ws.rs.ext.ExceptionMapper;
 import javax.ws.rs.ext.MessageBodyReader;
 import javax.ws.rs.ext.MessageBodyWriter;
 import javax.ws.rs.ext.ParamConverterProvider;
 import java.io.InputStream;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
 import java.util.*;
 import java.util.stream.Stream;
 
@@ -27,6 +31,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     private String openApiHtmlUrl = null;
     private OpenAPIObjectBuilder openAPIObject;
     private String openApiHtmlCss = null;
+    private Map<Class<? extends Throwable>, ExceptionMapper<? extends Throwable>> exceptionMappers = new HashMap<>();
 
     public RestHandlerBuilder(Object... resources) {
         this.resources = resources;
@@ -133,6 +138,21 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     }
 
     /**
+     * <p>Adds a mapper that converts an exception to a response.</p>
+     * <p>For example, you may create a custom exception such as a ValidationException that you throw from your
+     * jax-rs methods. A mapper for this exception type could return a Response with a 400 code and a custom
+     * validation error message.</p>
+     * @param <T> The exception type that the mapper can handle
+     * @param exceptionClass The type of exception to map.
+     * @param exceptionMapper A function that creates a {@link javax.ws.rs.core.Response} suitable for the exception.
+     * @return Returns this builder.
+     */
+    public <T extends Throwable> RestHandlerBuilder addExceptionMapper(Class<T> exceptionClass, ExceptionMapper<T> exceptionMapper) {
+        this.exceptionMappers.put(exceptionClass, exceptionMapper);
+        return this;
+    }
+
+    /**
      * @return The current Rest Handler Builder
      * @deprecated This does nothing. To expose API endpoints, use {@link #withOpenApiJsonUrl(String)} and/or {@link #withOpenApiHtmlUrl(String)}
      */
@@ -167,7 +187,8 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
             documentor = new OpenApiDocumentor(roots, openApiJsonUrl, openApiHtmlUrl, openAPIObjectToUse.build(), openApiHtmlCss);
         }
 
-        return new RestHandler(entityProviders, roots, documentor);
+        CustomExceptionMapper customExceptionMapper = new CustomExceptionMapper(exceptionMappers);
+        return new RestHandler(entityProviders, roots, documentor, customExceptionMapper);
     }
 
     public static RestHandlerBuilder restHandler(Object... resources) {

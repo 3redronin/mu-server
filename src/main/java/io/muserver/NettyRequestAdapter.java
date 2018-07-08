@@ -378,6 +378,15 @@ class NettyRequestAdapter implements MuRequest {
         }
 
         @Override
+        public void complete(Throwable throwable) {
+            try {
+                SyncHandlerAdapter.dealWithUnhandledException(request, request.nettyAsyncContext.response, throwable);
+            } finally {
+                complete();
+            }
+        }
+
+        @Override
         public void write(ByteBuffer data, WriteCallback callback) {
             ChannelFuture writeFuture = (ChannelFuture) write(data);
             writeFuture.addListener(future -> {

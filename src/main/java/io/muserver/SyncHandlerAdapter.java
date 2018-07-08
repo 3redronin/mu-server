@@ -31,11 +31,12 @@ class SyncHandlerAdapter implements AsyncMuHandler {
         request.nettyAsyncContext = ctx;
         executor.submit(() -> {
             boolean error = false;
+            MuResponse response = ctx.response;
             try {
 
                 boolean handled = false;
                 for (MuHandler muHandler : muHandlers) {
-                    handled = muHandler.handle(ctx.request, ctx.response);
+                    handled = muHandler.handle(ctx.request, response);
                     if (handled) {
                         break;
                     }
@@ -50,14 +51,7 @@ class SyncHandlerAdapter implements AsyncMuHandler {
 
             } catch (Throwable ex) {
                 error = true;
-
-                if (ctx.response.hasStartedSendingData()) {
-                    log.warn("Unhandled error from handler for " + request + " (note that a " + ctx.response.status() + " was already sent to the client before the error occurred)", ex);
-                } else {
-                    String errorID = "ERR-" + UUID.randomUUID().toString();
-                    log.info("Sending a 500 to the client with ErrorID=" + errorID + " for " + request, ex);
-                    MuServerHandler.sendPlainText(ctx, "500 Server Error. ErrorID=" + errorID, 500);
-                }
+                dealWithUnhandledException(request, response, ex);
             } finally {
                 request.clean();
                 if (error || !request.isAsync()) {
@@ -70,6 +64,19 @@ class SyncHandlerAdapter implements AsyncMuHandler {
             }
         });
         return true;
+    }
+
+    public static void dealWithUnhandledException(MuRequest request, MuResponse response, Throwable ex) {
+        if (response.hasStartedSendingData()) {
+            log.warn("Unhandled error from handler for " + request + " (note that a " + response.status() +
+                " was already sent to the client before the error occurred and so the client may receive an incomplete response)", ex);
+        } else {
+            String errorID = "ERR-" + UUID.randomUUID().toString();
+            log.info("Sending a 500 to the client with ErrorID=" + errorID + " for " + request, ex);
+            response.status(500);
+            response.contentType(ContentTypes.TEXT_HTML);
+            response.write("<h1>500 Internal Server Error</h1><p>ErrorID=" + errorID + "</p>");
+        }
     }
 
     public void onRequestData(AsyncContext ctx, ByteBuffer buffer) {

@@ -11,7 +11,6 @@ import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.*;
 import javax.ws.rs.ext.MessageBodyReader;
 import javax.ws.rs.ext.MessageBodyWriter;
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.annotation.Annotation;
@@ -23,6 +22,7 @@ import java.util.concurrent.CompletionStage;
 import static io.muserver.Mutils.hasValue;
 import static io.muserver.rest.JaxRSResponse.muHeadersToJax;
 import static io.muserver.rest.JaxRSResponse.muHeadersToJaxObj;
+import static java.util.Collections.emptyList;
 import static java.util.Collections.singletonList;
 
 /**
@@ -36,11 +36,13 @@ public class RestHandler implements MuHandler {
     private final RequestMatcher requestMatcher;
     private final EntityProviders entityProviders;
     private final MuHandler documentor;
+    private final CustomExceptionMapper customExceptionMapper;
 
-    RestHandler(EntityProviders entityProviders, Set<ResourceClass> roots, MuHandler documentor) {
+    RestHandler(EntityProviders entityProviders, Set<ResourceClass> roots, MuHandler documentor, CustomExceptionMapper customExceptionMapper) {
         this.requestMatcher = new RequestMatcher(roots);
         this.entityProviders = entityProviders;
         this.documentor = documentor;
+        this.customExceptionMapper = customExceptionMapper;
     }
 
     @Override
@@ -51,14 +53,19 @@ public class RestHandler implements MuHandler {
         }
         String relativePath = Mutils.trim(request.relativePath(), "/");
         AsyncHandle asyncHandle = null;
+        List<MediaType> acceptHeaders = MediaTypeDeterminer.parseAcceptHeaders(request.headers().getAll(HeaderNames.ACCEPT));
+        List<MediaType> producesRef = null;
+        List<MediaType> directlyProducesRef = null;
         try {
             String requestContentType = request.headers().get(HeaderNames.CONTENT_TYPE);
-            List<MediaType> acceptHeaders = MediaTypeDeterminer.parseAcceptHeaders(request.headers().getAll(HeaderNames.ACCEPT));
             RequestMatcher.MatchedMethod mm = requestMatcher.findResourceMethod(request.method(), relativePath, acceptHeaders, requestContentType);
+            List<MediaType> produces = producesRef = mm.resourceMethod.resourceClass.produces;
+            List<MediaType> directlyProduces = directlyProducesRef = mm.resourceMethod.directlyProduces;
             ResourceMethod rm = mm.resourceMethod;
             Object[] params = new Object[rm.methodHandle.getParameterCount()];
 
             boolean isAsync = false;
+
             for (ResourceMethodParam param : rm.params) {
                 Object paramValue;
                 if (param.source == ResourceMethodParam.ValueSource.MESSAGE_BODY) {
@@ -78,7 +85,7 @@ public class RestHandler implements MuHandler {
                     }
                     isAsync = true;
                     asyncHandle = request.handleAsync();
-                    paramValue = new AsyncResponseAdapter(asyncHandle, response -> sendResponse(request, muResponse, acceptHeaders, mm, response));
+                    paramValue = new AsyncResponseAdapter(asyncHandle, response -> sendResponse(0, request, muResponse, acceptHeaders, produces, directlyProduces, response));
                 } else {
                     ResourceMethodParam.RequestBasedParam rbp = (ResourceMethodParam.RequestBasedParam) param;
                     paramValue = rbp.getValue(request, mm);
@@ -93,20 +100,25 @@ public class RestHandler implements MuHandler {
                     AsyncHandle asyncHandle1 = request.handleAsync();
                     CompletionStage cs = (CompletionStage) result;
                     cs.thenAccept(o -> {
-                        sendResponse(request, muResponse, acceptHeaders, mm, o);
-                        asyncHandle1.complete();
+                        try {
+                            sendResponse(0, request, muResponse, acceptHeaders, produces, directlyProduces, o);
+                            asyncHandle1.complete();
+                        } catch (Exception e) {
+                            asyncHandle1.complete(e);
+                        }
                     });
                 } else {
-                    sendResponse(request, muResponse, acceptHeaders, mm, result);
+                    sendResponse(0, request, muResponse, acceptHeaders, produces, directlyProduces, result);
                 }
             }
         } catch (NotFoundException e) {
             return false;
         } catch (Exception ex) {
-            if (ex instanceof  WebApplicationException) {
-                dealWithWebApplicationException(request, muResponse, (WebApplicationException)ex);
+            if (ex instanceof WebApplicationException) {
+                dealWithWebApplicationException(0, request, muResponse, (WebApplicationException) ex, acceptHeaders,
+                    producesRef == null ? emptyList() : producesRef, directlyProducesRef == null ? emptyList() : directlyProducesRef);
             } else {
-                dealWithUnhandledException(request, muResponse, ex);
+                dealWithUnhandledException(0, request, muResponse, ex, acceptHeaders, producesRef, directlyProducesRef);
             }
             if (asyncHandle != null) {
                 asyncHandle.complete();
@@ -115,22 +127,15 @@ public class RestHandler implements MuHandler {
         return true;
     }
 
-    private static void dealWithUnhandledException(MuRequest request, MuResponse muResponse, Exception ex) {
-        log.warn("Unhandled error from handler for " + request, ex);
-        if (!muResponse.hasStartedSendingData()) {
-            String errorID = "ERR-" + UUID.randomUUID().toString();
-            log.info("Sending a 500 to the client with ErrorID=" + errorID);
-            try {
-                muResponse.status(500);
-                muResponse.contentType(ContentTypes.TEXT_PLAIN);
-                muResponse.write("500 Server Error - ErrorID=" + errorID);
-            } catch (Exception ex2) {
-                log.info("Error while trying to send error message to client, probably because the connection is already lost.", ex2);
-            }
+    private void dealWithUnhandledException(int nestingLevel, MuRequest request, MuResponse muResponse, Exception ex, List<MediaType> acceptHeaders, List<MediaType> producesRef, List<MediaType> directlyProducesRef) throws Exception {
+        Response response = customExceptionMapper.toResponse(ex);
+        if (response == null) {
+            throw ex;
         }
+        sendResponse(nestingLevel, request, muResponse, acceptHeaders, producesRef, directlyProducesRef, response);
     }
 
-    private void sendResponse(MuRequest request, MuResponse muResponse, List<MediaType> acceptHeaders, RequestMatcher.MatchedMethod mm, Object result) {
+    private void sendResponse(int nestingLevel, MuRequest request, MuResponse muResponse, List<MediaType> acceptHeaders, List<MediaType> produces, List<MediaType> directlyProduces, Object result) throws Exception {
         try {
             if (!muResponse.hasStartedSendingData()) {
                 ObjWithType obj = ObjWithType.objType(result);
@@ -149,7 +154,7 @@ public class RestHandler implements MuHandler {
 
                     Annotation[] annotations = new Annotation[0]; // TODO set this properly
 
-                    MediaType responseMediaType = MediaTypeDeterminer.determine(obj, mm.resourceMethod.resourceClass.produces, mm.resourceMethod.directlyProduces, entityProviders.writers, acceptHeaders);
+                    MediaType responseMediaType = MediaTypeDeterminer.determine(obj, produces, directlyProduces, entityProviders.writers, acceptHeaders);
                     MessageBodyWriter messageBodyWriter = entityProviders.selectWriter(obj.type, obj.genericType, annotations, responseMediaType);
 
                     long size = messageBodyWriter.getSize(obj.entity, obj.type, obj.genericType, annotations, responseMediaType);
@@ -167,31 +172,38 @@ public class RestHandler implements MuHandler {
                 }
             }
         } catch (WebApplicationException e) {
-            dealWithWebApplicationException(request, muResponse, e);
+            dealWithWebApplicationException(nestingLevel + 1, request, muResponse, e, acceptHeaders, produces, directlyProduces);
         } catch (Exception ex) {
-            dealWithUnhandledException(request, muResponse, ex);
+            dealWithUnhandledException(nestingLevel + 1, request, muResponse, ex, acceptHeaders, produces, directlyProduces);
         }
     }
 
-    private void dealWithWebApplicationException(MuRequest request, MuResponse muResponse, WebApplicationException e) {
-        if (e instanceof ServerErrorException) {
-            log.info("Server error for " + request, e);
-        }
+    private void dealWithWebApplicationException(int nestingLevel, MuRequest request, MuResponse muResponse, WebApplicationException e, List<MediaType> acceptHeaders, List<MediaType> produces, List<MediaType> directlyProduces) throws Exception {
         if (muResponse.hasStartedSendingData()) {
             log.warn("A web application exception " + e + " was thrown for " + request + ", however the response code and message cannot be sent to the client as some data was already sent.");
         } else {
             Response r = e.getResponse();
-            muResponse.status(r.getStatus());
-            muResponse.contentType(ContentTypes.TEXT_PLAIN);
-            Object entity = r.getEntity();
-            String message;
-            if (entity != null) {
-                message = entity.toString();
+            if (nestingLevel < 2) {
+                Response.ResponseBuilder toSend = Response.fromResponse(r);
+                if (r.getEntity() == null) {
+                    toSend.type(MediaType.TEXT_HTML_TYPE);
+                    String entity = "<h1>" + r.getStatus() + " " + r.getStatusInfo().getReasonPhrase() + "</h1>";
+                    if (e instanceof ServerErrorException) {
+                        String errorID = "ERR-" + UUID.randomUUID().toString();
+                        log.info("Sending a 500 to the client with ErrorID=" + errorID + " for " + request, e);
+                        toSend.entity(entity + "<p>ErrorID=" + errorID + "</p>");
+                    } else {
+                        toSend.entity(entity + e.getMessage());
+                    }
+                }
+                sendResponse(nestingLevel + 1, request, muResponse, acceptHeaders, produces, directlyProduces, toSend.build());
             } else {
+                muResponse.status(r.getStatus());
+                muResponse.contentType(ContentTypes.TEXT_PLAIN);
                 Response.StatusType statusInfo = r.getStatusInfo();
-                message = statusInfo.getStatusCode() + " " + statusInfo.getReasonPhrase() + " - " + e.getMessage();
+                String message = statusInfo.getStatusCode() + " " + statusInfo.getReasonPhrase() + " - " + e.getMessage();
+                muResponse.write(message);
             }
-            muResponse.write(message);
         }
     }
 
@@ -257,37 +269,6 @@ public class RestHandler implements MuHandler {
 
         public int read() {
             return -1;
-        }
-    }
-
-    /**
-     * An output stream based on the request output stream, but if no methods are called then the output stream is never created.
-     */
-    private static class LazyAccessOutputStream extends OutputStream {
-        private final MuResponse muResponse;
-
-        LazyAccessOutputStream(MuResponse muResponse) {
-            this.muResponse = muResponse;
-        }
-
-        @Override
-        public void write(int b) throws IOException {
-            muResponse.outputStream().write(b);
-        }
-
-        @Override
-        public void write(byte[] b, int off, int len) throws IOException {
-            muResponse.outputStream().write(b, off, len);
-        }
-
-        @Override
-        public void flush() throws IOException {
-            muResponse.outputStream().flush();
-        }
-
-        @Override
-        public void close() throws IOException {
-            muResponse.outputStream().close();
         }
     }
 

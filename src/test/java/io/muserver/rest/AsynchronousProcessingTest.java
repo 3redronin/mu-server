@@ -101,7 +101,7 @@ public class AsynchronousProcessingTest {
         this.server = httpServer().addHandler(restHandler(new Sample())).start();
         try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
             assertThat(resp.code(), is(400));
-            assertThat(resp.body().string(), equalTo("400 Bad Request - Bad bad bad request"));
+            assertThat(resp.body().string(), equalTo("<h1>400 Bad Request</h1>Bad bad bad request"));
         }
     }
 
@@ -124,7 +124,7 @@ public class AsynchronousProcessingTest {
         this.server = httpServer().addHandler(restHandler(new Sample())).start();
         try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
             assertThat(resp.code(), is(503));
-            assertThat(resp.body().string(), equalTo("503 Service Unavailable - HTTP 503 Service Unavailable"));
+            assertThat(resp.body().string(), equalTo("<h1>503 Service Unavailable</h1><p>Timed out</p>"));
         }
         latch.countDown();
         assertNotTimedOut("Waiting until resume sent", afterSentLatch);

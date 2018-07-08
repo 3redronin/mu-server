@@ -24,6 +24,14 @@ public interface AsyncHandle {
     void complete();
 
     /**
+     * Calling this will mark the request as complete and log the error message. If possible, a 500 Internal Server Error
+     * message will be sent to the client.
+     * @param throwable an exception to log
+     */
+    void complete(Throwable throwable);
+
+
+    /**
      * <p>Writes data to the response asynchronously.</p>
      * <p>Note that even in async mode it is possible to use the blocking write methods on the {@link MuResponse}</p>
      * <p>See {@link #write(ByteBuffer)} for an alternative that returns a future.</p>

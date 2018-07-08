@@ -71,7 +71,7 @@ class JaxRSResponse extends Response {
 
     @Override
     public boolean hasEntity() {
-        throw NotImplementedException.notYet();
+        return entity != null;
     }
 
     @Override

@@ -67,7 +67,10 @@ N/A Not applicable as only singletons supported
 
 #### 3.3.4 Exceptions 
 
-- [ ] Partially implemented, but requires tests on sub-parts 1 through 4. Does not re-process exceptions.
+- [ ] 1: Use the response property of WebApplicationExceptions to send the error message
+- [ ] 2: Use an exception mapping provider if available
+- [ ] 3: Unchecked and unmapped exceptions should be thrown to the web server
+- [x] 4: (not applicable to mu-server)
 
 #### 3.3.5 HEAD and OPTIONS 
 
@@ -300,6 +303,7 @@ N/A
 #### 8.2.2 CompletionStage
 
 - [x] Return a `CompletionStage` to indicate async processing.
+- [ ] The correct entity provider is used.
 
 ### 8.3 EJB Resource Classes 
 

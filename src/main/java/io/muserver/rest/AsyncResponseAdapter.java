@@ -11,6 +11,7 @@ import javax.ws.rs.container.AsyncResponse;
 import javax.ws.rs.container.CompletionCallback;
 import javax.ws.rs.container.ConnectionCallback;
 import javax.ws.rs.container.TimeoutHandler;
+import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import java.util.*;
 import java.util.concurrent.Executors;
@@ -25,7 +26,7 @@ class AsyncResponseAdapter implements AsyncResponse, AsyncHandle.ResponseComplet
     private static ScheduledExecutorService ses = Executors.newSingleThreadScheduledExecutor();
 
     private final AsyncHandle asyncHandle;
-    private final Consumer<Object> resultConsumer;
+    private final Consumer resultConsumer;
     private volatile boolean isSuspended;
     private volatile boolean isCancelled;
     private volatile boolean isDone;
@@ -33,8 +34,9 @@ class AsyncResponseAdapter implements AsyncResponse, AsyncHandle.ResponseComplet
     private volatile TimeoutHandler timeoutHandler;
     private final List<ConnectionCallback> connectionCallbacks = new ArrayList<>();
     private final List<CompletionCallback> completionCallbacks = new ArrayList<>();
+    private Throwable exceptionWhileWriting = null;
 
-    AsyncResponseAdapter(AsyncHandle asyncHandle, Consumer<Object> resultConsumer) {
+    AsyncResponseAdapter(AsyncHandle asyncHandle, Consumer resultConsumer) {
         this.asyncHandle = asyncHandle;
         isSuspended = true;
         isCancelled = false;
@@ -53,9 +55,12 @@ class AsyncResponseAdapter implements AsyncResponse, AsyncHandle.ResponseComplet
             isSuspended = false;
             try {
                 resultConsumer.accept(response);
+                asyncHandle.complete();
+            } catch (Exception e) {
+                exceptionWhileWriting = e;
+                asyncHandle.complete(e);
             } finally {
                 isDone = true;
-                asyncHandle.complete();
             }
             return true;
         } else {
@@ -117,7 +122,9 @@ class AsyncResponseAdapter implements AsyncResponse, AsyncHandle.ResponseComplet
         cancelEvent = ses.schedule(() -> {
             TimeoutHandler th = this.timeoutHandler;
             if (th == null) {
-                resume(new WebApplicationException(503));
+                resume(new WebApplicationException(Response.status(503)
+                    .type(MediaType.TEXT_PLAIN_TYPE)
+                    .entity("<h1>503 Service Unavailable</h1><p>Timed out</p>").build()));
             } else {
                 th.handleTimeout(this);
             }
@@ -186,10 +193,14 @@ class AsyncResponseAdapter implements AsyncResponse, AsyncHandle.ResponseComplet
         }
         for (CompletionCallback completionCallback : completionCallbacks) {
             try {
-                completionCallback.onComplete(null);
+                completionCallback.onComplete(exceptionWhileWriting);
             } catch (Exception e) {
                 log.warn("Exception from calling onComplete on " + completionCallback);
             }
         }
+    }
+
+    interface Consumer {
+        void accept(Object response) throws Exception;
     }
 }
