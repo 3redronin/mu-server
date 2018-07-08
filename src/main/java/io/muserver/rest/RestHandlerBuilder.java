@@ -47,6 +47,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * <p>Registers an object that can write custom classes to responses.</p>
      * <p>For example, if you return an instance of <code>MyClass</code> from a REST method, you need to specify how
      * that gets serialised with a <code>MessageBodyWriter&lt;MyClass&gt;</code> writer.</p>
+     * @param <T> The type of object that the writer can serialise
      * @param writer A response body writer
      * @return This builder
      */
@@ -59,6 +60,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * <p>Registers an object that can deserialise request bodies into custom classes.</p>
      * <p>For example, if you specify that the request body is a <code>MyClass</code>, you need to specify how
      * that gets deserialised with a <code>MessageBodyReader&lt;MyClass&gt;</code> reader.</p>
+     * @param <T> The type of object that the reader can deserialise
      * @param reader A request body reader
      * @return This builder
      */

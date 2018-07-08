@@ -164,4 +164,26 @@ public class Mutils {
         notNull("date", date);
         return DateFormatter.format(date);
     }
+
+    /**
+     * <p>Very basic HTML encoding, converting characters such as <code>&lt;</code> to <code>&lt;lt;</code></p>
+     * <p>Important: HTML encoding is a complex topic, and different schemes are needed depending on whether the string
+     * is destined for a tag name, attribute, the contents of a tag, CSS, or JavaScript etc. It is recommended that
+     * a fully featured text encoding library is used rather than this method.</p>
+     * @param value A value
+     * @return A value that can be safely included inside HTML tags.
+     */
+    public static String htmlEncode(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace("\"", "&quot;")
+            .replace("'", "&#x27;")
+            .replace("/", "&#x2F;")
+            ;
+    }
 }

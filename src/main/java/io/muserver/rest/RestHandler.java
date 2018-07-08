@@ -193,7 +193,7 @@ public class RestHandler implements MuHandler {
                         log.info("Sending a 500 to the client with ErrorID=" + errorID + " for " + request, e);
                         toSend.entity(entity + "<p>ErrorID=" + errorID + "</p>");
                     } else {
-                        toSend.entity(entity + e.getMessage());
+                        toSend.entity(entity + Mutils.htmlEncode(e.getMessage()));
                     }
                 }
                 sendResponse(nestingLevel + 1, request, muResponse, acceptHeaders, produces, directlyProduces, toSend.build());
