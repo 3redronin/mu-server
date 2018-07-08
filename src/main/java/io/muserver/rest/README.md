@@ -67,9 +67,9 @@ N/A Not applicable as only singletons supported
 
 #### 3.3.4 Exceptions 
 
-- [ ] 1: Use the response property of WebApplicationExceptions to send the error message
-- [ ] 2: Use an exception mapping provider if available
-- [ ] 3: Unchecked and unmapped exceptions should be thrown to the web server
+- [x] 1: Use the response property of WebApplicationExceptions to send the error message
+- [x] 2: Use an exception mapping provider if available
+- [x] 3: Unchecked and unmapped exceptions should be thrown to the web server
 - [x] 4: (not applicable to mu-server)
 
 #### 3.3.5 HEAD and OPTIONS 
@@ -183,13 +183,14 @@ N/A as Mu will never instantiate user classes.
 
 ### 4.4 Exception Mapping Providers 
 
-- [ ] Not implemented.
+- [x] Implemented, except as per Mu-Server conventions, no automatic registering is used, so a `@Provider` annotation is ignored.
+Call `RestHandlerBuilder.addExceptionMapper` to register mappers.
 
 ### 4.5 Exceptions 
 
 #### 4.5.1 Server Runtime 
 
-- [ ] Not implemented.
+- [ ] Implemente.
 
 #### 4.5.2 Client Runtime 
 
