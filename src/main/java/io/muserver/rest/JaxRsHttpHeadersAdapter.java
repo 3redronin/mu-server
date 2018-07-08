@@ -1,7 +1,7 @@
 package io.muserver.rest;
 
 import io.muserver.HeaderNames;
-import io.muserver.MuRequest;
+import io.muserver.Headers;
 
 import javax.ws.rs.core.*;
 import java.util.*;
@@ -12,11 +12,13 @@ import static java.util.stream.Collectors.toList;
 class JaxRsHttpHeadersAdapter implements HttpHeaders {
     private static final List<Locale> WILDCARD_LOCALES = Collections.unmodifiableList(Collections.singletonList(new Locale("*")));
     private static final List<MediaType> WILDCARD_MEDIA_TYPES = Collections.unmodifiableList(Collections.singletonList(MediaType.WILDCARD_TYPE));
-    private final MuRequest request;
+    private final Headers muHeaders;
+    private final Set<io.muserver.Cookie> muCookies;
     private MultivaluedMap<String, String> copy;
 
-    JaxRsHttpHeadersAdapter(MuRequest request) {
-        this.request = request;
+    JaxRsHttpHeadersAdapter(Headers headers, Set<io.muserver.Cookie> cookies) {
+        muHeaders = headers;
+        muCookies = cookies;
     }
 
 
@@ -38,7 +40,7 @@ class JaxRsHttpHeadersAdapter implements HttpHeaders {
     public MultivaluedMap<String, String> getRequestHeaders() {
         if (copy == null) {
             MultivaluedMap<String, String> c = new MultivaluedHashMap<>();
-            for (Map.Entry<String, String> entry : request.headers()) {
+            for (Map.Entry<String, String> entry : muHeaders) {
                 c.add(entry.getKey(), entry.getValue());
             }
             copy = ReadOnlyMultivaluedMap.readOnly(c);
@@ -48,7 +50,7 @@ class JaxRsHttpHeadersAdapter implements HttpHeaders {
 
     @Override
     public List<MediaType> getAcceptableMediaTypes() {
-        List<MediaType> mediaTypes = MediaTypeDeterminer.parseAcceptHeaders(request.headers().getAll(HeaderNames.ACCEPT));
+        List<MediaType> mediaTypes = MediaTypeDeterminer.parseAcceptHeaders(muHeaders.getAll(HeaderNames.ACCEPT));
         return mediaTypes.isEmpty() ? WILDCARD_MEDIA_TYPES : mediaTypes;
     }
 
@@ -58,7 +60,7 @@ class JaxRsHttpHeadersAdapter implements HttpHeaders {
     }
 
     private List<Locale> getLocalesFromHeader(CharSequence headerName, List<Locale> defaultLocales) {
-        List<String> all = request.headers().getAll(headerName);
+        List<String> all = muHeaders.getAll(headerName);
         if (all.isEmpty()) {
             return defaultLocales;
         }
@@ -81,7 +83,7 @@ class JaxRsHttpHeadersAdapter implements HttpHeaders {
 
     @Override
     public MediaType getMediaType() {
-        String type = request.headers().get(HeaderNames.CONTENT_TYPE);
+        String type = muHeaders.get(HeaderNames.CONTENT_TYPE);
         return type == null ? null : MediaType.valueOf(type);
     }
 
@@ -94,7 +96,7 @@ class JaxRsHttpHeadersAdapter implements HttpHeaders {
     @Override
     public Map<String, Cookie> getCookies() {
         Map<String, Cookie> all = new HashMap<>();
-        for (io.muserver.Cookie cookie : request.cookies()) {
+        for (io.muserver.Cookie cookie : muCookies) {
             all.put(cookie.name(), new Cookie(cookie.name(), cookie.value()));
         }
         return all;
@@ -102,12 +104,12 @@ class JaxRsHttpHeadersAdapter implements HttpHeaders {
 
     @Override
     public Date getDate() {
-        long timeMillis = request.headers().getTimeMillis(HeaderNames.DATE, -1);
+        long timeMillis = muHeaders.getTimeMillis(HeaderNames.DATE, -1);
         return timeMillis < 0 ? null : new Date(timeMillis);
     }
 
     @Override
     public int getLength() {
-        return request.headers().getInt(HeaderNames.CONTENT_LENGTH, -1);
+        return muHeaders.getInt(HeaderNames.CONTENT_LENGTH, -1);
     }
 }

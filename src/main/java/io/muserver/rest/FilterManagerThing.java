@@ -28,4 +28,10 @@ class FilterManagerThing {
             requestFilter.filter(requestContext);
         }
     }
+
+    public void onBeforeSendResponse(MuContainerRequestContext requestContext, MuResponseContext responseContext) throws IOException {
+        for (ContainerResponseFilter responseFilter : responseFilters) {
+            responseFilter.filter(requestContext, responseContext);
+        }
+    }
 }

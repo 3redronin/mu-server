@@ -8,14 +8,14 @@ import okhttp3.Response;
 import okio.BufferedSink;
 import org.junit.Test;
 
-import javax.ws.rs.GET;
-import javax.ws.rs.POST;
-import javax.ws.rs.Path;
+import javax.ws.rs.*;
 import javax.ws.rs.container.*;
+import javax.ws.rs.core.NewCookie;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.annotation.Annotation;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
@@ -23,6 +23,7 @@ import java.util.List;
 import static io.muserver.ContextHandlerBuilder.context;
 import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
+import static java.util.Arrays.asList;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.is;
@@ -80,13 +81,11 @@ public class FilterTest {
         try (Response resp = call(request().url(server.uri().resolve("/blah").toString()))) {
             assertThat(resp.body().string(), is("Hello"));
         }
-
         assertThat(received, contains(
             "REQUEST GET " + server.uri().resolve("/blah"),
-            "REQUEST POST " + server.uri().resolve("/something") + " - a-value"
-//            "RESPONSE POST " + server.uri().resolve("/something")
+            "REQUEST POST " + server.uri().resolve("/something") + " - a-value",
+            "RESPONSE OK"
         ));
-
     }
 
     @Test
@@ -179,6 +178,71 @@ public class FilterTest {
         try (Response resp = call(request().url(server.uri().resolve("/something").toString()))) {
             assertThat(resp.code(), is(409));
             assertThat(resp.body().string(), is("Blocked!"));
+        }
+    }
+
+
+    @Test
+    public void ifExceptionIsThrownThenNormalExceptionHandlingHappens() throws IOException {
+        @Path("something")
+        class TheWay {
+            @GET
+            public String itMoves() {
+                return "Not called";
+            }
+        }
+        @PreMatching
+        class MethodChangingFilter implements ContainerRequestFilter {
+            @Override
+            public void filter(ContainerRequestContext requestContext) throws IOException {
+                throw new BadRequestException("Bad!!!");
+            }
+        }
+        MuServer server = httpsServer()
+            .addHandler(
+                restHandler(new TheWay())
+                    .addRequestFilter(new MethodChangingFilter())
+            ).start();
+        try (Response resp = call(request().url(server.uri().resolve("/something").toString()))) {
+            assertThat(resp.code(), is(400));
+            assertThat(resp.body().string(), is("<h1>400 Bad Request</h1>Bad!!!"));
+        }
+    }
+
+
+    @Test
+    public void responseFiltersCanChangeHeadersAndCookiesAndResponseCodesAndEntitiesEven() throws IOException {
+        @Path("something")
+        class TheWay {
+            @GET
+            @Produces("text/html")
+            public javax.ws.rs.core.Response itMoves() {
+                return javax.ws.rs.core.Response.status(200)
+                    .header("My-Header", "was-lowercase")
+                    .entity("a lowercase string")
+                    .cookie(new NewCookie("my-cookie", "cooke-value"))
+                    .build();
+            }
+        }
+
+
+        MuServer server = httpsServer()
+            .addHandler(
+                restHandler(new TheWay())
+                    .addResponseFilter(new ContainerResponseFilter() {
+                        @Override
+                        public void filter(ContainerRequestContext requestContext, ContainerResponseContext responseContext) throws IOException {
+                            responseContext.setStatus(400);
+                            responseContext.setEntity(12, new Annotation[0], javax.ws.rs.core.MediaType.TEXT_PLAIN_TYPE);
+                            responseContext.getStringHeaders().putSingle("My-Header", responseContext.getHeaderString("My-Header").toUpperCase());
+                            responseContext.getHeaders().put("My-Number", asList(1, 2, 3));
+                        }
+                    })
+            ).start();
+        try (Response resp = call(request().url(server.uri().resolve("/something").toString()))) {
+            assertThat(resp.code(), is(400));
+            assertThat(resp.header("Content-Type"), is("text/plain"));
+            assertThat(resp.body().string(), is("12"));
         }
     }
 

@@ -202,15 +202,15 @@ N/A. This is a server-only implementation and there is no plan for a Client impl
 
 ## 6 Filters and Interceptors
 
-- [ ] Not yet implemented.
-
 ### 6.1 Introduction 
 
-- [ ] Not yet implemented.
+Only server-based filters and interceptors are being implemented as there is no Mu client.
 
 ### 6.2 Filters 
 
-- [ ] Not yet implemented.
+- [x] `ContainerRequestFilter`
+- [x] `@Prematching` causes request filter to run before matching
+- [x] `ContainerResponseFilter`
 
 ### 6.3 Entity Interceptors 
 
@@ -218,15 +218,13 @@ N/A. This is a server-only implementation and there is no plan for a Client impl
 
 ### 6.4 Lifecycle 
 
-- [ ] Not yet implemented.
+N/A as Mu Server does not control the lifecycle of your objects.
 
 ### 6.5 Binding 
 
-- [ ] Not yet implemented.
-
 #### 6.5.1 Global Binding 
 
-- [ ] Not yet implemented.
+- [x] Implemented.
 
 #### 6.5.2 Name Binding 
 
@@ -234,7 +232,7 @@ N/A. This is a server-only implementation and there is no plan for a Client impl
 
 #### 6.5.3 Dynamic Binding 
 
-- [ ] Not yet implemented.
+- [ ] Not implemented, and won't be as it uses Configuration and Feature classes.
 
 #### 6.5.4 Binding in Client API 
 
@@ -246,11 +244,9 @@ N/A
 
 ### 6.7 Exceptions 
 
-- [ ] Not yet implemented.
-
 #### 6.7.1 Server Runtime 
 
-- [ ] Not yet implemented.
+- [x] Implemented
 
 #### 6.7.2 Client Runtime 
 

@@ -1,14 +1,12 @@
 package io.muserver.rest;
 
-import io.muserver.*;
-import io.netty.handler.codec.http.HttpHeaderNames;
+import io.muserver.Cookie;
+import io.muserver.HeaderNames;
+import io.muserver.Headers;
 import org.junit.Test;
 
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.MultivaluedHashMap;
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.URI;
 import java.util.*;
 
 import static java.util.Arrays.asList;
@@ -22,8 +20,8 @@ public class JaxRsHttpHeadersAdapterTest {
     }
 
     private final Headers reqHeaders = new Headers();
-    private final JaxRsHttpHeadersAdapter httpHeaders = new JaxRsHttpHeadersAdapter(createRequest());
     private final Set<Cookie> cookies = new HashSet<>();
+    private final JaxRsHttpHeadersAdapter httpHeaders = new JaxRsHttpHeadersAdapter(reqHeaders, cookies);
 
 
     @Test
@@ -109,132 +107,6 @@ public class JaxRsHttpHeadersAdapterTest {
         assertThat(httpHeaders.getLength(), is(-1));
         reqHeaders.set("Content-Length", 1234L);
         assertThat(httpHeaders.getLength(), is(1234));
-    }
-
-
-    private MuRequest createRequest() {
-        return new MuRequest() {
-
-            @Override
-            public String contentType() {
-                return reqHeaders.get(HttpHeaderNames.CONTENT_TYPE);
-            }
-
-            @Override
-            public Method method() {
-                return Method.POST;
-            }
-
-            @Override
-            public URI uri() {
-                return URI.create("http://localhost:123/some-path");
-            }
-
-            @Override
-            public URI serverURI() {
-                return uri();
-            }
-
-            @Override
-            public Headers headers() {
-                return reqHeaders;
-            }
-
-            @Override
-            public Optional<InputStream> inputStream() {
-                throw new NotImplementedException("mock");
-            }
-
-            @Override
-            public String readBodyAsString() throws IOException {
-                throw new NotImplementedException("mock");
-            }
-
-            @Override
-            public List<UploadedFile> uploadedFiles(String name) {
-                throw new NotImplementedException("mock");
-            }
-
-            @Override
-            public UploadedFile uploadedFile(String name) {
-                throw new NotImplementedException("mock");
-            }
-
-            @Override
-            public String parameter(String name) {
-                return null;
-            }
-
-            @Override
-            public RequestParameters query() {
-                throw new NotImplementedException("mock");
-            }
-
-            @Override
-            public RequestParameters form() throws IOException {
-                throw new NotImplementedException("mock");
-            }
-
-            @Override
-            public List<String> parameters(String name) {
-                return null;
-            }
-
-            @Override
-            public String formValue(String name) throws IOException {
-                return null;
-            }
-
-            @Override
-            public List<String> formValues(String name) throws IOException {
-                return null;
-            }
-
-            @Override
-            public Set<Cookie> cookies() {
-                return cookies;
-            }
-
-            @Override
-            public Optional<String> cookie(String name) {
-                return Optional.empty();
-            }
-
-            @Override
-            public String contextPath() {
-                return null;
-            }
-
-            @Override
-            public String relativePath() {
-                return null;
-            }
-
-            @Override
-            public Object state() {
-                throw new NotImplementedException();
-            }
-
-            @Override
-            public void state(Object value) {
-                throw new NotImplementedException();
-            }
-
-            @Override
-            public AsyncHandle handleAsync() {
-                throw new NotImplementedException();
-            }
-
-            @Override
-            public String remoteAddress() {
-                throw new NotImplementedException();
-            }
-
-            @Override
-            public MuServer server() {
-                throw new NotImplementedException();
-            }
-        };
     }
 
 }

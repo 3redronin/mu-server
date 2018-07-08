@@ -3,7 +3,6 @@ package io.muserver.rest;
 
 import io.muserver.HeaderNames;
 import io.muserver.Headers;
-import io.muserver.MuResponse;
 
 import javax.ws.rs.core.*;
 import java.lang.annotation.Annotation;
@@ -187,14 +186,6 @@ class JaxRSResponse extends Response {
         return headers.get(name);
     }
 
-    public void writeToMuResponse(MuResponse muResponse) {
-        muResponse.headers().add(this.headers);
-        if (cookies != null) {
-            for (NewCookie cookie : cookies) {
-                muResponse.headers().add(HeaderNames.SET_COOKIE, cookie.toString());
-            }
-        }
-    }
 
     public static class Builder extends Response.ResponseBuilder {
         static {
@@ -206,7 +197,7 @@ class JaxRSResponse extends Response {
         private StatusType status;
         private Object entity;
         private Annotation[] annotations;
-        private NewCookie[] cookies;
+        private NewCookie[] cookies = new NewCookie[0];
         private MediaType type;
         private Variant variant;
         private List<Variant> variants = new ArrayList<>();

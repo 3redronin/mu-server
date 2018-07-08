@@ -15,7 +15,7 @@ import static java.util.Collections.emptyList;
 class MuContainerRequestContext implements ContainerRequestContext {
 
     private final Map<String, Object> props = new HashMap<>();
-    private final MuRequest muRequest;
+    final MuRequest muRequest;
     private InputStream inputStream;
     private final String relativePath;
     private final JaxRsHttpHeadersAdapter jaxHeaders;
@@ -29,7 +29,7 @@ class MuContainerRequestContext implements ContainerRequestContext {
         this.relativePath = relativePath;
         this.uriInfo = RestHandler.createUriInfo(relativePath, null, muRequest.uri().resolve(muRequest.contextPath() + "/"), muRequest.uri());
         this.jaxRequest = new JaxRequest(muRequest);
-        this.jaxHeaders = new JaxRsHttpHeadersAdapter(muRequest);
+        this.jaxHeaders = new JaxRsHttpHeadersAdapter(muRequest.headers(), muRequest.cookies());
     }
 
     @Override
