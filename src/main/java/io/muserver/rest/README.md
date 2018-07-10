@@ -348,7 +348,7 @@ N/A. Will not implement, as there is no support for `Application`.
 
 #### 10.2.5 Security Context 
 
-- [ ] Not yet implemented.
+- [x] Implemented.
 
 #### 10.2.6 Providers 
 

@@ -56,7 +56,8 @@ public class RestHandler implements MuHandler {
         List<MediaType> acceptHeaders = MediaTypeDeterminer.parseAcceptHeaders(muRequest.headers().getAll(HeaderNames.ACCEPT));
         List<MediaType> producesRef = null;
         List<MediaType> directlyProducesRef = null;
-        MuContainerRequestContext requestContext = new MuContainerRequestContext(muRequest, new LazyAccessInputStream(muRequest), Mutils.trim(muRequest.relativePath(), "/"));
+        SecurityContext securityContext = muRequest.uri().getScheme().equals("https") ? MuSecurityContext.notLoggedInHttpsContext : MuSecurityContext.notLoggedInHttpContext;
+        MuContainerRequestContext requestContext = new MuContainerRequestContext(muRequest, new LazyAccessInputStream(muRequest), Mutils.trim(muRequest.relativePath(), "/"), securityContext);
         try {
             filterManagerThing.onPreMatch(requestContext);
             String relativePath = requestContext.getUriInfo().getPath(false);
@@ -85,7 +86,7 @@ public class RestHandler implements MuHandler {
                             + "- if this should be optional then specify an @DefaultValue annotation on the parameter");
                     }
                 } else if (param.source == ResourceMethodParam.ValueSource.CONTEXT) {
-                    paramValue = getContextParam(muRequest, muResponse, relativePath, mm, param);
+                    paramValue = getContextParam(requestContext, muResponse, relativePath, mm, param);
                 } else if (param.source == ResourceMethodParam.ValueSource.SUSPENDED) {
                     if (isAsync) {
                         throw new MuException("A REST method can only have one @Suspended attribute. Error for " + rm);
@@ -232,7 +233,8 @@ public class RestHandler implements MuHandler {
         }
     }
 
-    private static Object getContextParam(MuRequest request, MuResponse muResponse, String relativePath, RequestMatcher.MatchedMethod mm, ResourceMethodParam param) {
+    private static Object getContextParam(MuContainerRequestContext requestContext, MuResponse muResponse, String relativePath, RequestMatcher.MatchedMethod mm, ResourceMethodParam param) {
+        MuRequest request = requestContext.muRequest;
         Object paramValue;
         Class<?> type = param.parameterHandle.getType();
         if (type.equals(UriInfo.class)) {
@@ -243,6 +245,8 @@ public class RestHandler implements MuHandler {
             paramValue = request;
         } else if (type.equals(HttpHeaders.class)) {
             paramValue = new JaxRsHttpHeadersAdapter(request.headers(), request.cookies());
+        } else if (type.equals(SecurityContext.class)) {
+            return requestContext.getSecurityContext();
         } else {
             throw new ServerErrorException("MuServer does not support @Context parameters with type " + type, 500);
         }

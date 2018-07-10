@@ -173,6 +173,7 @@ class JaxRSResponse extends Response {
         }
         return map;
     }
+
     static MultivaluedMap<String, Object> muHeadersToJaxObj(Headers headers) {
         MultivaluedMap<String, Object> map = new MultivaluedHashMap<>();
         for (String name : headers.names()) {
@@ -207,10 +208,16 @@ class JaxRSResponse extends Response {
             for (Link linkHeader : linkHeaders) {
                 headers.add(HeaderNames.LINK, "<" + linkHeader.getUri().toString() + ">;rel=" + linkHeader.getRel());
             }
-            if (type != null) {
-                headers.set(HeaderNames.CONTENT_TYPE, type.toString());
+            MediaType typeToUse = this.type;
+            if (typeToUse == null) {
+                String ct = headers.get(HeaderNames.CONTENT_TYPE);
+                if (ct != null) {
+                    typeToUse = MediaType.valueOf(ct);
+                }
+            } else {
+                headers.set(HeaderNames.CONTENT_TYPE, typeToUse.toString());
             }
-            return new JaxRSResponse(status, headers, entity, type, cookies);
+            return new JaxRSResponse(status, headers, entity, typeToUse, cookies);
         }
 
         @Override
@@ -292,17 +299,21 @@ class JaxRSResponse extends Response {
         }
 
         private ResponseBuilder header(CharSequence name, Object value) {
-            if (value == null) {
-                headers.remove(name);
+            if (value instanceof Iterable) {
+                ((Iterable)value).forEach(v -> header(name, v));
             } else {
-                headers.add(name, value);
+                if (value == null) {
+                    headers.remove(name);
+                } else {
+                    headers.add(name, value);
+                }
             }
             return this;
         }
 
         @Override
         public ResponseBuilder header(String name, Object value) {
-            return header((CharSequence)name, value);
+            return header((CharSequence) name, value);
         }
 
         @Override
@@ -417,19 +428,23 @@ class JaxRSResponse extends Response {
         private final String reason;
         private final Status.Family family;
         private final int code;
+
         private CustomStatus(Status.Family family, int code, String reason) {
             this.reason = reason;
             this.family = family;
             this.code = code;
         }
+
         @Override
         public int getStatusCode() {
             return code;
         }
+
         @Override
         public Status.Family getFamily() {
             return family;
         }
+
         @Override
         public String getReasonPhrase() {
             return reason;

@@ -1,10 +1,8 @@
 package io.muserver.rest;
 
 import io.muserver.MuServer;
-import io.muserver.MuServerBuilder;
 import okhttp3.Request;
 import okhttp3.Response;
-import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.MuAssert;
@@ -15,9 +13,12 @@ import javax.ws.rs.Produces;
 import java.io.IOException;
 import java.util.List;
 
+import static io.muserver.MuServerBuilder.httpsServer;
+import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static java.util.Arrays.asList;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.is;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 
@@ -44,7 +45,7 @@ public class MediaTypesTest {
             }
         }
 
-        muServer(new Widget());
+        this.server = httpsServer().addHandler(restHandler(new Widget())).start();
 
         assertSelected("/pictures", asList("image/gif"), ";)");
         assertSelected("/pictures", asList("image/jpeg"), ";)");
@@ -57,19 +58,88 @@ public class MediaTypesTest {
 
     @Test
     public void canHandleChromeAcceptHeader() throws IOException {
-        @Path("pictures")
+        @Path("things")
         class Widget {
             @GET
-            @Produces("application/json")
+            @Produces("text/plain")
             public String json() {
                 return "[]";
             }
         }
 
-        muServer(new Widget());
+        this.server = httpsServer().addHandler(restHandler(new Widget())).start();
 
-        assertSelected("/pictures", asList("text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8"), "[]");
+        try (Response resp = call(request()
+            .url(server.uri().resolve("/things").toString())
+            .header("Accept","text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8" ))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.header("Content-Type"), is("text/plain"));
+            assertThat(resp.body().string(), equalTo("[]"));
+        }
 
+    }
+
+    @Test
+    public void canHandleFirefox61AcceptHeader() throws IOException {
+        @Path("things")
+        class Widget {
+            @GET
+            @Produces("text/plain")
+            public String json() {
+                return "[]";
+            }
+        }
+
+        this.server = httpsServer().addHandler(restHandler(new Widget())).start();
+
+        try (Response resp = call(request()
+            .url(server.uri().resolve("/things").toString())
+            .header("Accept","text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" ))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.header("Content-Type"), is("text/plain"));
+            assertThat(resp.body().string(), equalTo("[]"));
+        }
+    }
+
+    @Test
+    public void producesOnClassCanBeUsedAsDefault() throws IOException {
+        @Path("things")
+        @Produces("application/json")
+        class Widget {
+            @GET
+            public String json() {
+                return "[]";
+            }
+        }
+        this.server = httpsServer().addHandler(restHandler(new Widget())).start();
+        try (Response resp = call(request().url(server.uri().resolve("/things").toString()))) {
+            assertThat(resp.header("Content-Type"), is("application/json"));
+        }
+    }
+
+    @Test
+    public void ifReturnTypeIsStringThenDefaultsToTextPlain() throws IOException {
+        @Path("things")
+        class Widget {
+
+            @GET
+            @Path("string")
+            public String getString() {
+                return "[]";
+            }
+            @GET
+            @Path("int")
+            public int getInt() {
+                return 42;
+            }
+        }
+        this.server = httpsServer().addHandler(restHandler(new Widget())).start();
+        try (Response resp = call(request().url(server.uri().resolve("/things/string").toString()))) {
+            assertThat(resp.header("Content-Type"), is("text/plain"));
+        }
+        try (Response resp = call(request().url(server.uri().resolve("/things/int").toString()))) {
+            assertThat(resp.header("Content-Type"), is("text/plain"));
+        }
     }
 
     private void assertSelected(String path, List<String> accept, String expectedBody) throws IOException {
@@ -79,7 +149,7 @@ public class MediaTypesTest {
             rb.addHeader("Accept", s);
         }
         try (Response resp = call(rb)) {
-            assertThat(resp.code(), Matchers.is(200));
+            assertThat(resp.code(), is(200));
             assertThat(resp.body().string(), equalTo(expectedBody));
         }
     }
@@ -91,16 +161,10 @@ public class MediaTypesTest {
             rb.addHeader("Accept", s);
         }
         try (Response resp = call(rb)) {
-            assertThat(resp.code(), Matchers.is(406));
+            assertThat(resp.code(), is(406));
         }
     }
 
-
-    private void muServer(Object... resources) {
-        this.server = MuServerBuilder.httpsServer()
-            .addHandler(RestHandlerBuilder.restHandler(resources).build())
-            .start();
-    }
 
     @After
     public void stop() {

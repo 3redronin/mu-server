@@ -22,11 +22,13 @@ class MuContainerRequestContext implements ContainerRequestContext {
     private UriInfo uriInfo;
     private RequestMatcher.MatchedMethod matchedMethod;
     private final JaxRequest jaxRequest;
+    private SecurityContext securityContext;
 
-    MuContainerRequestContext(MuRequest muRequest, InputStream inputStream, String relativePath) {
+    MuContainerRequestContext(MuRequest muRequest, InputStream inputStream, String relativePath, SecurityContext securityContext) {
         this.muRequest = muRequest;
         this.inputStream = inputStream;
         this.relativePath = relativePath;
+        this.securityContext = securityContext;
         this.uriInfo = RestHandler.createUriInfo(relativePath, null, muRequest.uri().resolve(muRequest.contextPath() + "/"), muRequest.uri());
         this.jaxRequest = new JaxRequest(muRequest);
         this.jaxHeaders = new JaxRsHttpHeadersAdapter(muRequest.headers(), muRequest.cookies());
@@ -158,12 +160,12 @@ class MuContainerRequestContext implements ContainerRequestContext {
 
     @Override
     public SecurityContext getSecurityContext() {
-        throw NotImplementedException.notYet();
+        return securityContext;
     }
 
     @Override
     public void setSecurityContext(SecurityContext context) {
-        throw NotImplementedException.notYet();
+        this.securityContext = context;
     }
 
     @Override
