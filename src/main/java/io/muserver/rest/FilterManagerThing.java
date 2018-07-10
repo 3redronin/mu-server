@@ -1,9 +1,9 @@
 package io.muserver.rest;
 
-import javax.ws.rs.container.ContainerRequestContext;
 import javax.ws.rs.container.ContainerRequestFilter;
 import javax.ws.rs.container.ContainerResponseFilter;
 import java.io.IOException;
+import java.lang.annotation.Annotation;
 import java.util.List;
 
 class FilterManagerThing {
@@ -17,21 +17,28 @@ class FilterManagerThing {
         this.responseFilters = responseFilters;
     }
 
-    void onPreMatch(ContainerRequestContext requestContext) throws IOException {
+    void onPreMatch(MuContainerRequestContext requestContext) throws IOException {
         for (ContainerRequestFilter preMatchRequestFilter : preMatchRequestFilters) {
+
             preMatchRequestFilter.filter(requestContext);
         }
     }
 
-    void onPostMatch(ContainerRequestContext requestContext) throws IOException {
+    void onPostMatch(MuContainerRequestContext requestContext) throws IOException {
         for (ContainerRequestFilter requestFilter : requestFilters) {
-            requestFilter.filter(requestContext);
+            List<Class<? extends Annotation>> filterBindings = ResourceClass.getNameBindingAnnotations(requestFilter.getClass());
+            if (requestContext.methodHasAnnotations(filterBindings)) {
+                requestFilter.filter(requestContext);
+            }
         }
     }
 
     public void onBeforeSendResponse(MuContainerRequestContext requestContext, MuResponseContext responseContext) throws IOException {
         for (ContainerResponseFilter responseFilter : responseFilters) {
-            responseFilter.filter(requestContext, responseContext);
+            List<Class<? extends Annotation>> filterBindings = ResourceClass.getNameBindingAnnotations(responseFilter.getClass());
+            if (requestContext.methodHasAnnotations(filterBindings)) {
+                responseFilter.filter(requestContext, responseContext);
+            }
         }
     }
 }

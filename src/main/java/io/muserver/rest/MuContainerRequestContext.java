@@ -7,6 +7,7 @@ import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.container.ContainerRequestContext;
 import javax.ws.rs.core.*;
 import java.io.InputStream;
+import java.lang.annotation.Annotation;
 import java.net.URI;
 import java.util.*;
 
@@ -32,6 +33,13 @@ class MuContainerRequestContext implements ContainerRequestContext {
         this.uriInfo = RestHandler.createUriInfo(relativePath, null, muRequest.uri().resolve(muRequest.contextPath() + "/"), muRequest.uri());
         this.jaxRequest = new JaxRequest(muRequest);
         this.jaxHeaders = new JaxRsHttpHeadersAdapter(muRequest.headers(), muRequest.cookies());
+    }
+
+    boolean methodHasAnnotations(List<Class<? extends Annotation>> toCheck) {
+        if (matchedMethod == null) {
+            return false;
+        }
+        return matchedMethod.resourceMethod.hasAll(toCheck);
     }
 
     @Override

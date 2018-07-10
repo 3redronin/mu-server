@@ -3,11 +3,9 @@ package io.muserver.rest;
 import io.muserver.Method;
 import io.muserver.openapi.OperationObjectBuilder;
 import io.muserver.openapi.RequestBodyObject;
-import io.muserver.openapi.RequestBodyObjectBuilder;
 import io.muserver.openapi.ResponseObject;
 
 import javax.ws.rs.HttpMethod;
-import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.MediaType;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.InvocationTargetException;
@@ -39,8 +37,9 @@ class ResourceMethod {
     final List<ResourceMethodParam> params;
     final DescriptionData descriptionData;
     final boolean isDeprecated;
+    private final List<Class<? extends Annotation>> nameBindingAnnotations;
 
-    ResourceMethod(ResourceClass resourceClass, UriPattern pathPattern, java.lang.reflect.Method methodHandle, List<ResourceMethodParam> params, Method httpMethod, String pathTemplate, List<MediaType> produces, List<MediaType> consumes, DescriptionData descriptionData, boolean isDeprecated) {
+    ResourceMethod(ResourceClass resourceClass, UriPattern pathPattern, java.lang.reflect.Method methodHandle, List<ResourceMethodParam> params, Method httpMethod, String pathTemplate, List<MediaType> produces, List<MediaType> consumes, DescriptionData descriptionData, boolean isDeprecated, List<Class<? extends Annotation>> nameBindingAnnotations) {
         this.resourceClass = resourceClass;
         this.pathPattern = pathPattern;
         this.methodHandle = methodHandle;
@@ -50,8 +49,18 @@ class ResourceMethod {
         this.directlyProduces = produces;
         this.descriptionData = descriptionData;
         this.isDeprecated = isDeprecated;
+        this.nameBindingAnnotations = nameBindingAnnotations;
         this.effectiveProduces = !produces.isEmpty() ? produces : (!resourceClass.produces.isEmpty() ? resourceClass.produces : RequestMatcher.WILDCARD_AS_LIST);
         this.effectiveConsumes = !consumes.isEmpty() ? consumes : (!resourceClass.consumes.isEmpty() ? resourceClass.consumes : RequestMatcher.WILDCARD_AS_LIST);
+    }
+
+    boolean hasAll(List<Class<? extends Annotation>> annotations) {
+        for (Class<? extends Annotation> annotation : annotations) {
+            if (!nameBindingAnnotations.contains(annotation) && !resourceClass.nameBindingAnnotations.contains(annotation)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     boolean isSubResource() {

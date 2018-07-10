@@ -4,16 +4,21 @@ import io.muserver.Method;
 import io.muserver.openapi.TagObject;
 
 import javax.ws.rs.Consumes;
+import javax.ws.rs.NameBinding;
 import javax.ws.rs.Path;
 import javax.ws.rs.Produces;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.ext.ParamConverterProvider;
+import java.lang.annotation.Annotation;
+import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.Parameter;
 import java.net.URI;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static java.util.Arrays.asList;
+import static java.util.stream.Collectors.toList;
 
 class ResourceClass {
 
@@ -25,8 +30,9 @@ class ResourceClass {
     Set<ResourceMethod> resourceMethods;
     final String pathTemplate;
     final TagObject tag;
+    final List<Class<? extends Annotation>> nameBindingAnnotations;
 
-    private ResourceClass(UriPattern pathPattern, String pathTemplate, Object resourceInstance, List<MediaType> consumes, List<MediaType> produces, TagObject tag) {
+    private ResourceClass(UriPattern pathPattern, String pathTemplate, Object resourceInstance, List<MediaType> consumes, List<MediaType> produces, TagObject tag, List<Class<? extends Annotation>> nameBindingAnnotations) {
         this.pathPattern = pathPattern;
         this.pathTemplate = pathTemplate;
         this.resourceClass = resourceInstance.getClass();
@@ -34,6 +40,7 @@ class ResourceClass {
         this.consumes = consumes;
         this.produces = produces;
         this.tag = tag;
+        this.nameBindingAnnotations = nameBindingAnnotations;
     }
 
     public boolean matches(URI uri) {
@@ -63,6 +70,9 @@ class ResourceClass {
             }
             restMethod.setAccessible(true);
             Path methodPath = annotationSource.getAnnotation(Path.class);
+
+            List<Class<? extends Annotation>> methodNameBindingAnnotations = getNameBindingAnnotations(annotationSource);
+
             UriPattern pathPattern = methodPath == null ? null : UriPattern.uriTemplateToRegex(methodPath.value());
 
             List<MediaType> methodProduces = MediaTypeDeterminer.supportedProducesTypes(annotationSource);
@@ -77,9 +87,16 @@ class ResourceClass {
             DescriptionData descriptionData = DescriptionData.fromAnnotation(restMethod, null);
             String pathTemplate = methodPath == null ? null : methodPath.value();
             boolean isDeprecated = annotationSource.isAnnotationPresent(Deprecated.class);
-            resourceMethods.add(new ResourceMethod(this, pathPattern, restMethod, params, httpMethod, pathTemplate, methodProduces, methodConsumes, descriptionData, isDeprecated));
+            resourceMethods.add(new ResourceMethod(this, pathPattern, restMethod, params, httpMethod, pathTemplate, methodProduces, methodConsumes, descriptionData, isDeprecated, methodNameBindingAnnotations));
         }
         this.resourceMethods = Collections.unmodifiableSet(resourceMethods);
+    }
+
+    static List<Class<? extends Annotation>> getNameBindingAnnotations(AnnotatedElement annotationSource) {
+        return Stream.of(annotationSource.getAnnotations())
+            .filter(a -> a.annotationType().isAnnotationPresent(NameBinding.class))
+            .map(Annotation::annotationType)
+            .collect(toList());
     }
 
     static ResourceClass fromObject(Object restResource, List<ParamConverterProvider> paramConverterProviders) {
@@ -108,9 +125,10 @@ class ResourceClass {
         Consumes consumes = annotationSource.getAnnotation(Consumes.class);
         List<MediaType> consumesList = MediaTypeHeaderDelegate.fromStrings(consumes == null ? null : asList(consumes.value()));
 
+        List<Class<? extends Annotation>> classLevelNameBindingAnnotations = getNameBindingAnnotations(annotationSource);
 
         TagObject tag = DescriptionData.fromAnnotation(annotationSource, annotationSource.getSimpleName()).toTag();
-        ResourceClass resourceClass = new ResourceClass(pathPattern, path.value(), restResource, consumesList, producesList, tag);
+        ResourceClass resourceClass = new ResourceClass(pathPattern, path.value(), restResource, consumesList, producesList, tag, classLevelNameBindingAnnotations);
         resourceClass.setupMethodInfo(paramConverterProviders);
         return resourceClass;
     }
