@@ -224,11 +224,11 @@ N/A as Mu Server does not control the lifecycle of your objects.
 
 #### 6.5.1 Global Binding 
 
-- [x] Implemented.
+- [x] Implemented
 
 #### 6.5.2 Name Binding 
 
-- [ ] Not yet implemented.
+- [x] Implemented
 
 #### 6.5.3 Dynamic Binding 
 
