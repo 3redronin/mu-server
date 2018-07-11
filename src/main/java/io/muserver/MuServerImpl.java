@@ -51,4 +51,14 @@ class MuServerImpl implements MuServer {
     public InetSocketAddress address() {
         return address;
     }
+
+    @Override
+    public String toString() {
+        return "MuServerImpl{" +
+            "httpUri=" + httpUri +
+            ", httpsUri=" + httpsUri +
+            ", stats=" + stats +
+            ", address=" + address +
+            '}';
+    }
 }

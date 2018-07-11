@@ -21,6 +21,8 @@ class MethodMapping {
             return Method.DELETE;
         } else if (PATCH.class.equals(jaxMethod)) {
             return Method.PATCH;
+        } else if (HEAD.class.equals(jaxMethod)) {
+            return Method.HEAD;
         }
         throw new MuException(jaxMethod.getName() + " is not supported by mu-server JAX RS");
     }

@@ -74,7 +74,8 @@ N/A Not applicable as only singletons supported
 
 #### 3.3.5 HEAD and OPTIONS 
 
-- [ ] Not yet implemented.
+- [x] HEAD requests fall back to GET requests without a body
+- [ ] OPTIONS requests fall back to using jax-rs meta-data
 
 ### 3.4 URI Templates 
 
@@ -132,7 +133,7 @@ N/A as Mu will never instantiate user classes.
 
 #### 4.1.3 Priorities
 
-- [ ] `@Priority` Not yet implemented
+No plan to implement as it would add another dependency.
 
 ### 4.2 Entity Providers 
 
@@ -240,7 +241,7 @@ N/A
 
 ### 6.6 Priorities 
 
-- [ ] Not yet implemented.
+No plan to implement as it would add another dependency. The order filters are added are the order they are run in.
 
 ### 6.7 Exceptions 
 

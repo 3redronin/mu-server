@@ -4,10 +4,7 @@ import io.muserver.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.ws.rs.BadRequestException;
-import javax.ws.rs.NotFoundException;
-import javax.ws.rs.ServerErrorException;
-import javax.ws.rs.WebApplicationException;
+import javax.ws.rs.*;
 import javax.ws.rs.core.*;
 import javax.ws.rs.ext.MessageBodyReader;
 import javax.ws.rs.ext.MessageBodyWriter;
@@ -63,7 +60,16 @@ public class RestHandler implements MuHandler {
             String relativePath = requestContext.getUriInfo().getPath(false);
 
             String requestContentType = muRequest.headers().get(HeaderNames.CONTENT_TYPE);
-            RequestMatcher.MatchedMethod mm = requestMatcher.findResourceMethod(requestContext.getMuMethod(), relativePath, acceptHeaders, requestContentType);
+            RequestMatcher.MatchedMethod mm;
+            try {
+                mm = requestMatcher.findResourceMethod(requestContext.getMuMethod(), relativePath, acceptHeaders, requestContentType);
+            } catch (NotAllowedException e) {
+                if (requestContext.getMuMethod() == Method.HEAD) {
+                    mm = requestMatcher.findResourceMethod(Method.GET, relativePath, acceptHeaders, requestContentType);
+                } else {
+                    throw e;
+                }
+            }
             List<MediaType> produces = producesRef = mm.resourceMethod.resourceClass.produces;
             List<MediaType> directlyProduces = directlyProducesRef = mm.resourceMethod.directlyProduces;
             ResourceMethod rm = mm.resourceMethod;
@@ -100,7 +106,6 @@ public class RestHandler implements MuHandler {
                 }
                 params[param.index] = paramValue;
             }
-
 
 
             Object result = rm.invoke(params);
@@ -159,7 +164,8 @@ public class RestHandler implements MuHandler {
                 if (jaxRSResponse == null) {
                     jaxRSResponse = new JaxRSResponse(Response.Status.fromStatusCode(obj.status()), new Headers(), obj.entity, null, new NewCookie[0]);
                 }
-                MuResponseContext responseContext = new MuResponseContext(jaxRSResponse, obj, new LazyAccessOutputStream(muResponse));
+
+                MuResponseContext responseContext = new MuResponseContext(jaxRSResponse, obj, requestContext.getMuMethod() == Method.HEAD ? NullOutputStream.INSTANCE :  new LazyAccessOutputStream(muResponse));
                 if (obj.entity != null) {
                     Annotation[] annotations = new Annotation[0]; // TODO set this properly
                     MediaType responseMediaType = MediaTypeDeterminer.determine(obj, produces, directlyProduces, entityProviders.writers, acceptHeaders);

@@ -18,6 +18,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static scaffolding.ClientUtils.call;
+import static scaffolding.MuAssert.stopAndCheck;
 
 public class PrimitiveEntityProviderTest {
 
@@ -210,7 +211,7 @@ public class PrimitiveEntityProviderTest {
 
     @After
     public void stop() {
-        scaffolding.MuAssert.stopAndCheck(server);
+        stopAndCheck(server);
     }
 
 }

@@ -37,7 +37,7 @@ class StringEntityProviders {
     @Consumes({"text/plain", "*/*"})
     static class StringMessageReaderWriter implements MessageBodyWriter<String>, MessageBodyReader<String> {
         private StringMessageReaderWriter() {}
-        public static final StringMessageReaderWriter INSTANCE = new StringMessageReaderWriter();
+        static final StringMessageReaderWriter INSTANCE = new StringMessageReaderWriter();
 
         public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
             return String.class.equals(type);
@@ -67,7 +67,7 @@ class StringEntityProviders {
     @Consumes({"text/plain", "*/*"})
     static class CharArrayReaderWriter implements MessageBodyWriter<char[]>, MessageBodyReader<char[]> {
         private CharArrayReaderWriter() {}
-        public static final CharArrayReaderWriter INSTANCE = new CharArrayReaderWriter();
+        static final CharArrayReaderWriter INSTANCE = new CharArrayReaderWriter();
 
 
         @Override
