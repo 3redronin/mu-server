@@ -1,6 +1,6 @@
 import io.muserver.*;
-import io.muserver.handlers.ResourceHandler;
 import io.muserver.handlers.ResourceHandlerBuilder;
+import io.muserver.rest.CORSConfigBuilder;
 import io.muserver.rest.RestHandlerBuilder;
 import org.example.petstore.resource.PetResource;
 import org.example.petstore.resource.PetStoreResource;
@@ -13,7 +13,6 @@ import java.io.File;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URI;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.Mutils.urlEncode;
 import static io.muserver.handlers.FileProviderTest.BIG_FILE_DIR;
@@ -22,11 +21,12 @@ public class RunLocal {
     private static final Logger log = LoggerFactory.getLogger(RunLocal.class);
 
     public static void main(String[] args) {
-        AtomicReference<MuStats> stats = new AtomicReference<>();
         MuServer server = new MuServerBuilder().withHttpPort(0).withHttpsPort(0)
-            .withHttpPort(18080).withHttpsPort(18443).withHttpsConfig(SSLContextBuilder.unsignedLocalhostCert())
-            .addHandler(ResourceHandlerBuilder.fileHandler(BIG_FILE_DIR).build())
-            .addHandler(ResourceHandlerBuilder.fileOrClasspath("src/test/resources/sample-static", "/sample-static").build())
+            .withHttpPort(18080)
+            .withHttpsPort(18443)
+            .withHttpsConfig(SSLContextBuilder.unsignedLocalhostCert())
+            .addHandler(ResourceHandlerBuilder.fileHandler(BIG_FILE_DIR))
+            .addHandler(ResourceHandlerBuilder.fileOrClasspath("src/test/resources/sample-static", "/sample-static"))
             .addHandler(Method.GET, "/api", (request, response, pathParams) -> {
                 response.contentType(ContentTypes.APPLICATION_JSON);
                 response.write("{ \"hello\": \"world                    this is something           to be gzipped\" }");
@@ -37,6 +37,7 @@ public class RunLocal {
                 )
                     .withOpenApiJsonUrl("/openapi.json")
                     .withOpenApiHtmlUrl("/api.html")
+                    .withCORS(CORSConfigBuilder.corsConfig().withAllowedOrigins("http://localhost:3200").withExposedHeaders("Content-Type"))
             )
             .addHandler(Method.POST, "/upload", (request, response, pathParams) -> {
                 UploadedFile file = request.uploadedFile("theFile");
@@ -82,16 +83,16 @@ public class RunLocal {
                 }).start();
             })
             .addHandler(Method.GET, "/stats", (request, response, pathParams) -> {
+                MuStats stats = request.server().stats();
                 response.contentType(ContentTypes.TEXT_PLAIN);
-                response.sendChunk(stats.get().toString());
+                response.sendChunk(stats.toString());
                 response.sendChunk("\n\n");
-                for (MuRequest muRequest : stats.get().activeRequests()) {
+                for (MuRequest muRequest : stats.activeRequests()) {
                     response.sendChunk(muRequest + "\r\n");
                 }
             })
             .start();
 
-        stats.set(server.stats());
 
         log.info("Started at " + server.httpUri() + " and " + server.httpsUri());
         log.info("REST docs available at " + server.httpUri().resolve("/api.html") + " and OpenAPI JSON at " + server.httpUri().resolve("/openapi.json"));

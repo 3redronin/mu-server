@@ -67,6 +67,7 @@ public class ResourceHandler implements MuHandler {
             type = extensionToResourceType.getOrDefault(extension, ResourceType.DEFAULT);
         }
         response.contentType(type.mimeType);
+        response.headers().set(HeaderNames.VARY, "accept-encoding");
         response.headers().add(type.headers);
     }
 

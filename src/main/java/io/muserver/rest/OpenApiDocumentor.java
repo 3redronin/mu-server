@@ -9,13 +9,11 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 import static io.muserver.Mutils.notNull;
-import static io.muserver.openapi.MediaTypeObjectBuilder.mediaTypeObject;
 import static io.muserver.openapi.PathItemObjectBuilder.pathItemObject;
 import static io.muserver.openapi.PathsObjectBuilder.pathsObject;
-import static io.muserver.openapi.RequestBodyObjectBuilder.requestBodyObject;
 import static io.muserver.openapi.ServerObjectBuilder.serverObject;
+import static java.util.Collections.emptySet;
 import static java.util.Collections.singletonList;
-import static java.util.Collections.singletonMap;
 import static java.util.stream.Collectors.toList;
 
 class OpenApiDocumentor implements MuHandler {
@@ -24,9 +22,11 @@ class OpenApiDocumentor implements MuHandler {
     private final OpenAPIObject openAPIObject;
     private final String openApiHtmlUrl;
     private final String openApiHtmlCss;
+    private final CORSConfig corsConfig;
 
-    OpenApiDocumentor(Set<ResourceClass> roots, String openApiJsonUrl, String openApiHtmlUrl, OpenAPIObject openAPIObject, String openApiHtmlCss) {
+    OpenApiDocumentor(Set<ResourceClass> roots, String openApiJsonUrl, String openApiHtmlUrl, OpenAPIObject openAPIObject, String openApiHtmlCss, CORSConfig corsConfig) {
         notNull("openAPIObject", openAPIObject);
+        this.corsConfig = corsConfig;
         this.roots = roots;
         this.openApiJsonUrl = openApiJsonUrl == null ? null : Mutils.trim(openApiJsonUrl, "/");
         this.openApiHtmlUrl = openApiHtmlUrl == null ? null : Mutils.trim(openApiHtmlUrl, "/");
@@ -37,6 +37,7 @@ class OpenApiDocumentor implements MuHandler {
     @Override
     public boolean handle(MuRequest request, MuResponse response) throws Exception {
         String relativePath = Mutils.trim(request.relativePath(), "/");
+
         if (request.method() != Method.GET || (!relativePath.equals(openApiJsonUrl) && !relativePath.equals(openApiHtmlUrl))) {
             return false;
         }
@@ -97,6 +98,8 @@ class OpenApiDocumentor implements MuHandler {
 
         if (relativePath.equals(openApiJsonUrl)) {
             response.contentType(ContentTypes.APPLICATION_JSON);
+            corsConfig.writeHeaders(request, response, emptySet());
+            response.headers().set("Access-Control-Allow-Methods", "GET");
 
             try (OutputStreamWriter osw = new OutputStreamWriter(response.outputStream(), StandardCharsets.UTF_8);
                  BufferedWriter writer = new BufferedWriter(osw, 8192)) {

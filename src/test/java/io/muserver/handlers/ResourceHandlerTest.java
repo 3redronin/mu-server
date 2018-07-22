@@ -125,7 +125,7 @@ public class ResourceHandlerTest {
     public void callsToContextNamesWithoutTrailingSlashesResultIn302() throws Exception {
         server = MuServerBuilder.httpsServer()
             .addHandler(context("my-app")
-                .addHandler(ResourceHandler.classpathHandler("/sample-static"))
+                .addHandler(ResourceHandlerBuilder.classpathHandler("/sample-static"))
             )
             .start();
         OkHttpClient client = newClient().followRedirects(false).build();
@@ -142,8 +142,8 @@ public class ResourceHandlerTest {
     public void filesCanHaveNoFileExtensions() throws IOException {
         server = MuServerBuilder.httpsServer()
             .withGzipEnabled(false)
-            .addHandler(ResourceHandler.classpathHandler("/sample-static").withPathToServeFrom("/classpath").build())
-            .addHandler(ResourceHandler.fileHandler("src/test/resources/sample-static").withPathToServeFrom("/file").build())
+            .addHandler(ResourceHandlerBuilder.classpathHandler("/sample-static").withPathToServeFrom("/classpath").build())
+            .addHandler(ResourceHandlerBuilder.fileHandler("src/test/resources/sample-static").withPathToServeFrom("/file").build())
             .start();
 
         OkHttpClient client = newClient().followRedirects(false).build();
@@ -176,7 +176,7 @@ public class ResourceHandlerTest {
     @Test
     public void canServeFromPath() throws Exception {
         server = MuServerBuilder.httpsServer()
-            .addHandler(ResourceHandler.fileHandler("src/test/resources/sample-static")
+            .addHandler(ResourceHandlerBuilder.fileHandler("src/test/resources/sample-static")
                 .withPathToServeFrom("/blah")
                 .build())
             .start();
@@ -195,7 +195,7 @@ public class ResourceHandlerTest {
     @Test
     public void itCanDefaultToFilesSuchAsIndexHtml() throws Exception {
         server = MuServerBuilder.httpsServer()
-            .addHandler(ResourceHandler.fileHandler("src/test/resources/sample-static")
+            .addHandler(ResourceHandlerBuilder.fileHandler("src/test/resources/sample-static")
                 .withPathToServeFrom("/blah")
                 .withDefaultFile("index.html").build())
             .start();
@@ -211,7 +211,7 @@ public class ResourceHandlerTest {
     public void contentTypesAreCorrect() throws Exception {
         server = MuServerBuilder.httpsServer()
             .withGzip(1, gzippableMimeTypes(getResourceTypes()))
-            .addHandler(ResourceHandler.fileHandler("src/test/resources/sample-static").build())
+            .addHandler(ResourceHandlerBuilder.fileHandler("src/test/resources/sample-static").build())
             .start();
 
         assertContentTypeAndContent("/index.html", "text/html", true);
@@ -227,11 +227,13 @@ public class ResourceHandlerTest {
             headersFromGET = resp.headers().toMultimap();
             assertThat(resp.code(), is(200));
             assertThat(resp.header("Content-Type"), is(expectedContentType));
+            assertThat(resp.header("Vary"), is("accept-encoding"));
             assertThat(resp.body().string(), is(readResource("/sample-static" + urlDecode(relativePath))));
         }
         try (Response resp = call(request().head().url(url))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.headers().toMultimap(), equalTo(headersFromGET));
+            assertThat(resp.header("Vary"), is("accept-encoding"));
             assertThat(resp.body().contentLength(), is(0L));
         }
 

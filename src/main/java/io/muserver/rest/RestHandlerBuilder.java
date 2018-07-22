@@ -34,6 +34,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     private List<ContainerRequestFilter> preMatchRequestFilters = new ArrayList<>();
     private List<ContainerRequestFilter> requestFilters = new ArrayList<>();
     private List<ContainerResponseFilter> responseFilters = new ArrayList<>();
+    private CORSConfig corsConfig = CORSConfigBuilder.disabled().build();
 
     public RestHandlerBuilder(Object... resources) {
         this.resources = resources;
@@ -235,18 +236,44 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
             }
             OpenAPIObjectBuilder openAPIObjectToUse = this.openAPIObject == null ? OpenAPIObjectBuilder.openAPIObject() : this.openAPIObject;
             openAPIObjectToUse.withPaths(pathsObject().build());
-            documentor = new OpenApiDocumentor(roots, openApiJsonUrl, openApiHtmlUrl, openAPIObjectToUse.build(), openApiHtmlCss);
+            documentor = new OpenApiDocumentor(roots, openApiJsonUrl, openApiHtmlUrl, openAPIObjectToUse.build(), openApiHtmlCss, corsConfig);
         }
 
         CustomExceptionMapper customExceptionMapper = new CustomExceptionMapper(exceptionMappers);
 
         FilterManagerThing filterManagerThing = new FilterManagerThing(preMatchRequestFilters, requestFilters, responseFilters);
 
-        return new RestHandler(entityProviders, roots, documentor, customExceptionMapper, filterManagerThing);
+        return new RestHandler(entityProviders, roots, documentor, customExceptionMapper, filterManagerThing, corsConfig);
     }
 
+    /**
+     * <p>Creates a handler builder for JAX-RS REST services.</p>
+     * <p>Note that CORS is disabled by default.</p>
+     * @param resources Instances of classes that have a {@link javax.ws.rs.Path} annotation.
+     * @return Returns a builder that can be used to specify more config
+     */
     public static RestHandlerBuilder restHandler(Object... resources) {
         return new RestHandlerBuilder(resources);
+    }
+
+    /**
+     * <p>Specifies the CORS config for the REST services. Defaults to {@link CORSConfigBuilder#disabled()}</p>
+     * @see CORSConfigBuilder
+     * @param corsConfig The CORS config to use
+     * @return This builder.
+     */
+    public RestHandlerBuilder withCORS(CORSConfig corsConfig) {
+        this.corsConfig = corsConfig;
+        return this;
+    }
+    /**
+     * <p>Specifies the CORS config for the REST services. Defaults to {@link CORSConfigBuilder#disabled()}</p>
+     * @see CORSConfigBuilder
+     * @param corsConfig The CORS config to use
+     * @return This builder.
+     */
+    public RestHandlerBuilder withCORS(CORSConfigBuilder corsConfig) {
+        return withCORS(corsConfig.build());
     }
 
     /**

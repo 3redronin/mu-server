@@ -17,11 +17,10 @@ import java.util.*;
 import java.util.concurrent.CompletionStage;
 
 import static io.muserver.Mutils.hasValue;
+import static io.muserver.rest.CORSConfig.getAllowedMethods;
 import static io.muserver.rest.JaxRSResponse.muHeadersToJaxObj;
 import static java.util.Collections.emptyList;
 import static java.util.Collections.singletonList;
-import static java.util.stream.Collectors.joining;
-import static java.util.stream.Collectors.toSet;
 
 /**
  * A handler that serves JAX-RS resources.
@@ -36,13 +35,15 @@ public class RestHandler implements MuHandler {
     private final MuHandler documentor;
     private final CustomExceptionMapper customExceptionMapper;
     private final FilterManagerThing filterManagerThing;
+    private final CORSConfig corsConfig;
 
-    RestHandler(EntityProviders entityProviders, Set<ResourceClass> roots, MuHandler documentor, CustomExceptionMapper customExceptionMapper, FilterManagerThing filterManagerThing) {
+    RestHandler(EntityProviders entityProviders, Set<ResourceClass> roots, MuHandler documentor, CustomExceptionMapper customExceptionMapper, FilterManagerThing filterManagerThing, CORSConfig corsConfig) {
         this.requestMatcher = new RequestMatcher(roots);
         this.entityProviders = entityProviders;
         this.documentor = documentor;
         this.customExceptionMapper = customExceptionMapper;
         this.filterManagerThing = filterManagerThing;
+        this.corsConfig = corsConfig;
     }
 
     @Override
@@ -70,18 +71,16 @@ public class RestHandler implements MuHandler {
                     mm = requestMatcher.findResourceMethod(Method.GET, relativePath, acceptHeaders, requestContentType);
                 } else if (requestContext.getMuMethod() == Method.OPTIONS) {
                     Set<RequestMatcher.MatchedMethod> matchedMethodsForPath = requestMatcher.getMatchedMethodsForPath(relativePath);
-                    Set<Method> allowed = matchedMethodsForPath.stream().map(m -> m.resourceMethod.httpMethod).collect(toSet());
-                    if (allowed.contains(Method.GET)) {
-                        allowed.add(Method.HEAD);
-                    }
-                    muResponse.status(200);
-                    String asStrings = allowed.stream().map(Enum::name).sorted().collect(joining(", "));
-                    muResponse.headers().set(HeaderNames.ALLOW, asStrings);
+                    muResponse.headers().set(HeaderNames.ALLOW, getAllowedMethods(matchedMethodsForPath));
+                    corsConfig.writeHeaders(muRequest, muResponse, matchedMethodsForPath);
                     return true;
                 } else {
                     throw e;
                 }
             }
+
+            corsConfig.writeHeaders(muRequest, muResponse, Collections.singleton(mm));
+
             List<MediaType> produces = producesRef = mm.resourceMethod.resourceClass.produces;
             List<MediaType> directlyProduces = directlyProducesRef = mm.resourceMethod.directlyProduces;
             ResourceMethod rm = mm.resourceMethod;
@@ -187,6 +186,7 @@ public class RestHandler implements MuHandler {
                 filterManagerThing.onBeforeSendResponse(requestContext, responseContext);
                 muResponse.status(responseContext.getStatus());
                 muResponse.headers().setAll(responseContext.muHeaders());
+
                 for (NewCookie cookie : jaxRSResponse.getCookies().values()) {
                     muResponse.headers().add(HeaderNames.SET_COOKIE, cookie.toString());
                 }

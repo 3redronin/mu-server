@@ -68,14 +68,14 @@ public class OptionsTest {
             .method("OPTIONS", Util.EMPTY_REQUEST)
             .url(server.uri().resolve("/things").toString()))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.header("Allow"), is("GET, HEAD, POST"));
+            assertThat(resp.header("Allow"), is("GET, HEAD, OPTIONS, POST"));
             assertThat(resp.body().contentLength(), is(0L));
         }
         try (okhttp3.Response resp = call(request()
             .method("OPTIONS", Util.EMPTY_REQUEST)
             .url(server.uri().resolve("/things/non-root").toString()))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.header("Allow"), is("DELETE"));
+            assertThat(resp.header("Allow"), is("DELETE, OPTIONS"));
             assertThat(resp.body().contentLength(), is(0L));
         }
     }
