@@ -165,7 +165,7 @@ public class MuServerBuilder {
     }
 
     /**
-     * Sets the HTTPS port to use. To set the SSL certificate config, see {@link }
+     * Sets the HTTPS port to use. To set the SSL certificate config, see {@link #withHttpsConfig(SSLContextBuilder)}
      * @param port A value of 0 will result in a random port being assigned; a value of -1 will
      * disable HTTPS.
      * @return The current Mu-Server builder
