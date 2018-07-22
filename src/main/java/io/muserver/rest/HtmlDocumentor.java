@@ -240,7 +240,7 @@ class HtmlDocumentor {
                                     paramDesc.content(schema.description);
 
                                     if (schema.example != null) {
-                                        render("p", "Example:\n\n" + schema.example);
+                                        renderExamples(schema.example, null);
                                     }
 
                                     paramDesc.close();
@@ -266,8 +266,8 @@ class HtmlDocumentor {
                             El thead = new El("thead").open();
                             El theadRow = new El("tr").open();
                             render("th", "Code");
-                            render("th", "Description");
                             render("th", "Content Type");
+                            render("th", "Description");
                             theadRow.close();
                             thead.close();
 
@@ -279,8 +279,8 @@ class HtmlDocumentor {
                                 String code = respEntry.getKey();
                                 ResponseObject resp = respEntry.getValue();
                                 render("td", code);
-                                render("td", resp.description);
                                 render("td", resp.content.keySet().stream().collect(Collectors.joining("\n")));
+                                render("td", resp.description);
 
 
                                 row.close();
@@ -304,7 +304,9 @@ class HtmlDocumentor {
 
     private void renderExamples(Object example, Map<String, ExampleObject> examples) throws IOException {
         if (example != null) {
-            render("p", "Example:\n\n" + example);
+            El div = new El("div").open().content("Example: ");
+            render("code", example.toString());
+            div.close();
         } else if (examples != null) {
             for (Map.Entry<String, ExampleObject> exampleEntry : examples.entrySet()) {
                 El div = new El("div").open();

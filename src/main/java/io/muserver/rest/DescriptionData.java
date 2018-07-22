@@ -15,17 +15,19 @@ class DescriptionData {
     final String summary;
     final String description;
     final ExternalDocumentationObject externalDocumentation;
+    final String example;
 
-    DescriptionData(String summary, String description, ExternalDocumentationObject externalDocumentation) {
+    DescriptionData(String summary, String description, ExternalDocumentationObject externalDocumentation, String example) {
         this.summary = summary;
         this.description = description;
         this.externalDocumentation = externalDocumentation;
+        this.example = example;
     }
 
-    public static DescriptionData fromAnnotation(AnnotatedElement source, String defaultSummary) {
+    static DescriptionData fromAnnotation(AnnotatedElement source, String defaultSummary) {
         Description description = source.getAnnotation(Description.class);
         if (description == null) {
-            return new DescriptionData(defaultSummary, null, null);
+            return new DescriptionData(defaultSummary, null, null, null);
         } else {
             ExternalDocumentationObject externalDocumentation = null;
             if (!description.documentationUrl().isEmpty()) {
@@ -38,13 +40,13 @@ class DescriptionData {
             }
             String summary = description.value();
             String desc = description.details();
-
-            return new DescriptionData(summary.isEmpty() ? defaultSummary : summary, desc.isEmpty() ? null : desc, externalDocumentation);
+            String example = description.example();
+            return new DescriptionData(summary.isEmpty() ? defaultSummary : summary, desc.isEmpty() ? null : desc, externalDocumentation, example.isEmpty() ? null : example);
 
         }
     }
 
-    public TagObject toTag() {
+    TagObject toTag() {
         return tagObject().withName(summary).withDescription(description).withExternalDocs(externalDocumentation).build();
     }
 

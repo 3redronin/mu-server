@@ -73,6 +73,10 @@ table.parameterTable, table.responseTable {
     padding: 10px 8px;
 }
 
+.responseTable th:nth-of-type(-n+2), .parameterTable th:nth-of-type(-n+2) {
+    width: 25%;
+}
+
 .responseTable tbody tr:hover td, .parameterTable tbody tr:hover td {
     color: #1A237E;
 }

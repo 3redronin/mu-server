@@ -38,4 +38,9 @@ public @interface ApiResponse {
      */
     Class<?> response() default Void.class;
 
+    /**
+     * The content type for this code, if different from the default
+     * @return A content type such as <code>text/plain</code>
+     */
+    String[] contentType() default {};
 }

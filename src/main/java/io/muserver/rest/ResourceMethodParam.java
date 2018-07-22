@@ -74,7 +74,7 @@ abstract class ResourceMethodParam {
             if (descriptionData.description != null) {
                 paramDesc += "\n" + descriptionData.description;
             }
-            descriptionData = new DescriptionData(key, paramDesc, descriptionData.externalDocumentation);
+            descriptionData = new DescriptionData(key, paramDesc, descriptionData.externalDocumentation, descriptionData.example);
         }
         return descriptionData;
     }
@@ -95,7 +95,8 @@ abstract class ResourceMethodParam {
                 .withDeprecated(isDeprecated);
             if (descriptionData != null) {
                 builder.withName(descriptionData.summary)
-                    .withDescription(descriptionData.description);
+                    .withDescription(descriptionData.description)
+                .withExample(descriptionData.example);
             }
             return builder.withSchema(
                 schemaObjectFrom(parameterHandle.getType())

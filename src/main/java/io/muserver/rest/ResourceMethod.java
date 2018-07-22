@@ -4,6 +4,7 @@ import io.muserver.Method;
 import io.muserver.openapi.OperationObjectBuilder;
 import io.muserver.openapi.RequestBodyObject;
 import io.muserver.openapi.ResponseObject;
+import io.muserver.openapi.SchemaObjectBuilder;
 
 import javax.ws.rs.HttpMethod;
 import javax.ws.rs.core.MediaType;
@@ -13,6 +14,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static io.muserver.Mutils.nullOrEmpty;
 import static io.muserver.openapi.HeaderObjectBuilder.headerObject;
 import static io.muserver.openapi.MediaTypeObjectBuilder.mediaTypeObject;
 import static io.muserver.openapi.OperationObjectBuilder.operationObject;
@@ -98,15 +100,16 @@ class ResourceMethod {
                 .build());
         } else {
             for (ApiResponse apiResponse : apiResponseList) {
+                Stream<MediaType> responseTypes = apiResponse.contentType().length == 0 ? effectiveProduces.stream() : Stream.of(apiResponse.contentType()).map(MediaType::valueOf);
                 httpStatusCodes.put(apiResponse.code(), responseObject()
-                    .withContent(effectiveProduces.stream().collect(toMap(MediaType::toString,
+                    .withContent(responseTypes.collect(toMap(MediaType::toString,
                         mt -> mediaTypeObject()
                             .build()))
                     )
                     .withDescription(apiResponse.message())
                     .withHeaders(Stream.of(apiResponse.responseHeaders()).collect(
                         toMap(ResponseHeader::name,
-                            rh -> headerObject().withDescription(rh.description()).withDeprecated(rh.deprecated()).withExample(rh.example()).build()
+                            rh -> headerObject().withDescription(rh.description()).withDeprecated(rh.deprecated()).withExample(nullOrEmpty(rh.example()) ? null : rh.example()).build()
                         )))
                     .build());
             }
@@ -116,8 +119,8 @@ class ResourceMethod {
             .filter(p -> p instanceof ResourceMethodParam.MessageBodyParam)
             .map(ResourceMethodParam.MessageBodyParam.class::cast)
             .map(messageBodyParam -> requestBodyObject()
-                .withContent(singletonMap(effectiveConsumes.get(0).toString(), mediaTypeObject()
-                    .build()))
+                .withContent(singletonMap(effectiveConsumes.get(0).toString(),
+                    mediaTypeObject().withExample(descriptionData.example).build()))
                 .withDescription(messageBodyParam.descriptionData.description)
                 .withRequired(messageBodyParam.isRequired)
                 .build())
@@ -145,11 +148,15 @@ class ResourceMethod {
                                                     if (n.isRequired) {
                                                         required.add(n.key);
                                                     }
-                                                    return schemaObjectFrom(n.parameterHandle.getType())
+                                                    SchemaObjectBuilder schemaObjectBuilder = schemaObjectFrom(n.parameterHandle.getType())
                                                         .withNullable(!n.isRequired)
                                                         .withDeprecated(n.isDeprecated)
-                                                        .withDefaultValue(n.defaultValue())
-                                                        .withDescription(n.descriptionData == null ? null : n.descriptionData.description).build();
+                                                        .withDefaultValue(n.defaultValue());
+                                                    if (n.descriptionData != null) {
+                                                        schemaObjectBuilder.withExample(n.descriptionData.example)
+                                                            .withDescription(n.descriptionData.description);
+                                                    }
+                                                    return schemaObjectBuilder.build();
                                                 }))
                                     )
                                     .build()

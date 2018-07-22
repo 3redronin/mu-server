@@ -6,6 +6,8 @@ import java.io.*;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.util.Date;
+import java.util.Objects;
+import java.util.stream.Stream;
 
 public class Mutils {
 
@@ -185,5 +187,15 @@ public class Mutils {
             .replace("'", "&#x27;")
             .replace("/", "&#x2F;")
             ;
+    }
+
+    /**
+     * Returns the first non-null value from the given values (or null if all values are null)
+     * @param values An array of values
+     * @param <T> The type of the value
+     * @return The first object in the list that is not null (or null, if all are null)
+     */
+    public static <T> T coalesce(T... values) {
+        return Stream.of(values).filter(Objects::nonNull).findFirst().orElse(null);
     }
 }
