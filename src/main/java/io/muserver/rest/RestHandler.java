@@ -20,6 +20,8 @@ import static io.muserver.Mutils.hasValue;
 import static io.muserver.rest.JaxRSResponse.muHeadersToJaxObj;
 import static java.util.Collections.emptyList;
 import static java.util.Collections.singletonList;
+import static java.util.stream.Collectors.joining;
+import static java.util.stream.Collectors.toSet;
 
 /**
  * A handler that serves JAX-RS resources.
@@ -66,6 +68,16 @@ public class RestHandler implements MuHandler {
             } catch (NotAllowedException e) {
                 if (requestContext.getMuMethod() == Method.HEAD) {
                     mm = requestMatcher.findResourceMethod(Method.GET, relativePath, acceptHeaders, requestContentType);
+                } else if (requestContext.getMuMethod() == Method.OPTIONS) {
+                    Set<RequestMatcher.MatchedMethod> matchedMethodsForPath = requestMatcher.getMatchedMethodsForPath(relativePath);
+                    Set<Method> allowed = matchedMethodsForPath.stream().map(m -> m.resourceMethod.httpMethod).collect(toSet());
+                    if (allowed.contains(Method.GET)) {
+                        allowed.add(Method.HEAD);
+                    }
+                    muResponse.status(200);
+                    String asStrings = allowed.stream().map(Enum::name).sorted().collect(joining(", "));
+                    muResponse.headers().set(HeaderNames.ALLOW, asStrings);
+                    return true;
                 } else {
                     throw e;
                 }
