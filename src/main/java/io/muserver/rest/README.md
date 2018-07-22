@@ -75,7 +75,7 @@ N/A Not applicable as only singletons supported
 #### 3.3.5 HEAD and OPTIONS 
 
 - [x] HEAD requests fall back to GET requests without a body
-- [ ] OPTIONS requests fall back to using jax-rs meta-data
+- [x] OPTIONS requests fall back to using jax-rs meta-data
 
 ### 3.4 URI Templates 
 
@@ -233,7 +233,7 @@ N/A as Mu Server does not control the lifecycle of your objects.
 
 #### 6.5.3 Dynamic Binding 
 
-- [ ] Not implemented, and won't be as it uses Configuration and Feature classes.
+Not implemented, and won't be as it uses Configuration and Feature classes.
 
 #### 6.5.4 Binding in Client API 
 
