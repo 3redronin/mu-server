@@ -308,10 +308,10 @@ class NettyRequestAdapter implements MuRequest {
                         log.warn("Unrecognised body part: " + bodyHttpData.getClass() + " from " + this + " - this may mean some of the request data is lost.");
                     }
                 }
-                form = new NettyRequestParameters(new QueryStringDecoder(qse.toString()));
+                form = new NettyRequestParameters(new QueryStringDecoder(qse.toString(), UTF_8, true, 1000000));
             } else {
                 String body = readBodyAsString();
-                form = new NettyRequestParameters(new QueryStringDecoder(body, false));
+                form = new NettyRequestParameters(new QueryStringDecoder(body, UTF_8, false, 1000000));
             }
         }
     }

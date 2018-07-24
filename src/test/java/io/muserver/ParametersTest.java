@@ -7,7 +7,9 @@ import scaffolding.MuAssert;
 
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 
 import static java.util.Arrays.asList;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -53,26 +55,30 @@ public class ParametersTest {
 	}
 
     @Test public void formParametersCanBeGot() throws MalformedURLException {
-        Object[] actual = new Object[3];
+
+        List<String> vals = new ArrayList<>();
+        for (int i = 0; i < 2000; i++) {
+            vals.add("This is value " + i);
+        }
+
+        List<String> actual = new ArrayList<>();
         server = MuServerBuilder.httpServer().addHandler((request, response) -> {
-            actual[0] = request.form().get("value1");
-            actual[1] = request.form().get("value2");
-            actual[2] = request.form().get("unspecified");
+            for (int i = 0; i < vals.size(); i++) {
+                actual.add(request.form().get("theNameOfTheFormParameter_" + i));
+            }
             return true;
         }).start();
 
         String str = "/something/here.html?value1=unrelated";
+        FormBody.Builder formBuilder = new FormBody.Builder();
+        for (int i = 0; i < vals.size(); i++) {
+            formBuilder.add("theNameOfTheFormParameter_" + i, vals.get(i));
+        }
         call(request()
             .url(http(str))
-            .post(new FormBody.Builder()
-                .add("value1", "something")
-                .add("value1", "somethingAgain")
-                .add("value2", "something else i think")
-                .build())
+            .post(formBuilder.build())
         );
-        assertThat(actual[0], equalTo("something"));
-        assertThat(actual[1], equalTo("something else i think"));
-        assertThat(actual[2], equalTo(""));
+        assertThat(actual, equalTo(vals));
     }
 
     @Test public void formParametersWithMultipleValuesCanBeGot() throws MalformedURLException {

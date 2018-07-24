@@ -18,7 +18,7 @@ A modern Java web server, based on Netty. Currently in beta.
 <dependency>
     <groupId>io.muserver</groupId>
     <artifactId>mu-server</artifactId>
-    <version>0.11.5</version>
+    <version>0.12.1</version>
 </dependency>
 ````
 
