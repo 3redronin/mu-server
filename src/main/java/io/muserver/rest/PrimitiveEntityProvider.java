@@ -65,9 +65,7 @@ class PrimitiveEntityProvider<T> implements MessageBodyWriter<T>, MessageBodyRea
     }
 
     public long getSize(T content, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
-        int length = toBytes(content, mediaType).length;
-        System.out.println("length = " + length + " for " + content);
-        return length;
+        return toBytes(content, mediaType).length;
     }
 
     public void writeTo(T content, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException, WebApplicationException {

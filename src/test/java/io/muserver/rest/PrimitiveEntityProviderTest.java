@@ -1,7 +1,6 @@
 package io.muserver.rest;
 
 import io.muserver.MuServer;
-import io.muserver.MuServerBuilder;
 import okhttp3.MediaType;
 import okhttp3.RequestBody;
 import okhttp3.Response;
@@ -13,6 +12,8 @@ import javax.ws.rs.POST;
 import javax.ws.rs.Path;
 import java.io.IOException;
 
+import static io.muserver.MuServerBuilder.httpServer;
+import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
@@ -34,7 +35,7 @@ public class PrimitiveEntityProviderTest {
                 return value;
             }
         }
-        startServer(new Sample());
+        this.server = httpServer().addHandler(restHandler(new Sample())).start();
         check(true);
         check(false);
         checkNoBody();
@@ -49,7 +50,7 @@ public class PrimitiveEntityProviderTest {
                 return value;
             }
         }
-        startServer(new Sample());
+        this.server = httpServer().addHandler(restHandler(new Sample())).start();
         check(Integer.MAX_VALUE);
         check(Integer.MIN_VALUE);
         check(0);
@@ -67,7 +68,7 @@ public class PrimitiveEntityProviderTest {
                 return value;
             }
         }
-        startServer(new Sample());
+        this.server = httpServer().addHandler(restHandler(new Sample())).start();
         check(Short.MAX_VALUE);
         check(Short.MIN_VALUE);
         check((short)0);
@@ -85,7 +86,7 @@ public class PrimitiveEntityProviderTest {
                 return value;
             }
         }
-        startServer(new Sample());
+        this.server = httpServer().addHandler(restHandler(new Sample())).start();
         check(Long.MAX_VALUE);
         check(Long.MIN_VALUE);
         check((long)0);
@@ -103,7 +104,7 @@ public class PrimitiveEntityProviderTest {
                 return value;
             }
         }
-        startServer(new Sample());
+        this.server = httpServer().addHandler(restHandler(new Sample())).start();
         check(Character.MAX_VALUE);
         check('好');
         check('�');
@@ -122,7 +123,7 @@ public class PrimitiveEntityProviderTest {
                 return value;
             }
         }
-        startServer(new Sample());
+        this.server = httpServer().addHandler(restHandler(new Sample())).start();
         check(Byte.MAX_VALUE);
         check(Byte.MIN_VALUE);
         check((byte)0);
@@ -139,7 +140,7 @@ public class PrimitiveEntityProviderTest {
                 return value;
             }
         }
-        startServer(new Sample());
+        this.server = httpServer().addHandler(restHandler(new Sample())).start();
         check(Float.MAX_VALUE);
         check(Float.MIN_VALUE);
         check((float)0);
@@ -157,7 +158,7 @@ public class PrimitiveEntityProviderTest {
                 return value;
             }
         }
-        startServer(new Sample());
+        this.server = httpServer().addHandler(restHandler(new Sample())).start();
         check(Double.MAX_VALUE);
         check(Double.MIN_VALUE);
         check((double)0);
@@ -175,7 +176,7 @@ public class PrimitiveEntityProviderTest {
                 return 123;
             }
         }
-        startServer(new Sample());
+        this.server = httpServer().addHandler(restHandler(new Sample())).start();
         try (Response resp = call(request()
             .url(server.uri().resolve("/samples").toString())
         )) {
@@ -187,11 +188,13 @@ public class PrimitiveEntityProviderTest {
 
 
     private void check(Object value) throws IOException {
+        long start = System.currentTimeMillis();
         String content = String.valueOf(value);
         try (Response resp = call(request()
             .post(RequestBody.create(MediaType.parse("text/plain;charset=UTF-8"), content))
             .url(server.uri().resolve("/samples").toString())
         )) {
+            System.out.println("Took "+ (System.currentTimeMillis() - start) + "ms for "+ value);
             assertThat(resp.code(), equalTo(200));
             assertThat(resp.header("Content-Type"), equalTo("text/plain;charset=UTF-8"));
             assertThat(resp.header("Content-Length"), equalTo("" + value.toString().getBytes(UTF_8).length));
@@ -208,10 +211,6 @@ public class PrimitiveEntityProviderTest {
         }
     }
 
-
-    private void startServer(Object restResource) {
-        this.server = MuServerBuilder.httpsServer().addHandler(RestHandlerBuilder.restHandler(restResource).build()).start();
-    }
 
     @After
     public void stop() {
