@@ -45,7 +45,7 @@ public class UploadTest {
 
             }).start();
 
-        Response resp = call(request()
+        try (Response resp = call(request()
             .url(server.uri().resolve("/upload").toString())
             .post(new MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
@@ -54,14 +54,14 @@ public class UploadTest {
                 .addPart(Headers.of("Content-Disposition", "form-data; name=\"image\"; filename=\"guangzhou.jpeg\""),
                     RequestBody.create(MediaType.parse("image/jpeg"), guangzhou))
                 .build())
-        );
-
-        assertThat(resp.code(), is(200));
-        assertThat(resp.body().string(), is("World\n" +
-            "the value / with / stuff\n" +
-            "twoWaysToGetFileIsSame=true\n" +
-            "guangzhou.jpeg is 372987 bytes\n" +
-            "non-existent: null"));
+        )) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), is("World\n" +
+                "the value / with / stuff\n" +
+                "twoWaysToGetFileIsSame=true\n" +
+                "guangzhou.jpeg is 372987 bytes\n" +
+                "non-existent: null"));
+        }
     }
 
     @After

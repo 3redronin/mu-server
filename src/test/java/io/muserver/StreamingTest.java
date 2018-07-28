@@ -5,17 +5,14 @@ import org.junit.After;
 import org.junit.Test;
 import scaffolding.MuAssert;
 
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CountDownLatch;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Arrays.asList;
-import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static scaffolding.ClientUtils.*;
@@ -35,10 +32,11 @@ public class StreamingTest {
 					return true;
 				}).start();
 
-		Response resp = call(request().url(server.httpUri().toString()));
-
-		String actual = resp.body().string();
-		assertThat(actual, equalTo(String.format("Hello, world%nWhat's happening?")));
+        String actual;
+        try (Response resp = call(request().url(server.httpUri().toString()))) {
+            actual = resp.body().string();
+        }
+        assertThat(actual, equalTo(String.format("Hello, world%nWhat's happening?")));
 	}
 
 	@Test public void requestDataCanBeReadFromTheInputStream() throws Exception {
@@ -58,12 +56,12 @@ public class StreamingTest {
 				}).start();
 
 		StringBuffer sentData = new StringBuffer();
-		Response resp = call(request()
-				.url(server.httpUri().toString())
-				.post(largeRequestBody(sentData)));
-
-		String actual = new String(resp.body().bytes(), UTF_8);
-		assertThat(actual, equalTo(sentData.toString()));
+        try (Response resp = call(request()
+            .url(server.httpUri().toString())
+            .post(largeRequestBody(sentData)))) {
+            String actual = new String(resp.body().bytes(), UTF_8);
+            assertThat(actual, equalTo(sentData.toString()));
+        }
 	}
 
 	@Test public void theWholeRequestBodyCanBeReadAsAStringWithABlockingCall() throws Exception {
@@ -74,11 +72,11 @@ public class StreamingTest {
 				}).start();
 
 		StringBuffer sentData = new StringBuffer();
-		Response resp = call(request()
-				.url(server.httpUri().toString())
-				.post(largeRequestBody(sentData)));
-
-		assertThat(resp.body().string(), equalTo(sentData.toString()));
+        try (Response resp = call(request()
+            .url(server.httpUri().toString())
+            .post(largeRequestBody(sentData)))) {
+            assertThat(resp.body().string(), equalTo(sentData.toString()));
+        }
 	}
 
 	@Test public void thereIsNoInputStreamIfThereIsNoRequestBody() throws Exception {
@@ -90,7 +88,8 @@ public class StreamingTest {
 					return true;
 				}).start();
 
-		call(request().url(server.httpUri().toString()));
+        try (Response ignored = call(request().url(server.httpUri().toString()))) {
+        }
 		assertThat(actual, equalTo(asList("Not Present", "Request body: ")));
 	}
 

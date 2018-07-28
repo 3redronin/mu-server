@@ -29,7 +29,7 @@ public class ClientUtils {
         return new OkHttpClient.Builder()
             .retryOnConnectionFailure(false)
             .hostnameVerifier((hostname, session) -> true)
-            .readTimeout(isDebug ? 180 : 120, TimeUnit.SECONDS)
+            .readTimeout(isDebug ? 180 : 20, TimeUnit.SECONDS)
             .sslSocketFactory(sslContextForTesting(veryTrustingTrustManager).getSocketFactory(), veryTrustingTrustManager);
     }
 

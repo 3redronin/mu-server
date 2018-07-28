@@ -36,9 +36,9 @@ public class HeadersTest {
 
 		String randomValue = UUID.randomUUID().toString();
 
-		Response resp = call(xSomethingHeader(randomValue));
-
-		assertThat(resp.header("X-Response"), equalTo(randomValue));
+        try (Response resp = call(xSomethingHeader(randomValue))) {
+            assertThat(resp.header("X-Response"), equalTo(randomValue));
+        }
 	}
 
 	@Test public void aHandlerCanChangeTheHeadersOfASubsequentHandler() {
@@ -57,8 +57,9 @@ public class HeadersTest {
 				.start();
 
 
-		Response resp = call(xSomethingHeader("OriginalValue"));
-		assertThat(resp.header("X-Response"), equalTo(randomValue));
+        try (Response resp = call(xSomethingHeader("OriginalValue"))) {
+            assertThat(resp.header("X-Response"), equalTo(randomValue));
+        }
 	}
 
 	@Test public void largeHeadersAreFineIfConfigured() {
@@ -70,8 +71,9 @@ public class HeadersTest {
 				}).start();
 
 		String bigString = randomStringOfLength(32000);
-		Response resp = call(xSomethingHeader(bigString));
-		assertThat(resp.header("X-Something"), equalTo(bigString));
+        try (Response resp = call(xSomethingHeader(bigString))) {
+            assertThat(resp.header("X-Something"), equalTo(bigString));
+        }
 	}
 
 	@Test public void urlsThatAreTooLongAreRejected() throws MalformedURLException {
@@ -84,9 +86,9 @@ public class HeadersTest {
 					return true;
 				}).start();
 
-		Response resp = call(request().url(server.httpUri().resolve("/this-is-much-longer-than-that-value-allowed-by-the-config-above-i-think").toURL()));
-		resp.close();
-		assertThat(resp.code(), is(414));
+        try (Response resp = call(request().url(server.httpUri().resolve("/this-is-much-longer-than-that-value-allowed-by-the-config-above-i-think").toURL()))) {
+            assertThat(resp.code(), is(414));
+        }
 		assertThat(handlerHit.get(), is(false));
 	}
 
@@ -98,10 +100,10 @@ public class HeadersTest {
 					return true;
 				}).start();
 
-		Response resp = call(xSomethingHeader(randomStringOfLength(1025)));
-		resp.close();
-		assertThat(resp.code(), is(431));
-		assertThat(resp.header("X-Something"), is(nullValue()));
+        try (Response resp = call(xSomethingHeader(randomStringOfLength(1025)))) {
+            assertThat(resp.code(), is(431));
+            assertThat(resp.header("X-Something"), is(nullValue()));
+        }
 	}
 
 	@Test public void ifXForwardedHeadersAreSpecifiedThenRequestUriUsesThem() {
@@ -115,12 +117,13 @@ public class HeadersTest {
 					return true;
 				}).start();
 
-		call(request()
-				.header("X-Forwarded-Proto", "https")
-				.header("X-Forwarded-Host", "www.example.org")
-				.header("X-Forwarded-Port", "443")
-				.url(server.httpUri().resolve("/blah?query=value").toString()));
-		assertThat(actual[1].toString(), equalTo("http://localhost:12752/blah?query=value"));
+        try (Response ignored = call(request()
+            .header("X-Forwarded-Proto", "https")
+            .header("X-Forwarded-Host", "www.example.org")
+            .header("X-Forwarded-Port", "443")
+            .url(server.httpUri().resolve("/blah?query=value").toString()))) {
+        }
+        assertThat(actual[1].toString(), equalTo("http://localhost:12752/blah?query=value"));
 		assertThat(actual[0].toString(), equalTo("https://www.example.org/blah?query=value"));
 	}
 
@@ -134,11 +137,12 @@ public class HeadersTest {
             }).start();
 
 
-        Response resp = call(request().url(server.httpUri().toString()));
-        assertThat(resp.code(), is(200));
-        assertThat(resp.header("X-Blah"), is("ha"));
-        assertThat(resp.header("Content-Length"), is("0"));
-        assertThat(resp.header("Transfer-Encoding"), is(nullValue()));
+        try (Response resp = call(request().url(server.httpUri().toString()))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.header("X-Blah"), is("ha"));
+            assertThat(resp.header("Content-Length"), is("0"));
+            assertThat(resp.header("Transfer-Encoding"), is(nullValue()));
+        }
     }
 
     @Test public void ifOutputStreamUsedThenTransferEncodingIsChunked() {
@@ -151,11 +155,11 @@ public class HeadersTest {
                 return true;
             }).start();
 
-        Response resp = call(request().url(server.httpUri().toString()));
-        resp.close();
-        assertThat(resp.code(), is(200));
-        assertThat(resp.header("Content-Length"), is(nullValue()));
-        assertThat(resp.header("Transfer-Encoding"), is("chunked"));
+        try (Response resp = call(request().url(server.httpUri().toString()))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.header("Content-Length"), is(nullValue()));
+            assertThat(resp.header("Transfer-Encoding"), is("chunked"));
+        }
     }
 
     @Test public void aRequestHasXForwardHostHeaderDontThrowException() throws IOException {

@@ -1,6 +1,7 @@
 package io.muserver;
 
 import okhttp3.FormBody;
+import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.MuAssert;
@@ -32,8 +33,9 @@ public class ParametersTest {
 			return true;
 		}).start();
 
-		call(request().url(http("/something/here.html?value1=something&value1=somethingAgain&value2=something%20else+i+think")));
-		assertThat(actual[0], equalTo("something"));
+        try (Response ignored = call(request().url(http("/something/here.html?value1=something&value1=somethingAgain&value2=something%20else+i+think")))) {
+        }
+        assertThat(actual[0], equalTo("something"));
 		assertThat(actual[1], equalTo("something else i think"));
 		assertThat(actual[2], equalTo(""));
 		assertThat(actual[3], equalTo("/something/here.html"));
@@ -48,7 +50,8 @@ public class ParametersTest {
 			return true;
 		}).start();
 
-		call(request().url(http("/something/here.html?value1=something&value1=somethingAgain&value2=something%20else+i+think")));
+        try (Response ignored = call(request().url(http("/something/here.html?value1=something&value1=somethingAgain&value2=something%20else+i+think")))) {
+        }
 		assertThat(actual[0], equalTo(asList("something", "somethingAgain")));
 		assertThat(actual[1], equalTo(asList("something else i think")));
 		assertThat(actual[2], equalTo(Collections.<String>emptyList()));
@@ -74,10 +77,11 @@ public class ParametersTest {
         for (int i = 0; i < vals.size(); i++) {
             formBuilder.add("theNameOfTheFormParameter_" + i, vals.get(i));
         }
-        call(request()
+        try (Response ignored = call(request()
             .url(http(str))
             .post(formBuilder.build())
-        );
+        )) {
+        }
         assertThat(actual, equalTo(vals));
     }
 
@@ -90,14 +94,15 @@ public class ParametersTest {
             return true;
         }).start();
 
-        call(request()
+        try (Response ignored = call(request()
             .url(http("/something/here.html?value1=unrelated"))
             .post(new FormBody.Builder()
                 .add("value1", "something")
                 .add("value1", "somethingAgain")
                 .add("value2", "something else i think")
                 .build())
-        );
+        )) {
+        }
         assertThat(actual[0], equalTo(asList("something", "somethingAgain")));
         assertThat(actual[1], equalTo(asList("something else i think")));
         assertThat(actual[2], equalTo(Collections.<String>emptyList()));
@@ -115,12 +120,13 @@ public class ParametersTest {
             return true;
         }).start();
 
-        call(request()
+        try (Response ignored = call(request()
             .url(server.httpUri().toString())
             .post(new FormBody.Builder()
                 .add("blah", "something")
                 .build())
-        );
+        )) {
+        }
         assertThat(actual[0], instanceOf(IllegalStateException.class));
         assertThat(actual[0].getMessage(), equalTo("The body of the request message cannot be read twice. This can happen when calling any 2 of inputStream(), readBodyAsString(), or form() methods."));
     }

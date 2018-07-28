@@ -23,8 +23,9 @@ public class HttpsTest {
             })
             .start();
 
-        Response resp = call(request().url(server.httpsUri().toString()));
-        assertThat(resp.body().string(), equalTo("This is encrypted and the URL is https://localhost:9443/"));
+        try (Response resp = call(request().url(server.httpsUri().toString()))) {
+            assertThat(resp.body().string(), equalTo("This is encrypted and the URL is https://localhost:9443/"));
+        }
     }
 
     @Test public void httpIsNotAvailableUnlessRequested() {

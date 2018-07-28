@@ -184,9 +184,9 @@ public class ResourceHandlerTest {
                 .build())
             .start();
 
-        Response badOne = call(request().url(server.httpsUri().resolve("/index.html").toURL()));
-        assertThat(badOne.code(), is(404));
-        badOne.close();
+        try (Response badOne = call(request().url(server.httpsUri().resolve("/index.html").toURL()))) {
+            assertThat(badOne.code(), is(404));
+        }
 
         try (Response resp = call(request().url(server.httpsUri().resolve("/blah/index.html").toURL()))) {
             assertThat(resp.code(), is(200));
