@@ -1,6 +1,7 @@
 package io.muserver;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
@@ -67,9 +68,7 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
                         // TODO reject if body size too large
                         ctx.writeAndFlush(new DefaultFullHttpResponse(HTTP_1_1, HttpResponseStatus.CONTINUE));
                     } else {
-                        // TODO set values correctly
-                        ctx.writeAndFlush(new DefaultFullHttpResponse(HTTP_1_1, HttpResponseStatus.EXPECTATION_FAILED))
-                            .addListener(ChannelFutureListener.CLOSE);
+                        sendSimpleResponse(ctx, "417 Expectation Failed", HttpResponseStatus.EXPECTATION_FAILED.code());
                         return;
                     }
                 }
@@ -138,10 +137,15 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
                 message = "URI too long";
             }
         }
+        sendSimpleResponse(ctx, message, code).addListener(ChannelFutureListener.CLOSE);
+        ;
+    }
+
+    private static ChannelFuture sendSimpleResponse(ChannelHandlerContext ctx, String message, int code) {
         FullHttpResponse response = new DefaultFullHttpResponse(HTTP_1_1, HttpResponseStatus.valueOf(code), copiedBuffer(message.getBytes(UTF_8)));
         response.headers().set(HeaderNames.CONTENT_TYPE, ContentTypes.TEXT_PLAIN);
         response.headers().set(HeaderNames.CONTENT_LENGTH, message.length());
-        ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
+        return ctx.writeAndFlush(response);
     }
 
 }
