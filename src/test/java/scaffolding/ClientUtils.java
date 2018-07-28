@@ -4,7 +4,9 @@ import io.netty.util.ResourceLeakDetector;
 import okhttp3.*;
 import okio.BufferedSink;
 
-import javax.net.ssl.*;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.util.concurrent.TimeUnit;
@@ -27,7 +29,7 @@ public class ClientUtils {
         return new OkHttpClient.Builder()
             .retryOnConnectionFailure(false)
             .hostnameVerifier((hostname, session) -> true)
-            .readTimeout(isDebug ? 180 : 20, TimeUnit.SECONDS)
+            .readTimeout(isDebug ? 180 : 120, TimeUnit.SECONDS)
             .sslSocketFactory(sslContextForTesting(veryTrustingTrustManager).getSocketFactory(), veryTrustingTrustManager);
     }
 
