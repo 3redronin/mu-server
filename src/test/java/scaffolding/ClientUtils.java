@@ -60,6 +60,8 @@ public class ClientUtils {
 
     public static Response call(Request.Builder request) {
         try {
+            ConnectionPool cp = client.connectionPool();
+            System.out.println("Going to call with "+ cp.connectionCount() + " - "+ cp.idleConnectionCount());
             return client.newCall(request.build()).execute();
         } catch (IOException e) {
             throw new RuntimeException("Error while calling " + request, e);
