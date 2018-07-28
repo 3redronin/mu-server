@@ -1,10 +1,11 @@
 package io.muserver;
 
-import io.netty.handler.codec.DateFormatter;
-
 import java.io.*;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.Date;
 import java.util.Objects;
 import java.util.stream.Stream;
@@ -164,7 +165,9 @@ public class Mutils {
      */
     public static String toHttpDate(Date date) {
         notNull("date", date);
-        return DateFormatter.format(date);
+        return DateTimeFormatter.RFC_1123_DATE_TIME
+            .withZone(ZoneOffset.UTC)
+            .format(Instant.ofEpochMilli(date.getTime()));
     }
 
     /**

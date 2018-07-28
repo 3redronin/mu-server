@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Mu-Server API Documentation</title>
+</head>
+<body>
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+                            ccccccccccccccccccccccccccccccccccccccccccccccc
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+                            ccccccccccccccccccccccccccccccccccccccccccccccc
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+                            ccccccccccccccccccccccccccccccccccccccccccccccc
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+                            ccccccccccccccccccccccccccccccccccccccccccccccc
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+                            ccccccccccccccccccccccccccccccccccccccccccccccc
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+                            ccccccccccccccccccccccccccccccccccccccccccccccc
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+                            ccccccccccccccccccccccccccccccccccccccccccccccc
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+                            ccccccccccccccccccccccccccccccccccccccccccccccc
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+                            ccccccccccccccccccccccccccccccccccccccccccccccc
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+                            ccccccccccccccccccccccccccccccccccccccccccccccc
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+                            ccccccccccccccccccccccccccccccccccccccccccccccc
+<h1>Mu-Server API Documentation</h1>
+
+<p>Mu-Server is a modern, lightweight web server library for Java.</p>
+<p>An HTTP server is created by creating a server builder, such as <a href="io/muserver/MuServerBuilder.html#httpsServer--"><code>MuServerBuilder.httpsServer()</code></a>
+    and then calling <a href="io/muserver/MuServerBuilder.html#start--"><code>MuServerBuilder.start()</code></a>.</p>
+<p>Handlers are added to the builder with the <a href="io/muserver/MuServerBuilder.html#addHandler-io.muserver.MuHandler-"><code>MuServerBuilder.addHandler(io.muserver.MuHandler)</code></a>
+    or <a href="io/muserver/MuServerBuilder.html#addHandler-io.muserver.Method-java.lang.String-io.muserver.RouteHandler-"><code>MuServerBuilder.addHandler(io.muserver.Method, java.lang.String, io.muserver.RouteHandler)</code></a>
+    methods.</p>
+<p>Rest resources can be created by using the <a href="io/muserver/rest/RestHandlerBuilder.html#restHandler-java.lang.Object...-"><code>RestHandlerBuilder.restHandler(java.lang.Object...)</code></a>
+    builder.</p>
+
+<h2>Hello, World</h2>
+
+<p>The following creates a server on HTTPS using a self-signed certificate, bound to a random port:</p>
+<pre><code>import io.muserver.MuServer;
+import io.muserver.MuServerBuilder;
+
+public class HelloServer {
+
+    public static void main(String[] args) {
+        MuServer server = MuServerBuilder.httpsServer()
+            .addHandler((request, response) -&gt; {
+                response.write("Hello world");
+                return true;
+            })
+            .start();
+        System.out.println("Server started at " + server.uri());
+    }
+}
+</code></pre>
+<h2>Hello, World</h2>
+
+<p>The following creates a server on HTTPS using a self-signed certificate, bound to a random port:</p>
+<pre><code>import io.muserver.MuServer;
+import io.muserver.MuServerBuilder;
+
+public class HelloServer {
+
+    public static void main(String[] args) {
+        MuServer server = MuServerBuilder.httpsServer()
+            .addHandler((request, response) -&gt; {
+                response.write("Hello world");
+                return true;
+            })
+            .start();
+        System.out.println("Server started at " + server.uri());
+    }
+}
+</code></pre>
+<h2>Hello, World</h2>
+
+<p>The following creates a server on HTTPS using a self-signed certificate, bound to a random port:</p>
+<pre><code>import io.muserver.MuServer;
+import io.muserver.MuServerBuilder;
+
+public class HelloServer {
+
+    public static void main(String[] args) {
+        MuServer server = MuServerBuilder.httpsServer()
+            .addHandler((request, response) -&gt; {
+                response.write("Hello world");
+                return true;
+            })
+            .start();
+        System.out.println("Server started at " + server.uri());
+    }
+}
+</code></pre>
+<h2>Hello, World</h2>
+
+<p>The following creates a server on HTTPS using a self-signed certificate, bound to a random port:</p>
+<pre><code>import io.muserver.MuServer;
+import io.muserver.MuServerBuilder;
+
+public class HelloServer {
+
+    public static void main(String[] args) {
+        MuServer server = MuServerBuilder.httpsServer()
+            .addHandler((request, response) -&gt; {
+                response.write("Hello world");
+                return true;
+            })
+            .start();
+        System.out.println("Server started at " + server.uri());
+    }
+}
+</code></pre>
+<h2>Hello, World</h2>
+
+<p>The following creates a server on HTTPS using a self-signed certificate, bound to a random port:</p>
+<pre><code>import io.muserver.MuServer;
+import io.muserver.MuServerBuilder;
+
+public class HelloServer {
+
+    public static void main(String[] args) {
+        MuServer server = MuServerBuilder.httpsServer()
+            .addHandler((request, response) -&gt; {
+                response.write("Hello world");
+                return true;
+            })
+            .start();
+        System.out.println("Server started at " + server.uri());
+    }
+}
+</code></pre>
+<h2>Hello, World</h2>
+
+<p>The following creates a server on HTTPS using a self-signed certificate, bound to a random port:</p>
+<pre><code>import io.muserver.MuServer;
+import io.muserver.MuServerBuilder;
+
+public class HelloServer {
+
+    public static void main(String[] args) {
+        MuServer server = MuServerBuilder.httpsServer()
+            .addHandler((request, response) -&gt; {
+                response.write("Hello world");
+                return true;
+            })
+            .start();
+        System.out.println("Server started at " + server.uri());
+    }
+}
+</code></pre>
+<h2>Hello, World</h2>
+
+<p>The following creates a server on HTTPS using a self-signed certificate, bound to a random port:</p>
+<pre><code>import io.muserver.MuServer;
+import io.muserver.MuServerBuilder;
+
+public class HelloServer {
+
+    public static void main(String[] args) {
+        MuServer server = MuServerBuilder.httpsServer()
+            .addHandler((request, response) -&gt; {
+                response.write("Hello world");
+                return true;
+            })
+            .start();
+        System.out.println("Server started at " + server.uri());
+    }
+}
+</code></pre>
+<h2>Hello, World</h2>
+
+<p>The following creates a server on HTTPS using a self-signed certificate, bound to a random port:</p>
+<pre><code>import io.muserver.MuServer;
+import io.muserver.MuServerBuilder;
+
+public class HelloServer {
+
+    public static void main(String[] args) {
+        MuServer server = MuServerBuilder.httpsServer()
+            .addHandler((request, response) -&gt; {
+                response.write("Hello world");
+                return true;
+            })
+            .start();
+        System.out.println("Server started at " + server.uri());
+    }
+}
+</code></pre>
+<h2>Hello, World</h2>
+
+<p>The following creates a server on HTTPS using a self-signed certificate, bound to a random port:</p>
+<pre><code>import io.muserver.MuServer;
+import io.muserver.MuServerBuilder;
+
+public class HelloServer {
+
+    public static void main(String[] args) {
+        MuServer server = MuServerBuilder.httpsServer()
+            .addHandler((request, response) -&gt; {
+                response.write("Hello world");
+                return true;
+            })
+            .start();
+        System.out.println("Server started at " + server.uri());
+    }
+}
+</code></pre>
+<h2>Hello, World</h2>
+
+<p>The following creates a server on HTTPS using a self-signed certificate, bound to a random port:</p>
+<pre><code>import io.muserver.MuServer;
+import io.muserver.MuServerBuilder;
+
+public class HelloServer {
+
+    public static void main(String[] args) {
+        MuServer server = MuServerBuilder.httpsServer()
+            .addHandler((request, response) -&gt; {
+                response.write("Hello world");
+                return true;
+            })
+            .start();
+        System.out.println("Server started at " + server.uri());
+    }
+}
+</code></pre>
+
+<h2>More examples</h2>
+
+<p>For more documentation including the Maven artifact information, see <a href="http://muserver.io/" target="_blank">muserver.io</a></p>
+</body>
+</html>

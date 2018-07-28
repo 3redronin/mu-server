@@ -138,7 +138,7 @@ public class MediaTypesTest {
             assertThat(resp.header("Content-Type"), is("text/plain"));
         }
         try (Response resp = call(request().url(server.uri().resolve("/things/int").toString()))) {
-            assertThat(resp.header("Content-Type"), is("text/plain"));
+            assertThat(resp.header("Content-Type"), is("text/plain;charset=UTF-8"));
         }
     }
 

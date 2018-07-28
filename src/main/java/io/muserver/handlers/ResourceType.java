@@ -53,7 +53,7 @@ public class ResourceType {
             .add(HeaderNames.CACHE_CONTROL, "max-age=300")
             .add(HeaderNames.X_CONTENT_TYPE_OPTIONS, HeaderValues.NOSNIFF),
         true, asList("css"));
-    public static final ResourceType TEXT_CONFIG = new ResourceType(ContentTypes.TEXT_PLAIN, noCache(), true, asList("ini", "gitignore", "gitattributes", "cfg"));
+    public static final ResourceType TEXT_PLAIN = new ResourceType(ContentTypes.TEXT_PLAIN, noCache(), true, asList("txt", "ini", "gitignore", "gitattributes", "cfg"));
     public static final ResourceType TEXT_CSV = new ResourceType(ContentTypes.TEXT_CSV, noCache(), true, asList("csv"));
     public static final ResourceType APPLICATION_MSWORD = new ResourceType(ContentTypes.APPLICATION_MSWORD, shortCache(), false, asList("doc"));
     public static final ResourceType APPLICATION_VND_MS_FONTOBJECT = new ResourceType(ContentTypes.APPLICATION_VND_MS_FONTOBJECT, shortCache(), false, asList("eot"));
@@ -77,6 +77,7 @@ public class ResourceType {
     public static final ResourceType APPLICATION_VND_OASIS_OPENDOCUMENT_SPREADSHEET = new ResourceType(ContentTypes.APPLICATION_VND_OASIS_OPENDOCUMENT_SPREADSHEET, shortCache(), false, asList("ods"));
     public static final ResourceType APPLICATION_VND_OASIS_OPENDOCUMENT_TEXT = new ResourceType(ContentTypes.APPLICATION_VND_OASIS_OPENDOCUMENT_TEXT, shortCache(), true, asList("odt"));
     public static final ResourceType AUDIO_OGG = new ResourceType(ContentTypes.AUDIO_OGG, shortCache(), false, asList("oga"));
+    public static final ResourceType VIDEO_X_MATROSKA = new ResourceType(ContentTypes.VIDEO_X_MATROSKA, shortCache(), false, asList("mkv"));
     public static final ResourceType VIDEO_OGG = new ResourceType(ContentTypes.VIDEO_OGG, shortCache(), false, asList("ogv"));
     public static final ResourceType APPLICATION_OGG = new ResourceType(ContentTypes.APPLICATION_OGG, shortCache(), false, asList("ogx"));
     public static final ResourceType FONT_OTF = new ResourceType(ContentTypes.FONT_OTF, shortCache(), true, asList("otf"));

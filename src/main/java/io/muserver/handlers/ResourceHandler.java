@@ -51,13 +51,13 @@ public class ResourceHandler implements MuHandler {
             response.redirect(goingTo);
         } else {
             String filename = requestPath.substring(requestPath.lastIndexOf('/'));
-            addHeaders(response, filename);
+            addHeaders(response, filename, provider.fileSize());
             provider.sendTo(response, request.method() != Method.HEAD);
         }
         return true;
     }
 
-    private void addHeaders(MuResponse response, String fileName) {
+    private void addHeaders(MuResponse response, String fileName, Long fileSize) {
         int ind = fileName.lastIndexOf('.');
         ResourceType type;
         if (ind == -1) {
@@ -68,6 +68,9 @@ public class ResourceHandler implements MuHandler {
         }
         response.contentType(type.mimeType);
         response.headers().set(HeaderNames.VARY, "accept-encoding");
+        if (fileSize != null) {
+            response.headers().set(HeaderNames.CONTENT_LENGTH, fileSize);
+        }
         response.headers().add(type.headers);
     }
 

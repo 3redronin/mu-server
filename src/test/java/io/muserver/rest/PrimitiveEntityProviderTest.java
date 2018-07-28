@@ -104,6 +104,8 @@ public class PrimitiveEntityProviderTest {
         }
         startServer(new Sample());
         check(Character.MAX_VALUE);
+        check('好');
+        check('�');
         check(Character.MIN_VALUE);
         check('h');
         check('i');
@@ -177,7 +179,7 @@ public class PrimitiveEntityProviderTest {
             .url(server.uri().resolve("/samples").toString())
         )) {
             assertThat(resp.code(), equalTo(200));
-            assertThat(resp.header("Content-Type"), equalTo("text/plain"));
+            assertThat(resp.header("Content-Type"), equalTo("text/plain;charset=UTF-8"));
             assertThat(resp.body().string(), equalTo("123"));
         }
     }
@@ -186,11 +188,11 @@ public class PrimitiveEntityProviderTest {
     private void check(Object value) throws IOException {
         String content = String.valueOf(value);
         try (Response resp = call(ClientUtils.request()
-            .post(RequestBody.create(MediaType.parse("text/plain"), content))
+            .post(RequestBody.create(MediaType.parse("text/plain;charset=UTF-8"), content))
             .url(server.uri().resolve("/samples").toString())
         )) {
             assertThat(resp.code(), equalTo(200));
-            assertThat(resp.header("Content-Type"), equalTo("text/plain"));
+            assertThat(resp.header("Content-Type"), equalTo("text/plain;charset=UTF-8"));
             assertThat(resp.body().string(), equalTo(content));
         }
     }

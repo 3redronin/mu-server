@@ -9,7 +9,8 @@ import java.util.Collections;
 import java.util.stream.Collectors;
 
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.*;
+import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.sameInstance;
 
 public class CombinedMediaTypeTest {
     private final MediaTypeHeaderDelegate delegate = new MediaTypeHeaderDelegate();
@@ -22,6 +23,14 @@ public class CombinedMediaTypeTest {
         assertThat(s.q, equalTo(1.0));
         assertThat(s.qs, equalTo(1.0));
         assertThat(s.d, equalTo(1));
+    }
+
+
+    @Test
+    public void serverEncodingSurvives() {
+        CombinedMediaType s = CombinedMediaType.s(delegate.fromString("text/*"), delegate.fromString("text/html; charset=UTF-8"));
+        assertThat(s.type, equalTo("text"));
+        assertThat(s.subType, equalTo("html"));
     }
 
     @Test
@@ -80,7 +89,7 @@ public class CombinedMediaTypeTest {
     }
 
     private static CombinedMediaType t(String type, String subType, double q, double qs, int d) {
-        return new CombinedMediaType(type, subType, q, qs, d);
+        return new CombinedMediaType(type, subType, q, qs, d, null);
     }
 
 

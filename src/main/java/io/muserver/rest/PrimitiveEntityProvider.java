@@ -21,7 +21,7 @@ import java.util.function.Function;
 
 import static java.util.Arrays.asList;
 
-@Produces("text/plain")
+@Produces("text/plain; charset=UTF-8")
 @Consumes("text/plain")
 class PrimitiveEntityProvider<T> implements MessageBodyWriter<T>, MessageBodyReader<T> {
 
@@ -65,7 +65,8 @@ class PrimitiveEntityProvider<T> implements MessageBodyWriter<T>, MessageBodyRea
     }
 
     public long getSize(T content, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
-        return content.toString().length();
+        Charset charset = EntityProviders.charsetFor(mediaType);
+        return String.valueOf(content).getBytes(charset).length;
     }
 
     public void writeTo(T content, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException, WebApplicationException {

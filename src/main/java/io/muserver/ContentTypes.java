@@ -310,5 +310,10 @@ public class ContentTypes {
      */
     public static final CharSequence TEXT_EVENT_STREAM = AsciiString.cached("text/event-stream");
 
+    /**
+     * MKV video files {@code "video/x-matroska"}
+     */
+    public static final CharSequence VIDEO_X_MATROSKA = AsciiString.cached("video/x-matroska");
+
     private ContentTypes() {}
 }

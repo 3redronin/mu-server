@@ -46,6 +46,7 @@ public class AsynchronousProcessingTest {
 
     @Test
     public void canUseTheSuspendedAnnotationToGetAnAsyncResponseObject() throws Exception {
+        CountDownLatch resumedLatch = new CountDownLatch(1);
         AsyncResponse[] captured = new AsyncResponse[1];
         @Path("samples")
         class Sample {
@@ -56,6 +57,7 @@ public class AsynchronousProcessingTest {
                     MuAssert.sleep(100);
                     javax.ws.rs.core.Response resp = javax.ws.rs.core.Response.status(202).entity("Suspended/cancelled/done: " + ar.isSuspended() + ar.isCancelled() + ar.isDone()).build();
                     ar.resume(resp);
+                    resumedLatch.countDown();
                 });
             }
         }
@@ -66,6 +68,8 @@ public class AsynchronousProcessingTest {
         }
         assertThat(captured[0].isSuspended(), is(false));
         assertThat(captured[0].isCancelled(), is(false));
+
+        assertThat("Timed out waiting for resumption", resumedLatch.await(1, TimeUnit.MINUTES));
         assertThat(captured[0].isDone(), is(true));
     }
 

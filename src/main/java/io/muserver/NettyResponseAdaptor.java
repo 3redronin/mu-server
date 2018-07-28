@@ -15,6 +15,7 @@ import java.io.PrintWriter;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.Date;
 import java.util.concurrent.Future;
 
 import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
@@ -38,6 +39,8 @@ class NettyResponseAdaptor implements MuResponse {
         this.ctx = ctx;
         this.request = request;
         this.isHead = request.method() == Method.HEAD;
+
+        headers.set(HeaderNames.DATE, Mutils.toHttpDate(new Date()));
     }
 
     public int status() {
@@ -57,13 +60,10 @@ class NettyResponseAdaptor implements MuResponse {
         }
         outputState = OutputState.CHUNKING;
         HttpResponse response = isHead ? new EmptyHttpResponse(httpStatus()) : new DefaultHttpResponse(HTTP_1_1, httpStatus(), false);
-
-
         writeHeaders(response, headers, request);
-
-        response.headers().set(HttpHeaderNames.TRANSFER_ENCODING, HttpHeaderValues.CHUNKED);
-        response.headers().remove(HttpHeaderNames.CONTENT_LENGTH);
-
+        if (!response.headers().contains(HeaderNames.CONTENT_LENGTH)) {
+            response.headers().set(HttpHeaderNames.TRANSFER_ENCODING, HttpHeaderValues.CHUNKED);
+        }
         lastAction = ctx.writeAndFlush(response);
     }
 

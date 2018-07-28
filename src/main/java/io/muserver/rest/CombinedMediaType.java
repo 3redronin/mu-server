@@ -8,7 +8,7 @@ import java.util.Objects;
  */
 class CombinedMediaType implements Comparable<CombinedMediaType> {
 
-    public static CombinedMediaType NONMATCH = new CombinedMediaType(null, null, 1.0, 1.0, 0);
+    public static CombinedMediaType NONMATCH = new CombinedMediaType(null, null, 1.0, 1.0, 0, null);
 
     public final String type;
     public final String subType;
@@ -17,8 +17,9 @@ class CombinedMediaType implements Comparable<CombinedMediaType> {
     public final int d;
     public final boolean isWildcardType;
     public final boolean isWildcardSubtype;
+    public final String charset;
 
-    CombinedMediaType(String type, String subType, double q, double qs, int d) {
+    CombinedMediaType(String type, String subType, double q, double qs, int d, String charset) {
         this.type = type;
         this.subType = subType;
         this.q = q;
@@ -26,6 +27,7 @@ class CombinedMediaType implements Comparable<CombinedMediaType> {
         this.d = d;
         this.isWildcardType = "*".equals(type);
         this.isWildcardSubtype = "*".equals(subType);
+        this.charset = charset;
     }
 
     public boolean isConcrete() {
@@ -47,7 +49,7 @@ class CombinedMediaType implements Comparable<CombinedMediaType> {
         if (clientType.isWildcardSubtype() ^ serverType.isWildcardSubtype()) {
             d++;
         }
-        return new CombinedMediaType(type, sub, q, qs, d);
+        return new CombinedMediaType(type, sub, q, qs, d, serverType.getParameters().get("charset"));
     }
 
     @Override

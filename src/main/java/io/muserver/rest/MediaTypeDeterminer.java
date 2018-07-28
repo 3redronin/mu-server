@@ -81,7 +81,7 @@ class MediaTypeDeterminer {
         // 8. For each member of M,m: • If m is a concrete type, set Mselected = m, finish.
         for (CombinedMediaType mediaType : m) {
             if (mediaType.isConcrete()) {
-                return new MediaType(mediaType.type, mediaType.subType);
+                return new MediaType(mediaType.type, mediaType.subType, mediaType.charset);
             }
         }
 
