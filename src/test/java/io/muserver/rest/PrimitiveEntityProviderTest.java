@@ -7,17 +7,18 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
-import scaffolding.ClientUtils;
 
 import javax.ws.rs.GET;
 import javax.ws.rs.POST;
 import javax.ws.rs.Path;
 import java.io.IOException;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static scaffolding.ClientUtils.call;
+import static scaffolding.ClientUtils.request;
 import static scaffolding.MuAssert.stopAndCheck;
 
 public class PrimitiveEntityProviderTest {
@@ -175,7 +176,7 @@ public class PrimitiveEntityProviderTest {
             }
         }
         startServer(new Sample());
-        try (Response resp = call(ClientUtils.request()
+        try (Response resp = call(request()
             .url(server.uri().resolve("/samples").toString())
         )) {
             assertThat(resp.code(), equalTo(200));
@@ -187,17 +188,18 @@ public class PrimitiveEntityProviderTest {
 
     private void check(Object value) throws IOException {
         String content = String.valueOf(value);
-        try (Response resp = call(ClientUtils.request()
+        try (Response resp = call(request()
             .post(RequestBody.create(MediaType.parse("text/plain;charset=UTF-8"), content))
             .url(server.uri().resolve("/samples").toString())
         )) {
             assertThat(resp.code(), equalTo(200));
             assertThat(resp.header("Content-Type"), equalTo("text/plain;charset=UTF-8"));
+            assertThat(resp.header("Content-Length"), equalTo("" + value.toString().getBytes(UTF_8).length));
             assertThat(resp.body().string(), equalTo(content));
         }
     }
     private void checkNoBody() throws IOException {
-        try (Response resp = call(ClientUtils.request()
+        try (Response resp = call(request()
             .post(RequestBody.create(MediaType.parse("text/plain"), ""))
             .url(server.uri().resolve("/samples").toString())
         )) {
