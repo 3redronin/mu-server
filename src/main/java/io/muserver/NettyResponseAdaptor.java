@@ -32,7 +32,7 @@ class NettyResponseAdaptor implements MuResponse {
     private ChunkedHttpOutputStream outputStream;
 
     private enum OutputState {
-        NOTHING, FULL_SENT, CHUNKING
+        NOTHING, FULL_SENT, STREAMING
     }
 
     NettyResponseAdaptor(ChannelHandlerContext ctx, NettyRequestAdapter request) {
@@ -54,11 +54,11 @@ class NettyResponseAdaptor implements MuResponse {
         status = value;
     }
 
-    private void startChunking() {
+    private void startStreaming() {
         if (outputState != OutputState.NOTHING) {
-            throw new IllegalStateException("Cannot start chunking when state is " + outputState);
+            throw new IllegalStateException("Cannot start streaming when state is " + outputState);
         }
-        outputState = OutputState.CHUNKING;
+        outputState = OutputState.STREAMING;
         HttpResponse response = isHead ? new EmptyHttpResponse(httpStatus()) : new DefaultHttpResponse(HTTP_1_1, httpStatus(), false);
         writeHeaders(response, headers, request);
         if (!response.headers().contains(HeaderNames.CONTENT_LENGTH)) {
@@ -76,7 +76,7 @@ class NettyResponseAdaptor implements MuResponse {
 
     public Future<Void> writeAsync(String text) {
         if (outputState == OutputState.NOTHING) {
-            startChunking();
+            startStreaming();
         }
         lastAction = ctx.writeAndFlush(new DefaultHttpContent(textToBuffer(text)));
         return lastAction;
@@ -84,7 +84,7 @@ class NettyResponseAdaptor implements MuResponse {
 
     ChannelFuture write(ByteBuffer data) {
         if (outputState == OutputState.NOTHING) {
-            startChunking();
+            startStreaming();
         }
         lastAction = ctx.writeAndFlush(new DefaultHttpContent(Unpooled.wrappedBuffer(data)));
         return lastAction;
@@ -108,7 +108,7 @@ class NettyResponseAdaptor implements MuResponse {
 
     public void sendChunk(String text) {
         if (outputState == OutputState.NOTHING) {
-            startChunking();
+            startStreaming();
         }
         lastAction = ctx.writeAndFlush(new DefaultHttpContent(textToBuffer(text))).syncUninterruptibly();
     }
@@ -145,7 +145,7 @@ class NettyResponseAdaptor implements MuResponse {
 
     public OutputStream outputStream() {
         if (this.outputStream == null) {
-            startChunking();
+            startStreaming();
             this.outputStream = new ChunkedHttpOutputStream(ctx);
         }
         return this.outputStream;
@@ -174,7 +174,7 @@ class NettyResponseAdaptor implements MuResponse {
                 msg.headers().set(HeaderNames.CONTENT_LENGTH, 0);
             }
             lastAction = ctx.writeAndFlush(msg);
-        } else if (outputState == OutputState.CHUNKING && !isHead) {
+        } else if (outputState == OutputState.STREAMING && !isHead) {
             if (writer != null) {
                 writer.close();
             }
