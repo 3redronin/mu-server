@@ -19,21 +19,19 @@ public class ClientUtils {
     private static final org.slf4j.Logger log = LoggerFactory.getLogger(ClientUtils.class);
 
     public static final OkHttpClient client;
-    public static X509TrustManager veryTrustingTrustManager = veryTrustingTrustManager();
+    private static X509TrustManager veryTrustingTrustManager = veryTrustingTrustManager();
 
     static {
         Logger.getLogger(OkHttpClient.class.getName()).setLevel(Level.FINE);
-        client = newClient().build();
-        ResourceLeakDetector.setLevel(ResourceLeakDetector.Level.PARANOID);
-    }
-
-    public static OkHttpClient.Builder newClient() {
         boolean isDebug = ManagementFactory.getRuntimeMXBean().getInputArguments().toString().contains("jdwp");
-        return new OkHttpClient.Builder()
+        client = new OkHttpClient.Builder()
             .retryOnConnectionFailure(false)
+            .followRedirects(false)
+            .followSslRedirects(false)
             .hostnameVerifier((hostname, session) -> true)
             .readTimeout(isDebug ? 180 : 20, TimeUnit.SECONDS)
-            .sslSocketFactory(sslContextForTesting(veryTrustingTrustManager).getSocketFactory(), veryTrustingTrustManager);
+            .sslSocketFactory(sslContextForTesting(veryTrustingTrustManager).getSocketFactory(), veryTrustingTrustManager).build();
+        ResourceLeakDetector.setLevel(ResourceLeakDetector.Level.PARANOID);
     }
 
     public static RequestBody largeRequestBody(StringBuffer sentData) {
@@ -62,7 +60,7 @@ public class ClientUtils {
     }
 
     public static Response call(Request.Builder request) {
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 1; i++) {
             Request req = request.build();
             try {
                 return client.newCall(req).execute();
@@ -75,7 +73,7 @@ public class ClientUtils {
         throw new RuntimeException("Timed out too many times");
     }
 
-    public static SSLContext sslContextForTesting(TrustManager trustManager) {
+    private static SSLContext sslContextForTesting(TrustManager trustManager) {
         try {
             SSLContext context = SSLContext.getInstance("TLS");
             context.init(null, new TrustManager[]{trustManager}, null);
@@ -85,7 +83,7 @@ public class ClientUtils {
         }
     }
 
-    public static X509TrustManager veryTrustingTrustManager() {
+    private static X509TrustManager veryTrustingTrustManager() {
         return new X509TrustManager() {
             public void checkClientTrusted(java.security.cert.X509Certificate[] chain, String authType) {
             }

@@ -31,7 +31,7 @@ public class CookieTest {
     @Before
     public void setupClient() {
         CookieJar inMemoryCookieJar = new InMemoryCookieJar();
-        client = ClientUtils.newClient()
+        client = ClientUtils.client.newBuilder()
             .cookieJar(inMemoryCookieJar)
             .build();
     }

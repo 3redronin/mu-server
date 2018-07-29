@@ -83,7 +83,15 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
                 }
 
                 boolean handled = false;
-                NettyRequestAdapter muRequest = new NettyRequestAdapter(ctx.channel(), request, serverRef);
+
+                Method method;
+                try {
+                    method = Method.fromNetty(request.method());
+                } catch (IllegalArgumentException e) {
+                    sendSimpleResponse(ctx, "405 Method Not Allowed", 405);
+                    return;
+                }
+                NettyRequestAdapter muRequest = new NettyRequestAdapter(ctx.channel(), request, serverRef, method);
                 stats.onRequestStarted(muRequest);
 
                 AsyncContext asyncContext = new AsyncContext(muRequest, new NettyResponseAdaptor(ctx, muRequest), stats);

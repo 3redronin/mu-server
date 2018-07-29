@@ -31,6 +31,7 @@ import static java.util.Arrays.asList;
 import static java.util.Collections.singletonMap;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.nullValue;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 
@@ -114,6 +115,14 @@ public class BasicAuthTest {
     }
 
     @Test
+    public void callingRootPathDoesNotInvokeBasicAuth() {
+        try (Response resp = call(request().url(server.uri().resolve("/").toString()))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.header("WWW-Authenticate"), is(nullValue()));
+        }
+    }
+
+    @Test
     public void frankCanReadStuff() throws IOException {
         try (Response resp = call(request()
             .url(server.uri().resolve("/things/read").toString())
@@ -165,14 +174,15 @@ public class BasicAuthTest {
 
         server = httpsServer()
             .withHttpsPort(port)
+            .addHandler(
+                RestHandlerBuilder.restHandler(new Thing())
+                    .addRequestFilter(new BasicAuthSecurityFilter("My-App", authenticator, authorizer))
+            )
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.contentType("text/html");
                 response.write(html.toString());
             })
-            .addHandler(
-                RestHandlerBuilder.restHandler(new Thing())
-                    .addRequestFilter(new BasicAuthSecurityFilter("My-App", authenticator, authorizer))
-            ).start();
+            .start();
     }
 
     @Test

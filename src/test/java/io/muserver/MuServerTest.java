@@ -189,6 +189,15 @@ public class MuServerTest {
         }
     }
 
+    @Test
+    public void returnsA405ForUnsupportedMethods() throws IOException {
+        server = httpServer().start();
+        try (Response resp = call(request().method("COFFEE", null).url(server.uri().toString()))) {
+            assertThat(resp.code(), is(405));
+            assertThat(resp.body().string(), containsString("405 Method Not Allowed"));
+        }
+    }
+
     @After
     public void stopIt() {
         scaffolding.MuAssert.stopAndCheck(server);

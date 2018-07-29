@@ -1,7 +1,6 @@
 package io.muserver;
 
 import io.muserver.rest.RestHandlerBuilder;
-import okhttp3.OkHttpClient;
 import okhttp3.Response;
 import org.hamcrest.Matchers;
 import org.junit.After;
@@ -17,7 +16,8 @@ import static io.muserver.MuServerBuilder.httpsServer;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static scaffolding.ClientUtils.*;
+import static scaffolding.ClientUtils.call;
+import static scaffolding.ClientUtils.request;
 
 public class ContextHandlerTest {
 
@@ -104,10 +104,9 @@ public class ContextHandlerTest {
         server = MuServerBuilder.httpsServer()
             .addHandler(context("my-app"))
             .start();
-        OkHttpClient client = newClient().followRedirects(false).build();
 
         URL url = server.uri().resolve("/my-app").toURL();
-        try (Response resp = client.newCall(request().get().url(url).build()).execute()) {
+        try (Response resp = call(request().get().url(url))) {
             assertThat(resp.code(), Matchers.equalTo(302));
             assertThat(resp.header("location"), Matchers.equalTo(server.uri().resolve("/my-app/").toString()));
             assertThat(resp.body().contentLength(), Matchers.equalTo(0L));

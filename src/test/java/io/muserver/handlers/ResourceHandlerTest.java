@@ -3,7 +3,6 @@ package io.muserver.handlers;
 import io.muserver.MuServer;
 import io.muserver.MuServerBuilder;
 import io.muserver.Mutils;
-import okhttp3.OkHttpClient;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
@@ -22,7 +21,8 @@ import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.nullValue;
-import static scaffolding.ClientUtils.*;
+import static scaffolding.ClientUtils.call;
+import static scaffolding.ClientUtils.request;
 import static scaffolding.FileUtils.readResource;
 
 public class ResourceHandlerTest {
@@ -106,15 +106,12 @@ public class ResourceHandlerTest {
             .addHandler(ResourceHandlerBuilder.fileHandler("src/test/resources/sample-static").withPathToServeFrom("/file").build())
             .start();
 
-        OkHttpClient client = newClient().followRedirects(false).build();
-        try (Response resp = client.newCall(request().url(server.uri().resolve("/classpath/images").toURL()).build()).execute()) {
+        try (Response resp = call(request().url(server.uri().resolve("/classpath/images").toURL()))) {
             assertThat(resp.code(), equalTo(302));
             assertThat(resp.header("location"), equalTo(server.uri().resolve("/classpath/images/").toString()));
             assertThat(resp.body().contentLength(), equalTo(0L));
         }
-        // TODO Why does this need a new client?
-        client = newClient().followRedirects(false).build();
-        try (Response resp = client.newCall(request().url(server.uri().resolve("/file/images").toURL()).build()).execute()) {
+        try (Response resp = call(request().url(server.uri().resolve("/file/images").toURL()))) {
             assertThat(resp.code(), equalTo(302));
             assertThat(resp.header("location"), equalTo(server.uri().resolve("/file/images/").toString()));
             assertThat(resp.body().contentLength(), equalTo(0L));
@@ -128,10 +125,9 @@ public class ResourceHandlerTest {
                 .addHandler(ResourceHandlerBuilder.classpathHandler("/sample-static"))
             )
             .start();
-        OkHttpClient client = newClient().followRedirects(false).build();
 
         URL url = server.httpsUri().resolve("/my-app?hello=world").toURL();
-        try (Response resp = client.newCall(request().get().url(url).build()).execute()) {
+        try (Response resp = call(request().get().url(url))) {
             assertThat(resp.code(), equalTo(302));
             assertThat(resp.header("location"), equalTo(server.uri().resolve("/my-app/?hello=world").toString()));
             assertThat(resp.body().contentLength(), equalTo(0L));
@@ -146,14 +142,13 @@ public class ResourceHandlerTest {
             .addHandler(ResourceHandlerBuilder.fileHandler("src/test/resources/sample-static").withPathToServeFrom("/file").build())
             .start();
 
-        OkHttpClient client = newClient().followRedirects(false).build();
-        try (Response resp = client.newCall(request().url(server.uri().resolve("/file/filewithnoextension").toURL()).build()).execute()) {
+        try (Response resp = call(request().url(server.uri().resolve("/file/filewithnoextension").toURL()))) {
             assertThat(resp.code(), equalTo(200));
             assertThat(resp.header("Content-Type"), equalTo("application/octet-stream"));
             assertThat(resp.body().string(), equalTo("I am not a directory"));
         }
 
-        try (Response resp = client.newCall(request().url(server.uri().resolve("/classpath/filewithnoextension").toURL()).build()).execute()) {
+        try (Response resp = call(request().url(server.uri().resolve("/classpath/filewithnoextension").toURL()))) {
             assertThat(resp.code(), equalTo(200));
             assertThat(resp.header("Content-Type"), equalTo("application/octet-stream"));
             assertThat(resp.body().string(), equalTo("I am not a directory"));

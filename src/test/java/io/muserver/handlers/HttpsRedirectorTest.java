@@ -10,7 +10,8 @@ import java.io.IOException;
 import java.util.concurrent.TimeUnit;
 
 import static org.hamcrest.Matchers.equalTo;
-import static org.junit.Assert.*;
+import static org.hamcrest.Matchers.is;
+import static org.junit.Assert.assertThat;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 
@@ -34,8 +35,13 @@ public class HttpsRedirectorTest {
             })
             .start();
 
-        // this test assumes the http client follows redirects
+        String newLocation;
         try (Response resp = call(request().url("http://localhost:12380/"))) {
+            assertThat(resp.code(), is(302));
+            newLocation = resp.header("Location");
+        }
+        try (Response resp = call(request().url(newLocation))) {
+            assertThat(resp.code(), is(200));
             assertThat(resp.body().string(), equalTo("Uri is https://localhost:12443/"));
             assertThat(resp.header("Strict-Transport-Security"), equalTo("max-age=31536000; includeSubDomains"));
         }

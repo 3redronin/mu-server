@@ -50,7 +50,7 @@ class NettyRequestAdapter implements MuRequest {
     private Object state;
     private volatile AsyncHandleImpl asyncHandle;
 
-    NettyRequestAdapter(Channel channel, HttpRequest request, AtomicReference<MuServer> serverRef) {
+    NettyRequestAdapter(Channel channel, HttpRequest request, AtomicReference<MuServer> serverRef, Method method) {
         this.channel = channel;
         this.request = request;
         this.serverRef = serverRef;
@@ -59,7 +59,7 @@ class NettyRequestAdapter implements MuRequest {
         this.uri = getUri(request, serverUri);
         this.relativePath = this.uri.getRawPath();
         this.query = new NettyRequestParameters(new QueryStringDecoder(request.uri(), true));
-        this.method = Method.fromNetty(request.method());
+        this.method = method;
         this.headers = new Headers(request.headers());
     }
 

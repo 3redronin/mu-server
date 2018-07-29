@@ -148,6 +148,7 @@ class NettyResponseAdaptor implements MuResponse {
         writeHeaders(resp, this.headers, request);
         HttpUtil.setContentLength(resp, 0);
         lastAction = ctx.writeAndFlush(resp);
+        outputState = OutputState.FULL_SENT;
     }
 
     public Headers headers() {

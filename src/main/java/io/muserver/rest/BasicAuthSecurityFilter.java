@@ -4,7 +4,6 @@ import io.muserver.Mutils;
 
 import javax.ws.rs.container.ContainerRequestContext;
 import javax.ws.rs.container.ContainerRequestFilter;
-import javax.ws.rs.container.PreMatching;
 import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
@@ -22,7 +21,6 @@ import java.util.Base64;
  * <p>If authentication fails, then the method is still invoked, however {@link SecurityContext#getUserPrincipal()} will
  * return <code>null</code> and {@link SecurityContext#isUserInRole(String)} will return false for any role.</p>
  */
-@PreMatching
 public class BasicAuthSecurityFilter implements ContainerRequestFilter {
     static {
         MuRuntimeDelegate.ensureSet();
