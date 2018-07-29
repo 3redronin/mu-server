@@ -88,8 +88,9 @@ public interface SsePublisher {
      * <p>Note: clients could ignore this value.</p>
      * @param timeToWait The time the client should wait before attempting to reconnect in case of any disconnection.
      * @param unit The unit of time.
+     * @throws IOException Thrown if there is an error writing to the client, for example if the user has closed their browser.
      */
-    void setClientReconnectTime(long timeToWait, TimeUnit unit);
+    void setClientReconnectTime(long timeToWait, TimeUnit unit) throws IOException;
 
     /**
      * <p>Creates a new Server-Sent Events publisher. This is designed by be called from within a MuHandler.</p>
@@ -118,17 +119,17 @@ class SsePublisherImpl implements SsePublisher {
     }
 
     @Override
-    public void send(String message) {
+    public void send(String message) throws IOException {
         send(message, null, null);
     }
 
     @Override
-    public void send(String message, String event) {
+    public void send(String message, String event) throws IOException {
         send(message, event, null);
     }
 
     @Override
-    public void send(String message, String event, String eventID) {
+    public void send(String message, String event, String eventID) throws IOException {
         StringBuilder raw = new StringBuilder();
         if (eventID != null) {
             ensureNoLineBreaks(eventID, "SSE IDs");
@@ -147,11 +148,14 @@ class SsePublisherImpl implements SsePublisher {
         sendChunk(raw.toString());
     }
 
-    private void sendChunk(String text) {
+    private void sendChunk(String text) throws IOException {
         try {
             response.sendChunk(text);
         } catch (Throwable e) {
             close();
+            if (e instanceof IllegalStateException) {
+                throw new IOException(e);
+            }
             throw e;
         }
     }
@@ -168,13 +172,13 @@ class SsePublisherImpl implements SsePublisher {
     }
 
     @Override
-    public void sendComment(String comment) {
+    public void sendComment(String comment) throws IOException {
         ensureNoLineBreaks(comment, "SSE Comments");
         sendChunk(":" + comment + "\n\n");
     }
 
     @Override
-    public void setClientReconnectTime(long timeToWait, TimeUnit unit) {
+    public void setClientReconnectTime(long timeToWait, TimeUnit unit) throws IOException {
         sendChunk("retry: " + unit.toMillis(timeToWait) + '\n');
     }
 }

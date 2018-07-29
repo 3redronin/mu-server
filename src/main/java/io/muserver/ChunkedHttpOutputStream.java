@@ -1,18 +1,17 @@
 package io.muserver;
 
-import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.handler.codec.http.DefaultHttpContent;
 
 import java.io.IOException;
 import java.io.OutputStream;
 
 class ChunkedHttpOutputStream extends OutputStream {
-    private final ChannelHandlerContext ctx;
+    private final NettyResponseAdaptor response;
 
-    ChunkedHttpOutputStream(ChannelHandlerContext ctx) {
-        this.ctx = ctx;
+    boolean isClosed = false;
+
+    ChunkedHttpOutputStream(NettyResponseAdaptor response) {
+        this.response = response;
     }
 
     @Override
@@ -22,9 +21,14 @@ class ChunkedHttpOutputStream extends OutputStream {
 
     @Override
     public void write(byte[] b, int off, int len) throws IOException {
-        ByteBuf data = Unpooled.copiedBuffer(b, off, len);
-        DefaultHttpContent msg = new DefaultHttpContent(data);
-        ctx.writeAndFlush(msg).syncUninterruptibly();
+        if (isClosed) {
+            throw new IOException("Cannot write to closed output stream");
+        }
+        response.write(Unpooled.copiedBuffer(b, off, len), true);
+    }
+
+    public void close() {
+        isClosed = true;
     }
 
 }

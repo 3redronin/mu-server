@@ -3,17 +3,20 @@ package scaffolding;
 import io.netty.util.ResourceLeakDetector;
 import okhttp3.*;
 import okio.BufferedSink;
+import org.slf4j.LoggerFactory;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
+import java.net.SocketTimeoutException;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class ClientUtils {
+    private static final org.slf4j.Logger log = LoggerFactory.getLogger(ClientUtils.class);
 
     public static final OkHttpClient client;
     public static X509TrustManager veryTrustingTrustManager = veryTrustingTrustManager();
@@ -59,11 +62,17 @@ public class ClientUtils {
     }
 
     public static Response call(Request.Builder request) {
-        try {
-            return client.newCall(request.build()).execute();
-        } catch (IOException e) {
-            throw new RuntimeException("Error while calling " + request, e);
+        for (int i = 0; i < 5; i++) {
+            Request req = request.build();
+            try {
+                return client.newCall(req).execute();
+            } catch (SocketTimeoutException ste) {
+                log.warn("Timeout... will let it retry", ste);
+            } catch (IOException e) {
+                throw new RuntimeException("Error while calling " + req, e);
+            }
         }
+        throw new RuntimeException("Timed out too many times");
     }
 
     public static SSLContext sslContextForTesting(TrustManager trustManager) {

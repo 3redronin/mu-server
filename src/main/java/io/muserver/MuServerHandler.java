@@ -54,6 +54,15 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
     }
 
     protected void channelRead0(ChannelHandlerContext ctx, Object msg) throws Exception {
+        try {
+            onChannelRead(ctx, msg);
+        } catch (Exception e) {
+            log.info("Unhandled internal error", e);
+            ctx.channel().close();
+        }
+    }
+
+    private void onChannelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
         if (msg instanceof HttpRequest) {
             HttpRequest request = (HttpRequest) msg;
 
@@ -88,7 +97,7 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
                 }
                 if (!handled) {
                     send404(asyncContext);
-                    asyncContext.complete();
+                    asyncContext.complete(false);
                 }
             }
 

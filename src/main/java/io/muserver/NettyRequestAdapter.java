@@ -98,7 +98,8 @@ class NettyRequestAdapter implements MuRequest {
             port = (port != 80 && port != 443 && port > 0) ? port : -1;
             return new URI(proto, serverUri.getUserInfo(), host, port, serverUri.getPath(), serverUri.getQuery(), serverUri.getFragment());
         } catch (URISyntaxException e) {
-            log.warn("Could not convert " + request.uri() + " into a URI object", e);
+            log.warn("Could not convert " + request.uri() + " into a URI object using X-Forwarded values " + proto + " and " + xforwardedHost
+                + " so using local server URI. URL generation (including in redirects) may be incorrect.");
             return serverUri;
         }
     }
@@ -374,7 +375,7 @@ class NettyRequestAdapter implements MuRequest {
 
         @Override
         public void complete() {
-            request.nettyAsyncContext.complete();
+            request.nettyAsyncContext.complete(false);
         }
 
         @Override
@@ -382,7 +383,7 @@ class NettyRequestAdapter implements MuRequest {
             try {
                 SyncHandlerAdapter.dealWithUnhandledException(request, request.nettyAsyncContext.response, throwable);
             } finally {
-                complete();
+                request.nettyAsyncContext.complete(true);
             }
         }
 
@@ -398,7 +399,7 @@ class NettyRequestAdapter implements MuRequest {
                     }
                 } catch (Exception e) {
                     log.warn("Unhandled exception from write callback", e);
-                    complete();
+                    complete(e);
                 }
             });
         }

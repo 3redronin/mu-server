@@ -31,7 +31,7 @@ public class HttpToHttpsRedirector implements AsyncMuHandler {
         }
         URI newURI = new URI("https", uri.getUserInfo(), uri.getHost(), httpsPort, uri.getPath(), uri.getQuery(), uri.getFragment());
         ctx.response.redirect(newURI);
-        ctx.complete();
+        ctx.complete(true);
         return true;
     }
 

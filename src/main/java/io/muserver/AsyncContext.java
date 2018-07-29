@@ -25,14 +25,16 @@ public class AsyncContext {
         this.stats = stats;
     }
 
-    public Future<Void> complete() {
+    public Future<Void> complete(boolean forceDisconnect) {
         boolean wasCompleted = this.completed.getAndSet(true);
         if (wasCompleted) {
             log.info("AsyncContext.complete called twice for " + request);
             return null;
         } else {
+            Future<Void> complete = ((NettyResponseAdaptor) response)
+                .complete(forceDisconnect);
             stats.onRequestEnded(request);
-            return ((NettyResponseAdaptor) response).complete();
+            return complete;
         }
     }
 
@@ -44,7 +46,7 @@ public class AsyncContext {
         boolean wasCompleted = isComplete();
         ((NettyRequestAdapter) request).onClientDisconnected(wasCompleted);
         if (!wasCompleted) {
-            complete();
+            complete(true);
         }
     }
 }

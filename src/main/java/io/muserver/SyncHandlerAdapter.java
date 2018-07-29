@@ -56,7 +56,7 @@ class SyncHandlerAdapter implements AsyncMuHandler {
                 request.clean();
                 if (error || !request.isAsync()) {
                     try {
-                        ctx.complete();
+                        ctx.complete(error);
                     } catch (Throwable e) {
                         log.info("Error while completing request", e);
                     }

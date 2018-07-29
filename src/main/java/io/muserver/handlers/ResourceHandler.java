@@ -15,6 +15,7 @@ import static io.muserver.handlers.ResourceType.DEFAULT_EXTENSION_MAPPINGS;
  * {@link ResourceHandlerBuilder#classpathHandler(String)}, {@link ResourceHandlerBuilder#fileHandler(File)} or one of its variants.
  */
 public class ResourceHandler implements MuHandler {
+
     private final Map<String, ResourceType> extensionToResourceType;
     private final String pathToServeFrom;
     private final String defaultFile;

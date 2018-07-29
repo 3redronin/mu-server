@@ -8,6 +8,8 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.*;
 import io.netty.handler.codec.http.cookie.ServerCookieEncoder;
 import io.netty.util.CharsetUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
@@ -21,6 +23,7 @@ import java.util.concurrent.Future;
 import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 
 class NettyResponseAdaptor implements MuResponse {
+    private static final Logger log = LoggerFactory.getLogger(NettyResponseAdaptor.class);
     private final boolean isHead;
     private OutputState outputState = OutputState.NOTHING;
     private final ChannelHandlerContext ctx;
@@ -30,9 +33,10 @@ class NettyResponseAdaptor implements MuResponse {
     private int status = 200;
     private PrintWriter writer;
     private ChunkedHttpOutputStream outputStream;
+    private long bytesStreamed = 0;
 
     private enum OutputState {
-        NOTHING, FULL_SENT, STREAMING
+        NOTHING, FULL_SENT, STREAMING, STREAMING_COMPLETE
     }
 
     NettyResponseAdaptor(ChannelHandlerContext ctx, NettyRequestAdapter request) {
@@ -74,35 +78,50 @@ class NettyResponseAdaptor implements MuResponse {
         }
     }
 
-    public Future<Void> writeAsync(String text) {
-        if (outputState == OutputState.NOTHING) {
-            startStreaming();
+    private void throwIfFinished() {
+        if (outputState == OutputState.FULL_SENT || outputState == OutputState.STREAMING_COMPLETE) {
+            throw new IllegalStateException("Cannot write data as response has already completed");
         }
-        lastAction = ctx.writeAndFlush(new DefaultHttpContent(textToBuffer(text)));
-        return lastAction;
+    }
+
+    public Future<Void> writeAsync(String text) {
+        return write(textToBuffer(text), false);
     }
 
     ChannelFuture write(ByteBuffer data) {
         if (outputState == OutputState.NOTHING) {
             startStreaming();
         }
+        return write(Unpooled.wrappedBuffer(data), false);
+    }
+
+    ChannelFuture write(ByteBuf data, boolean sync) {
+        throwIfFinished();
+        int size = data.writerIndex();
         lastAction = ctx.writeAndFlush(new DefaultHttpContent(Unpooled.wrappedBuffer(data)));
+        if (sync) {
+            lastAction = lastAction.syncUninterruptibly();
+        }
+        bytesStreamed += size;
         return lastAction;
     }
 
 
     public void write(String text) {
+        throwIfFinished();
         if (outputState != OutputState.NOTHING) {
             String what = outputState == OutputState.FULL_SENT ? "twice for one response" : "after sending chunks";
             throw new IllegalStateException("You cannot call write " + what + ". If you want to send text in multiple chunks, use sendChunk instead.");
         }
         outputState = OutputState.FULL_SENT;
+        ByteBuf body = textToBuffer(text);
+        long bodyLength = body.writerIndex();
         FullHttpResponse resp = isHead ?
             new EmptyHttpResponse(httpStatus())
-            : new DefaultFullHttpResponse(HTTP_1_1, httpStatus(), textToBuffer(text), false);
+            : new DefaultFullHttpResponse(HTTP_1_1, httpStatus(), body, false);
 
         writeHeaders(resp, this.headers, request);
-        HttpUtil.setContentLength(resp, text.length());
+        HttpUtil.setContentLength(resp, bodyLength);
         lastAction = ctx.writeAndFlush(resp).syncUninterruptibly();
     }
 
@@ -110,7 +129,7 @@ class NettyResponseAdaptor implements MuResponse {
         if (outputState == OutputState.NOTHING) {
             startStreaming();
         }
-        lastAction = ctx.writeAndFlush(new DefaultHttpContent(textToBuffer(text))).syncUninterruptibly();
+        lastAction = write(textToBuffer(text), true);
     }
 
     private static ByteBuf textToBuffer(String text) {
@@ -146,7 +165,7 @@ class NettyResponseAdaptor implements MuResponse {
     public OutputStream outputStream() {
         if (this.outputStream == null) {
             startStreaming();
-            this.outputStream = new ChunkedHttpOutputStream(ctx);
+            this.outputStream = new ChunkedHttpOutputStream(this);
         }
         return this.outputStream;
     }
@@ -164,13 +183,14 @@ class NettyResponseAdaptor implements MuResponse {
         return outputState != OutputState.NOTHING;
     }
 
-    Future<Void> complete() {
+    ChannelFuture complete(boolean forceDisconnect) {
+        boolean shouldDisconnect = forceDisconnect || !request.isKeepAliveRequested();
         if (outputState == OutputState.NOTHING) {
             HttpResponse msg = isHead ?
                 new EmptyHttpResponse(httpStatus()) :
                 new DefaultFullHttpResponse(HTTP_1_1, httpStatus(), false);
             msg.headers().add(this.headers.nettyHeaders());
-            if (request.method() != Method.HEAD || !(msg.headers().contains(HeaderNames.CONTENT_LENGTH))) {
+            if (!isHead || !(headers().contains(HeaderNames.CONTENT_LENGTH))) {
                 msg.headers().set(HeaderNames.CONTENT_LENGTH, 0);
             }
             lastAction = ctx.writeAndFlush(msg);
@@ -178,10 +198,28 @@ class NettyResponseAdaptor implements MuResponse {
             if (writer != null) {
                 writer.close();
             }
+            if (outputStream != null) {
+                outputStream.close();
+            }
+            outputState = OutputState.STREAMING_COMPLETE;
             lastAction = ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
         }
-        if (!request.isKeepAliveRequested()) {
-            lastAction = lastAction.addListener(ChannelFutureListener.CLOSE);
+
+        if (!isHead && (headers().contains(HeaderNames.CONTENT_LENGTH))) {
+            long declaredLength = Long.parseLong(headers.get(HeaderNames.CONTENT_LENGTH));
+            long actualLength = this.bytesStreamed;
+            if (declaredLength != actualLength) {
+                shouldDisconnect = true;
+                log.warn("Declared length " + declaredLength + " doesn't equal actual length " + actualLength + " for " + request);
+            }
+        }
+
+        if (shouldDisconnect) {
+            if (lastAction == null) {
+                lastAction = ctx.channel().close();
+            } else {
+                lastAction = lastAction.addListener(ChannelFutureListener.CLOSE);
+            }
         }
         return lastAction;
     }
