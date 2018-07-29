@@ -60,7 +60,7 @@ public class ClientUtils {
     }
 
     public static Response call(Request.Builder request) {
-        for (int i = 0; i < 1; i++) {
+        for (int i = 0; i < 5; i++) {
             Request req = request.build();
             try {
                 return client.newCall(req).execute();
