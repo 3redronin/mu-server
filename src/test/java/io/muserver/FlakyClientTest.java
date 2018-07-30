@@ -50,6 +50,7 @@ public class FlakyClientTest {
                 @Override
                 public void onResponse(Call call, Response response) throws IOException {
                     latch.countDown();
+                    response.close();
 
                 }
             };
