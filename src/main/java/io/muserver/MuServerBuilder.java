@@ -12,6 +12,7 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.http.HttpRequestDecoder;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseEncoder;
+import io.netty.handler.codec.http.HttpServerKeepAliveHandler;
 import io.netty.handler.ssl.ClientAuth;
 import io.netty.handler.ssl.JdkSslContext;
 import io.netty.handler.traffic.GlobalTrafficShapingHandler;
@@ -361,6 +362,7 @@ public class MuServerBuilder {
                     if (gzipEnabled) {
                         p.addLast("compressor", new SelectiveHttpContentCompressor(minimumGzipSize, mimeTypesToGzip));
                     }
+                    p.addLast("keepalive", new HttpServerKeepAliveHandler());
                     p.addLast("muhandler", new MuServerHandler(asyncHandlers, stats, serverRef));
                 }
             });

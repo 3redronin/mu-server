@@ -155,7 +155,6 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
             }
         }
         sendSimpleResponse(ctx, message, code).addListener(ChannelFutureListener.CLOSE);
-        ;
     }
 
     private static ChannelFuture sendSimpleResponse(ChannelHandlerContext ctx, String message, int code) {
