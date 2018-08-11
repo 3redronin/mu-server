@@ -70,7 +70,7 @@ class NettyResponseAdaptor implements MuResponse {
         if (!response.headers().contains(HeaderNames.CONTENT_LENGTH)) {
             response.headers().set(HttpHeaderNames.TRANSFER_ENCODING, HttpHeaderValues.CHUNKED);
         }
-        lastAction = ctx.writeAndFlush(response);
+        lastAction = ctx.writeAndFlush(response).syncUninterruptibly();
     }
 
     private static void writeHeaders(HttpResponse response, Headers headers, NettyRequestAdapter request) {
@@ -149,7 +149,7 @@ class NettyResponseAdaptor implements MuResponse {
         HttpResponse resp = new EmptyHttpResponse(httpStatus());
         writeHeaders(resp, this.headers, request);
         HttpUtil.setContentLength(resp, 0);
-        lastAction = ctx.writeAndFlush(resp);
+        lastAction = ctx.writeAndFlush(resp).syncUninterruptibly();
         outputState = OutputState.FULL_SENT;
     }
 
@@ -187,44 +187,67 @@ class NettyResponseAdaptor implements MuResponse {
     }
 
     ChannelFuture complete(boolean forceDisconnect) {
-        boolean shouldDisconnect = forceDisconnect || !request.isKeepAliveRequested();
-        if (outputState == OutputState.NOTHING) {
-            HttpResponse msg = isHead ?
-                new EmptyHttpResponse(httpStatus()) :
-                new DefaultFullHttpResponse(HTTP_1_1, httpStatus(), false);
-            msg.headers().add(this.headers.nettyHeaders());
-            if (!isHead || !(headers().contains(HeaderNames.CONTENT_LENGTH))) {
-                msg.headers().set(HeaderNames.CONTENT_LENGTH, 0);
-            }
-            lastAction = ctx.writeAndFlush(msg);
-        } else if (outputState == OutputState.STREAMING && !isHead) {
-            if (writer != null) {
-                writer.close();
-            }
-            if (outputStream != null) {
-                outputStream.close();
-            }
-            outputState = OutputState.STREAMING_COMPLETE;
-            lastAction = ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
-        }
+        try {
 
-        if (!isHead && (headers().contains(HeaderNames.CONTENT_LENGTH))) {
-            long declaredLength = Long.parseLong(headers.get(HeaderNames.CONTENT_LENGTH));
-            long actualLength = this.bytesStreamed;
-            if (declaredLength != actualLength) {
-                shouldDisconnect = true;
-                log.warn("Declared length " + declaredLength + " doesn't equal actual length " + actualLength + " for " + request);
-            }
-        }
+            boolean shouldDisconnect = forceDisconnect || !request.isKeepAliveRequested();
+            if (ctx.channel().isActive()) {
+                if (outputState == OutputState.NOTHING) {
+                    HttpResponse msg = isHead ?
+                        new EmptyHttpResponse(httpStatus()) :
+                        new DefaultFullHttpResponse(HTTP_1_1, httpStatus(), false);
+                    msg.headers().add(this.headers.nettyHeaders());
+                    if (!isHead || !(headers().contains(HeaderNames.CONTENT_LENGTH))) {
+                        msg.headers().set(HeaderNames.CONTENT_LENGTH, 0);
+                    }
+                    if (shouldDisconnect) {
+                        msg.headers().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
+                    }
+                    shouldDisconnect |= writeAndFlushSafely(msg);
+                } else if (outputState == OutputState.STREAMING && !isHead) {
+                    if (writer != null) {
+                        writer.close();
+                    }
+                    if (outputStream != null) {
+                        outputStream.close();
+                    }
+                    outputState = OutputState.STREAMING_COMPLETE;
+                    shouldDisconnect |= writeAndFlushSafely(LastHttpContent.EMPTY_LAST_CONTENT);
+                }
 
-        if (shouldDisconnect) {
-            if (lastAction == null) {
-                lastAction = ctx.channel().close();
-            } else {
-                lastAction = lastAction.addListener(ChannelFutureListener.CLOSE);
+                if (!isHead && (headers().contains(HeaderNames.CONTENT_LENGTH))) {
+                    long declaredLength = Long.parseLong(headers.get(HeaderNames.CONTENT_LENGTH));
+                    long actualLength = this.bytesStreamed;
+                    if (declaredLength != actualLength) {
+                        shouldDisconnect = true;
+                        log.warn("Declared length " + declaredLength + " doesn't equal actual length " + actualLength + " for " + request);
+                    }
+                }
+
             }
+
+            if (shouldDisconnect) {
+                if (lastAction == null || !ctx.channel().isActive()) {
+                    lastAction = ctx.channel().close();
+                } else {
+                    lastAction = lastAction.addListener(ChannelFutureListener.CLOSE);
+                }
+            }
+            return lastAction;
+        } catch (Exception e) {
+            log.error("Unexpected exception during complete", e);
+            ctx.channel().close();
+            throw e;
         }
-        return lastAction;
+    }
+
+    private boolean writeAndFlushSafely(HttpObject msg) {
+        try {
+            lastAction = ctx.channel().writeAndFlush(msg).syncUninterruptibly();
+            return false;
+        } catch (Exception e) {
+            log.info("Error while sending last content", e);
+            return true;
+        }
     }
 
     private HttpResponseStatus httpStatus() {

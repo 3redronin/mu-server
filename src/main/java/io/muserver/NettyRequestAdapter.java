@@ -389,19 +389,28 @@ class NettyRequestAdapter implements MuRequest {
 
         @Override
         public void write(ByteBuffer data, WriteCallback callback) {
-            ChannelFuture writeFuture = (ChannelFuture) write(data);
-            writeFuture.addListener(future -> {
-                try {
-                    if (future.isSuccess()) {
-                        callback.onSuccess();
-                    } else {
-                        callback.onFailure(future.cause());
+            try {
+                ChannelFuture writeFuture = (ChannelFuture) write(data);
+                writeFuture.addListener(future -> {
+                    try {
+                        if (future.isSuccess()) {
+                            callback.onSuccess();
+                        } else {
+                            callback.onFailure(future.cause());
+                        }
+                    } catch (Exception e) {
+                        log.warn("Unhandled exception from write callback", e);
+                        complete(e);
                     }
-                } catch (Exception e) {
-                    log.warn("Unhandled exception from write callback", e);
+                });
+            } catch (Exception e) {
+                try {
+                    callback.onFailure(e);
+                } catch (Exception e1) {
+                    log.warn("Unhandled exception from write callback", e1);
                     complete(e);
                 }
-            });
+            }
         }
 
         @Override

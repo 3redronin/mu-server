@@ -66,7 +66,7 @@ class SyncHandlerAdapter implements AsyncMuHandler {
         return true;
     }
 
-    public static void dealWithUnhandledException(MuRequest request, MuResponse response, Throwable ex) {
+    static void dealWithUnhandledException(MuRequest request, MuResponse response, Throwable ex) {
         if (response.hasStartedSendingData()) {
             log.warn("Unhandled error from handler for " + request + " (note that a " + response.status() +
                 " was already sent to the client before the error occurred and so the client may receive an incomplete response)", ex);
@@ -75,6 +75,7 @@ class SyncHandlerAdapter implements AsyncMuHandler {
             log.info("Sending a 500 to the client with ErrorID=" + errorID + " for " + request, ex);
             response.status(500);
             response.contentType(ContentTypes.TEXT_HTML);
+            response.headers().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
             response.write("<h1>500 Internal Server Error</h1><p>ErrorID=" + errorID + "</p>");
         }
     }

@@ -97,7 +97,7 @@ public class AsyncTest {
                                     ctxClosedLatch.countDown();
                                 }
                                 @Override
-                                public void onSuccess() throws Exception {
+                                public void onSuccess() {
                                 }
                             });
                         } catch (Throwable e) {
@@ -279,6 +279,7 @@ public class AsyncTest {
 
                 }
             });
+            thread.setName("DatabaseListenerSimulator");
             thread.start();
         }
 
@@ -288,7 +289,6 @@ public class AsyncTest {
 
         public void stop() throws InterruptedException {
             stopped.set(true);
-            thread.join();
         }
     }
 
