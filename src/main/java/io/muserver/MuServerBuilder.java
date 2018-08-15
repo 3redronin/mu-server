@@ -16,7 +16,6 @@ import io.netty.handler.codec.http.HttpServerKeepAliveHandler;
 import io.netty.handler.ssl.ClientAuth;
 import io.netty.handler.ssl.JdkSslContext;
 import io.netty.handler.traffic.GlobalTrafficShapingHandler;
-import io.netty.util.Attribute;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,12 +23,11 @@ import javax.net.ssl.SSLContext;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
-
-import static io.muserver.MuServerHandler.PROTO_ATTRIBUTE;
 
 /**
  * <p>A builder for creating a web server.</p>
@@ -43,7 +41,6 @@ public class MuServerBuilder {
     private int httpsPort = -1;
     private int maxHeadersSize = 8192;
     private int maxUrlSize = 8192 - LENGTH_OF_METHOD_AND_PROTOCOL;
-    private List<AsyncMuHandler> asyncHandlers = new ArrayList<>();
     private List<MuHandler> handlers = new ArrayList<>();
     private SSLContext sslContext;
     private boolean gzipEnabled = true;
@@ -202,21 +199,6 @@ public class MuServerBuilder {
         return this;
     }
 
-    /**
-     * <p>xAdds a new Asynchronous handler. This is for cases where async handling of requests and
-     * responses is required; in other cases use {@link #addHandler(MuHandler)},
-     * {@link #addHandler(MuHandlerBuilder)} or {@link #addHandler(Method, String, RouteHandler)}.</p>
-     * <p>Note that async handlers are executed in the order added to the builder, but all async
-     * handlers are executed before synchronous handlers.</p>
-     * @param handler An Async Handler
-     * @deprecated For async handling, add a normal {@link MuHandler} and call {@link MuRequest#handleAsync()}
-     * @return The current Mu-Server builder
-     */
-    @Deprecated
-    public MuServerBuilder addAsyncHandler(AsyncMuHandler handler) {
-        asyncHandlers.add(handler);
-        return this;
-    }
 
     /**
      * <p>Adds a request handler.</p>
@@ -269,9 +251,7 @@ public class MuServerBuilder {
             throw new IllegalArgumentException("No ports were configured. Please call MuServerBuilder.withHttpPort(int) or MuServerBuilder.withHttpsPort(int)");
         }
 
-        if (!handlers.isEmpty()) {
-            asyncHandlers.add(new SyncHandlerAdapter(handlers));
-        }
+        List<MuHandler> handlersCopy = Collections.unmodifiableList(new ArrayList<>(handlers));
         NioEventLoopGroup bossGroup = new NioEventLoopGroup(1);
         NioEventLoopGroup workerGroup = new NioEventLoopGroup();
         List<Channel> channels = new ArrayList<>();
@@ -295,13 +275,13 @@ public class MuServerBuilder {
             MuStatsImpl stats = new MuStatsImpl(trafficShapingHandler.trafficCounter());
             AtomicReference<MuServer> serverRef = new AtomicReference<>();
 
-            Channel httpChannel = httpPort < 0 ? null : createChannel(bossGroup, workerGroup, host, httpPort, null, trafficShapingHandler, stats, serverRef);
+            Channel httpChannel = httpPort < 0 ? null : createChannel(bossGroup, workerGroup, host, httpPort, null, trafficShapingHandler, stats, serverRef, handlersCopy);
             Channel httpsChannel;
             if (httpsPort < 0) {
                 httpsChannel = null;
             } else {
                 SSLContext sslContextToUse = this.sslContext != null ? this.sslContext : SSLContextBuilder.unsignedLocalhostCert();
-                httpsChannel = createChannel(bossGroup, workerGroup, host, httpsPort, sslContextToUse, trafficShapingHandler, stats, serverRef);
+                httpsChannel = createChannel(bossGroup, workerGroup, host, httpsPort, sslContextToUse, trafficShapingHandler, stats, serverRef, handlersCopy);
             }
             URI uri = null;
             if (httpChannel != null) {
@@ -335,7 +315,7 @@ public class MuServerBuilder {
         return URI.create(protocol + "://" + host.toLowerCase() + ":" + a.getPort());
     }
 
-    private Channel createChannel(NioEventLoopGroup bossGroup, NioEventLoopGroup workerGroup, String host, int port, SSLContext rawSSLContext, GlobalTrafficShapingHandler trafficShapingHandler, MuStatsImpl stats, AtomicReference<MuServer> serverRef) throws InterruptedException {
+    private Channel createChannel(NioEventLoopGroup bossGroup, NioEventLoopGroup workerGroup, String host, int port, SSLContext rawSSLContext, GlobalTrafficShapingHandler trafficShapingHandler, MuStatsImpl stats, AtomicReference<MuServer> serverRef, List<MuHandler> muHandlers) throws InterruptedException {
         boolean usesSsl = rawSSLContext != null;
         JdkSslContext sslContext = usesSsl ? new JdkSslContext(rawSSLContext, false, ClientAuth.NONE) : null;
 
@@ -345,8 +325,6 @@ public class MuServerBuilder {
             .childHandler(new ChannelInitializer<SocketChannel>() {
 
                 protected void initChannel(SocketChannel socketChannel) throws Exception {
-                    Attribute<String> proto = socketChannel.attr(PROTO_ATTRIBUTE);
-                    proto.set(usesSsl ? "https" : "http");
                     ChannelPipeline p = socketChannel.pipeline();
                     p.addLast(trafficShapingHandler);
                     if (usesSsl) {
@@ -363,7 +341,9 @@ public class MuServerBuilder {
                         p.addLast("compressor", new SelectiveHttpContentCompressor(minimumGzipSize, mimeTypesToGzip));
                     }
                     p.addLast("keepalive", new HttpServerKeepAliveHandler());
-                    p.addLast("muhandler", new MuServerHandler(asyncHandlers, stats, serverRef));
+
+                    String protocol = usesSsl ? "https" : "http";
+                    p.addLast("muhandler", new MuServerHandler(muHandlers, stats, serverRef, protocol));
                 }
             });
         ChannelFuture bound = host == null ? b.bind(port) : b.bind(host, port);

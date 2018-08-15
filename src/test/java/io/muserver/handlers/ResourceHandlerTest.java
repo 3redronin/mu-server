@@ -6,6 +6,8 @@ import io.muserver.Mutils;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
+import scaffolding.MuAssert;
+import scaffolding.RawClient;
 
 import java.io.IOException;
 import java.net.MalformedURLException;
@@ -17,6 +19,7 @@ import static io.muserver.ContextHandlerBuilder.context;
 import static io.muserver.Mutils.urlDecode;
 import static io.muserver.handlers.ResourceType.getResourceTypes;
 import static io.muserver.handlers.ResourceType.gzippableMimeTypes;
+import static org.hamcrest.CoreMatchers.endsWith;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
@@ -219,6 +222,25 @@ public class ResourceHandlerTest {
         assertContentTypeAndContent("/images/friends.jpg", "image/jpeg", false);
     }
 
+    @Test
+    public void headRequestHasNoBody() throws Exception {
+        server = MuServerBuilder.httpServer()
+            .withGzip(1200, gzippableMimeTypes(getResourceTypes()))
+            .addHandler(ResourceHandlerBuilder.fileHandler("src/test/resources/sample-static").build())
+            .start();
+
+        try (RawClient client = RawClient.create(server.uri())) {
+            client.sendStartLine("HEAD", "/overview.txt");
+            client.sendHeader("Host", server.uri().getAuthority());
+            client.endHeaders();
+            client.flushRequest();
+
+            MuAssert.waitUntil( () -> client.responseString().contains("\r\n\r\n"));
+            Thread.sleep(100);
+            assertThat(client.responseString(), endsWith("\r\n\r\n"));
+        }
+    }
+
     private void assertContentTypeAndContent(String relativePath, String expectedContentType, boolean expectGzip) throws Exception {
         Map<String, List<String>> headersFromGET;
         URL url = server.httpsUri().resolve(relativePath).toURL();
@@ -246,17 +268,16 @@ public class ResourceHandlerTest {
             assertThat(resp.code(), is(200));
             Map<String, List<String>> headersFromHEAD = resp.headers().toMultimap();
             headersFromHEAD.remove("Date");
-//            if (expectGzip) {
-//                headersFromHEAD.remove("Content-Length");
-//                headersFromGET.remove("transfer-encoding");
-//                assertThat(headersFromHEAD, equalTo(headersFromGET));
-//            } else {
-//                assertThat(headersFromHEAD, equalTo(headersFromGET));
-//            }
+            if (expectGzip) {
+                headersFromHEAD.remove("Content-Length");
+                headersFromGET.remove("transfer-encoding");
+                assertThat(headersFromHEAD, equalTo(headersFromGET));
+            } else {
+                assertThat(headersFromHEAD, equalTo(headersFromGET));
+            }
             assertThat(resp.header("Vary"), is("accept-encoding"));
             assertThat(resp.body().contentLength(), is(0L));
         }
-
 
     }
 

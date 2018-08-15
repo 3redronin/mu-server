@@ -9,7 +9,7 @@ public class Sniffer {
     public static void main(String[] args) throws IOException {
         String host = "localhost";
         int port = 18080;
-        Collection<String> requestLines = asList("GET /sample.css HTTP/1.1", "Accept-Encoding: gzip");
+        Collection<String> requestLines = asList("HEAD /sample.css HTTP/1.1", "Accept-Encoding: blah");
 
         Socket socket = new Socket(host, port);
 
@@ -17,7 +17,7 @@ public class Sniffer {
             new OutputStreamWriter(socket.getOutputStream(), "UTF8"));
              InputStream responseStream = socket.getInputStream()) {
             sendMessage(out, requestLines);
-            readResponse(responseStream);
+            readResponse(responseStream, System.out);
         }
 
     }
@@ -34,9 +34,8 @@ public class Sniffer {
         out.flush();
     }
 
-    private static void readResponse(InputStream in) throws IOException {
+    private static void readResponse(InputStream in, PrintStream out) throws IOException {
         System.out.println("\n * Response");
-        PrintStream out = System.out;
 
         byte[] buffer = new byte[4096];
         int read;

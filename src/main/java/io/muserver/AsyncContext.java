@@ -6,23 +6,20 @@ import org.slf4j.LoggerFactory;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/**
- * @deprecated This interface is no longer used. Instead call {@link MuRequest#handleAsync()} from a standard Mu Handler.
- */
-@Deprecated
-public class AsyncContext {
+class AsyncContext {
     private static final Logger log = LoggerFactory.getLogger(AsyncContext.class);
-    public final MuRequest request;
+    public final NettyRequestAdapter request;
     public final MuResponse response;
     private final MuStatsImpl stats;
-    public Object state;
+    private final Runnable onComplete;
     GrowableByteBufferInputStream requestBody;
     private AtomicBoolean completed = new AtomicBoolean(false);
 
-    AsyncContext(MuRequest request, MuResponse response, MuStatsImpl stats) {
+    AsyncContext(NettyRequestAdapter request, MuResponse response, MuStatsImpl stats, Runnable onComplete) {
         this.request = request;
         this.response = response;
         this.stats = stats;
+        this.onComplete = onComplete;
     }
 
     public Future<Void> complete(boolean forceDisconnect) {
@@ -31,9 +28,11 @@ public class AsyncContext {
             log.info("AsyncContext.complete called twice for " + request);
             return null;
         } else {
+            request.clean();
             Future<Void> complete = ((NettyResponseAdaptor) response)
                 .complete(forceDisconnect);
             stats.onRequestEnded(request);
+            onComplete.run();
             return complete;
         }
     }
@@ -44,7 +43,7 @@ public class AsyncContext {
 
     void onDisconnected() {
         boolean wasCompleted = isComplete();
-        ((NettyRequestAdapter) request).onClientDisconnected(wasCompleted);
+        request.onClientDisconnected(wasCompleted);
         if (!wasCompleted) {
             complete(true);
         }
