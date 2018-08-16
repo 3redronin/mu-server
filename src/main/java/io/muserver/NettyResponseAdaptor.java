@@ -64,7 +64,7 @@ class NettyResponseAdaptor implements MuResponse {
         }
         outputState = OutputState.STREAMING;
         HttpResponse response = isHead ? new EmptyHttpResponse(httpStatus()) : new DefaultHttpResponse(HTTP_1_1, httpStatus(), false);
-        writeHeaders(response, headers, request);
+        writeHeaders(response, headers);
 
         // Force chunked on everything due to bug in fixed length (fails on travis-ci only)
 //        response.headers().remove(HeaderNames.CONTENT_LENGTH);
@@ -76,11 +76,8 @@ class NettyResponseAdaptor implements MuResponse {
         lastAction = ctx.write(response);
     }
 
-    private static void writeHeaders(HttpResponse response, Headers headers, NettyRequestAdapter request) {
+    private static void writeHeaders(HttpResponse response, Headers headers) {
         response.headers().add(headers.nettyHeaders());
-        if (request.isKeepAliveRequested()) {
-            response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE);
-        }
     }
 
     private void throwIfFinished() {
@@ -125,7 +122,7 @@ class NettyResponseAdaptor implements MuResponse {
             new EmptyHttpResponse(httpStatus())
             : new DefaultFullHttpResponse(HTTP_1_1, httpStatus(), body, false);
 
-        writeHeaders(resp, this.headers, request);
+        writeHeaders(resp, this.headers);
         HttpUtil.setContentLength(resp, bodyLength);
         lastAction = ctx.writeAndFlush(resp).syncUninterruptibly();
     }
@@ -150,7 +147,7 @@ class NettyResponseAdaptor implements MuResponse {
         status(302);
         headers().set(HeaderNames.LOCATION, absoluteUrl.toString());
         HttpResponse resp = new EmptyHttpResponse(httpStatus());
-        writeHeaders(resp, this.headers, request);
+        writeHeaders(resp, this.headers);
         HttpUtil.setContentLength(resp, 0);
         lastAction = ctx.writeAndFlush(resp).syncUninterruptibly();
         outputState = OutputState.FULL_SENT;
