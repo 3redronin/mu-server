@@ -67,7 +67,7 @@ class NettyResponseAdaptor implements MuResponse {
         writeHeaders(response, headers);
 
         // Force chunked on everything due to bug in fixed length (fails on travis-ci only)
-//        response.headers().remove(HeaderNames.CONTENT_LENGTH);
+        response.headers().remove(HeaderNames.CONTENT_LENGTH);
 
         if (!response.headers().contains(HeaderNames.CONTENT_LENGTH)) {
             response.headers().set(HttpHeaderNames.TRANSFER_ENCODING, HttpHeaderValues.CHUNKED);

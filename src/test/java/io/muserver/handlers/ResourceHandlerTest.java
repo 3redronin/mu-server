@@ -270,7 +270,7 @@ public class ResourceHandlerTest {
             headersFromHEAD.remove("Date");
             if (expectGzip) {
                 headersFromHEAD.remove("Content-Length");
-                headersFromGET.remove("transfer-encoding");
+//                headersFromGET.remove("transfer-encoding");
                 assertThat(headersFromHEAD, equalTo(headersFromGET));
             } else {
                 assertThat(headersFromHEAD, equalTo(headersFromGET));
