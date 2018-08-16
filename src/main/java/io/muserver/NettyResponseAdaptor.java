@@ -66,6 +66,9 @@ class NettyResponseAdaptor implements MuResponse {
         HttpResponse response = isHead ? new EmptyHttpResponse(httpStatus()) : new DefaultHttpResponse(HTTP_1_1, httpStatus(), false);
         writeHeaders(response, headers, request);
 
+        // Force chunked on everything due to bug in fixed length (fails on travis-ci only)
+//        response.headers().remove(HeaderNames.CONTENT_LENGTH);
+
         if (!response.headers().contains(HeaderNames.CONTENT_LENGTH)) {
             response.headers().set(HttpHeaderNames.TRANSFER_ENCODING, HttpHeaderValues.CHUNKED);
         }
@@ -199,9 +202,7 @@ class NettyResponseAdaptor implements MuResponse {
                     if (!isHead || !(headers().contains(HeaderNames.CONTENT_LENGTH))) {
                         msg.headers().set(HeaderNames.CONTENT_LENGTH, 0);
                     }
-                    if (shouldDisconnect) {
-                        msg.headers().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
-                    }
+                    msg.headers().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
                     shouldDisconnect |= writeAndFlushSafely(msg);
                 } else if (outputState == OutputState.STREAMING) {
                     if (isHead) {

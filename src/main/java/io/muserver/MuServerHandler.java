@@ -2,7 +2,6 @@ package io.muserver;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.TooLongFrameException;
@@ -87,7 +86,7 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
                         // TODO reject if body size too large
                         ctx.writeAndFlush(new DefaultFullHttpResponse(HTTP_1_1, HttpResponseStatus.CONTINUE));
                     } else {
-                        sendSimpleResponse(ctx, "417 Expectation Failed", HttpResponseStatus.EXPECTATION_FAILED.code(), true);
+                        sendSimpleResponse(ctx, "417 Expectation Failed", HttpResponseStatus.EXPECTATION_FAILED.code());
                         return;
                     }
                 }
@@ -96,7 +95,7 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
                 try {
                     method = Method.fromNetty(request.method());
                 } catch (IllegalArgumentException e) {
-                    sendSimpleResponse(ctx, "405 Method Not Allowed", 405, true);
+                    sendSimpleResponse(ctx, "405 Method Not Allowed", 405);
                     return;
                 }
                 NettyRequestAdapter muRequest = new NettyRequestAdapter(ctx.channel(), request, serverRef, method, protocol);
@@ -207,21 +206,15 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
                 message = "URI too long";
             }
         }
-        sendSimpleResponse(ctx, message, code, true);
+        sendSimpleResponse(ctx, message, code);
     }
 
-    private static ChannelFuture sendSimpleResponse(ChannelHandlerContext ctx, String message, int code, boolean disconnect) {
+    private static ChannelFuture sendSimpleResponse(ChannelHandlerContext ctx, String message, int code) {
         FullHttpResponse response = new DefaultFullHttpResponse(HTTP_1_1, HttpResponseStatus.valueOf(code), copiedBuffer(message.getBytes(UTF_8)));
         response.headers().set(HeaderNames.CONTENT_TYPE, ContentTypes.TEXT_PLAIN);
         response.headers().set(HeaderNames.CONTENT_LENGTH, message.length());
-        if (disconnect) {
-            response.headers().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
-        }
-        ChannelFuture future = ctx.writeAndFlush(response);
-        if (disconnect) {
-            future = future.addListener(ChannelFutureListener.CLOSE);
-        }
-        return future;
+        response.headers().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
+        return ctx.writeAndFlush(response);
     }
 
     @Override
