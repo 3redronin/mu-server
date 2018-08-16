@@ -3,20 +3,16 @@ package scaffolding;
 import java.io.*;
 import java.net.Socket;
 import java.net.URI;
-import java.util.Collection;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
-import static java.util.Arrays.asList;
 
 public class RawClient implements Closeable {
     private static final ExecutorService executorService = Executors.newCachedThreadPool();
 
-    private final AtomicLong bytesReceived = new AtomicLong(0);
     private final ByteArrayOutputStream baos = new ByteArrayOutputStream();
     private BufferedOutputStream request;
     private Socket socket;
@@ -25,8 +21,6 @@ public class RawClient implements Closeable {
     private final AtomicReference<Exception> exception = new AtomicReference<>();
 
     public static RawClient create(URI uri) throws IOException {
-        Collection<String> requestLines = asList("HEAD /sample.css HTTP/1.1", "Accept-Encoding: blah");
-
         RawClient rawClient = new RawClient();
         rawClient.start(uri);
         return rawClient;
@@ -43,23 +37,26 @@ public class RawClient implements Closeable {
             int read;
             try {
                 while ((read = response.read(buffer)) > -1) {
+//                    System.out.println("Got " + read + " bytes: " + new String(buffer, 0, read, UTF_8));
                     if (read > 0) {
-                        bytesReceived.addAndGet(read);
                         baos.write(buffer, 0, read);
                     }
                 }
             } catch (IOException e) {
                 exception.set(e);
+                isConnected.set(false);
             }
-            isConnected.set(false);
 
         });
     }
 
     public void send(byte[] bytes) throws IOException {
-        request.write(bytes);
+        if (bytes.length > 0) {
+            request.write(bytes);
+        }
     }
     public void sendUTF8(String message) throws IOException {
+//        System.out.println(" >> " + message);
         send(message.getBytes(UTF_8));
     }
     public void sendLine(String line) throws IOException {
@@ -90,10 +87,10 @@ public class RawClient implements Closeable {
     }
 
     public long bytesReceived() {
-        return bytesReceived.get();
+        return baos.size();
     }
 
-    public String asString() {
+    public String responseString() {
         try {
             return baos.toString("UTF-8");
         } catch (UnsupportedEncodingException e) {
@@ -110,6 +107,7 @@ public class RawClient implements Closeable {
         close(request);
         close(response);
         close(socket);
+        isConnected.set(false);
     }
 
     private static void close(Closeable closeable) {
@@ -119,5 +117,9 @@ public class RawClient implements Closeable {
             } catch (IOException e) {
             }
         }
+    }
+
+    public void clear() {
+        baos.reset();
     }
 }

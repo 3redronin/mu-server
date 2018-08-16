@@ -66,11 +66,11 @@ class NettyResponseAdaptor implements MuResponse {
         HttpResponse response = isHead ? new EmptyHttpResponse(httpStatus()) : new DefaultHttpResponse(HTTP_1_1, httpStatus(), false);
         writeHeaders(response, headers, request);
 
-        response.headers().remove(HeaderNames.CONTENT_LENGTH);
         if (!response.headers().contains(HeaderNames.CONTENT_LENGTH)) {
             response.headers().set(HttpHeaderNames.TRANSFER_ENCODING, HttpHeaderValues.CHUNKED);
         }
-        lastAction = ctx.writeAndFlush(response).syncUninterruptibly();
+
+        lastAction = ctx.write(response);
     }
 
     private static void writeHeaders(HttpResponse response, Headers headers, NettyRequestAdapter request) {
@@ -203,15 +203,19 @@ class NettyResponseAdaptor implements MuResponse {
                         msg.headers().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
                     }
                     shouldDisconnect |= writeAndFlushSafely(msg);
-                } else if (outputState == OutputState.STREAMING && !isHead) {
-                    if (writer != null) {
-                        writer.close();
+                } else if (outputState == OutputState.STREAMING) {
+                    if (isHead) {
+                        ctx.channel().flush();
+                    } else {
+                        if (writer != null) {
+                            writer.close();
+                        }
+                        if (outputStream != null) {
+                            outputStream.close();
+                        }
+                        outputState = OutputState.STREAMING_COMPLETE;
+                        shouldDisconnect |= writeAndFlushSafely(LastHttpContent.EMPTY_LAST_CONTENT);
                     }
-                    if (outputStream != null) {
-                        outputStream.close();
-                    }
-                    outputState = OutputState.STREAMING_COMPLETE;
-                    shouldDisconnect |= writeAndFlushSafely(LastHttpContent.EMPTY_LAST_CONTENT);
                 }
 
                 if (!isHead && (headers().contains(HeaderNames.CONTENT_LENGTH))) {
@@ -246,6 +250,7 @@ class NettyResponseAdaptor implements MuResponse {
             return false;
         } catch (Exception e) {
             log.info("Error while sending last content", e);
+            log.error("Stack trace", new MuException("stack trace"));
             return true;
         }
     }

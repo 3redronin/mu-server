@@ -235,9 +235,9 @@ public class ResourceHandlerTest {
             client.endHeaders();
             client.flushRequest();
 
-            MuAssert.waitUntil( () -> client.asString().contains("\r\n\r\n"));
+            MuAssert.waitUntil( () -> client.responseString().contains("\r\n\r\n"));
             Thread.sleep(100);
-            assertThat(client.asString(), endsWith("\r\n\r\n"));
+            assertThat(client.responseString(), endsWith("\r\n\r\n"));
         }
     }
 
@@ -270,7 +270,7 @@ public class ResourceHandlerTest {
             headersFromHEAD.remove("Date");
             if (expectGzip) {
                 headersFromHEAD.remove("Content-Length");
-//                headersFromGET.remove("transfer-encoding");
+                headersFromGET.remove("transfer-encoding");
                 assertThat(headersFromHEAD, equalTo(headersFromGET));
             } else {
                 assertThat(headersFromHEAD, equalTo(headersFromGET));
@@ -278,7 +278,6 @@ public class ResourceHandlerTest {
             assertThat(resp.header("Vary"), is("accept-encoding"));
             assertThat(resp.body().contentLength(), is(0L));
         }
-
 
     }
 

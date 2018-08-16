@@ -50,12 +50,11 @@ class NettyRequestAdapter implements MuRequest {
     private Object state;
     private volatile AsyncHandleImpl asyncHandle;
 
-    NettyRequestAdapter(Channel channel, HttpRequest request, AtomicReference<MuServer> serverRef, Method method) {
+    NettyRequestAdapter(Channel channel, HttpRequest request, AtomicReference<MuServer> serverRef, Method method, String protocol) {
         this.channel = channel;
         this.request = request;
         this.serverRef = serverRef;
-        String proto = channel.attr(MuServerHandler.PROTO_ATTRIBUTE).get();
-        this.serverUri = URI.create(proto + "://" + request.headers().get(HeaderNames.HOST) + request.uri());
+        this.serverUri = URI.create(protocol + "://" + request.headers().get(HeaderNames.HOST) + request.uri());
         this.uri = getUri(request, serverUri);
         this.relativePath = this.uri.getRawPath();
         this.query = new NettyRequestParameters(new QueryStringDecoder(request.uri(), true));
@@ -339,7 +338,7 @@ class NettyRequestAdapter implements MuRequest {
     void clean() {
         state(null);
         if (multipartRequestDecoder != null) {
-            // need to clear the datas before destorying. See https://github.com/netty/netty/issues/7814#issuecomment-397855311
+            // need to clear the datas before destroying. See https://github.com/netty/netty/issues/7814#issuecomment-397855311
             multipartRequestDecoder.getBodyHttpDatas().clear();
             multipartRequestDecoder.destroy();
             multipartRequestDecoder = null;
@@ -381,7 +380,7 @@ class NettyRequestAdapter implements MuRequest {
         @Override
         public void complete(Throwable throwable) {
             try {
-                SyncHandlerAdapter.dealWithUnhandledException(request, request.nettyAsyncContext.response, throwable);
+                MuServerHandler.dealWithUnhandledException(request, request.nettyAsyncContext.response, throwable);
             } finally {
                 request.nettyAsyncContext.complete(true);
             }
