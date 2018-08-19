@@ -63,7 +63,7 @@ class GrowableByteBufferInputStream extends InputStream {
 		return cur.remaining();
 	}
 
-	public void close() throws IOException {
+	public void close() {
 		// This is called from the main netty accepter thread so must be non-blocking
         synchronized (listenerLock) {
             if (listener == null) {

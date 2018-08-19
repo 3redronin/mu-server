@@ -42,10 +42,7 @@ public class GrowableByteBufferInputStreamTest {
             for (ByteBuffer byteBuffer : generated) {
                 stream.handOff(byteBuffer);
             }
-            try {
-                stream.close();
-            } catch (IOException e) {
-            }
+            stream.close();
         });
 
         ByteBuffer actual = ByteBuffer.allocate(expected.capacity());
