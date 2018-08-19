@@ -22,8 +22,10 @@ class RequestParser {
     private List<String> curVals;
     GrowableByteBufferInputStream body;
     private Charset bodyCharset = StandardCharsets.ISO_8859_1;
-    private long bodyLength = -1;
+    private long bodyLength = -1; // -2 is chunked
     private long bodyBytesRead = 0;
+    private ChunkState chunkState;
+    private long curChunkSize = -1;
 
     boolean complete() {
         return state == State.COMPLETE;
@@ -37,11 +39,15 @@ class RequestParser {
         RL_METHOD, RL_URI, RL_PROTO, RL_ENDING, H_NAME, H_VALUE, FIXED_BODY, CHUNKED_BODY, COMPLETE
     }
 
+    private enum ChunkState {
+        LENGTH, LENGTH_WRITTEN, CHUNK, AFTER_CHUNK, LAST_CHUNK
+    }
+
     void offer(ByteBuffer bb) throws InvalidRequestException {
         if (state == State.COMPLETE) {
             throw new InvalidRequestException(400, "Request body too long", "More request was found even though no more was expected.");
         } else if (state == State.FIXED_BODY) {
-            int size = bb.limit();
+            int size = bb.limit() - bb.position();
             bodyBytesRead += size;
             ByteBuffer copy = ByteBuffer.allocate(size);
             copy.put(bb);
@@ -54,6 +60,65 @@ class RequestParser {
             } else if (bodyBytesRead > bodyLength) {
                 throw new InvalidRequestException(400, "Request body too long", "The client declared a body length of " + bodyLength + " but has already sent " + bodyBytesRead);
             }
+
+            return;
+        } else if (state == State.CHUNKED_BODY) {
+
+            if (chunkState == ChunkState.LENGTH || chunkState == ChunkState.AFTER_CHUNK || chunkState == ChunkState.LAST_CHUNK) {
+                while (bb.hasRemaining()) {
+                    byte c = bb.get();
+                    if (chunkState == ChunkState.AFTER_CHUNK || chunkState == ChunkState.LAST_CHUNK) {
+                        if (c == '\n') {
+                            if (cur.length() != 1 || cur.charAt(0) != '\r') {
+                                throw new InvalidRequestException(400, "Bad chunk terminator", "After a chunk got " + cur);
+                            }
+                            cur.setLength(0);
+                            if (chunkState == ChunkState.AFTER_CHUNK) {
+                                chunkState = ChunkState.LENGTH;
+                            } else {
+                                body.close();
+                                state = State.COMPLETE;
+                                if (bb.hasRemaining()) {
+                                    throw new InvalidRequestException(400, "More bytes remaining after final chunk", "" + bb);
+                                }
+                            }
+                        } else {
+                            append(c);
+                        }
+                    } else {
+                        if ((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+                            append(c);
+                        } else if (c == '\r') {
+                            curChunkSize = Long.parseLong(cur.toString(), 16);
+                            cur.setLength(0);
+                        } else if (c == '\n') {
+                            if (cur.length() > 0) {
+                                throw new InvalidRequestException(400, "Chunk declaration had extra bytes", "Already had " + curChunkSize + " but then read character " + c);
+                            }
+                            chunkState = curChunkSize == 0 ? ChunkState.LAST_CHUNK : ChunkState.CHUNK;
+                            break;
+                        } else {
+                            throw new InvalidRequestException(400, "Invalid character in chunk size declaration: " + c, "Why");
+                        }
+                    }
+                }
+            }
+
+            if (chunkState == ChunkState.CHUNK) {
+                while (bb.hasRemaining()) {
+                    int size = (int) Math.min(curChunkSize, bb.limit() - bb.position());
+                    bodyBytesRead += size;
+                    curChunkSize -= size;
+                    byte[] copy = new byte[size];
+                    bb.get(copy, 0, size);
+                    body.handOff(ByteBuffer.wrap(copy));
+                    if (curChunkSize == 0) {
+                        chunkState = ChunkState.AFTER_CHUNK;
+                        break;
+                    }
+                }
+            }
+
 
             return;
         }
@@ -105,6 +170,9 @@ class RequestParser {
                         String val = cur.toString().trim();
                         switch (curHeader) {
                             case "content-length":
+                                if (bodyLength == -2) {
+                                    throw new InvalidRequestException(400, "Content-Length set after chunked encoding sent", "Headers were " + headers);
+                                }
                                 long prev = this.bodyLength;
                                 try {
                                     this.bodyLength = Long.parseLong(val);
@@ -113,6 +181,14 @@ class RequestParser {
                                 }
                                 if (prev != -1 && prev != this.bodyLength) {
                                     throw new InvalidRequestException(400, "Multiple content-length headers", "First was " + prev + " and then " + bodyLength);
+                                }
+                                break;
+                            case "transfer-encoding":
+                                if (bodyLength > -1) {
+                                    throw new InvalidRequestException(400, "Can't have transfer-encoding with content-length", "Headers were " + headers);
+                                }
+                                if (val.toLowerCase().endsWith("chunked")) {
+                                    this.bodyLength = -2;
                                 }
                                 break;
                         }
@@ -140,12 +216,20 @@ class RequestParser {
                                 throw new InvalidRequestException(400, "A request cannot have both transfer encoding and content length", "Headers were " + headers);
                             }
                             body = new GrowableByteBufferInputStream();
-                            state = hasContentLength ? State.FIXED_BODY : State.CHUNKED_BODY;
+                            if (hasContentLength) {
+                                state = State.FIXED_BODY;
+                            } else {
+                                chunkState = ChunkState.LENGTH;
+                                state = State.CHUNKED_BODY;
+                            }
                         } else {
                             state = State.COMPLETE;
                         }
 
                         requestListener.onHeaders(method, requestUri, protocol, headers);
+                        while (bb.hasRemaining()) {
+                            offer(bb);
+                        }
                         break;
                     case H_VALUE:
                         if (cur.length() > 0) {

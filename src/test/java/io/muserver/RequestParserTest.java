@@ -1,17 +1,19 @@
 package io.muserver;
 
 
+import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 import scaffolding.StringUtils;
 
 import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.util.Objects;
+import java.util.*;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.Arrays.asList;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -21,7 +23,6 @@ public class RequestParserTest {
 
     private final MyRequestListener listener = new MyRequestListener();
     private final RequestParser parser = new RequestParser(listener);
-
 
 
     @Test
@@ -55,7 +56,7 @@ public class RequestParserTest {
     }
 
     @Test
-    public void fixedLengthBodiesCanBeSent() throws RequestParser.InvalidRequestException, IOException {
+    public void fixedLengthBodiesCanBeSent() throws Exception {
         String message = StringUtils.randomStringOfLength(20000) + "This & that I'm afraid is my message\r\n";
         byte[] messageBytes = message.getBytes(UTF_8);
 
@@ -68,14 +69,128 @@ public class RequestParserTest {
         assertThat(to.toString("UTF-8"), is(message + message));
     }
 
+
     @Test
-    public void zeroLengthBodiesAreFine() throws RequestParser.InvalidRequestException, IOException {
+    public void wholeRequestCanComeInAtOnce() throws Exception {
+        String message = "Hello, there";
+        parser.offer(wrap("POST / HTTP/1.1\r\ncontent-length:" + (message.getBytes(UTF_8).length) + "\r\n\r\n" + message));
+        ByteArrayOutputStream to = new ByteArrayOutputStream();
+        Mutils.copy(parser.body, to, 8192);
+        assertThat(to.toString("UTF-8"), is(message));
+    }
+
+    @Test
+    public void zeroLengthBodiesAreFine() throws Exception {
         parser.offer(wrap("POST / HTTP/1.1\r\ncontent-length: 0\r\n\r\n"));
         parser.offer(ByteBuffer.allocate(0));
         ByteArrayOutputStream to = new ByteArrayOutputStream();
         Mutils.copy(parser.body, to, 8192);
         assertThat(to.size(), is(0));
     }
+
+    @Test
+    public void hexWorksLikeIThinkItDoes() {
+        assertThat(Integer.toHexString(15), equalTo("f"));
+        assertThat(Integer.toHexString(16), equalTo("10"));
+        assertThat(Integer.toHexString(13434546), equalTo("ccfeb2"));
+        assertThat(Integer.parseInt("f", 16), is(15));
+        assertThat(Integer.parseInt("F", 16), is(15));
+        assertThat(Integer.parseInt("10", 16), is(16));
+        assertThat(Integer.parseInt("ccfeb2", 16), is(13434546));
+    }
+
+    @Test
+    public void weirdCharacters() throws Exception {
+
+        parser.offer(wrap("POST / HTTP/1.1\r\ntransfer-encoding: chunked\r\n\r\n"));
+
+        parser.offer(wrap("2\r\n"));
+        parser.offer(ByteBuffer.wrap(new byte[]{-45, -66}));
+        parser.offer(wrap("\r\n"));
+        parser.offer(wrap("2\r\n"));
+        parser.offer(ByteBuffer.wrap(new byte[]{63, 111}));
+        parser.offer(wrap("\r\n"));
+        parser.offer(wrap("2\r\n"));
+        parser.offer(ByteBuffer.wrap(new byte[]{-69, -49}));
+        parser.offer(wrap("\r\n"));
+        parser.offer(wrap("2\r\n"));
+        parser.offer(ByteBuffer.wrap(new byte[]{-76, 33}));
+        parser.offer(wrap("\r\n"));
+        parser.offer(wrap("2\r\n"));
+        parser.offer(ByteBuffer.wrap(new byte[]{47, 56}));
+        parser.offer(wrap("\r\n"));
+        parser.offer(wrap("2\r\n"));
+        parser.offer(ByteBuffer.wrap(new byte[]{-123, 18}));
+        parser.offer(wrap("\r\n"));
+        parser.offer(wrap("2\r\n"));
+        parser.offer(ByteBuffer.wrap(new byte[]{82, 98}));
+        parser.offer(wrap("\r\n"));
+        parser.offer(wrap("2\r\n"));
+        parser.offer(ByteBuffer.wrap(new byte[]{1, -92}));
+        parser.offer(wrap("\r\n"));
+        parser.offer(wrap("2\r\n"));
+        parser.offer(ByteBuffer.wrap(new byte[]{52, 85}));
+        parser.offer(wrap("\r\n"));
+
+        parser.offer(wrap("0\r\n"));
+        parser.offer(wrap("\r\n"));
+
+        byte[] all = new byte[]{
+            -45, -66, 63, 111, -69, -49, -76, 33, 47, 56, -123, 18, 82, 98, 1, -92, 52, 85
+        };
+        assertThat(parser.complete(), is(true));
+        ByteArrayOutputStream to = new ByteArrayOutputStream();
+        Mutils.copy(parser.body, to, 8192);
+        assertThat(to.toString("UTF-8"), is(new String(all, UTF_8)));
+    }
+
+    @Test
+    public void chunkingCanAllHappenInOneOffer() throws Exception {
+        parser.offer(wrap("POST / HTTP/1.1\r\ntransfer-encoding: chunked\r\n\r\n" +
+            "6\r\nHello \r\n" +
+            "6\r\nHello \r\n" +
+            "0\r\n\r\n"));
+        assertThat(parser.complete(), is(true));
+
+        ByteArrayOutputStream to = new ByteArrayOutputStream();
+        Mutils.copy(parser.body, to, 8192);
+
+        assertThat(to.toString("UTF-8"), is("Hello Hello "));
+    }
+
+    @Test
+    public void requestBodiesCanBeChunked() throws Exception {
+        List<Byte> allSent = new ArrayList<>();
+        parser.offer(wrap("POST / HTTP/1.1\r\ntransfer-encoding: chunked\r\n\r\n"));
+        for (int i = 1; i < 10; i++) {
+            byte[] chunk = StringUtils.randomBytes(777 * i);
+            for (byte b : chunk) {
+                allSent.add(b);
+            }
+            parser.offer(wrap(Integer.toHexString(chunk.length) + "\r\n"));
+            parser.offer(ByteBuffer.wrap(chunk));
+            parser.offer(wrap("\r\n"));
+        }
+        parser.offer(wrap("0\r\n"));
+
+        // todo: trailer
+        parser.offer(wrap("\r\n"));
+        assertThat(parser.complete(), is(true));
+        ByteArrayOutputStream to = new ByteArrayOutputStream();
+        Mutils.copy(parser.body, to, 8192);
+
+        byte[] actual = to.toByteArray();
+        assertThat(actual.length, is(allSent.size()));
+        int i = 0;
+        for (byte aByte : allSent) {
+            byte a = actual[i];
+            if (a != aByte) {
+                Assert.fail("Error at index " + i);
+            }
+            i++;
+        }
+    }
+
 
     private static ByteBuffer wrap(String in) {
         return ByteBuffer.wrap(in.getBytes(StandardCharsets.US_ASCII));
