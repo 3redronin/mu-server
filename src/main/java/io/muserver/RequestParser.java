@@ -40,7 +40,7 @@ class RequestParser {
     }
 
     private enum ChunkState {
-        LENGTH, LENGTH_WRITTEN, CHUNK, AFTER_CHUNK, LAST_CHUNK
+        LENGTH, LENGTH_WRITTEN, CHUNK, AFTER_CHUNK, EXTENSION, LAST_CHUNK
     }
 
     void offer(ByteBuffer bb) throws InvalidRequestException {
@@ -63,63 +63,7 @@ class RequestParser {
 
             return;
         } else if (state == State.CHUNKED_BODY) {
-
-            if (chunkState == ChunkState.LENGTH || chunkState == ChunkState.AFTER_CHUNK || chunkState == ChunkState.LAST_CHUNK) {
-                while (bb.hasRemaining()) {
-                    byte c = bb.get();
-                    if (chunkState == ChunkState.AFTER_CHUNK || chunkState == ChunkState.LAST_CHUNK) {
-                        if (c == '\n') {
-                            if (cur.length() != 1 || cur.charAt(0) != '\r') {
-                                throw new InvalidRequestException(400, "Bad chunk terminator", "After a chunk got " + cur);
-                            }
-                            cur.setLength(0);
-                            if (chunkState == ChunkState.AFTER_CHUNK) {
-                                chunkState = ChunkState.LENGTH;
-                            } else {
-                                body.close();
-                                state = State.COMPLETE;
-                                if (bb.hasRemaining()) {
-                                    throw new InvalidRequestException(400, "More bytes remaining after final chunk", "" + bb);
-                                }
-                            }
-                        } else {
-                            append(c);
-                        }
-                    } else {
-                        if ((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
-                            append(c);
-                        } else if (c == '\r') {
-                            curChunkSize = Long.parseLong(cur.toString(), 16);
-                            cur.setLength(0);
-                        } else if (c == '\n') {
-                            if (cur.length() > 0) {
-                                throw new InvalidRequestException(400, "Chunk declaration had extra bytes", "Already had " + curChunkSize + " but then read character " + c);
-                            }
-                            chunkState = curChunkSize == 0 ? ChunkState.LAST_CHUNK : ChunkState.CHUNK;
-                            break;
-                        } else {
-                            throw new InvalidRequestException(400, "Invalid character in chunk size declaration: " + c, "Why");
-                        }
-                    }
-                }
-            }
-
-            if (chunkState == ChunkState.CHUNK) {
-                while (bb.hasRemaining()) {
-                    int size = (int) Math.min(curChunkSize, bb.limit() - bb.position());
-                    bodyBytesRead += size;
-                    curChunkSize -= size;
-                    byte[] copy = new byte[size];
-                    bb.get(copy, 0, size);
-                    body.handOff(ByteBuffer.wrap(copy));
-                    if (curChunkSize == 0) {
-                        chunkState = ChunkState.AFTER_CHUNK;
-                        break;
-                    }
-                }
-            }
-
-
+            parseChunkedBody(bb);
             return;
         }
 
@@ -259,6 +203,73 @@ class RequestParser {
                 }
             } else {
                 append(c);
+            }
+        }
+    }
+
+    private void parseChunkedBody(ByteBuffer bb) throws InvalidRequestException {
+        if (chunkState == ChunkState.LENGTH || chunkState == ChunkState.AFTER_CHUNK || chunkState == ChunkState.LAST_CHUNK) {
+            while (bb.hasRemaining()) {
+                byte c = bb.get();
+                if (chunkState == ChunkState.AFTER_CHUNK || chunkState == ChunkState.LAST_CHUNK) {
+                    if (c == '\n') {
+                        if (cur.length() != 1 || cur.charAt(0) != '\r') {
+                            throw new InvalidRequestException(400, "Bad chunk terminator", "After a chunk got " + cur);
+                        }
+                        cur.setLength(0);
+                        if (chunkState == ChunkState.AFTER_CHUNK) {
+                            chunkState = ChunkState.LENGTH;
+                        } else {
+                            body.close();
+                            state = State.COMPLETE;
+                            if (bb.hasRemaining()) {
+                                throw new InvalidRequestException(400, "More bytes remaining after final chunk", "" + bb);
+                            }
+                        }
+                    } else {
+                        append(c);
+                    }
+                } else if (chunkState == ChunkState.LENGTH) {
+                    if ((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+                        append(c);
+                    } else if (c == '\r' || c == ';') {
+                        curChunkSize = Long.parseLong(cur.toString(), 16);
+                        cur.setLength(0);
+                        if (c == ';') {
+                            chunkState = ChunkState.EXTENSION;
+                        }
+                    } else if (c == '\n') {
+                        if (cur.length() > 0) {
+                            throw new InvalidRequestException(400, "Chunk declaration had extra bytes", "Already had " + curChunkSize + " but then read character " + c);
+                        }
+                        chunkState = curChunkSize == 0 ? ChunkState.LAST_CHUNK : ChunkState.CHUNK;
+                        break;
+                    } else {
+                        throw new InvalidRequestException(400, "Invalid character in chunk size declaration: " + c, "Why");
+                    }
+                } else if (chunkState == ChunkState.EXTENSION) {
+                    if (c == '\n') {
+                        chunkState = curChunkSize == 0 ? ChunkState.LAST_CHUNK : ChunkState.CHUNK;
+                        break;
+                    } // else ignore the character because chunked extensions are ignored by mu-server
+                } else {
+                    throw new IllegalStateException("Unexpected state " + state);
+                }
+            }
+        }
+
+        if (chunkState == ChunkState.CHUNK) {
+            while (bb.hasRemaining()) {
+                int size = (int) Math.min(curChunkSize, bb.limit() - bb.position());
+                bodyBytesRead += size;
+                curChunkSize -= size;
+                byte[] copy = new byte[size];
+                bb.get(copy, 0, size);
+                body.handOff(ByteBuffer.wrap(copy));
+                if (curChunkSize == 0) {
+                    chunkState = ChunkState.AFTER_CHUNK;
+                    break;
+                }
             }
         }
     }

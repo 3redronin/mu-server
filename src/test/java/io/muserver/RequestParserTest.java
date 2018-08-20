@@ -7,6 +7,7 @@ import org.junit.Test;
 import scaffolding.StringUtils;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -100,6 +101,19 @@ public class RequestParserTest {
 
 
     @Test
+    public void chunkExtensionsAreIgnored() throws Exception {
+        String in = "POST / HTTP/1.1\r\ntransfer-encoding: chunked\r\n\r\n" +
+            "6;ignore\r\nHello \r\n" +
+            "6;ignore;some=value;another=\"I'm \"good\" or something\"\r\nHello \r\n" +
+            "6\r\nHello \r\n" +
+            "0\r\n\r\n";
+        parser.offer(wrap(in));
+        assertThat(parser.complete(), is(true));
+        assertThat(bodyAsUTF8(parser), is("Hello Hello Hello "));
+
+    }
+
+    @Test
     public void chunkingCanAllHappenInOneOfferOrByteByByte() throws Exception {
         String in = "POST / HTTP/1.1\r\ntransfer-encoding: chunked\r\n\r\n" +
             "6\r\nHello \r\n" +
@@ -107,11 +121,7 @@ public class RequestParserTest {
             "0\r\n\r\n";
         parser.offer(wrap(in));
         assertThat(parser.complete(), is(true));
-
-        ByteArrayOutputStream to = new ByteArrayOutputStream();
-        Mutils.copy(parser.body, to, 8192);
-
-        assertThat(to.toString("UTF-8"), is("Hello Hello "));
+        assertThat(bodyAsUTF8(parser), is("Hello Hello "));
 
         MyRequestListener listener2 = new MyRequestListener();
         RequestParser p2 = new RequestParser(listener2);
@@ -120,6 +130,12 @@ public class RequestParserTest {
             p2.offer(ByteBuffer.wrap(inBytes, i, 1));
         }
         assertThat(listener2, equalTo(listener));
+    }
+
+    private static String bodyAsUTF8(RequestParser parser) throws IOException {
+        ByteArrayOutputStream to = new ByteArrayOutputStream();
+        Mutils.copy(parser.body, to, 8192);
+        return to.toString("UTF-8");
     }
 
     @Test
@@ -321,6 +337,8 @@ Comments can be included in some HTTP header fields by surrounding
    grammar aside from the robustness exceptions listed above, the server
    SHOULD respond with a 400 (Bad Request) response.
 
+
+https://noxxi.de/research/http-evader-explained-3-chunked.html
 
      */
 
