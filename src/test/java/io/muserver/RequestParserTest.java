@@ -47,6 +47,7 @@ public class RequestParserTest {
 
     @Test
     public void headersComeOutAsHeaders() throws RequestParser.InvalidRequestException {
+        long start = System.currentTimeMillis();
         parser.offer(wrap("GET / HTTP/1.1\r\n"));
         parser.offer(wrap("Host:localhost:1234\r\nx-blah: haha\r\nSOME-Length: 0\r\nX-BLAH: \t something else\t \r\n\r\n"));
         assertThat(listener.headers.getAll("Host"), contains("localhost:1234"));

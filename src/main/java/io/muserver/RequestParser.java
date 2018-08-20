@@ -44,29 +44,20 @@ class RequestParser {
     }
 
     void offer(ByteBuffer bb) throws InvalidRequestException {
-        if (state == State.COMPLETE) {
-            throw new InvalidRequestException(400, "Request body too long", "More request was found even though no more was expected.");
-        } else if (state == State.FIXED_BODY) {
-            int size = bb.limit() - bb.position();
-            bodyBytesRead += size;
-            ByteBuffer copy = ByteBuffer.allocate(size);
-            copy.put(bb);
-            copy.flip();
-            body.handOff(copy);
-
-            if (bodyBytesRead == bodyLength) {
-                body.close();
-                state = State.COMPLETE;
-            } else if (bodyBytesRead > bodyLength) {
-                throw new InvalidRequestException(400, "Request body too long", "The client declared a body length of " + bodyLength + " but has already sent " + bodyBytesRead);
+        while (bb.hasRemaining()) {
+            if (state == State.COMPLETE) {
+                throw new InvalidRequestException(400, "Request body too long", "More request was found even though no more was expected.");
+            } else if (state == State.FIXED_BODY) {
+                parseFixedLengthBody(bb);
+            } else if (state == State.CHUNKED_BODY) {
+                parseChunkedBody(bb);
+            } else {
+                parseHeaders(bb);
             }
-
-            return;
-        } else if (state == State.CHUNKED_BODY) {
-            parseChunkedBody(bb);
-            return;
         }
+    }
 
+    private void parseHeaders(ByteBuffer bb) throws InvalidRequestException {
         while (bb.hasRemaining()) {
 
             byte c = bb.get();
@@ -161,7 +152,12 @@ class RequestParser {
                             }
                             body = new GrowableByteBufferInputStream();
                             if (hasContentLength) {
-                                state = State.FIXED_BODY;
+                                if (bodyLength == 0) {
+                                    state = State.COMPLETE;
+                                    body.close();
+                                } else {
+                                    state = State.FIXED_BODY;
+                                }
                             } else {
                                 chunkState = ChunkState.LENGTH;
                                 state = State.CHUNKED_BODY;
@@ -171,10 +167,7 @@ class RequestParser {
                         }
 
                         requestListener.onHeaders(method, requestUri, protocol, headers);
-                        while (bb.hasRemaining()) {
-                            offer(bb);
-                        }
-                        break;
+                        return; // jump out of this method to parse the body (if there is one)
                     case H_VALUE:
                         if (cur.length() > 0) {
                             throw new InvalidRequestException(400, "A newline was inside a header value", "Header value was " + cur);
@@ -204,6 +197,22 @@ class RequestParser {
             } else {
                 append(c);
             }
+        }
+    }
+
+    private void parseFixedLengthBody(ByteBuffer bb) throws InvalidRequestException {
+        int size = bb.limit() - bb.position();
+        bodyBytesRead += size;
+        ByteBuffer copy = ByteBuffer.allocate(size);
+        copy.put(bb);
+        copy.flip();
+        body.handOff(copy);
+
+        if (bodyBytesRead == bodyLength) {
+            body.close();
+            state = State.COMPLETE;
+        } else if (bodyBytesRead > bodyLength) {
+            throw new InvalidRequestException(400, "Request body too long", "The client declared a body length of " + bodyLength + " but has already sent " + bodyBytesRead);
         }
     }
 
