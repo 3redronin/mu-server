@@ -69,7 +69,6 @@ public class RequestParserTest {
         assertThat(to.toString("UTF-8"), is(message + message));
     }
 
-
     @Test
     public void wholeRequestCanComeInAtOnce() throws Exception {
         String message = "Hello, there";
@@ -99,63 +98,28 @@ public class RequestParserTest {
         assertThat(Integer.parseInt("ccfeb2", 16), is(13434546));
     }
 
-    @Test
-    public void weirdCharacters() throws Exception {
-
-        parser.offer(wrap("POST / HTTP/1.1\r\ntransfer-encoding: chunked\r\n\r\n"));
-
-        parser.offer(wrap("2\r\n"));
-        parser.offer(ByteBuffer.wrap(new byte[]{-45, -66}));
-        parser.offer(wrap("\r\n"));
-        parser.offer(wrap("2\r\n"));
-        parser.offer(ByteBuffer.wrap(new byte[]{63, 111}));
-        parser.offer(wrap("\r\n"));
-        parser.offer(wrap("2\r\n"));
-        parser.offer(ByteBuffer.wrap(new byte[]{-69, -49}));
-        parser.offer(wrap("\r\n"));
-        parser.offer(wrap("2\r\n"));
-        parser.offer(ByteBuffer.wrap(new byte[]{-76, 33}));
-        parser.offer(wrap("\r\n"));
-        parser.offer(wrap("2\r\n"));
-        parser.offer(ByteBuffer.wrap(new byte[]{47, 56}));
-        parser.offer(wrap("\r\n"));
-        parser.offer(wrap("2\r\n"));
-        parser.offer(ByteBuffer.wrap(new byte[]{-123, 18}));
-        parser.offer(wrap("\r\n"));
-        parser.offer(wrap("2\r\n"));
-        parser.offer(ByteBuffer.wrap(new byte[]{82, 98}));
-        parser.offer(wrap("\r\n"));
-        parser.offer(wrap("2\r\n"));
-        parser.offer(ByteBuffer.wrap(new byte[]{1, -92}));
-        parser.offer(wrap("\r\n"));
-        parser.offer(wrap("2\r\n"));
-        parser.offer(ByteBuffer.wrap(new byte[]{52, 85}));
-        parser.offer(wrap("\r\n"));
-
-        parser.offer(wrap("0\r\n"));
-        parser.offer(wrap("\r\n"));
-
-        byte[] all = new byte[]{
-            -45, -66, 63, 111, -69, -49, -76, 33, 47, 56, -123, 18, 82, 98, 1, -92, 52, 85
-        };
-        assertThat(parser.complete(), is(true));
-        ByteArrayOutputStream to = new ByteArrayOutputStream();
-        Mutils.copy(parser.body, to, 8192);
-        assertThat(to.toString("UTF-8"), is(new String(all, UTF_8)));
-    }
 
     @Test
-    public void chunkingCanAllHappenInOneOffer() throws Exception {
-        parser.offer(wrap("POST / HTTP/1.1\r\ntransfer-encoding: chunked\r\n\r\n" +
+    public void chunkingCanAllHappenInOneOfferOrByteByByte() throws Exception {
+        String in = "POST / HTTP/1.1\r\ntransfer-encoding: chunked\r\n\r\n" +
             "6\r\nHello \r\n" +
             "6\r\nHello \r\n" +
-            "0\r\n\r\n"));
+            "0\r\n\r\n";
+        parser.offer(wrap(in));
         assertThat(parser.complete(), is(true));
 
         ByteArrayOutputStream to = new ByteArrayOutputStream();
         Mutils.copy(parser.body, to, 8192);
 
         assertThat(to.toString("UTF-8"), is("Hello Hello "));
+
+        MyRequestListener listener2 = new MyRequestListener();
+        RequestParser p2 = new RequestParser(listener2);
+        byte[] inBytes = in.getBytes(UTF_8);
+        for (int i = 0; i < inBytes.length; i++) {
+            p2.offer(ByteBuffer.wrap(inBytes, i, 1));
+        }
+        assertThat(listener2, equalTo(listener));
     }
 
     @Test
