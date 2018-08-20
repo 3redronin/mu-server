@@ -1,5 +1,6 @@
 package io.muserver;
 
+import java.io.InputStream;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
@@ -36,7 +37,7 @@ class RequestParser {
     }
 
     private enum State {
-        RL_METHOD, RL_URI, RL_PROTO, RL_ENDING, H_NAME, H_VALUE, FIXED_BODY, CHUNKED_BODY, COMPLETE
+        RL_METHOD, RL_URI, RL_PROTO, H_NAME, H_VALUE, FIXED_BODY, CHUNKED_BODY, COMPLETE
     }
 
     private enum ChunkState {
@@ -82,26 +83,57 @@ class RequestParser {
                         throw new IllegalStateException("Shouldn't have a space while in " + state);
                 }
             } else if (c == '\r') {
+                // ignore it, as per spec recommendation saying it's okay
+            } else if (c == '\n') {
                 switch (state) {
                     case RL_PROTO:
                         this.protocol = cur.toString();
                         switch (protocol) {
                             case "HTTP/1.0":
                             case "HTTP/1.1":
-                                this.state = State.RL_ENDING;
+                                this.state = State.H_NAME;
                                 cur.setLength(0);
                                 break;
                             default:
                                 throw new MuException("Unsupported HTTP protocol " + protocol);
                         }
+                        state = State.H_NAME;
+                        break;
                     case H_NAME:
                         if (cur.length() > 0) {
-                            throw new InvalidRequestException(400, "A header name included a carriage return character", "Value was " + cur);
+                            throw new InvalidRequestException(400, "A header name included a line feed character", "Value was " + cur);
                         }
-                        break;
+                        cur.setLength(0);
+
+                        boolean hasContentLength = bodyLength > -1;
+                        boolean hasTransferEncoding = headers.contains("transfer-encoding");
+                        if (hasContentLength || hasTransferEncoding) {
+                            if (hasContentLength && hasTransferEncoding) {
+                                throw new InvalidRequestException(400, "A request cannot have both transfer encoding and content length", "Headers were " + headers);
+                            }
+                            if (hasContentLength) {
+                                if (bodyLength == 0) {
+                                    state = State.COMPLETE;
+                                    body = new GrowableByteBufferInputStream(); // TODO: make this empty
+                                    body.close();
+
+
+                                } else {
+                                    body = new GrowableByteBufferInputStream();
+                                    state = State.FIXED_BODY;
+                                }
+                            } else {
+                                body = new GrowableByteBufferInputStream();
+                                chunkState = ChunkState.LENGTH;
+                                state = State.CHUNKED_BODY;
+                            }
+                        } else {
+                            state = State.COMPLETE;
+                        }
+
+                        requestListener.onHeaders(method, requestUri, protocol, headers);
+                        return; // jump out of this method to parse the body (if there is one)
                     case H_VALUE:
-
-
                         String val = cur.toString().trim();
                         switch (curHeader) {
                             case "content-length":
@@ -129,49 +161,6 @@ class RequestParser {
                         }
                         curVals.add(val);
                         cur.setLength(0);
-                        break;
-                    default:
-                        throw new InvalidRequestException(400, "Unexpected CR", "State is " + state + " and accumulated value was " + cur);
-                }
-            } else if (c == '\n') {
-                switch (state) {
-                    case RL_ENDING:
-                        state = State.H_NAME;
-                        break;
-                    case H_NAME:
-                        if (cur.length() > 0) {
-                            throw new InvalidRequestException(400, "A header name included a line feed character", "Value was " + cur);
-                        }
-                        cur.setLength(0);
-
-                        boolean hasContentLength = bodyLength > -1;
-                        boolean hasTransferEncoding = headers.contains("transfer-encoding");
-                        if (hasContentLength || hasTransferEncoding) {
-                            if (hasContentLength && hasTransferEncoding) {
-                                throw new InvalidRequestException(400, "A request cannot have both transfer encoding and content length", "Headers were " + headers);
-                            }
-                            body = new GrowableByteBufferInputStream();
-                            if (hasContentLength) {
-                                if (bodyLength == 0) {
-                                    state = State.COMPLETE;
-                                    body.close();
-                                } else {
-                                    state = State.FIXED_BODY;
-                                }
-                            } else {
-                                chunkState = ChunkState.LENGTH;
-                                state = State.CHUNKED_BODY;
-                            }
-                        } else {
-                            state = State.COMPLETE;
-                        }
-
-                        requestListener.onHeaders(method, requestUri, protocol, headers);
-                        return; // jump out of this method to parse the body (if there is one)
-                    case H_VALUE:
-                        if (cur.length() > 0) {
-                            throw new InvalidRequestException(400, "A newline was inside a header value", "Header value was " + cur);
-                        }
                         state = State.H_NAME;
                         break;
                     default:
@@ -301,6 +290,15 @@ class RequestParser {
             this.responseCode = responseCode;
             this.clientMessage = clientMessage;
             this.privateDetails = privateDetails;
+        }
+    }
+
+    static class EmptyInputStream extends InputStream {
+        static final InputStream INSTANCE = new EmptyInputStream();
+        private EmptyInputStream() {
+        }
+        public int read() {
+            return -1;
         }
     }
 }
