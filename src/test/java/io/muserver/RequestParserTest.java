@@ -128,7 +128,6 @@ public class RequestParserTest {
         parser.offer(wrap(in));
         assertThat(parser.complete(), is(true));
         assertThat(bodyAsUTF8(parser), is("Hello Hello "));
-        System.out.println("parser.trailers = " + parser.trailers);
         assertThat(parser.trailers.getAll("X-Trailer-One"), contains("blart"));
         assertThat(parser.trailers.getAll("X-Trailer-Two"), contains("blart2", "and another value"));
     }
@@ -138,7 +137,11 @@ public class RequestParserTest {
         String in = "POST / HTTP/1.1\r\ntransfer-encoding: chunked\r\n\r\n" +
             "6\r\nHello \r\n" +
             "6\r\nHello \r\n" +
-            "0\r\n\r\n";
+            "0\r\n" +
+            "x-trailer-one: blart\r\n" +
+            "X-Trailer-TWO: blart2\r\n" +
+            "x-trailer-two: and another value\r\n" +
+            "\r\n";
         parser.offer(wrap(in));
         assertThat(parser.complete(), is(true));
         assertThat(bodyAsUTF8(parser), is("Hello Hello "));
@@ -150,6 +153,7 @@ public class RequestParserTest {
             p2.offer(ByteBuffer.wrap(inBytes, i, 1));
         }
         assertThat(listener2, equalTo(listener));
+        assertThat(parser.trailers, equalTo(p2.trailers));
     }
 
     private static String bodyAsUTF8(RequestParser parser) throws IOException {
