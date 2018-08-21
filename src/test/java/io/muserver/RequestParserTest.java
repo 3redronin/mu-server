@@ -2,7 +2,6 @@ package io.muserver;
 
 
 import org.junit.Assert;
-import org.junit.Ignore;
 import org.junit.Test;
 import scaffolding.StringUtils;
 
@@ -11,10 +10,11 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
-import static java.util.Arrays.asList;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -47,7 +47,6 @@ public class RequestParserTest {
 
     @Test
     public void headersComeOutAsHeaders() throws RequestParser.InvalidRequestException {
-        long start = System.currentTimeMillis();
         parser.offer(wrap("GET / HTTP/1.1\r\n"));
         parser.offer(wrap("Host:localhost:1234\r\nx-blah: haha\r\nSOME-Length: 0\r\nX-BLAH: \t something else\t \r\n\r\n"));
         assertThat(listener.headers.getAll("Host"), contains("localhost:1234"));
@@ -111,7 +110,27 @@ public class RequestParserTest {
         parser.offer(wrap(in));
         assertThat(parser.complete(), is(true));
         assertThat(bodyAsUTF8(parser), is("Hello Hello Hello "));
+    }
 
+    @Test
+    public void trailersCanBeSpecified() throws Exception {
+        String in = "POST / HTTP/1.1\r\n" +
+            "transfer-encoding: chunked\r\n" +
+            "x-header: blah\r\n" +
+            "\r\n" +
+            "6\r\nHello \r\n" +
+            "6\r\nHello \r\n" +
+            "0\r\n" +
+            "x-trailer-one: blart\r\n" +
+            "X-Trailer-TWO: blart2\r\n" +
+            "x-trailer-two: and another value\r\n" +
+            "\r\n";
+        parser.offer(wrap(in));
+        assertThat(parser.complete(), is(true));
+        assertThat(bodyAsUTF8(parser), is("Hello Hello "));
+        System.out.println("parser.trailers = " + parser.trailers);
+        assertThat(parser.trailers.getAll("X-Trailer-One"), contains("blart"));
+        assertThat(parser.trailers.getAll("X-Trailer-Two"), contains("blart2", "and another value"));
     }
 
     @Test

@@ -1,10 +1,7 @@
 package io.muserver;
 
-import java.io.InputStream;
 import java.net.URI;
 import java.nio.ByteBuffer;
-import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -19,10 +16,10 @@ class RequestParser {
     private URI requestUri;
     private String protocol;
     private final MuHeaders headers = new MuHeaders();
+    MuHeaders trailers;
     private String curHeader;
     private List<String> curVals;
     GrowableByteBufferInputStream body;
-    private Charset bodyCharset = StandardCharsets.ISO_8859_1;
     private long bodyLength = -1; // -2 is chunked
     private long bodyBytesRead = 0;
     private ChunkState chunkState;
@@ -41,7 +38,7 @@ class RequestParser {
     }
 
     private enum ChunkState {
-        LENGTH, LENGTH_WRITTEN, CHUNK, AFTER_CHUNK, EXTENSION, LAST_CHUNK
+        SIZE, EXTENSION, DATA, DATA_DONE, TRAILER_NAME, TRAILER_VALUE
     }
 
     void offer(ByteBuffer bb) throws InvalidRequestException {
@@ -53,12 +50,12 @@ class RequestParser {
             } else if (state == State.CHUNKED_BODY) {
                 parseChunkedBody(bb);
             } else {
-                parseHeaders(bb);
+                parseReqLineAndHeaders(bb);
             }
         }
     }
 
-    private void parseHeaders(ByteBuffer bb) throws InvalidRequestException {
+    private void parseReqLineAndHeaders(ByteBuffer bb) throws InvalidRequestException {
         while (bb.hasRemaining()) {
 
             byte c = bb.get();
@@ -77,7 +74,7 @@ class RequestParser {
                     case H_VALUE:
                         if (cur.length() > 0) {
                             append(c);
-                        }
+                        } // else ignore pre-pended space on a header value
                         break;
                     default:
                         throw new IllegalStateException("Shouldn't have a space while in " + state);
@@ -114,17 +111,14 @@ class RequestParser {
                             if (hasContentLength) {
                                 if (bodyLength == 0) {
                                     state = State.COMPLETE;
-                                    body = new GrowableByteBufferInputStream(); // TODO: make this empty
-                                    body.close();
-
-
+                                    body = GrowableByteBufferInputStream.EMPTY_STREAM;
                                 } else {
                                     body = new GrowableByteBufferInputStream();
                                     state = State.FIXED_BODY;
                                 }
                             } else {
                                 body = new GrowableByteBufferInputStream();
-                                chunkState = ChunkState.LENGTH;
+                                chunkState = ChunkState.SIZE;
                                 state = State.CHUNKED_BODY;
                             }
                         } else {
@@ -206,57 +200,89 @@ class RequestParser {
     }
 
     private void parseChunkedBody(ByteBuffer bb) throws InvalidRequestException {
-        if (chunkState == ChunkState.LENGTH || chunkState == ChunkState.AFTER_CHUNK || chunkState == ChunkState.LAST_CHUNK) {
+        if (chunkState != ChunkState.DATA) {
             while (bb.hasRemaining()) {
                 byte c = bb.get();
-                if (chunkState == ChunkState.AFTER_CHUNK || chunkState == ChunkState.LAST_CHUNK) {
+                if (c == '\r') {
+                    continue;
+                }
+                if (chunkState == ChunkState.TRAILER_NAME) {
+
                     if (c == '\n') {
-                        if (cur.length() != 1 || cur.charAt(0) != '\r') {
-                            throw new InvalidRequestException(400, "Bad chunk terminator", "After a chunk got " + cur);
+                        if (cur.length() > 0) {
+                            throw new InvalidRequestException(400, "HTTP Protocol error - trailer line had no value", "While reading a header name (" + cur + ") a newline was found, but there was no ':' first.");
+                        }
+                        body.close();
+                        state = State.COMPLETE;
+                        break;
+                    } else if (c == ':') {
+                        String header = cur.toString();
+                        this.curHeader = header.toLowerCase();
+
+                        if (trailers == null) {
+                            trailers = new MuHeaders();
+                        }
+                        if (trailers.contains(header)) {
+                            curVals = trailers.getAll(header);
+                        } else {
+                            curVals = new ArrayList<>();
+                            trailers.put(header, curVals);
                         }
                         cur.setLength(0);
-                        if (chunkState == ChunkState.AFTER_CHUNK) {
-                            chunkState = ChunkState.LENGTH;
-                        } else {
-                            body.close();
-                            state = State.COMPLETE;
-                            if (bb.hasRemaining()) {
-                                throw new InvalidRequestException(400, "More bytes remaining after final chunk", "" + bb);
-                            }
-                        }
+                        chunkState = ChunkState.TRAILER_VALUE;
                     } else {
                         append(c);
                     }
-                } else if (chunkState == ChunkState.LENGTH) {
+                } else if (chunkState == ChunkState.TRAILER_VALUE) {
+                    if (c == '\n') {
+                        String val = cur.toString().trim();
+                        curVals.add(val);
+                        cur.setLength(0);
+                        chunkState = ChunkState.TRAILER_NAME;
+                    } else {
+                        append(c);
+                    }
+                } else if (chunkState == ChunkState.SIZE) {
                     if ((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
                         append(c);
-                    } else if (c == '\r' || c == ';') {
+                    } else if (c == '\n' || c == ';') {
                         curChunkSize = Long.parseLong(cur.toString(), 16);
                         cur.setLength(0);
                         if (c == ';') {
                             chunkState = ChunkState.EXTENSION;
+                        } else {
+                            if (curChunkSize == 0) {
+                                chunkState = ChunkState.TRAILER_NAME;
+                            } else {
+                                chunkState = ChunkState.DATA;
+                                break; // break out of while loop parse body
+                            }
                         }
-                    } else if (c == '\n') {
-                        if (cur.length() > 0) {
-                            throw new InvalidRequestException(400, "Chunk declaration had extra bytes", "Already had " + curChunkSize + " but then read character " + c);
-                        }
-                        chunkState = curChunkSize == 0 ? ChunkState.LAST_CHUNK : ChunkState.CHUNK;
-                        break;
                     } else {
                         throw new InvalidRequestException(400, "Invalid character in chunk size declaration: " + c, "Why");
                     }
                 } else if (chunkState == ChunkState.EXTENSION) {
                     if (c == '\n') {
-                        chunkState = curChunkSize == 0 ? ChunkState.LAST_CHUNK : ChunkState.CHUNK;
-                        break;
+                        if (curChunkSize == 0) {
+                            chunkState = ChunkState.TRAILER_NAME;
+                        } else {
+                            chunkState = ChunkState.DATA;
+                            break; // break out of while loop parse body
+                        }
                     } // else ignore the character because chunked extensions are ignored by mu-server
+                } else if (chunkState == ChunkState.DATA_DONE) {
+                    if (c == '\n') {
+                        chunkState = ChunkState.SIZE;
+                    } else {
+                        throw new InvalidRequestException(400, "Extra data after chunk was supposed to end: " + c, "Why2");
+                    }
                 } else {
                     throw new IllegalStateException("Unexpected state " + state);
                 }
             }
         }
 
-        if (chunkState == ChunkState.CHUNK) {
+        if (chunkState == ChunkState.DATA) {
             while (bb.hasRemaining()) {
                 int size = (int) Math.min(curChunkSize, bb.limit() - bb.position());
                 bodyBytesRead += size;
@@ -265,7 +291,7 @@ class RequestParser {
                 bb.get(copy, 0, size);
                 body.handOff(ByteBuffer.wrap(copy));
                 if (curChunkSize == 0) {
-                    chunkState = ChunkState.AFTER_CHUNK;
+                    chunkState = ChunkState.DATA_DONE;
                     break;
                 }
             }
@@ -293,12 +319,4 @@ class RequestParser {
         }
     }
 
-    static class EmptyInputStream extends InputStream {
-        static final InputStream INSTANCE = new EmptyInputStream();
-        private EmptyInputStream() {
-        }
-        public int read() {
-            return -1;
-        }
-    }
 }

@@ -105,4 +105,10 @@ class GrowableByteBufferInputStream extends InputStream {
             readListener.onDataReceived(byteBuffer);
         }
     }
+
+    static final GrowableByteBufferInputStream EMPTY_STREAM;
+    static {
+        EMPTY_STREAM = new GrowableByteBufferInputStream();
+        EMPTY_STREAM.close();
+    }
 }
