@@ -113,7 +113,7 @@ class RequestParser {
                             cur.setLength(0);
                             break;
                         default:
-                            throw new MuException("Unsupported HTTP protocol " + protocol);
+                            throw new InvalidRequestException(505, "HTTP Version Not Supported", "Http version was " + protocol);
                     }
                     state = State.H_NAME;
                 } else {
