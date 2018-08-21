@@ -59,126 +59,140 @@ class RequestParser {
         while (bb.hasRemaining()) {
 
             byte c = bb.get();
-            if (c == ' ') {
-                switch (state) {
-                    case RL_METHOD:
-                        method = Method.valueOf(cur.toString());
-                        state = State.RL_URI;
-                        cur.setLength(0);
-                        break;
-                    case RL_URI:
-                        requestUri = URI.create(cur.toString());
-                        state = State.RL_PROTO;
-                        cur.setLength(0);
-                        break;
-                    case H_VALUE:
-                        if (cur.length() > 0) {
-                            append(c);
-                        } // else ignore pre-pended space on a header value
-                        break;
-                    default:
-                        throw new IllegalStateException("Shouldn't have a space while in " + state);
-                }
-            } else if (c == '\r') {
-                // ignore it, as per spec recommendation saying it's okay
-            } else if (c == '\n') {
-                switch (state) {
-                    case RL_PROTO:
-                        this.protocol = cur.toString();
-                        switch (protocol) {
-                            case "HTTP/1.0":
-                            case "HTTP/1.1":
-                                this.state = State.H_NAME;
-                                cur.setLength(0);
-                                break;
-                            default:
-                                throw new MuException("Unsupported HTTP protocol " + protocol);
-                        }
-                        state = State.H_NAME;
-                        break;
-                    case H_NAME:
-                        if (cur.length() > 0) {
-                            throw new InvalidRequestException(400, "A header name included a line feed character", "Value was " + cur);
-                        }
-                        cur.setLength(0);
+            if (c == '\r') {
+                continue; // as per spec, \r can be ignored in line endings when parsing
+            }
 
-                        boolean hasContentLength = bodyLength > -1;
-                        boolean hasTransferEncoding = headers.contains("transfer-encoding");
-                        if (hasContentLength || hasTransferEncoding) {
-                            if (hasContentLength && hasTransferEncoding) {
-                                throw new InvalidRequestException(400, "A request cannot have both transfer encoding and content length", "Headers were " + headers);
-                            }
-                            if (hasContentLength) {
-                                if (bodyLength == 0) {
-                                    state = State.COMPLETE;
-                                    body = GrowableByteBufferInputStream.EMPTY_STREAM;
-                                } else {
-                                    body = new GrowableByteBufferInputStream();
-                                    state = State.FIXED_BODY;
-                                }
+            if (state == State.RL_METHOD) {
+                if (c == ' ') {
+                    method = Method.valueOf(cur.toString());
+                    state = State.RL_URI;
+                    cur.setLength(0);
+                } else {
+                    // todo: throw if invalid char
+                    append(c);
+                }
+            } else if (state == State.RL_URI) {
+
+                if (c == ' ') {
+                    requestUri = URI.create(cur.toString());
+                    state = State.RL_PROTO;
+                    cur.setLength(0);
+                } else {
+                    append(c);
+                }
+            } else if (state == State.RL_PROTO) {
+                if (c == '\n') {
+                    this.protocol = cur.toString();
+                    switch (protocol) {
+                        case "HTTP/1.0":
+                        case "HTTP/1.1":
+                            this.state = State.H_NAME;
+                            cur.setLength(0);
+                            break;
+                        default:
+                            throw new MuException("Unsupported HTTP protocol " + protocol);
+                    }
+                    state = State.H_NAME;
+                } else {
+                    append(c);
+                }
+
+            } else if (state == State.H_NAME) {
+
+                if (c == ' ') {
+                    throw new InvalidRequestException(400, "HTTP protocol error: space in header name", "Shouldn't have a space while in " + state);
+                } else if (c == '\n') {
+                    if (cur.length() > 0) {
+                        throw new InvalidRequestException(400, "A header name included a line feed character", "Value was " + cur);
+                    }
+                    cur.setLength(0);
+
+                    boolean hasContentLength = bodyLength > -1;
+                    boolean hasTransferEncoding = headers.contains("transfer-encoding");
+                    if (hasContentLength || hasTransferEncoding) {
+                        if (hasContentLength && hasTransferEncoding) {
+                            throw new InvalidRequestException(400, "A request cannot have both transfer encoding and content length", "Headers were " + headers);
+                        }
+                        if (hasContentLength) {
+                            if (bodyLength == 0) {
+                                state = State.COMPLETE;
+                                body = GrowableByteBufferInputStream.EMPTY_STREAM;
                             } else {
                                 body = new GrowableByteBufferInputStream();
-                                chunkState = ChunkState.SIZE;
-                                state = State.CHUNKED_BODY;
+                                state = State.FIXED_BODY;
                             }
                         } else {
-                            state = State.COMPLETE;
+                            body = new GrowableByteBufferInputStream();
+                            chunkState = ChunkState.SIZE;
+                            state = State.CHUNKED_BODY;
                         }
+                    } else {
+                        state = State.COMPLETE;
+                    }
 
-                        requestListener.onHeaders(method, requestUri, protocol, headers, body);
-                        return; // jump out of this method to parse the body (if there is one)
-                    case H_VALUE:
-                        String val = cur.toString().trim();
-                        switch (curHeader) {
-                            case "content-length":
-                                if (bodyLength == -2) {
-                                    throw new InvalidRequestException(400, "Content-Length set after chunked encoding sent", "Headers were " + headers);
-                                }
-                                long prev = this.bodyLength;
-                                try {
-                                    this.bodyLength = Long.parseLong(val);
-                                } catch (NumberFormatException e) {
-                                    throw new InvalidRequestException(400, "Invalid content-length header", "Header was " + cur);
-                                }
-                                if (prev != -1 && prev != this.bodyLength) {
-                                    throw new InvalidRequestException(400, "Multiple content-length headers", "First was " + prev + " and then " + bodyLength);
-                                }
-                                break;
-                            case "transfer-encoding":
-                                if (bodyLength > -1) {
-                                    throw new InvalidRequestException(400, "Can't have transfer-encoding with content-length", "Headers were " + headers);
-                                }
-                                if (val.toLowerCase().endsWith("chunked")) {
-                                    this.bodyLength = -2;
-                                }
-                                break;
-                        }
-                        curVals.add(val);
-                        cur.setLength(0);
-                        state = State.H_NAME;
-                        break;
-                    default:
-                        append(c);
+                    requestListener.onHeaders(method, requestUri, protocol, headers, body);
+                    return; // jump out of this method to parse the body (if there is one)
+                } else if (c == ':') {
+
+                    String header = cur.toString();
+                    this.curHeader = header.toLowerCase();
+                    if (headers.contains(header)) {
+                        curVals = headers.getAll(header);
+                    } else {
+                        curVals = new ArrayList<>();
+                        headers.put(header, curVals);
+                    }
+                    state = State.H_VALUE;
+                    cur.setLength(0);
+                } else {
+                    append(c);
                 }
-            } else if (c == ':') {
-                switch (state) {
-                    case H_NAME:
-                        String header = cur.toString();
-                        this.curHeader = header.toLowerCase();
-                        if (headers.contains(header)) {
-                            curVals = headers.getAll(header);
-                        } else {
-                            curVals = new ArrayList<>();
-                            headers.put(header, curVals);
-                        }
-                        state = State.H_VALUE;
-                        cur.setLength(0);
-                        break;
-                    default:
+
+            } else if (state == State.H_VALUE) {
+
+                if (c == ' ') {
+                    if (cur.length() > 0) {
                         append(c);
+                    } // else ignore pre-pended space on a header value
+
+                } else if (c == '\n') {
+
+                    String val = cur.toString().trim();
+                    switch (curHeader) {
+                        case "content-length":
+                            if (bodyLength == -2) {
+                                throw new InvalidRequestException(400, "Content-Length set after chunked encoding sent", "Headers were " + headers);
+                            }
+                            long prev = this.bodyLength;
+                            try {
+                                this.bodyLength = Long.parseLong(val);
+                            } catch (NumberFormatException e) {
+                                throw new InvalidRequestException(400, "Invalid content-length header", "Header was " + cur);
+                            }
+                            if (prev != -1 && prev != this.bodyLength) {
+                                throw new InvalidRequestException(400, "Multiple content-length headers", "First was " + prev + " and then " + bodyLength);
+                            }
+                            break;
+                        case "transfer-encoding":
+                            if (bodyLength > -1) {
+                                throw new InvalidRequestException(400, "Can't have transfer-encoding with content-length", "Headers were " + headers);
+                            }
+                            if (val.toLowerCase().endsWith("chunked")) {
+                                this.bodyLength = -2;
+                            }
+                            break;
+                    }
+                    curVals.add(val);
+                    cur.setLength(0);
+                    state = State.H_NAME;
+                } else {
+                    append(c);
                 }
+
+
             } else {
-                append(c);
+                throw new IllegalStateException("Should not be processing headers at state " + state);
             }
         }
     }
@@ -307,20 +321,8 @@ class RequestParser {
 
     interface RequestListener {
         void onHeaders(Method method, URI uri, String proto, MuHeaders headers, InputStream body);
+
         void onRequestComplete(MuHeaders trailers);
-    }
-
-    static class InvalidRequestException extends Exception {
-        final int responseCode;
-        final String clientMessage;
-        final String privateDetails;
-
-        InvalidRequestException(int responseCode, String clientMessage, String privateDetails) {
-            super(responseCode + " " + clientMessage + " - " + privateDetails);
-            this.responseCode = responseCode;
-            this.clientMessage = clientMessage;
-            this.privateDetails = privateDetails;
-        }
     }
 
 }

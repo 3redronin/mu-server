@@ -28,7 +28,7 @@ public class RequestParserTest {
 
 
     @Test
-    public void noHeadersAndNoBodySupported() throws RequestParser.InvalidRequestException {
+    public void noHeadersAndNoBodySupported() throws InvalidRequestException {
         parser.offer(wrap("G"));
         parser.offer(wrap("ET"));
         parser.offer(wrap(" /"));
@@ -47,7 +47,7 @@ public class RequestParserTest {
     }
 
     @Test
-    public void headersComeOutAsHeaders() throws RequestParser.InvalidRequestException {
+    public void headersComeOutAsHeaders() throws InvalidRequestException {
         parser.offer(wrap("GET / HTTP/1.1\r\n"));
         parser.offer(wrap("Host:localhost:1234\r\nx-blah: haha\r\nSOME-Length: 0\r\nX-BLAH: \t something else\t \r\n\r\n"));
         assertThat(listener.headers.getAll("Host"), contains("localhost:1234"));
