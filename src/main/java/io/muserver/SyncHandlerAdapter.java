@@ -12,7 +12,7 @@ import java.util.concurrent.Executors;
 class SyncHandlerAdapter implements AsyncMuHandler {
     private static final Logger log = LoggerFactory.getLogger(SyncHandlerAdapter.class);
     private final List<MuHandler> muHandlers;
-    private final ExecutorService executor = Executors.newCachedThreadPool();
+    private static final ExecutorService executor = Executors.newCachedThreadPool();
 
     SyncHandlerAdapter(List<MuHandler> muHandlers) {
         this.muHandlers = muHandlers;
