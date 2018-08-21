@@ -106,16 +106,15 @@ public class HeadersTest {
         }
 	}
 
-	@Test public void ifXForwardedHeadersAreSpecifiedThenRequestUriUsesThem() {
-		URI[] actual = new URI[2];
-		server = MuServerBuilder.httpServer()
-				.withHttpPort(12752)
-				.withMaxHeadersSize(1024)
-				.addHandler((request, response) -> {
-					actual[0] = request.uri();
-					actual[1] = request.serverURI();
-					return true;
-				}).start();
+    @Test public void ifXForwardedHeadersAreSpecifiedThenRequestUriUsesThem() {
+        URI[] actual = new URI[2];
+        server = MuServerBuilder.httpServer()
+            .withHttpPort(12752)
+            .addHandler((request, response) -> {
+                actual[0] = request.uri();
+                actual[1] = request.serverURI();
+                return true;
+            }).start();
 
         try (Response ignored = call(request()
             .header("X-Forwarded-Proto", "https")
@@ -124,8 +123,29 @@ public class HeadersTest {
             .url(server.httpUri().resolve("/blah?query=value").toString()))) {
         }
         assertThat(actual[1].toString(), equalTo("http://localhost:12752/blah?query=value"));
-		assertThat(actual[0].toString(), equalTo("https://www.example.org/blah?query=value"));
-	}
+        assertThat(actual[0].toString(), equalTo("https://www.example.org/blah?query=value"));
+    }
+
+    @Test public void ifMultipleXForwardedHeadersAreSpecifiedThenRequestUriUsesTheFirst() {
+        URI[] actual = new URI[2];
+        server = MuServerBuilder.httpServer()
+            .withHttpPort(12753)
+            .addHandler((request, response) -> {
+                actual[0] = request.uri();
+                actual[1] = request.serverURI();
+                return true;
+            }).start();
+
+        try (Response ignored = call(request()
+            .header("X-Forwarded-Proto", "https")
+            .addHeader("X-Forwarded-Proto", "http")
+            .header("X-Forwarded-Host", "www.example.org:12000")
+            .addHeader("X-Forwarded-Host", "localhost:8192")
+            .url(server.httpUri().resolve("/blah?query=value").toString()))) {
+        }
+        assertThat(actual[1].toString(), equalTo("http://localhost:12753/blah?query=value"));
+        assertThat(actual[0].toString(), equalTo("https://www.example.org:12000/blah?query=value"));
+    }
 
     @Test public void ifNoResponseDataThenContentLengthIsZero() {
         server = MuServerBuilder.httpServer()
