@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.ByteBuffer;
@@ -37,9 +38,14 @@ class MuSelector {
 
                     RequestParser.RequestListener requestListener = new RequestParser.RequestListener() {
                         @Override
-                        public void onHeaders(Method method, URI uri, String proto, MuHeaders headers) {
+                        public void onHeaders(Method method, URI uri, String proto, MuHeaders headers, InputStream body) {
                             log.info(method + " " + uri + " " + proto + " - " + headers);
 
+                        }
+
+                        @Override
+                        public void onRequestComplete(MuHeaders trailers) {
+                            log.info("Request complete. Trailers=" + trailers);
                         }
                     };
                     RequestParser requestParser = new RequestParser(requestListener);

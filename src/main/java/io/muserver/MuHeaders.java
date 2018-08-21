@@ -1,5 +1,7 @@
 package io.muserver;
 
+import com.sun.javafx.collections.ImmutableObservableList;
+
 import java.util.*;
 
 import static io.muserver.NettyRequestParameters.isTruthy;
@@ -102,4 +104,12 @@ public class MuHeaders implements RequestParameters {
     public String toString() {
         return all.toString();
     }
+
+
+    public static final MuHeaders EMPTY = new MuHeaders() {
+        @Override
+        public void put(String header, List<String> values) {
+            throw new UnsupportedOperationException("This is a readonly object");
+        }
+    };
 }

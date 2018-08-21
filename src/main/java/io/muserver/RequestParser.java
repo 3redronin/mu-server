@@ -1,5 +1,6 @@
 package io.muserver;
 
+import java.io.InputStream;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -16,18 +17,14 @@ class RequestParser {
     private URI requestUri;
     private String protocol;
     private final MuHeaders headers = new MuHeaders();
-    MuHeaders trailers;
+    private MuHeaders trailers;
     private String curHeader;
     private List<String> curVals;
-    GrowableByteBufferInputStream body;
+    private GrowableByteBufferInputStream body;
     private long bodyLength = -1; // -2 is chunked
     private long bodyBytesRead = 0;
     private ChunkState chunkState;
     private long curChunkSize = -1;
-
-    boolean complete() {
-        return state == State.COMPLETE;
-    }
 
     RequestParser(RequestListener requestListener) {
         this.requestListener = requestListener;
@@ -52,6 +49,9 @@ class RequestParser {
             } else {
                 parseReqLineAndHeaders(bb);
             }
+        }
+        if (state == State.COMPLETE) {
+            requestListener.onRequestComplete(trailers);
         }
     }
 
@@ -125,7 +125,7 @@ class RequestParser {
                             state = State.COMPLETE;
                         }
 
-                        requestListener.onHeaders(method, requestUri, protocol, headers);
+                        requestListener.onHeaders(method, requestUri, protocol, headers, body);
                         return; // jump out of this method to parse the body (if there is one)
                     case H_VALUE:
                         String val = cur.toString().trim();
@@ -211,6 +211,9 @@ class RequestParser {
                     if (c == '\n') {
                         if (cur.length() > 0) {
                             throw new InvalidRequestException(400, "HTTP Protocol error - trailer line had no value", "While reading a header name (" + cur + ") a newline was found, but there was no ':' first.");
+                        }
+                        if (trailers == null) {
+                            trailers = MuHeaders.EMPTY;
                         }
                         body.close();
                         state = State.COMPLETE;
@@ -303,7 +306,8 @@ class RequestParser {
     }
 
     interface RequestListener {
-        void onHeaders(Method method, URI uri, String proto, MuHeaders headers);
+        void onHeaders(Method method, URI uri, String proto, MuHeaders headers, InputStream body);
+        void onRequestComplete(MuHeaders trailers);
     }
 
     static class InvalidRequestException extends Exception {

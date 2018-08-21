@@ -7,6 +7,7 @@ import scaffolding.StringUtils;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -33,7 +34,7 @@ public class RequestParserTest {
         parser.offer(wrap(" /"));
         parser.offer(wrap("a%20link HTTP/1.0\r"));
         parser.offer(wrap("\n\r\n"));
-        assertThat(parser.complete(), is(true));
+        assertThat(listener.isComplete, is(true));
         assertThat(listener.method, is(Method.GET));
         assertThat(listener.uri.toString(), is("/a%20link"));
         assertThat(listener.proto, is("HTTP/1.0"));
@@ -53,7 +54,7 @@ public class RequestParserTest {
         assertThat(listener.headers.getAll("Host"), contains("localhost:1234"));
         assertThat(listener.headers.getAll("some-length"), contains("0"));
         assertThat(listener.headers.getAll("X-Blah"), contains("haha", "something else"));
-        assertThat(parser.complete(), is(true));
+        assertThat(listener.isComplete, is(true));
     }
 
     @Test
@@ -66,7 +67,7 @@ public class RequestParserTest {
         parser.offer(ByteBuffer.wrap(messageBytes));
 
         ByteArrayOutputStream to = new ByteArrayOutputStream();
-        Mutils.copy(parser.body, to, 8192);
+        Mutils.copy(listener.body, to, 8192);
         assertThat(to.toString("UTF-8"), is(message + message));
     }
 
@@ -75,7 +76,7 @@ public class RequestParserTest {
         String message = "Hello, there";
         parser.offer(wrap("POST / HTTP/1.1\r\ncontent-length:" + (message.getBytes(UTF_8).length) + "\r\n\r\n" + message));
         ByteArrayOutputStream to = new ByteArrayOutputStream();
-        Mutils.copy(parser.body, to, 8192);
+        Mutils.copy(listener.body, to, 8192);
         assertThat(to.toString("UTF-8"), is(message));
     }
 
@@ -84,7 +85,7 @@ public class RequestParserTest {
         parser.offer(wrap("POST / HTTP/1.1\r\ncontent-length: 0\r\n\r\n"));
         parser.offer(ByteBuffer.allocate(0));
         ByteArrayOutputStream to = new ByteArrayOutputStream();
-        Mutils.copy(parser.body, to, 8192);
+        Mutils.copy(listener.body, to, 8192);
         assertThat(to.size(), is(0));
     }
 
@@ -108,8 +109,8 @@ public class RequestParserTest {
             "6\r\nHello \r\n" +
             "0\r\n\r\n";
         parser.offer(wrap(in));
-        assertThat(parser.complete(), is(true));
-        assertThat(bodyAsUTF8(parser), is("Hello Hello Hello "));
+        assertThat(listener.isComplete, is(true));
+        assertThat(bodyAsUTF8(listener), is("Hello Hello Hello "));
     }
 
     @Test
@@ -126,10 +127,10 @@ public class RequestParserTest {
             "x-trailer-two: and another value\r\n" +
             "\r\n";
         parser.offer(wrap(in));
-        assertThat(parser.complete(), is(true));
-        assertThat(bodyAsUTF8(parser), is("Hello Hello "));
-        assertThat(parser.trailers.getAll("X-Trailer-One"), contains("blart"));
-        assertThat(parser.trailers.getAll("X-Trailer-Two"), contains("blart2", "and another value"));
+        assertThat(listener.isComplete, is(true));
+        assertThat(bodyAsUTF8(listener), is("Hello Hello "));
+        assertThat(listener.trailers.getAll("X-Trailer-One"), contains("blart"));
+        assertThat(listener.trailers.getAll("X-Trailer-Two"), contains("blart2", "and another value"));
     }
 
     @Test
@@ -143,8 +144,8 @@ public class RequestParserTest {
             "x-trailer-two: and another value\r\n" +
             "\r\n";
         parser.offer(wrap(in));
-        assertThat(parser.complete(), is(true));
-        assertThat(bodyAsUTF8(parser), is("Hello Hello "));
+        assertThat(listener.isComplete, is(true));
+        assertThat(bodyAsUTF8(listener), is("Hello Hello "));
 
         MyRequestListener listener2 = new MyRequestListener();
         RequestParser p2 = new RequestParser(listener2);
@@ -153,12 +154,12 @@ public class RequestParserTest {
             p2.offer(ByteBuffer.wrap(inBytes, i, 1));
         }
         assertThat(listener2, equalTo(listener));
-        assertThat(parser.trailers, equalTo(p2.trailers));
+        assertThat(listener2.trailers, equalTo(listener.trailers));
     }
 
-    private static String bodyAsUTF8(RequestParser parser) throws IOException {
+    private static String bodyAsUTF8(MyRequestListener listener) throws IOException {
         ByteArrayOutputStream to = new ByteArrayOutputStream();
-        Mutils.copy(parser.body, to, 8192);
+        Mutils.copy(listener.body, to, 8192);
         return to.toString("UTF-8");
     }
 
@@ -179,9 +180,9 @@ public class RequestParserTest {
 
         // todo: trailer
         parser.offer(wrap("\r\n"));
-        assertThat(parser.complete(), is(true));
+        assertThat(listener.isComplete, is(true));
         ByteArrayOutputStream to = new ByteArrayOutputStream();
-        Mutils.copy(parser.body, to, 8192);
+        Mutils.copy(listener.body, to, 8192);
 
         byte[] actual = to.toByteArray();
         assertThat(actual.length, is(allSent.size()));
@@ -205,9 +206,13 @@ public class RequestParserTest {
         String proto;
         URI uri;
         Method method;
+        MuHeaders trailers;
+        InputStream body;
+        boolean isComplete;
 
         @Override
-        public void onHeaders(Method method, URI uri, String proto, MuHeaders headers) {
+        public void onHeaders(Method method, URI uri, String proto, MuHeaders headers, InputStream body) {
+            this.body = body;
             if (this.method != null) {
                 throw new IllegalStateException("onHeaders called twice!");
             }
@@ -218,6 +223,12 @@ public class RequestParserTest {
         }
 
         @Override
+        public void onRequestComplete(MuHeaders trailers) {
+            this.trailers = trailers;
+            this.isComplete = true;
+        }
+
+        @Override
         public boolean equals(Object o) {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
@@ -225,12 +236,13 @@ public class RequestParserTest {
             return Objects.equals(headers, that.headers) &&
                 Objects.equals(proto, that.proto) &&
                 Objects.equals(uri, that.uri) &&
+                Objects.equals(trailers, that.trailers) &&
                 method == that.method;
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(headers, proto, uri, method);
+            return Objects.hash(headers, proto, uri, trailers, method);
         }
 
         @Override
@@ -239,6 +251,7 @@ public class RequestParserTest {
                 "headers=" + headers +
                 ", proto='" + proto + '\'' +
                 ", uri=" + uri +
+                ", method=" + trailers +
                 ", method=" + method +
                 '}';
         }
