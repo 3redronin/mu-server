@@ -196,6 +196,35 @@ public class RequestParserTest {
         }
     }
 
+    @Test
+    public void multipleRequestsCanBeHandled() throws Exception {
+        String message = StringUtils.randomStringOfLength(200) + "This & that I'm afraid is my message\r\n";
+        byte[] messageBytes = message.getBytes(UTF_8);
+
+        parser.offer(wrap("POST / HTTP/1.1\r\ncontent-length: " + (messageBytes.length * 2) + "\r\n\r\n"));
+        parser.offer(ByteBuffer.wrap(messageBytes));
+        parser.offer(ByteBuffer.wrap(messageBytes));
+
+        ByteArrayOutputStream to = new ByteArrayOutputStream();
+        Mutils.copy(listener.body, to, 8192);
+        assertThat(to.toString("UTF-8"), is(message + message));
+
+
+        message = "Hello, there";
+        parser.offer(wrap("POST / HTTP/1.1\r\ncontent-length:" + (message.getBytes(UTF_8).length) + "\r\n\r\n" + message));
+        to = new ByteArrayOutputStream();
+        Mutils.copy(listener.body, to, 8192);
+        assertThat(to.toString("UTF-8"), is(message));
+
+
+        parser.offer(wrap("POST / HTTP/1.1\r\ncontent-length: 0\r\n\r\n"));
+        parser.offer(ByteBuffer.allocate(0));
+
+        to = new ByteArrayOutputStream();
+        Mutils.copy(listener.body, to, 8192);
+        assertThat(to.size(), is(0));
+    }
+
 
     private static ByteBuffer wrap(String in) {
         return ByteBuffer.wrap(in.getBytes(StandardCharsets.US_ASCII));
@@ -213,9 +242,6 @@ public class RequestParserTest {
         @Override
         public void onHeaders(Method method, URI uri, String proto, MuHeaders headers, InputStream body) {
             this.body = body;
-            if (this.method != null) {
-                throw new IllegalStateException("onHeaders called twice!");
-            }
             this.method = method;
             this.uri = uri;
             this.proto = proto;

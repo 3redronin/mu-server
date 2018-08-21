@@ -8,23 +8,40 @@ import java.util.List;
 
 class RequestParser {
 
-    private State state = State.RL_METHOD;
 
     private final RequestListener requestListener;
-    private StringBuffer cur = new StringBuffer();
 
+    private State state = State.RL_METHOD;
+    private StringBuffer cur = new StringBuffer();
     private Method method;
     private URI requestUri;
     private String protocol;
-    private final MuHeaders headers = new MuHeaders();
+    private MuHeaders headers = new MuHeaders();
     private MuHeaders trailers;
     private String curHeader;
     private List<String> curVals;
     private GrowableByteBufferInputStream body;
     private long bodyLength = -1; // -2 is chunked
-    private long bodyBytesRead = 0;
+    private long bodyBytesRead;
     private ChunkState chunkState;
     private long curChunkSize = -1;
+
+    private void reset() {
+        state = State.RL_METHOD;
+        cur.setLength(0);
+        method = null;
+        requestUri = null;
+        protocol = null;
+        headers = new MuHeaders();
+        trailers = null;
+        curHeader = null;
+        curVals = null;
+        body = null;
+        bodyLength = -1;
+        bodyBytesRead = 0;
+        chunkState = null;
+        curChunkSize = -1;
+    }
 
     RequestParser(RequestListener requestListener) {
         this.requestListener = requestListener;
@@ -52,6 +69,7 @@ class RequestParser {
         }
         if (state == State.COMPLETE) {
             requestListener.onRequestComplete(trailers);
+            reset();
         }
     }
 
