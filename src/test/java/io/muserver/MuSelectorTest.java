@@ -8,7 +8,7 @@ import scaffolding.RawClient;
 import java.io.IOException;
 import java.net.URI;
 
-import static org.junit.Assert.*;
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 public class MuSelectorTest {
     private static final Logger log = LoggerFactory.getLogger(MuSelectorTest.class);
@@ -18,12 +18,16 @@ public class MuSelectorTest {
         MuSelector selector = new MuSelector();
         selector.start();
 
-        RawClient client = RawClient.create(URI.create("http://localhost:" + selector.address.getPort()));
+        URI targetURI = URI.create("http://localhost:" + selector.address.getPort());
+        RawClient client = RawClient.create(targetURI);
 
-        client.sendUTF8("Hello, world");
-        client.flushRequest();
-        Thread.sleep(100);
-        client.sendUTF8("This is something of a longer message");
+        String message = "Hello, world";
+
+        client.sendStartLine("GET", "/something?aquery=what&huh");
+        client.sendHeader("Host", targetURI.getAuthority());
+        client.sendHeader("Content-Length", String.valueOf(message.getBytes(UTF_8).length));
+        client.endHeaders();
+        client.sendUTF8(message);
         client.flushRequest();
 
         Thread.sleep(2000);

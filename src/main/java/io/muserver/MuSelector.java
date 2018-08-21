@@ -26,6 +26,7 @@ class MuSelector {
 
         log.info("Started at " + address.getPort());
 
+
         listener.accept(
             null, new CompletionHandler<AsynchronousSocketChannel, Object>() {
                 public void completed(AsynchronousSocketChannel client, Object attachment) {

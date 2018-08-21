@@ -83,7 +83,11 @@ class RequestParser {
 
             if (state == State.RL_METHOD) {
                 if (c == ' ') {
-                    method = Method.valueOf(cur.toString());
+                    try {
+                        method = Method.valueOf(cur.toString());
+                    } catch (IllegalArgumentException e) {
+                        throw new InvalidRequestException(501, "Not Implemented", "The HTTP method " + cur + " is not supported by mu-server");
+                    }
                     state = State.RL_URI;
                     cur.setLength(0);
                 } else {
