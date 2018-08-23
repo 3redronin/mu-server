@@ -11,6 +11,8 @@ import java.nio.ByteBuffer;
 import java.nio.channels.AsynchronousServerSocketChannel;
 import java.nio.channels.AsynchronousSocketChannel;
 import java.nio.channels.CompletionHandler;
+import java.util.Date;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 class MuSelector {
@@ -39,8 +41,28 @@ class MuSelector {
 
                     RequestParser.RequestListener requestListener = new RequestParser.RequestListener() {
                         @Override
-                        public void onHeaders(Method method, URI uri, String proto, MuHeaders headers, InputStream body) {
-                            log.info(method + " " + uri + " " + proto + " - " + headers);
+                        public void onHeaders(Method method, URI uri, HttpVersion httpVersion, MuHeaders requestHeaders, InputStream body) {
+                            log.info(method + " " + uri + " " + httpVersion + " - " + requestHeaders);
+
+                            boolean isKeepAlive = keepAlive(httpVersion, requestHeaders);
+
+                            MuHeaders respHeaders = new MuHeaders();
+                            respHeaders.set(HeaderNames.DATE.toString(), Mutils.toHttpDate(new Date()));
+                            respHeaders.set("X-Blah", "Ah haha");
+
+                            ResponseGenerator resp = new ResponseGenerator(httpVersion);
+                            ByteBuffer toSend = resp.writeHeader(200, respHeaders);
+                            client.write(toSend, 1, TimeUnit.MINUTES, null, new CompletionHandler<Integer, Object>() {
+                                @Override
+                                public void completed(Integer result, Object attachment) {
+                                    log.info("Writing worked with " + result);
+                                }
+
+                                @Override
+                                public void failed(Throwable exc, Object attachment) {
+                                    log.error("Writing failed", exc);
+                                }
+                            });
 
                         }
 
@@ -51,6 +73,8 @@ class MuSelector {
                     };
                     RequestParser requestParser = new RequestParser(requestListener);
                     readRequest(client, buffer, requestParser);
+
+
                 }
 
                 public void failed(Throwable exc, Object attachment) {
@@ -58,6 +82,33 @@ class MuSelector {
                     log.error("Failure", exc);
                 }
             });
+    }
+
+    static boolean keepAlive(HttpVersion version, MuHeaders headers) {
+        List<String> connection = headers.getAll("connection");
+        switch (version) {
+            case HTTP_1_1:
+                for (String value : connection) {
+                    String[] split = value.split(",\\s*");
+                    for (String s : split) {
+                        if (s.equalsIgnoreCase("close")) {
+                            return false;
+                        }
+                    }
+                }
+                return true;
+            case HTTP_1_0:
+                for (String value : connection) {
+                    String[] split = value.split(",\\s*");
+                    for (String s : split) {
+                        if (s.equalsIgnoreCase("keep-alive")) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+        }
+        throw new IllegalArgumentException(version + " is not supported");
     }
 
     private static void readRequest(AsynchronousSocketChannel client, ByteBuffer buffer, RequestParser requestParser) {

@@ -9,6 +9,8 @@ import java.io.IOException;
 import java.net.URI;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.MatcherAssert.assertThat;
 
 public class MuSelectorTest {
     private static final Logger log = LoggerFactory.getLogger(MuSelectorTest.class);
@@ -36,5 +38,13 @@ public class MuSelectorTest {
 
         client.closeRequest();
         client.closeResponse();
+    }
+
+    @Test
+    public void keepAliveTest() {
+        assertThat(MuSelector.keepAlive(HttpVersion.HTTP_1_0, new MuHeaders()), is(false));
+        assertThat(MuSelector.keepAlive(HttpVersion.HTTP_1_1, new MuHeaders()), is(true));
+        assertThat(MuSelector.keepAlive(HttpVersion.HTTP_1_0, new MuHeaders().set("Connection", "keep-alive")), is(true));
+        assertThat(MuSelector.keepAlive(HttpVersion.HTTP_1_1, new MuHeaders().set("Connection", "Blah, close, Another")), is(false));
     }
 }

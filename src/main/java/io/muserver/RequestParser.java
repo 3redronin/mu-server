@@ -15,7 +15,7 @@ class RequestParser {
     private StringBuffer cur = new StringBuffer();
     private Method method;
     private URI requestUri;
-    private String protocol;
+    private HttpVersion protocol;
     private MuHeaders headers = new MuHeaders();
     private MuHeaders trailers;
     private String curHeader;
@@ -105,16 +105,12 @@ class RequestParser {
                 }
             } else if (state == State.RL_PROTO) {
                 if (c == '\n') {
-                    this.protocol = cur.toString();
-                    switch (protocol) {
-                        case "HTTP/1.0":
-                        case "HTTP/1.1":
-                            this.state = State.H_NAME;
-                            cur.setLength(0);
-                            break;
-                        default:
-                            throw new InvalidRequestException(505, "HTTP Version Not Supported", "Http version was " + protocol);
+                    this.protocol = HttpVersion.fromRequestLine(cur.toString());
+                    if (this.protocol == null) {
+                        throw new InvalidRequestException(505, "HTTP Version Not Supported", "Http version was " + protocol);
                     }
+                    this.state = State.H_NAME;
+                    cur.setLength(0);
                     state = State.H_NAME;
                 } else {
                     append(c);
@@ -342,7 +338,7 @@ class RequestParser {
     }
 
     interface RequestListener {
-        void onHeaders(Method method, URI uri, String proto, MuHeaders headers, InputStream body);
+        void onHeaders(Method method, URI uri, HttpVersion httpProtocolVersion, MuHeaders headers, InputStream body);
 
         void onRequestComplete(MuHeaders trailers);
     }

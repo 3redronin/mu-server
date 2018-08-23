@@ -232,7 +232,7 @@ public class RequestParserTest {
 
     private static class MyRequestListener implements RequestParser.RequestListener {
         MuHeaders headers;
-        String proto;
+        HttpVersion proto;
         URI uri;
         Method method;
         MuHeaders trailers;
@@ -240,11 +240,11 @@ public class RequestParserTest {
         boolean isComplete;
 
         @Override
-        public void onHeaders(Method method, URI uri, String proto, MuHeaders headers, InputStream body) {
+        public void onHeaders(Method method, URI uri, HttpVersion httpProtocolVersion, MuHeaders headers, InputStream body) {
             this.body = body;
             this.method = method;
             this.uri = uri;
-            this.proto = proto;
+            this.proto = httpProtocolVersion;
             this.headers = headers;
         }
 
@@ -402,6 +402,12 @@ Comments can be included in some HTTP header fields by surrounding
 
 
 https://noxxi.de/research/http-evader-explained-3-chunked.html
+
+
+A server MUST respond with a 400 (Bad Request) status code to any
+   HTTP/1.1 request message that lacks a Host header field and to any
+   request message that contains more than one Host header field or a
+   Host header field with an invalid field-value.
 
      */
 

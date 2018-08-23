@@ -1,10 +1,9 @@
 package io.muserver;
 
-import com.sun.javafx.collections.ImmutableObservableList;
-
 import java.util.*;
 
 import static io.muserver.NettyRequestParameters.isTruthy;
+import static java.util.Arrays.asList;
 
 public class MuHeaders implements RequestParameters {
 
@@ -79,9 +78,25 @@ public class MuHeaders implements RequestParameters {
         return all.containsKey(name.toLowerCase());
     }
 
-    public void put(String header, List<String> values) {
+    public MuHeaders put(String header, List<String> values) {
         all.put(header.toLowerCase(), values);
+        return this;
     }
+
+    public MuHeaders set(String header, String value) {
+        all.put(header.toLowerCase(), asList(value));
+        return this;
+    }
+    public MuHeaders add(String header, String value) {
+        header = header.toLowerCase();
+        if (all.containsKey(header)) {
+            all.get(header).add(value);
+        } else {
+            set(header, value);
+        }
+        return this;
+    }
+
 
     public int size() {
         return all.size();
@@ -108,7 +123,7 @@ public class MuHeaders implements RequestParameters {
 
     public static final MuHeaders EMPTY = new MuHeaders() {
         @Override
-        public void put(String header, List<String> values) {
+        public MuHeaders put(String header, List<String> values) {
             throw new UnsupportedOperationException("This is a readonly object");
         }
     };
