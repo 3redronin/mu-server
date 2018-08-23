@@ -40,15 +40,26 @@ class MuSelector {
                     ByteBuffer buffer = ByteBuffer.allocate(8192);
 
                     RequestParser.RequestListener requestListener = new RequestParser.RequestListener() {
+
+
+                        private HttpVersion httpVersion;
+
                         @Override
                         public void onHeaders(Method method, URI uri, HttpVersion httpVersion, MuHeaders requestHeaders, InputStream body) {
                             log.info(method + " " + uri + " " + httpVersion + " - " + requestHeaders);
 
                             boolean isKeepAlive = keepAlive(httpVersion, requestHeaders);
+                            this.httpVersion = httpVersion;
 
+                        }
+
+                        @Override
+                        public void onRequestComplete(MuHeaders trailers) {
+                            log.info("Request complete. Trailers=" + trailers);
                             MuHeaders respHeaders = new MuHeaders();
                             respHeaders.set(HeaderNames.DATE.toString(), Mutils.toHttpDate(new Date()));
                             respHeaders.set("X-Blah", "Ah haha");
+
 
                             ResponseGenerator resp = new ResponseGenerator(httpVersion);
                             ByteBuffer toSend = resp.writeHeader(200, respHeaders);
@@ -56,19 +67,24 @@ class MuSelector {
                                 @Override
                                 public void completed(Integer result, Object attachment) {
                                     log.info("Writing worked with " + result);
+                                    try {
+                                        client.close();
+                                    } catch (IOException e) {
+                                        log.info("Error closing socket", e);
+                                    }
                                 }
 
                                 @Override
                                 public void failed(Throwable exc, Object attachment) {
                                     log.error("Writing failed", exc);
+                                    try {
+                                        client.close();
+                                    } catch (IOException e) {
+                                        log.info("Error closing socket", e);
+                                    }
                                 }
                             });
 
-                        }
-
-                        @Override
-                        public void onRequestComplete(MuHeaders trailers) {
-                            log.info("Request complete. Trailers=" + trailers);
                         }
                     };
                     RequestParser requestParser = new RequestParser(requestListener);

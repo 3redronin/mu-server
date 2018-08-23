@@ -165,9 +165,10 @@ public class Mutils {
      */
     public static String toHttpDate(Date date) {
         notNull("date", date);
-        return DateTimeFormatter.RFC_1123_DATE_TIME
+        String s = DateTimeFormatter.RFC_1123_DATE_TIME
             .withZone(ZoneOffset.UTC)
             .format(Instant.ofEpochMilli(date.getTime()));
+        return s.replaceFirst(", ([0-9]) ", ", 0$1 ");
     }
 
     /**

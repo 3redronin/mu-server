@@ -1,8 +1,10 @@
 package io.muserver;
 
+import okhttp3.Response;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import scaffolding.ClientUtils;
 import scaffolding.RawClient;
 
 import java.io.IOException;
@@ -47,4 +49,17 @@ public class MuSelectorTest {
         assertThat(MuSelector.keepAlive(HttpVersion.HTTP_1_0, new MuHeaders().set("Connection", "keep-alive")), is(true));
         assertThat(MuSelector.keepAlive(HttpVersion.HTTP_1_1, new MuHeaders().set("Connection", "Blah, close, Another")), is(false));
     }
+
+    @Test
+    public void worksWithOKHttpClient() throws IOException {
+        MuSelector selector = new MuSelector();
+        selector.start();
+
+        String targetURI = "http://localhost:" + selector.address.getPort();
+
+        try (Response resp = ClientUtils.call(ClientUtils.request().url(targetURI))) {
+            assertThat(resp.code(), is(200));
+        }
+    }
+
 }

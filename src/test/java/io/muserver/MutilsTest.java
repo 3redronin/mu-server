@@ -35,7 +35,7 @@ public class MutilsTest {
     @Test
     public void formatsDatesCorrectly() {
         assertThat(Mutils.toHttpDate(new Date(1532785855376L)), equalTo("Sat, 28 Jul 2018 13:50:55 GMT"));
-        assertThat(Mutils.toHttpDate(new Date(1564787855376L)), equalTo("Fri, 2 Aug 2019 23:17:35 GMT"));
+        assertThat(Mutils.toHttpDate(new Date(1564787855376L)), equalTo("Fri, 02 Aug 2019 23:17:35 GMT"));
     }
 
 }
