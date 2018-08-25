@@ -5,7 +5,6 @@ import org.slf4j.LoggerFactory;
 
 import javax.net.ssl.SSLContext;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.ByteBuffer;
@@ -49,7 +48,7 @@ class MuSelector {
                         private HttpVersion httpVersion;
 
                         @Override
-                        public void onHeaders(Method method, URI uri, HttpVersion httpVersion, MuHeaders requestHeaders, InputStream body) {
+                        public void onHeaders(Method method, URI uri, HttpVersion httpVersion, MuHeaders requestHeaders, GrowableByteBufferInputStream body) {
                             log.info(method + " " + uri + " " + httpVersion + " - " + requestHeaders);
 
                             boolean isKeepAlive = keepAlive(httpVersion, requestHeaders);

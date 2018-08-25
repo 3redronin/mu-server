@@ -8,6 +8,7 @@ import tlschannel.ServerTlsChannel;
 import tlschannel.TlsChannel;
 
 import javax.net.ssl.SSLContext;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
@@ -17,6 +18,7 @@ import java.nio.channels.SocketChannel;
 import java.util.Iterator;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class ConnectionAccepter {
     private static final Logger log = LoggerFactory.getLogger(ConnectionAccepter.class);
@@ -27,9 +29,11 @@ public class ConnectionAccepter {
     private volatile boolean running = false;
     private Selector selector;
     private final SSLContext sslContext;
+    private final AtomicReference<MuServer> serverRef;
 
-    public ConnectionAccepter(SSLContext sslContext) {
+    public ConnectionAccepter(SSLContext sslContext, AtomicReference<MuServer> serverRef) {
         this.sslContext = sslContext;
+        this.serverRef = serverRef;
     }
 
 
@@ -75,12 +79,14 @@ public class ConnectionAccepter {
                         SocketChannel rawChannel = serverChannel.accept();
                         rawChannel.configureBlocking(false);
 
+                        InetAddress clientAddress = ((InetSocketAddress) rawChannel.getRemoteAddress()).getAddress();
+
                         ClientConnection cc;
                         if (sslContext == null) {
-                            cc = new ClientConnection(rawChannel);
+                            cc = new ClientConnection(rawChannel, "http", clientAddress, serverRef.get());
                         } else {
                             TlsChannel tlsChannel = ServerTlsChannel.newBuilder(rawChannel, sslContext).build();
-                            cc = new ClientConnection(tlsChannel);
+                            cc = new ClientConnection(tlsChannel, "https", clientAddress, serverRef.get());
                         }
                         SelectionKey newKey = rawChannel.register(selector, SelectionKey.OP_READ);
                         newKey.attach(cc);

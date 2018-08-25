@@ -2,10 +2,6 @@ package io.muserver.rest;
 
 class NotImplementedException extends RuntimeException {
 
-    public NotImplementedException() {
-        super();
-    }
-
     public NotImplementedException(String message) {
         super(message);
     }

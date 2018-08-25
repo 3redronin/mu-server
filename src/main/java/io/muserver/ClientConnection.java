@@ -4,23 +4,31 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.io.InputStream;
+import java.net.InetAddress;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.channels.ByteChannel;
 import java.util.Date;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 class ClientConnection implements RequestParser.RequestListener {
     private static final Logger log = LoggerFactory.getLogger(ClientConnection.class);
 
-
     private final RequestParser requestParser = new RequestParser(this);
     final ByteChannel channel;
+    private final ConcurrentLinkedQueue queue = new ConcurrentLinkedQueue();
     private HttpVersion httpVersion;
     private boolean isKeepAlive;
+    private MuRequestImpl curReq;
+    final String protocol;
+    final InetAddress clientAddress;
+    final MuServer server;
 
-    ClientConnection(ByteChannel channel) {
+    ClientConnection(ByteChannel channel, String protocol, InetAddress clientAddress, MuServer server) {
         this.channel = channel;
+        this.protocol = protocol;
+        this.clientAddress = clientAddress;
+        this.server = server;
         log.info("New connection");
     }
 
@@ -34,8 +42,10 @@ class ClientConnection implements RequestParser.RequestListener {
     }
 
     @Override
-    public void onHeaders(Method method, URI uri, HttpVersion httpVersion, MuHeaders headers, InputStream body) {
+    public void onHeaders(Method method, URI uri, HttpVersion httpVersion, MuHeaders headers, GrowableByteBufferInputStream body) {
 //        log.info(method + " " + uri + " " + httpVersion + " - " + headers);
+
+        MuRequestImpl req = new MuRequestImpl(method, uri, headers, body, this);
 
         this.isKeepAlive = MuSelector.keepAlive(httpVersion, headers);
         this.httpVersion = httpVersion;

@@ -5,6 +5,7 @@ import java.net.URI;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 class RequestParser {
 
@@ -135,7 +136,7 @@ class RequestParser {
                         if (hasContentLength) {
                             if (bodyLength == 0) {
                                 state = State.COMPLETE;
-                                body = GrowableByteBufferInputStream.EMPTY_STREAM;
+                                body = null;
                             } else {
                                 body = new GrowableByteBufferInputStream();
                                 state = State.FIXED_BODY;
@@ -159,7 +160,7 @@ class RequestParser {
                         curVals = headers.getAll(header);
                     } else {
                         curVals = new ArrayList<>();
-                        headers.put(header, curVals);
+                        headers.set(header, curVals);
                     }
                     state = State.H_VALUE;
                     cur.setLength(0);
@@ -261,7 +262,7 @@ class RequestParser {
                             curVals = trailers.getAll(header);
                         } else {
                             curVals = new ArrayList<>();
-                            trailers.put(header, curVals);
+                            trailers.set(header, curVals);
                         }
                         cur.setLength(0);
                         chunkState = ChunkState.TRAILER_VALUE;
@@ -343,7 +344,7 @@ class RequestParser {
     }
 
     interface RequestListener {
-        void onHeaders(Method method, URI uri, HttpVersion httpProtocolVersion, MuHeaders headers, InputStream body);
+        void onHeaders(Method method, URI uri, HttpVersion httpProtocolVersion, MuHeaders headers, GrowableByteBufferInputStream body);
 
         void onRequestComplete(MuHeaders trailers);
     }

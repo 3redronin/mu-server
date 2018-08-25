@@ -240,7 +240,7 @@ public class RequestParserTest {
         boolean isComplete;
 
         @Override
-        public void onHeaders(Method method, URI uri, HttpVersion httpProtocolVersion, MuHeaders headers, InputStream body) {
+        public void onHeaders(Method method, URI uri, HttpVersion httpProtocolVersion, MuHeaders headers, GrowableByteBufferInputStream body) {
             this.body = body;
             this.method = method;
             this.uri = uri;

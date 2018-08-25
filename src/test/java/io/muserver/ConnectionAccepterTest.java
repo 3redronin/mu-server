@@ -8,6 +8,7 @@ import scaffolding.RawClient;
 
 import javax.net.ssl.SSLContext;
 import java.net.URI;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.hamcrest.CoreMatchers.is;
@@ -20,7 +21,7 @@ public class ConnectionAccepterTest {
 
     @Test
     public void go() throws Exception {
-        ConnectionAccepter selector = new ConnectionAccepter(null);
+        ConnectionAccepter selector = new ConnectionAccepter(null, new AtomicReference<>());
         selector.start();
 
         URI targetURI = URI.create("http://localhost:" + selector.address.getPort());
@@ -54,24 +55,34 @@ public class ConnectionAccepterTest {
     @Test
     public void worksWithOKHttpClient() throws Exception {
         SSLContext sslContext = SSLContextBuilder.unsignedLocalhostCert();
-        ConnectionAccepter selector = new ConnectionAccepter(sslContext);
+        ConnectionAccepter selector = new ConnectionAccepter(sslContext, new AtomicReference<>());
         try {
             selector.start();
             String targetURI = "https://localhost:" + selector.address.getPort();
             long start = System.currentTimeMillis();
 
 
-            for (int i = 0; i < 1000; i++) {
+            for (int i = 0; i < 100; i++) {
                 try (Response resp = call(request().url(targetURI))) {
                     assertThat(resp.code(), is(200));
                 }
             }
 
-            System.out.println("Call took " + (System.currentTimeMillis() - start) + "ms");
+            long duration = System.currentTimeMillis() - start;
+            System.out.println("Call took " + duration + "ms - or " + (duration / 1000));
         } finally {
             selector.stop();
         }
 
     }
+
+    /*
+    Tests
+
+    point https call at http endpoint
+    point http call at https endpoint
+
+
+     */
 
 }
