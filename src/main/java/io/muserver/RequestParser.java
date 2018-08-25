@@ -333,6 +333,11 @@ class RequestParser {
         }
     }
 
+    private static boolean isTokenChar(char c) {
+//        "!" / "#" / "$" / "%" / "&" / "'" / "*" / "+" / "-" / "." / "^" / "_" / "`" / "|" / "~" / DIGIT / ALPHA
+        return true;
+    }
+
     private void append(byte c) {
         cur.append((char) c);
     }

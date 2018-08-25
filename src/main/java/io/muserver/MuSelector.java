@@ -3,6 +3,7 @@ package io.muserver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.net.ssl.SSLContext;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
@@ -19,6 +20,8 @@ class MuSelector {
     private static final Logger log = LoggerFactory.getLogger(MuSelector.class);
 
     InetSocketAddress address;
+    SSLContext sslContext = SSLContextBuilder.unsignedLocalhostCert();
+
 
     public void start() throws IOException {
         AsynchronousServerSocketChannel listener
@@ -27,6 +30,7 @@ class MuSelector {
         this.address = (InetSocketAddress) listener.getLocalAddress();
 
         log.info("Started at " + address.getPort());
+
 
 
         listener.accept(
@@ -127,7 +131,7 @@ class MuSelector {
         throw new IllegalArgumentException(version + " is not supported");
     }
 
-    private static void readRequest(AsynchronousSocketChannel client, ByteBuffer buffer, RequestParser requestParser) {
+    private void readRequest(AsynchronousSocketChannel client, ByteBuffer buffer, RequestParser requestParser) {
         client.read(buffer, 1, TimeUnit.MINUTES, requestParser, new CompletionHandler<Integer, Object>() {
             @Override
             public void completed(Integer result, Object attachment) {
@@ -142,6 +146,9 @@ class MuSelector {
                     }
                     return;
                 }
+
+
+
                 log.info("Read " + read + " bytes with position " + buffer.position() + " and limit " + buffer.limit() + " and capacity " + buffer.capacity());
 
                 buffer.limit(read);
