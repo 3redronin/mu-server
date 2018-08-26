@@ -4,11 +4,10 @@ import java.util.*;
 
 import static io.muserver.Mutils.notNull;
 import static io.muserver.NettyRequestParameters.isTruthy;
-import static java.util.Arrays.asList;
 
 public class MuHeaders extends Headers implements RequestParameters {
 
-    private final Map<String, List<String>> all = new HashMap<>();
+    private final Map<String, List<String>> all = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
 
     @Override
     public Map<String, List<String>> all() {
@@ -70,20 +69,20 @@ public class MuHeaders extends Headers implements RequestParameters {
 
     @Override
     public List<String> getAll(String name) {
-        List<String> vals = all.get(name.toLowerCase());
+        List<String> vals = all.get(name);
         return vals == null ? Collections.emptyList() : vals;
     }
 
     @Override
     public boolean contains(String name) {
-        return all.containsKey(name.toLowerCase());
+        return all.containsKey(name);
     }
 
 
     public MuHeaders set(String header, String value) {
         notNull("name", header);
         notNull("value", value);
-        all.put(header.toLowerCase(), newList(value));
+        all.put(header, newList(value));
         return this;
     }
 
@@ -91,7 +90,6 @@ public class MuHeaders extends Headers implements RequestParameters {
     public MuHeaders add(String header, String value) {
         notNull("name", header);
         notNull("value", value);
-        header = header.toLowerCase();
         if (all.containsKey(header)) {
             all.get(header).add(value);
         } else {
@@ -321,7 +319,7 @@ public class MuHeaders extends Headers implements RequestParameters {
 
     private static String valueToString(Object value) {
         notNull("value", value);
-        return value instanceof Date ? Mutils.toHttpDate((Date)value) : value.toString();
+        return value instanceof Date ? Mutils.toHttpDate((Date) value) : value.toString();
     }
 
     @Override
@@ -380,6 +378,11 @@ public class MuHeaders extends Headers implements RequestParameters {
         return add(name, values);
     }
 
+    public Headers set(String name, List<String> values) {
+        all.put(name, values);
+        return this;
+    }
+
     private List<String> addIfAbsent(String name) {
         List<String> values = all.get(name);
         if (values == null) {
@@ -422,7 +425,7 @@ public class MuHeaders extends Headers implements RequestParameters {
     @Override
     public Headers remove(String name) {
         notNull("name", name);
-        all.remove(name.toLowerCase());
+        all.remove(name);
         return this;
     }
 

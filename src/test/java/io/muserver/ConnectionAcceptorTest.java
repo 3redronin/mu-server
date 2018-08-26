@@ -8,22 +8,28 @@ import scaffolding.RawClient;
 
 import javax.net.ssl.SSLContext;
 import java.net.URI;
+import java.util.Collections;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.Arrays.asList;
+import static java.util.Collections.emptyList;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 
-public class ConnectionAccepterTest {
-    private static final Logger log = LoggerFactory.getLogger(ConnectionAccepterTest.class);
+public class ConnectionAcceptorTest {
+    private static final Logger log = LoggerFactory.getLogger(ConnectionAcceptorTest.class);
+    private static final ExecutorService executorService = Executors.newCachedThreadPool();
 
     @Test
     public void go() throws Exception {
-        ConnectionAccepter selector = new ConnectionAccepter(null, new AtomicReference<>());
-        selector.start();
+        ConnectionAcceptor selector = new ConnectionAcceptor(executorService, emptyList(), null, new AtomicReference<>());
+        selector.start("localhost", 0);
 
         URI targetURI = URI.create("http://localhost:" + selector.address.getPort());
         RawClient client = RawClient.create(targetURI);
@@ -56,18 +62,26 @@ public class ConnectionAccepterTest {
     @Test
     public void worksWithOKHttpClient() throws Exception {
         SSLContext sslContext = SSLContextBuilder.unsignedLocalhostCert();
-        ConnectionAccepter selector = new ConnectionAccepter(sslContext, new AtomicReference<>());
+        MuHandler echoHandler = new MuHandler() {
+            @Override
+            public boolean handle(MuRequest request, MuResponse response) throws Exception {
+                response.contentType("text/plain");
+                response.write("This is just a test");
+                return true;
+            }
+        };
+        ConnectionAcceptor selector = new ConnectionAcceptor(executorService, asList(echoHandler), sslContext, new AtomicReference<>());
         try {
-            selector.start();
+            selector.start("localhost", 0);
             String targetURI = "https://localhost:" + selector.address.getPort();
             long start = System.currentTimeMillis();
 
 
-            int numToMake = 100;
+            int numToMake = 10000;
             for (int i = 0; i < numToMake; i++) {
                 try (Response resp = call(request().url(targetURI))) {
                     assertThat(resp.code(), is(200));
-                    assertThat(resp.body().string(), equalTo("Hello, world"));
+                    assertThat(resp.body().string(), equalTo("This is just a test"));
                 }
             }
 

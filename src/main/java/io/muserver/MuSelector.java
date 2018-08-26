@@ -13,6 +13,7 @@ import java.nio.channels.AsynchronousSocketChannel;
 import java.nio.channels.CompletionHandler;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 
 class MuSelector {
@@ -20,6 +21,9 @@ class MuSelector {
 
     InetSocketAddress address;
     SSLContext sslContext = SSLContextBuilder.unsignedLocalhostCert();
+
+    MuSelector() {
+    }
 
 
     public void start() throws IOException {

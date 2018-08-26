@@ -10,38 +10,43 @@ import tlschannel.TlsChannel;
 import javax.net.ssl.SSLContext;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.URI;
 import java.nio.ByteBuffer;
-import java.nio.channels.SelectionKey;
-import java.nio.channels.Selector;
-import java.nio.channels.ServerSocketChannel;
-import java.nio.channels.SocketChannel;
+import java.nio.channels.*;
 import java.util.Iterator;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
-class ConnectionAccepter {
-    private static final Logger log = LoggerFactory.getLogger(ConnectionAccepter.class);
+class ConnectionAcceptor {
+    private static final Logger log = LoggerFactory.getLogger(ConnectionAcceptor.class);
+    private final ExecutorService executorService;
 
     InetSocketAddress address;
     private Thread thread;
     private final CountDownLatch startLatch = new CountDownLatch(1);
     private volatile boolean running = false;
     private Selector selector;
+    private final List<MuHandler> handlers;
     private final SSLContext sslContext;
     private final AtomicReference<MuServer> serverRef;
+    private URI uri;
 
-    ConnectionAccepter(SSLContext sslContext, AtomicReference<MuServer> serverRef) {
+    ConnectionAcceptor(ExecutorService executorService, List<MuHandler> handlers, SSLContext sslContext, AtomicReference<MuServer> serverRef) {
+        this.executorService = executorService;
+        this.handlers = handlers;
         this.sslContext = sslContext;
         this.serverRef = serverRef;
     }
 
 
-    public void start() throws Exception {
+    public void start(String host, int port) throws Exception {
         long start = System.currentTimeMillis();
         thread = new Thread(() -> {
             try {
-                startIt();
+                startIt(host, port);
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -52,14 +57,17 @@ class ConnectionAccepter {
         log.info("Started? " + started + " in " + (System.currentTimeMillis() - start) + "ms");
     }
 
-    private void startIt() throws Exception {
+    private void startIt(String host, int port) throws Exception {
         try (ServerSocketChannel serverSocket = ServerSocketChannel.open()) {
-            serverSocket.socket().bind(new InetSocketAddress(0));
+            InetSocketAddress endpoint = host == null ? new InetSocketAddress(port) : new InetSocketAddress(host, port);
+            serverSocket.socket().bind(endpoint);
             serverSocket.configureBlocking(false);
             this.selector = Selector.open();
             serverSocket.register(selector, SelectionKey.OP_ACCEPT);
 
             this.address = (InetSocketAddress) serverSocket.getLocalAddress();
+
+            this.uri = new URI(sslContext == null ? "http" : "https", null, address.getHostName(), address.getPort(), "/", null, null);
 
             startLatch.countDown();
 
@@ -78,13 +86,16 @@ class ConnectionAccepter {
 
                         InetAddress clientAddress = ((InetSocketAddress) rawChannel.getRemoteAddress()).getAddress();
 
-                        ClientConnection cc;
+                        String protocol;
+                        ByteChannel byteChannel;
                         if (sslContext == null) {
-                            cc = new ClientConnection(rawChannel, "http", clientAddress, serverRef.get());
+                            protocol = "http";
+                            byteChannel = rawChannel;
                         } else {
-                            TlsChannel tlsChannel = ServerTlsChannel.newBuilder(rawChannel, sslContext).build();
-                            cc = new ClientConnection(tlsChannel, "https", clientAddress, serverRef.get());
+                            protocol = "https";
+                            byteChannel = ServerTlsChannel.newBuilder(rawChannel, sslContext).build();
                         }
+                        ClientConnection cc = new ClientConnection(executorService, handlers, byteChannel, protocol, clientAddress, serverRef.get());
                         SelectionKey newKey = rawChannel.register(selector, SelectionKey.OP_READ);
                         newKey.attach(cc);
 
@@ -121,4 +132,12 @@ class ConnectionAccepter {
         }
     }
 
+    @Override
+    public String toString() {
+        return "Connection[" + uri + "]";
+    }
+
+    public URI uri() {
+        return uri;
+    }
 }

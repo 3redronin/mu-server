@@ -82,6 +82,7 @@ public class TextSendingTest {
     public void anEmptyHandlerIsA200WithNoContent() throws Exception {
         server = MuServerBuilder.httpServer()
             .addHandler(Method.GET, "/", (request, response, pp) -> {
+                System.out.println("request = " + request);
             }).start();
         try (Response resp = call(request().url(server.httpUri().toString()))) {
             assertThat(resp.header("Content-Length"), is("0"));

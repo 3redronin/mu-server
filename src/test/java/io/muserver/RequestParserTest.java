@@ -20,6 +20,7 @@ import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.nullValue;
 
 public class RequestParserTest {
 
@@ -37,7 +38,7 @@ public class RequestParserTest {
         assertThat(listener.isComplete, is(true));
         assertThat(listener.method, is(Method.GET));
         assertThat(listener.uri.toString(), is("/a%20link"));
-        assertThat(listener.proto, is("HTTP/1.0"));
+        assertThat(listener.proto, is(HttpVersion.HTTP_1_0));
         assertThat(listener.headers.size(), is(0));
 
         MyRequestListener anotherListener = new MyRequestListener();
@@ -85,8 +86,7 @@ public class RequestParserTest {
         parser.offer(wrap("POST / HTTP/1.1\r\ncontent-length: 0\r\n\r\n"));
         parser.offer(ByteBuffer.allocate(0));
         ByteArrayOutputStream to = new ByteArrayOutputStream();
-        Mutils.copy(listener.body, to, 8192);
-        assertThat(to.size(), is(0));
+        assertThat(listener.body, is(nullValue()));
     }
 
     @Test
@@ -220,9 +220,7 @@ public class RequestParserTest {
         parser.offer(wrap("POST / HTTP/1.1\r\ncontent-length: 0\r\n\r\n"));
         parser.offer(ByteBuffer.allocate(0));
 
-        to = new ByteArrayOutputStream();
-        Mutils.copy(listener.body, to, 8192);
-        assertThat(to.size(), is(0));
+        assertThat(listener.body, is(nullValue()));
     }
 
 

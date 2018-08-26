@@ -1,32 +1,17 @@
 package io.muserver;
 
 import io.muserver.handlers.ResourceType;
-import io.netty.bootstrap.ServerBootstrap;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelInitializer;
-import io.netty.channel.ChannelPipeline;
-import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.channel.socket.SocketChannel;
-import io.netty.channel.socket.nio.NioServerSocketChannel;
-import io.netty.handler.codec.http.HttpRequestDecoder;
-import io.netty.handler.codec.http.HttpResponse;
-import io.netty.handler.codec.http.HttpResponseEncoder;
-import io.netty.handler.codec.http.HttpServerKeepAliveHandler;
-import io.netty.handler.ssl.ClientAuth;
-import io.netty.handler.ssl.JdkSslContext;
-import io.netty.handler.traffic.GlobalTrafficShapingHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.net.ssl.SSLContext;
-import java.net.InetSocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -47,6 +32,7 @@ public class MuServerBuilder {
     private Set<String> mimeTypesToGzip = ResourceType.gzippableMimeTypes(ResourceType.getResourceTypes());
     private boolean addShutdownHook = false;
     private String host;
+    private ExecutorService executorService;
 
     /**
      * @param port The HTTP port to use. A value of 0 will have a random port assigned; a value of -1 will
@@ -55,6 +41,16 @@ public class MuServerBuilder {
      */
     public MuServerBuilder withHttpPort(int port) {
         this.httpPort = port;
+        return this;
+    }
+
+    /**
+     * Sets the executor that request handlers will run on. Defaults to <code>Executors.newCachedThreadPool()</code>
+     * @param executor The executor to use
+     * @return The current Mu-Server Builder
+     */
+    public MuServerBuilder withExecutor(ExecutorService executor) {
+        this.executorService = executor;
         return this;
     }
 
@@ -251,103 +247,52 @@ public class MuServerBuilder {
             throw new IllegalArgumentException("No ports were configured. Please call MuServerBuilder.withHttpPort(int) or MuServerBuilder.withHttpsPort(int)");
         }
 
-        List<MuHandler> handlersCopy = Collections.unmodifiableList(new ArrayList<>(handlers));
-        NioEventLoopGroup bossGroup = new NioEventLoopGroup(1);
-        NioEventLoopGroup workerGroup = new NioEventLoopGroup();
-        List<Channel> channels = new ArrayList<>();
+        ExecutorService executorService = this.executorService != null ? this.executorService : Executors.newCachedThreadPool();
 
+        List<MuHandler> handlersCopy = Collections.unmodifiableList(new ArrayList<>(handlers));
+
+        AtomicReference<MuServer> serverRef = new AtomicReference<>();
+
+        List<ConnectionAcceptor> accepters = new ArrayList<>();
+        URI httpUri = startAcceptorMaybe(executorService, handlersCopy, serverRef, accepters, httpPort, host);
+        URI httpsUri = startAcceptorMaybe(executorService, handlersCopy, serverRef, accepters, httpsPort, host);
         Runnable shutdown = () -> {
             try {
-                for (Channel channel : channels) {
-                    channel.close().sync();
+                for (ConnectionAcceptor accepter : accepters) {
+                    try {
+                        accepter.stop();
+                    } catch (InterruptedException e) {
+                        log.warn("Error while stopping " + accepter, e);
+                    }
                 }
-                bossGroup.shutdownGracefully(0, 0, TimeUnit.MILLISECONDS).sync();
-                workerGroup.shutdownGracefully(0, 0, TimeUnit.MILLISECONDS).sync();
-
             } catch (Exception e) {
                 log.info("Error while shutting down. Will ignore. Error was: " + e.getMessage());
             }
         };
 
 
-        try {
-            GlobalTrafficShapingHandler trafficShapingHandler = new GlobalTrafficShapingHandler(workerGroup, 0, 0, 1000);
-            MuStatsImpl stats = new MuStatsImpl(trafficShapingHandler.trafficCounter());
-            AtomicReference<MuServer> serverRef = new AtomicReference<>();
-
-            Channel httpChannel = httpPort < 0 ? null : createChannel(bossGroup, workerGroup, host, httpPort, null, trafficShapingHandler, stats, serverRef, handlersCopy);
-            Channel httpsChannel;
-            if (httpsPort < 0) {
-                httpsChannel = null;
-            } else {
-                SSLContext sslContextToUse = this.sslContext != null ? this.sslContext : SSLContextBuilder.unsignedLocalhostCert();
-                httpsChannel = createChannel(bossGroup, workerGroup, host, httpsPort, sslContextToUse, trafficShapingHandler, stats, serverRef, handlersCopy);
-            }
-            URI uri = null;
-            if (httpChannel != null) {
-                channels.add(httpChannel);
-                uri = getUriFromChannel(httpChannel, "http", host);
-            }
-            URI httpsUri = null;
-            if (httpsChannel != null) {
-                channels.add(httpsChannel);
-                httpsUri = getUriFromChannel(httpsChannel, "https", host);
-            }
-
-            InetSocketAddress serverAddress = (InetSocketAddress) channels.get(0).localAddress();
-            MuServer server = new MuServerImpl(uri, httpsUri, shutdown, stats, serverAddress);
-            serverRef.set(server);
-            if (addShutdownHook) {
-                Runtime.getRuntime().addShutdownHook(new Thread(server::stop));
-            }
-            return server;
-
-        } catch (Exception ex) {
-            shutdown.run();
-            throw new MuException("Error while starting server", ex);
+        MuStats stats = new MuStatsImpl2();
+        MuServer server = new MuServerImpl(httpUri, httpsUri, shutdown, stats, accepters.get(0).address);
+        serverRef.set(server);
+        if (addShutdownHook) {
+            Runtime.getRuntime().addShutdownHook(new Thread(server::stop));
         }
-
+        return server;
     }
 
-    private static URI getUriFromChannel(Channel httpChannel, String protocol, String host) {
-        host = host == null ? "localhost" : host;
-        InetSocketAddress a = (InetSocketAddress) httpChannel.localAddress();
-        return URI.create(protocol + "://" + host.toLowerCase() + ":" + a.getPort());
-    }
-
-    private Channel createChannel(NioEventLoopGroup bossGroup, NioEventLoopGroup workerGroup, String host, int port, SSLContext rawSSLContext, GlobalTrafficShapingHandler trafficShapingHandler, MuStatsImpl stats, AtomicReference<MuServer> serverRef, List<MuHandler> muHandlers) throws InterruptedException {
-        boolean usesSsl = rawSSLContext != null;
-        JdkSslContext sslContext = usesSsl ? new JdkSslContext(rawSSLContext, false, ClientAuth.NONE) : null;
-
-        ServerBootstrap b = new ServerBootstrap();
-        b.group(bossGroup, workerGroup)
-            .channel(NioServerSocketChannel.class)
-            .childHandler(new ChannelInitializer<SocketChannel>() {
-
-                protected void initChannel(SocketChannel socketChannel) throws Exception {
-                    ChannelPipeline p = socketChannel.pipeline();
-                    p.addLast(trafficShapingHandler);
-                    if (usesSsl) {
-                        p.addLast("ssl", sslContext.newHandler(socketChannel.alloc()));
-                    }
-                    p.addLast("decoder", new HttpRequestDecoder(maxUrlSize + LENGTH_OF_METHOD_AND_PROTOCOL, maxHeadersSize, 8192));
-                    p.addLast("encoder", new HttpResponseEncoder() {
-                        @Override
-                        protected boolean isContentAlwaysEmpty(HttpResponse msg) {
-                            return super.isContentAlwaysEmpty(msg) || msg instanceof NettyResponseAdaptor.EmptyHttpResponse;
-                        }
-                    });
-                    if (gzipEnabled) {
-                        p.addLast("compressor", new SelectiveHttpContentCompressor(minimumGzipSize, mimeTypesToGzip));
-                    }
-                    p.addLast("keepalive", new HttpServerKeepAliveHandler());
-
-                    String protocol = usesSsl ? "https" : "http";
-                    p.addLast("muhandler", new MuServerHandler(muHandlers, stats, serverRef, protocol));
-                }
-            });
-        ChannelFuture bound = host == null ? b.bind(port) : b.bind(host, port);
-        return bound.sync().channel();
+    private static URI startAcceptorMaybe(ExecutorService executorService, List<MuHandler> handlers, AtomicReference<MuServer> serverRef, List<ConnectionAcceptor> accepters, int httpPort, String host) {
+        URI httpUri = null;
+        if (httpPort >= 0) {
+            ConnectionAcceptor httpAccepter = new ConnectionAcceptor(executorService, handlers, null, serverRef);
+            try {
+                httpAccepter.start(host, httpPort);
+                httpUri = httpAccepter.uri();
+                accepters.add(httpAccepter);
+            } catch (Exception e) {
+                throw new RuntimeException("Error while starting HTTP service on port " + httpPort, e);
+            }
+        }
+        return httpUri;
     }
 
     /**

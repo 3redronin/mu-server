@@ -1,11 +1,9 @@
 package io.muserver;
 
-import java.io.InputStream;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 class RequestParser {
 
@@ -155,7 +153,7 @@ class RequestParser {
                 } else if (c == ':') {
 
                     String header = cur.toString();
-                    this.curHeader = header.toLowerCase();
+                    this.curHeader = header;
                     if (headers.contains(header)) {
                         curVals = headers.getAll(header);
                     } else {
@@ -178,7 +176,7 @@ class RequestParser {
                 } else if (c == '\n') {
 
                     String val = cur.toString().trim();
-                    switch (curHeader) {
+                    switch (curHeader.toLowerCase()) {
                         case "content-length":
                             if (bodyLength == -2) {
                                 throw new InvalidRequestException(400, "Content-Length set after chunked encoding sent", "Headers were " + headers);
@@ -253,7 +251,7 @@ class RequestParser {
                         break;
                     } else if (c == ':') {
                         String header = cur.toString();
-                        this.curHeader = header.toLowerCase();
+                        this.curHeader = header;
 
                         if (trailers == null) {
                             trailers = new MuHeaders();

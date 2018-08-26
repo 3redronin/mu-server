@@ -1,18 +1,24 @@
 package io.muserver;
 
+import io.netty.handler.codec.http.*;
+import io.netty.handler.codec.http.cookie.ServerCookieEncoder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.net.URI;
 import java.nio.ByteBuffer;
+import java.nio.channels.ByteChannel;
 import java.nio.channels.WritableByteChannel;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.concurrent.Future;
 
+import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 class MuResponseImpl implements MuResponse {
@@ -23,14 +29,21 @@ class MuResponseImpl implements MuResponse {
     }
 
     private final WritableByteChannel channel;
+    private final MuRequestImpl request;
+    private final boolean isKeepAlive;
     private int status = 200;
     private final MuHeaders headers = new MuHeaders();
     private OutputState state = OutputState.NOTHING;
     private final ResponseGenerator rg;
+    private PrintWriter writer;
+    private OutputStreamToByteChannelAdapter outputStream;
+    private long bytesStreamed = 0;
 
-    public MuResponseImpl(WritableByteChannel channel, HttpVersion httpVersion) {
+    MuResponseImpl(WritableByteChannel channel, MuRequestImpl request, boolean isKeepAlive) {
         this.channel = channel;
-        rg = new ResponseGenerator(httpVersion);
+        this.request = request;
+        this.isKeepAlive = isKeepAlive;
+        rg = new ResponseGenerator(HttpVersion.HTTP_1_1);
         headers.set(HeaderNames.DATE.toString(), Mutils.toHttpDate(new Date()));
     }
 
@@ -65,23 +78,82 @@ class MuResponseImpl implements MuResponse {
             throw new IllegalStateException("MuResponse.write(String) can only be called once. To send text in multiple chunks" +
                 " use MuResponse.sendChunk(String) instead.");
         }
-
         ByteBuffer toSend = charset().encode(text);
         headers.set(HeaderNames.CONTENT_LENGTH, toSend.remaining());
-        writeBytes(rg.writeHeader(status, headers));
+        writeBytesREX(rg.writeHeader(status, headers));
         // TODO combine into a single write
-        writeBytes(toSend);
+        writeBytesREX(toSend);
     }
 
-    private void writeBytes(ByteBuffer bytes) {
+
+    void complete(boolean forceDisconnect) throws IOException {
+        boolean shouldDisconnect = forceDisconnect || !isKeepAlive;
         try {
-            int expected = bytes.remaining();
-            int written = channel.write(bytes);
-            if (written != expected) {
-                log.warn("Sent " + written + " bytes but expected to send " + expected);
+            boolean isHead = request.method() == Method.HEAD;
+            if (channel.isOpen()) {
+                if (state == OutputState.NOTHING) {
+
+                    if (!isHead || !(headers().contains(HeaderNames.CONTENT_LENGTH))) {
+                        headers.set(HeaderNames.CONTENT_LENGTH, 0);
+                    }
+                    if (shouldDisconnect) {
+                        headers.add(HeaderNames.CONNECTION, HeaderValues.CLOSE);
+                    }
+                    ByteBuffer byteBuffer = rg.writeHeader(status, headers);
+                    writeBytes(byteBuffer);
+
+                } else if (state == OutputState.STREAMING) {
+                    if (!isHead) {
+                        if (writer != null) {
+                            writer.close();
+                        }
+                        if (outputStream != null) {
+                            outputStream.close();
+                        }
+                        state = OutputState.STREAMING_COMPLETE;
+                    }
+                }
+
+                if (!isHead && (headers().contains(HeaderNames.CONTENT_LENGTH))) {
+                    long declaredLength = Long.parseLong(headers.get(HeaderNames.CONTENT_LENGTH));
+                    long actualLength = this.bytesStreamed;
+                    if (declaredLength != actualLength) {
+                        shouldDisconnect = true;
+                        log.warn("Declared length " + declaredLength + " doesn't equal actual length " + actualLength + " for " + request);
+                    }
+                }
+
             }
+
+        } catch (Exception e) {
+            log.error("Unexpected exception during complete", e);
+            shouldDisconnect = true;
+            throw e;
+        } finally {
+            if (shouldDisconnect) {
+                try {
+                    channel.close();
+                } catch (IOException e) {
+                    log.info("Error closing response to client", e);
+                }
+            }
+        }
+    }
+
+
+    private void writeBytesREX(ByteBuffer bytes) {
+        try {
+            writeBytes(bytes);
         } catch (IOException e) {
-            throw new MuException("Probably disconnected");
+            throw new MuException("Error writing to client. They have probably disconnected", e);
+        }
+    }
+    private void writeBytes(ByteBuffer bytes) throws IOException {
+        int expected = bytes.remaining();
+        int written = channel.write(bytes);
+        bytesStreamed += written;
+        if (written != expected) {
+            log.warn("Sent " + written + " bytes but expected to send " + expected);
         }
     }
 
@@ -112,20 +184,36 @@ class MuResponseImpl implements MuResponse {
         headers.set(HeaderNames.CONTENT_TYPE, contentType);
     }
 
-    @Override
     public void addCookie(Cookie cookie) {
-        throw new MuException("Not supported");
-
+        headers.add(HeaderNames.SET_COOKIE, ServerCookieEncoder.STRICT.encode(cookie.nettyCookie));
     }
 
-    @Override
+    private void startStreaming() {
+        if (state != OutputState.NOTHING) {
+            throw new IllegalStateException("Cannot start streaming when state is " + state);
+        }
+        state = OutputState.STREAMING;
+        rg.writeHeader(status, headers);
+        if (!headers.contains(HeaderNames.CONTENT_LENGTH)) {
+            headers.set(HttpHeaderNames.TRANSFER_ENCODING, HttpHeaderValues.CHUNKED);
+        }
+        writeBytesREX(rg.writeHeader(status, headers));
+    }
+
     public OutputStream outputStream() {
-        throw new MuException("Not supported");
+        if (this.outputStream == null) {
+            startStreaming();
+            this.outputStream = new OutputStreamToByteChannelAdapter(channel);
+        }
+        return this.outputStream;
     }
 
-    @Override
     public PrintWriter writer() {
-        return null;
+        if (this.writer == null) {
+            OutputStreamWriter os = new OutputStreamWriter(outputStream(), StandardCharsets.UTF_8);
+            this.writer = new PrintWriter(os);
+        }
+        return this.writer;
     }
 
     @Override
