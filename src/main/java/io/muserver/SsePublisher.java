@@ -153,7 +153,7 @@ class SsePublisherImpl implements SsePublisher {
             response.sendChunk(text);
         } catch (Throwable e) {
             close();
-            if (e instanceof IllegalStateException) {
+            if (e instanceof MuException) {
                 throw new IOException(e);
             }
             throw e;
