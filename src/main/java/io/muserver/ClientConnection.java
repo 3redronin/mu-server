@@ -9,10 +9,8 @@ import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.channels.ByteChannel;
 import java.util.List;
-import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
-
-import static io.muserver.MuServerHandler.dealWithUnhandledException;
 
 class ClientConnection implements RequestParser.RequestListener {
     private static final Logger log = LoggerFactory.getLogger(ClientConnection.class);
@@ -26,6 +24,7 @@ class ClientConnection implements RequestParser.RequestListener {
     final InetAddress clientAddress;
     final MuServer server;
     private MuResponseImpl curResp;
+    private AsyncHandleImpl asyncHandle;
 
     ClientConnection(ExecutorService executorService, List<MuHandler> handlers, ByteChannel channel, String protocol, InetAddress clientAddress, MuServer server) {
         this.executorService = executorService;
@@ -41,18 +40,29 @@ class ClientConnection implements RequestParser.RequestListener {
     void onBytesReceived(ByteBuffer buffer) {
         try {
             requestParser.offer(buffer);
-        } catch (InvalidRequestException e) {
+        } catch (Exception e) {
+            // TODO tell the async stuff and stop processing
+            log.error("Error while parsing body", e);
+
+            if (e instanceof InvalidRequestException) {
+                // send response
+            }
             e.printStackTrace();
+            try {
+                channel.close();
+            } catch (IOException e1) {
+                log.info("Error closing channel after read error: " + e1.getMessage());
+            }
         }
     }
 
     @Override
     public void onHeaders(Method method, URI uri, HttpVersion httpVersion, MuHeaders headers, GrowableByteBufferInputStream body) {
-//        log.info(method + " " + uri + " " + httpVersion + " - " + headers);
-
         MuRequestImpl req = new MuRequestImpl(method, uri, headers, body, this);
         boolean isKeepAlive = MuSelector.keepAlive(httpVersion, headers);
         MuResponseImpl resp = new MuResponseImpl(channel, req, isKeepAlive);
+        asyncHandle = new AsyncHandleImpl(executorService, req, resp);
+        req.setAsyncHandle(asyncHandle);
 
         curReq = req;
         curResp = resp;
@@ -100,6 +110,21 @@ class ClientConnection implements RequestParser.RequestListener {
 
     @Override
     public void onRequestComplete(MuHeaders trailers) {
+        asyncHandle.onReadComplete(null);
+    }
+
+    static void dealWithUnhandledException(MuRequest request, MuResponse response, Throwable ex) {
+        if (response.hasStartedSendingData()) {
+            log.warn("Unhandled error from handler for " + request + " (note that a " + response.status() +
+                " was already sent to the client before the error occurred and so the client may receive an incomplete response)", ex);
+        } else {
+            String errorID = "ERR-" + UUID.randomUUID().toString();
+            log.info("Sending a 500 to the client with ErrorID=" + errorID + " for " + request, ex);
+            response.status(500);
+            response.contentType(ContentTypes.TEXT_HTML);
+            response.headers().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
+            response.write("<h1>500 Internal Server Error</h1><p>ErrorID=" + errorID + "</p>");
+        }
     }
 
 

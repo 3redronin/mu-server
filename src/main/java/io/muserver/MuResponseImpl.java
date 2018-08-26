@@ -1,6 +1,9 @@
 package io.muserver;
 
-import io.netty.handler.codec.http.*;
+import io.netty.handler.codec.http.HttpHeaderNames;
+import io.netty.handler.codec.http.HttpHeaderValues;
+import io.netty.handler.codec.http.HttpResponse;
+import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.cookie.ServerCookieEncoder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -87,8 +90,8 @@ class MuResponseImpl implements MuResponse {
     }
 
 
-    void complete(boolean forceDisconnect) throws IOException {
-        boolean shouldDisconnect = forceDisconnect || !isKeepAlive;
+    void complete(boolean forceDisconnect) {
+        boolean shouldDisconnect = forceDisconnect || !isKeepAlive || headers.containsValue(HeaderNames.CONNECTION, HeaderValues.CLOSE, true);
         try {
             boolean isHead = request.method() == Method.HEAD;
             if (channel.isOpen()) {
@@ -111,26 +114,28 @@ class MuResponseImpl implements MuResponse {
                         if (outputStream != null) {
                             outputStream.close();
                         }
-                        sendChunkEnd();
-                        state = OutputState.STREAMING_COMPLETE;
+
+                        if (chunkResponse) {
+                            sendChunkEnd();
+                        }
                     }
+                    state = OutputState.STREAMING_COMPLETE;
                 }
 
                 if (!isHead && (headers().contains(HeaderNames.CONTENT_LENGTH))) {
                     long declaredLength = Long.parseLong(headers.get(HeaderNames.CONTENT_LENGTH));
                     long actualLength = this.bytesStreamed;
                     if (declaredLength != actualLength) {
-                        shouldDisconnect = true;
-                        log.warn("Declared length " + declaredLength + " doesn't equal actual length " + actualLength + " for " + request);
+//                        shouldDisconnect = true;
+//                        log.warn("Declared length " + declaredLength + " doesn't equal actual length " + actualLength + " for " + request);
                     }
                 }
 
             }
 
         } catch (Exception e) {
-            log.error("Unexpected exception during complete", e);
             shouldDisconnect = true;
-            throw e;
+            throw new MuException("Error while completing response", e);
         } finally {
             if (shouldDisconnect) {
                 try {
@@ -143,7 +148,7 @@ class MuResponseImpl implements MuResponse {
     }
 
 
-    private void writeBytesREX(ByteBuffer bytes) {
+    void writeBytesREX(ByteBuffer bytes) {
         try {
             writeBytes(bytes);
         } catch (IOException e) {
@@ -158,7 +163,7 @@ class MuResponseImpl implements MuResponse {
         }
     }
 
-    private void writeBytes(ByteBuffer bytes) throws IOException {
+    void writeBytes(ByteBuffer bytes) throws IOException {
         throwIfFinished();
         int expected = bytes.remaining();
         int written = channel.write(bytes);
@@ -203,16 +208,15 @@ class MuResponseImpl implements MuResponse {
     }
 
 
-    @Override
-    public void redirect(String url) {
-        throw new MuException("Not supported");
-
+    public void redirect(String newLocation) {
+        redirect(URI.create(newLocation));
     }
 
-    @Override
-    public void redirect(URI uri) {
-        throw new MuException("Not supported");
-
+    public void redirect(URI newLocation) {
+        URI absoluteUrl = request.uri().resolve(newLocation);
+        status(302);
+        headers().set(HeaderNames.LOCATION, absoluteUrl.toString());
+        headers().set(HeaderNames.CONTENT_LENGTH, "0");
     }
 
     @Override

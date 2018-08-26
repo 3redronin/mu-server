@@ -11,7 +11,6 @@ import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
 import java.util.List;
-import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
@@ -36,20 +35,6 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
         this.stats = stats;
         this.serverRef = serverRef;
         this.protocol = protocol;
-    }
-
-    static void dealWithUnhandledException(MuRequest request, MuResponse response, Throwable ex) {
-        if (response.hasStartedSendingData()) {
-            log.warn("Unhandled error from handler for " + request + " (note that a " + response.status() +
-                " was already sent to the client before the error occurred and so the client may receive an incomplete response)", ex);
-        } else {
-            String errorID = "ERR-" + UUID.randomUUID().toString();
-            log.info("Sending a 500 to the client with ErrorID=" + errorID + " for " + request, ex);
-            response.status(500);
-            response.contentType(ContentTypes.TEXT_HTML);
-            response.headers().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
-            response.write("<h1>500 Internal Server Error</h1><p>ErrorID=" + errorID + "</p>");
-        }
     }
 
 
@@ -140,7 +125,7 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
 
                     } catch (Throwable ex) {
                         error = true;
-                        dealWithUnhandledException(muRequest, response, ex);
+                        ClientConnection.dealWithUnhandledException(muRequest, response, ex);
                     } finally {
                         if (error || !muRequest.isAsync()) {
                             try {

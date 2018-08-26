@@ -380,7 +380,7 @@ class NettyRequestAdapter implements MuRequest {
         @Override
         public void complete(Throwable throwable) {
             try {
-                MuServerHandler.dealWithUnhandledException(request, request.nettyAsyncContext.response, throwable);
+                ClientConnection.dealWithUnhandledException(request, request.nettyAsyncContext.response, throwable);
             } finally {
                 request.nettyAsyncContext.complete(true);
             }
@@ -428,7 +428,6 @@ class NettyRequestAdapter implements MuRequest {
             if (listener != null) {
                 listener.onComplete(complete);
             }
-
         }
     }
 }

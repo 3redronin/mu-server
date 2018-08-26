@@ -1,6 +1,7 @@
 package io.muserver;
 
 import java.util.*;
+import java.util.function.Consumer;
 
 import static io.muserver.Mutils.notNull;
 import static io.muserver.NettyRequestParameters.isTruthy;
@@ -16,7 +17,7 @@ public class MuHeaders extends Headers implements RequestParameters {
 
     @Override
     public String get(String name) {
-        return get(name, "");
+        return get(name, null);
     }
 
     @Override
@@ -346,7 +347,12 @@ public class MuHeaders extends Headers implements RequestParameters {
     @Override
     @Deprecated
     public Headers add(Headers headers) {
-        throw new MuException("Deprecated");
+        MuHeaders muHeaders = (MuHeaders) headers;
+        Map<String, List<String>> all = muHeaders.all();
+        for (Map.Entry<String, List<String>> entry : all.entrySet()) {
+            add(entry.getKey(), entry.getValue());
+        }
+        return this;
     }
 
     @Override
@@ -401,13 +407,17 @@ public class MuHeaders extends Headers implements RequestParameters {
     @Override
     @Deprecated
     public Headers set(Headers headers) {
-        throw new MuException("Deprecated");
+        clear();
+        return setAll(headers);
     }
 
     @Override
-    @Deprecated
     public Headers setAll(Headers headers) {
-        throw new MuException("Deprecated");
+        notNull("headers", headers);
+        for (Map.Entry<String, String> header : headers) {
+            set(header.getKey(), header.getValue());
+        }
+        return this;
     }
 
     @Override
@@ -450,7 +460,20 @@ public class MuHeaders extends Headers implements RequestParameters {
     @Override
     @Deprecated
     public boolean containsValue(CharSequence name, CharSequence value, boolean ignoreCase) {
-        throw new MuException("Deprecated");
+        return containsValue(name.toString(), value.toString(), ignoreCase);
+    }
+
+    public boolean containsValue(String name, String value, boolean ignoreCaseOfValue) {
+        List<String> all = getAll(name);
+        for (String s : all) {
+            if (ignoreCaseOfValue && value.equalsIgnoreCase(s)) {
+                return true;
+            }
+            if (!ignoreCaseOfValue && value.equals(s)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override

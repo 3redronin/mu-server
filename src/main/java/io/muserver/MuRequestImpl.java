@@ -15,9 +15,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.nio.ByteBuffer;
 import java.util.*;
-import java.util.concurrent.Future;
 
 import static io.muserver.Cookie.nettyToMu;
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -42,7 +40,8 @@ class MuRequestImpl implements MuRequest {
     private HttpPostMultipartRequestDecoder multipartRequestDecoder;
     private HashMap<String, List<UploadedFile>> uploads;
     private Object state;
-    private volatile AsyncHandleImpl asyncHandle;
+    private volatile AsyncHandle asyncHandle;
+    private boolean isAsync = false;
 
     MuRequestImpl(Method method, URI requestUri, MuHeaders headers, GrowableByteBufferInputStream body, ClientConnection clientConnection) {
         this.headers = headers;
@@ -54,7 +53,6 @@ class MuRequestImpl implements MuRequest {
         this.method = method;
         this.inputStream = body;
     }
-
 
     @Override
     public String contentType() {
@@ -242,15 +240,15 @@ class MuRequestImpl implements MuRequest {
 
 
     boolean isAsync() {
-        return asyncHandle != null;
+        return this.isAsync;
     }
 
     @Override
     public AsyncHandle handleAsync() {
         if (isAsync()) {
-            throw new IllegalStateException("handleAsync called twice for " + this);
+            throw new IllegalStateException("handleAsync() called twice for " + this);
         }
-        asyncHandle = new AsyncHandleImpl(this);
+        this.isAsync = true;
         return asyncHandle;
     }
 
@@ -321,69 +319,18 @@ class MuRequestImpl implements MuRequest {
         this.relativePath = this.relativePath.substring(contextToAdd.length());
     }
 
-    void clean() {
-        state(null);
-    }
-
-    public void onClientDisconnected(boolean complete) {
-        if (asyncHandle != null) {
-            asyncHandle.onClientDisconnected(complete);
-        }
-    }
-
-    private static class AsyncHandleImpl implements AsyncHandle {
-
-        private final MuRequestImpl request;
-        private ResponseCompletedListener responseCompletedListener;
-
-        private AsyncHandleImpl(MuRequestImpl request) {
-            this.request = request;
-        }
-
-        @Override
-        public void setReadListener(RequestBodyListener readListener) {
-            request.claimingBodyRead();
-            if (readListener != null) {
-                if (request.inputStream == null) {
-                    readListener.onComplete();
-                } else {
-                    request.inputStream.switchToListener(readListener);
-                }
+    void setReadListener(RequestBodyListener readListener) {
+        claimingBodyRead();
+        if (readListener != null) {
+            if (inputStream == null) {
+                readListener.onComplete();
+            } else {
+                inputStream.switchToListener(readListener);
             }
         }
-
-        @Override
-        public void complete() {
-            throw new MuException("Not yet implemented");
-        }
-
-        @Override
-        public void complete(Throwable throwable) {
-            throw new MuException("Not yet implemented");
-        }
-
-        @Override
-        public void write(ByteBuffer data, WriteCallback callback) {
-            throw new MuException("Not yet implemented");
-        }
-
-        @Override
-        public Future<Void> write(ByteBuffer data) {
-            throw new MuException("Not yet implemented");
-        }
-
-        @Override
-        public void setResponseCompletedHandler(ResponseCompletedListener responseCompletedListener) {
-            this.responseCompletedListener = responseCompletedListener;
-        }
-
-        void onClientDisconnected(boolean complete) {
-            ResponseCompletedListener listener = this.responseCompletedListener;
-            if (listener != null) {
-                listener.onComplete(complete);
-            }
-
-        }
     }
 
+    void setAsyncHandle(AsyncHandle asyncHandle) {
+        this.asyncHandle = asyncHandle;
+    }
 }

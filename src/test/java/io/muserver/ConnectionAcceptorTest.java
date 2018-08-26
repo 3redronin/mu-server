@@ -16,6 +16,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Arrays.asList;
 import static java.util.Collections.emptyList;
+import static java.util.Collections.singletonList;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -28,7 +29,16 @@ public class ConnectionAcceptorTest {
 
     @Test
     public void go() throws Exception {
-        ConnectionAcceptor selector = new ConnectionAcceptor(executorService, emptyList(), null, new AtomicReference<>());
+
+        MuHandler echoHandler = new MuHandler() {
+            @Override
+            public boolean handle(MuRequest request, MuResponse response) throws Exception {
+                response.contentType("text/plain");
+                response.write("This is just a test");
+                return true;
+            }
+        };
+        ConnectionAcceptor selector = new ConnectionAcceptor(executorService, singletonList(echoHandler), null, new AtomicReference<>());
         selector.start("localhost", 0);
 
         URI targetURI = URI.create("http://localhost:" + selector.address.getPort());
@@ -44,6 +54,10 @@ public class ConnectionAcceptorTest {
         client.flushRequest();
 
         Thread.sleep(2000);
+
+        long l = client.bytesReceived();
+        byte[] resp = client.asBytes();
+        String theString = client.responseString();
 
         System.out.println("Got back " + client.responseString());
 
@@ -77,7 +91,7 @@ public class ConnectionAcceptorTest {
             long start = System.currentTimeMillis();
 
 
-            int numToMake = 10000;
+            int numToMake = 1000;
             for (int i = 0; i < numToMake; i++) {
                 try (Response resp = call(request().url(targetURI))) {
                     assertThat(resp.code(), is(200));

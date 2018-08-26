@@ -64,7 +64,6 @@ class GrowableByteBufferInputStream extends InputStream {
 	}
 
 	public void close() {
-		// This is called from the main netty accepter thread so must be non-blocking
         synchronized (listenerLock) {
             if (listener == null) {
                 queue.add(LAST);
@@ -75,7 +74,6 @@ class GrowableByteBufferInputStream extends InputStream {
 	}
 
 	void handOff(ByteBuffer buffer) {
-		// This is called from the main netty accepter thread so must be non-blocking
         synchronized (listenerLock) {
             if (listener == null) {
                 queue.add(buffer);

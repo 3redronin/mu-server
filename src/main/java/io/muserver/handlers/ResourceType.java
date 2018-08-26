@@ -17,24 +17,24 @@ public class ResourceType {
     public static final Map<String, ResourceType> DEFAULT_EXTENSION_MAPPINGS;
 
     public final CharSequence mimeType;
-    public final Headers headers;
+    public final MuHeaders headers;
     public final List<String> extensions;
     public final boolean gzip;
 
-    public ResourceType(CharSequence mimeType, Headers headers, boolean gzip, List<String> extensions) {
+    public ResourceType(CharSequence mimeType, MuHeaders headers, boolean gzip, List<String> extensions) {
         this.mimeType = mimeType;
         this.headers = headers;
         this.gzip = gzip;
         this.extensions = extensions;
     }
 
-    public static final Headers shortCache() {
-        return new Headers()
+    public static MuHeaders shortCache() {
+        return (MuHeaders) new MuHeaders()
             .add(HeaderNames.CACHE_CONTROL, "max-age=300");
     }
 
-    public static final Headers noCache() {
-        return new Headers()
+    public static MuHeaders noCache() {
+        return (MuHeaders) new MuHeaders()
             .add(HeaderNames.CACHE_CONTROL, HeaderValues.NO_CACHE);
     }
 
@@ -49,7 +49,7 @@ public class ResourceType {
     public static final ResourceType APPLICATION_X_BZIP2 = new ResourceType(ContentTypes.APPLICATION_X_BZIP2, shortCache(), false, asList("bz2"));
     public static final ResourceType APPLICATION_X_CSH = new ResourceType(ContentTypes.APPLICATION_X_CSH, shortCache(), false, asList("csh"));
     public static final ResourceType TEXT_CSS = new ResourceType(ContentTypes.TEXT_CSS,
-        new Headers()
+        (MuHeaders)new MuHeaders()
             .add(HeaderNames.CACHE_CONTROL, "max-age=300")
             .add(HeaderNames.X_CONTENT_TYPE_OPTIONS, HeaderValues.NOSNIFF),
         true, asList("css"));
@@ -65,7 +65,7 @@ public class ResourceType {
     public static final ResourceType APPLICATION_JAVA_ARCHIVE = new ResourceType(ContentTypes.APPLICATION_JAVA_ARCHIVE, shortCache(), false, asList("jar"));
     public static final ResourceType IMAGE_JPEG = new ResourceType(ContentTypes.IMAGE_JPEG, shortCache(), false, asList("jpg", "jpeg"));
     public static final ResourceType TEXT_JAVASCRIPT = new ResourceType(ContentTypes.APPLICATION_JAVASCRIPT,
-        new Headers()
+        (MuHeaders)new MuHeaders()
             .add(HeaderNames.CACHE_CONTROL, "max-age=300")
             .add(HeaderNames.X_CONTENT_TYPE_OPTIONS, HeaderValues.NOSNIFF),
         true, asList("js"));

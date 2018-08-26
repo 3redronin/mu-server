@@ -29,7 +29,7 @@ public class ContextHandler implements MuHandler {
             return true;
         }
         if (rp.startsWith(slashContextSlash)) {
-            ((NettyRequestAdapter) request).addContext(contextPath);
+            ((MuRequestImpl) request).addContext(contextPath);
             for (MuHandler muHandler : muHandlers) {
                 if (muHandler.handle(request, response)) {
                     return true;

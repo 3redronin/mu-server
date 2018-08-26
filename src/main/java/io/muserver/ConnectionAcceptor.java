@@ -8,11 +8,14 @@ import tlschannel.ServerTlsChannel;
 import tlschannel.TlsChannel;
 
 import javax.net.ssl.SSLContext;
+import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.channels.*;
+import java.security.AccessController;
+import java.security.PrivilegedAction;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -59,7 +62,10 @@ class ConnectionAcceptor {
 
     private void startIt(String host, int port) throws Exception {
         try (ServerSocketChannel serverSocket = ServerSocketChannel.open()) {
-            InetSocketAddress endpoint = host == null ? new InetSocketAddress(port) : new InetSocketAddress(host, port);
+
+            InetSocketAddress endpoint = host == null
+                ? new InetSocketAddress(port)
+                : AccessController.doPrivileged((PrivilegedAction<InetSocketAddress>) () -> new InetSocketAddress(host, port));;
             serverSocket.socket().bind(endpoint);
             serverSocket.configureBlocking(false);
             this.selector = Selector.open();
@@ -67,7 +73,7 @@ class ConnectionAcceptor {
 
             this.address = (InetSocketAddress) serverSocket.getLocalAddress();
 
-            this.uri = new URI(sslContext == null ? "http" : "https", null, address.getHostName(), address.getPort(), "/", null, null);
+            this.uri = new URI(sslContext == null ? "http" : "https", null, host == null ? "localhost" : host, address.getPort(), "/", null, null);
 
             startLatch.countDown();
 
