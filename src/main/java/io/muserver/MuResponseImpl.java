@@ -78,6 +78,7 @@ class MuResponseImpl implements MuResponse {
             throw new IllegalStateException("MuResponse.write(String) can only be called once. To send text in multiple chunks" +
                 " use MuResponse.sendChunk(String) instead.");
         }
+        state = OutputState.FULL_SENT;
         ByteBuffer toSend = charset().encode(text);
         headers.set(HeaderNames.CONTENT_LENGTH, toSend.remaining());
         writeBytesREX(rg.writeHeader(status, headers));
