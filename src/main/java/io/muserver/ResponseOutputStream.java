@@ -5,13 +5,14 @@ import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 
-class OutputStreamToByteChannelAdapter extends OutputStream {
+class ResponseOutputStream extends OutputStream {
 
-    private final WritableByteChannel channel;
-    boolean isClosed = false;
+    private final MuResponseImpl response;
+    private boolean isClosed = false;
 
-    OutputStreamToByteChannelAdapter(WritableByteChannel channel) {
-        this.channel = channel;
+    ResponseOutputStream(MuResponseImpl response) {
+
+        this.response = response;
     }
 
     @Override
@@ -24,7 +25,7 @@ class OutputStreamToByteChannelAdapter extends OutputStream {
         if (isClosed) {
             throw new IOException("Cannot write to closed output stream");
         }
-        channel.write(ByteBuffer.wrap(b, off, len));
+        response.sendBodyData(b, off, len);
     }
 
     public void close() {

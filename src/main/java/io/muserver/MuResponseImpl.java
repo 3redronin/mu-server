@@ -35,8 +35,9 @@ class MuResponseImpl implements MuResponse {
     private OutputState state = OutputState.NOTHING;
     private final ResponseGenerator rg;
     private PrintWriter writer;
-    private OutputStreamToByteChannelAdapter outputStream;
+    private ResponseOutputStream outputStream;
     private long bytesStreamed = 0;
+    private boolean chunkResponse;
 
     MuResponseImpl(WritableByteChannel channel, MuRequestImpl request, boolean isKeepAlive) {
         this.channel = channel;
@@ -77,12 +78,12 @@ class MuResponseImpl implements MuResponse {
             throw new IllegalStateException("MuResponse.write(String) can only be called once. To send text in multiple chunks" +
                 " use MuResponse.sendChunk(String) instead.");
         }
-        state = OutputState.FULL_SENT;
         ByteBuffer toSend = charset().encode(text);
         headers.set(HeaderNames.CONTENT_LENGTH, toSend.remaining());
         writeBytesREX(rg.writeHeader(status, headers));
-        // TODO combine into a single write
+        // TODO combine into a single write ?
         writeBytesREX(toSend);
+        state = OutputState.FULL_SENT;
     }
 
 
@@ -169,27 +170,34 @@ class MuResponseImpl implements MuResponse {
 
     @Override
     public void sendChunk(String text) {
-        sendChunk(text.getBytes(charset()));
+        byte[] bytes = text.getBytes(charset());
+        sendBodyData(bytes, 0, bytes.length);
     }
 
-    void sendChunk(byte[] chunkData) {
+    void sendBodyData(byte[] data, int off, int len) {
         if (state == OutputState.NOTHING) {
             startStreaming();
         }
 
-        byte[] size = Integer.toHexString(chunkData.length).getBytes(US_ASCII);
-        ByteBuffer bb = ByteBuffer.allocate(chunkData.length + size.length + 4);
-        bb.put(size)
-            .put((byte) '\r')
-            .put((byte) '\n')
-            .put(chunkData)
-            .put((byte) '\r')
-            .put((byte) '\n');
-        bb.flip();
+        ByteBuffer bb;
+        if (chunkResponse) {
+            byte[] size = Integer.toHexString(len).getBytes(US_ASCII);
+            bb = ByteBuffer.allocate(len + size.length + 4);
+            bb.put(size)
+                .put((byte) '\r')
+                .put((byte) '\n')
+                .put(data, off, len)
+                .put((byte) '\r')
+                .put((byte) '\n')
+                .flip();
+        } else {
+            bb = ByteBuffer.wrap(data, off, len);
+        }
         writeBytesREX(bb);
     }
 
-    private static final byte[] LAST_CHUNK = new byte[] { '0', '\r', '\n', '\r', '\n'};
+    private static final byte[] LAST_CHUNK = new byte[]{'0', '\r', '\n', '\r', '\n'};
+
     private void sendChunkEnd() throws IOException {
         writeBytes(ByteBuffer.wrap(LAST_CHUNK));
     }
@@ -226,8 +234,11 @@ class MuResponseImpl implements MuResponse {
             throw new IllegalStateException("Cannot start streaming when state is " + state);
         }
         state = OutputState.STREAMING;
-        if (!headers.contains(HeaderNames.CONTENT_LENGTH)) {
+        if (headers.contains(HeaderNames.CONTENT_LENGTH)) {
+            chunkResponse = false;
+        } else {
             headers.set(HttpHeaderNames.TRANSFER_ENCODING, HttpHeaderValues.CHUNKED);
+            chunkResponse = true;
         }
         writeBytesREX(rg.writeHeader(status, headers));
     }
@@ -235,7 +246,7 @@ class MuResponseImpl implements MuResponse {
     public OutputStream outputStream() {
         if (this.outputStream == null) {
             startStreaming();
-            this.outputStream = new OutputStreamToByteChannelAdapter(channel);
+            this.outputStream = new ResponseOutputStream(this);
         }
         return this.outputStream;
     }
