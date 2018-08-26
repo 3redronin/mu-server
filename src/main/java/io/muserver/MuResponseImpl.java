@@ -11,14 +11,13 @@ import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.net.URI;
 import java.nio.ByteBuffer;
-import java.nio.channels.ByteChannel;
 import java.nio.channels.WritableByteChannel;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.concurrent.Future;
 
-import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
+import static java.nio.charset.StandardCharsets.US_ASCII;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 class MuResponseImpl implements MuResponse {
@@ -111,6 +110,7 @@ class MuResponseImpl implements MuResponse {
                         if (outputStream != null) {
                             outputStream.close();
                         }
+                        sendChunkEnd();
                         state = OutputState.STREAMING_COMPLETE;
                     }
                 }
@@ -149,7 +149,16 @@ class MuResponseImpl implements MuResponse {
             throw new MuException("Error writing to client. They have probably disconnected", e);
         }
     }
+
+
+    private void throwIfFinished() {
+        if (state == OutputState.FULL_SENT || state == OutputState.STREAMING_COMPLETE) {
+            throw new IllegalStateException("Cannot write data as response has already completed");
+        }
+    }
+
     private void writeBytes(ByteBuffer bytes) throws IOException {
+        throwIfFinished();
         int expected = bytes.remaining();
         int written = channel.write(bytes);
         bytesStreamed += written;
@@ -160,8 +169,31 @@ class MuResponseImpl implements MuResponse {
 
     @Override
     public void sendChunk(String text) {
-        throw new MuException("Not supported");
+        sendChunk(text.getBytes(charset()));
     }
+
+    void sendChunk(byte[] chunkData) {
+        if (state == OutputState.NOTHING) {
+            startStreaming();
+        }
+
+        byte[] size = Integer.toHexString(chunkData.length).getBytes(US_ASCII);
+        ByteBuffer bb = ByteBuffer.allocate(chunkData.length + size.length + 4);
+        bb.put(size)
+            .put((byte) '\r')
+            .put((byte) '\n')
+            .put(chunkData)
+            .put((byte) '\r')
+            .put((byte) '\n');
+        bb.flip();
+        writeBytesREX(bb);
+    }
+
+    private static final byte[] LAST_CHUNK = new byte[] { '0', '\r', '\n', '\r', '\n'};
+    private void sendChunkEnd() throws IOException {
+        writeBytes(ByteBuffer.wrap(LAST_CHUNK));
+    }
+
 
     @Override
     public void redirect(String url) {
@@ -194,7 +226,6 @@ class MuResponseImpl implements MuResponse {
             throw new IllegalStateException("Cannot start streaming when state is " + state);
         }
         state = OutputState.STREAMING;
-        rg.writeHeader(status, headers);
         if (!headers.contains(HeaderNames.CONTENT_LENGTH)) {
             headers.set(HttpHeaderNames.TRANSFER_ENCODING, HttpHeaderValues.CHUNKED);
         }
