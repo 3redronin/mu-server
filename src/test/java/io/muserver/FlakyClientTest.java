@@ -6,6 +6,7 @@ import okhttp3.OkHttpClient;
 import okhttp3.Response;
 import org.hamcrest.Matchers;
 import org.junit.After;
+import org.junit.Ignore;
 import org.junit.Test;
 import scaffolding.ClientUtils;
 import scaffolding.MuAssert;
@@ -18,6 +19,7 @@ import static io.muserver.MuServerBuilder.httpServer;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static scaffolding.ClientUtils.request;
 
+@Ignore
 public class FlakyClientTest {
 
     private MuServer server;

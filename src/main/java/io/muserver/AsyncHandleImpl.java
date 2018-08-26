@@ -50,7 +50,7 @@ class AsyncHandleImpl implements AsyncHandle {
     public void write(ByteBuffer data, WriteCallback callback) {
         executorService.submit(() -> {
             try {
-                response.writeBytes(data);
+                response.sendBodyData(data);
                 try {
                     callback.onSuccess();
                 } catch (Exception e) {
@@ -69,7 +69,7 @@ class AsyncHandleImpl implements AsyncHandle {
     @Override
     public Future<Void> write(ByteBuffer data) {
         return executorService.submit(() -> {
-            response.writeBytes(data);
+            response.sendBodyData(data);
             return null;
         });
     }

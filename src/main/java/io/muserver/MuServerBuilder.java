@@ -253,16 +253,16 @@ public class MuServerBuilder {
 
         AtomicReference<MuServer> serverRef = new AtomicReference<>();
 
-        List<ConnectionAcceptor> accepters = new ArrayList<>();
-        URI httpUri = startAcceptorMaybe(executorService, handlersCopy, serverRef, accepters, httpPort, host);
-        URI httpsUri = startAcceptorMaybe(executorService, handlersCopy, serverRef, accepters, httpsPort, host);
+        List<ConnectionAcceptor> acceptors = new ArrayList<>();
+        URI httpUri = startAcceptorMaybe(executorService, handlersCopy, serverRef, acceptors, httpPort, host, null);
+        URI httpsUri = startAcceptorMaybe(executorService, handlersCopy, serverRef, acceptors, httpsPort, host, sslContext == null ? SSLContextBuilder.unsignedLocalhostCert() : sslContext);
         Runnable shutdown = () -> {
             try {
-                for (ConnectionAcceptor accepter : accepters) {
+                for (ConnectionAcceptor acceptor : acceptors) {
                     try {
-                        accepter.stop();
+                        acceptor.stop();
                     } catch (InterruptedException e) {
-                        log.warn("Error while stopping " + accepter, e);
+                        log.warn("Error while stopping " + acceptor, e);
                     }
                 }
             } catch (Exception e) {
@@ -272,7 +272,7 @@ public class MuServerBuilder {
 
 
         MuStats stats = new MuStatsImpl2();
-        MuServer server = new MuServerImpl(httpUri, httpsUri, shutdown, stats, accepters.get(0).address);
+        MuServer server = new MuServerImpl(httpUri, httpsUri, shutdown, stats, acceptors.get(0).address);
         serverRef.set(server);
         if (addShutdownHook) {
             Runtime.getRuntime().addShutdownHook(new Thread(server::stop));
@@ -280,10 +280,10 @@ public class MuServerBuilder {
         return server;
     }
 
-    private static URI startAcceptorMaybe(ExecutorService executorService, List<MuHandler> handlers, AtomicReference<MuServer> serverRef, List<ConnectionAcceptor> accepters, int httpPort, String host) {
+    private static URI startAcceptorMaybe(ExecutorService executorService, List<MuHandler> handlers, AtomicReference<MuServer> serverRef, List<ConnectionAcceptor> accepters, int httpPort, String host, SSLContext sslContext) {
         URI httpUri = null;
         if (httpPort >= 0) {
-            ConnectionAcceptor httpAccepter = new ConnectionAcceptor(executorService, handlers, null, serverRef);
+            ConnectionAcceptor httpAccepter = new ConnectionAcceptor(executorService, handlers, sslContext, serverRef);
             try {
                 httpAccepter.start(host, httpPort);
                 httpUri = httpAccepter.uri();

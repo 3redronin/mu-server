@@ -124,7 +124,7 @@ public class SsePublisherTest {
     @After
     public void destroy() {
         scaffolding.MuAssert.stopAndCheck(server);
-        if (listener != null) listener.cleanup();
+        listener.cleanup();
     }
 
     private static class TestSseClient implements SseClient.ServerSentEvent.Listener {

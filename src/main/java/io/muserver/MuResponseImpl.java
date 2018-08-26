@@ -83,9 +83,13 @@ class MuResponseImpl implements MuResponse {
         }
         ByteBuffer toSend = charset().encode(text);
         headers.set(HeaderNames.CONTENT_LENGTH, toSend.remaining());
-        writeBytesREX(rg.writeHeader(status, headers));
-        // TODO combine into a single write ?
-        writeBytesREX(toSend);
+        try {
+            writeBytesREX(rg.writeHeader(status, headers));
+            // TODO combine into a single write ?
+            writeBytesREX(toSend);
+        } catch (IOException e) {
+            throw new MuException("Exception while sending to the client. They have probably disconnected.", e);
+        }
         state = OutputState.FULL_SENT;
     }
 
@@ -148,12 +152,8 @@ class MuResponseImpl implements MuResponse {
     }
 
 
-    void writeBytesREX(ByteBuffer bytes) {
-        try {
-            writeBytes(bytes);
-        } catch (IOException e) {
-            throw new MuException("Error writing to client. They have probably disconnected", e);
-        }
+    void writeBytesREX(ByteBuffer bytes) throws IOException {
+        writeBytes(bytes);
     }
 
 
@@ -163,7 +163,7 @@ class MuResponseImpl implements MuResponse {
         }
     }
 
-    void writeBytes(ByteBuffer bytes) throws IOException {
+    private void writeBytes(ByteBuffer bytes) throws IOException {
         throwIfFinished();
         int expected = bytes.remaining();
         int written = channel.write(bytes);
@@ -176,10 +176,14 @@ class MuResponseImpl implements MuResponse {
     @Override
     public void sendChunk(String text) {
         byte[] bytes = text.getBytes(charset());
-        sendBodyData(bytes, 0, bytes.length);
+        try {
+            sendBodyData(bytes, 0, bytes.length);
+        } catch (IOException e) {
+            throw new MuException("Exception while sending to the client. They have probably disconnected.", e);
+        }
     }
 
-    void sendBodyData(byte[] data, int off, int len) {
+    void sendBodyData(byte[] data, int off, int len) throws IOException {
         if (state == OutputState.NOTHING) {
             startStreaming();
         }
@@ -197,6 +201,29 @@ class MuResponseImpl implements MuResponse {
                 .flip();
         } else {
             bb = ByteBuffer.wrap(data, off, len);
+        }
+        writeBytesREX(bb);
+    }
+
+    void sendBodyData(ByteBuffer data) throws IOException {
+        if (state == OutputState.NOTHING) {
+            startStreaming();
+        }
+
+        ByteBuffer bb;
+        if (chunkResponse) {
+            int len = data.remaining();
+            byte[] size = Integer.toHexString(len).getBytes(US_ASCII);
+            bb = ByteBuffer.allocate(len + size.length + 4);
+            bb.put(size)
+                .put((byte) '\r')
+                .put((byte) '\n')
+                .put(data)
+                .put((byte) '\r')
+                .put((byte) '\n')
+                .flip();
+        } else {
+            bb = data;
         }
         writeBytesREX(bb);
     }
@@ -233,7 +260,7 @@ class MuResponseImpl implements MuResponse {
         headers.add(HeaderNames.SET_COOKIE, ServerCookieEncoder.STRICT.encode(cookie.nettyCookie));
     }
 
-    private void startStreaming() {
+    private void startStreaming() throws IOException {
         if (state != OutputState.NOTHING) {
             throw new IllegalStateException("Cannot start streaming when state is " + state);
         }
@@ -249,7 +276,11 @@ class MuResponseImpl implements MuResponse {
 
     public OutputStream outputStream() {
         if (this.outputStream == null) {
-            startStreaming();
+            try {
+                startStreaming();
+            } catch (IOException e) {
+                throw new MuException("Exception while sending to the client. They have probably disconnected.", e);
+            }
             this.outputStream = new ResponseOutputStream(this);
         }
         return this.outputStream;
@@ -257,7 +288,7 @@ class MuResponseImpl implements MuResponse {
 
     public PrintWriter writer() {
         if (this.writer == null) {
-            OutputStreamWriter os = new OutputStreamWriter(outputStream(), StandardCharsets.UTF_8);
+            OutputStreamWriter os = new OutputStreamWriter(outputStream(), charset());
             this.writer = new PrintWriter(os);
         }
         return this.writer;

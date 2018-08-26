@@ -102,6 +102,7 @@ public interface MuResponse {
     /**
      * <p>A print writer that can be used to send text to the client. It is a convenience method, wrapping {@link #outputStream()}
      * in a PrintWriter.</p>
+     * <p>The character set used is UTF-8, unless a different encoding is specified in the Content-Type header.</p>
      * <p>You may prefer using {@link #sendChunk(String)} or {@link #write(String)} to send text.</p>
      * @return A print writer that can be used to send text to the client.
      */

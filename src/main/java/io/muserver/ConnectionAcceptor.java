@@ -36,12 +36,14 @@ class ConnectionAcceptor {
     private final SSLContext sslContext;
     private final AtomicReference<MuServer> serverRef;
     private URI uri;
+    private final String protocol;
 
     ConnectionAcceptor(ExecutorService executorService, List<MuHandler> handlers, SSLContext sslContext, AtomicReference<MuServer> serverRef) {
         this.executorService = executorService;
         this.handlers = handlers;
         this.sslContext = sslContext;
         this.serverRef = serverRef;
+        this.protocol = sslContext == null ? "http" : "https";
     }
 
 
@@ -92,13 +94,10 @@ class ConnectionAcceptor {
 
                         InetAddress clientAddress = ((InetSocketAddress) rawChannel.getRemoteAddress()).getAddress();
 
-                        String protocol;
                         ByteChannel byteChannel;
                         if (sslContext == null) {
-                            protocol = "http";
                             byteChannel = rawChannel;
                         } else {
-                            protocol = "https";
                             byteChannel = ServerTlsChannel.newBuilder(rawChannel, sslContext).build();
                         }
                         ClientConnection cc = new ClientConnection(executorService, handlers, byteChannel, protocol, clientAddress, serverRef.get());
