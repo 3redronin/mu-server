@@ -371,7 +371,7 @@ public class MuHeaders extends Headers implements RequestParameters {
     @Override
     @Deprecated
     public Headers set(CharSequence name, Object value) {
-        throw new MuException("Deprecated");
+        return set(name.toString(), value);
     }
 
     @Override

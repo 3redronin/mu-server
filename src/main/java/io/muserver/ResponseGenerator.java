@@ -2,9 +2,10 @@ package io.muserver;
 
 import javax.ws.rs.core.Response;
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+
+import static java.nio.charset.StandardCharsets.US_ASCII;
 
 public class ResponseGenerator {
     private final HttpVersion httpVersion;
@@ -25,6 +26,6 @@ public class ResponseGenerator {
             }
         }
         resp.append("\r\n");
-        return ByteBuffer.wrap(resp.toString().getBytes(StandardCharsets.US_ASCII));
+        return US_ASCII.encode(resp.toString());
     }
 }

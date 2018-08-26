@@ -8,21 +8,17 @@ import java.net.InetAddress;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.channels.ByteChannel;
-import java.util.Date;
-import java.util.concurrent.ConcurrentLinkedQueue;
 
 class ClientConnection implements RequestParser.RequestListener {
     private static final Logger log = LoggerFactory.getLogger(ClientConnection.class);
 
     private final RequestParser requestParser = new RequestParser(this);
     final ByteChannel channel;
-    private final ConcurrentLinkedQueue queue = new ConcurrentLinkedQueue();
-    private HttpVersion httpVersion;
-    private boolean isKeepAlive;
     private MuRequestImpl curReq;
     final String protocol;
     final InetAddress clientAddress;
     final MuServer server;
+    private MuResponseImpl curResp;
 
     ClientConnection(ByteChannel channel, String protocol, InetAddress clientAddress, MuServer server) {
         this.channel = channel;
@@ -46,29 +42,16 @@ class ClientConnection implements RequestParser.RequestListener {
 //        log.info(method + " " + uri + " " + httpVersion + " - " + headers);
 
         MuRequestImpl req = new MuRequestImpl(method, uri, headers, body, this);
+        boolean isKeepAlive = MuSelector.keepAlive(httpVersion, headers);
+        MuResponseImpl resp = new MuResponseImpl(channel, httpVersion);
+        curReq = req;
+        curResp = resp;
 
-        this.isKeepAlive = MuSelector.keepAlive(httpVersion, headers);
-        this.httpVersion = httpVersion;
     }
 
     @Override
     public void onRequestComplete(MuHeaders trailers) {
-
-//        log.info("Request complete. Trailers=" + trailers);
-        MuHeaders respHeaders = new MuHeaders();
-        respHeaders.set(HeaderNames.DATE.toString(), Mutils.toHttpDate(new Date()));
-        respHeaders.set("X-Blah", "Ah haha");
-        respHeaders.set("Content-Length", "0");
-
-
-        ResponseGenerator resp = new ResponseGenerator(httpVersion);
-        ByteBuffer toSend = resp.writeHeader(200, respHeaders);
-        try {
-            int written = channel.write(toSend);
-            // TODO: while written?
-        } catch (IOException e) {
-            onClientClosed();
-        }
+        curResp.write("Hello, world");
     }
 
 

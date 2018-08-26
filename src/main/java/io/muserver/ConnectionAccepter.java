@@ -20,7 +20,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
-public class ConnectionAccepter {
+class ConnectionAccepter {
     private static final Logger log = LoggerFactory.getLogger(ConnectionAccepter.class);
 
     InetSocketAddress address;
@@ -31,7 +31,7 @@ public class ConnectionAccepter {
     private final SSLContext sslContext;
     private final AtomicReference<MuServer> serverRef;
 
-    public ConnectionAccepter(SSLContext sslContext, AtomicReference<MuServer> serverRef) {
+    ConnectionAccepter(SSLContext sslContext, AtomicReference<MuServer> serverRef) {
         this.sslContext = sslContext;
         this.serverRef = serverRef;
     }
@@ -39,14 +39,11 @@ public class ConnectionAccepter {
 
     public void start() throws Exception {
         long start = System.currentTimeMillis();
-        thread = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    startIt();
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
+        thread = new Thread(() -> {
+            try {
+                startIt();
+            } catch (Exception e) {
+                e.printStackTrace();
             }
         }, "ConnectionAcceptor");
         running = true;

@@ -11,6 +11,7 @@ import java.net.URI;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static scaffolding.ClientUtils.call;
@@ -62,14 +63,16 @@ public class ConnectionAccepterTest {
             long start = System.currentTimeMillis();
 
 
-            for (int i = 0; i < 100; i++) {
+            int numToMake = 100;
+            for (int i = 0; i < numToMake; i++) {
                 try (Response resp = call(request().url(targetURI))) {
                     assertThat(resp.code(), is(200));
+                    assertThat(resp.body().string(), equalTo("Hello, world"));
                 }
             }
 
             long duration = System.currentTimeMillis() - start;
-            System.out.println("Call took " + duration + "ms - or " + (duration / 1000));
+            System.out.println("Call took " + duration + "ms - or " + (duration / numToMake));
         } finally {
             selector.stop();
         }
