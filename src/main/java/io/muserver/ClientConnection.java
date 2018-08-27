@@ -66,7 +66,7 @@ class ClientConnection implements RequestParser.RequestListener {
         MuRequestImpl req = new MuRequestImpl(method, uri, headers, body, this);
         boolean isKeepAlive = MuSelector.keepAlive(httpVersion, headers);
         MuResponseImpl resp = new MuResponseImpl(channel, req, isKeepAlive, stats);
-        asyncHandle = new AsyncHandleImpl(executorService, req, resp);
+        asyncHandle = new AsyncHandleImpl(req, resp);
         req.setAsyncHandle(asyncHandle);
         stats.onRequestStarted(req);
 

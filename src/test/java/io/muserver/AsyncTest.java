@@ -92,12 +92,14 @@ public class AsyncTest {
                             ctx.write(text, new WriteCallback() {
                                 @Override
                                 public void onFailure(Throwable reason) throws Exception {
+                                    System.out.println("Failure :( " + reason);
                                     changeListener.stop();
                                     ctx.complete();
                                     ctxClosedLatch.countDown();
                                 }
                                 @Override
                                 public void onSuccess() {
+                                    System.out.println("Success!");
                                 }
                             });
                         } catch (Throwable e) {
@@ -131,6 +133,7 @@ public class AsyncTest {
         }
 
         assertThat(connectionsDuringListening.get(), is(1L));
+        Thread.sleep(100);
         assertThat(server.stats().activeConnections(), is(0L));
         assertThat(server.stats().completedRequests(), is(1L));
     }

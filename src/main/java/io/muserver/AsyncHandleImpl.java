@@ -5,21 +5,20 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
+import java.util.concurrent.*;
 
 class AsyncHandleImpl implements AsyncHandle {
+
+    private final ExecutorService executorService = Executors.newSingleThreadExecutor();
     private static final Logger log = LoggerFactory.getLogger(AsyncHandleImpl.class);
 
-    private final ExecutorService executorService;
     private final MuRequestImpl request;
     private final MuResponseImpl response;
     private ResponseCompletedListener responseCompletedListener;
     private RequestBodyListener readListener;
 
-    AsyncHandleImpl(ExecutorService executorService, MuRequestImpl request, MuResponseImpl response) {
-        this.executorService = executorService;
+
+    AsyncHandleImpl(MuRequestImpl request, MuResponseImpl response) {
         this.request = request;
         this.response = response;
     }
@@ -32,18 +31,23 @@ class AsyncHandleImpl implements AsyncHandle {
 
     @Override
     public void complete() {
-        response.complete(false);
-        onResponseComplete(true);
+        complete(null);
     }
 
     @Override
     public void complete(Throwable throwable) {
-        try {
-            ClientConnection.dealWithUnhandledException(request, response, throwable);
-        } finally {
-            response.complete(true);
-            onResponseComplete(false);
-        }
+        executorService.submit(() -> {
+            boolean error = throwable != null;
+            try {
+                if (error) {
+                    ClientConnection.dealWithUnhandledException(request, response, throwable);
+                }
+            } finally {
+                response.complete(error);
+                onResponseComplete(!error);
+            }
+        });
+
     }
 
     @Override
@@ -60,7 +64,7 @@ class AsyncHandleImpl implements AsyncHandle {
                 try {
                     callback.onFailure(e);
                 } catch (Exception e1) {
-                    log.warn("Error while running async failure callback", e);
+                    log.warn("Error while running async failure callback", e1);
                 }
             }
         });
