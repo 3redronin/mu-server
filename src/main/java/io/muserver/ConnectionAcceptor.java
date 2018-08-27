@@ -5,10 +5,8 @@ import org.slf4j.LoggerFactory;
 import tlschannel.NeedsReadException;
 import tlschannel.NeedsWriteException;
 import tlschannel.ServerTlsChannel;
-import tlschannel.TlsChannel;
 
 import javax.net.ssl.SSLContext;
-import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -37,13 +35,15 @@ class ConnectionAcceptor {
     private final AtomicReference<MuServer> serverRef;
     private URI uri;
     private final String protocol;
+    private final RequestParser.Options parserOptions;
 
-    ConnectionAcceptor(ExecutorService executorService, List<MuHandler> handlers, SSLContext sslContext, AtomicReference<MuServer> serverRef) {
+    ConnectionAcceptor(ExecutorService executorService, List<MuHandler> handlers, SSLContext sslContext, AtomicReference<MuServer> serverRef, RequestParser.Options parserOptions) {
         this.executorService = executorService;
         this.handlers = handlers;
         this.sslContext = sslContext;
         this.serverRef = serverRef;
         this.protocol = sslContext == null ? "http" : "https";
+        this.parserOptions = parserOptions;
     }
 
 
@@ -100,7 +100,7 @@ class ConnectionAcceptor {
                         } else {
                             byteChannel = ServerTlsChannel.newBuilder(rawChannel, sslContext).build();
                         }
-                        ClientConnection cc = new ClientConnection(executorService, handlers, byteChannel, protocol, clientAddress, serverRef.get());
+                        ClientConnection cc = new ClientConnection(executorService, handlers, byteChannel, protocol, clientAddress, serverRef.get(), parserOptions);
                         SelectionKey newKey = rawChannel.register(selector, SelectionKey.OP_READ);
                         newKey.attach(cc);
 

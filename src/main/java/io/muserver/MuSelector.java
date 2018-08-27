@@ -94,7 +94,7 @@ class MuSelector {
 
                         }
                     };
-                    RequestParser requestParser = new RequestParser(requestListener);
+                    RequestParser requestParser = new RequestParser(null, requestListener);
                     readRequest(client, buffer, requestParser);
 
 

@@ -7,7 +7,24 @@ import java.util.List;
 
 class RequestParser {
 
+    static class Options {
+        final int maxUrlLength;
+        final int maxHeaderSize;
 
+        Options(int maxUrlLength, int maxHeaderSize) {
+            this.maxHeaderSize = maxHeaderSize;
+            if (maxUrlLength < 30) {
+                throw new IllegalArgumentException("The Max URL length must be at least 30 characters, however " + maxUrlLength
+                    + " was specified. It is recommended that a much larger value, such as 4096 is used to cater for URLs with long " +
+                    "paths or many querystring parameters.");
+            }
+            this.maxUrlLength = maxUrlLength;
+        }
+
+        final static Options defaultOptions = new Options(16 * 1024, 16 * 1024);
+    }
+
+    private final Options options;
     private final RequestListener requestListener;
 
     private State state = State.RL_METHOD;
@@ -42,7 +59,8 @@ class RequestParser {
         curChunkSize = -1;
     }
 
-    RequestParser(RequestListener requestListener) {
+    RequestParser(Options options, RequestListener requestListener) {
+        this.options = options;
         this.requestListener = requestListener;
     }
 
@@ -101,6 +119,9 @@ class RequestParser {
                     cur.setLength(0);
                 } else {
                     append(c);
+                    if (cur.length() > options.maxUrlLength) {
+                        throw new InvalidRequestException(414, "URI Too Long", "The URL " + cur + " exceeded the maximum URL length allowed, which is " + options.maxUrlLength);
+                    }
                 }
             } else if (state == State.RL_PROTO) {
                 if (c == '\n') {

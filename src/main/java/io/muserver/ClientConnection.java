@@ -8,14 +8,18 @@ import java.net.InetAddress;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.channels.ByteChannel;
+import java.nio.charset.StandardCharsets;
+import java.util.Date;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+
 class ClientConnection implements RequestParser.RequestListener {
     private static final Logger log = LoggerFactory.getLogger(ClientConnection.class);
 
-    private final RequestParser requestParser = new RequestParser(this);
+    private final RequestParser requestParser;
     private final ExecutorService executorService;
     private final List<MuHandler> handlers;
     final ByteChannel channel;
@@ -27,16 +31,17 @@ class ClientConnection implements RequestParser.RequestListener {
     private MuResponseImpl curResp;
     private AsyncHandleImpl asyncHandle;
 
-    ClientConnection(ExecutorService executorService, List<MuHandler> handlers, ByteChannel channel, String protocol, InetAddress clientAddress, MuServer server) {
+    ClientConnection(ExecutorService executorService, List<MuHandler> handlers, ByteChannel channel, String protocol, InetAddress clientAddress, MuServer server, RequestParser.Options parserOptions) {
         this.executorService = executorService;
         this.handlers = handlers;
         this.channel = channel;
         this.protocol = protocol;
         this.clientAddress = clientAddress;
         this.server = server;
-        this.stats = (MuStatsImpl2)server.stats();
+        this.stats = (MuStatsImpl2) server.stats();
         this.stats.incrementActiveConnections();
         log.info("New connection");
+        requestParser = new RequestParser(parserOptions, this);
     }
 
 
@@ -46,14 +51,25 @@ class ClientConnection implements RequestParser.RequestListener {
             requestParser.offer(buffer);
         } catch (Exception e) {
             // TODO tell the async stuff and stop processing
-            log.error("Error while parsing body", e);
-
-            if (e instanceof InvalidRequestException) {
-                stats.incrementInvalidHttpRequests();
-                // send response
-            }
-            e.printStackTrace();
             try {
+
+                if (e instanceof InvalidRequestException) {
+                    InvalidRequestException ire = (InvalidRequestException) e;
+                    stats.incrementInvalidHttpRequests();
+                    ResponseGenerator rg = new ResponseGenerator(HttpVersion.HTTP_1_1);
+                    MuHeaders headers = new MuHeaders();
+                    headers.set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
+                    headers.set(HeaderNames.DATE, Mutils.toHttpDate(new Date()));
+                    headers.set(HeaderNames.CONTENT_TYPE, ContentTypes.TEXT_PLAIN);
+                    String message = ire.responseCode + " " + ire.clientMessage;
+                    ByteBuffer body = UTF_8.encode(message);
+                    headers.set(HeaderNames.CONTENT_LENGTH, body.remaining());
+                    log.warn("Invalid HTTP request detected from " + clientAddress + " - sent \"" + message + "\" to the client. Further info: " + ire.privateDetails);
+                    channel.write(rg.writeHeader(ire.responseCode, headers));
+                    channel.write(body);
+                } else {
+                    log.error("Error while parsing body", e);
+                }
                 channel.close();
             } catch (IOException e1) {
                 log.info("Error closing channel after read error: " + e1.getMessage());

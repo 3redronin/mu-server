@@ -62,7 +62,8 @@ public class HeadersTest {
         }
 	}
 
-	@Test public void largeHeadersAreFineIfConfigured() {
+	@Test
+    public void largeHeadersAreFineIfConfigured() {
 		server = MuServerBuilder.httpServer()
 				.withMaxHeadersSize(33000)
 				.addHandler((request, response) -> {
@@ -74,9 +75,11 @@ public class HeadersTest {
         try (Response resp = call(xSomethingHeader(bigString))) {
             assertThat(resp.header("X-Something"), equalTo(bigString));
         }
-	}
+        assertThat(server.stats().invalidHttpRequests(), is(0L));
+    }
 
-	@Test public void urlsThatAreTooLongAreRejected() throws MalformedURLException {
+	@Test
+    public void urlsThatAreTooLongAreRejected() throws MalformedURLException {
 		AtomicBoolean handlerHit = new AtomicBoolean(false);
 		server = MuServerBuilder.httpServer()
 				.withMaxUrlSize(30)
@@ -89,6 +92,7 @@ public class HeadersTest {
         try (Response resp = call(request().url(server.httpUri().resolve("/this-is-much-longer-than-that-value-allowed-by-the-config-above-i-think").toURL()))) {
             assertThat(resp.code(), is(414));
         }
+        assertThat(server.stats().invalidHttpRequests(), is(1L));
 		assertThat(handlerHit.get(), is(false));
 	}
 
@@ -104,7 +108,8 @@ public class HeadersTest {
             assertThat(resp.code(), is(431));
             assertThat(resp.header("X-Something"), is(nullValue()));
         }
-	}
+        assertThat(server.stats().invalidHttpRequests(), is(1L));
+    }
 
     @Test public void ifXForwardedHeadersAreSpecifiedThenRequestUriUsesThem() {
         URI[] actual = new URI[2];
@@ -147,7 +152,8 @@ public class HeadersTest {
         assertThat(actual[0].toString(), equalTo("https://www.example.org:12000/blah?query=value"));
     }
 
-    @Test public void ifNoResponseDataThenContentLengthIsZero() {
+    @Test
+    public void ifNoResponseDataThenContentLengthIsZero() {
         server = MuServerBuilder.httpServer()
             .addHandler((request, response) -> {
                 response.status(200);
@@ -165,7 +171,8 @@ public class HeadersTest {
         }
     }
 
-    @Test public void ifOutputStreamUsedThenTransferEncodingIsChunked() {
+    @Test
+    public void ifOutputStreamUsedThenTransferEncodingIsChunked() {
         server = MuServerBuilder.httpServer()
             .addHandler((request, response) -> {
                 response.status(200);
@@ -182,7 +189,8 @@ public class HeadersTest {
         }
     }
 
-    @Test public void aRequestHasXForwardHostHeaderDontThrowException() throws IOException {
+    @Test
+    public void aRequestHasXForwardHostHeaderDontThrowException() throws IOException {
         final String host = "mu-server-io:1234";
         server = httpServer()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
@@ -196,7 +204,8 @@ public class HeadersTest {
         }
     }
 
-    @Test public void aRequestHasXForwardHostAndHasNoPortDontThrowException() throws IOException {
+    @Test
+    public void aRequestHasXForwardHostAndHasNoPortDontThrowException() throws IOException {
         final String host = "mu-server-io";
         server = httpServer()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
@@ -210,7 +219,8 @@ public class HeadersTest {
         }
     }
 
-    @Test public void aRequestHasXForwardHostAndXForwardedPortDontThrowExceptionAndUserPort() throws IOException {
+    @Test
+    public void aRequestHasXForwardHostAndXForwardedPortDontThrowExceptionAndUserPort() throws IOException {
         final String host = "mu-server-io:9999";
         final String port = "8888";
         server = httpServer()
@@ -226,7 +236,8 @@ public class HeadersTest {
     }
 
 
-    @Test public void aRquestWithErrorXForwardHostHeaderDontThrowException() throws IOException {
+    @Test
+    public void aRquestWithErrorXForwardHostHeaderDontThrowException() throws IOException {
         final String host = "mu-server-io(error):1234";
         server = httpServer()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {

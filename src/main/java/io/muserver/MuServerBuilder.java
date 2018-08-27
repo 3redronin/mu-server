@@ -24,8 +24,8 @@ public class MuServerBuilder {
     private long minimumGzipSize = 1400;
     private int httpPort = -1;
     private int httpsPort = -1;
-    private int maxHeadersSize = 8192;
-    private int maxUrlSize = 8192 - LENGTH_OF_METHOD_AND_PROTOCOL;
+    private int maxHeadersSize = RequestParser.Options.defaultOptions.maxHeaderSize;
+    private int maxUrlSize = RequestParser.Options.defaultOptions.maxUrlLength;
     private List<MuHandler> handlers = new ArrayList<>();
     private SSLContext sslContext;
     private boolean gzipEnabled = true;
@@ -254,8 +254,9 @@ public class MuServerBuilder {
         AtomicReference<MuServer> serverRef = new AtomicReference<>();
 
         List<ConnectionAcceptor> acceptors = new ArrayList<>();
-        URI httpUri = startAcceptorMaybe(executorService, handlersCopy, serverRef, acceptors, httpPort, host, null);
-        URI httpsUri = startAcceptorMaybe(executorService, handlersCopy, serverRef, acceptors, httpsPort, host, sslContext == null ? SSLContextBuilder.unsignedLocalhostCert() : sslContext);
+        RequestParser.Options parserOptions = new RequestParser.Options(maxUrlSize, maxHeadersSize);
+        URI httpUri = startAcceptorMaybe(executorService, handlersCopy, serverRef, acceptors, httpPort, host, null, parserOptions);
+        URI httpsUri = startAcceptorMaybe(executorService, handlersCopy, serverRef, acceptors, httpsPort, host, sslContext == null ? SSLContextBuilder.unsignedLocalhostCert() : sslContext, parserOptions);
         Runnable shutdown = () -> {
             try {
                 for (ConnectionAcceptor acceptor : acceptors) {
@@ -280,10 +281,10 @@ public class MuServerBuilder {
         return server;
     }
 
-    private static URI startAcceptorMaybe(ExecutorService executorService, List<MuHandler> handlers, AtomicReference<MuServer> serverRef, List<ConnectionAcceptor> accepters, int httpPort, String host, SSLContext sslContext) {
+    private static URI startAcceptorMaybe(ExecutorService executorService, List<MuHandler> handlers, AtomicReference<MuServer> serverRef, List<ConnectionAcceptor> accepters, int httpPort, String host, SSLContext sslContext, RequestParser.Options parserOptions) {
         URI httpUri = null;
         if (httpPort >= 0) {
-            ConnectionAcceptor httpAccepter = new ConnectionAcceptor(executorService, handlers, sslContext, serverRef);
+            ConnectionAcceptor httpAccepter = new ConnectionAcceptor(executorService, handlers, sslContext, serverRef, parserOptions);
             try {
                 httpAccepter.start(host, httpPort);
                 httpUri = httpAccepter.uri();

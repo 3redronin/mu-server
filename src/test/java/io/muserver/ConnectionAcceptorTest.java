@@ -8,14 +8,12 @@ import scaffolding.RawClient;
 
 import javax.net.ssl.SSLContext;
 import java.net.URI;
-import java.util.Collections;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Arrays.asList;
-import static java.util.Collections.emptyList;
 import static java.util.Collections.singletonList;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.is;
@@ -38,7 +36,7 @@ public class ConnectionAcceptorTest {
                 return true;
             }
         };
-        ConnectionAcceptor selector = new ConnectionAcceptor(executorService, singletonList(echoHandler), null, new AtomicReference<>());
+        ConnectionAcceptor selector = new ConnectionAcceptor(executorService, singletonList(echoHandler), null, new AtomicReference<>(), RequestParser.Options.defaultOptions);
         selector.start("localhost", 0);
 
         URI targetURI = URI.create("http://localhost:" + selector.address.getPort());
@@ -84,7 +82,7 @@ public class ConnectionAcceptorTest {
                 return true;
             }
         };
-        ConnectionAcceptor selector = new ConnectionAcceptor(executorService, asList(echoHandler), sslContext, new AtomicReference<>());
+        ConnectionAcceptor selector = new ConnectionAcceptor(executorService, asList(echoHandler), sslContext, new AtomicReference<>(), RequestParser.Options.defaultOptions);
         try {
             selector.start("localhost", 0);
             String targetURI = "https://localhost:" + selector.address.getPort();

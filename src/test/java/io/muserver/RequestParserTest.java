@@ -25,7 +25,7 @@ import static org.hamcrest.Matchers.nullValue;
 public class RequestParserTest {
 
     private final MyRequestListener listener = new MyRequestListener();
-    private final RequestParser parser = new RequestParser(listener);
+    private final RequestParser parser = new RequestParser(RequestParser.Options.defaultOptions, listener);
 
 
     @Test
@@ -42,7 +42,7 @@ public class RequestParserTest {
         assertThat(listener.headers.size(), is(0));
 
         MyRequestListener anotherListener = new MyRequestListener();
-        RequestParser another = new RequestParser(anotherListener);
+        RequestParser another = new RequestParser(RequestParser.Options.defaultOptions, anotherListener);
         another.offer(wrap("GET /a%20link HTTP/1.0\r\n\r\n"));
         assertThat(anotherListener, equalTo(listener));
     }
@@ -148,7 +148,7 @@ public class RequestParserTest {
         assertThat(bodyAsUTF8(listener), is("Hello Hello "));
 
         MyRequestListener listener2 = new MyRequestListener();
-        RequestParser p2 = new RequestParser(listener2);
+        RequestParser p2 = new RequestParser(RequestParser.Options.defaultOptions, listener2);
         byte[] inBytes = in.getBytes(UTF_8);
         for (int i = 0; i < inBytes.length; i++) {
             p2.offer(ByteBuffer.wrap(inBytes, i, 1));
