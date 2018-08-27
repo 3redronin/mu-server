@@ -42,6 +42,11 @@ class MuStatsImpl implements MuStats {
     }
 
     @Override
+    public long currentRequests() {
+        return activeRequests.size();
+    }
+
+    @Override
     public Set<MuRequest> activeRequests() {
         return activeRequests;
     }

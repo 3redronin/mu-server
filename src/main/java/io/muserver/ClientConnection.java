@@ -19,6 +19,7 @@ class ClientConnection implements RequestParser.RequestListener {
     private final ExecutorService executorService;
     private final List<MuHandler> handlers;
     final ByteChannel channel;
+    private final MuStatsImpl2 stats;
     private MuRequestImpl curReq;
     final String protocol;
     final InetAddress clientAddress;
@@ -33,18 +34,22 @@ class ClientConnection implements RequestParser.RequestListener {
         this.protocol = protocol;
         this.clientAddress = clientAddress;
         this.server = server;
+        this.stats = (MuStatsImpl2)server.stats();
+        this.stats.incrementActiveConnections();
         log.info("New connection");
     }
 
 
     void onBytesReceived(ByteBuffer buffer) {
         try {
+            stats.incrementBytesRead(buffer.remaining());
             requestParser.offer(buffer);
         } catch (Exception e) {
             // TODO tell the async stuff and stop processing
             log.error("Error while parsing body", e);
 
             if (e instanceof InvalidRequestException) {
+                stats.incrementInvalidHttpRequests();
                 // send response
             }
             e.printStackTrace();
@@ -60,9 +65,10 @@ class ClientConnection implements RequestParser.RequestListener {
     public void onHeaders(Method method, URI uri, HttpVersion httpVersion, MuHeaders headers, GrowableByteBufferInputStream body) {
         MuRequestImpl req = new MuRequestImpl(method, uri, headers, body, this);
         boolean isKeepAlive = MuSelector.keepAlive(httpVersion, headers);
-        MuResponseImpl resp = new MuResponseImpl(channel, req, isKeepAlive);
+        MuResponseImpl resp = new MuResponseImpl(channel, req, isKeepAlive, stats);
         asyncHandle = new AsyncHandleImpl(executorService, req, resp);
         req.setAsyncHandle(asyncHandle);
+        stats.onRequestStarted(req);
 
         curReq = req;
         curResp = resp;
@@ -129,6 +135,7 @@ class ClientConnection implements RequestParser.RequestListener {
 
 
     void onClientClosed() {
+        stats.decrementActiveConnections();
         try {
             channel.close();
         } catch (IOException e) {

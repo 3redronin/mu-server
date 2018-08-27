@@ -2,8 +2,6 @@ package io.muserver;
 
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpHeaderValues;
-import io.netty.handler.codec.http.HttpResponse;
-import io.netty.handler.codec.http.HttpUtil;
 import io.netty.handler.codec.http.cookie.ServerCookieEncoder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,7 +14,6 @@ import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.concurrent.Future;
 
@@ -41,11 +38,13 @@ class MuResponseImpl implements MuResponse {
     private ResponseOutputStream outputStream;
     private long bytesStreamed = 0;
     private boolean chunkResponse;
+    private final MuStatsImpl2 stats;
 
-    MuResponseImpl(WritableByteChannel channel, MuRequestImpl request, boolean isKeepAlive) {
+    MuResponseImpl(WritableByteChannel channel, MuRequestImpl request, boolean isKeepAlive, MuStatsImpl2 stats) {
         this.channel = channel;
         this.request = request;
         this.isKeepAlive = isKeepAlive;
+        this.stats = stats;
         rg = new ResponseGenerator(HttpVersion.HTTP_1_1);
         headers.set(HeaderNames.DATE.toString(), Mutils.toHttpDate(new Date()));
     }
@@ -84,9 +83,9 @@ class MuResponseImpl implements MuResponse {
         ByteBuffer toSend = charset().encode(text);
         headers.set(HeaderNames.CONTENT_LENGTH, toSend.remaining());
         try {
-            writeBytesREX(rg.writeHeader(status, headers));
+            writeBytes(rg.writeHeader(status, headers));
             // TODO combine into a single write ?
-            writeBytesREX(toSend);
+            writeBytes(toSend);
         } catch (IOException e) {
             throw new MuException("Exception while sending to the client. They have probably disconnected.", e);
         }
@@ -108,7 +107,13 @@ class MuResponseImpl implements MuResponse {
                         headers.add(HeaderNames.CONNECTION, HeaderValues.CLOSE);
                     }
                     ByteBuffer byteBuffer = rg.writeHeader(status, headers);
-                    writeBytes(byteBuffer);
+                    throwIfFinished();
+                    int expected = byteBuffer.remaining();
+                    int written = channel.write(byteBuffer);
+                    bytesStreamed += written;
+                    if (written != expected) {
+                        log.warn("Sent " + written + " bytes but expected to send " + expected);
+                    }
 
                 } else if (state == OutputState.STREAMING) {
                     if (!isHead) {
@@ -141,6 +146,7 @@ class MuResponseImpl implements MuResponse {
             shouldDisconnect = true;
             throw new MuException("Error while completing response", e);
         } finally {
+            stats.onRequestEnded(request);
             if (shouldDisconnect) {
                 try {
                     channel.close();
@@ -152,24 +158,21 @@ class MuResponseImpl implements MuResponse {
     }
 
 
-    void writeBytesREX(ByteBuffer bytes) throws IOException {
-        writeBytes(bytes);
+    void writeBytes(ByteBuffer bytes) throws IOException {
+        throwIfFinished();
+        int expected = bytes.remaining();
+        int written = channel.write(bytes);
+        bytesStreamed += written;
+        stats.incrementBytesSent(written);
+        if (written != expected) {
+            log.warn("Sent " + written + " bytes but expected to send " + expected);
+        }
     }
 
 
     private void throwIfFinished() {
         if (state == OutputState.FULL_SENT || state == OutputState.STREAMING_COMPLETE) {
             throw new IllegalStateException("Cannot write data as response has already completed");
-        }
-    }
-
-    private void writeBytes(ByteBuffer bytes) throws IOException {
-        throwIfFinished();
-        int expected = bytes.remaining();
-        int written = channel.write(bytes);
-        bytesStreamed += written;
-        if (written != expected) {
-            log.warn("Sent " + written + " bytes but expected to send " + expected);
         }
     }
 
@@ -202,7 +205,7 @@ class MuResponseImpl implements MuResponse {
         } else {
             bb = ByteBuffer.wrap(data, off, len);
         }
-        writeBytesREX(bb);
+        writeBytes(bb);
     }
 
     void sendBodyData(ByteBuffer data) throws IOException {
@@ -225,13 +228,20 @@ class MuResponseImpl implements MuResponse {
         } else {
             bb = data;
         }
-        writeBytesREX(bb);
+        writeBytes(bb);
     }
 
     private static final byte[] LAST_CHUNK = new byte[]{'0', '\r', '\n', '\r', '\n'};
 
     private void sendChunkEnd() throws IOException {
-        writeBytes(ByteBuffer.wrap(LAST_CHUNK));
+        ByteBuffer bytes = ByteBuffer.wrap(LAST_CHUNK);
+        throwIfFinished();
+        int expected = bytes.remaining();
+        int written = channel.write(bytes);
+        bytesStreamed += written;
+        if (written != expected) {
+            log.warn("Sent " + written + " bytes but expected to send " + expected);
+        }
     }
 
 
@@ -271,7 +281,7 @@ class MuResponseImpl implements MuResponse {
             headers.set(HttpHeaderNames.TRANSFER_ENCODING, HttpHeaderValues.CHUNKED);
             chunkResponse = true;
         }
-        writeBytesREX(rg.writeHeader(status, headers));
+        writeBytes(rg.writeHeader(status, headers));
     }
 
     public OutputStream outputStream() {
