@@ -9,7 +9,6 @@ import java.util.concurrent.*;
 
 class AsyncHandleImpl implements AsyncHandle {
 
-    private final ExecutorService executorService = Executors.newSingleThreadExecutor();
     private static final Logger log = LoggerFactory.getLogger(AsyncHandleImpl.class);
 
     private final MuRequestImpl request;
@@ -36,46 +35,45 @@ class AsyncHandleImpl implements AsyncHandle {
 
     @Override
     public void complete(Throwable throwable) {
-        executorService.submit(() -> {
-            boolean error = throwable != null;
-            try {
-                if (error) {
-                    ClientConnection.dealWithUnhandledException(request, response, throwable);
-                }
-            } finally {
-                response.complete(error);
-                onResponseComplete(!error);
+        boolean error = throwable != null;
+        try {
+            if (error) {
+                ClientConnection.dealWithUnhandledException(request, response, throwable);
             }
-        });
-
+        } finally {
+            response.complete(error);
+            onResponseComplete(!error);
+        }
     }
 
     @Override
     public void write(ByteBuffer data, WriteCallback callback) {
-        executorService.submit(() -> {
+        try {
+            response.sendBodyData(data);
             try {
-                response.sendBodyData(data);
-                try {
-                    callback.onSuccess();
-                } catch (Exception e) {
-                    log.warn("Error while running async write callback", e);
-                }
+                callback.onSuccess();
             } catch (Exception e) {
-                try {
-                    callback.onFailure(e);
-                } catch (Exception e1) {
-                    log.warn("Error while running async failure callback", e1);
-                }
+                log.warn("Error while running async write callback", e);
             }
-        });
+        } catch (Throwable e) {
+            try {
+                callback.onFailure(e);
+            } catch (Exception e1) {
+                log.warn("Error while running async failure callback", e1);
+            }
+        }
     }
 
     @Override
     public Future<Void> write(ByteBuffer data) {
-        return executorService.submit(() -> {
+        CompletableFuture<Void> future = new CompletableFuture<>();
+        try {
             response.sendBodyData(data);
-            return null;
-        });
+            future.complete(null);
+        } catch (Throwable e) {
+            future.completeExceptionally(e);
+        }
+        return future;
     }
 
     @Override
