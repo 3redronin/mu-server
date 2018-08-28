@@ -20,7 +20,6 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public class MuServerBuilder {
     private static final Logger log = LoggerFactory.getLogger(MuServerBuilder.class);
-    private static final int LENGTH_OF_METHOD_AND_PROTOCOL = 17; // e.g. "OPTIONS HTTP/1.1 "
     private long minimumGzipSize = 1400;
     private int httpPort = -1;
     private int httpsPort = -1;

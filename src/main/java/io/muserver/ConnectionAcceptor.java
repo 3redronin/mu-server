@@ -80,9 +80,7 @@ class ConnectionAcceptor {
             startLatch.countDown();
 
             while (running) {
-
                 selector.select();
-
                 Iterator<SelectionKey> iterator = selector.selectedKeys().iterator();
                 while (iterator.hasNext()) {
                     SelectionKey key = iterator.next();
@@ -131,8 +129,8 @@ class ConnectionAcceptor {
 
     public void stop() throws InterruptedException {
         if (running) {
-            selector.wakeup();
             running = false;
+            selector.wakeup();
             thread.join();
         }
     }

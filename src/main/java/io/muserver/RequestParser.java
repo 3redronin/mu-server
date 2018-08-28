@@ -41,6 +41,7 @@ class RequestParser {
     private long bodyBytesRead;
     private ChunkState chunkState;
     private long curChunkSize = -1;
+    private int headerSize = 0;
 
     private void reset() {
         state = State.RL_METHOD;
@@ -57,6 +58,7 @@ class RequestParser {
         bodyBytesRead = 0;
         chunkState = null;
         curChunkSize = -1;
+        headerSize = 0;
     }
 
     RequestParser(Options options, RequestListener requestListener) {
@@ -94,6 +96,12 @@ class RequestParser {
         while (bb.hasRemaining()) {
 
             byte c = bb.get();
+
+            headerSize++;
+            if (headerSize > options.maxHeaderSize) {
+                throw new InvalidRequestException(431, "Request Header Fields Too Large", "Header length (including all white space) reached " + headerSize + " bytes.");
+            }
+
             if (c == '\r') {
                 continue; // as per spec, \r can be ignored in line endings when parsing
             }

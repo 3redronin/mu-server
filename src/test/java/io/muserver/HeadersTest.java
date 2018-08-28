@@ -247,7 +247,7 @@ public class HeadersTest {
             .start();
         try (Response resp = call(request().header(HeaderNames.X_FORWARDED_HOST.toString(), host).url(server.uri().toString()))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.body().string(), equalTo(server.uri().toString()+"/"));
+            assertThat(resp.body().string(), equalTo(server.uri().toString()));
         }
     }
 
