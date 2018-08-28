@@ -51,11 +51,7 @@ public class ConnectionAcceptorTest {
         client.sendUTF8(message);
         client.flushRequest();
 
-        Thread.sleep(2000);
-
-        long l = client.bytesReceived();
-        byte[] resp = client.asBytes();
-        String theString = client.responseString();
+        Thread.sleep(100);
 
         System.out.println("Got back " + client.responseString());
 
@@ -65,45 +61,13 @@ public class ConnectionAcceptorTest {
 
     @Test
     public void keepAliveTest() {
-        assertThat(MuSelector.keepAlive(HttpVersion.HTTP_1_0, new MuHeaders()), is(false));
-        assertThat(MuSelector.keepAlive(HttpVersion.HTTP_1_1, new MuHeaders()), is(true));
-        assertThat(MuSelector.keepAlive(HttpVersion.HTTP_1_0, new MuHeaders().set("Connection", "keep-alive")), is(true));
-        assertThat(MuSelector.keepAlive(HttpVersion.HTTP_1_1, new MuHeaders().set("Connection", "Blah, close, Another")), is(false));
+        assertThat(ClientConnection.keepAlive(HttpVersion.HTTP_1_0, new MuHeaders()), is(false));
+        assertThat(ClientConnection.keepAlive(HttpVersion.HTTP_1_1, new MuHeaders()), is(true));
+        assertThat(ClientConnection.keepAlive(HttpVersion.HTTP_1_0, new MuHeaders().set("Connection", "keep-alive")), is(true));
+        assertThat(ClientConnection.keepAlive(HttpVersion.HTTP_1_1, new MuHeaders().set("Connection", "Blah, close, Another")), is(false));
     }
 
-    @Test
-    public void worksWithOKHttpClient() throws Exception {
-        SSLContext sslContext = SSLContextBuilder.unsignedLocalhostCert();
-        MuHandler echoHandler = new MuHandler() {
-            @Override
-            public boolean handle(MuRequest request, MuResponse response) throws Exception {
-                response.contentType("text/plain");
-                response.write("This is just a test");
-                return true;
-            }
-        };
-        ConnectionAcceptor selector = new ConnectionAcceptor(executorService, asList(echoHandler), sslContext, new AtomicReference<>(), RequestParser.Options.defaultOptions);
-        try {
-            selector.start("localhost", 0);
-            String targetURI = "https://localhost:" + selector.address.getPort();
-            long start = System.currentTimeMillis();
 
-
-            int numToMake = 1000;
-            for (int i = 0; i < numToMake; i++) {
-                try (Response resp = call(request().url(targetURI))) {
-                    assertThat(resp.code(), is(200));
-                    assertThat(resp.body().string(), equalTo("This is just a test"));
-                }
-            }
-
-            long duration = System.currentTimeMillis() - start;
-            System.out.println("Call took " + duration + "ms - or " + (duration / numToMake));
-        } finally {
-            selector.stop();
-        }
-
-    }
 
     /*
     Tests

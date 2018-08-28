@@ -3,6 +3,7 @@ package io.muserver.rest;
 import io.muserver.Cookie;
 import io.muserver.HeaderNames;
 import io.muserver.Headers;
+import io.muserver.MuHeaders;
 import org.junit.Test;
 
 import javax.ws.rs.core.MediaType;
@@ -19,7 +20,7 @@ public class JaxRsHttpHeadersAdapterTest {
         MuRuntimeDelegate.ensureSet();
     }
 
-    private final Headers reqHeaders = new Headers();
+    private final MuHeaders reqHeaders = new MuHeaders();
     private final Set<Cookie> cookies = new HashSet<>();
     private final JaxRsHttpHeadersAdapter httpHeaders = new JaxRsHttpHeadersAdapter(reqHeaders, cookies);
 
@@ -50,8 +51,8 @@ public class JaxRsHttpHeadersAdapterTest {
         reqHeaders.add("X-Blah", "something");
 
         MultivaluedHashMap<String,String> expected = new MultivaluedHashMap<>();
-        for (Map.Entry<String, String> entry : reqHeaders) {
-            expected.add(entry.getKey(), entry.getValue());
+        for (Map.Entry<String, List<String>> entry : reqHeaders.all().entrySet()) {
+            expected.addAll(entry.getKey(), entry.getValue());
         }
         assertThat(httpHeaders.getRequestHeaders(), equalTo(expected));
     }

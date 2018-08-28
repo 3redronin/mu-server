@@ -190,11 +190,11 @@ public class MuServerTest {
     }
 
     @Test
-    public void returnsA405ForUnsupportedMethods() throws IOException {
+    public void returnsA501ForUnsupportedMethods() throws IOException {
         server = httpServer().start();
         try (Response resp = call(request().method("COFFEE", null).url(server.uri().toString()))) {
-            assertThat(resp.code(), is(405));
-            assertThat(resp.body().string(), containsString("405 Method Not Allowed"));
+            assertThat(resp.code(), is(501));
+            assertThat(resp.body().string(), containsString("501 Not Implemented"));
         }
     }
 

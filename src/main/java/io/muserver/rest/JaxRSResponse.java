@@ -3,6 +3,7 @@ package io.muserver.rest;
 
 import io.muserver.HeaderNames;
 import io.muserver.Headers;
+import io.muserver.MuHeaders;
 
 import javax.ws.rs.core.*;
 import java.lang.annotation.Annotation;
@@ -18,13 +19,13 @@ class JaxRSResponse extends Response {
         MuRuntimeDelegate.ensureSet();
     }
 
-    private final Headers headers;
+    private final MuHeaders headers;
     private final StatusType status;
     private final Object entity;
     private final MediaType type;
     private final NewCookie[] cookies;
 
-    JaxRSResponse(StatusType status, Headers headers, Object entity, MediaType type, NewCookie[] cookies) {
+    JaxRSResponse(StatusType status, MuHeaders headers, Object entity, MediaType type, NewCookie[] cookies) {
         this.status = status;
         this.headers = headers;
         this.entity = entity;
@@ -157,7 +158,7 @@ class JaxRSResponse extends Response {
         return map;
     }
 
-    Headers getMuHeaders() {
+    MuHeaders getMuHeaders() {
         return this.headers;
     }
 
@@ -193,7 +194,7 @@ class JaxRSResponse extends Response {
             MuRuntimeDelegate.ensureSet();
         }
 
-        private final Headers headers = new Headers();
+        private final MuHeaders headers = new MuHeaders();
         private final List<Link> linkHeaders = new ArrayList<>();
         private StatusType status;
         private Object entity;

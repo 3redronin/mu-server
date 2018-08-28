@@ -42,9 +42,9 @@ public class JaxRSResponseTest {
         assertThat(actual.get(HeaderNames.CACHE_CONTROL), equalTo("private, no-transform, must-revalidate, max-age=10"));
         assertThat(actual.get(HeaderNames.CONTENT_LOCATION), equalTo("http://localhost:8080"));
         assertThat(actual.get(HeaderNames.CONTENT_ENCODING), equalTo("UTF-8"));
-        assertThat(actual.get(HeaderNames.EXPIRES), equalTo("Mon, 1 Jan 2018 02:24:12 GMT"));
+        assertThat(actual.get(HeaderNames.EXPIRES), equalTo("Mon, 01 Jan 2018 02:24:12 GMT"));
         assertThat(actual.get(HeaderNames.CONTENT_LANGUAGE), equalTo("fr-CA"));
-        assertThat(actual.get(HeaderNames.LAST_MODIFIED), equalTo("Mon, 1 Jan 2018 02:23:20 GMT"));
+        assertThat(actual.get(HeaderNames.LAST_MODIFIED), equalTo("Mon, 01 Jan 2018 02:23:20 GMT"));
 //        assertThat(actual.getAll(HeaderNames.LINK), contains("<http://www.example.org>;rel=meta"));
         assertThat(actual.get(HeaderNames.LOCATION), equalTo("/some-location"));
         assertThat(actual.get(HeaderNames.ETAG), equalTo("W/\"lkajsd\\\"fkljsklfdj\""));

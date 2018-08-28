@@ -2,6 +2,7 @@ package io.muserver.rest;
 
 import io.muserver.HeaderNames;
 import io.muserver.Headers;
+import io.muserver.MuHeaders;
 
 import javax.ws.rs.core.*;
 import java.util.*;
@@ -12,11 +13,11 @@ import static java.util.stream.Collectors.toList;
 class JaxRsHttpHeadersAdapter implements HttpHeaders {
     private static final List<Locale> WILDCARD_LOCALES = Collections.unmodifiableList(Collections.singletonList(new Locale("*")));
     private static final List<MediaType> WILDCARD_MEDIA_TYPES = Collections.unmodifiableList(Collections.singletonList(MediaType.WILDCARD_TYPE));
-    private final Headers muHeaders;
+    private final MuHeaders muHeaders;
     private final Set<io.muserver.Cookie> muCookies;
     private MultivaluedMap<String, String> copy;
 
-    JaxRsHttpHeadersAdapter(Headers headers, Set<io.muserver.Cookie> cookies) {
+    JaxRsHttpHeadersAdapter(MuHeaders headers, Set<io.muserver.Cookie> cookies) {
         muHeaders = headers;
         muCookies = cookies;
     }
@@ -40,8 +41,8 @@ class JaxRsHttpHeadersAdapter implements HttpHeaders {
     public MultivaluedMap<String, String> getRequestHeaders() {
         if (copy == null) {
             MultivaluedMap<String, String> c = new MultivaluedHashMap<>();
-            for (Map.Entry<String, String> entry : muHeaders) {
-                c.add(entry.getKey(), entry.getValue());
+            for (Map.Entry<String, List<String>> entry : muHeaders.all().entrySet()) {
+                c.addAll(entry.getKey(), entry.getValue());
             }
             copy = ReadOnlyMultivaluedMap.readOnly(c);
         }

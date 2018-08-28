@@ -1,6 +1,7 @@
 package io.muserver.rest;
 
 import io.muserver.Method;
+import io.muserver.MuHeaders;
 import io.muserver.MuRequest;
 
 import javax.ws.rs.WebApplicationException;
@@ -32,7 +33,7 @@ class MuContainerRequestContext implements ContainerRequestContext {
         this.securityContext = securityContext;
         this.uriInfo = RestHandler.createUriInfo(relativePath, null, muRequest.uri().resolve(muRequest.contextPath() + "/"), muRequest.uri());
         this.jaxRequest = new JaxRequest(muRequest);
-        this.jaxHeaders = new JaxRsHttpHeadersAdapter(muRequest.headers(), muRequest.cookies());
+        this.jaxHeaders = new JaxRsHttpHeadersAdapter((MuHeaders)muRequest.headers(), muRequest.cookies());
     }
 
     boolean methodHasAnnotations(List<Class<? extends Annotation>> toCheck) {

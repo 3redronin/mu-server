@@ -173,7 +173,7 @@ public class RestHandler implements MuHandler {
 
                 JaxRSResponse jaxRSResponse = obj.response;
                 if (jaxRSResponse == null) {
-                    jaxRSResponse = new JaxRSResponse(Response.Status.fromStatusCode(obj.status()), new Headers(), obj.entity, null, new NewCookie[0]);
+                    jaxRSResponse = new JaxRSResponse(Response.Status.fromStatusCode(obj.status()), new MuHeaders(), obj.entity, null, new NewCookie[0]);
                 }
 
                 MuResponseContext responseContext = new MuResponseContext(jaxRSResponse, obj, requestContext.getMuMethod() == Method.HEAD ? NullOutputStream.INSTANCE :  new LazyAccessOutputStream(muResponse));
@@ -262,7 +262,7 @@ public class RestHandler implements MuHandler {
         } else if (type.equals(MuRequest.class)) {
             paramValue = request;
         } else if (type.equals(HttpHeaders.class)) {
-            paramValue = new JaxRsHttpHeadersAdapter(request.headers(), request.cookies());
+            paramValue = new JaxRsHttpHeadersAdapter((MuHeaders)request.headers(), request.cookies());
         } else if (type.equals(SecurityContext.class)) {
             return requestContext.getSecurityContext();
         } else {

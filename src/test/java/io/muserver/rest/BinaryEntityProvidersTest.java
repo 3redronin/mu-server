@@ -8,6 +8,7 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.hamcrest.Matchers;
 import org.junit.After;
+import org.junit.Ignore;
 import org.junit.Test;
 import scaffolding.MuAssert;
 import scaffolding.StringUtils;
@@ -62,6 +63,7 @@ public class BinaryEntityProvidersTest {
     }
 
     @Test
+    @Ignore("Until file support")
     public void filesSupported() throws Exception {
         File sample = new File("src/test/resources/sample-static/images/friends.jpg");
         if (!sample.isFile()) {
@@ -81,6 +83,7 @@ public class BinaryEntityProvidersTest {
     }
 
     @Test
+    @Ignore("Until file support")
     public void dataSourcesSupported() throws Exception {
         File sample = new File("src/test/resources/sample-static/images/friends.jpg");
         if (!sample.isFile()) {

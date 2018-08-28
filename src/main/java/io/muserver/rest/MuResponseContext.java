@@ -2,6 +2,7 @@ package io.muserver.rest;
 
 import io.muserver.HeaderNames;
 import io.muserver.Headers;
+import io.muserver.MuHeaders;
 
 import javax.ws.rs.container.ContainerResponseContext;
 import javax.ws.rs.core.*;
@@ -14,7 +15,7 @@ import java.util.*;
 class MuResponseContext implements ContainerResponseContext {
 
     private final Map<String, NewCookie> cookies;
-    private final Headers muHeaders;
+    private final MuHeaders muHeaders;
     private Response.StatusType status;
     private final JaxRSResponse jaxRSResponse;
     private ObjWithType objWithType;
@@ -30,7 +31,7 @@ class MuResponseContext implements ContainerResponseContext {
         this.status = jaxRSResponse.getStatusInfo();
     }
 
-    Headers muHeaders() {
+    MuHeaders muHeaders() {
         return muHeaders;
     }
 

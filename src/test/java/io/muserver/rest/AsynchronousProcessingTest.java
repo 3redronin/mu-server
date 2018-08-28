@@ -202,7 +202,7 @@ public class AsynchronousProcessingTest {
         }
         try (Response resp = call(request().url(server.uri().resolve("/samples?retryDate=1530959539077").toString()))) {
             assertThat(resp.code(), is(503));
-            assertThat(resp.header("Retry-After"), is("Sat, 7 Jul 2018 10:32:19 GMT"));
+            assertThat(resp.header("Retry-After"), is("Sat, 07 Jul 2018 10:32:19 GMT"));
         }
     }
 

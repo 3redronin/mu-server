@@ -8,7 +8,6 @@ import java.net.InetAddress;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.channels.ByteChannel;
-import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.List;
 import java.util.UUID;
@@ -42,6 +41,33 @@ class ClientConnection implements RequestParser.RequestListener {
         this.stats.incrementActiveConnections();
         log.info("New connection");
         requestParser = new RequestParser(parserOptions, this);
+    }
+
+    static boolean keepAlive(HttpVersion version, MuHeaders headers) {
+        List<String> connection = headers.getAll("connection");
+        switch (version) {
+            case HTTP_1_1:
+                for (String value : connection) {
+                    String[] split = value.split(",\\s*");
+                    for (String s : split) {
+                        if (s.equalsIgnoreCase("close")) {
+                            return false;
+                        }
+                    }
+                }
+                return true;
+            case HTTP_1_0:
+                for (String value : connection) {
+                    String[] split = value.split(",\\s*");
+                    for (String s : split) {
+                        if (s.equalsIgnoreCase("keep-alive")) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+        }
+        throw new IllegalArgumentException(version + " is not supported");
     }
 
 
@@ -80,7 +106,7 @@ class ClientConnection implements RequestParser.RequestListener {
     @Override
     public void onHeaders(Method method, URI uri, HttpVersion httpVersion, MuHeaders headers, GrowableByteBufferInputStream body) {
         MuRequestImpl req = new MuRequestImpl(method, uri, headers, body, this);
-        boolean isKeepAlive = MuSelector.keepAlive(httpVersion, headers);
+        boolean isKeepAlive = keepAlive(httpVersion, headers);
         MuResponseImpl resp = new MuResponseImpl(channel, req, isKeepAlive, stats);
         asyncHandle = new AsyncHandleImpl(req, resp);
         req.setAsyncHandle(asyncHandle);

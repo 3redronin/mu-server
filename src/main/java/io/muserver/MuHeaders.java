@@ -1,5 +1,8 @@
 package io.muserver;
 
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.function.Consumer;
 
@@ -250,13 +253,29 @@ public class MuHeaders extends Headers implements RequestParameters {
     @Override
     @Deprecated
     public Long getTimeMillis(CharSequence name) {
-        throw new MuException("Not implemented");
+        return getTimeMillis(name.toString());
     }
 
     @Override
     @Deprecated
     public long getTimeMillis(CharSequence name, long defaultValue) {
-        throw new MuException("Not implemented");
+        return getTimeMillis(name.toString(), defaultValue);
+    }
+
+    public Long getTimeMillis(String name) {
+        String val = get(name, null);
+        if (val == null) {
+            return null;
+        }
+        Instant parsed = DateTimeFormatter.RFC_1123_DATE_TIME
+            .withZone(ZoneOffset.UTC)
+            .parse(val, Instant::from);
+        return parsed.toEpochMilli();
+    }
+
+    public long getTimeMillis(String name, long defaultValue) {
+        Long val = getTimeMillis(name);
+        return val == null ? defaultValue : val;
     }
 
     @Override
@@ -414,7 +433,7 @@ public class MuHeaders extends Headers implements RequestParameters {
     @Override
     public Headers setAll(Headers headers) {
         notNull("headers", headers);
-        for (Map.Entry<String, String> header : headers) {
+        for (Map.Entry<String, List<String>> header : ((MuHeaders)headers).all().entrySet()) {
             set(header.getKey(), header.getValue());
         }
         return this;
