@@ -84,8 +84,10 @@ class MuResponseImpl implements MuResponse {
         headers.set(HeaderNames.CONTENT_LENGTH, toSend.remaining());
         try {
             writeBytes(rg.writeHeader(status, headers));
-            // TODO combine into a single write ?
-            writeBytes(toSend);
+            // TODO combine into a single write if not HEAD?
+            if (request.method() != Method.HEAD) {
+                writeBytes(toSend);
+            }
         } catch (IOException e) {
             throw new MuException("Exception while sending to the client. They have probably disconnected.", e);
         }
@@ -116,17 +118,15 @@ class MuResponseImpl implements MuResponse {
                     }
 
                 } else if (state == OutputState.STREAMING) {
-                    if (!isHead) {
-                        if (writer != null) {
-                            writer.close();
-                        }
-                        if (outputStream != null) {
-                            outputStream.close();
-                        }
+                    if (writer != null) {
+                        writer.close();
+                    }
+                    if (outputStream != null) {
+                        outputStream.close();
+                    }
 
-                        if (chunkResponse) {
-                            sendChunkEnd();
-                        }
+                    if (chunkResponse && !isHead) {
+                        sendChunkEnd();
                     }
                     state = OutputState.STREAMING_COMPLETE;
                 }
@@ -158,7 +158,7 @@ class MuResponseImpl implements MuResponse {
     }
 
 
-    void writeBytes(ByteBuffer bytes) throws IOException {
+    private void writeBytes(ByteBuffer bytes) throws IOException {
         throwIfFinished();
         int expected = bytes.remaining();
         int written = channel.write(bytes);

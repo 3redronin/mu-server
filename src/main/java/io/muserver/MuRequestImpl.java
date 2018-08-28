@@ -43,6 +43,7 @@ class MuRequestImpl implements MuRequest {
     private volatile AsyncHandle asyncHandle;
     private boolean isAsync = false;
 
+
     MuRequestImpl(Method method, URI requestUri, MuHeaders headers, GrowableByteBufferInputStream body, ClientConnection clientConnection) {
         this.headers = headers;
         this.clientConnection = clientConnection;

@@ -27,6 +27,7 @@ import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.nullValue;
+import static org.hamcrest.Matchers.startsWith;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 import static scaffolding.FileUtils.readResource;
@@ -94,9 +95,9 @@ public class ResourceHandlerTest {
 
     @Test
     public void requestsWithDotDotOrTildesResultIn404s() throws Exception {
-        server = MuServerBuilder.httpsServer()
+        server = MuServerBuilder.httpServer()
             .withGzipEnabled(false)
-            .addHandler(fileOrClasspath("src/test/resources/does-not-exist", "/sample-static"))
+            .addHandler(classpathHandler("/sample-static"))
             .start();
 
         assertNotFound("/../something.txt");
@@ -161,9 +162,9 @@ public class ResourceHandlerTest {
         }
     }
 
-    private void assertNotFound(String path) throws MalformedURLException {
+    private void assertNotFound(String path) throws Exception {
         Map<String, List<String>> headersFromGET;
-        URL url = server.httpsUri().resolve(path).toURL();
+        URL url = server.uri().resolve(path).toURL();
         try (Response resp = call(request().get().url(url))) {
             headersFromGET = resp.headers().toMultimap();
             assertThat(resp.code(), is(404));
@@ -174,6 +175,24 @@ public class ResourceHandlerTest {
             Map<String, List<String>> headersFromHEAD = resp.headers().toMultimap();
             headersFromHEAD.remove("date");
             assertThat(headersFromHEAD, equalTo(headersFromGET));
+        }
+
+        RawClient rawClient = RawClient.create(server.uri());
+        rawClient.sendStartLine("GET", path);
+        rawClient.sendHeader("Host", server.uri().getAuthority());
+        rawClient.endHeaders();
+        rawClient.flushRequest();
+        while (rawClient.bytesReceived() < 40) {
+            Thread.sleep(10);
+        }
+        assertThat(rawClient.responseString(), startsWith("HTTP/1.1 404 Not Found"));
+        rawClient.clear();
+        rawClient.sendStartLine("HEAD", path);
+        rawClient.sendHeader("Host", server.uri().getAuthority());
+        rawClient.endHeaders();
+        rawClient.flushRequest();
+        while (rawClient.bytesReceived() < 40) {
+            Thread.sleep(10);
         }
     }
 

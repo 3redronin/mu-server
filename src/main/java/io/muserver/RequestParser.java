@@ -122,6 +122,7 @@ class RequestParser {
             } else if (state == State.RL_URI) {
 
                 if (c == ' ') {
+                    System.out.println("URI=" + cur.toString());
                     requestUri = URI.create(cur.toString());
                     state = State.RL_PROTO;
                     cur.setLength(0);
