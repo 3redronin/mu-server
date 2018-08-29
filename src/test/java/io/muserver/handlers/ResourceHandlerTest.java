@@ -106,6 +106,7 @@ public class ResourceHandlerTest {
         assertNotFound("/../something.txt");
         assertNotFound("/images/../../something.txt");
         assertBadRequest("/images/../../something.txt");
+        assertBadRequest("~/.ssh/id_rsa");
         assertNotFound("/images/../blah");
     }
 

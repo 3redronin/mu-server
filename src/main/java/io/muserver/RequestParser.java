@@ -125,10 +125,11 @@ class RequestParser {
                     String uriStr = cur.toString();
                     if (uriStr.charAt(0) != '/') {
                         throw new InvalidRequestException(400, "Bad Request - Invalid URI", "The URI did not start with a '/'. It was: " + uriStr);
-                    } else if (uriStr.contains("/..")) {
-                        throw new InvalidRequestException(400, "Bad Request - Invalid URI", "The URI had '..' after normalisation: " + uriStr);
                     }
                     requestUri = URI.create(uriStr).normalize();
+                    if (requestUri.getPath().startsWith("/..")) {
+                        throw new InvalidRequestException(400, "Bad Request - Invalid URI", "The URI had '..' after normalisation. Raw value was " + uriStr);
+                    }
                     state = State.RL_PROTO;
                     cur.setLength(0);
                 } else {
