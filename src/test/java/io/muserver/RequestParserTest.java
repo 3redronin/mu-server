@@ -69,10 +69,9 @@ public class RequestParserTest {
         parser.offer(wrap("GET ./a HTTP/1.1\r\n\r\n"));
     }
 
-    @Test
+    @Test(expected = InvalidRequestException.class)
     public void pathsGoingAboveRootAreNotAllowed() throws InvalidRequestException {
         parser.offer(wrap("GET /a/../../../b HTTP/1.1\r\n\r\n"));
-        System.out.println("listener = " + listener.uri);
     }
 
     @Test

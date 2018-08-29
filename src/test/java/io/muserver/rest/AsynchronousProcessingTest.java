@@ -5,6 +5,7 @@ import okhttp3.MediaType;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.junit.After;
+import org.junit.Ignore;
 import org.junit.Test;
 import scaffolding.MuAssert;
 import scaffolding.RawClient;
@@ -208,6 +209,7 @@ public class AsynchronousProcessingTest {
 
 
     @Test
+    @Ignore("Disconnects aren't working")
     public void completionCallbacksCanBeRegistered() throws Exception {
         CountDownLatch completedLatch = new CountDownLatch(1);
         CountDownLatch disconnectedLatch = new CountDownLatch(1);
@@ -223,12 +225,11 @@ public class AsynchronousProcessingTest {
                     (CompletionCallback) disconnected -> completedLatch.countDown())
                 );
                 registeredLatch.countDown();
-                ar.resume("");
             }
         }
         this.server = httpServer().addHandler(restHandler(new Sample())).start();
         try (RawClient client = RawClient.create(server.uri())) {
-            client.sendStartLine("GET", server.uri().resolve("/samples").toString());
+            client.sendStartLine("GET", "/samples");
             client.sendHeader("Host", server.uri().getAuthority());
             client.sendHeader("Content-Length", "0");
             client.endHeaders();
@@ -238,12 +239,38 @@ public class AsynchronousProcessingTest {
             client.closeResponse();
         }
 
-//        assertNotTimedOut("waiting for disconnect callback", disconnectedLatch);
+        assertNotTimedOut("waiting for disconnect callback", disconnectedLatch);
         assertNotTimedOut("waiting for completed callback", completedLatch);
 
         assertThat(registered.get().values().stream().flatMap(Collection::stream).collect(toSet()),
             containsInAnyOrder(ConnectionCallback.class, CompletionCallback.class));
     }
+
+
+    @Test
+    public void completionCallbacksCanBeRegisteredAndAreCalledOnCompletion() throws Exception {
+        CountDownLatch completedLatch = new CountDownLatch(1);
+        AtomicReference<Collection<Class<?>>> registered = new AtomicReference<>();
+
+        @Path("samples")
+        class Sample {
+            @GET
+            public void go(@Suspended AsyncResponse ar) {
+                registered.set(ar.register(
+                    (CompletionCallback) e -> completedLatch.countDown())
+                );
+                ar.resume("Hi");
+            }
+        }
+        this.server = httpServer().addHandler(restHandler(new Sample())).start();
+        try (Response resp = call(request().url(server.uri().resolve("/samples").toURL()))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), equalTo("Hi"));
+        }
+        assertNotTimedOut("waiting for completed callback", completedLatch);
+        assertThat(registered.get(), contains(CompletionCallback.class));
+    }
+
 
     @Test
     public void ifExceptionThrownAfterAsyncStartedButBeforeAsyncInvokedThenSomethingHappens() throws IOException {
