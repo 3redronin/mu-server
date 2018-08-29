@@ -122,8 +122,13 @@ class RequestParser {
             } else if (state == State.RL_URI) {
 
                 if (c == ' ') {
-                    System.out.println("URI=" + cur.toString());
-                    requestUri = URI.create(cur.toString());
+                    String uriStr = cur.toString();
+                    if (uriStr.charAt(0) != '/') {
+                        throw new InvalidRequestException(400, "Bad Request - Invalid URI", "The URI did not start with a '/'. It was: " + uriStr);
+                    } else if (uriStr.contains("/..")) {
+                        throw new InvalidRequestException(400, "Bad Request - Invalid URI", "The URI had '..' after normalisation: " + uriStr);
+                    }
+                    requestUri = URI.create(uriStr).normalize();
                     state = State.RL_PROTO;
                     cur.setLength(0);
                 } else {

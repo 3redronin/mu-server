@@ -59,6 +59,23 @@ public class RequestParserTest {
     }
 
     @Test
+    public void urisAreNormalised() throws InvalidRequestException {
+        parser.offer(wrap("GET /a/./b/../c//d HTTP/1.1\r\n\r\n"));
+        assertThat(listener.uri.toString(), is("/a/c/d"));
+    }
+
+    @Test(expected = InvalidRequestException.class)
+    public void urisCannotStartWithDot() throws InvalidRequestException {
+        parser.offer(wrap("GET ./a HTTP/1.1\r\n\r\n"));
+    }
+
+    @Test
+    public void pathsGoingAboveRootAreNotAllowed() throws InvalidRequestException {
+        parser.offer(wrap("GET /a/../../../b HTTP/1.1\r\n\r\n"));
+        System.out.println("listener = " + listener.uri);
+    }
+
+    @Test
     public void fixedLengthBodiesCanBeSent() throws Exception {
         String message = StringUtils.randomStringOfLength(20000) + "This & that I'm afraid is my message\r\n";
         byte[] messageBytes = message.getBytes(UTF_8);

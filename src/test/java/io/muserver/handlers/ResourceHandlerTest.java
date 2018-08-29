@@ -11,17 +11,20 @@ import scaffolding.RawClient;
 
 import java.io.IOException;
 import java.net.MalformedURLException;
+import java.net.URI;
 import java.net.URL;
 import java.util.List;
 import java.util.Map;
 
 import static io.muserver.ContextHandlerBuilder.context;
+import static io.muserver.MuServerBuilder.httpServer;
 import static io.muserver.Mutils.urlDecode;
 import static io.muserver.handlers.ResourceHandlerBuilder.classpathHandler;
 import static io.muserver.handlers.ResourceHandlerBuilder.fileHandler;
 import static io.muserver.handlers.ResourceHandlerBuilder.fileOrClasspath;
 import static io.muserver.handlers.ResourceType.getResourceTypes;
 import static io.muserver.handlers.ResourceType.gzippableMimeTypes;
+import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.endsWith;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -95,13 +98,14 @@ public class ResourceHandlerTest {
 
     @Test
     public void requestsWithDotDotOrTildesResultIn404s() throws Exception {
-        server = MuServerBuilder.httpServer()
+        server = httpServer()
             .withGzipEnabled(false)
             .addHandler(classpathHandler("/sample-static"))
             .start();
 
         assertNotFound("/../something.txt");
         assertNotFound("/images/../../something.txt");
+        assertBadRequest("/images/../../something.txt");
         assertNotFound("/images/../blah");
     }
 
@@ -176,7 +180,9 @@ public class ResourceHandlerTest {
             headersFromHEAD.remove("date");
             assertThat(headersFromHEAD, equalTo(headersFromGET));
         }
+    }
 
+    private void assertBadRequest(String path) throws IOException, InterruptedException {
         RawClient rawClient = RawClient.create(server.uri());
         rawClient.sendStartLine("GET", path);
         rawClient.sendHeader("Host", server.uri().getAuthority());
@@ -185,8 +191,9 @@ public class ResourceHandlerTest {
         while (rawClient.bytesReceived() < 40) {
             Thread.sleep(10);
         }
-        assertThat(rawClient.responseString(), startsWith("HTTP/1.1 404 Not Found"));
-        rawClient.clear();
+        assertThat(rawClient.responseString(), startsWith("HTTP/1.1 400 Bad Request\r\n"));
+        assertThat(rawClient.responseString(), containsString("\r\nconnection: close\r\n"));
+        rawClient = RawClient.create(server.uri());
         rawClient.sendStartLine("HEAD", path);
         rawClient.sendHeader("Host", server.uri().getAuthority());
         rawClient.endHeaders();
@@ -194,6 +201,8 @@ public class ResourceHandlerTest {
         while (rawClient.bytesReceived() < 40) {
             Thread.sleep(10);
         }
+        assertThat(rawClient.responseString(), startsWith("HTTP/1.1 400 Bad Request\r\n"));
+        assertThat(rawClient.responseString(), containsString("\r\nconnection: close\r\n"));
     }
 
     @Test
@@ -246,7 +255,7 @@ public class ResourceHandlerTest {
 
     @Test
     public void headRequestHasNoBody() throws Exception {
-        server = MuServerBuilder.httpServer()
+        server = httpServer()
             .withGzip(1200, gzippableMimeTypes(getResourceTypes()))
             .addHandler(fileHandler("src/test/resources/sample-static").build())
             .start();

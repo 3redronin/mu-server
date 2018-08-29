@@ -133,7 +133,7 @@ class ClientConnection implements RequestParser.RequestListener {
                         }
                     }
                     if (!handled) {
-                        send404(req.method() == Method.HEAD, resp);
+                        send404(resp);
                     }
 
 
@@ -185,7 +185,7 @@ class ClientConnection implements RequestParser.RequestListener {
         }
     }
 
-    static void send404(boolean isHead, MuResponse resp) {
+    static void send404(MuResponse resp) {
         resp.status(404);
         resp.contentType(ContentTypes.TEXT_PLAIN);
         resp.write("404 Not Found");
