@@ -139,7 +139,7 @@ class MuRequestImpl implements MuRequest {
             }
             int port = h.getInt(HeaderNames.X_FORWARDED_PORT, xforwardedHost != null ? Integer.valueOf(portFromHost) : serverUri.getPort());
             port = (port != 80 && port != 443 && port > 0) ? port : -1;
-            return new URI(proto, serverUri.getUserInfo(), host, port, serverUri.getPath(), serverUri.getQuery(), serverUri.getFragment());
+            return new URI(proto, serverUri.getRawUserInfo(), host, port, serverUri.getRawPath(), serverUri.getRawQuery(), serverUri.getRawFragment());
         } catch (URISyntaxException e) {
             log.warn("Could create a URI object using X-Forwarded values " + proto + " and " + xforwardedHost
                 + " so using local server URI. URL generation (including in redirects) may be incorrect.");
