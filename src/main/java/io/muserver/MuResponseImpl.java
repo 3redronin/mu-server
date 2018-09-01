@@ -16,6 +16,7 @@ import java.nio.channels.WritableByteChannel;
 import java.nio.charset.Charset;
 import java.util.Date;
 import java.util.concurrent.Future;
+import java.util.zip.GZIPOutputStream;
 
 import static java.nio.charset.StandardCharsets.US_ASCII;
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -35,16 +36,20 @@ class MuResponseImpl implements MuResponse {
     private OutputState state = OutputState.NOTHING;
     private final ResponseGenerator rg;
     private PrintWriter writer;
-    private ResponseOutputStream outputStream;
+    private OutputStream outputStream;
     private long bytesStreamed = 0;
     private boolean chunkResponse;
     private final MuStatsImpl2 stats;
+    private final ServerSettings settings;
+    private final boolean isHead;
 
-    MuResponseImpl(WritableByteChannel channel, MuRequestImpl request, boolean isKeepAlive, MuStatsImpl2 stats) {
+    MuResponseImpl(WritableByteChannel channel, MuRequestImpl request, boolean isKeepAlive, MuStatsImpl2 stats, ServerSettings settings) {
         this.channel = channel;
         this.request = request;
+        isHead = request.method() == Method.HEAD;
         this.isKeepAlive = isKeepAlive;
         this.stats = stats;
+        this.settings = settings;
         rg = new ResponseGenerator(HttpVersion.HTTP_1_1);
         headers.set(HeaderNames.DATE.toString(), Mutils.toHttpDate(new Date()));
     }
@@ -85,7 +90,7 @@ class MuResponseImpl implements MuResponse {
         try {
             writeBytes(rg.writeHeader(status, headers));
             // TODO combine into a single write if not HEAD?
-            if (request.method() != Method.HEAD) {
+            if (!isHead) {
                 writeBytes(toSend);
             }
         } catch (IOException e) {
@@ -98,7 +103,6 @@ class MuResponseImpl implements MuResponse {
     void complete(boolean forceDisconnect) {
         boolean shouldDisconnect = forceDisconnect || !isKeepAlive || headers.containsValue(HeaderNames.CONNECTION, HeaderValues.CLOSE, true);
         try {
-            boolean isHead = request.method() == Method.HEAD;
             if (channel.isOpen()) {
                 if (state == OutputState.NOTHING) {
 
@@ -286,12 +290,24 @@ class MuResponseImpl implements MuResponse {
 
     public OutputStream outputStream() {
         if (this.outputStream == null) {
+            boolean shouldGzip = settings.compressionSettings.shouldGzip(
+                headers.getLong(HeaderNames.CONTENT_LENGTH.toString(), Long.MAX_VALUE),
+                headers.get(HeaderNames.CONTENT_TYPE), request.headers().get(HeaderNames.ACCEPT_ENCODING));
+            if (shouldGzip) {
+                headers.remove(HeaderNames.CONTENT_LENGTH);
+                headers.add(HeaderNames.CONTENT_ENCODING, HeaderValues.GZIP);
+            }
+            OutputStream outputStream;
             try {
                 startStreaming();
+                outputStream = new ResponseOutputStream(this);
+                if (shouldGzip && !isHead) {
+                    outputStream = new GZIPOutputStream(outputStream, true);
+                }
             } catch (IOException e) {
                 throw new MuException("Exception while sending to the client. They have probably disconnected.", e);
             }
-            this.outputStream = new ResponseOutputStream(this);
+            this.outputStream = outputStream;
         }
         return this.outputStream;
     }

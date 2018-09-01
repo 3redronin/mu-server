@@ -22,21 +22,20 @@ import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 
 public class ConnectionAcceptorTest {
-    private static final Logger log = LoggerFactory.getLogger(ConnectionAcceptorTest.class);
     private static final ExecutorService executorService = Executors.newCachedThreadPool();
 
     @Test
     public void go() throws Exception {
 
-        MuHandler echoHandler = new MuHandler() {
-            @Override
-            public boolean handle(MuRequest request, MuResponse response) throws Exception {
-                response.contentType("text/plain");
-                response.write("This is just a test");
-                return true;
-            }
+        MuHandler echoHandler = (request, response) -> {
+            response.contentType("text/plain");
+            response.write("This is just a test");
+            return true;
         };
-        ConnectionAcceptor selector = new ConnectionAcceptor(executorService, singletonList(echoHandler), null, new AtomicReference<>(), RequestParser.Options.defaultOptions);
+        ServerSettings serverSettings = new ServerSettings();
+        serverSettings.executorService = executorService;
+        serverSettings.parserOptions = RequestParser.Options.defaultOptions;
+        ConnectionAcceptor selector = new ConnectionAcceptor(serverSettings, singletonList(echoHandler), null, new AtomicReference<>());
         selector.start("localhost", 0);
 
         URI targetURI = URI.create("http://localhost:" + selector.address.getPort());

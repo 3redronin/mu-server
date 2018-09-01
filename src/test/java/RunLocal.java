@@ -24,6 +24,7 @@ public class RunLocal {
         MuServer server = new MuServerBuilder().withHttpPort(0).withHttpsPort(0)
             .withHttpPort(18080)
             .withHttpsPort(18443)
+            .withGzipEnabled(true)
             .withHttpsConfig(SSLContextBuilder.unsignedLocalhostCert())
             .addHandler(ResourceHandlerBuilder.fileHandler(BIG_FILE_DIR))
             .addHandler(ResourceHandlerBuilder.fileOrClasspath("src/test/resources/sample-static", "/sample-static"))

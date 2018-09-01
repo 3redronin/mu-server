@@ -247,7 +247,7 @@ public class ResourceHandlerTest {
             .addHandler(fileHandler("src/test/resources/sample-static").build())
             .start();
 
-//        assertContentTypeAndContent("/index.html", "text/html", false); // not sure why it's chunked but not gzipped. Probably just too small.
+        assertContentTypeAndContent("/index.html", "text/html", false); // not sure why it's chunked but not gzipped. Probably just too small.
         assertContentTypeAndContent("/overview.txt", "text/plain", true);
         assertContentTypeAndContent("/sample.css", "text/css", true);
         assertContentTypeAndContent("/images/guangzhou.jpeg", "image/jpeg", false);
@@ -301,8 +301,7 @@ public class ResourceHandlerTest {
             Map<String, List<String>> headersFromHEAD = resp.headers().toMultimap();
             headersFromHEAD.remove("Date");
             if (expectGzip) {
-                headersFromHEAD.remove("Content-Length");
-//                headersFromGET.remove("transfer-encoding");
+                headersFromHEAD.remove("Content-Encoding");
                 assertThat(headersFromHEAD, equalTo(headersFromGET));
             } else {
                 assertThat(headersFromHEAD, equalTo(headersFromGET));

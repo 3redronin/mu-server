@@ -333,6 +333,37 @@ Comments can be included in some HTTP header fields by surrounding
    fields containing "comment" as part of their field value definition
 
 
+To allow for transition to the absolute-form for all requests in some
+   future version of HTTP, a server MUST accept the absolute-form in
+   requests, even though HTTP/1.1 clients will only send them in
+   requests to proxies.
+
+   Additional status codes related
+   to capacity limits have been defined by extensions to HTTP [RFC6585].
+
+
+
+   A common defense against response splitting is to filter requests for
+   data that looks like encoded CR and LF (e.g., "%0D" and "%0A").
+   However, that assumes the application server is only performing URI
+   decoding, rather than more obscure data transformations like charset
+   transcoding, XML entity translation, base64 decoding, sprintf
+   reformatting, etc.  A more effective mitigation is to prevent
+   anything other than the server's core protocol libraries from sending
+   a CR or LF within the header section, which means restricting the
+   output of header fields to APIs that filter for bad octets and not
+   allowing application servers to write directly to the protocol
+   stream.
+
+
+
+   A client that receives a 417 (Expectation Failed) status code in
+      response to a request containing a 100-continue expectation SHOULD
+      repeat that request without a 100-continue expectation, since the
+      417 response merely indicates that the response chain does not
+      support expectations (e.g., it passes through an HTTP/1.0 server).
+
+
 
    Responses to the HEAD request method (Section 4.3.2
    of [RFC7231]) never include a message body because the associated

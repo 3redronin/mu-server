@@ -50,40 +50,48 @@ public class RawClient implements Closeable {
         });
     }
 
-    public void send(byte[] bytes) throws IOException {
+    public RawClient send(byte[] bytes) throws IOException {
         if (bytes.length > 0) {
             request.write(bytes);
         }
+        return this;
     }
-    public void sendUTF8(String message) throws IOException {
-//        System.out.println(" >> " + message);
+    public RawClient sendUTF8(String message) throws IOException {
         send(message.getBytes(UTF_8));
+        return this;
     }
-    public void sendLine(String line) throws IOException {
+    public RawClient sendLine(String line) throws IOException {
         sendUTF8(line + "\r\n");
+        return this;
     }
 
-    public void sendStartLine(String method, String target) throws IOException {
+    public RawClient sendStartLine(String method, String target) throws IOException {
         sendLine(method + " " + target + " HTTP/1.1");
+        return this;
     }
 
-    public void sendHeader(String name, String value) throws IOException {
+    public RawClient sendHeader(String name, String value) throws IOException {
         sendLine(name + ": " + value);
+        return this;
     }
-    public void endHeaders() throws IOException {
+    public RawClient endHeaders() throws IOException {
         sendLine("");
+        return this;
     }
-    public void flushRequest() throws IOException {
+    public RawClient flushRequest() throws IOException {
         request.flush();
+        return this;
     }
 
-    public void closeRequest() throws IOException {
+    public RawClient closeRequest() throws IOException {
         request.close();
         request = null;
+        return this;
     }
-    public void closeResponse() throws IOException {
+    public RawClient closeResponse() throws IOException {
         response.close();
         response = null;
+        return this;
     }
 
     public long bytesReceived() {

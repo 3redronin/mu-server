@@ -20,15 +20,13 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public class MuServerBuilder {
     private static final Logger log = LoggerFactory.getLogger(MuServerBuilder.class);
-    private long minimumGzipSize = 1400;
     private int httpPort = -1;
     private int httpsPort = -1;
     private int maxHeadersSize = RequestParser.Options.defaultOptions.maxHeaderSize;
     private int maxUrlSize = RequestParser.Options.defaultOptions.maxUrlLength;
     private List<MuHandler> handlers = new ArrayList<>();
     private SSLContext sslContext;
-    private boolean gzipEnabled = true;
-    private Set<String> mimeTypesToGzip = ResourceType.gzippableMimeTypes(ResourceType.getResourceTypes());
+    private final CompressionSettings compressionSettings = new CompressionSettings();
     private boolean addShutdownHook = false;
     private String host;
     private ExecutorService executorService;
@@ -93,7 +91,7 @@ public class MuServerBuilder {
      * @return The current Mu-Server builder
      */
     public MuServerBuilder withGzipEnabled(boolean enabled) {
-        this.gzipEnabled = enabled;
+        compressionSettings.gzipEnabled = enabled;
         return this;
     }
 
@@ -108,9 +106,9 @@ public class MuServerBuilder {
      * @return The current Mu-Server Builder
      */
     public MuServerBuilder withGzip(long minimumGzipSize, Set<String> mimeTypesToGzip) {
-        this.gzipEnabled = true;
-        this.mimeTypesToGzip = mimeTypesToGzip;
-        this.minimumGzipSize = minimumGzipSize;
+        compressionSettings.gzipEnabled = true;
+        compressionSettings.mimeTypesToGzip = mimeTypesToGzip;
+        compressionSettings.minimumGzipSize = minimumGzipSize;
         return this;
     }
 
@@ -246,16 +244,17 @@ public class MuServerBuilder {
             throw new IllegalArgumentException("No ports were configured. Please call MuServerBuilder.withHttpPort(int) or MuServerBuilder.withHttpsPort(int)");
         }
 
-        ExecutorService executorService = this.executorService != null ? this.executorService : Executors.newCachedThreadPool();
+        ServerSettings settings = new ServerSettings();
+        settings.executorService = this.executorService != null ? this.executorService : Executors.newCachedThreadPool();
+        settings.compressionSettings = compressionSettings;
+        settings.parserOptions = new RequestParser.Options(maxUrlSize, maxHeadersSize);
 
         List<MuHandler> handlersCopy = Collections.unmodifiableList(new ArrayList<>(handlers));
-
         AtomicReference<MuServer> serverRef = new AtomicReference<>();
 
         List<ConnectionAcceptor> acceptors = new ArrayList<>();
-        RequestParser.Options parserOptions = new RequestParser.Options(maxUrlSize, maxHeadersSize);
-        URI httpUri = startAcceptorMaybe(executorService, handlersCopy, serverRef, acceptors, httpPort, host, null, parserOptions);
-        URI httpsUri = startAcceptorMaybe(executorService, handlersCopy, serverRef, acceptors, httpsPort, host, sslContext == null ? SSLContextBuilder.unsignedLocalhostCert() : sslContext, parserOptions);
+        URI httpUri = startAcceptorMaybe(settings, handlersCopy, serverRef, acceptors, httpPort, host, null);
+        URI httpsUri = startAcceptorMaybe(settings, handlersCopy, serverRef, acceptors, httpsPort, host, sslContext == null ? SSLContextBuilder.unsignedLocalhostCert() : sslContext);
         Runnable shutdown = () -> {
             try {
                 for (ConnectionAcceptor acceptor : acceptors) {
@@ -280,10 +279,10 @@ public class MuServerBuilder {
         return server;
     }
 
-    private static URI startAcceptorMaybe(ExecutorService executorService, List<MuHandler> handlers, AtomicReference<MuServer> serverRef, List<ConnectionAcceptor> accepters, int httpPort, String host, SSLContext sslContext, RequestParser.Options parserOptions) {
+    private static URI startAcceptorMaybe(ServerSettings settings, List<MuHandler> handlers, AtomicReference<MuServer> serverRef, List<ConnectionAcceptor> accepters, int httpPort, String host, SSLContext sslContext) {
         URI httpUri = null;
         if (httpPort >= 0) {
-            ConnectionAcceptor httpAccepter = new ConnectionAcceptor(executorService, handlers, sslContext, serverRef, parserOptions);
+            ConnectionAcceptor httpAccepter = new ConnectionAcceptor(settings, handlers, sslContext, serverRef);
             try {
                 httpAccepter.start(host, httpPort);
                 httpUri = httpAccepter.uri();

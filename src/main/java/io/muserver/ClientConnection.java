@@ -20,6 +20,7 @@ class ClientConnection implements RequestParser.RequestListener {
 
     private final RequestParser requestParser;
     private final ExecutorService executorService;
+    private final ServerSettings settings;
     private final List<MuHandler> handlers;
     final ByteChannel channel;
     private final MuStatsImpl2 stats;
@@ -30,8 +31,8 @@ class ClientConnection implements RequestParser.RequestListener {
     private MuResponseImpl curResp;
     private AsyncHandleImpl asyncHandle;
 
-    ClientConnection(ExecutorService executorService, List<MuHandler> handlers, ByteChannel channel, String protocol, InetAddress clientAddress, MuServer server, RequestParser.Options parserOptions) {
-        this.executorService = executorService;
+    ClientConnection(ServerSettings settings, List<MuHandler> handlers, ByteChannel channel, String protocol, InetAddress clientAddress, MuServer server) {
+        this.settings = settings;
         this.handlers = handlers;
         this.channel = channel;
         this.protocol = protocol;
@@ -39,8 +40,8 @@ class ClientConnection implements RequestParser.RequestListener {
         this.server = server;
         this.stats = (MuStatsImpl2) server.stats();
         this.stats.incrementActiveConnections();
-        log.info("New connection");
-        requestParser = new RequestParser(parserOptions, this);
+        executorService = settings.executorService;
+        requestParser = new RequestParser(settings.parserOptions, this);
     }
 
     static boolean keepAlive(HttpVersion version, MuHeaders headers) {
@@ -107,7 +108,7 @@ class ClientConnection implements RequestParser.RequestListener {
     public void onHeaders(Method method, URI uri, HttpVersion httpVersion, MuHeaders headers, GrowableByteBufferInputStream body) {
         MuRequestImpl req = new MuRequestImpl(method, uri, headers, body, this);
         boolean isKeepAlive = keepAlive(httpVersion, headers);
-        MuResponseImpl resp = new MuResponseImpl(channel, req, isKeepAlive, stats);
+        MuResponseImpl resp = new MuResponseImpl(channel, req, isKeepAlive, stats, settings);
         asyncHandle = new AsyncHandleImpl(req, resp);
         req.setAsyncHandle(asyncHandle);
         stats.onRequestStarted(req);

@@ -420,7 +420,7 @@ public class MuHeaders extends Headers implements RequestParameters {
     @Override
     @Deprecated
     public Headers set(CharSequence name, Iterable<?> values) {
-        throw new MuException("Deprecated");
+        return set(name.toString(), values);
     }
 
     @Override
@@ -461,7 +461,7 @@ public class MuHeaders extends Headers implements RequestParameters {
     @Override
     @Deprecated
     public Headers remove(CharSequence name) {
-        throw new MuException("Deprecated");
+        return remove(name.toString());
     }
 
     @Override
@@ -473,7 +473,7 @@ public class MuHeaders extends Headers implements RequestParameters {
     @Override
     @Deprecated
     public boolean contains(String name, String value, boolean ignoreCase) {
-        throw new MuException("Deprecated");
+        return containsValue(name, value, ignoreCase);
     }
 
     @Override
@@ -498,7 +498,7 @@ public class MuHeaders extends Headers implements RequestParameters {
     @Override
     @Deprecated
     public String getAsString(CharSequence name) {
-        throw new MuException("Deprecated");
+        return get(name.toString());
     }
 
     @Override
@@ -516,7 +516,7 @@ public class MuHeaders extends Headers implements RequestParameters {
     @Override
     @Deprecated
     public boolean contains(CharSequence name, CharSequence value, boolean ignoreCase) {
-        throw new MuException("Deprecated");
+        return containsValue(name.toString(), value.toString(), ignoreCase);
     }
 
     @Override

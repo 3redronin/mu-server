@@ -23,27 +23,25 @@ import java.util.concurrent.atomic.AtomicReference;
 
 class ConnectionAcceptor {
     private static final Logger log = LoggerFactory.getLogger(ConnectionAcceptor.class);
-    private final ExecutorService executorService;
 
     InetSocketAddress address;
     private Thread thread;
     private final CountDownLatch startLatch = new CountDownLatch(1);
     private volatile boolean running = false;
     private Selector selector;
+    private final ServerSettings settings;
     private final List<MuHandler> handlers;
     private final SSLContext sslContext;
     private final AtomicReference<MuServer> serverRef;
     private URI uri;
     private final String protocol;
-    private final RequestParser.Options parserOptions;
 
-    ConnectionAcceptor(ExecutorService executorService, List<MuHandler> handlers, SSLContext sslContext, AtomicReference<MuServer> serverRef, RequestParser.Options parserOptions) {
-        this.executorService = executorService;
+    ConnectionAcceptor(ServerSettings settings, List<MuHandler> handlers, SSLContext sslContext, AtomicReference<MuServer> serverRef) {
+        this.settings = settings;
         this.handlers = handlers;
         this.sslContext = sslContext;
         this.serverRef = serverRef;
         this.protocol = sslContext == null ? "http" : "https";
-        this.parserOptions = parserOptions;
     }
 
 
@@ -98,7 +96,7 @@ class ConnectionAcceptor {
                         } else {
                             byteChannel = ServerTlsChannel.newBuilder(rawChannel, sslContext).build();
                         }
-                        ClientConnection cc = new ClientConnection(executorService, handlers, byteChannel, protocol, clientAddress, serverRef.get(), parserOptions);
+                        ClientConnection cc = new ClientConnection(settings, handlers, byteChannel, protocol, clientAddress, serverRef.get());
                         SelectionKey newKey = rawChannel.register(selector, SelectionKey.OP_READ);
                         newKey.attach(cc);
 
