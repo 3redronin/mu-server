@@ -238,7 +238,7 @@ public class HeadersTest {
 
     @Test
     public void aRquestWithErrorXForwardHostHeaderDontThrowException() throws IOException {
-        final String host = "mu-server-io(error):1234";
+        final String host = "mu-server-io<error>:1234";
         server = httpServer()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);

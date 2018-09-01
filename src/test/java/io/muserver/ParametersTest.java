@@ -5,15 +5,22 @@ import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.MuAssert;
+import scaffolding.RawClient;
 
+import java.io.IOException;
 import java.net.MalformedURLException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import static io.muserver.MuServerBuilder.httpServer;
 import static java.util.Arrays.asList;
+import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.instanceOf;
 import static scaffolding.ClientUtils.call;
@@ -25,7 +32,7 @@ public class ParametersTest {
 
 	@Test public void queryStringsCanBeGot() throws MalformedURLException {
 		Object[] actual = new Object[4];
-		server = MuServerBuilder.httpServer().addHandler((request, response) -> {
+		server = httpServer().addHandler((request, response) -> {
 			actual[0] = request.query().get("value1");
 			actual[1] = request.query().get("value2");
 			actual[2] = request.query().get("unspecified");
@@ -43,7 +50,7 @@ public class ParametersTest {
 
 	@Test public void queryStringParametersCanAppearMultipleTimes() throws MalformedURLException {
 		Object[] actual = new Object[3];
-		server = MuServerBuilder.httpServer().addHandler((request, response) -> {
+		server = httpServer().addHandler((request, response) -> {
 			actual[0] = request.query().getAll("value1");
 			actual[1] = request.query().getAll("value2");
 			actual[2] = request.query().getAll("unspecified");
@@ -65,7 +72,7 @@ public class ParametersTest {
         }
 
         List<String> actual = new ArrayList<>();
-        server = MuServerBuilder.httpServer().addHandler((request, response) -> {
+        server = httpServer().addHandler((request, response) -> {
             for (int i = 0; i < vals.size(); i++) {
                 actual.add(request.form().get("theNameOfTheFormParameter_" + i));
             }
@@ -87,7 +94,7 @@ public class ParametersTest {
 
     @Test public void formParametersWithMultipleValuesCanBeGot() throws MalformedURLException {
         Object[] actual = new Object[3];
-        server = MuServerBuilder.httpServer().addHandler((request, response) -> {
+        server = httpServer().addHandler((request, response) -> {
             actual[0] = request.form().getAll("value1");
             actual[1] = request.form().getAll("value2");
             actual[2] = request.form().getAll("unspecified");
@@ -110,7 +117,7 @@ public class ParametersTest {
 
     @Test public void exceptionsThrownWhenTryingToReadBodyAfterReadingFormData() {
         Throwable[] actual = new Throwable[1];
-        server = MuServerBuilder.httpServer().addHandler((request, response) -> {
+        server = httpServer().addHandler((request, response) -> {
             request.form().get("blah");
             try {
                 request.readBodyAsString();
@@ -129,6 +136,64 @@ public class ParametersTest {
         }
         assertThat(actual[0], instanceOf(IllegalStateException.class));
         assertThat(actual[0].getMessage(), equalTo("The body of the request message cannot be read twice. This can happen when calling any 2 of inputStream(), readBodyAsString(), or form() methods."));
+    }
+
+    @Test
+    public void charactersAreDecodedInPaths() throws Exception {
+	    server = httpServer()
+            .addHandler((request, response) -> {
+                response.write("|path=" + request.uri().getPath() + "|\n" +
+                    "|rawPath=" + request.uri().getRawPath() + "|\n" +
+                    "|serverPath=" + request.serverURI().getPath() + "|\n" +
+                    "|serverRawPath=" + request.serverURI().getRawPath() + "|\n");
+                return true;
+            }).start();
+        RawClient client = RawClient.create(server.uri());
+        client.sendStartLine("GET", "/a%20space/a+plus?a%20space=a%20value&a+space=a+value2&a%2Bplus=s%2Bplus");
+        client.sendHeader("Host", server.uri().getAuthority());
+        client.endHeaders();
+        client.flushRequest();
+
+        while (client.bytesReceived() == 0) {
+            Thread.sleep(10);
+        }
+        String r = client.responseString();
+        assertThat(r, containsString("|path=/a space/a+plus|"));
+        assertThat(r, containsString("|rawPath=/a%20space/a+plus|"));
+        assertThat(r, containsString("|serverPath=/a space/a+plus|"));
+        assertThat(r, containsString("|serverRawPath=/a%20space/a+plus|"));
+    }
+
+    @Test
+    public void charactersAreDecodedInQueryStrings() throws Exception {
+        server = httpServer()
+            .addHandler((request, response) -> {
+                RequestParameters q = request.query();
+                response.write("|qs=" + request.uri().getQuery() + "|\n" +
+                    "|rawQS=" + request.uri().getRawQuery() + "|\n" +
+                    "|serverQS=" + request.serverURI().getQuery() + "|\n" +
+                    "|serverRawQS=" + request.serverURI().getRawQuery() + "|\n" +
+                    "|a space=" + q.getAll("a space") + "|\n" +
+                    "|a+plus=" + q.getAll("a+plus") + "|\n" +
+                    "");
+                return true;
+            }).start();
+        RawClient client = RawClient.create(server.uri());
+        client.sendStartLine("GET", "/a%20space/a+plus?a%20space=a%20value&a+space=a+value2&a%2Bplus=a%2Bplus");
+        client.sendHeader("Host", server.uri().getAuthority());
+        client.endHeaders();
+        client.flushRequest();
+
+        while (client.bytesReceived() == 0) {
+            Thread.sleep(10);
+        }
+        String r = client.responseString();
+        assertThat(r, containsString("|a space=[a value, a value2]|"));
+        assertThat(r, containsString("|a+plus=[a+plus]|"));
+        assertThat(r, containsString("|serverQS=a space=a value&a+space=a+value2&a+plus=a+plus|"));
+        assertThat(r, containsString("|serverRawQS=a%20space=a%20value&a+space=a+value2&a%2Bplus=a%2Bplus|"));
+        assertThat(r, containsString("|qs=a space=a value&a+space=a+value2&a+plus=a+plus|"));
+        assertThat(r, containsString("|rawQS=a%20space=a%20value&a+space=a+value2&a%2Bplus=a%2Bplus|"));
     }
 
 	@After public void stopIt() {

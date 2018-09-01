@@ -13,9 +13,9 @@ import java.net.URL;
 
 import static io.muserver.ContextHandlerBuilder.context;
 import static io.muserver.MuServerBuilder.httpsServer;
-import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.equalTo;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 
@@ -107,9 +107,9 @@ public class ContextHandlerTest {
 
         URL url = server.uri().resolve("/my-app").toURL();
         try (Response resp = call(request().get().url(url))) {
-            assertThat(resp.code(), Matchers.equalTo(302));
-            assertThat(resp.header("location"), Matchers.equalTo(server.uri().resolve("/my-app/").toString()));
-            assertThat(resp.body().contentLength(), Matchers.equalTo(0L));
+            assertThat(resp.code(), equalTo(302));
+            assertThat(resp.header("location"), equalTo(server.uri().resolve("/my-app/").toString()));
+            assertThat(resp.body().contentLength(), equalTo(0L));
         }
     }
 
