@@ -1,55 +1,32 @@
 package io.muserver.rest;
 
+import io.muserver.MediaTypeParser;
+
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.ext.RuntimeDelegate;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 class MediaTypeHeaderDelegate implements RuntimeDelegate.HeaderDelegate<MediaType> {
     static {
         MuRuntimeDelegate.ensureSet();
     }
 
-    public static final MediaType NONE = new MediaType("-", "-");
+    static final MediaType NONE = new MediaType("-", "-");
 
 
     @Override
     public MediaType fromString(String value) {
-        if (value == null) {
-            throw new NullPointerException("value");
-        }
-        int slashIndex = value.indexOf('/');
-        String type = value.substring(0, slashIndex).trim();
-        Map<String, String> params;
-        String subType;
-        int firstSemi = value.indexOf(';', slashIndex);
-        if (firstSemi == -1) {
-            params = null;
-            subType = value.substring(slashIndex + 1).trim();
-        } else {
-            subType = value.substring(slashIndex + 1, firstSemi).trim();
-
-            String[] bits = value.substring(firstSemi + 1).split(";");
-            params = new HashMap<>();
-            for (String bit : bits) {
-                String[] pair = bit.split("=");
-                params.put(pair[0].trim(), pair[1].trim());
-            }
-        }
-
-        return new MediaType(type, subType, params);
+        return MediaTypeParser.fromString(value);
     }
 
     @Override
     public String toString(MediaType mediaType) {
-        StringBuilder sb = new StringBuilder(mediaType.getType() + "/" + mediaType.getSubtype());
-        Map<String, String> parameters = mediaType.getParameters();
-        if (parameters != null) {
-            parameters.forEach((key, value) -> sb.append(';').append(key).append('=').append(value));
-        }
-        return sb.toString();
+        return MediaTypeParser.toString(mediaType);
     }
 
-    public static List<MediaType> fromStrings(List<String> accepts) {
+    static List<MediaType> fromStrings(List<String> accepts) {
         if (accepts == null || accepts.isEmpty()) {
             return Collections.emptyList();
         }
@@ -62,7 +39,7 @@ class MediaTypeHeaderDelegate implements RuntimeDelegate.HeaderDelegate<MediaTyp
         return results;
     }
 
-    public static boolean atLeastOneCompatible(List<MediaType> providerProduces, List<MediaType> consumerAccepts) {
+    static boolean atLeastOneCompatible(List<MediaType> providerProduces, List<MediaType> consumerAccepts) {
         for (MediaType clientAccept : consumerAccepts) {
             for (MediaType produce : providerProduces) {
                 boolean compatible = produce.isCompatible(clientAccept);
