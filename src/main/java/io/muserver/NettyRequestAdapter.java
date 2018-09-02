@@ -55,12 +55,13 @@ class NettyRequestAdapter implements MuRequest {
         this.request = request;
         this.serverRef = serverRef;
         String proto = channel.attr(MuServerHandler.PROTO_ATTRIBUTE).get();
-        this.serverUri = URI.create(proto + "://" + request.headers().get(HeaderNames.HOST) + request.uri());
-        this.uri = getUri(request, serverUri);
+        String host = request.headers().get(HeaderNames.HOST);
+        this.serverUri = URI.create(proto + "://" + host + request.uri());
+        this.headers = new Headers(request.headers());
+        this.uri = getUri(headers, proto, host, URI.create(request.uri()), serverUri);
         this.relativePath = this.uri.getRawPath();
         this.query = new NettyRequestParameters(new QueryStringDecoder(request.uri(), true));
         this.method = method;
-        this.headers = new Headers(request.headers());
     }
 
     boolean isAsync() {
@@ -71,9 +72,8 @@ class NettyRequestAdapter implements MuRequest {
         return HttpUtil.isKeepAlive(request);
     }
 
-    private static URI getUri(HttpRequest request, URI serverUri) {
-        HttpHeaders h = request.headers();
-        String proto = h.get(HeaderNames.X_FORWARDED_PROTO, serverUri.getScheme());
+    private static URI getUri(Headers h, String scheme, String hostHeader, URI requestUri, URI serverUri) {
+        String xforwardedProto = h.get(HeaderNames.X_FORWARDED_PROTO, scheme);
         String xforwardedHost = h.get(HeaderNames.X_FORWARDED_HOST);
         try {
             String host, portFromHost = "-1";
@@ -83,22 +83,22 @@ class NettyRequestAdapter implements MuRequest {
                 if (ipv6CheckAndIndex != -1) {      // IPv6
                     host = xforwardedHost.substring(0, ipv6CheckAndIndex + 1);
                     if (ipv6CheckAndIndex < lastColonCheckAndIndex) { // has port
-                        portFromHost = xforwardedHost.substring(lastColonCheckAndIndex + 1, xforwardedHost.length());
+                        portFromHost = xforwardedHost.substring(lastColonCheckAndIndex + 1);
                     }
                 } else if(lastColonCheckAndIndex != -1) { // IPv4 or domain and has port
                     host = xforwardedHost.substring(0, lastColonCheckAndIndex);
-                    portFromHost = xforwardedHost.substring(lastColonCheckAndIndex + 1, xforwardedHost.length());
+                    portFromHost = xforwardedHost.substring(lastColonCheckAndIndex + 1);
                 } else {  // no port
                     host = xforwardedHost;
                 }
             } else {
-                host = serverUri.getHost();
+                host = hostHeader;
             }
-            int port = h.getInt(HeaderNames.X_FORWARDED_PORT, xforwardedHost != null ? Integer.valueOf(portFromHost) : serverUri.getPort());
-            port = (port != 80 && port != 443 && port > 0) ? port : -1;
-            return new URI(proto, serverUri.getUserInfo(), host, port, serverUri.getPath(), serverUri.getQuery(), serverUri.getFragment());
+            int port = h.getInt(HeaderNames.X_FORWARDED_PORT, xforwardedHost != null ? Integer.valueOf(portFromHost) : -1);
+            String portStr = (port != 80 && port != 443 && port > 0) ? ":" + port : "";
+            return new URI(xforwardedProto + "://" + host + portStr + requestUri);
         } catch (URISyntaxException e) {
-            log.warn("Could not convert " + request.uri() + " into a URI object using X-Forwarded values " + proto + " and " + xforwardedHost
+            log.warn("Could not create a URI object using X-Forwarded values " + xforwardedProto + " and " + xforwardedHost
                 + " so using local server URI. URL generation (including in redirects) may be incorrect.");
             return serverUri;
         }
