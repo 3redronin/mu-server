@@ -33,6 +33,9 @@ public class UploadTest {
 
         server = httpsServer()
             .addHandler(Method.POST, "/upload", (request, response, pathParams) -> {
+
+                System.out.println("---]" + request.readBodyAsString() + "[---");
+
                 response.sendChunk(request.form().get("Hello")
                     + "\n" + request.form().get("The name"));
                 boolean twoWaysToGetFileIsSame = request.uploadedFiles("image").get(0).filename().equals(request.uploadedFile("image").filename());
