@@ -1,5 +1,6 @@
 package io.muserver;
 
+import javax.ws.rs.core.MediaType;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -26,7 +27,8 @@ public interface MuRequest {
      * @return The content type of the request body (specified by the <code>Content-Type</code> request header),
      * or <code>null</code> if there is no body.
      */
-    String contentType();
+    MediaType contentType();
+
 
     /**
      * @return The request method, e.g. GET or POST

@@ -11,6 +11,7 @@ import io.netty.handler.codec.http.multipart.InterfaceHttpData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.ws.rs.core.MediaType;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -58,13 +59,10 @@ class MuRequestImpl implements MuRequest {
     }
 
     @Override
-    public String contentType() {
+    public MediaType contentType() {
         String c = headers.get(HttpHeaderNames.CONTENT_TYPE);
         if (c == null) return null;
-        if (c.contains(";")) {
-            return c.split(";", 2)[0];
-        }
-        return c;
+        return MediaTypeParser.fromString(c);
     }
 
     @Override
@@ -267,7 +265,7 @@ class MuRequestImpl implements MuRequest {
 
     private void ensureFormDataLoaded() throws IOException {
         if (form == null) {
-            if (contentType().startsWith("multipart/")) {
+            if (contentType().getType().equals("multipart")) {
                 multipartRequestDecoder = new HttpPostMultipartRequestDecoder(null);
                 if (inputStream != null) {
                     claimingBodyRead();

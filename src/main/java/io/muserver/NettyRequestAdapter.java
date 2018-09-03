@@ -13,6 +13,7 @@ import io.netty.handler.codec.http.multipart.InterfaceHttpData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.ws.rs.core.MediaType;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
@@ -104,13 +105,10 @@ class NettyRequestAdapter implements MuRequest {
     }
 
     @Override
-    public String contentType() {
+    public MediaType contentType() {
         String c = headers.get(HttpHeaderNames.CONTENT_TYPE);
         if (c == null) return null;
-        if (c.contains(";")) {
-            return c.split(";")[0];
-        }
-        return c;
+        return MediaTypeParser.fromString(c);
     }
 
     public Method method() {
@@ -276,7 +274,7 @@ class NettyRequestAdapter implements MuRequest {
 
     private void ensureFormDataLoaded() throws IOException {
         if (form == null) {
-            if (contentType().startsWith("multipart/")) {
+            if (contentType().getType().equals("multipart")) {
                 multipartRequestDecoder = new HttpPostMultipartRequestDecoder(request);
                 if (inputStream != null) {
                     claimingBodyRead();

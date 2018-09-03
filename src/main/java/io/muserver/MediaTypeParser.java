@@ -1,20 +1,14 @@
 package io.muserver;
 
 import javax.ws.rs.core.MediaType;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.List;
 
 import static io.muserver.Mutils.notNull;
-import static io.muserver.Parser.isOWS;
-import static io.muserver.Parser.isTChar;
 
 /**
  * A utility class to parse Media Type or Content Type values such as <code>text/plain</code> and <code>text/plain; charset=UTF-8</code> etc
  */
-public class MediaTypeParser {
-
-    private enum State { TYPE, SUB, PARAM_NAME, PARAM_VALUE}
+class MediaTypeParser {
 
     /**
      * Converts a string such as "text/plain" into a MediaType object.
@@ -25,118 +19,15 @@ public class MediaTypeParser {
         if (value == null) {
             throw new NullPointerException("value");
         }
-        StringBuilder buffer = new StringBuilder();
-        String type = null;
-        String subType = null;
-        Map<String, String> parameters = null;
-        State state = State.TYPE;
-        String paramName = null;
-        boolean isQuotedString = false;
-
-        for (int i = 0; i < value.length(); i++) {
-            char c = value.charAt(i);
-
-
-            if (state == State.TYPE) {
-                if (isTChar(c)) {
-                    buffer.append(c);
-                } else if (c == '/') {
-                    type = buffer.toString();
-                    buffer.setLength(0);
-                    state = State.SUB;
-                } else if (Parser.isOWS(c)) {
-                    if (buffer.length() > 0) {
-                        throw new IllegalStateException("Got whitespace in media type while in " + state + " - header was " + buffer);
-                    }
-                } else {
-                    throw new IllegalStateException("Got ascii " + c + " while in " + state);
-                }
-            } else if (state == State.SUB) {
-                if (isTChar(c)) {
-                    buffer.append(c);
-                } else if (c == ';') {
-                    subType = buffer.toString();
-                    buffer.setLength(0);
-                    state = State.PARAM_NAME;
-                } else if (Parser.isOWS(c)) {
-                    // just ignore
-                } else {
-                    throw new IllegalStateException("Got ascii " + ((int)c) + " while in " + state);
-                }
-            } else if (state == State.PARAM_NAME) {
-                if (isTChar(c)) {
-                    buffer.append(c);
-                } else if (c == '=') {
-                    paramName = buffer.toString();
-                    buffer.setLength(0);
-                    state = State.PARAM_VALUE;
-                } else if (Parser.isOWS(c)) {
-                    if (buffer.length() > 0) {
-                        throw new IllegalStateException("Got whitespace in media type while in " + state + " - header was " + buffer);
-                    }
-                } else {
-                    throw new IllegalStateException("Got ascii " + c + " while in " + state);
-                }
-            } else if (state == State.PARAM_VALUE) {
-                boolean isFirst = !isQuotedString && buffer.length() == 0;
-                if (isFirst && isOWS(c)) {
-                    // ignore it
-                } else if (isFirst && c == '"') {
-                    isQuotedString = true;
-                } else {
-
-                    if (isQuotedString) {
-                        char lastChar = value.charAt(i - 1);
-                        if (c == '\\') {
-                            // don't append
-                        } else if (lastChar == '\\') {
-                            buffer.append(c);
-                        } else if (c == '"') {
-                            // this is the end, but we'll update on the next go
-                            isQuotedString = false;
-                        } else {
-                            buffer.append(c);
-                        }
-                    } else {
-                        if (isTChar(c)) {
-                            buffer.append(c);
-                        } else if (c == ';') {
-                            if (parameters == null) {
-                                parameters = new HashMap<>();
-                            }
-                            parameters.put(paramName, buffer.toString());
-                            buffer.setLength(0);
-                            paramName = null;
-                            state = State.PARAM_NAME;
-                        } else if (isOWS(c)) {
-                            // ignore it
-                        } else {
-                            throw new IllegalArgumentException("Got character code " + ((int)c) + " while parsing parameter value");
-                        }
-                    }
-                }
-            }
+        List<HeaderValue> headerValues = HeaderValue.fromString(value);
+        if (headerValues.isEmpty()) {
+            throw new IllegalArgumentException("The value '" + value + "' did not contain a valid header value");
         }
-        switch (state) {
-            case TYPE:
-                type = buffer.toString();
-                break;
-            case SUB:
-                subType = buffer.toString();
-                break;
-            case PARAM_VALUE:
-                if (parameters == null) {
-                    parameters = new HashMap<>();
-                }
-                parameters.put(paramName, buffer.toString());
-                break;
-            default:
-                if (buffer.length() > 0) {
-                    throw new IllegalArgumentException("Unexpected ending point at state " + state + " for " + value);
-                }
-        }
-
-        return new MediaType(type, subType, parameters == null ? Collections.emptyMap() : parameters);
+        HeaderValue v = headerValues.get(0);
+        String[] split = v.value().split("/", 2);
+        String type = split[0];
+        String subType = split.length == 1 ? MediaType.MEDIA_TYPE_WILDCARD : split[1];
+        return new MediaType(type, subType, v.parameters());
     }
 
     /**
@@ -146,21 +37,6 @@ public class MediaTypeParser {
      */
     public static String toString(MediaType mediaType) {
         notNull("mediaType", mediaType);
-        StringBuilder sb = new StringBuilder(mediaType.getType() + "/" + mediaType.getSubtype());
-        Map<String, String> parameters = mediaType.getParameters();
-        if (parameters != null) {
-            parameters.forEach((key, value) -> {
-                boolean needsQuoting = false;
-                for (int i = 0; i < value.length(); i++) {
-                    if (!isTChar(value.charAt(i))) {
-                        needsQuoting = true;
-                        break;
-                    }
-                }
-                String v = needsQuoting ? '"' + value.replace("\"", "\\\"") + '"' : value;
-                sb.append(';').append(key).append('=').append(v);
-            });
-        }
-        return sb.toString();
+        return new HeaderValue(mediaType.getType() + "/" + mediaType.getSubtype(), mediaType.getParameters()).toString();
     }
 }

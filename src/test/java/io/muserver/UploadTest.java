@@ -9,6 +9,8 @@ import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.List;
+import java.util.Map;
 
 import static io.muserver.MuServerBuilder.httpsServer;
 import static org.hamcrest.CoreMatchers.is;
@@ -19,7 +21,7 @@ import static scaffolding.ClientUtils.request;
 public class UploadTest {
 
     private MuServer server;
-    public static File guangzhou = new File("src/test/resources/sample-static/images/guangzhou.jpeg");
+    static File guangzhou = new File("src/test/resources/sample-static/images/guangzhou.jpeg");
 
     @Before
     public void check() throws IOException {
@@ -33,6 +35,10 @@ public class UploadTest {
 
         server = httpsServer()
             .addHandler(Method.POST, "/upload", (request, response, pathParams) -> {
+
+                for (Map.Entry<String, List<String>> entry : ((MuHeaders)request.headers()).all().entrySet()) {
+                    System.out.println(" >> " + entry.getKey() + ": " + entry.getValue());
+                }
 
                 System.out.println("---]" + request.readBodyAsString() + "[---");
 
