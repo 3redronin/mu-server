@@ -115,9 +115,10 @@ class RequestParser {
                     }
                     state = State.RL_URI;
                     cur.setLength(0);
-                } else {
-                    // todo: throw if invalid char
+                } else if (Parser.isTChar(c)) {
                     append(c);
+                } else {
+                    throw new InvalidRequestException(400, "Invalid character in request line", "Got a " + c + " character in the request line");
                 }
             } else if (state == State.RL_URI) {
 
@@ -366,11 +367,6 @@ class RequestParser {
                 }
             }
         }
-    }
-
-    private static boolean isTokenChar(char c) {
-//        "!" / "#" / "$" / "%" / "&" / "'" / "*" / "+" / "-" / "." / "^" / "_" / "`" / "|" / "~" / DIGIT / ALPHA
-        return true;
     }
 
     private void append(byte c) {
