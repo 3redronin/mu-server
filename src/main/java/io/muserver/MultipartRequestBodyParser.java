@@ -32,6 +32,9 @@ class MultipartRequestBodyParser {
 
     public void parse(InputStream inputStream) throws IOException {
 
+
+        BoundariedInputStream bis = new BoundariedInputStream(inputStream, "--" + boundary);
+
         String partClose = "--" + boundary;
         String close = partClose + "--";
 
@@ -42,6 +45,7 @@ class MultipartRequestBodyParser {
         byte[] buffer = new byte[8192];
         int read;
         ByteArrayOutputStream lineBuffer = new ByteArrayOutputStream();
+        ByteArrayOutputStream bodyBuffer = new ByteArrayOutputStream();
         int offset = 0;
         while ((read = inputStream.read(buffer)) > -1) {
 
@@ -55,64 +59,59 @@ class MultipartRequestBodyParser {
 
             if (read > 0) {
                 for (int i = 0; i < read; i++) {
-                    byte b = buffer[i];
-                    if (lastB == '\r' && b == '\n') {
-                        lineBuffer.write(buffer, offset, i - offset - 1);
-                        String line = lineBuffer.toString(bodyCharset.name());
-                        lineBuffer.reset();
-                        if (state == State.PREAMBLE) {
-                            if (line.equals(partClose)) {
-                                state = State.ENCAP;
-                                encapState = EncapState.HEADERS;
-                            } else if (line.equals(close)) {
-                                state = State.EPILOGUE;
-                            }
-                        } else if (state == State.ENCAP) {
+                    if (state != State.ENCAP || encapState != EncapState.BODY) {
+                        byte b = buffer[i];
+                        if (lastB == '\r' && b == '\n') {
+                            lineBuffer.write(buffer, offset, i - offset - 1);
+                            String line = lineBuffer.toString(bodyCharset.name());
+                            lineBuffer.reset();
+                            if (state == State.PREAMBLE) {
+                                if (line.equals(partClose)) {
+                                    state = State.ENCAP;
+                                    encapState = EncapState.HEADERS;
+                                } else if (line.equals(close)) {
+                                    state = State.EPILOGUE;
+                                }
+                            } else if (state == State.ENCAP) {
 
-                            if (encapState == EncapState.HEADERS) {
-                                if (line.isEmpty()) {
-                                    encapState = EncapState.BODY;
-                                    bodyRead = 0;
-                                } else {
-                                    String[] bits = line.split(":", 2);
-                                    String headerName = bits[0].trim().toLowerCase();
-                                    if (headerName.equals("content-disposition")) {
-                                        HeaderValue disposition = HeaderValue.fromString(bits[1]).get(0);
-                                        switch (disposition.value()) {
-                                            case "form-data": {
-                                                formName = disposition.parameters().get("name");
-                                                break;
+                                if (encapState == EncapState.HEADERS) {
+                                    if (line.isEmpty()) {
+                                        encapState = EncapState.BODY;
+                                        bodyRead = 0;
+                                    } else {
+                                        String[] bits = line.split(":", 2);
+                                        String headerName = bits[0].trim().toLowerCase();
+                                        if (headerName.equals("content-disposition")) {
+                                            HeaderValue disposition = HeaderValue.fromString(bits[1]).get(0);
+                                            switch (disposition.value()) {
+                                                case "form-data": {
+                                                    formName = disposition.parameters().get("name");
+                                                    break;
+                                                }
                                             }
+                                        } else if (headerName.equals("content-type")) {
+                                            partType = MediaTypeParser.fromString(bits[1]);
+                                        } else if (headerName.equals("content-length")) {
+                                            partLen = Long.parseLong(bits[1].trim());
                                         }
-                                    } else if (headerName.equals("content-type")) {
-                                        partType = MediaTypeParser.fromString(bits[1]);
-                                    } else if (headerName.equals("content-length")) {
-                                        partLen = Long.parseLong(bits[1].trim());
                                     }
-                                }
 
-                            }
-                            if (encapState == EncapState.BODY) {
-                                boolean bodyEnded;
-                                if (partLen > -1) {
-                                    int toRead = Math.min((int)(partLen - bodyRead), read - i);
-                                    partBody.write(buffer, i + 1, toRead);
-                                    bodyRead += toRead;
-                                    i += toRead;
-                                    bodyEnded = bodyRead == partLen;
-                                } else {
-                                    bodyEnded = false;
-                                }
-                                if (bodyEnded) {
-                                    String partCharset = partType.getParameters().getOrDefault("charset", "UTF-8");
-                                    String formValue = ((ByteArrayOutputStream) partBody).toString(partCharset);
-                                    formParams.putSingle(formName, formValue);
                                 }
                             }
+                            offset = i + 1;
                         }
-                        offset = i + 1;
+                        lastB = b;
                     }
-                    lastB = b;
+                    if (encapState == EncapState.BODY) {
+                        bodyBuffer.write(buffer, i, read - i);
+
+                        if (contains(bodyBuffer.toByteArray(), closeBytes)) {
+
+                            String partCharset = partType.getParameters().getOrDefault("charset", "UTF-8");
+                            String formValue = bodyBuffer.toString(partCharset);
+                            formParams.putSingle(formName, formValue);
+                        }
+                    }
                 }
             }
         }
@@ -120,7 +119,8 @@ class MultipartRequestBodyParser {
     }
 
 
-    public List<String> formValue(String name) {
+
+    List<String> formValue(String name) {
         return this.formParams.getOrDefault(name, emptyList());
     }
 }
