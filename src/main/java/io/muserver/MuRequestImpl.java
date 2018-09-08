@@ -1,12 +1,11 @@
 package io.muserver;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
-import io.netty.handler.codec.http.*;
+import io.netty.handler.codec.http.HttpHeaderNames;
+import io.netty.handler.codec.http.QueryStringDecoder;
+import io.netty.handler.codec.http.QueryStringEncoder;
 import io.netty.handler.codec.http.cookie.ServerCookieDecoder;
 import io.netty.handler.codec.http.multipart.Attribute;
 import io.netty.handler.codec.http.multipart.FileUpload;
-import io.netty.handler.codec.http.multipart.HttpPostMultipartRequestDecoder;
 import io.netty.handler.codec.http.multipart.InterfaceHttpData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,9 +15,12 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 import static io.muserver.Cookie.nettyToMu;
+import static io.muserver.Mutils.coalesce;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Collections.emptyList;
 import static java.util.Collections.emptySet;
@@ -38,7 +40,7 @@ class MuRequestImpl implements MuRequest {
     private boolean bodyRead = false;
     private Set<Cookie> cookies;
     private String contextPath = "";
-    private HttpPostMultipartRequestDecoder multipartRequestDecoder;
+    private MultipartRequestBodyParser multipartRequestDecoder;
     private HashMap<String, List<UploadedFile>> uploads;
     private Object state;
     private volatile AsyncHandle asyncHandle;
@@ -105,7 +107,8 @@ class MuRequestImpl implements MuRequest {
 
 
     public String readBodyAsString() throws IOException {
-        return new String(readBodyAsBytes(), UTF_8); // TODO: respect the charset of the content-type if provided
+        String charset = contentType().getParameters().get("charset");
+        return new String(readBodyAsBytes(), coalesce(charset, "UTF-8"));
     }
 
     private void claimingBodyRead() {
@@ -266,23 +269,21 @@ class MuRequestImpl implements MuRequest {
     private void ensureFormDataLoaded() throws IOException {
         if (form == null) {
             if (contentType().getType().equals("multipart")) {
-                multipartRequestDecoder = new HttpPostMultipartRequestDecoder(null);
+
+                System.out.println("headers = " + headers);
+                String s = new String(readBodyAsBytes(), StandardCharsets.UTF_8);
+                System.out.println("s = " + s);
+
+                Map<String, String> contentParam = contentType().getParameters();
+                Charset bodyCharset = Charset.forName(contentParam.getOrDefault("charset", "UTF-8"));
+                multipartRequestDecoder = new MultipartRequestBodyParser(bodyCharset, contentParam.get("boundary"));
                 if (inputStream != null) {
                     claimingBodyRead();
-
-                    byte[] buffer = new byte[16 * 1024];
-                    int read;
-                    while ((read = inputStream.read(buffer)) > -1) {
-                        if (read > 0) {
-                            ByteBuf content = Unpooled.copiedBuffer(buffer, 0, read);
-                            multipartRequestDecoder.offer(new DefaultHttpContent(content));
-                        }
-                    }
+                    multipartRequestDecoder.parse(inputStream);
                 }
-                multipartRequestDecoder.offer(new DefaultLastHttpContent());
                 uploads = new HashMap<>();
 
-                List<InterfaceHttpData> bodyHttpDatas = multipartRequestDecoder.getBodyHttpDatas();
+                List<InterfaceHttpData> bodyHttpDatas = null;
                 QueryStringEncoder qse = new QueryStringEncoder("/");
 
                 for (InterfaceHttpData bodyHttpData : bodyHttpDatas) {

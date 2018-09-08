@@ -1,5 +1,7 @@
 package io.muserver;
 
+import io.muserver.rest.MuRuntimeDelegate;
+
 import javax.ws.rs.core.MediaType;
 import java.util.List;
 
@@ -8,7 +10,10 @@ import static io.muserver.Mutils.notNull;
 /**
  * A utility class to parse Media Type or Content Type values such as <code>text/plain</code> and <code>text/plain; charset=UTF-8</code> etc
  */
-class MediaTypeParser {
+public class MediaTypeParser {
+    static {
+        MuRuntimeDelegate.ensureSet();
+    }
 
     /**
      * Converts a string such as "text/plain" into a MediaType object.

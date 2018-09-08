@@ -40,7 +40,7 @@ public class UploadTest {
                     System.out.println(" >> " + entry.getKey() + ": " + entry.getValue());
                 }
 
-                System.out.println("---]" + request.readBodyAsString() + "[---");
+//                System.out.println("---]" + request.readBodyAsString() + "[---");
 
                 response.sendChunk(request.form().get("Hello")
                     + "\n" + request.form().get("The name"));
