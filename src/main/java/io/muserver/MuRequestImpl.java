@@ -276,7 +276,11 @@ class MuRequestImpl implements MuRequest {
 
                 Map<String, String> contentParam = contentType().getParameters();
                 Charset bodyCharset = Charset.forName(contentParam.getOrDefault("charset", "UTF-8"));
-                multipartRequestDecoder = new MultipartRequestBodyParser(bodyCharset, contentParam.get("boundary"));
+                String boundary = contentParam.get("boundary");
+                if (boundary == null || boundary.isEmpty() || boundary.length() > 70) {
+                    throw new MuException("Invalid boundary in multipart form - must be between 1 an 70 characters");
+                }
+                multipartRequestDecoder = new MultipartRequestBodyParser(bodyCharset, boundary);
                 if (inputStream != null) {
                     claimingBodyRead();
                     multipartRequestDecoder.parse(inputStream);

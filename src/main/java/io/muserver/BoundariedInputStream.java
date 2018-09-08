@@ -3,20 +3,21 @@ package io.muserver;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.Objects;
+
+import static java.nio.charset.StandardCharsets.US_ASCII;
 
 public class BoundariedInputStream extends FilterInputStream {
 
     private final InputStream source;
-    private final byte[] boundary;
+    private byte[] boundary;
     private byte[] buffer;
     private int bufferInd;
     private int bufferLen;
     private boolean isClosed;
 
     public BoundariedInputStream(InputStream source, String boundary) {
-        this(source, boundary.getBytes(StandardCharsets.US_ASCII), new byte[8192], -1, -1);
+        this(source, boundary.getBytes(US_ASCII), new byte[8192], -1, -1);
     }
 
     private BoundariedInputStream(InputStream source, byte[] boundary, byte[] buffer, int bufferInd, int bufferLen) {
@@ -26,6 +27,10 @@ public class BoundariedInputStream extends FilterInputStream {
         this.buffer = buffer;
         this.bufferInd = bufferInd;
         this.bufferLen = bufferLen;
+    }
+
+    public void changeBoundary(String newBoundary) {
+        boundary = newBoundary.getBytes(US_ASCII);
     }
 
     public BoundariedInputStream continueNext() {
@@ -80,16 +85,7 @@ public class BoundariedInputStream extends FilterInputStream {
         isClosed = true;
     }
 
-    /**
-     * Search the data byte array for the first occurrence of the byte array pattern within given boundaries.
-     *
-     * @param data
-     * @param start   First index in data
-     * @param stop    Last index in data so that stop-start = length
-     * @param pattern What is being searched. '*' can be used as wildcard for "ANY character"
-     * @return
-     */
-    public static ArrayMatch indexOf(byte[] data, int start, int stop, byte[] pattern) {
+    static ArrayMatch indexOf(byte[] data, int start, int stop, byte[] pattern) {
         if (data == null || pattern == null) return ArrayMatch.NOPE;
 
         int[] failure = computeFailure(pattern);
