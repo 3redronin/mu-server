@@ -34,6 +34,9 @@ public class BoundariedInputStream extends FilterInputStream {
     }
 
     public BoundariedInputStream continueNext() {
+        if (bufferLen == -1) {
+            return null;
+        }
         return new BoundariedInputStream(source, boundary, buffer, bufferInd, bufferLen);
     }
 
