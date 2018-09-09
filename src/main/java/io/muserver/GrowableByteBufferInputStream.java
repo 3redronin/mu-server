@@ -23,6 +23,7 @@ class GrowableByteBufferInputStream extends InputStream {
 		}
 		synchronized (queue) {
 			ByteBuffer cur = current;
+            System.out.println("Cycling " + cur.remaining());
 			if (!cur.hasRemaining()) {
 				try {
 					current = queue.poll(120, TimeUnit.SECONDS); // TODO: add config for this which is like a request stream idle timeout limit
@@ -77,9 +78,12 @@ class GrowableByteBufferInputStream extends InputStream {
 	}
 
 	void handOff(ByteBuffer buffer) {
+        System.out.println("Handing... " + buffer.remaining());
         synchronized (listenerLock) {
+            System.out.println("Got locked");
             if (listener == null) {
                 queue.add(buffer);
+                System.out.println("Added");
             } else {
                 sendToListener(listener, buffer);
             }

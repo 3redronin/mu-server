@@ -65,13 +65,13 @@ public class BoundariedInputStream extends FilterInputStream {
         }
         ArrayMatch match = indexOf(buffer, bufferInd, bufferLen, boundary);
         if (match.match()) {
-            int length = match.index - bufferInd;
+            int length = Math.min(len, match.index - bufferInd);
             System.arraycopy(buffer, bufferInd, dest, off, length);
             bufferInd = match.index + boundary.length;
             isClosed = true;
             return length;
         } else if (match.partialMatch()) {
-            int length = match.index - bufferInd;
+            int length = Math.min(len, match.index - bufferInd);
             System.arraycopy(buffer, bufferInd, dest, off, length);
             bufferInd = match.index;
             return length;

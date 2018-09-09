@@ -7,6 +7,9 @@ import org.slf4j.LoggerFactory;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 
 import static io.muserver.Mutils.fullPath;
 import static io.muserver.Mutils.notNull;
@@ -242,11 +245,10 @@ class MuUploadedFile2 implements UploadedFile {
     public void saveTo(File dest) throws IOException {
         notNull("dest", dest);
         dest.getParentFile().mkdirs();
-        boolean success = file.renameTo(dest);
-        if (!success) {
-            throw new IOException("Failed to save file to " + fullPath(dest));
-        }
-        this.file = dest;
+        Path moved = Files.move(file.toPath(), dest.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        shouldDeleteOnClean = false;
+        System.out.println("Moved to " + moved);
+        this.file = moved.toFile();
     }
 
     @Override

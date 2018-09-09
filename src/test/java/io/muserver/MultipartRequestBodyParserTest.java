@@ -4,6 +4,7 @@ package io.muserver;
 import org.junit.Test;
 
 import java.io.*;
+import java.nio.ByteBuffer;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -140,6 +141,44 @@ public class MultipartRequestBodyParserTest {
         assertThat(parser.fileParams().getFirst("image").contentType(), is("image/jpeg"));
         parser.clean();
 
+    }
+
+    @Test
+    public void binaryFilesWorkReally() throws IOException, InterruptedException {
+        MultipartRequestBodyParser parser = new MultipartRequestBodyParser(new File("target/tempupload/bin"), UTF_8, "9fcbdd85-e675-4559-a957-b04c9a2b4d17");
+
+        GrowableByteBufferInputStream slow = new GrowableByteBufferInputStream();
+
+        StringBuffer error = new StringBuffer();
+
+        Thread thread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    try (InputStream req = getClass().getResourceAsStream("/file-upload-request.bin")) {
+                        byte[] buf = new byte[8192];
+                        int read;
+                        while ((read = req.read(buf))> -1) {
+                            ByteBuffer byteBuffer = ByteBuffer.wrap(buf, 0, read);
+                            slow.handOff(byteBuffer);
+                        }
+                    }
+                } catch (Throwable e) {
+                    error.append(e);
+                }
+
+            }
+        });
+        thread.start();
+
+
+        parser.parse(slow);
+
+        assertThat(error.toString(), is(""));
+        assertThat(parser.formValue("Hello"), contains("World"));
+        assertThat(parser.fileParams().getFirst("image").contentType(), is("image/jpeg"));
+        parser.clean();
+        thread.join();
     }
 
 }
