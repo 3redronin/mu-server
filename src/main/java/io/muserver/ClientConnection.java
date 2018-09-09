@@ -12,6 +12,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
@@ -20,7 +21,7 @@ class ClientConnection implements RequestParser.RequestListener {
 
     private final RequestParser requestParser;
     private final ExecutorService executorService;
-    private final ServerSettings settings;
+    final ServerSettings settings;
     private final List<MuHandler> handlers;
     final ByteChannel channel;
     private final MuStatsImpl2 stats;
@@ -30,6 +31,7 @@ class ClientConnection implements RequestParser.RequestListener {
     final MuServer server;
     private MuResponseImpl curResp;
     private AsyncHandleImpl asyncHandle;
+    private AtomicLong bytesReceived = new AtomicLong(0);
 
     ClientConnection(ServerSettings settings, List<MuHandler> handlers, ByteChannel channel, String protocol, InetAddress clientAddress, MuServer server) {
         this.settings = settings;
@@ -74,6 +76,8 @@ class ClientConnection implements RequestParser.RequestListener {
 
     void onBytesReceived(ByteBuffer buffer) {
         try {
+            long l = bytesReceived.addAndGet(buffer.remaining());
+            System.out.println("Total received on connection: " + l);
             stats.incrementBytesRead(buffer.remaining());
             requestParser.offer(buffer);
         } catch (Exception e) {

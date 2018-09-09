@@ -4,12 +4,12 @@ import org.junit.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.FileInputStream;
 import java.io.IOException;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.nullValue;
+import static org.hamcrest.Matchers.*;
 
 public class BoundariedInputStreamTest {
 
@@ -137,7 +137,56 @@ public class BoundariedInputStreamTest {
             "\r\n" +
             "你好 the value / with / stuff"));
 
+        bis = bis.continueNext();
+        assertThat(bis, is(nullValue()));
+    }
 
+    @Test
+    public void largeBinaryFilesWork() throws IOException {
+
+
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        baos.write(("--43c1c131-74dd-4048-abc3-fb668bc8d734\r\n" +
+            "Content-Disposition: form-data; name=\"Hello\"\r\n" +
+            "Content-Length: 5\r\n" +
+            "\r\n" +
+            "World\r\n" +
+            "--43c1c131-74dd-4048-abc3-fb668bc8d734\r\n" +
+            "Content-Disposition: form-data; name=\"image\"; filename=\"guangzhou.jpeg\"\r\n" +
+            "Content-Type: image/jpeg\r\n" +
+            "Content-Length: 372987\r\n" +
+            "\r\n").getBytes(UTF_8));
+
+        try (FileInputStream fis = new FileInputStream(UploadTest.guangzhou)) {
+            Mutils.copy(fis, baos, 8192);
+        }
+
+        baos.write("\r\n--43c1c131-74dd-4048-abc3-fb668bc8d734--\r\n".getBytes(UTF_8));
+
+
+        ByteArrayInputStream bais = new ByteArrayInputStream(baos.toByteArray());
+
+        BoundariedInputStream outer = new BoundariedInputStream(bais, "\r\n--43c1c131-74dd-4048-abc3-fb668bc8d734--\r\n");
+
+        BoundariedInputStream bis = new BoundariedInputStream(outer, "--43c1c131-74dd-4048-abc3-fb668bc8d734\r\n");
+        assertThat(asString(bis), is(""));
+        bis = bis.continueNext();
+
+        bis.changeBoundary("\r\n--43c1c131-74dd-4048-abc3-fb668bc8d734\r\n");
+        assertThat(asString(bis), is("Content-Disposition: form-data; name=\"Hello\"\r\nContent-Length: 5\r\n\r\nWorld"));
+
+        bis = bis.continueNext();
+
+
+        String imageAsString = asString(bis);
+        assertThat(imageAsString, startsWith("Content-Disposition: form-data; name=\"image\"; filename=\"guangzhou.jpeg\"\r\n" +
+            "Content-Type: image/jpeg\r\n" +
+            "Content-Length: 372987\r\n" +
+            "\r\n"));
+        assertThat(imageAsString.length(), is(353025));
+
+        bis = bis.continueNext();
+        assertThat(bis, is(nullValue()));
     }
 
     private static String asString(BoundariedInputStream bis) throws IOException {

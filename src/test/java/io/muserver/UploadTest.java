@@ -35,12 +35,9 @@ public class UploadTest {
 
         server = httpsServer()
             .addHandler(Method.POST, "/upload", (request, response, pathParams) -> {
-
-                for (Map.Entry<String, List<String>> entry : ((MuHeaders)request.headers()).all().entrySet()) {
+                for (Map.Entry<String, List<String>> entry : ((MuHeaders) request.headers()).all().entrySet()) {
                     System.out.println(" >> " + entry.getKey() + ": " + entry.getValue());
                 }
-
-//                System.out.println("---]" + request.readBodyAsString() + "[---");
 
                 response.sendChunk(request.form().get("Hello")
                     + "\n" + request.form().get("The name"));

@@ -22,7 +22,7 @@ class MultipartRequestBodyParser {
     private final Charset bodyCharset;
     private final String boundary;
     private final MultivaluedMap<String, String> formParams = new MultivaluedHashMap<>();
-    private final MultivaluedMap<String, MuUploadedFile2> fileParams = new MultivaluedHashMap<>();
+    private final MultivaluedMap<String, UploadedFile> fileParams = new MultivaluedHashMap<>();
 
 
     MultipartRequestBodyParser(File fileUploadDir, Charset bodyCharset, String boundary) {
@@ -118,7 +118,8 @@ class MultipartRequestBodyParser {
                 formParams.putSingle(formName, formValue);
                 if (file != null) {
                     fileOutputStream.close();
-                    fileParams.putSingle(formName, new MuUploadedFile2(file, partType.getType() + "/" + partType.getSubtype(), filename));
+                    MuUploadedFile2 muppet = new MuUploadedFile2(file, partType.getType() + "/" + partType.getSubtype(), filename);
+                    fileParams.putSingle(formName, muppet);
                 }
             }
             bodyByteBuffer.reset();
@@ -138,15 +139,16 @@ class MultipartRequestBodyParser {
     MultivaluedMap<String, String> formParams() {
         return formParams;
     }
-    MultivaluedMap<String, MuUploadedFile2> fileParams() {
+
+    MultivaluedMap<String, UploadedFile> fileParams() {
         return fileParams;
     }
 
 
     void clean() {
-        for (List<MuUploadedFile2> fileParam : this.fileParams.values()) {
-            for (MuUploadedFile2 uploadedFile : fileParam) {
-                uploadedFile.deleteFile();
+        for (List<UploadedFile> fileParam : this.fileParams.values()) {
+            for (UploadedFile uploadedFile : fileParam) {
+                ((MuUploadedFile2) uploadedFile).deleteFile();
             }
         }
     }

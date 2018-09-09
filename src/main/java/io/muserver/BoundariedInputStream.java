@@ -6,6 +6,7 @@ import java.io.InputStream;
 import java.util.Objects;
 
 import static java.nio.charset.StandardCharsets.US_ASCII;
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 public class BoundariedInputStream extends FilterInputStream {
 
@@ -75,10 +76,13 @@ public class BoundariedInputStream extends FilterInputStream {
             bufferInd = match.index;
             return length;
         } else {
-            int length = bufferLen - bufferInd;
+            int length = Math.min(len, bufferLen - bufferInd);
             System.arraycopy(buffer, bufferInd, dest, off, length);
-            bufferInd = -1;
-            bufferLen = -1;
+            bufferInd += length;
+            if (bufferInd == bufferLen) {
+                bufferInd = -1;
+                bufferLen = -1;
+            }
             return length;
         }
 
@@ -174,5 +178,10 @@ public class BoundariedInputStream extends FilterInputStream {
         }
 
         return failure;
+    }
+
+    @Override
+    public String toString() {
+        return new String(boundary, UTF_8);
     }
 }

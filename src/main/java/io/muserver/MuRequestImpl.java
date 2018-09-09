@@ -4,19 +4,17 @@ import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.QueryStringDecoder;
 import io.netty.handler.codec.http.QueryStringEncoder;
 import io.netty.handler.codec.http.cookie.ServerCookieDecoder;
-import io.netty.handler.codec.http.multipart.Attribute;
-import io.netty.handler.codec.http.multipart.FileUpload;
-import io.netty.handler.codec.http.multipart.InterfaceHttpData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.MultivaluedHashMap;
+import javax.ws.rs.core.MultivaluedMap;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 import static io.muserver.Cookie.nettyToMu;
@@ -41,7 +39,7 @@ class MuRequestImpl implements MuRequest {
     private Set<Cookie> cookies;
     private String contextPath = "";
     private MultipartRequestBodyParser multipartRequestDecoder;
-    private HashMap<String, List<UploadedFile>> uploads;
+    private MultivaluedMap<String, UploadedFile> uploads;
     private Object state;
     private volatile AsyncHandle asyncHandle;
     private boolean isAsync = false;
@@ -270,14 +268,6 @@ class MuRequestImpl implements MuRequest {
         if (form == null) {
             if (contentType().getType().equals("multipart")) {
 
-                System.out.println("headers = " + headers);
-                String s = new String(readBodyAsBytes(), StandardCharsets.UTF_8);
-                System.out.println("s = " + "***" + s + "***");
-                try {
-                    Thread.sleep(2000);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
 
                 Map<String, String> contentParam = contentType().getParameters();
                 Charset bodyCharset = Charset.forName(contentParam.getOrDefault("charset", "UTF-8"));
@@ -285,29 +275,24 @@ class MuRequestImpl implements MuRequest {
                 if (boundary == null || boundary.isEmpty() || boundary.length() > 70) {
                     throw new MuException("Invalid boundary in multipart form - must be between 1 an 70 characters");
                 }
-                multipartRequestDecoder = new MultipartRequestBodyParser(null, bodyCharset, boundary);
+                multipartRequestDecoder = new MultipartRequestBodyParser(clientConnection.settings.tempUploadDir, bodyCharset, boundary);
                 if (inputStream != null) {
                     claimingBodyRead();
                     multipartRequestDecoder.parse(inputStream);
+                    uploads = multipartRequestDecoder.fileParams();
+                } else {
+                    uploads = new MultivaluedHashMap<>();
                 }
-                uploads = new HashMap<>();
 
-                List<InterfaceHttpData> bodyHttpDatas = null;
                 QueryStringEncoder qse = new QueryStringEncoder("/");
-
-                for (InterfaceHttpData bodyHttpData : bodyHttpDatas) {
-                    if (bodyHttpData instanceof FileUpload) {
-                        FileUpload fileUpload = (FileUpload) bodyHttpData;
-                        UploadedFile uploadedFile = new MuUploadedFile(fileUpload);
-                        addFile(fileUpload.getName(), uploadedFile);
-                    } else if (bodyHttpData instanceof Attribute) {
-                        Attribute a = (Attribute) bodyHttpData;
-                        qse.addParam(a.getName(), a.getValue());
-                    } else {
-                        log.warn("Unrecognised body part: " + bodyHttpData.getClass() + " from " + this + " - this may mean some of the request data is lost.");
+                for (Map.Entry<String, List<String>> o : multipartRequestDecoder.formParams().entrySet()) {
+                    for (String s : o.getValue()) {
+                        qse.addParam(o.getKey(), s);
                     }
                 }
+
                 form = new NettyRequestParameters(new QueryStringDecoder(qse.toString(), UTF_8, true, 1000000));
+
             } else {
                 String body = readBodyAsString();
                 form = new NettyRequestParameters(new QueryStringDecoder(body, UTF_8, false, 1000000));
@@ -339,6 +324,13 @@ class MuRequestImpl implements MuRequest {
                 inputStream.switchToListener(readListener);
             }
         }
+    }
+
+    void cleanup() {
+        if (multipartRequestDecoder != null) {
+            multipartRequestDecoder.clean();
+        }
+        multipartRequestDecoder = null;
     }
 
     void setAsyncHandle(AsyncHandle asyncHandle) {

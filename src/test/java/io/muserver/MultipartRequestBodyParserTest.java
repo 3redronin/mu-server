@@ -3,9 +3,7 @@ package io.muserver;
 
 import org.junit.Test;
 
-import java.io.ByteArrayInputStream;
-import java.io.File;
-import java.io.IOException;
+import java.io.*;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -96,7 +94,7 @@ public class MultipartRequestBodyParserTest {
         assertThat(parser.formValue("bla h3  "), contains("ha ha3"));
         assertThat(parser.formValue("ticked"), contains("on"));
 
-        MuUploadedFile2 theFile = parser.fileParams().get("theFile").get(0);
+        UploadedFile theFile = parser.fileParams().get("theFile").get(0);
         assertThat(theFile.filename(), is("a file 文件 & umm yeah! @@@.txt"));
         assertThat(theFile.asString(), is("This is a file or 文件 or whatever."));
         assertThat(theFile.contentType(), is("text/plain"));
@@ -106,5 +104,42 @@ public class MultipartRequestBodyParserTest {
         parser.clean();
     }
 
+    @Test
+    public void binaryFilesWork() throws IOException {
+
+
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        baos.write(("--43c1c131-74dd-4048-abc3-fb668bc8d734\r\n" +
+                    "Content-Disposition: form-data; name=\"Hello\"\r\n" +
+                    "Content-Length: 5\r\n" +
+                    "\r\n" +
+                    "World\r\n" +
+                    "--43c1c131-74dd-4048-abc3-fb668bc8d734\r\n" +
+                    "Content-Disposition: form-data; name=\"The name\"\r\n" +
+                    "Content-Length: 24\r\n" +
+                    "\r\n" +
+                    "the value / with / stuff\r\n" +
+                    "--43c1c131-74dd-4048-abc3-fb668bc8d734\r\n" +
+                    "Content-Disposition: form-data; name=\"image\"; filename=\"guangzhou.jpeg\"\r\n" +
+                    "Content-Type: image/jpeg\r\n" +
+                    "Content-Length: 372987\r\n" +
+                    "\r\n").getBytes(UTF_8));
+
+        try (FileInputStream fis = new FileInputStream(UploadTest.guangzhou)) {
+            Mutils.copy(fis, baos, 8192);
+        }
+
+        baos.write("\r\n--43c1c131-74dd-4048-abc3-fb668bc8d734--\r\n".getBytes(UTF_8));
+
+        ByteArrayInputStream bais = new ByteArrayInputStream(baos.toByteArray());
+
+        MultipartRequestBodyParser parser = new MultipartRequestBodyParser(new File("target/tempupload/bin"), UTF_8, "43c1c131-74dd-4048-abc3-fb668bc8d734");
+        parser.parse(bais);
+
+        assertThat(parser.formValue("The name"), contains("the value / with / stuff"));
+        assertThat(parser.fileParams().getFirst("image").contentType(), is("image/jpeg"));
+        parser.clean();
+
+    }
 
 }
