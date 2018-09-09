@@ -272,7 +272,12 @@ class MuRequestImpl implements MuRequest {
 
                 System.out.println("headers = " + headers);
                 String s = new String(readBodyAsBytes(), StandardCharsets.UTF_8);
-                System.out.println("s = " + s);
+                System.out.println("s = " + "***" + s + "***");
+                try {
+                    Thread.sleep(2000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
 
                 Map<String, String> contentParam = contentType().getParameters();
                 Charset bodyCharset = Charset.forName(contentParam.getOrDefault("charset", "UTF-8"));

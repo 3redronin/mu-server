@@ -1,5 +1,8 @@
 package io.muserver;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.MultivaluedHashMap;
 import javax.ws.rs.core.MultivaluedMap;
@@ -12,6 +15,7 @@ import java.util.List;
 import static java.util.Collections.emptyList;
 
 class MultipartRequestBodyParser {
+    private static final Logger log = LoggerFactory.getLogger(MultipartRequestBodyParser.class);
 
     private enum PartState {HEADERS, BODY}
 
@@ -74,11 +78,10 @@ class MultipartRequestBodyParser {
                                 String headerName = bits[0].trim().toLowerCase();
                                 if (headerName.equals("content-disposition")) {
                                     HeaderValue disposition = HeaderValue.fromString(bits[1]).get(0);
-                                    switch (disposition.value()) {
-                                        case "form-data": {
-                                            formName = disposition.parameters().get("name");
-                                            break;
-                                        }
+                                    if ("form-data".equals(disposition.value())) {
+                                        formName = disposition.parameters().get("name");
+                                    } else {
+                                        log.warn("Unsupported multipart-form part: " + disposition.value() + " - this part will be ignored");
                                     }
                                 } else if (headerName.equals("content-type")) {
                                     partType = MediaTypeParser.fromString(bits[1]);
@@ -95,15 +98,12 @@ class MultipartRequestBodyParser {
                 }
             }
 
-            if (formName == null) {
-                throw new IllegalStateException("Form part had no form name");
+            if (formName != null) {
+                String partCharset = partType.getParameters().getOrDefault("charset", "UTF-8");
+                String formValue = bodyBuffer.toString(partCharset);
+                formParams.putSingle(formName, formValue);
             }
-
-            String partCharset = partType.getParameters().getOrDefault("charset", "UTF-8");
-            String formValue = bodyBuffer.toString(partCharset);
             bodyBuffer.reset();
-            formParams.putSingle(formName, formValue);
-
         }
 
         while (inputStream.read(buffer) > -1) {
@@ -115,5 +115,9 @@ class MultipartRequestBodyParser {
 
     List<String> formValue(String name) {
         return this.formParams.getOrDefault(name, emptyList());
+    }
+
+    MultivaluedMap<String, String> formParams() {
+        return formParams;
     }
 }

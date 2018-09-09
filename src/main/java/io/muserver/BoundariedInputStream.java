@@ -58,6 +58,8 @@ public class BoundariedInputStream extends FilterInputStream {
             int read = source.read(buffer, bufferLen, buffer.length - bufferLen);
             if (read > 0) {
                 bufferLen += read;
+            } else if (read == -1) {
+                isClosed = true;
             }
         }
         ArrayMatch match = indexOf(buffer, bufferInd, bufferLen, boundary);
