@@ -13,14 +13,11 @@ import static java.util.Collections.emptyList;
 
 class MultipartRequestBodyParser {
 
-    private enum State {PREAMBLE, ENCAP, CLOSE, EPILOGUE}
-
-    private enum EncapState {HEADERS, BODY}
+    private enum PartState {HEADERS, BODY}
 
     private final Charset bodyCharset;
     private final String boundary;
-    private State state = State.PREAMBLE;
-    private EncapState encapState = EncapState.HEADERS;
+    private PartState partState = PartState.HEADERS;
     private final MultivaluedMap<String, String> formParams = new MultivaluedHashMap<>();
 
     MultipartRequestBodyParser(Charset bodyCharset, String boundary) {
@@ -49,8 +46,7 @@ class MultipartRequestBodyParser {
 
         while ((bis = bis.continueNext()) != null) {
             int offset = 0;
-            state = State.ENCAP;
-            encapState = EncapState.HEADERS;
+            partState = PartState.HEADERS;
 
             MediaType partType = MediaType.TEXT_PLAIN_TYPE;
             String formName = null;
@@ -60,7 +56,7 @@ class MultipartRequestBodyParser {
                 byte lastB = 0;
 
                 int i = 0;
-                if (encapState == EncapState.HEADERS) {
+                if (partState == PartState.HEADERS) {
                     headerparser:
                     for (i = 0; i < read; i++) {
                         byte b = buffer[i];
@@ -70,7 +66,7 @@ class MultipartRequestBodyParser {
                             lineBuffer.reset();
 
                             if (line.isEmpty()) {
-                                encapState = EncapState.BODY;
+                                partState = PartState.BODY;
                                 i++;
                                 break headerparser;
                             } else {
@@ -94,7 +90,7 @@ class MultipartRequestBodyParser {
                         lastB = b;
                     }
                 }
-                if (encapState == EncapState.BODY) {
+                if (partState == PartState.BODY) {
                     bodyBuffer.write(buffer, i, read - i);
                 }
             }

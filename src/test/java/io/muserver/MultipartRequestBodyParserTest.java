@@ -13,7 +13,7 @@ import static org.hamcrest.Matchers.contains;
 public class MultipartRequestBodyParserTest {
 
     @Test
-    public void canDecode() throws IOException {
+    public void canDecodeWithPreambleAndEpilogue() throws IOException {
         String input = "blah blah this is ignored preamble\r\n" +
             "--2fe110ee-3c8a-480b-a07b-32d777205a76\r\n" +
             "Content-Disposition: form-data; name=\"Hello\"\r\n" +
@@ -24,15 +24,36 @@ public class MultipartRequestBodyParserTest {
             "Content-Disposition: form-data; name=\"The 你好 name\"\r\n" +
             "\r\n" +
             "你好 the value / with / stuff\r\n" +
-            "--2fe110ee-3c8a-480b-a07b-32d777205a76--\r\n";
-
-
-        byte[] bytes = input.getBytes(UTF_8);
+            "--2fe110ee-3c8a-480b-a07b-32d777205a76--\r\n" +
+            "this is the epilogue";
         MultipartRequestBodyParser parser = new MultipartRequestBodyParser(UTF_8, "2fe110ee-3c8a-480b-a07b-32d777205a76");
-        parser.parse(new ByteArrayInputStream(bytes));
+        parser.parse(new ByteArrayInputStream(input.getBytes(UTF_8)));
 
         assertThat(parser.formValue("Hello"), contains("Wor\r\nld"));
         assertThat(parser.formValue("The 你好 name"), contains("你好 the value / with / stuff"));
     }
-    
+
+    @Test
+    public void canDecodeWithoutPreambleAndEpilogue() throws IOException {
+        String input =
+            "--2fe110ee-3c8a-480b-a07b-32d777205a76\r\n" +
+            "Content-Disposition: form-data; name=\"Hello\"\r\n" +
+            "Content-Length: 7\r\n" +
+            "\r\n" +
+            "Wor\r\nld\r\n" +
+            "--2fe110ee-3c8a-480b-a07b-32d777205a76\r\n" +
+            "Content-Disposition: form-data; name=\"The 你好 name\"\r\n" +
+            "\r\n" +
+            "你好 the value / with / stuff\r\n" +
+            "--2fe110ee-3c8a-480b-a07b-32d777205a76--\r\n";
+        MultipartRequestBodyParser parser = new MultipartRequestBodyParser(UTF_8, "2fe110ee-3c8a-480b-a07b-32d777205a76");
+        parser.parse(new ByteArrayInputStream(input.getBytes(UTF_8)));
+
+        assertThat(parser.formValue("Hello"), contains("Wor\r\nld"));
+        assertThat(parser.formValue("The 你好 name"), contains("你好 the value / with / stuff"));
+    }
+
+
+
+
 }
