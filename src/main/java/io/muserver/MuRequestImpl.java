@@ -285,7 +285,7 @@ class MuRequestImpl implements MuRequest {
                 if (boundary == null || boundary.isEmpty() || boundary.length() > 70) {
                     throw new MuException("Invalid boundary in multipart form - must be between 1 an 70 characters");
                 }
-                multipartRequestDecoder = new MultipartRequestBodyParser(bodyCharset, boundary);
+                multipartRequestDecoder = new MultipartRequestBodyParser(null, bodyCharset, boundary);
                 if (inputStream != null) {
                     claimingBodyRead();
                     multipartRequestDecoder.parse(inputStream);

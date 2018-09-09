@@ -6,25 +6,27 @@ import org.slf4j.LoggerFactory;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.MultivaluedHashMap;
 import javax.ws.rs.core.MultivaluedMap;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.nio.charset.Charset;
 import java.util.List;
 
+import static io.muserver.Mutils.coalesce;
 import static java.util.Collections.emptyList;
 
 class MultipartRequestBodyParser {
     private static final Logger log = LoggerFactory.getLogger(MultipartRequestBodyParser.class);
+    private final File fileUploadDir;
 
     private enum PartState {HEADERS, BODY}
 
     private final Charset bodyCharset;
     private final String boundary;
-    private PartState partState = PartState.HEADERS;
     private final MultivaluedMap<String, String> formParams = new MultivaluedHashMap<>();
+    private final MultivaluedMap<String, MuUploadedFile2> fileParams = new MultivaluedHashMap<>();
 
-    MultipartRequestBodyParser(Charset bodyCharset, String boundary) {
+
+    MultipartRequestBodyParser(File fileUploadDir, Charset bodyCharset, String boundary) {
+        this.fileUploadDir = fileUploadDir;
         this.bodyCharset = bodyCharset;
         this.boundary = boundary;
     }
@@ -45,15 +47,18 @@ class MultipartRequestBodyParser {
 
 
         ByteArrayOutputStream lineBuffer = new ByteArrayOutputStream();
-        ByteArrayOutputStream bodyBuffer = new ByteArrayOutputStream();
+        ByteArrayOutputStream bodyByteBuffer = new ByteArrayOutputStream();
 
 
         while ((bis = bis.continueNext()) != null) {
             int offset = 0;
-            partState = PartState.HEADERS;
+            PartState partState = PartState.HEADERS;
 
             MediaType partType = MediaType.TEXT_PLAIN_TYPE;
+            FileOutputStream fileOutputStream = null;
+            File file = null;
             String formName = null;
+            String filename = null;
 
             while ((read = bis.read(buffer)) > -1) {
 
@@ -80,6 +85,14 @@ class MultipartRequestBodyParser {
                                     HeaderValue disposition = HeaderValue.fromString(bits[1]).get(0);
                                     if ("form-data".equals(disposition.value())) {
                                         formName = disposition.parameters().get("name");
+                                        filename = disposition.parameters().get("filename");
+                                        if (filename != null) {
+                                            if (fileUploadDir != null) {
+                                                fileUploadDir.mkdirs();
+                                            }
+                                            file = File.createTempFile("muserverupload", ".tmp", fileUploadDir);
+                                            fileOutputStream = new FileOutputStream(file);
+                                        }
                                     } else {
                                         log.warn("Unsupported multipart-form part: " + disposition.value() + " - this part will be ignored");
                                     }
@@ -94,16 +107,21 @@ class MultipartRequestBodyParser {
                     }
                 }
                 if (partState == PartState.BODY) {
-                    bodyBuffer.write(buffer, i, read - i);
+                    OutputStream os = coalesce(fileOutputStream, bodyByteBuffer);
+                    os.write(buffer, i, read - i);
                 }
             }
 
             if (formName != null) {
                 String partCharset = partType.getParameters().getOrDefault("charset", "UTF-8");
-                String formValue = bodyBuffer.toString(partCharset);
+                String formValue = filename != null ? filename : bodyByteBuffer.toString(partCharset);
                 formParams.putSingle(formName, formValue);
+                if (file != null) {
+                    fileOutputStream.close();
+                    fileParams.putSingle(formName, new MuUploadedFile2(file, partType.getType() + "/" + partType.getSubtype(), filename));
+                }
             }
-            bodyBuffer.reset();
+            bodyByteBuffer.reset();
         }
 
         while (inputStream.read(buffer) > -1) {
@@ -119,5 +137,17 @@ class MultipartRequestBodyParser {
 
     MultivaluedMap<String, String> formParams() {
         return formParams;
+    }
+    MultivaluedMap<String, MuUploadedFile2> fileParams() {
+        return fileParams;
+    }
+
+
+    void clean() {
+        for (List<MuUploadedFile2> fileParam : this.fileParams.values()) {
+            for (MuUploadedFile2 uploadedFile : fileParam) {
+                uploadedFile.deleteFile();
+            }
+        }
     }
 }
