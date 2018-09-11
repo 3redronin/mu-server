@@ -53,6 +53,7 @@ public class BoundariedInputStream extends FilterInputStream {
             bufferInd = 0;
             bufferLen = source.read(buffer);
             if (bufferLen == -1) {
+                isClosed = true;
                 return -1;
             }
         } else {

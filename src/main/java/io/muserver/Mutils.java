@@ -44,6 +44,17 @@ public class Mutils {
     private Mutils() {}
 
     /**
+     * Copies an input stream to another stream in 8192 chunks
+     * @param from The source of the bytes
+     * @param to The destination of the bytes
+     * @throws IOException Thrown if there is a problem reading from or writing to either stream
+     */
+    public static void copy(InputStream from, OutputStream to) throws IOException {
+        copy(from, to, 8192);
+    }
+
+
+    /**
      * Copies an input stream to another stream
      * @param from The source of the bytes
      * @param to The destination of the bytes

@@ -163,6 +163,7 @@ public class MultipartRequestBodyParserTest {
                             slow.handOff(byteBuffer);
                         }
                     }
+                    slow.close();
                 } catch (Throwable e) {
                     error.append(e);
                 }
