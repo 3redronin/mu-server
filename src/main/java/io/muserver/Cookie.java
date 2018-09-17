@@ -5,13 +5,9 @@ import io.netty.handler.codec.http.cookie.DefaultCookie;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static io.muserver.Mutils.urlDecode;
-import static io.muserver.Mutils.urlEncode;
 
 /**
- * A cookie.
- * <p>
- * Note that all names and values will be URL Encoded.
+ * A cookie
  */
 public class Cookie {
     final DefaultCookie nettyCookie;
@@ -23,7 +19,7 @@ public class Cookie {
      * @return Returns a new cookie that can be sent to the response
      */
     public static Cookie secureCookie(String name, String value) {
-        Cookie cookie = new Cookie(urlEncode(name), urlEncode(value));
+        Cookie cookie = new Cookie(name, value);
         cookie.setHttpOnly(true);
         cookie.setSecure(true);
         return cookie;
@@ -33,15 +29,15 @@ public class Cookie {
     }
 
     public String name() {
-        return urlDecode(nettyCookie.name());
+        return nettyCookie.name();
     }
 
     public String value() {
-        return urlDecode(nettyCookie.value());
+        return nettyCookie.value();
     }
 
     public void setValue(String value) {
-        nettyCookie.setValue(urlEncode(value));
+        nettyCookie.setValue(value);
     }
 
     public String domain() {
