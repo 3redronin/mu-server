@@ -1,6 +1,5 @@
 package io.muserver;
 
-import io.muserver.rest.RestHandlerBuilder;
 import okhttp3.CookieJar;
 import okhttp3.HttpUrl;
 import okhttp3.OkHttpClient;
@@ -19,6 +18,8 @@ import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static io.muserver.MuServerBuilder.httpServer;
+import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.request;
@@ -38,9 +39,9 @@ public class CookieTest {
 
     @Test
     public void canSetThemFromTheServer() throws IOException {
-        server = MuServerBuilder.httpServer()
+        server = httpServer()
             .addHandler((request, response) -> {
-                Cookie cookie = Cookie.secureCookie("Session", "Somevalue");
+                Cookie cookie = Cookie.secureCookie("Session", "Some value");
                 response.addCookie(cookie);
                 return true;
             }).start();
@@ -51,7 +52,7 @@ public class CookieTest {
         assertThat(cookies, hasSize(1));
         okhttp3.Cookie actual = cookies.get(0);
         assertThat(actual.name(), equalTo("Session"));
-        assertThat(actual.value(), equalTo("Somevalue"));
+        assertThat(actual.value(), equalTo("Some value"));
         assertThat(actual.domain(), equalTo("localhost"));
         assertThat(actual.hostOnly(), equalTo(true));
         assertThat(actual.persistent(), equalTo(false));
@@ -67,7 +68,7 @@ public class CookieTest {
             @GET
             @Path("set")
             public javax.ws.rs.core.Response setCookie() {
-                return javax.ws.rs.core.Response.noContent().cookie(new NewCookie("Something", "This is a cookie value")).build();
+                return javax.ws.rs.core.Response.noContent().cookie(new NewCookie("Something", Mutils.urlEncode("This is a cookie value"))).build();
             }
 
             @GET
@@ -77,15 +78,15 @@ public class CookieTest {
             }
         }
 
-        server = MuServerBuilder.httpServer()
-            .addHandler(RestHandlerBuilder.restHandler(new Biscuits()).build()).start();
+        server = httpServer()
+            .addHandler(restHandler(new Biscuits())).start();
 
         try (Response setResp = client.newCall(request().url(server.uri().resolve("/biscuits/set").toString()).build()).execute()) {
             assertThat(setResp.code(), equalTo(204));
         }
         try (Response getResp = client.newCall(request().url(server.uri().resolve("/biscuits/get").toString()).build()).execute()) {
             assertThat(getResp.code(), equalTo(200));
-            assertThat(getResp.body().string(), equalTo("This is a cookie value"));
+            assertThat(getResp.body().string(), equalTo("This%20is%20a%20cookie%20value"));
         }
     }
 
@@ -94,16 +95,16 @@ public class CookieTest {
         Set<Cookie> actualSentCookies = new HashSet<>();
         AtomicReference<Optional<String>> sessionLookup = new AtomicReference<>();
         AtomicReference<Optional<String>> nonExistentCookieLookup = new AtomicReference<>();
-        server = MuServerBuilder.httpServer()
+        server = httpServer()
             .addHandler(Method.GET, "/set", (request, response, pathParams) -> {
-                Cookie cookie = Cookie.secureCookie("A Session", "Some value");
+                Cookie cookie = Cookie.secureCookie("ASession", "SomeValue");
                 Cookie cookie2 = new Cookie("Another", "Blah");
                 response.addCookie(cookie);
                 response.addCookie(cookie2);
             })
             .addHandler(Method.GET, "/save", (request, response, pathParams) -> {
                 nonExistentCookieLookup.set(request.cookie("ThereIsNoCookie"));
-                sessionLookup.set(request.cookie("A Session"));
+                sessionLookup.set(request.cookie("ASession"));
                 actualSentCookies.addAll(request.cookies());
             })
             .start();
@@ -118,13 +119,13 @@ public class CookieTest {
 
         assertThat(nonExistentCookieLookup.get().isPresent(), is(false));
         assertThat(sessionLookup.get().isPresent(), is(true));
-        assertThat(sessionLookup.get().get(), is("Some value"));
+        assertThat(sessionLookup.get().get(), is("SomeValue"));
 
     }
 
     @Test
-    public void cookieValuesAreUrlEncoded() throws IOException {
-        server = MuServerBuilder.httpServer()
+    public void cookieValuesAreNotUrlEncoded() throws IOException {
+        server = httpServer()
             .addHandler((request, response) -> {
                 response.addCookie(Cookie.secureCookie("A thing", "Some value & another thing=umm"));
                 return true;
@@ -135,8 +136,8 @@ public class CookieTest {
 
         assertThat(cookies, hasSize(1));
         okhttp3.Cookie actual = cookies.get(0);
-        assertThat(actual.name(), equalTo("A%20thing"));
-        assertThat(actual.value(), equalTo("Some%20value%20%26%20another%20thing%3Dumm"));
+        assertThat(actual.name(), equalTo("A thing"));
+        assertThat(actual.value(), equalTo("Some value & another thing=umm"));
 
     }
 
