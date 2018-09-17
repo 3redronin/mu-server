@@ -163,7 +163,7 @@ class NettyResponseAdaptor implements MuResponse {
     }
 
     public void addCookie(Cookie cookie) {
-        headers.add(HeaderNames.SET_COOKIE, ServerCookieEncoder.STRICT.encode(cookie.nettyCookie));
+        headers.add(HeaderNames.SET_COOKIE, ServerCookieEncoder.LAX.encode(cookie.nettyCookie));
     }
 
     public OutputStream outputStream() {
