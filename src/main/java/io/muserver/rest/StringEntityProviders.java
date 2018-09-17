@@ -44,7 +44,10 @@ class StringEntityProviders {
         }
 
         public long getSize(String s, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
-            return s.length();
+            if (s.length() > 100000) {
+                return -1;
+            }
+            return s.getBytes(EntityProviders.charsetFor(mediaType)).length;
         }
 
         public void writeTo(String s, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException, WebApplicationException {
@@ -97,7 +100,10 @@ class StringEntityProviders {
 
         @Override
         public long getSize(char[] chars, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
-            return chars.length;
+            if (chars.length > 100000) {
+                return -1;
+            }
+            return new String(chars).getBytes(EntityProviders.charsetFor(mediaType)).length;
         }
 
         @Override
