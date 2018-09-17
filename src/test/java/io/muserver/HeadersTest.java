@@ -20,7 +20,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.IsEqual.equalTo;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
-import static scaffolding.StringUtils.randomStringOfLength;
+import static scaffolding.StringUtils.randomAsciiStringOfLength;
 
 public class HeadersTest {
 
@@ -71,7 +71,7 @@ public class HeadersTest {
 					return true;
 				}).start();
 
-		String bigString = randomStringOfLength(32000);
+		String bigString = randomAsciiStringOfLength(32000);
         try (Response resp = call(xSomethingHeader(bigString))) {
             assertThat(resp.header("X-Something"), equalTo(bigString));
         }
@@ -104,7 +104,7 @@ public class HeadersTest {
 					return true;
 				}).start();
 
-        try (Response resp = call(xSomethingHeader(randomStringOfLength(1025)))) {
+        try (Response resp = call(xSomethingHeader(randomAsciiStringOfLength(1025)))) {
             assertThat(resp.code(), is(431));
             assertThat(resp.header("X-Something"), is(nullValue()));
         }
