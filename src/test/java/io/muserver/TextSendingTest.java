@@ -6,13 +6,7 @@ import org.junit.Test;
 import scaffolding.MuAssert;
 import scaffolding.StringUtils;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.PrintWriter;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CountDownLatch;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Arrays.asList;
@@ -20,7 +14,8 @@ import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.nullValue;
-import static scaffolding.ClientUtils.*;
+import static scaffolding.ClientUtils.call;
+import static scaffolding.ClientUtils.request;
 
 public class TextSendingTest {
 
@@ -37,7 +32,7 @@ public class TextSendingTest {
             }).start();
 
         try (Response resp = call(request().url(server.httpUri().toString()))) {
-            assertThat(resp.header("Content-Length"), is("70000"));
+            assertThat(resp.header("Content-Length"), is(String.valueOf(lotsoText.getBytes(UTF_8).length)));
             assertThat(resp.header("Transfer-Encoding"), is(nullValue()));
             assertThat(resp.body().string(), equalTo(lotsoText));
         }

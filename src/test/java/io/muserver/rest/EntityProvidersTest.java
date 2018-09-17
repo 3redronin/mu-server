@@ -48,6 +48,7 @@ public class EntityProvidersTest {
         startServer(new Sample());
         stringCheck("text/plain", randomStringOfLength(128 * 1024), "text/plain", "/samples");
     }
+
     @Test
     public void customConvertersComeBeforeBuiltInOnesIfAllOtherThingsMatch() throws Exception {
         @Path("samples")
