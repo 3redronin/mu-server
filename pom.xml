@@ -6,7 +6,7 @@
 
     <groupId>io.muserver</groupId>
     <artifactId>mu-server</artifactId>
-    <version>0.14-SNAPSHOT</version>
+    <version>0.15-SNAPSHOT</version>
 
     <name>mu-server</name>
     <description>A simple but powerful web server framework</description>
