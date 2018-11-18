@@ -81,6 +81,11 @@ public class ContentTypes {
     public static final CharSequence APPLICATION_EPUB_ZIP = AsciiString.cached("application/epub+zip");
 
     /**
+     * GZIP (.gz):  {@code "application/gzip"}
+     */
+    public static final CharSequence APPLICATION_GZIP = AsciiString.cached("application/gzip");
+
+    /**
      * Graphics Interchange Format (GIF):  {@code "image/gif"}
      */
     public static final CharSequence IMAGE_GIF = AsciiString.cached("image/gif");

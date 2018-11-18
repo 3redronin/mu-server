@@ -53,11 +53,14 @@ public class ResourceType {
             .add(HeaderNames.CACHE_CONTROL, "max-age=300")
             .add(HeaderNames.X_CONTENT_TYPE_OPTIONS, HeaderValues.NOSNIFF),
         true, asList("css"));
-    public static final ResourceType TEXT_PLAIN = new ResourceType(ContentTypes.TEXT_PLAIN, noCache(), true, asList("txt", "ini", "gitignore", "gitattributes", "cfg"));
+    public static final ResourceType TEXT_PLAIN = new ResourceType(ContentTypes.TEXT_PLAIN, noCache(), true,
+        asList("txt", "ini", "gitignore", "gitattributes", "cfg", "log", "out"));
+    public static final ResourceType TEXT_MARKDOWN = new ResourceType(ContentTypes.TEXT_MARKDOWN, shortCache(), true, asList("md"));
     public static final ResourceType TEXT_CSV = new ResourceType(ContentTypes.TEXT_CSV, noCache(), true, asList("csv"));
     public static final ResourceType APPLICATION_MSWORD = new ResourceType(ContentTypes.APPLICATION_MSWORD, shortCache(), false, asList("doc"));
     public static final ResourceType APPLICATION_VND_MS_FONTOBJECT = new ResourceType(ContentTypes.APPLICATION_VND_MS_FONTOBJECT, shortCache(), false, asList("eot"));
     public static final ResourceType APPLICATION_EPUB_ZIP = new ResourceType(ContentTypes.APPLICATION_EPUB_ZIP, shortCache(), false, asList("epub"));
+    public static final ResourceType APPLICATION_GZIP = new ResourceType(ContentTypes.APPLICATION_GZIP, shortCache(), false, asList("gz"));
     public static final ResourceType IMAGE_GIF = new ResourceType(ContentTypes.IMAGE_GIF, shortCache(), false, asList("gif"));
     public static final ResourceType TEXT_HTML = new ResourceType(ContentTypes.TEXT_HTML, noCache(), true, asList("html", "htm"));
     public static final ResourceType IMAGE_X_ICON = new ResourceType(ContentTypes.IMAGE_X_ICON, shortCache(), false, asList("ico"));
