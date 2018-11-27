@@ -82,13 +82,13 @@ public class ContextTest {
         this.server = muServer()
             .withHttpsPort(50378)
             .addHandler(
-                context("/ha ha/").addHandler(restHandler(new Sample()))
+                context("/api/ha ha/").addHandler(restHandler(new Sample()))
             )
             .start();
-        try (Response resp = call(request().url(server.uri().resolve("/ha%20ha/samples/zample/barmpit?hoo=har%20har").toString()))) {
-            assertThat(resp.body().string(), equalTo("https://localhost:50378/ha%20ha/\nsamples/zample/barmpit\n" +
-                "https://localhost:50378/ha%20ha/samples/zample/barmpit\n" +
-                "https://localhost:50378/ha%20ha/samples/zample/barmpit?hoo=har%20har\nhar har\nhar%20har\n" +
+        try (Response resp = call(request().url(server.uri().resolve("/api/ha%20ha/samples/zample/barmpit?hoo=har%20har").toString()))) {
+            assertThat(resp.body().string(), equalTo("https://localhost:50378/api/ha%20ha/\nsamples/zample/barmpit\n" +
+                "https://localhost:50378/api/ha%20ha/samples/zample/barmpit\n" +
+                "https://localhost:50378/api/ha%20ha/samples/zample/barmpit?hoo=har%20har\nhar har\nhar%20har\n" +
                 "Sample Resource Class\nsamples/zample/barmpit:samples"));
         }
     }

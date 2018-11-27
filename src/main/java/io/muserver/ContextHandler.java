@@ -2,8 +2,8 @@ package io.muserver;
 
 import java.net.URI;
 import java.util.List;
-
-import static io.muserver.Mutils.urlEncode;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class ContextHandler implements MuHandler {
 
@@ -13,7 +13,9 @@ public class ContextHandler implements MuHandler {
     private final String slashContext;
 
     public ContextHandler(String contextPath, List<MuHandler> muHandlers) {
-        this.contextPath = urlEncode(Mutils.trim(contextPath, "/"));
+        this.contextPath = Stream.of(Mutils.trim(contextPath, "/").split("/"))
+            .map(Mutils::urlEncode)
+            .collect(Collectors.joining("/"));
         this.muHandlers = muHandlers;
         this.slashContextSlash = "/" + this.contextPath + "/";
         this.slashContext = "/" + this.contextPath;
