@@ -66,11 +66,7 @@ class FileProvider implements ResourceProvider {
 
     public Long fileSize() {
         try {
-            long size = Files.size(localPath);
-            if (size >= Integer.MAX_VALUE) {
-                return null; // this causes problems due to an overflow somewhere....
-            }
-            return size;
+            return Files.size(localPath);
         } catch (IOException e) {
             log.error("Error finding file size: " + e.getMessage());
             return null;

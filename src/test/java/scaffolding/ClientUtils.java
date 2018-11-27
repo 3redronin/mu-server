@@ -1,5 +1,6 @@
 package scaffolding;
 
+import io.muserver.Toggles;
 import io.netty.util.ResourceLeakDetector;
 import okhttp3.*;
 import okio.BufferedSink;
@@ -16,6 +17,11 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class ClientUtils {
+
+    static {
+        Toggles.fixedLengthResponsesEnabled = true;
+    }
+
     private static final org.slf4j.Logger log = LoggerFactory.getLogger(ClientUtils.class);
 
     public static final OkHttpClient client;
