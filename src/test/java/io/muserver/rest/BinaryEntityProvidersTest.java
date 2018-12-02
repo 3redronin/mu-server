@@ -1,7 +1,6 @@
 package io.muserver.rest;
 
 import io.muserver.MuServer;
-import io.muserver.MuServerBuilder;
 import io.muserver.Mutils;
 import okhttp3.MediaType;
 import okhttp3.RequestBody;
@@ -12,8 +11,6 @@ import org.junit.Test;
 import scaffolding.MuAssert;
 import scaffolding.StringUtils;
 
-import javax.activation.DataSource;
-import javax.activation.FileDataSource;
 import javax.ws.rs.*;
 import javax.ws.rs.core.StreamingOutput;
 import java.io.*;
@@ -78,37 +75,6 @@ public class BinaryEntityProvidersTest {
         startServer(new Sample());
         check(Mutils.toByteArray(new FileInputStream(sample), 8192), "image/jpeg");
         checkNoBody();
-    }
-
-    @Test
-    public void dataSourcesSupported() throws Exception {
-        File sample = new File("src/test/resources/sample-static/images/friends.jpg");
-        if (!sample.isFile()) {
-            throw new RuntimeException("Expected " + sample.getCanonicalPath() + " to be a file");
-        }
-        @Path("samples")
-        class Sample {
-            @POST
-            @Produces("image/jpeg")
-            public DataSource echo(DataSource value) {
-                return value;
-            }
-
-            @GET
-            @Produces("image/jpeg")
-            public DataSource getFile() {
-                return new FileDataSource(sample);
-            }
-        }
-        startServer(new Sample());
-        byte[] imageBytes = Mutils.toByteArray(new FileInputStream(sample), 8192);
-        check(imageBytes, "image/jpeg");
-        checkNoBody();
-
-        try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
-            assertThat(resp.code(), equalTo(200));
-            assertThat(new String(resp.body().bytes(), UTF_8), equalTo(new String(imageBytes, UTF_8)));
-        }
     }
 
     @Test

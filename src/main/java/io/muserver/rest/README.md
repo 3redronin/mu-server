@@ -158,7 +158,7 @@ No plan to implement as it would add another dependency.
 - [x] `java.io.InputStream` All media types (*/*)
 - [x] `java.io.Reader` All media types (*/*)
 - [x] `java.io.File` All media types (*/*)
-- [x] `javax.activation.DataSource` All media types (*/*)
+- [ ] `javax.activation.DataSource` Will not implement as it is removed in Java 9
 - [ ] `javax.xml.transform.Source` XML types (text/xml, application/xml and media types of the form application/*+xml)
 - [ ] `javax.xml.bind.JAXBElement` and application-supplied JAXB classes XML types (text/xml and application/xml and media types of the form application/*+xml)
 - [x] `MultivaluedMap<String,String>` Form content (application/x-www-form-urlencoded)

@@ -2,7 +2,6 @@ package io.muserver.rest;
 
 import org.junit.Test;
 
-import javax.activation.DataSource;
 import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.MultivaluedMap;
@@ -27,7 +26,6 @@ public class ProviderWrapperTest {
         assertThat(readerType(new BinaryEntityProviders.ByteArrayReaderWriter()), equalTo(byte[].class));
         assertThat(readerType(new BinaryEntityProviders.InputStreamReader()), equalTo(InputStream.class));
         assertThat(readerType(new BinaryEntityProviders.FileReaderWriter()), equalTo(File.class));
-        assertThat(readerType(new BinaryEntityProviders.DataSourceReaderWriter()), equalTo(DataSource.class));
     }
 
     @Test
@@ -38,7 +36,6 @@ public class ProviderWrapperTest {
         assertThat(writerType(new BinaryEntityProviders.ByteArrayReaderWriter()), equalTo(byte[].class));
         assertThat(writerType(new BinaryEntityProviders.StreamingOutputWriter()), equalTo(StreamingOutput.class));
         assertThat(writerType(new BinaryEntityProviders.FileReaderWriter()), equalTo(File.class));
-        assertThat(writerType(new BinaryEntityProviders.DataSourceReaderWriter()), equalTo(DataSource.class));
     }
 
     @Test
