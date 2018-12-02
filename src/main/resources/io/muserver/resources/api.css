@@ -86,3 +86,6 @@ table.parameterTable, table.responseTable {
     padding: 9px 8px 0;
 }
 
+.parameterTable a {
+    word-wrap: break-word;
+}

@@ -45,13 +45,7 @@ class HtmlDocumentor {
 
         new El("p").open().content(api.info.description).close();
 
-        if (api.externalDocs != null) {
-            String url = api.externalDocs.url.toString();
-            String desc = api.externalDocs.description == null ? url : api.externalDocs.description;
-            El ext = new El("p").open().content("For more info, see ");
-            new El("a").open(Collections.singletonMap("href", url)).content(desc).close();
-            ext.close();
-        }
+        renderExternalLinksParagraph(api.externalDocs);
 
         El metaData = new El("p").open(singletonMap("class", "apiMetaData"));
         metaData.content("Version " + api.info.version);
@@ -163,11 +157,15 @@ class HtmlDocumentor {
                                 render("td", parameter.name);
                                 String type = parameter.in;
                                 SchemaObject schema = parameter.schema;
+                                Object defaultVal = null;
+                                ExternalDocumentationObject externalDocs = null;
                                 if (schema != null) {
                                     type += " - " + schema.type;
                                     if (schema.format != null) {
                                         type += " (" + schema.format + ")";
                                     }
+                                    defaultVal = schema.defaultValue;
+                                    externalDocs = schema.externalDocs;
                                 }
                                 render("td", type);
                                 El paramDesc = new El("td").open();
@@ -179,7 +177,8 @@ class HtmlDocumentor {
                                 }
                                 paramDesc.content(parameter.description);
 
-                                renderExamples(parameter.example, parameter.examples);
+                                renderExamples(parameter.example, parameter.examples, defaultVal);
+                                renderExternalLinksParagraph(externalDocs);
 
                                 paramDesc.close();
                                 row.close();
@@ -199,7 +198,7 @@ class HtmlDocumentor {
                                 MediaTypeObject value = bodyEntry.getValue();
                                 render("h5", mediaType);
 
-                                renderExamples(value.example, value.examples);
+                                renderExamples(value.example, value.examples, value.schema == null ? null : value.schema.defaultValue);
 
                                 if (value.schema == null) {
                                     continue;
@@ -238,10 +237,7 @@ class HtmlDocumentor {
                                         render("strong", "REQUIRED. ");
                                     }
                                     paramDesc.content(schema.description);
-
-                                    if (schema.example != null) {
-                                        renderExamples(schema.example, null);
-                                    }
+                                    renderExamples(schema.example, null, schema.defaultValue);
 
                                     paramDesc.close();
                                     row.close();
@@ -302,7 +298,17 @@ class HtmlDocumentor {
         html.close();
     }
 
-    private void renderExamples(Object example, Map<String, ExampleObject> examples) throws IOException {
+    private void renderExternalLinksParagraph(ExternalDocumentationObject externalDocs) throws IOException {
+        if (externalDocs != null) {
+            String url = externalDocs.url.toString();
+            String desc = externalDocs.description == null ? url : externalDocs.description;
+            El ext = new El("p").open().content("For more info, see ");
+            new El("a").open(Collections.singletonMap("href", url)).content(desc).close();
+            ext.close();
+        }
+    }
+
+    private void renderExamples(Object example, Map<String, ExampleObject> examples, Object defaultVal) throws IOException {
         if (example != null) {
             El div = new El("div").open().content("Example: ");
             render("code", example.toString());
@@ -318,6 +324,11 @@ class HtmlDocumentor {
 
                 div.close();
             }
+        }
+        if (defaultVal != null) {
+            El div = new El("div").open().content("Default value: ");
+            render("code", defaultVal.toString());
+            div.close();
         }
     }
 

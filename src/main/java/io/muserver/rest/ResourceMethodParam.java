@@ -1,6 +1,7 @@
 package io.muserver.rest;
 
 import io.muserver.MuRequest;
+import io.muserver.openapi.ExternalDocumentationObject;
 import io.muserver.openapi.ParameterObjectBuilder;
 
 import javax.ws.rs.*;
@@ -93,14 +94,17 @@ abstract class ResourceMethodParam {
                 .withIn(source.openAPIIn)
                 .withRequired(isRequired)
                 .withDeprecated(isDeprecated);
+            ExternalDocumentationObject externalDoc = null;
             if (descriptionData != null) {
                 builder.withName(descriptionData.summary)
                     .withDescription(descriptionData.description)
-                .withExample(descriptionData.example);
+                    .withExample(descriptionData.example);
+                externalDoc = descriptionData.externalDocumentation;
             }
             return builder.withSchema(
                 schemaObjectFrom(parameterHandle.getType())
                     .withDefaultValue(defaultValue())
+                    .withExternalDocs(externalDoc)
                     .build()
             );
         }
