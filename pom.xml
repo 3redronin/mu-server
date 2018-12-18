@@ -118,6 +118,12 @@
             <version>20180130</version>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.eclipse.jetty</groupId>
+            <artifactId>jetty-client</artifactId>
+            <version>9.4.12.v20180830</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <inceptionYear>2017</inceptionYear>
