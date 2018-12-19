@@ -53,7 +53,15 @@ public class RestHandler implements MuHandler {
             return true;
         }
         AsyncHandle asyncHandle = null;
-        List<MediaType> acceptHeaders = MediaTypeDeterminer.parseAcceptHeaders(muRequest.headers().getAll(HeaderNames.ACCEPT));
+        List<MediaType> acceptHeaders;
+        try {
+            acceptHeaders = MediaTypeDeterminer.parseAcceptHeaders(muRequest.headers().getAll(HeaderNames.ACCEPT));
+        } catch (IllegalArgumentException e) {
+            muResponse.status(400);
+            muResponse.contentType("text/plain");
+            muResponse.write(e.getMessage());
+            return true;
+        }
         List<MediaType> producesRef = null;
         List<MediaType> directlyProducesRef = null;
         SecurityContext securityContext = muRequest.uri().getScheme().equals("https") ? MuSecurityContext.notLoggedInHttpsContext : MuSecurityContext.notLoggedInHttpContext;

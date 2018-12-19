@@ -18,6 +18,9 @@ class MediaTypeHeaderDelegate implements RuntimeDelegate.HeaderDelegate<MediaTyp
             throw new NullPointerException("value");
         }
         int slashIndex = value.indexOf('/');
+        if (slashIndex < 1) {
+            throw new IllegalArgumentException("The value must be in the format of type/subtype but was '" + value + "'");
+        }
         String type = value.substring(0, slashIndex).trim();
         Map<String, String> params;
         String subType;

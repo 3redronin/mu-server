@@ -102,7 +102,7 @@ public class MediaTypesTest {
     }
 
     @Test
-    public void producesOnClassCanBeUsedAsDefault() throws IOException {
+    public void producesOnClassCanBeUsedAsDefault() {
         @Path("things")
         @Produces("application/json")
         class Widget {
@@ -115,6 +115,26 @@ public class MediaTypesTest {
         try (Response resp = call(request().url(server.uri().resolve("/things").toString()))) {
             assertThat(resp.header("Content-Type"), is("application/json"));
         }
+    }
+
+    @Test
+    public void invalidAcceptHeadersReturn400() {
+        @Path("things")
+        class Widget {
+            @GET
+            @Produces("application/json")
+            public String json() {
+                return "[]";
+            }
+        }
+        this.server = httpsServer().addHandler(restHandler(new Widget())).start();
+        try (Response resp = call(request().url(server.uri().resolve("/things").toString())
+        .header("accept", "text")
+        )) {
+            assertThat(resp.code(), is(400));
+            assertThat(resp.header("Content-Type"), is("text/plain"));
+        }
+
     }
 
     @Test

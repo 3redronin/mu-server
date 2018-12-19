@@ -15,6 +15,11 @@ import static org.hamcrest.Matchers.*;
 public class MediaTypeHeaderDelegateTest {
     private final MediaTypeHeaderDelegate delegate = new MediaTypeHeaderDelegate();
 
+    @Test(expected = IllegalArgumentException.class)
+    public void throwsIllegalArgumentExceptionIfInvalid() {
+        mt("text");
+    }
+
     @Test
     public void canParse() {
         assertThat(mt("image/jpeg"), equalTo(new MediaType("image", "jpeg")));

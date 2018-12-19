@@ -110,7 +110,7 @@ class MediaTypeDeterminer {
             : emptyList();
     }
 
-    public static List<MediaType> parseAcceptHeaders(List<String> headers) {
+    static List<MediaType> parseAcceptHeaders(List<String> headers) throws IllegalArgumentException {
         List<MediaType> list = new ArrayList<>();
         for (String header : headers) {
             String[] bits = header.split(",");
