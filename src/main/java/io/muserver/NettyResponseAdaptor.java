@@ -64,11 +64,11 @@ class NettyResponseAdaptor implements MuResponse {
         }
         outputState = OutputState.STREAMING;
         HttpResponse response = isHead ? new EmptyHttpResponse(httpStatus()) : new DefaultHttpResponse(HTTP_1_1, httpStatus(), false);
-        writeHeaders(response, headers, request);
 
         if (!Toggles.fixedLengthResponsesEnabled) {
             response.headers().remove(HeaderNames.CONTENT_LENGTH);
         }
+        writeHeaders(response, headers, request);
         if (!response.headers().contains(HeaderNames.CONTENT_LENGTH)) {
             response.headers().set(HttpHeaderNames.TRANSFER_ENCODING, HttpHeaderValues.CHUNKED);
         }
@@ -77,9 +77,6 @@ class NettyResponseAdaptor implements MuResponse {
 
     private static void writeHeaders(HttpResponse response, Headers headers, NettyRequestAdapter request) {
         response.headers().add(headers.nettyHeaders());
-        if (request.isKeepAliveRequested()) {
-            response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE);
-        }
     }
 
     private void throwIfFinished() {
