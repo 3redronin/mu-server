@@ -224,10 +224,13 @@ public class MuServerBuilder {
      * handlers are executed before synchronous handlers.</p>
      * @see #addHandler(Method, String, RouteHandler)
      * @param handler A handler builder. The <code>build()</code> method will be called on this
-     *                to create the handler.
+     *                to create the handler. If null, then no handler is added.
      * @return The current Mu-Server Handler.
      */
     public MuServerBuilder addHandler(MuHandlerBuilder handler) {
+        if (handler == null) {
+            return this;
+        }
         return addHandler(handler.build());
     }
 
@@ -236,11 +239,13 @@ public class MuServerBuilder {
      * <p>Note that handlers are executed in the order added to the builder, but all async
      * handlers are executed before synchronous handlers.</p>
      * @see #addHandler(Method, String, RouteHandler)
-     * @param handler The handler to add.
+     * @param handler The handler to add. If null, then no handler is added.
      * @return The current Mu-Server Handler.
      */
     public MuServerBuilder addHandler(MuHandler handler) {
-        handlers.add(handler);
+        if (handler != null) {
+            handlers.add(handler);
+        }
         return this;
     }
 
@@ -252,10 +257,13 @@ public class MuServerBuilder {
      *                    with regexes such as <code>/abc/{id : [0-9]+}</code> where the named
      *                    parameter values can be accessed with the <code>pathParams</code>
      *                    parameter in the route handler.
-     * @param handler The handler to invoke if the method and URI matches.
+     * @param handler The handler to invoke if the method and URI matches. If null, then no handler is added.
      * @return Returns the server builder
      */
     public MuServerBuilder addHandler(Method method, String uriTemplate, RouteHandler handler) {
+        if (handler == null) {
+            return this;
+        }
         return addHandler(Routes.route(method, uriTemplate, handler));
     }
 
