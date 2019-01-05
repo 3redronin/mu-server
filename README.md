@@ -48,6 +48,19 @@ MuServer server = MuServerBuilder.httpsServer()
     .start();
 ````
 
+## Static Resource handling
+
+The [ResourceHandlerBuilder](https://www.javadoc.io/page/io.muserver/mu-server/latest/io/muserver/handlers/ResourceHandlerBuilder.html)
+provides various options for handling static data. For simple cases
+where you have a directory such as `src/main/resources/static` there is a convenience method to let you serve from the
+filesystem during development, and from the classpath upon deployment:
+
+````java
+MuServer server = MuServerBuilder.httpsServer()
+    .addHandler(ResourceHandlerBuilder.fileOrClasspath("src/main/resources/static", "/static"))
+    .start();
+````
+
 ## Headers, Querystrings, Forms, Files and Cookies
 
 These can all be accessed from the Request object. Below are some examples:
