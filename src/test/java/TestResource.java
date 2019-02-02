@@ -27,11 +27,11 @@ public class TestResource {
 
 
     public static void main(String[] args) throws Exception {
-        ExecutorService es = Executors.newCachedThreadPool();
+        ExecutorService es = Executors.newFixedThreadPool(1000);
         HttpClient client = new HttpClient();
         client.start();
 
-        for (int i = 1; i < 500; i++) {
+        for (int i = 1; i < 10000; i++) {
 
             int finalI = i;
             es.submit(() -> {

@@ -34,6 +34,7 @@ class NettyResponseAdaptor implements MuResponse {
     private PrintWriter writer;
     private ChunkedHttpOutputStream outputStream;
     private long bytesStreamed = 0;
+    private long declaredLength = -1;
 
     private enum OutputState {
         NOTHING, FULL_SENT, STREAMING, STREAMING_COMPLETE
@@ -44,7 +45,6 @@ class NettyResponseAdaptor implements MuResponse {
         this.ctx = ctx;
         this.request = request;
         this.isHead = request.method() == Method.HEAD;
-
 
 
         headers.set(HeaderNames.DATE, Mutils.toHttpDate(new Date()));
@@ -69,15 +69,21 @@ class NettyResponseAdaptor implements MuResponse {
         log.info("Starting streaming");
         outputState = OutputState.STREAMING;
         HttpResponse response = isHead ? new EmptyHttpResponse(httpStatus()) : new DefaultHttpResponse(HTTP_1_1, httpStatus(), false);
-        writeHeaders(response, headers, request);
 
         if (!Toggles.fixedLengthResponsesEnabled) {
-            response.headers().remove(HeaderNames.CONTENT_LENGTH);
+            headers.remove(HeaderNames.CONTENT_LENGTH);
         }
-        if (!response.headers().contains(HeaderNames.CONTENT_LENGTH)) {
-            response.headers().set(HttpHeaderNames.TRANSFER_ENCODING, HttpHeaderValues.CHUNKED);
+        declaredLength = headers.contains(HeaderNames.CONTENT_LENGTH)
+            ? Long.parseLong(headers.get(HeaderNames.CONTENT_LENGTH))
+            : -1;
+        if (declaredLength == -1) {
+            headers.set(HeaderNames.TRANSFER_ENCODING, HeaderValues.CHUNKED);
         }
-        lastAction = ctx.writeAndFlush(response);
+
+        writeHeaders(response, headers, request);
+
+        // TODO don't flush
+        lastAction = ctx.write(response);
     }
 
     private static void writeHeaders(HttpResponse response, Headers headers, NettyRequestAdapter request) {
@@ -107,13 +113,19 @@ class NettyResponseAdaptor implements MuResponse {
     ChannelFuture write(ByteBuf data, boolean sync) {
         throwIfFinished();
         int size = data.writerIndex();
-        log.info("Going to write " + size + " with sync " + sync);
-        lastAction = ctx.writeAndFlush(new DefaultHttpContent(Unpooled.wrappedBuffer(data)));
-        if (sync) {
-            lastAction = lastAction.syncUninterruptibly();
-        }
         bytesStreamed += size;
-        log.info("Did maybe write " + size);
+
+        // TODO: if streamed > declared throw
+
+        boolean isLast = bytesStreamed == declaredLength;
+        if (isLast) {
+            outputState = OutputState.FULL_SENT;
+        }
+
+        ByteBuf content = Unpooled.wrappedBuffer(data);
+        HttpContent msg = isLast ? new DefaultLastHttpContent(content) : new DefaultHttpContent(content);
+        lastAction = ctx.writeAndFlush(msg);
+        log.info("Wrote " + size + "; total sent " + bytesStreamed + "; total " + declaredLength);
         return lastAction;
     }
 
@@ -210,12 +222,15 @@ class NettyResponseAdaptor implements MuResponse {
                 msg.headers().set(HeaderNames.CONTENT_LENGTH, 0);
             }
             lastAction = ctx.writeAndFlush(msg);
-        } else if (outputState == OutputState.STREAMING && !isHead) {
-            if (writer != null) {
-                writer.close();
-            }
-            if (outputStream != null) {
-                outputStream.close();
+        } else if (outputState == OutputState.STREAMING) {
+
+            if (!isHead) {
+                if (writer != null) {
+                    writer.close();
+                }
+                if (outputStream != null) {
+                    outputStream.close();
+                }
             }
             outputState = OutputState.STREAMING_COMPLETE;
             lastAction = ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
