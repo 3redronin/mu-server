@@ -34,6 +34,7 @@ class NettyResponseAdaptor implements MuResponse {
     private PrintWriter writer;
     private ChunkedHttpOutputStream outputStream;
     private long bytesStreamed = 0;
+    private long declaredLength = -1;
 
     private enum OutputState {
         NOTHING, FULL_SENT, STREAMING, STREAMING_COMPLETE
@@ -66,13 +67,18 @@ class NettyResponseAdaptor implements MuResponse {
         HttpResponse response = isHead ? new EmptyHttpResponse(httpStatus()) : new DefaultHttpResponse(HTTP_1_1, httpStatus(), false);
 
         if (!Toggles.fixedLengthResponsesEnabled) {
-            response.headers().remove(HeaderNames.CONTENT_LENGTH);
+            headers.remove(HeaderNames.CONTENT_LENGTH);
         }
+        declaredLength = headers.contains(HeaderNames.CONTENT_LENGTH)
+            ? Long.parseLong(headers.get(HeaderNames.CONTENT_LENGTH))
+            : -1;
+        if (declaredLength == -1) {
+            headers.set(HeaderNames.TRANSFER_ENCODING, HeaderValues.CHUNKED);
+        }
+
         writeHeaders(response, headers, request);
-        if (!response.headers().contains(HeaderNames.CONTENT_LENGTH)) {
-            response.headers().set(HttpHeaderNames.TRANSFER_ENCODING, HttpHeaderValues.CHUNKED);
-        }
-        lastAction = ctx.writeAndFlush(response);
+
+        lastAction = ctx.write(response);
     }
 
     private static void writeHeaders(HttpResponse response, Headers headers, NettyRequestAdapter request) {
@@ -99,11 +105,18 @@ class NettyResponseAdaptor implements MuResponse {
     ChannelFuture write(ByteBuf data, boolean sync) {
         throwIfFinished();
         int size = data.writerIndex();
-        lastAction = ctx.writeAndFlush(new DefaultHttpContent(Unpooled.wrappedBuffer(data)));
-        if (sync) {
-            lastAction = lastAction.syncUninterruptibly();
-        }
         bytesStreamed += size;
+
+        // TODO: if streamed > declared throw
+
+        boolean isLast = bytesStreamed == declaredLength;
+        if (isLast) {
+            outputState = OutputState.FULL_SENT;
+        }
+
+        ByteBuf content = Unpooled.wrappedBuffer(data);
+        HttpContent msg = isLast ? new DefaultLastHttpContent(content) : new DefaultHttpContent(content);
+        lastAction = ctx.writeAndFlush(msg);
         return lastAction;
     }
 
@@ -187,33 +200,28 @@ class NettyResponseAdaptor implements MuResponse {
 
     ChannelFuture complete(boolean forceDisconnect) {
         boolean shouldDisconnect = forceDisconnect || !request.isKeepAliveRequested();
+        boolean isFixedLength = declaredLength >= 0;
         if (outputState == OutputState.NOTHING) {
             HttpResponse msg = isHead ?
                 new EmptyHttpResponse(httpStatus()) :
                 new DefaultFullHttpResponse(HTTP_1_1, httpStatus(), false);
             msg.headers().add(this.headers.nettyHeaders());
-            if (!isHead || !(headers().contains(HeaderNames.CONTENT_LENGTH))) {
+            if (!isHead || !isFixedLength) {
                 msg.headers().set(HeaderNames.CONTENT_LENGTH, 0);
             }
             lastAction = ctx.writeAndFlush(msg);
-        } else if (outputState == OutputState.STREAMING && !isHead) {
-            if (writer != null) {
-                writer.close();
-            }
-            if (outputStream != null) {
-                outputStream.close();
+        } else if (outputState == OutputState.STREAMING) {
+
+            if (!isHead) {
+                if (writer != null) {
+                    writer.close();
+                }
+                if (outputStream != null) {
+                    outputStream.close();
+                }
             }
             outputState = OutputState.STREAMING_COMPLETE;
             lastAction = ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
-        }
-
-        if (!isHead && (headers().contains(HeaderNames.CONTENT_LENGTH))) {
-            long declaredLength = Long.parseLong(headers.get(HeaderNames.CONTENT_LENGTH));
-            long actualLength = this.bytesStreamed;
-            if (declaredLength != actualLength) {
-                shouldDisconnect = true;
-                log.warn("Declared length " + declaredLength + " doesn't equal actual length " + actualLength + " for " + request);
-            }
         }
 
         if (shouldDisconnect) {

@@ -21,9 +21,13 @@ public class RunLocal {
     private static final Logger log = LoggerFactory.getLogger(RunLocal.class);
 
     public static void main(String[] args) {
+
+        Toggles.fixedLengthResponsesEnabled = true;
+
         MuServer server = new MuServerBuilder().withHttpPort(0).withHttpsPort(0)
             .withHttpPort(18080)
             .withHttpsPort(18443)
+            .withGzipEnabled(false)
             .withHttpsConfig(SSLContextBuilder.unsignedLocalhostCert())
             .addHandler(ResourceHandlerBuilder.fileHandler(BIG_FILE_DIR))
             .addHandler(ResourceHandlerBuilder.fileOrClasspath("src/test/resources/sample-static", "/sample-static"))
@@ -33,7 +37,8 @@ public class RunLocal {
             })
             .addHandler(
                 RestHandlerBuilder.restHandler(
-                    new PetResource(), new PetStoreResource(), new UserResource(), new VehicleResource()
+                    new PetResource(), new PetStoreResource(), new UserResource(), new VehicleResource(),
+                    new TestResource()
                 )
                     .withOpenApiJsonUrl("/openapi.json")
                     .withOpenApiHtmlUrl("/api.html")

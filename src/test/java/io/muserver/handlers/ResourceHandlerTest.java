@@ -33,7 +33,7 @@ public class ResourceHandlerTest {
     public void canServeFromRootOfServer() throws Exception {
         server = MuServerBuilder.httpsServer()
             .withGzipEnabled(false)
-            .addHandler(ResourceHandler.fileHandler("src/test/resources/sample-static").build())
+            .addHandler(ResourceHandlerBuilder.fileHandler("src/test/resources/sample-static").build())
             .start();
 
         assertContentTypeAndContent("/index.html", "text/html", false);
@@ -64,7 +64,7 @@ public class ResourceHandlerTest {
             .addHandler(context("/a")
                 .addHandler(context("/b")
                     .addHandler(context("/c")
-                        .addHandler(ResourceHandler.classpathHandler("/sample-static")
+                        .addHandler(ResourceHandlerBuilder.classpathHandler("/sample-static")
                             .withPathToServeFrom("/d")
                         ))))
             .start();
