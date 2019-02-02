@@ -23,7 +23,7 @@ import java.util.concurrent.Future;
 import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 
 class NettyResponseAdaptor implements MuResponse {
-    private final Logger log;
+    private static final Logger log = LoggerFactory.getLogger(NettyResponseAdaptor.class);
     private final boolean isHead;
     private OutputState outputState = OutputState.NOTHING;
     private final ChannelHandlerContext ctx;
@@ -41,7 +41,6 @@ class NettyResponseAdaptor implements MuResponse {
     }
 
     NettyResponseAdaptor(ChannelHandlerContext ctx, NettyRequestAdapter request) {
-        log = LoggerFactory.getLogger("[Resp" + request.headers().get("num") + "-" + ctx.channel().id() + "]");
         this.ctx = ctx;
         this.request = request;
         this.isHead = request.method() == Method.HEAD;
@@ -63,10 +62,8 @@ class NettyResponseAdaptor implements MuResponse {
 
     private void startStreaming() {
         if (outputState != OutputState.NOTHING) {
-            log.info("Already streaming");
             throw new IllegalStateException("Cannot start streaming when state is " + outputState);
         }
-        log.info("Starting streaming");
         outputState = OutputState.STREAMING;
         HttpResponse response = isHead ? new EmptyHttpResponse(httpStatus()) : new DefaultHttpResponse(HTTP_1_1, httpStatus(), false);
 
@@ -82,7 +79,6 @@ class NettyResponseAdaptor implements MuResponse {
 
         writeHeaders(response, headers, request);
 
-        // TODO don't flush
         lastAction = ctx.write(response);
     }
 
@@ -122,13 +118,11 @@ class NettyResponseAdaptor implements MuResponse {
         ByteBuf content = Unpooled.wrappedBuffer(data);
         HttpContent msg = isLast ? new DefaultLastHttpContent(content) : new DefaultHttpContent(content);
         lastAction = ctx.writeAndFlush(msg);
-        log.info("Wrote " + size + "; total sent " + bytesStreamed + "; total " + declaredLength);
         return lastAction;
     }
 
 
     public void write(String text) {
-        log.info("Writing full in one go");
         throwIfFinished();
         if (outputState != OutputState.NOTHING) {
             String what = outputState == OutputState.FULL_SENT ? "twice for one response" : "after sending chunks";
@@ -144,7 +138,6 @@ class NettyResponseAdaptor implements MuResponse {
         writeHeaders(resp, this.headers, request);
         HttpUtil.setContentLength(resp, bodyLength);
         lastAction = ctx.writeAndFlush(resp).syncUninterruptibly();
-        log.info("Wrote full in one go");
     }
 
     public void sendChunk(String text) {
@@ -207,9 +200,8 @@ class NettyResponseAdaptor implements MuResponse {
     }
 
     ChannelFuture complete(boolean forceDisconnect) {
-        log.info("Complete called for state " + outputState);
         boolean shouldDisconnect = forceDisconnect || !request.isKeepAliveRequested();
-        boolean isFixedLength = headers().contains(HeaderNames.CONTENT_LENGTH);
+        boolean isFixedLength = declaredLength >= 0;
         if (outputState == OutputState.NOTHING) {
             HttpResponse msg = isHead ?
                 new EmptyHttpResponse(httpStatus()) :
@@ -233,17 +225,7 @@ class NettyResponseAdaptor implements MuResponse {
             lastAction = ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
         }
 
-        if (!isHead && isFixedLength) {
-            long declaredLength = Long.parseLong(headers.get(HeaderNames.CONTENT_LENGTH));
-            long actualLength = this.bytesStreamed;
-            if (declaredLength != actualLength) {
-                shouldDisconnect = true;
-                log.warn("Declared length " + declaredLength + " doesn't equal actual length " + actualLength + " for " + request);
-            }
-        }
-
         if (shouldDisconnect) {
-            log.info("Going to disconnect, last=" + lastAction);
             if (lastAction == null) {
                 lastAction = ctx.channel().close();
             } else {
