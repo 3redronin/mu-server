@@ -37,8 +37,7 @@ public class RunLocal {
             })
             .addHandler(
                 RestHandlerBuilder.restHandler(
-                    new PetResource(), new PetStoreResource(), new UserResource(), new VehicleResource(),
-                    new TestResource()
+                    new PetResource(), new PetStoreResource(), new UserResource(), new VehicleResource()
                 )
                     .withOpenApiJsonUrl("/openapi.json")
                     .withOpenApiHtmlUrl("/api.html")
