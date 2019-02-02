@@ -88,9 +88,6 @@ class NettyResponseAdaptor implements MuResponse {
 
     private static void writeHeaders(HttpResponse response, Headers headers, NettyRequestAdapter request) {
         response.headers().add(headers.nettyHeaders());
-        if (request.isKeepAliveRequested()) {
-            response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.KEEP_ALIVE);
-        }
     }
 
     private void throwIfFinished() {
