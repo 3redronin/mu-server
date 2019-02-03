@@ -37,7 +37,7 @@ public class FixedLengthTest {
                 writer.flush();
 
                 try {
-                    writer.println("this will push the response over 20 bytes in size");
+                    writer.print(" and this will push the response over 20 bytes in size");
                     writer.flush();
                 } catch (Exception ex) {
                     errors.append(ex.getMessage());
@@ -56,7 +56,7 @@ public class FixedLengthTest {
 
         assertThat(errors.toString(), equalTo("The declared content length for GET " + server.uri().resolve("/blah") + " was 20 bytes. " +
             "The current write is being aborted and the connection is being closed because it would have resulted in " +
-            "56 bytes being sent."));
+            "59 bytes being sent."));
     }
 
     @Test
