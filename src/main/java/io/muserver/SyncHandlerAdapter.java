@@ -1,5 +1,6 @@
 package io.muserver;
 
+import io.netty.util.concurrent.DefaultThreadFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -12,7 +13,7 @@ import java.util.concurrent.Executors;
 class SyncHandlerAdapter implements AsyncMuHandler {
     private static final Logger log = LoggerFactory.getLogger(SyncHandlerAdapter.class);
     private final List<MuHandler> muHandlers;
-    private static final ExecutorService executor = Executors.newCachedThreadPool();
+    private static final ExecutorService executor = Executors.newCachedThreadPool(new DefaultThreadFactory("muhandler"));
 
     SyncHandlerAdapter(List<MuHandler> muHandlers) {
         this.muHandlers = muHandlers;

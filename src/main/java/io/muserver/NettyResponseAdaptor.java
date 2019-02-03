@@ -107,16 +107,23 @@ class NettyResponseAdaptor implements MuResponse {
         int size = data.writerIndex();
         bytesStreamed += size;
 
-        // TODO: if streamed > declared throw
+        if (declaredLength > -1 && bytesStreamed > declaredLength) {
+            complete(true);
+            throw new IllegalStateException("The declared content length for " + request + " was " + declaredLength + " bytes. " +
+                "The current write is being aborted and the connection is being closed because it would have resulted in " +
+                bytesStreamed + " bytes being sent.");
+        } else {
+            // TODO: if streamed > declared throw
 
-        boolean isLast = bytesStreamed == declaredLength;
-        if (isLast) {
-            outputState = OutputState.FULL_SENT;
+            boolean isLast = bytesStreamed == declaredLength;
+            if (isLast) {
+                outputState = OutputState.FULL_SENT;
+            }
+
+            ByteBuf content = Unpooled.wrappedBuffer(data);
+            HttpContent msg = isLast ? new DefaultLastHttpContent(content) : new DefaultHttpContent(content);
+            lastAction = ctx.writeAndFlush(msg);
         }
-
-        ByteBuf content = Unpooled.wrappedBuffer(data);
-        HttpContent msg = isLast ? new DefaultLastHttpContent(content) : new DefaultHttpContent(content);
-        lastAction = ctx.writeAndFlush(msg);
         if (sync) {
             // force exception if writes fail
             lastAction = lastAction.syncUninterruptibly();
@@ -225,7 +232,14 @@ class NettyResponseAdaptor implements MuResponse {
                 }
             }
             outputState = OutputState.STREAMING_COMPLETE;
-            lastAction = ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
+            boolean badFixedLength = !isHead && isFixedLength && declaredLength != bytesStreamed;
+            if (badFixedLength) {
+                shouldDisconnect = true;
+                log.warn("Closing client connection for " + request + " because " + declaredLength + " bytes was the " +
+                    "expected length, however only " + bytesStreamed + " bytes were sent.");
+            } else {
+                lastAction = ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
+            }
         }
 
         if (shouldDisconnect) {

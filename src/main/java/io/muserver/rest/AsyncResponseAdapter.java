@@ -3,6 +3,7 @@ package io.muserver.rest;
 import io.muserver.AsyncHandle;
 import io.muserver.HeaderNames;
 import io.muserver.Mutils;
+import io.netty.util.concurrent.DefaultThreadFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -18,12 +19,11 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
 
 class AsyncResponseAdapter implements AsyncResponse, AsyncHandle.ResponseCompletedListener {
     private static final Logger log = LoggerFactory.getLogger(AsyncResponseAdapter.class);
 
-    private static ScheduledExecutorService ses = Executors.newSingleThreadScheduledExecutor();
+    private static ScheduledExecutorService ses = Executors.newSingleThreadScheduledExecutor(new DefaultThreadFactory("mutimeoutwatcher"));
 
     private final AsyncHandle asyncHandle;
     private final Consumer resultConsumer;
@@ -123,7 +123,7 @@ class AsyncResponseAdapter implements AsyncResponse, AsyncHandle.ResponseComplet
             TimeoutHandler th = this.timeoutHandler;
             if (th == null) {
                 resume(new WebApplicationException(Response.status(503)
-                    .type(MediaType.TEXT_PLAIN_TYPE)
+                    .type(MediaType.TEXT_HTML_TYPE)
                     .entity("<h1>503 Service Unavailable</h1><p>Timed out</p>").build()));
             } else {
                 th.handleTimeout(this);

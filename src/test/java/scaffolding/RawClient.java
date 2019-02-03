@@ -1,5 +1,7 @@
 package scaffolding;
 
+import io.netty.util.concurrent.DefaultThreadFactory;
+
 import java.io.*;
 import java.net.Socket;
 import java.net.URI;
@@ -11,7 +13,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 public class RawClient implements Closeable {
-    private static final ExecutorService executorService = Executors.newCachedThreadPool();
+    private static final ExecutorService executorService = Executors.newCachedThreadPool(new DefaultThreadFactory("raw-client"));
 
     private final ByteArrayOutputStream baos = new ByteArrayOutputStream();
     private BufferedOutputStream request;
@@ -43,6 +45,7 @@ public class RawClient implements Closeable {
                     }
                 }
             } catch (IOException e) {
+//                System.out.println("Got exception " + e);
                 exception.set(e);
                 isConnected.set(false);
             }
@@ -63,6 +66,10 @@ public class RawClient implements Closeable {
     public RawClient sendLine(String line) throws IOException {
         sendUTF8(line + "\r\n");
         return this;
+    }
+
+    public boolean isConnected() {
+        return isConnected.get();
     }
 
     public RawClient sendStartLine(String method, String target) throws IOException {

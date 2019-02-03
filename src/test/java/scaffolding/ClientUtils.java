@@ -19,7 +19,7 @@ import java.util.logging.Logger;
 public class ClientUtils {
 
     static {
-        Toggles.fixedLengthResponsesEnabled = false;
+        Toggles.fixedLengthResponsesEnabled = true;
     }
 
     private static final org.slf4j.Logger log = LoggerFactory.getLogger(ClientUtils.class);
