@@ -117,6 +117,10 @@ class NettyResponseAdaptor implements MuResponse {
         ByteBuf content = Unpooled.wrappedBuffer(data);
         HttpContent msg = isLast ? new DefaultLastHttpContent(content) : new DefaultHttpContent(content);
         lastAction = ctx.writeAndFlush(msg);
+        if (sync) {
+            // force exception if writes fail
+            lastAction = lastAction.syncUninterruptibly();
+        }
         return lastAction;
     }
 

@@ -1,16 +1,18 @@
 package io.muserver.handlers;
 
+import io.muserver.Method;
 import io.muserver.MuServer;
-import io.muserver.MuServerBuilder;
 import okhttp3.Response;
+import okhttp3.internal.Util;
 import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
 
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.is;
+import static io.muserver.MuServerBuilder.muServer;
+import static org.hamcrest.Matchers.*;
 import static org.junit.Assert.assertThat;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
@@ -19,10 +21,10 @@ public class HttpsRedirectorTest {
 
     private MuServer server;
 
-    @Test
-    public void doesRedirection() throws IOException {
-        server = MuServerBuilder.muServer()
-            .withHttpPort(12380)
+    @Before
+    public void setup() {
+        server = muServer()
+            .withHttpPort(0)
             .withHttpsPort(12443)
             .addHandler(
                 HttpsRedirectorBuilder.toHttpsPort(12443)
@@ -34,9 +36,12 @@ public class HttpsRedirectorTest {
                 return true;
             })
             .start();
+    }
 
+    @Test
+    public void doesRedirection() throws IOException {
         String newLocation;
-        try (Response resp = call(request().url("http://localhost:12380/"))) {
+        try (Response resp = call(request().url(server.httpUri().toString()))) {
             assertThat(resp.code(), is(302));
             newLocation = resp.header("Location");
         }
@@ -48,6 +53,22 @@ public class HttpsRedirectorTest {
 
     }
 
+    @Test
+    public void returnsA400IfMethodIsNotGetOrHead() throws IOException {
+        for (Method method : Method.values()) {
+            if (method == Method.GET || method == Method.HEAD) {
+                continue;
+            }
+            try (Response resp = call(request()
+                .url(server.httpUri().toString())
+                .method(method.name(), Util.EMPTY_REQUEST)
+            )) {
+                assertThat(resp.code(), is(400));
+                assertThat(resp.body().string(), containsString("HTTP is not supported for this endpoint. Please use the HTTPS endpoint at " + server.httpsUri()));
+                assertThat(resp.header("Strict-Transport-Security"), is(nullValue()));
+            }
+        }
+    }
 
     @After
     public void destroy() {

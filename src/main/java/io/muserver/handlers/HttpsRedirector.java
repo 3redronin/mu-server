@@ -3,7 +3,6 @@ package io.muserver.handlers;
 import io.muserver.*;
 
 import java.net.URI;
-import java.util.concurrent.TimeUnit;
 
 /**
  * <p>Sends any HTTP requests to the same HTTPS address at the supplied port and optionally enables
@@ -43,8 +42,15 @@ public class HttpsRedirector implements MuHandler {
             }
             return false;
         }
+
         URI newURI = new URI("https", uri.getUserInfo(), uri.getHost(), httpsPort, uri.getPath(), uri.getQuery(), uri.getFragment());
-        response.redirect(newURI);
+        if (request.method() == Method.GET || request.method() == Method.HEAD) {
+            response.redirect(newURI);
+        } else {
+            response.status(400);
+            response.contentType("text/plain");
+            response.write("HTTP is not supported for this endpoint. Please use the HTTPS endpoint at " + newURI.resolve("/"));
+        }
         return true;
     }
 
