@@ -18,10 +18,6 @@ import static scaffolding.ClientUtils.request;
 
 public class FixedLengthTest {
 
-    static {
-        Toggles.fixedLengthResponsesEnabled = true;
-    }
-
     private MuServer server;
     private StringBuilder errors = new StringBuilder();
     private CountDownLatch errorSetLatch = new CountDownLatch(1);

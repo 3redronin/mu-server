@@ -22,8 +22,6 @@ public class RunLocal {
 
     public static void main(String[] args) {
 
-        Toggles.fixedLengthResponsesEnabled = true;
-
         MuServer server = new MuServerBuilder().withHttpPort(0).withHttpsPort(0)
             .withHttpPort(18080)
             .withHttpsPort(18443)

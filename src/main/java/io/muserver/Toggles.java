@@ -6,8 +6,8 @@ package io.muserver;
 public class Toggles {
 
     /**
-     * If set to true, then responses can be non-chunked. If false, everything is chunked. Under a toggle as it hasn't
-     * been proven to work yet.
+     * An obsolete toggle that does nothing.
+     * @deprecated This is now unused and fixed length is always enabled
      */
     public static boolean fixedLengthResponsesEnabled = false;
 

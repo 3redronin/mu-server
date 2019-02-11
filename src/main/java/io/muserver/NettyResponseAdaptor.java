@@ -65,10 +65,6 @@ class NettyResponseAdaptor implements MuResponse {
         }
         outputState = OutputState.STREAMING;
         HttpResponse response = isHead ? new EmptyHttpResponse(httpStatus()) : new DefaultHttpResponse(HTTP_1_1, httpStatus(), false);
-
-        if (!Toggles.fixedLengthResponsesEnabled) {
-            headers.remove(HeaderNames.CONTENT_LENGTH);
-        }
         declaredLength = headers.contains(HeaderNames.CONTENT_LENGTH)
             ? Long.parseLong(headers.get(HeaderNames.CONTENT_LENGTH))
             : -1;
