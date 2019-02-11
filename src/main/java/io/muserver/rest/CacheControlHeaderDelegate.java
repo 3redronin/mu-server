@@ -47,6 +47,7 @@ import io.muserver.ParameterizedHeader;
 
 import javax.ws.rs.core.CacheControl;
 import javax.ws.rs.ext.RuntimeDelegate;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -58,14 +59,31 @@ class CacheControlHeaderDelegate implements RuntimeDelegate.HeaderDelegate<Cache
     public CacheControl fromString(String value) {
         ParameterizedHeader dir = ParameterizedHeader.fromString(value);
         CacheControl cc = new CacheControl();
-        Map<String, String> pams = dir.parameters();
+        Map<String, String> pams = new HashMap<>(dir.parameters());
 
         cc.setProxyRevalidate(pams.containsKey("proxy-revalidate"));
+        pams.remove("proxy-revalidate");
         cc.setMustRevalidate(pams.containsKey("must-revalidate"));
+        pams.remove("must-revalidate");
         cc.setNoTransform(pams.containsKey("no-transform"));
+        pams.remove("no-transform");
         cc.setNoStore(pams.containsKey("no-store"));
+        pams.remove("no-store");
         cc.setNoCache(pams.containsKey("no-cache"));
+        pams.remove("no-cache");
         cc.setPrivate(pams.containsKey("private"));
+        pams.remove("private");
+
+        if (pams.containsKey("max-age")) {
+            cc.setMaxAge(Integer.parseInt(pams.get("max-age")));
+            pams.remove("max-age");
+        }
+        if (pams.containsKey("s-maxage")) {
+            cc.setSMaxAge(Integer.parseInt(pams.get("s-maxage")));
+            pams.remove("s-maxage");
+        }
+
+        cc.getCacheExtension().putAll(pams);
 
         return cc;
     }
