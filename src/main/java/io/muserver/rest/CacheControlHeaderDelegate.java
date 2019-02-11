@@ -43,6 +43,8 @@ https://github.com/jersey/jersey/blob/12e5d8bdf22bcd2676a1032ed69473cf2bbc48c7/c
  */
 package io.muserver.rest;
 
+import io.muserver.ParameterizedHeader;
+
 import javax.ws.rs.core.CacheControl;
 import javax.ws.rs.ext.RuntimeDelegate;
 import java.util.List;
@@ -52,10 +54,20 @@ import java.util.regex.Pattern;
 
 class CacheControlHeaderDelegate implements RuntimeDelegate.HeaderDelegate<CacheControl> {
     private static final Pattern WHITESPACE = Pattern.compile("\\s");
-
     @Override
     public CacheControl fromString(String value) {
-        throw NotImplementedException.notYet();
+        ParameterizedHeader dir = ParameterizedHeader.fromString(value);
+        CacheControl cc = new CacheControl();
+        Map<String, String> pams = dir.parameters();
+
+        cc.setProxyRevalidate(pams.containsKey("proxy-revalidate"));
+        cc.setMustRevalidate(pams.containsKey("must-revalidate"));
+        cc.setNoTransform(pams.containsKey("no-transform"));
+        cc.setNoStore(pams.containsKey("no-store"));
+        cc.setNoCache(pams.containsKey("no-cache"));
+        cc.setPrivate(pams.containsKey("private"));
+
+        return cc;
     }
 
     @Override

@@ -4,47 +4,28 @@ import java.util.*;
 
 import static io.muserver.Mutils.notNull;
 import static java.util.Collections.emptyList;
-import static java.util.Collections.emptyMap;
 
 /**
- * A utility class to parse headers that are of the format <code>name; param1=value; param2="quoted string"</code>
- * \such as Content-Type, Accepts, Content-Disposition etc
+ * <p>A utility class to parse headers that are of the format <code>name; param1=value; param2="quoted string"</code>
+ * such as Content-Type, Accepts, Content-Disposition etc.</p>
+ * <p>More explicitly, a header that starts with a value, then has an optional list of semi-colon separated name/value pairs.</p>
  */
-public class HeaderParser {
+public class ParameterizedHeaderWithValue {
 
     private final String value;
     private final Map<String, String> parameters;
-
-    /**
-     * Creates a value with no parameters
-     * @param value The value, such as <code>image/jpeg</code>
-     */
-    public HeaderParser(String value) {
-        this(value, emptyMap());
-    }
 
     /**
      * Creates a value with parameters
      * @param value The value such as <code>text/plain</code>
      * @param parameters A map of parameters, such as <code>charset: UTF-8</code>
      */
-    public HeaderParser(String value, Map<String, String> parameters) {
+    ParameterizedHeaderWithValue(String value, Map<String, String> parameters) {
         notNull("value", value);
         notNull("parameters", parameters);
         this.value = value;
         this.parameters = parameters;
     }
-
-    /**
-     * Creates a header value with a single parameter
-     * @param value The value, such as <code>text/html</code>
-     * @param paramName The parameter name, such as <code>charset</code>
-     * @param paramValue The parameter value, such as <code>UTF-8</code>
-     */
-    public HeaderParser(String value, String paramName, String paramValue) {
-        this(value, Collections.singletonMap(paramName, paramValue));
-    }
-
 
     public String value() {
         return value;
@@ -57,18 +38,18 @@ public class HeaderParser {
     private enum State {VALUE, PARAM_NAME, PARAM_VALUE}
 
     /**
-     * Converts a string such as "text/plain" into a MediaType object.
+     * Converts headers that are values followed by optional parameters
      *
      * @param input The value to parse
-     * @return A MediaType object
+     * @return A list of ParameterizedHeaderWithValue objects
      */
-    public static List<HeaderParser> fromString(String input) {
+    public static List<ParameterizedHeaderWithValue> fromString(String input) {
         if (input == null || input.length() == 0) {
             return emptyList();
         }
         StringBuilder buffer = new StringBuilder();
 
-        List<HeaderParser> results = new ArrayList<>();
+        List<ParameterizedHeaderWithValue> results = new ArrayList<>();
 
         int i = 0;
         while (i < input.length()) {
@@ -174,7 +155,7 @@ public class HeaderParser {
                     }
             }
 
-            results.add(new HeaderParser(value, parameters == null ? Collections.emptyMap() : parameters));
+            results.add(new ParameterizedHeaderWithValue(value, parameters == null ? Collections.emptyMap() : parameters));
         }
 
         return results;
@@ -206,7 +187,7 @@ public class HeaderParser {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        HeaderParser that = (HeaderParser) o;
+        ParameterizedHeaderWithValue that = (ParameterizedHeaderWithValue) o;
         return Objects.equals(value, that.value) &&
             Objects.equals(parameters, that.parameters);
     }
@@ -216,21 +197,10 @@ public class HeaderParser {
         return Objects.hash(value, parameters);
     }
 
-    static boolean isTChar(byte c) {
-        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9' || c == '!' ||
-            c == '#' || c == '$' || c == '%' || c == '&' || c == '\'' || c == '*' || c == '+' ||
-            c == '-' || c == '.' || c == '^' || c == '_' || c == '`' || c == '|' || c == '~');
-    }
-    static boolean isOWS(byte c) {
-        return c == ' ' || c == '\t';
-    }
     static boolean isTChar(char c) {
         return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9' || c == '!' ||
             c == '#' || c == '$' || c == '%' || c == '&' || c == '\'' || c == '*' || c == '+' ||
             c == '-' || c == '.' || c == '^' || c == '_' || c == '`' || c == '|' || c == '~');
-    }
-    static boolean isVChar(byte c) {
-        return c >= 0x21 && c <= 0x7E;
     }
     static boolean isVChar(char c) {
         return c >= 0x21 && c <= 0x7E;

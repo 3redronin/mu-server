@@ -23,11 +23,11 @@ public class MediaTypeParser {
         if (value == null) {
             throw new NullPointerException("value");
         }
-        List<HeaderParser> headerValues = HeaderParser.fromString(value);
+        List<ParameterizedHeaderWithValue> headerValues = ParameterizedHeaderWithValue.fromString(value);
         if (headerValues.isEmpty()) {
             throw new IllegalArgumentException("The value '" + value + "' did not contain a valid header value");
         }
-        HeaderParser v = headerValues.get(0);
+        ParameterizedHeaderWithValue v = headerValues.get(0);
         String[] split = v.value().split("/");
         if (split.length != 2) {
             throw new IllegalArgumentException("Media types must be in the format 'type/subtype'; this is inavlid: '" + v.value() + "'");
@@ -42,6 +42,6 @@ public class MediaTypeParser {
      */
     public static String toString(MediaType mediaType) {
         notNull("mediaType", mediaType);
-        return new HeaderParser(mediaType.getType() + "/" + mediaType.getSubtype(), mediaType.getParameters()).toString();
+        return new ParameterizedHeaderWithValue(mediaType.getType() + "/" + mediaType.getSubtype(), mediaType.getParameters()).toString();
     }
 }
