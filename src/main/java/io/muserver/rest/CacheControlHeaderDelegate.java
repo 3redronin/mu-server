@@ -124,7 +124,7 @@ class CacheControlHeaderDelegate implements RuntimeDelegate.HeaderDelegate<Cache
         return sb.toString();
     }
 
-    private String buildListValue(List<String> values) {
+    static String buildListValue(List<String> values) {
         StringBuilder b = new StringBuilder();
         for (String value : values) {
             appendWithSeparator(b, value);
@@ -132,14 +132,14 @@ class CacheControlHeaderDelegate implements RuntimeDelegate.HeaderDelegate<Cache
         return b.toString();
     }
 
-    private void appendWithSeparator(StringBuilder b, String field) {
+    static void appendWithSeparator(StringBuilder b, String field) {
         if (b.length() > 0) {
             b.append(", ");
         }
         b.append(field);
     }
 
-    private void appendQuotedWithSeparator(StringBuilder b, String field, String value) {
+    static void appendQuotedWithSeparator(StringBuilder b, String field, String value) {
         appendWithSeparator(b, field);
         if (value != null && !value.isEmpty()) {
             b.append("=\"");
@@ -148,13 +148,13 @@ class CacheControlHeaderDelegate implements RuntimeDelegate.HeaderDelegate<Cache
         }
     }
 
-    private void appendWithSeparator(StringBuilder b, String field, int value) {
+    static void appendWithSeparator(StringBuilder b, String field, int value) {
         appendWithSeparator(b, field);
         b.append("=");
         b.append(value);
     }
 
-    private void appendWithSeparator(StringBuilder b, String field, String value) {
+    static void appendWithSeparator(StringBuilder b, String field, String value) {
         appendWithSeparator(b, field);
         if (value != null && !value.isEmpty()) {
             b.append("=");
@@ -162,7 +162,7 @@ class CacheControlHeaderDelegate implements RuntimeDelegate.HeaderDelegate<Cache
         }
     }
 
-    private String quoteIfWhitespace(String value) {
+    static String quoteIfWhitespace(String value) {
         if (value == null) {
             return null;
         }

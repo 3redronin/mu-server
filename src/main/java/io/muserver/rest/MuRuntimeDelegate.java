@@ -36,6 +36,7 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
         headerDelegates.put(NewCookie.class, new NewCookieHeaderDelegate());
         headerDelegates.put(Cookie.class, new CookieHeaderDelegate());
         headerDelegates.put(EntityTag.class, new EntityTagDelegate());
+        headerDelegates.put(Link.class, new LinkHeaderDelegate());
     }
 
     @Override
@@ -70,6 +71,6 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
 
     @Override
     public Link.Builder createLinkBuilder() {
-        throw NotImplementedException.notYet();
+        return new LinkHeaderDelegate.MuLinkBuilder();
     }
 }

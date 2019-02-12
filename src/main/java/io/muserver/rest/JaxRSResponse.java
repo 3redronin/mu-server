@@ -415,12 +415,16 @@ class JaxRSResponse extends Response {
 
         @Override
         public ResponseBuilder link(URI uri, String rel) {
-            throw NotImplementedException.notYet();
+            Link link = Link.fromUri(uri)
+                .rel(rel)
+                .build();
+            linkHeaders.add(link);
+            return this;
         }
 
         @Override
         public ResponseBuilder link(String uri, String rel) {
-            throw NotImplementedException.notYet();
+            return link(URI.create(uri), rel);
         }
     }
 
