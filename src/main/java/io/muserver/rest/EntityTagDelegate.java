@@ -6,7 +6,18 @@ import javax.ws.rs.ext.RuntimeDelegate;
 class EntityTagDelegate implements RuntimeDelegate.HeaderDelegate<EntityTag> {
     @Override
     public EntityTag fromString(String value) {
-        throw NotImplementedException.notYet();
+
+        if (value == null || !value.endsWith("\"")) {
+            throw new IllegalArgumentException("Not a value etag value");
+        }
+
+        if (value.startsWith("\"")) {
+            return new EntityTag(value.substring(1, value.length() -1), false);
+        } else if (value.startsWith("W/\"")) {
+            return new EntityTag(value.substring(3, value.length() -1), true);
+        }
+
+        throw new IllegalArgumentException("Not a value etag value");
     }
 
     @Override

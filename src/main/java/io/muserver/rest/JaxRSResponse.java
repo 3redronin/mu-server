@@ -50,22 +50,22 @@ class JaxRSResponse extends Response {
 
     @Override
     public <T> T readEntity(Class<T> entityType) {
-        throw NotImplementedException.notYet();
+        throw NotImplementedException.willNot();
     }
 
     @Override
     public <T> T readEntity(GenericType<T> entityType) {
-        throw NotImplementedException.notYet();
+        throw NotImplementedException.willNot();
     }
 
     @Override
     public <T> T readEntity(Class<T> entityType, Annotation[] annotations) {
-        throw NotImplementedException.notYet();
+        throw NotImplementedException.willNot();
     }
 
     @Override
     public <T> T readEntity(GenericType<T> entityType, Annotation[] annotations) {
-        throw NotImplementedException.notYet();
+        throw NotImplementedException.willNot();
     }
 
     @Override
@@ -75,7 +75,7 @@ class JaxRSResponse extends Response {
 
     @Override
     public boolean bufferEntity() {
-        throw NotImplementedException.notYet();
+        throw NotImplementedException.willNot();
     }
 
     @Override
@@ -200,13 +200,12 @@ class JaxRSResponse extends Response {
         private Annotation[] annotations;
         private NewCookie[] cookies = new NewCookie[0];
         private MediaType type;
-        private Variant variant;
         private List<Variant> variants = new ArrayList<>();
 
         @Override
         public Response build() {
             for (Link linkHeader : linkHeaders) {
-                headers.add(HeaderNames.LINK, "<" + linkHeader.getUri().toString() + ">;rel=" + linkHeader.getRel());
+                headers.add(HeaderNames.LINK, linkHeader.toString());
             }
             MediaType typeToUse = this.type;
             if (typeToUse == null) {
@@ -352,7 +351,7 @@ class JaxRSResponse extends Response {
 
         @Override
         public ResponseBuilder variant(Variant variant) {
-            this.variant = variant;
+            this.variants.add(variant);
             return this;
         }
 
@@ -399,7 +398,11 @@ class JaxRSResponse extends Response {
 
         @Override
         public ResponseBuilder variants(List<Variant> variants) {
-            this.variants = variants;
+            if (variants == null) {
+                this.variants.clear();
+            } else {
+                this.variants.addAll(variants);
+            }
             return this;
         }
 
