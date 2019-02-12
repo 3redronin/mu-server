@@ -377,5 +377,5 @@ None of this section is applicable to MuServer as it does not manage your server
 The following are not described by the spec but are interfaces defined in the jax-rs spec API that need to be implemented.
 
 - [x] `UriBilder`
-- [ ] `Link`
+- [x] `Link`
 - [ ] `VariantListBuilder`

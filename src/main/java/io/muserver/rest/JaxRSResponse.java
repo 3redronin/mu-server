@@ -418,9 +418,7 @@ class JaxRSResponse extends Response {
 
         @Override
         public ResponseBuilder link(URI uri, String rel) {
-            Link link = Link.fromUri(uri)
-                .rel(rel)
-                .build();
+            Link link = Link.fromUri(uri).rel(rel).build();
             linkHeaders.add(link);
             return this;
         }

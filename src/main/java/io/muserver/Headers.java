@@ -167,9 +167,9 @@ public class Headers implements Iterable<Map.Entry<String, String>> {
 
 	public Headers setAll(Headers headers) {
 		checkNotNull(headers, "headers");
-		for (Map.Entry<String, String> entry : headers) {
-			set(entry.getKey(), entry.getValue());
-		}
+        for (String name : headers.names()) {
+            set(name, headers.getAll(name));
+        }
 		return this;
 	}
 
