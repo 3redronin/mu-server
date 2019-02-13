@@ -38,7 +38,10 @@ public interface AsyncSsePublisher {
 
     /**
      * Sends a message (without an ID or event type)
+     *
      * @param message The message to send
+     * @return completion stage that completes when the event has been sent. If there is a problem during sending of
+     * an event, completion stage will be completed exceptionally.
      */
     CompletionStage<?> send(String message);
 
@@ -52,7 +55,9 @@ public interface AsyncSsePublisher {
      * </code></pre>
      *
      * @param message The message to send
-     * @param event An event name. If <code>null</code> is specified, clients default to a message type of <code>message</code>
+     * @param event   An event name. If <code>null</code> is specified, clients default to a message type of <code>message</code>
+     * @return completion stage that completes when the event has been sent. If there is a problem during sending of
+     * an event, completion stage will be completed exceptionally.
      */
     CompletionStage<?> send(String message, String event);
 
@@ -66,9 +71,11 @@ public interface AsyncSsePublisher {
      * </code></pre>
      *
      * @param message The message to send
-     * @param event An event name. If <code>null</code> is specified, clients default to a message type of <code>message</code>
+     * @param event   An event name. If <code>null</code> is specified, clients default to a message type of <code>message</code>
      * @param eventID An identifier for the message. If set, and the browser reconnects, then the last event ID will be
      *                sent by the browser in the <code>Last-Event-ID</code> request header.
+     * @return completion stage that completes when the event has been sent. If there is a problem during sending of
+     * an event, completion stage will be completed exceptionally.
      */
     CompletionStage<?> send(String message, String event, String eventID);
 
@@ -81,7 +88,10 @@ public interface AsyncSsePublisher {
 
     /**
      * Sends a comment to the client. Clients will ignore this, however it can be used as a way to keep the connection alive.
+     *
      * @param comment A single-line string to send as a comment.
+     * @return completion stage that completes when the comment has been sent. If there is a problem during sending of
+     * an event, completion stage will be completed exceptionally.
      */
     CompletionStage<?> sendComment(String comment);
 
@@ -89,8 +99,11 @@ public interface AsyncSsePublisher {
      * <p>Sends a message to the client instructing it to reconnect after the given time period in case of any disconnection
      * (including calling {@link #close()} from the server). A common default (controlled by the client) is several seconds.</p>
      * <p>Note: clients could ignore this value.</p>
+     *
      * @param timeToWait The time the client should wait before attempting to reconnect in case of any disconnection.
-     * @param unit The unit of time.
+     * @param unit       The unit of time.
+     * @return completion stage that completes when the event has been sent. If there is a problem during sending of
+     * an event, completion stage will be completed exceptionally.
      */
     CompletionStage<?> setClientReconnectTime(long timeToWait, TimeUnit unit);
 
@@ -99,7 +112,8 @@ public interface AsyncSsePublisher {
      * <p>This will set the content type of the response to <code>text/event-stream</code> and disable caching.</p>
      * <p>The request will also switch to async mode, which means you can use the returned publisher in another thread.</p>
      * <p><strong>IMPORTANT:</strong> The {@link #close()} method must be called when publishing is complete.</p>
-     * @param request The current MuRequest
+     *
+     * @param request  The current MuRequest
      * @param response The current MuResponse
      * @return Returns a publisher that can be used to send messages to the client.
      */

@@ -271,6 +271,9 @@
                                 <goals>
                                     <goal>sign</goal>
                                 </goals>
+                                <configuration>
+                                    <keyname>mykey</keyname>
+                                </configuration>
                             </execution>
                         </executions>
                     </plugin>
