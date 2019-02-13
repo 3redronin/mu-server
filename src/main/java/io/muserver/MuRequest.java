@@ -234,4 +234,9 @@ public interface MuRequest {
      * @return Returns a reference to the mu server instance.
      */
     MuServer server();
+
+    /**
+     * @return Returns try if {@link #handleAsync()} has been called and this is an async response
+     */
+    boolean isAsync();
 }

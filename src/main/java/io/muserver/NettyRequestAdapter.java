@@ -64,7 +64,7 @@ class NettyRequestAdapter implements MuRequest {
         this.method = method;
     }
 
-    boolean isAsync() {
+    public boolean isAsync() {
         return asyncHandle != null;
     }
 

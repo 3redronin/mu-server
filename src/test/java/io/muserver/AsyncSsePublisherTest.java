@@ -19,7 +19,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.request;
 
-public class SsePublisherTest {
+public class AsyncSsePublisherTest {
 
     private MuServer server;
     private final SseClient.OkSse sseClient = new SseClient.OkSse(ClientUtils.client);
@@ -37,22 +37,19 @@ public class SsePublisherTest {
         server = httpsServer()
             .addHandler(Method.GET, "/streamer", (request, response, pathParams) -> {
 
-                SsePublisher ssePublisher = SsePublisher.start(request, response);
+                AsyncSsePublisher ssePublisher = AsyncSsePublisher.start(request, response);
                 executor.submit(() -> {
-                    try {
-                        ssePublisher.sendComment("this is a comment");
-                        ssePublisher.send("Just a message");
-                        ssePublisher.send("A message and event", "customevent");
-                        ssePublisher.setClientReconnectTime(3, TimeUnit.SECONDS);
-                        ssePublisher.send("A message and ID", null, "myid");
-                        ssePublisher.send("A message and event and ID", "customevent", "myid");
-                        ssePublisher.sendComment("this is a comment 2");
-                        ssePublisher.send(multilineJson, null, null);
-                    } catch (IOException e) {
-                        // the user has disconnected
-                    } finally {
-                        ssePublisher.close();
-                    }
+                    ssePublisher.sendComment("this is a comment")
+                        .thenRunAsync(() -> {
+                            ssePublisher.send("Just a message");
+                            ssePublisher.send("A message and event", "customevent");
+                            ssePublisher.setClientReconnectTime(3, TimeUnit.SECONDS);
+                            ssePublisher.send("A message and ID", null, "myid");
+                            ssePublisher.send("A message and event and ID", "customevent", "myid");
+                            ssePublisher.sendComment("this is a comment 2");
+                            ssePublisher.send(multilineJson, null, null);
+                            ssePublisher.close();
+                        });
                 });
 
             })
@@ -84,18 +81,28 @@ public class SsePublisherTest {
         server = httpsServer()
             .addHandler(Method.GET, "/streamer", (request, response, pathParams) -> {
 
-                SsePublisher ssePublisher = SsePublisher.start(request, response);
+                AsyncSsePublisher ssePublisher = AsyncSsePublisher.start(request, response);
                 executor.submit(() -> {
                     int i = 0;
-                    while (true) {
+                    ssePublisher.send("This is message " + i);
+                    somethingPublishedLatch.countDown();
+
+                    while (thrownException.get() == null) {
+                        ssePublisher.send("This is message " + i)
+                            .whenCompleteAsync((o, throwable) -> {
+                                System.out.println("o = " + o);
+                                System.out.println("throwable = " + throwable);
+                                System.out.println();
+                                if (throwable != null) {
+                                    thrownException.set(throwable);
+                                    exceptionThrownLatch.countDown();
+                                }
+                            });
                         try {
-                            ssePublisher.send("This is message " + i);
-                            somethingPublishedLatch.countDown();
                             Thread.sleep(200);
-                        } catch (Throwable e) {
+                        } catch (InterruptedException e) {
                             thrownException.set(e);
                             exceptionThrownLatch.countDown();
-                            break;
                         }
                         i++;
                     }

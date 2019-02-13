@@ -1,10 +1,15 @@
 package io.muserver;
 
-import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.TimeUnit;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+
 /**
- * <p>An interface for sending Server-Sent Events (SSE) to a client.</p>
+ * <p>An interface for sending Server-Sent Events (SSE) to a client with async callbacks.</p>
+ * <p>If you aren't sure if you need async or not, use the {@link SsePublisher} interface instead as it is simpler.</p>
  * <p>The following example creates a publisher and publishes 10 messages to it from another thread:</p>
  * <pre><code>
  * server = httpsServer()
@@ -26,15 +31,16 @@ import java.util.concurrent.TimeUnit;
  *     })
  *     .start();
  * </code></pre>
+ *
+ * @see SsePublisher
  */
-public interface SsePublisher {
+public interface AsyncSsePublisher {
 
     /**
      * Sends a message (without an ID or event type)
      * @param message The message to send
-     * @throws IOException Thrown if there is an error writing to the client, for example if the user has closed their browser.
      */
-    void send(String message) throws IOException;
+    CompletionStage<?> send(String message);
 
     /**
      * <p>Sends a message with an event type (without an ID).</p>
@@ -47,9 +53,8 @@ public interface SsePublisher {
      *
      * @param message The message to send
      * @param event An event name. If <code>null</code> is specified, clients default to a message type of <code>message</code>
-     * @throws IOException Thrown if there is an error writing to the client, for example if the user has closed their browser.
      */
-    void send(String message, String event) throws IOException;
+    CompletionStage<?> send(String message, String event);
 
     /**
      * <p>Sends a message with an event type and ID.</p>
@@ -64,9 +69,8 @@ public interface SsePublisher {
      * @param event An event name. If <code>null</code> is specified, clients default to a message type of <code>message</code>
      * @param eventID An identifier for the message. If set, and the browser reconnects, then the last event ID will be
      *                sent by the browser in the <code>Last-Event-ID</code> request header.
-     * @throws IOException Thrown if there is an error writing to the client, for example if the user has closed their browser.
      */
-    void send(String message, String event, String eventID) throws IOException;
+    CompletionStage<?> send(String message, String event, String eventID);
 
     /**
      * <p>Stops the event stream.</p>
@@ -78,9 +82,8 @@ public interface SsePublisher {
     /**
      * Sends a comment to the client. Clients will ignore this, however it can be used as a way to keep the connection alive.
      * @param comment A single-line string to send as a comment.
-     * @throws IOException Thrown if there is an error writing to the client, for example if the user has closed their browser.
      */
-    void sendComment(String comment) throws IOException;
+    CompletionStage<?> sendComment(String comment);
 
     /**
      * <p>Sends a message to the client instructing it to reconnect after the given time period in case of any disconnection
@@ -88,9 +91,8 @@ public interface SsePublisher {
      * <p>Note: clients could ignore this value.</p>
      * @param timeToWait The time the client should wait before attempting to reconnect in case of any disconnection.
      * @param unit The unit of time.
-     * @throws IOException Thrown if there is an error writing to the client, for example if the user has closed their browser.
      */
-    void setClientReconnectTime(long timeToWait, TimeUnit unit) throws IOException;
+    CompletionStage<?> setClientReconnectTime(long timeToWait, TimeUnit unit);
 
     /**
      * <p>Creates a new Server-Sent Events publisher. This is designed by be called from within a MuHandler.</p>
@@ -101,95 +103,64 @@ public interface SsePublisher {
      * @param response The current MuResponse
      * @return Returns a publisher that can be used to send messages to the client.
      */
-    static SsePublisher start(MuRequest request, MuResponse response) {
+    static AsyncSsePublisher start(MuRequest request, MuResponse response) {
         response.contentType(ContentTypes.TEXT_EVENT_STREAM);
         response.headers().set(HeaderNames.CACHE_CONTROL, "no-cache, no-transform");
-        return new SsePublisherImpl(request.handleAsync(), response);
+        return new AsyncSsePublisherImpl(request.handleAsync());
     }
 }
 
-class SsePublisherImpl implements SsePublisher {
+class AsyncSsePublisherImpl implements AsyncSsePublisher {
 
     private final AsyncHandle asyncHandle;
-    private final MuResponse response;
 
-    SsePublisherImpl(AsyncHandle asyncHandle, MuResponse response) {
+    AsyncSsePublisherImpl(AsyncHandle asyncHandle) {
         this.asyncHandle = asyncHandle;
-        this.response = response;
     }
 
     @Override
-    public void send(String message) throws IOException {
-        send(message, null, null);
+    public CompletionStage<?> send(String message) {
+        return send(message, null, null);
     }
 
     @Override
-    public void send(String message, String event) throws IOException {
-        send(message, event, null);
+    public CompletionStage<?> send(String message, String event) {
+        return send(message, event, null);
     }
 
     @Override
-    public void send(String message, String event, String eventID) throws IOException {
-        sendChunk(dataText(message, event, eventID));
+    public CompletionStage<?> send(String message, String event, String eventID) {
+        return write(SsePublisherImpl.dataText(message, event, eventID));
     }
 
     @Override
-    public void sendComment(String comment) throws IOException {
-        sendChunk(commentText(comment));
+    public CompletionStage<?> sendComment(String comment) {
+        return write(SsePublisherImpl.commentText(comment));
     }
 
     @Override
-    public void setClientReconnectTime(long timeToWait, TimeUnit unit) throws IOException {
-        sendChunk(clientReconnectText(timeToWait, unit));
+    public CompletionStage<?> setClientReconnectTime(long timeToWait, TimeUnit unit) {
+        return write(SsePublisherImpl.clientReconnectText(timeToWait, unit));
+    }
+
+    private CompletionStage<?> write(String text) {
+        CompletableFuture<?> stage = new CompletableFuture<>();
+        asyncHandle.write(ByteBuffer.wrap(text.getBytes(UTF_8)), new WriteCallback() {
+            @Override
+            public void onFailure(Throwable reason) {
+                stage.completeExceptionally(reason);
+            }
+
+            @Override
+            public void onSuccess() {
+                stage.complete(null);
+            }
+        });
+        return stage;
     }
 
     @Override
     public void close() {
         asyncHandle.complete();
-    }
-
-    private void sendChunk(String text) throws IOException {
-        try {
-            response.sendChunk(text);
-        } catch (Throwable e) {
-            close();
-            if (e instanceof IllegalStateException) {
-                throw new IOException(e);
-            }
-            throw e;
-        }
-    }
-
-    private static void ensureNoLineBreaks(String value, String thing) {
-        if (value.contains("\n") || value.contains("\r")) {
-            throw new IllegalArgumentException(thing + " cannot have new line characters in them");
-        }
-    }
-
-    static String dataText(String message, String event, String eventID) {
-        StringBuilder raw = new StringBuilder();
-        if (eventID != null) {
-            ensureNoLineBreaks(eventID, "SSE IDs");
-            raw.append("id: ").append(eventID).append('\n');
-        }
-        if (event != null) {
-            ensureNoLineBreaks(event, "SSE event names");
-            raw.append("event: ").append(event).append('\n');
-        }
-        String[] lines = message.split("(\r\n)|[\r\n]");
-        for (String line : lines) {
-            raw.append("data: ").append(line).append('\n');
-        }
-        raw.append("\n");
-        return raw.toString();
-    }
-
-    static String commentText(String comment) {
-        ensureNoLineBreaks(comment, "SSE Comments");
-        return ":" + comment + "\n\n";
-    }
-
-    static String clientReconnectText(long timeToWait, TimeUnit unit) {
-        return "retry: " + unit.toMillis(timeToWait) + '\n';
     }
 }

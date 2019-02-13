@@ -313,7 +313,8 @@ N/A
 
 ## 9 Server-Sent Events
 
-- [ ] Not yet implemented
+- [x] SSE Event Sink
+- [ ] SSE Broadcaster
 
 ## 10 Context
 

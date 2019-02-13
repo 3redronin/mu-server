@@ -8,6 +8,8 @@ import javax.ws.rs.*;
 import javax.ws.rs.core.*;
 import javax.ws.rs.ext.MessageBodyReader;
 import javax.ws.rs.ext.MessageBodyWriter;
+import javax.ws.rs.sse.Sse;
+import javax.ws.rs.sse.SseEventSink;
 import java.io.InputStream;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Parameter;
@@ -111,7 +113,8 @@ public class RestHandler implements MuHandler {
                             + "- if this should be optional then specify an @DefaultValue annotation on the parameter");
                     }
                 } else if (param.source == ResourceMethodParam.ValueSource.CONTEXT) {
-                    paramValue = getContextParam(requestContext, muResponse, relativePath, mm, param);
+                    paramValue = getContextParam(requestContext, muResponse, relativePath, mm, param, entityProviders);
+
                 } else if (param.source == ResourceMethodParam.ValueSource.SUSPENDED) {
                     if (isAsync) {
                         throw new MuException("A REST method can only have one @Suspended attribute. Error for " + rm);
@@ -128,6 +131,9 @@ public class RestHandler implements MuHandler {
 
 
             Object result = rm.invoke(params);
+
+            isAsync |= muRequest.isAsync();
+
             if (!isAsync) {
                 if (result instanceof CompletionStage) {
                     AsyncHandle asyncHandle1 = muRequest.handleAsync();
@@ -259,7 +265,7 @@ public class RestHandler implements MuHandler {
         }
     }
 
-    private static Object getContextParam(MuContainerRequestContext requestContext, MuResponse muResponse, String relativePath, RequestMatcher.MatchedMethod mm, ResourceMethodParam param) {
+    private static Object getContextParam(MuContainerRequestContext requestContext, MuResponse muResponse, String relativePath, RequestMatcher.MatchedMethod mm, ResourceMethodParam param, EntityProviders providers) {
         MuRequest request = requestContext.muRequest;
         Object paramValue;
         Class<?> type = param.parameterHandle.getType();
@@ -273,6 +279,11 @@ public class RestHandler implements MuHandler {
             paramValue = new JaxRsHttpHeadersAdapter(request.headers(), request.cookies());
         } else if (type.equals(SecurityContext.class)) {
             return requestContext.getSecurityContext();
+        } else if (type.equals(Sse.class)) {
+            return new JaxSseImpl();
+        } else if (type.equals(SseEventSink.class)) {
+            AsyncSsePublisher pub = AsyncSsePublisher.start(requestContext.muRequest, muResponse);
+            return new JaxSseEventSinkImpl(pub, muResponse, providers);
         } else {
             throw new ServerErrorException("MuServer does not support @Context parameters with type " + type, 500);
         }
