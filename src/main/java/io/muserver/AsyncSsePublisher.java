@@ -10,27 +10,8 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 /**
  * <p>An interface for sending Server-Sent Events (SSE) to a client with async callbacks.</p>
  * <p>If you aren't sure if you need async or not, use the {@link SsePublisher} interface instead as it is simpler.</p>
- * <p>The following example creates a publisher and publishes 10 messages to it from another thread:</p>
- * <pre><code>
- * server = httpsServer()
- *     .addHandler(Method.GET, "/streamer", (request, response, pathParams) -&gt; {
- *         SsePublisher ssePublisher = SsePublisher.start(request, response);
- *         new Thread(() -&gt; {
- *             try {
- *                 for (int i = 0; i &lt; 100; i++) {
- *                     ssePublisher.send("This is message " + i);
- *                     Thread.sleep(1000);
- *                 }
- *             } catch (Exception e) {
- *                 // the user has probably disconnected; stop publishing
- *             } finally {
- *                 ssePublisher.close();
- *             }
- *         }).start();
- *
- *     })
- *     .start();
- * </code></pre>
+ * <p>The usage is that same as for the synchronous version except that each send method returns a {@link CompletionStage}
+ * which contains completion or exception info.</p>
  *
  * @see SsePublisher
  */

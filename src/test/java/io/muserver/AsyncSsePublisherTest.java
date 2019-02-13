@@ -38,19 +38,17 @@ public class AsyncSsePublisherTest {
             .addHandler(Method.GET, "/streamer", (request, response, pathParams) -> {
 
                 AsyncSsePublisher ssePublisher = AsyncSsePublisher.start(request, response);
-                executor.submit(() -> {
-                    ssePublisher.sendComment("this is a comment")
-                        .thenRunAsync(() -> {
-                            ssePublisher.send("Just a message");
-                            ssePublisher.send("A message and event", "customevent");
-                            ssePublisher.setClientReconnectTime(3, TimeUnit.SECONDS);
-                            ssePublisher.send("A message and ID", null, "myid");
-                            ssePublisher.send("A message and event and ID", "customevent", "myid");
-                            ssePublisher.sendComment("this is a comment 2");
-                            ssePublisher.send(multilineJson, null, null);
-                            ssePublisher.close();
-                        });
-                });
+                ssePublisher.sendComment("this is a comment")
+                    .thenRunAsync(() -> {
+                        ssePublisher.send("Just a message");
+                        ssePublisher.send("A message and event", "customevent");
+                        ssePublisher.setClientReconnectTime(3, TimeUnit.SECONDS);
+                        ssePublisher.send("A message and ID", null, "myid");
+                        ssePublisher.send("A message and event and ID", "customevent", "myid");
+                        ssePublisher.sendComment("this is a comment 2");
+                        ssePublisher.send(multilineJson, null, null);
+                        ssePublisher.close();
+                    });
 
             })
             .start();
