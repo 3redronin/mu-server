@@ -4,7 +4,7 @@ import javax.ws.rs.sse.OutboundSseEvent;
 import javax.ws.rs.sse.Sse;
 import javax.ws.rs.sse.SseBroadcaster;
 
-public class JaxSseImpl implements Sse {
+class JaxSseImpl implements Sse {
 
     @Override
     public OutboundSseEvent.Builder newEventBuilder() {

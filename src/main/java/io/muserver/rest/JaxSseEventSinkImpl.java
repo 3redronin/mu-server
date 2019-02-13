@@ -16,7 +16,7 @@ import java.util.concurrent.TimeUnit;
 import static io.muserver.rest.JaxRSResponse.muHeadersToJaxObj;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
-public class JaxSseEventSinkImpl implements SseEventSink {
+class JaxSseEventSinkImpl implements SseEventSink {
 
     private final AsyncSsePublisher ssePublisher;
     private final MuResponse response;
