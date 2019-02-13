@@ -110,11 +110,13 @@ class RequestMatcher {
         for (MatchedClass candidateClass : candidateClasses) {
             for (ResourceMethod resourceMethod : candidateClass.resourceClass.resourceMethods) {
                 if (resourceMethod.isSubResource() || resourceMethod.isSubResourceLocator()) {
-                    PathMatch matcher = resourceMethod.pathPattern.matcher(relativeUri);
-                    if (matcher.prefixMatches()) {
-                        Map<String, String> combinedParams = new HashMap<>(candidateClass.pathMatch.params());
-                        combinedParams.putAll(matcher.params());
-                        candidates.add(new MatchedMethod(candidateClass, resourceMethod, true, combinedParams, matcher));
+                    if (relativeUri != null) {
+                        PathMatch matcher = resourceMethod.pathPattern.matcher(relativeUri);
+                        if (matcher.prefixMatches()) {
+                            Map<String, String> combinedParams = new HashMap<>(candidateClass.pathMatch.params());
+                            combinedParams.putAll(matcher.params());
+                            candidates.add(new MatchedMethod(candidateClass, resourceMethod, true, combinedParams, matcher));
+                        }
                     }
                 }
             }

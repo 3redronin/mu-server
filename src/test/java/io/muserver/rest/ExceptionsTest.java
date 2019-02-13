@@ -30,7 +30,7 @@ public class ExceptionsTest {
                 throw new NotFoundException("This is ignored");
             }
         }
-        this.server = httpsServer().addHandler(restHandler((Object) new Sample())).start();
+        this.server = httpsServer().addHandler(restHandler(new Sample())).start();
         try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
             assertThat(resp.code(), is(404));
             assertThat(resp.body().string(), equalTo("404 Not Found"));
@@ -46,10 +46,27 @@ public class ExceptionsTest {
                 throw new NotFoundException("This is ignored");
             }
         }
-        this.server = httpsServer().addHandler(restHandler((Object) new Sample())).start();
+        this.server = httpsServer().addHandler(restHandler(new Sample())).start();
         try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
             assertThat(resp.code(), is(405));
             assertThat(resp.body().string(), equalTo("<h1>405 Method Not Allowed</h1>HTTP 405 Method Not Allowed"));
+        }
+    }
+
+    @Test
+    public void classMatchingWithNoSuitableMethodsThrows404() throws Exception {
+        @Path("samples")
+        class Sample {
+            @GET
+            @Path("get")
+            public String get() {
+                return "This should not be called";
+            }
+        }
+        this.server = httpsServer().addHandler(restHandler(new Sample())).start();
+        try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
+            assertThat(resp.code(), is(404));
+            assertThat(resp.body().string(), equalTo("404 Not Found"));
         }
     }
 
