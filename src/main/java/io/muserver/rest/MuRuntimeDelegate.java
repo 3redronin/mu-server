@@ -4,6 +4,7 @@ import io.muserver.MuException;
 
 import javax.ws.rs.core.*;
 import javax.ws.rs.ext.RuntimeDelegate;
+import javax.ws.rs.sse.Sse;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -72,5 +73,14 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
     @Override
     public Link.Builder createLinkBuilder() {
         return new LinkHeaderDelegate.MuLinkBuilder();
+    }
+
+    /**
+     * <p>Creates a new SSE interface that can create SSE Events and Broadcasters.</p>
+     * <p>This can be useful if you want to have a singleton broadcaster in your class that you can declare as a final field.</p>
+     * @return A broadcaster that can be used to publish SSE events to clients.
+     */
+    public static Sse createSseFactory() {
+        return new JaxSseImpl();
     }
 }

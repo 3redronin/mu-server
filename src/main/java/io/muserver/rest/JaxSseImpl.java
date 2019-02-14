@@ -13,6 +13,6 @@ class JaxSseImpl implements Sse {
 
     @Override
     public SseBroadcaster newBroadcaster() {
-        throw NotImplementedException.notYet();
+        return new SseBroadcasterImpl();
     }
 }
