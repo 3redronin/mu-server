@@ -336,7 +336,7 @@ public class SseClient {
         }
     }
 
-    public interface ServerSentEvent {
+    public interface ServerSentEvent extends AutoCloseable {
 
         /**
          * @return the original request that initiated the Server Sent Event.
