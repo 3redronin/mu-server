@@ -109,8 +109,6 @@ class NettyResponseAdaptor implements MuResponse {
                 "The current write is being aborted and the connection is being closed because it would have resulted in " +
                 bytesStreamed + " bytes being sent.");
         } else {
-            // TODO: if streamed > declared throw
-
             boolean isLast = bytesStreamed == declaredLength;
             if (isLast) {
                 outputState = OutputState.FULL_SENT;

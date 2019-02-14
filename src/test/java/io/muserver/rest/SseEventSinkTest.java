@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -93,9 +94,9 @@ public class SseEventSinkTest {
                 .addCustomWriter(new DogWriter())
         ).start();
 
-        SseClient.ServerSentEvent clientHandle = sseClient.newServerSentEvent(request().url(server.uri().resolve("/streamer/eventStream").toString()).build(), listener);
-        listener.assertListenerIsClosed();
-        clientHandle.close();
+        try (SseClient.ServerSentEvent ignored = sseClient.newServerSentEvent(request().url(server.uri().resolve("/streamer/eventStream").toString()).build(), listener)) {
+            listener.assertListenerIsClosed();
+        }
         assertThat(listener.receivedMessages.subList(0, 7), equalTo(asList(
             "open",
             "retryTime=100000",
@@ -104,6 +105,41 @@ public class SseEventSinkTest {
             "message=event2        event=message        id=null",
             "message=Dog Little has tail? true        event=message        id=null",
             "message=123        event=Number        id=123")));
+    }
+
+    @Test
+    public void theCallbacksCanBeUsedToDetectClientDisconnections() throws Exception {
+        CountDownLatch failureLatch = new CountDownLatch(1);
+        @Path("/streamer")
+        class Streamer {
+
+            public void sendStuff(SseEventSink sink, Sse sse) {
+                sink.send(sse.newEvent("Hello"))
+                    .whenComplete((o, throwable) -> {
+                        if (throwable == null) {
+                            System.out.println("Will send again");
+                            sendStuff(sink, sse);
+                        } else {
+                            failureLatch.countDown();
+                        }
+                    });
+            }
+
+            @GET
+            @Path("eventStream")
+            @Produces(MediaType.SERVER_SENT_EVENTS)
+            public void eventStream(@Context SseEventSink eventSink,
+                                    @Context Sse sse) {
+                sendStuff(eventSink, sse);
+            }
+        }
+
+        server = httpServer().addHandler(restHandler(new Streamer())).start();
+
+        try (SseClient.ServerSentEvent ignored = sseClient.newServerSentEvent(request().url(server.uri().resolve("/streamer/eventStream").toString()).build(), listener)) {
+            Thread.sleep(50);
+        }
+        MuAssert.assertNotTimedOut("Timed out waiting for error", failureLatch);
     }
 
 

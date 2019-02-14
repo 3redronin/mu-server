@@ -397,7 +397,7 @@ class NettyRequestAdapter implements MuRequest {
                     } else {
                         callback.onFailure(future.cause());
                     }
-                } catch (Exception e) {
+                } catch (Throwable e) {
                     log.warn("Unhandled exception from write callback", e);
                     complete(e);
                 }

@@ -166,7 +166,7 @@ class SsePublisherImpl implements SsePublisher {
         }
     }
 
-    static String dataText(String message, String event, String eventID) {
+    private static String dataText(String message, String event, String eventID) {
         StringBuilder raw = new StringBuilder();
         if (eventID != null) {
             ensureNoLineBreaks(eventID, "SSE IDs");
@@ -184,12 +184,12 @@ class SsePublisherImpl implements SsePublisher {
         return raw.toString();
     }
 
-    static String commentText(String comment) {
+    private static String commentText(String comment) {
         ensureNoLineBreaks(comment, "SSE Comments");
         return ":" + comment + "\n\n";
     }
 
-    static String clientReconnectText(long timeToWait, TimeUnit unit) {
+    private static String clientReconnectText(long timeToWait, TimeUnit unit) {
         return "retry: " + unit.toMillis(timeToWait) + '\n';
     }
 }
