@@ -113,11 +113,10 @@ public class SseEventSinkTest {
         @Path("/streamer")
         class Streamer {
 
-            public void sendStuff(SseEventSink sink, Sse sse) {
+            private void sendStuff(SseEventSink sink, Sse sse) {
                 sink.send(sse.newEvent("Hello"))
                     .whenComplete((o, throwable) -> {
                         if (throwable == null) {
-                            System.out.println("Will send again");
                             sendStuff(sink, sse);
                         } else {
                             failureLatch.countDown();

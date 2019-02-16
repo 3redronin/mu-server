@@ -83,7 +83,7 @@ public class SseBroadcasterImplTest {
         List<TestSseClient> listeners = new ArrayList<>();
         for (int i = 0; i < numberOfSubscribers; i++) {
             TestSseClient listener = new TestSseClient();
-            SseClient.ServerSentEvent sse = sseClient.newServerSentEvent(request().url(server.uri().resolve("/streamer/register").toString()).build(), listener);
+            sseClient.newServerSentEvent(request().url(server.uri().resolve("/streamer/register").toString()).build(), listener);
             listeners.add(listener);
         }
 

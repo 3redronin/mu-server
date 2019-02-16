@@ -1,7 +1,7 @@
 package io.muserver.rest;
 
+import io.muserver.AsyncSsePublisher;
 import io.muserver.MuResponse;
-import io.muserver.SsePublisher;
 
 import javax.ws.rs.ext.MessageBodyWriter;
 import javax.ws.rs.sse.OutboundSseEvent;
@@ -17,12 +17,12 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 class JaxSseEventSinkImpl implements SseEventSink {
 
-    private final SsePublisher ssePublisher;
+    private final AsyncSsePublisher ssePublisher;
     private final MuResponse response;
     private final EntityProviders entityProviders;
     private volatile boolean isClosed = false;
 
-    public JaxSseEventSinkImpl(SsePublisher ssePublisher, MuResponse response, EntityProviders entityProviders) {
+    public JaxSseEventSinkImpl(AsyncSsePublisher ssePublisher, MuResponse response, EntityProviders entityProviders) {
         this.ssePublisher = ssePublisher;
         this.response = response;
         this.entityProviders = entityProviders;
@@ -37,14 +37,14 @@ class JaxSseEventSinkImpl implements SseEventSink {
     @Override
     public CompletionStage<?> send(OutboundSseEvent event) {
 
-        CompletableFuture<?> stage = new CompletableFuture<>();
+        CompletionStage<?> stage = null;
 
         try {
             if (event.isReconnectDelaySet()) {
-                ssePublisher.setClientReconnectTime(event.getReconnectDelay(), TimeUnit.MILLISECONDS);
+                stage = ssePublisher.setClientReconnectTime(event.getReconnectDelay(), TimeUnit.MILLISECONDS);
             }
             if (event.getComment() != null) {
-                ssePublisher.sendComment(event.getComment());
+                stage = ssePublisher.sendComment(event.getComment());
             }
             if (event.getData() != null) {
                 MessageBodyWriter messageBodyWriter = entityProviders.selectWriter(event.getType(), event.getGenericType(),
@@ -53,12 +53,16 @@ class JaxSseEventSinkImpl implements SseEventSink {
                     messageBodyWriter.writeTo(event.getData(), event.getType(), event.getGenericType(), new Annotation[0],
                         event.getMediaType(), muHeadersToJaxObj(response.headers()), out);
                     String data = new String(out.toByteArray(), UTF_8);
-                    ssePublisher.send(data, event.getName(), event.getId());
+                    stage = ssePublisher.send(data, event.getName(), event.getId());
                 }
             }
-            stage.complete(null);
+            if (stage == null) {
+                throw new IllegalArgumentException("The event had nothing to send");
+            }
         } catch (Throwable e) {
-            stage.completeExceptionally(e);
+            CompletableFuture<?> f = new CompletableFuture<>();
+            f.completeExceptionally(e);
+            stage = f;
         }
         return stage;
     }

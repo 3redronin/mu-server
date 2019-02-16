@@ -57,19 +57,12 @@ class SseBroadcasterImpl implements SseBroadcaster {
             CompletableFuture<?> completableFuture = new CompletableFuture<>();
 
             AtomicInteger count = new AtomicInteger(sinks.size());
-
-            int act = 0;
             for (SseEventSink sink : sinks) {
-//                System.out.println("Sending " + act);
-
-
-                int finalAct = act;
                 if (sink.isClosed()) {
                     sendOnCloseEvent(sink);
                     sendComplete(completableFuture, count);
                 } else {
                     sink.send(event).whenComplete((o, throwable) -> {
-//                        System.out.println("Sent " + finalAct + " ex: " + throwable);
                         if (throwable != null) {
                             for (BiConsumer<SseEventSink, Throwable> errorListener : errorListeners) {
                                 errorListener.accept(sink, throwable);
@@ -79,19 +72,15 @@ class SseBroadcasterImpl implements SseBroadcaster {
                         sendComplete(completableFuture, count);
                     });
                 }
-                act++;
-
             }
-
 
             return completableFuture;
         }
     }
 
-    public static void sendComplete(CompletableFuture<?> completableFuture, AtomicInteger count) {
+    private static void sendComplete(CompletableFuture<?> completableFuture, AtomicInteger count) {
         int remaining = count.decrementAndGet();
         if (remaining == 0) {
-//            System.out.println("Finally complete");
             completableFuture.complete(null);
         }
     }
@@ -113,7 +102,7 @@ class SseBroadcasterImpl implements SseBroadcaster {
         }
     }
 
-    public void sendOnCloseEvent(SseEventSink sink) {
+    private void sendOnCloseEvent(SseEventSink sink) {
         for (Consumer<SseEventSink> closeListener : closeListeners) {
             closeListener.accept(sink);
         }
