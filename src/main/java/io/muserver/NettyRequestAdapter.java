@@ -407,7 +407,11 @@ class NettyRequestAdapter implements MuRequest {
         @Override
         public Future<Void> write(ByteBuffer data) {
             NettyResponseAdaptor response = (NettyResponseAdaptor) request.nettyAsyncContext.response;
-            return response.write(data);
+            try {
+                return response.write(data);
+            } catch (Throwable e) {
+                return request.channel.newFailedFuture(e);
+            }
         }
 
         @Override

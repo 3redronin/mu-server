@@ -102,6 +102,7 @@ class NettyResponseAdaptor implements MuResponse {
         throwIfFinished();
         int size = data.writerIndex();
         bytesStreamed += size;
+        ChannelFuture lastAction;
 
         if (declaredLength > -1 && bytesStreamed > declaredLength) {
             complete(true);
@@ -122,6 +123,7 @@ class NettyResponseAdaptor implements MuResponse {
             // force exception if writes fail
             lastAction = lastAction.syncUninterruptibly();
         }
+        this.lastAction = lastAction;
         return lastAction;
     }
 

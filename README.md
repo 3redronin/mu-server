@@ -8,8 +8,8 @@ A modern Java web server, based on Netty. Currently in beta.
 
 * HTTPS is as simple as HTTP
 * The fluent API interface should mean it is easy to create web servers without referring to example code.
-* Advanced options still available, such as async handlers, controlling stream flow, etc
-* The dependencies should be kept to a minimum and all be  compile-time dependencies
+* Advanced options still available, such as async handlers, direct access to input/output streams, etc
+* The dependencies should be kept to a minimum and all be compile-time dependencies
 * All config via constructors or builders, so we do not assume or impose any dependency injection frameworks.
 
 ## Maven config
@@ -18,7 +18,7 @@ A modern Java web server, based on Netty. Currently in beta.
 <dependency>
     <groupId>io.muserver</groupId>
     <artifactId>mu-server</artifactId>
-    <version>0.16.0</version>
+    <version>0.18.6</version>
 </dependency>
 ````
 
