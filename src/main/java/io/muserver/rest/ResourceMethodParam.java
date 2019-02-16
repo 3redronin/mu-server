@@ -128,7 +128,7 @@ abstract class ResourceMethodParam {
                 source == ValueSource.COOKIE_PARAM ? request.cookie(key).orElse("") // TODO make request.cookie return a string and default it
                     : source == ValueSource.HEADER_PARAM ? String.join(",", request.headers().getAll(key))
                     : source == ValueSource.MATRIX_PARAM ? "" // TODO support matrix params
-                    : source == ValueSource.FORM_PARAM ? String.join(",", request.form().get(key))
+                    : source == ValueSource.FORM_PARAM ? String.join(",", request.form().getAll(key))
                     : source == ValueSource.PATH_PARAM ? matchedMethod.pathParams.get(key)
                     : source == ValueSource.QUERY_PARAM ? String.join(",", request.query().getAll(key))
                     : null;

@@ -10,8 +10,6 @@ import javax.ws.rs.*;
 import javax.ws.rs.ext.ParamConverter;
 import javax.ws.rs.ext.ParamConverterProvider;
 import java.io.IOException;
-import java.lang.annotation.Annotation;
-import java.lang.reflect.Type;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -208,15 +206,24 @@ public class ResourceMethodParamTest {
         @Path("samples")
         class Sample {
             @POST
-            public String postIt(@FormParam("someThing") String something, @FormParam("someThing2") @DefaultValue("Ah hah") String something2) {
-                return something + " / " + something2;
+            public String postIt(
+                @FormParam("someThing") String something,
+                @FormParam("someThing2") @DefaultValue("Ah hah") String something2,
+                @FormParam("someThing3") String something3,
+                @FormParam("someThings") List<String> somethings) {
+                return something + " / " + something2 + " / " + something3 + " / " + somethings;
             }
         }
         server = httpsServer().addHandler(restHandler(new Sample())).start();
         try (Response resp = call(request().url(server.uri().resolve("/samples").toString())
-            .post(new FormBody.Builder().add("someThing", "Is here").build())
+            .post(
+                new FormBody.Builder()
+                    .add("someThing", "Is here")
+                    .add("someThings", "some things one")
+                    .add("someThings", "some things two")
+                    .build())
         )) {
-            assertThat(resp.body().string(), equalTo("Is here / Ah hah"));
+            assertThat(resp.body().string(), equalTo("Is here / Ah hah / null / [some things one, some things two]"));
         }
     }
 
