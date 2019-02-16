@@ -11,6 +11,7 @@ import javax.net.ssl.X509TrustManager;
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.net.SocketTimeoutException;
+import java.net.URI;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -58,6 +59,9 @@ public class ClientUtils {
 
     public static Request.Builder request() {
         return new Request.Builder();
+    }
+    public static Request.Builder request(URI uri) {
+        return new Request.Builder().url(uri.toString());
     }
 
     public static Response call(Request.Builder request) {

@@ -6,6 +6,7 @@ import java.net.URLEncoder;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.Date;
 import java.util.Objects;
 import java.util.stream.Stream;
@@ -41,12 +42,14 @@ public class Mutils {
         }
     }
 
-    private Mutils() {}
+    private Mutils() {
+    }
 
     /**
      * Copies an input stream to another stream
-     * @param from The source of the bytes
-     * @param to The destination of the bytes
+     *
+     * @param from       The source of the bytes
+     * @param to         The destination of the bytes
      * @param bufferSize The size of the byte buffer to use as bytes are copied
      * @throws IOException Thrown if there is a problem reading from or writing to either stream
      */
@@ -60,7 +63,8 @@ public class Mutils {
 
     /**
      * Reads the given input stream into a byte array and closes the input stream
-     * @param source The source of the bytes
+     *
+     * @param source     The source of the bytes
      * @param bufferSize The size of the byte buffer to use when copying streams
      * @return Returns a byte array
      * @throws IOException If there is an error reading from the stream
@@ -74,6 +78,7 @@ public class Mutils {
 
     /**
      * Checks for a null string or string with a length of 9
+     *
      * @param val The value to check
      * @return True if the value is null or a zero-length string.
      */
@@ -83,6 +88,7 @@ public class Mutils {
 
     /**
      * Checks that a string is not null and has a length greater than 0.
+     *
      * @param val The value to check
      * @return True if the string is 1 or more characters.
      */
@@ -96,6 +102,7 @@ public class Mutils {
      * string begins with it. For example, the output <code>one/two</code> would be returned from <code>join("one", "two", "/")</code>
      * or <code>join("one/", "/two", "/")</code> or <code>join("one/", "two", "/")</code> or
      * <code>join("one", "/two", "/")</code>
+     *
      * @param one The prefix
      * @param sep The separator to put between the two strings, if it is not there already
      * @param two The suffix
@@ -117,7 +124,8 @@ public class Mutils {
 
     /**
      * Trims the given string from the given value
-     * @param value The value to be trimmed
+     *
+     * @param value  The value to be trimmed
      * @param toTrim The string to trim
      * @return The value with any occurrences of toTrim removed from the start and end of the value
      */
@@ -134,7 +142,8 @@ public class Mutils {
 
     /**
      * Throws an {@link IllegalArgumentException} if the given value is null
-     * @param name The name of the variable to check
+     *
+     * @param name  The name of the variable to check
      * @param value The value to check
      */
     public static void notNull(String name, Object value) {
@@ -145,6 +154,7 @@ public class Mutils {
 
     /**
      * Gets the canonical path of the given file, or if that throws an exception then gets the absolute path.
+     *
      * @param file The file to check
      * @return The canonical or absolute path of the given file
      */
@@ -159,6 +169,7 @@ public class Mutils {
 
     /**
      * Converts a date into a date string as used in HTTP headers (defined in RFC 7321), for example <code>Tue, 15 Nov 1994 08:12:31 GMT</code>
+     *
      * @param date A date to format
      * @return The date as a formatted string
      * @throws IllegalArgumentException If the date is null
@@ -171,10 +182,27 @@ public class Mutils {
     }
 
     /**
+     * Converts a date string as used in HTTP headers (defined in RFC 7321) into a date object
+     *
+     * @param date A date formatted like <code>Tue, 15 Nov 1994 08:12:31 GMT</code>
+     * @return A date representing the string
+     * @throws IllegalArgumentException If the date is null
+     * @throws DateTimeParseException If the date is not a valid HTTP date format
+     */
+    public static Date fromHttpDate(String date) throws DateTimeParseException {
+        notNull("date", date);
+        return new Date(DateTimeFormatter.RFC_1123_DATE_TIME
+            .withZone(ZoneOffset.UTC)
+            .parse(date, Instant::from)
+            .toEpochMilli());
+    }
+
+    /**
      * <p>Very basic HTML encoding, converting characters such as <code>&lt;</code> to <code>&lt;lt;</code></p>
      * <p>Important: HTML encoding is a complex topic, and different schemes are needed depending on whether the string
      * is destined for a tag name, attribute, the contents of a tag, CSS, or JavaScript etc. It is recommended that
      * a fully featured text encoding library is used rather than this method.</p>
+     *
      * @param value A value
      * @return A value that can be safely included inside HTML tags.
      */
@@ -194,8 +222,9 @@ public class Mutils {
 
     /**
      * Returns the first non-null value from the given values (or null if all values are null)
+     *
      * @param values An array of values
-     * @param <T> The type of the value
+     * @param <T>    The type of the value
      * @return The first object in the list that is not null (or null, if all are null)
      */
     public static <T> T coalesce(T... values) {

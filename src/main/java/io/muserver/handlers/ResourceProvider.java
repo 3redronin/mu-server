@@ -16,6 +16,7 @@ import java.net.URLConnection;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.util.Date;
 
 interface ResourceProvider {
     boolean exists();
@@ -23,6 +24,8 @@ interface ResourceProvider {
     boolean isDirectory();
 
     Long fileSize();
+
+    Date lastModified();
 
     void sendTo(MuResponse response, boolean sendBody) throws IOException;
 }
@@ -74,6 +77,15 @@ class FileProvider implements ResourceProvider {
     }
 
     @Override
+    public Date lastModified() {
+        try {
+            return new Date(Files.getLastModifiedTime(localPath).toMillis());
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    @Override
     public void sendTo(MuResponse response, boolean sendBody) throws IOException {
         if (sendBody) {
             try (OutputStream os = response.outputStream()) {
@@ -91,7 +103,7 @@ class ClasspathResourceProvider implements ResourceProvider {
     private final URLConnection info;
     private final boolean isDir;
 
-    public ClasspathResourceProvider(String classpathBase, String relativePath) {
+    ClasspathResourceProvider(String classpathBase, String relativePath) {
         URLConnection con;
         String path = Mutils.join(classpathBase, "/", relativePath);
         URL resource = ClasspathResourceProvider.class.getResource(path);
@@ -135,9 +147,19 @@ class ClasspathResourceProvider implements ResourceProvider {
         return isDir;
     }
 
+    @Override
     public Long fileSize() {
+        if (isDir) {
+            return null;
+        }
         long size = info.getContentLengthLong();
         return size >= 0 ? size : null;
+    }
+
+    @Override
+    public Date lastModified() {
+        long mod = info.getLastModified();
+        return mod >= 0 ? new Date(mod) : null;
     }
 
     @Override

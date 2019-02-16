@@ -6,6 +6,8 @@ import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.format.DateTimeParseException;
+import java.util.Date;
 import java.util.Map;
 
 import static io.muserver.handlers.ResourceType.DEFAULT_EXTENSION_MAPPINGS;
@@ -52,13 +54,29 @@ public class ResourceHandler implements MuHandler {
             response.redirect(goingTo);
         } else {
             String filename = requestPath.substring(requestPath.lastIndexOf('/'));
-            addHeaders(response, filename, provider.fileSize());
-            provider.sendTo(response, request.method() != Method.HEAD);
+            Date lastModified = provider.lastModified();
+            addHeaders(response, filename, provider.fileSize(), lastModified);
+            boolean sendBody = request.method() != Method.HEAD;
+
+            String ims = request.headers().get(HeaderNames.IF_MODIFIED_SINCE);
+            if (ims != null) {
+                try {
+                    long lastModTime = lastModified.getTime() / 1000;
+                    long lastAccessed = Mutils.fromHttpDate(ims).getTime() / 1000;
+                    if (lastModTime <= lastAccessed) {
+                        response.status(304);
+                        sendBody = false;
+                    }
+                } catch (DateTimeParseException ignored) {
+                }
+            }
+
+            provider.sendTo(response, sendBody);
         }
         return true;
     }
 
-    private void addHeaders(MuResponse response, String fileName, Long fileSize) {
+    private void addHeaders(MuResponse response, String fileName, Long fileSize, Date lastModified) {
         int ind = fileName.lastIndexOf('.');
         ResourceType type;
         if (ind == -1) {
@@ -68,11 +86,15 @@ public class ResourceHandler implements MuHandler {
             type = extensionToResourceType.getOrDefault(extension, ResourceType.DEFAULT);
         }
         response.contentType(type.mimeType);
-        response.headers().set(HeaderNames.VARY, "accept-encoding");
+        Headers headers = response.headers();
+        headers.set(HeaderNames.VARY, "accept-encoding"); // to stop gzip caching issues
         if (fileSize != null) {
-            response.headers().set(HeaderNames.CONTENT_LENGTH, fileSize);
+            headers.set(HeaderNames.CONTENT_LENGTH, fileSize);
         }
-        response.headers().add(type.headers);
+        if (lastModified != null) {
+            headers.set(HeaderNames.LAST_MODIFIED, Mutils.toHttpDate(lastModified));
+        }
+        headers.add(type.headers);
     }
 
     /**

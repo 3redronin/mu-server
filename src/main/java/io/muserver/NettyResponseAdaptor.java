@@ -228,7 +228,7 @@ class NettyResponseAdaptor implements MuResponse {
                 }
             }
             outputState = OutputState.STREAMING_COMPLETE;
-            boolean badFixedLength = !isHead && isFixedLength && declaredLength != bytesStreamed;
+            boolean badFixedLength = !isHead && isFixedLength && declaredLength != bytesStreamed && status != 304;
             if (badFixedLength) {
                 shouldDisconnect = true;
                 log.warn("Closing client connection for " + request + " because " + declaredLength + " bytes was the " +

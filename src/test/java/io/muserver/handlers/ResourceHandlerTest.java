@@ -1,7 +1,6 @@
 package io.muserver.handlers;
 
 import io.muserver.MuServer;
-import io.muserver.MuServerBuilder;
 import io.muserver.Mutils;
 import okhttp3.Response;
 import org.junit.After;
@@ -9,18 +8,22 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.net.MalformedURLException;
+import java.net.URI;
 import java.net.URL;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
 import static io.muserver.ContextHandlerBuilder.context;
+import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.Mutils.urlDecode;
+import static io.muserver.Mutils.urlEncode;
+import static io.muserver.handlers.ResourceHandlerBuilder.*;
 import static io.muserver.handlers.ResourceType.getResourceTypes;
 import static io.muserver.handlers.ResourceType.gzippableMimeTypes;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.nullValue;
+import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 import static scaffolding.FileUtils.readResource;
@@ -31,40 +34,68 @@ public class ResourceHandlerTest {
 
     @Test
     public void canServeFromRootOfServer() throws Exception {
-        server = MuServerBuilder.httpsServer()
+        server = httpsServer()
             .withGzipEnabled(false)
-            .addHandler(ResourceHandlerBuilder.fileHandler("src/test/resources/sample-static").build())
+            .addHandler(ResourceHandlerBuilder.fileHandler("src/test/resources/sample-static"))
             .start();
 
         assertContentTypeAndContent("/index.html", "text/html", false);
-        assertContentTypeAndContent("/images/" + Mutils.urlEncode("guangzhou.jpeg"), "image/jpeg", false);
-        assertContentTypeAndContent("/images/" + Mutils.urlEncode("guangzhou, china.jpeg"), "image/jpeg", false);
+        assertContentTypeAndContent("/images/" + urlEncode("guangzhou.jpeg"), "image/jpeg", false);
+        assertContentTypeAndContent("/images/" + urlEncode("guangzhou, china.jpeg"), "image/jpeg", false);
 
         assertNotFound("/bad-path");
     }
 
     @Test
     public void classpathCanBeUsed() throws Exception {
-        server = MuServerBuilder.httpsServer()
+        server = httpsServer()
             .withGzipEnabled(false)
-            .addHandler(ResourceHandlerBuilder.fileOrClasspath("src/test/resources/does-not-exist", "/sample-static").build())
+            .addHandler(fileOrClasspath("src/test/resources/does-not-exist", "/sample-static"))
             .start();
 
         assertContentTypeAndContent("/index.html", "text/html", false);
-        assertContentTypeAndContent("/images/" + Mutils.urlEncode("guangzhou.jpeg"), "image/jpeg", false);
-        assertContentTypeAndContent("/images/" + Mutils.urlEncode("guangzhou, china.jpeg"), "image/jpeg", false);
+        assertContentTypeAndContent("/images/" + urlEncode("guangzhou.jpeg"), "image/jpeg", false);
+        assertContentTypeAndContent("/images/" + urlEncode("guangzhou, china.jpeg"), "image/jpeg", false);
 
         assertNotFound("/bad-path");
     }
 
     @Test
+    public void lastModifiedSinceWorks() {
+        server = httpsServer()
+            .addHandler(fileHandler("src/test/resources/sample-static").withPathToServeFrom("/file"))
+            .addHandler(classpathHandler("/sample-static").withPathToServeFrom("/classpath"))
+            .start();
+
+        String[] dirs = {"file", "classpath"};
+        for (String dir : dirs) {
+            URI imageUri = server.uri().resolve("/" + dir + "/images/" + urlEncode("guangzhou, china.jpeg"));
+            String lastModified;
+            try (Response resp = call(request(imageUri))) {
+                assertThat(resp.code(), is(200));
+                lastModified = resp.header("last-modified");
+                assertThat(lastModified, is(notNullValue()));
+            }
+            try (Response resp = call(request(imageUri).header("If-Modified-Since", lastModified))) {
+                assertThat(resp.code(), is(304));
+                assertThat(resp.header("last-modified"), is(lastModified));
+            }
+            Date oneSecBeforeLastModified = new Date(Mutils.fromHttpDate(lastModified).getTime() - 1000);
+            try (Response resp = call(request(imageUri).header("If-Modified-Since", Mutils.toHttpDate(oneSecBeforeLastModified)))) {
+                assertThat(resp.code(), is(200));
+                assertThat(resp.header("last-modified"), is(lastModified));
+            }
+        }
+    }
+
+    @Test
     public void contextsCanBeUsed() throws Exception {
-        server = MuServerBuilder.httpsServer()
+        server = httpsServer()
             .withGzipEnabled(false)
             .addHandler(context("/a")
                 .addHandler(context("/b")
                     .addHandler(context("/c")
-                        .addHandler(ResourceHandlerBuilder.classpathHandler("/sample-static")
+                        .addHandler(classpathHandler("/sample-static")
                             .withPathToServeFrom("/d")
                         ))))
             .start();
@@ -88,9 +119,9 @@ public class ResourceHandlerTest {
 
     @Test
     public void requestsWithDotDotOrTildesResultIn404s() throws Exception {
-        server = MuServerBuilder.httpsServer()
+        server = httpsServer()
             .withGzipEnabled(false)
-            .addHandler(ResourceHandlerBuilder.fileOrClasspath("src/test/resources/does-not-exist", "/sample-static").build())
+            .addHandler(fileOrClasspath("src/test/resources/does-not-exist", "/sample-static"))
             .start();
 
         assertNotFound("/../something.txt");
@@ -100,10 +131,10 @@ public class ResourceHandlerTest {
 
     @Test
     public void directoriesResultIn302s() throws Exception {
-        server = MuServerBuilder.httpsServer()
+        server = httpsServer()
             .withGzipEnabled(false)
-            .addHandler(ResourceHandlerBuilder.classpathHandler("/sample-static").withPathToServeFrom("/classpath").build())
-            .addHandler(ResourceHandlerBuilder.fileHandler("src/test/resources/sample-static").withPathToServeFrom("/file").build())
+            .addHandler(classpathHandler("/sample-static").withPathToServeFrom("/classpath"))
+            .addHandler(ResourceHandlerBuilder.fileHandler("src/test/resources/sample-static").withPathToServeFrom("/file"))
             .start();
 
         try (Response resp = call(request().url(server.uri().resolve("/classpath/images").toURL()))) {
@@ -120,9 +151,9 @@ public class ResourceHandlerTest {
 
     @Test
     public void callsToContextNamesWithoutTrailingSlashesResultIn302() throws Exception {
-        server = MuServerBuilder.httpsServer()
+        server = httpsServer()
             .addHandler(context("my-app")
-                .addHandler(ResourceHandlerBuilder.classpathHandler("/sample-static"))
+                .addHandler(classpathHandler("/sample-static"))
             )
             .start();
 
@@ -136,10 +167,10 @@ public class ResourceHandlerTest {
 
     @Test
     public void filesCanHaveNoFileExtensions() throws IOException {
-        server = MuServerBuilder.httpsServer()
+        server = httpsServer()
             .withGzipEnabled(false)
-            .addHandler(ResourceHandlerBuilder.classpathHandler("/sample-static").withPathToServeFrom("/classpath").build())
-            .addHandler(ResourceHandlerBuilder.fileHandler("src/test/resources/sample-static").withPathToServeFrom("/file").build())
+            .addHandler(classpathHandler("/sample-static").withPathToServeFrom("/classpath"))
+            .addHandler(ResourceHandlerBuilder.fileHandler("src/test/resources/sample-static").withPathToServeFrom("/file"))
             .start();
 
         try (Response resp = call(request().url(server.uri().resolve("/file/filewithnoextension").toURL()))) {
@@ -173,7 +204,7 @@ public class ResourceHandlerTest {
 
     @Test
     public void canServeFromPath() throws Exception {
-        server = MuServerBuilder.httpsServer()
+        server = httpsServer()
             .addHandler(ResourceHandlerBuilder.fileHandler("src/test/resources/sample-static")
                 .withPathToServeFrom("/blah")
                 .build())
@@ -192,10 +223,10 @@ public class ResourceHandlerTest {
 
     @Test
     public void itCanDefaultToFilesSuchAsIndexHtml() throws Exception {
-        server = MuServerBuilder.httpsServer()
+        server = httpsServer()
             .addHandler(ResourceHandlerBuilder.fileHandler("src/test/resources/sample-static")
                 .withPathToServeFrom("/blah")
-                .withDefaultFile("index.html").build())
+                .withDefaultFile("index.html"))
             .start();
 
         try (Response resp = call(request().url(server.httpsUri().resolve("/blah/").toURL()))) {
@@ -207,9 +238,9 @@ public class ResourceHandlerTest {
 
     @Test
     public void contentTypesAreCorrect() throws Exception {
-        server = MuServerBuilder.httpsServer()
+        server = httpsServer()
             .withGzip(1200, gzippableMimeTypes(getResourceTypes()))
-            .addHandler(ResourceHandlerBuilder.fileHandler("src/test/resources/sample-static").build())
+            .addHandler(ResourceHandlerBuilder.fileHandler("src/test/resources/sample-static"))
             .start();
 
 //        assertContentTypeAndContent("/index.html", "text/html", false); // not sure why it's chunked but not gzipped. Probably just too small.

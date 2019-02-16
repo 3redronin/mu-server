@@ -2,6 +2,7 @@ package io.muserver;
 
 import org.junit.Test;
 
+import java.time.format.DateTimeParseException;
 import java.util.Date;
 
 import static io.muserver.Mutils.join;
@@ -36,6 +37,17 @@ public class MutilsTest {
     public void formatsDatesCorrectly() {
         assertThat(Mutils.toHttpDate(new Date(1532785855376L)), equalTo("Sat, 28 Jul 2018 13:50:55 GMT"));
         assertThat(Mutils.toHttpDate(new Date(1564787855376L)), equalTo("Fri, 2 Aug 2019 23:17:35 GMT"));
+    }
+
+    @Test
+    public void parsesDatesCorrectly() {
+        assertThat(Mutils.fromHttpDate("Sat, 28 Jul 2018 13:50:55 GMT"), equalTo(new Date(1532785855000L)));
+        assertThat(Mutils.fromHttpDate("Fri, 2 Aug 2019 23:17:35 GMT"), equalTo(new Date(1564787855000L)));
+    }
+
+    @Test(expected = DateTimeParseException.class)
+    public void throwsIfBadFormat() {
+        Mutils.fromHttpDate("28Jul 2018 13:50:55");
     }
 
 }
