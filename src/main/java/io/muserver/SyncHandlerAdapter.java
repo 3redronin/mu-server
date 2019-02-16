@@ -4,6 +4,10 @@ import io.netty.util.concurrent.DefaultThreadFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.ws.rs.InternalServerErrorException;
+import javax.ws.rs.NotFoundException;
+import javax.ws.rs.WebApplicationException;
+import javax.ws.rs.core.Response;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.UUID;
@@ -46,13 +50,12 @@ class SyncHandlerAdapter implements AsyncMuHandler {
                     }
                 }
                 if (!handled) {
-                    MuServerHandler.send404(ctx);
+                    throw new NotFoundException("This page is not available. Sorry about that.");
                 }
 
 
             } catch (Throwable ex) {
-                error = true;
-                dealWithUnhandledException(request, response, ex);
+                error = dealWithUnhandledException(request, response, ex);
             } finally {
                 request.clean();
                 if (error || !request.isAsync()) {
@@ -67,17 +70,36 @@ class SyncHandlerAdapter implements AsyncMuHandler {
         return true;
     }
 
-    public static void dealWithUnhandledException(MuRequest request, MuResponse response, Throwable ex) {
+    static boolean dealWithUnhandledException(MuRequest request, MuResponse response, Throwable ex) {
+        boolean forceDisconnect = true;
+
         if (response.hasStartedSendingData()) {
             log.warn("Unhandled error from handler for " + request + " (note that a " + response.status() +
                 " was already sent to the client before the error occurred and so the client may receive an incomplete response)", ex);
         } else {
-            String errorID = "ERR-" + UUID.randomUUID().toString();
-            log.info("Sending a 500 to the client with ErrorID=" + errorID + " for " + request, ex);
-            response.status(500);
+            WebApplicationException wae;
+            if (ex instanceof WebApplicationException) {
+                forceDisconnect = false;
+                wae = (WebApplicationException) ex;
+            } else {
+                String errorID = "ERR-" + UUID.randomUUID().toString();
+                log.info("Sending a 500 to the client with ErrorID=" + errorID + " for " + request, ex);
+                wae = new InternalServerErrorException("Oops! An unexpected error occurred. The ErrorID=" + errorID);
+            }
+            Response exResp = wae.getResponse();
+            if (exResp == null) {
+                exResp = Response.serverError().build();
+            }
+
+            response.status(exResp.getStatus());
+            if (forceDisconnect) {
+                response.headers().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
+            }
             response.contentType(ContentTypes.TEXT_HTML);
-            response.write("<h1>500 Internal Server Error</h1><p>ErrorID=" + errorID + "</p>");
+            response.write("<h1>" + exResp.getStatus() + " " + exResp.getStatusInfo().getReasonPhrase() + "</h1><p>" +
+                Mutils.htmlEncode(wae.getMessage()) + "</p>");
         }
+        return forceDisconnect;
     }
 
     public void onRequestData(AsyncContext ctx, ByteBuffer buffer) {

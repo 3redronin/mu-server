@@ -14,7 +14,7 @@ import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.containsString;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 
@@ -33,7 +33,7 @@ public class ExceptionsTest {
         this.server = httpsServer().addHandler(restHandler(new Sample())).start();
         try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
             assertThat(resp.code(), is(404));
-            assertThat(resp.body().string(), equalTo("404 Not Found"));
+            assertThat(resp.body().string(), containsString("404 Not Found"));
         }
     }
 
@@ -49,7 +49,7 @@ public class ExceptionsTest {
         this.server = httpsServer().addHandler(restHandler(new Sample())).start();
         try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
             assertThat(resp.code(), is(405));
-            assertThat(resp.body().string(), equalTo("<h1>405 Method Not Allowed</h1>HTTP 405 Method Not Allowed"));
+            assertThat(resp.body().string(), containsString("405 Method Not Allowed"));
         }
     }
 
@@ -66,7 +66,7 @@ public class ExceptionsTest {
         this.server = httpsServer().addHandler(restHandler(new Sample())).start();
         try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
             assertThat(resp.code(), is(404));
-            assertThat(resp.body().string(), equalTo("404 Not Found"));
+            assertThat(resp.body().string(), containsString("404 Not Found"));
         }
     }
 

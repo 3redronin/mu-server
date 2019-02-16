@@ -13,7 +13,6 @@ import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.MultivaluedMap;
 import javax.ws.rs.ext.ExceptionMapper;
 import javax.ws.rs.ext.MessageBodyWriter;
-
 import java.io.IOException;
 import java.io.OutputStream;
 import java.lang.annotation.Annotation;
@@ -22,8 +21,8 @@ import java.lang.reflect.Type;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.startsWith;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 import static scaffolding.MuAssert.stopAndCheck;
@@ -77,7 +76,7 @@ public class ExceptionMappingProviderTest {
             .addHandler(restHandler(new Sample())).start();
         try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
             assertThat(resp.code(), is(500));
-            assertThat(resp.body().string(), startsWith("<h1>500 Internal Server Error</h1><p>ErrorID=ERR-"));
+            assertThat(resp.body().string(), containsString("500 Internal Server Error"));
         }
     }
 

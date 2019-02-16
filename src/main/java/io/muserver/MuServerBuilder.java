@@ -1,6 +1,7 @@
 package io.muserver;
 
 import io.muserver.handlers.ResourceType;
+import io.muserver.rest.MuRuntimeDelegate;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
@@ -36,6 +37,10 @@ import static io.muserver.MuServerHandler.PROTO_ATTRIBUTE;
  * <p>Use the <code>withXXX()</code> methods to set the ports, config, and request handlers needed.</p>
  */
 public class MuServerBuilder {
+    static {
+        MuRuntimeDelegate.ensureSet();
+    }
+
     private static final Logger log = LoggerFactory.getLogger(MuServerBuilder.class);
     private static final int LENGTH_OF_METHOD_AND_PROTOCOL = 17; // e.g. "OPTIONS HTTP/1.1 "
     private long minimumGzipSize = 1400;
