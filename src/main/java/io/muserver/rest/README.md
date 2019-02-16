@@ -314,7 +314,7 @@ N/A
 ## 9 Server-Sent Events
 
 - [x] SSE Event Sink
-- [ ] SSE Broadcaster
+- [x] SSE Broadcaster
 
 ## 10 Context
 
