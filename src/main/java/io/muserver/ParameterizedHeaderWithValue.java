@@ -9,6 +9,7 @@ import static java.util.Collections.emptyList;
  * <p>A utility class to parse headers that are of the format <code>name; param1=value; param2="quoted string"</code>
  * such as Content-Type, Accepts, Content-Disposition etc.</p>
  * <p>More explicitly, a header that starts with a value, then has an optional list of semi-colon separated name/value pairs.</p>
+ * @see ParameterizedHeader
  */
 public class ParameterizedHeaderWithValue {
 
@@ -27,24 +28,45 @@ public class ParameterizedHeaderWithValue {
         this.parameters = parameters;
     }
 
+    /**
+     * @return Gets the first value of the header (without parameters), such as the media type in a Content-Type header
+     */
     public String value() {
         return value;
     }
 
+    /**
+     * @return Gets all the parameters
+     */
     public Map<String, String> parameters() {
         return parameters;
+    }
+
+    /**
+     * @return Gets a single parameter, or null if there is no value
+     */
+    public String parameter(String name) {
+        return parameters.get(name);
+    }
+
+    /**
+     * @return Gets a single parameter, or null if there is no value
+     */
+    public String parameter(String name, String defaultValue) {
+        return parameters.getOrDefault(name, defaultValue);
     }
 
     private enum State {VALUE, PARAM_NAME, PARAM_VALUE}
 
     /**
-     * Converts headers that are values followed by optional parameters
-     *
+     * <p>Converts headers that are values followed by optional parameters into a list of values with parameters.</p>
+     * <p>Null or blank strings return an empty list.</p>
      * @param input The value to parse
      * @return A list of ParameterizedHeaderWithValue objects
+     * @throws IllegalArgumentException The value cannot be parsed
      */
     public static List<ParameterizedHeaderWithValue> fromString(String input) {
-        if (input == null || input.length() == 0) {
+        if (input == null || input.trim().isEmpty()) {
             return emptyList();
         }
         StringBuilder buffer = new StringBuilder();
@@ -55,7 +77,7 @@ public class ParameterizedHeaderWithValue {
         while (i < input.length()) {
 
             String value = null;
-            Map<String, String> parameters = null;
+            LinkedHashMap<String, String> parameters = null;
             State state = State.VALUE;
             String paramName = null;
             boolean isQuotedString = false;
@@ -75,7 +97,7 @@ public class ParameterizedHeaderWithValue {
                     } else if (isVChar(c) || isOWS(c)) {
                         buffer.append(c);
                     } else {
-                        throw new IllegalStateException("Got ascii " + ((int) c) + " while in " + state);
+                        throw new IllegalArgumentException("Got ascii " + ((int) c) + " while in " + state + " at position " + i);
                     }
                 } else if (state == State.PARAM_NAME) {
                     if (c == ',' && buffer.length() == 0) {
@@ -89,10 +111,10 @@ public class ParameterizedHeaderWithValue {
                         buffer.append(c);
                     } else if (isOWS(c)) {
                         if (buffer.length() > 0) {
-                            throw new IllegalStateException("Got whitespace in media type while in " + state + " - header was " + buffer);
+                            throw new IllegalArgumentException("Got whitespace in parameter name while in " + state + " - header was " + buffer);
                         }
                     } else {
-                        throw new IllegalStateException("Got ascii " + ((int)c) + " while in " + state);
+                        throw new IllegalArgumentException("Got ascii " + ((int)c) + " while in " + state);
                     }
                 } else {
                     boolean isFirst = !isQuotedString && buffer.length() == 0;
@@ -119,7 +141,7 @@ public class ParameterizedHeaderWithValue {
                                 buffer.append(c);
                             } else if (c == ';') {
                                 if (parameters == null) {
-                                    parameters = new HashMap<>();
+                                    parameters = new LinkedHashMap<>(); // keeps insertion order
                                 }
                                 parameters.put(paramName, buffer.toString());
                                 buffer.setLength(0);
@@ -144,7 +166,7 @@ public class ParameterizedHeaderWithValue {
                     break;
                 case PARAM_VALUE:
                     if (parameters == null) {
-                        parameters = new HashMap<>();
+                        parameters = new LinkedHashMap<>(); // keeps insertion order
                     }
                     parameters.put(paramName, buffer.toString());
                     buffer.setLength(0);
@@ -169,17 +191,7 @@ public class ParameterizedHeaderWithValue {
     public String toString() {
         StringBuilder sb = new StringBuilder(this.value());
         Map<String, String> parameters = this.parameters();
-        parameters.forEach((key, value) -> {
-            boolean needsQuoting = false;
-            for (int i = 0; i < value.length(); i++) {
-                if (!isTChar(value.charAt(i))) {
-                    needsQuoting = true;
-                    break;
-                }
-            }
-            String v = needsQuoting ? '"' + value.replace("\"", "\\\"") + '"' : value;
-            sb.append(';').append(key).append('=').append(v);
-        });
+        parameters.forEach((key, value) -> sb.append(';').append(key).append('=').append(ParameterizedHeader.quoteIfNeeded(value)));
         return sb.toString();
     }
 

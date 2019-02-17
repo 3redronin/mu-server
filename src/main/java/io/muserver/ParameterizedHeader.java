@@ -1,8 +1,6 @@
 package io.muserver;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 
 import static io.muserver.Mutils.notNull;
 import static io.muserver.ParameterizedHeaderWithValue.isOWS;
@@ -11,7 +9,8 @@ import static java.util.Collections.emptyMap;
 
 /**
  * <p>A utility class to parse headers that are of the format <code>param1, param2=value, param3="quoted string"</code>
- * such as Cache-Controlg etc.</p>
+ * such as Cache-Control etc.</p>
+ * @see ParameterizedHeaderWithValue
  */
 public class ParameterizedHeader {
 
@@ -27,30 +26,62 @@ public class ParameterizedHeader {
         this.parameters = parameters;
     }
 
+    /**
+     * @return Gets all the parameters
+     */
     public Map<String, String> parameters() {
         return parameters;
+    }
+
+    /**
+     * @return Gets a single parameter, or null if there is no value
+     */
+    public String parameter(String name) {
+        return parameters.get(name);
+    }
+
+    /**
+     * @return Gets a single parameter, or null if there is no value
+     */
+    public String parameter(String name, String defaultValue) {
+        return parameters.getOrDefault(name, defaultValue);
+    }
+
+    /**
+     * @param name The name of the parameter to look up
+     * @return True if the parameter exists (with or without a value); otherwise false
+     */
+    public boolean hasParameter(String name) {
+        return parameters.containsKey(name);
+    }
+
+    /**
+     * @return Gets the parameters in the order declared (without the parameter values)
+     */
+    public List<String> parameterNames() {
+        return new ArrayList<>(parameters.keySet());
     }
 
     private enum State {PARAM_NAME, PARAM_VALUE}
 
     /**
-     * Converts headers that are values followed by optional parameters
-     *
+     * <p>Converts a comma-separated list of param names (with optional values) into a Parameterized Header</p>
+     * <p>Null or blank strings return value with an empty parameter map.</p>
      * @param input The value to parse
      * @return An object containing a map of name/value pairs (where values may be null)
+     * @throws IllegalArgumentException The value cannot be parsed
      */
     public static ParameterizedHeader fromString(String input) {
-        if (input == null || input.length() == 0) {
+        if (input == null || input.trim().isEmpty()) {
             return new ParameterizedHeader(emptyMap());
         }
         StringBuilder buffer = new StringBuilder();
 
-        Map<String, String> parameters = new HashMap<>();
+        Map<String, String> parameters = new LinkedHashMap<>(); // keeps insertion order
         State state = State.PARAM_NAME;
         String paramName = null;
         boolean isQuotedString = false;
 
-        headerValueLoop:
         for (int i = 0; i < input.length(); i++) {
             char c = input.charAt(i);
 
@@ -64,7 +95,7 @@ public class ParameterizedHeader {
                 } else if (c == '=') {
                     paramName = buffer.toString();
                     if (paramName.isEmpty()) {
-                        throw new IllegalStateException("Nameless values not allowed");
+                        throw new IllegalArgumentException("Nameless values not allowed");
                     }
                     buffer.setLength(0);
                     state = State.PARAM_VALUE;
@@ -73,7 +104,7 @@ public class ParameterizedHeader {
                 } else if (isOWS(c)) {
                     // ignore it
                 } else {
-                    throw new IllegalStateException("Got ascii " + ((int) c) + " while in " + state);
+                    throw new IllegalArgumentException("Got ascii " + ((int) c) + " while in " + state);
                 }
             } else {
                 boolean isFirst = !isQuotedString && buffer.length() == 0;
@@ -113,9 +144,6 @@ public class ParameterizedHeader {
             }
         }
         if (state == State.PARAM_VALUE) {
-            if (parameters == null) {
-                parameters = new HashMap<>();
-            }
             parameters.put(paramName, buffer.toString());
             buffer.setLength(0);
         } else {
@@ -142,18 +170,21 @@ public class ParameterizedHeader {
             sb.append(entry.getKey());
             String value = entry.getValue();
             if (value != null) {
-                boolean needsQuoting = false;
-                for (int i = 0; i < value.length(); i++) {
-                    if (!isTChar(value.charAt(i))) {
-                        needsQuoting = true;
-                        break;
-                    }
-                }
-                String v = needsQuoting ? '"' + value.replace("\"", "\\\"") + '"' : value;
-                sb.append('=').append(v);
+                sb.append('=').append(quoteIfNeeded(value));
             }
         }
         return sb.toString();
+    }
+
+    static String quoteIfNeeded(String value) {
+        boolean needsQuoting = false;
+        for (int i = 0; i < value.length(); i++) {
+            if (!isTChar(value.charAt(i))) {
+                needsQuoting = true;
+                break;
+            }
+        }
+        return needsQuoting ? '"' + value.replace("\"", "\\\"") + '"' : value;
     }
 
     @Override
