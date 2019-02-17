@@ -231,8 +231,10 @@ class NettyResponseAdaptor implements MuResponse {
             boolean badFixedLength = !isHead && isFixedLength && declaredLength != bytesStreamed && status != 304;
             if (badFixedLength) {
                 shouldDisconnect = true;
-                log.warn("Closing client connection for " + request + " because " + declaredLength + " bytes was the " +
-                    "expected length, however only " + bytesStreamed + " bytes were sent.");
+                if (ctx.channel().isOpen()) {
+                    log.warn("Closing client connection for " + request + " because " + declaredLength + " bytes was the " +
+                        "expected length, however only " + bytesStreamed + " bytes were sent.");
+                }
             } else {
                 lastAction = ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
             }

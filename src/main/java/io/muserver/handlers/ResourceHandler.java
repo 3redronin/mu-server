@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -76,7 +77,7 @@ public class ResourceHandler implements MuHandler {
                         sendBody = false;
                     }
                 } catch (DateTimeParseException e) {
-                    log.info("Ignoring cache check due to invalid If-Modified-Since header value: " + ims, e);
+                    log.info("Ignoring cache check due to invalid If-Modified-Since header value: " + ims);
                 }
             }
 
@@ -96,10 +97,14 @@ public class ResourceHandler implements MuHandler {
                         }
                     }
                 } catch (IllegalArgumentException e) {
-                    log.info("Ignoring range request due to invalid Range header value: " + rh, e);
+                    log.info("Ignoring range request due to invalid Range header value: " + rh);
                 }
             }
-            provider.sendTo(response, sendBody, maxAmountToSend);
+            try {
+                provider.sendTo(response, sendBody, maxAmountToSend);
+            } catch (IOException e) {
+                log.debug(request + " cancelled before full response sent to the client");
+            }
         }
 
 //        log.info(">> " + response + " - " + response.headers());

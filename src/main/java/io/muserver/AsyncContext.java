@@ -28,7 +28,7 @@ public class AsyncContext {
     public Future<Void> complete(boolean forceDisconnect) {
         boolean wasCompleted = this.completed.getAndSet(true);
         if (wasCompleted) {
-            log.info("AsyncContext.complete called twice for " + request);
+            log.debug("AsyncContext.complete called twice for " + request);
             return null;
         } else {
             Future<Void> complete = ((NettyResponseAdaptor) response)

@@ -222,7 +222,7 @@ class ClasspathResourceProvider implements ResourceProvider {
                 byte[] buffer = new byte[8192];
                 long soFar = 0;
                 int read;
-                while ((read = is.read(buffer)) > -1) {
+                while (soFar < maxLen && (read = is.read(buffer)) > -1) {
                     soFar += read;
                     if (soFar > maxLen) {
                         read -= soFar - maxLen;
