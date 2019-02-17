@@ -23,6 +23,19 @@ public class RangeRequestsTest {
         .start();
 
     @Test
+    public void simpleTest() throws IOException {
+        URI uri = server.uri().resolve("/fp/alphanumerics.txt");
+        try (Response resp = call(request(uri))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.header("Content-Type"), is("text/plain"));
+            assertThat(resp.header("Content-Length"), is("62"));
+            assertThat(resp.header("Content-Range"), is(nullValue()));
+            assertThat(resp.header("Accept-Ranges"), is("bytes"));
+            assertThat(resp.body().string(), is("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"));
+        }
+    }
+
+    @Test
     public void rangeRequestsSupported() throws IOException {
 
         for (String prefix : new String[]{"cp", "fp"}) {

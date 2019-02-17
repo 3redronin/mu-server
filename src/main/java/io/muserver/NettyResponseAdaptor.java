@@ -233,7 +233,7 @@ class NettyResponseAdaptor implements MuResponse {
                 shouldDisconnect = true;
                 if (ctx.channel().isOpen()) {
                     log.warn("Closing client connection for " + request + " because " + declaredLength + " bytes was the " +
-                        "expected length, however only " + bytesStreamed + " bytes were sent.");
+                        "expected length, however " + bytesStreamed + " bytes were sent.");
                 }
             } else {
                 lastAction = ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);

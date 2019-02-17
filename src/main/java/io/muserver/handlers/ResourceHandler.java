@@ -101,7 +101,7 @@ public class ResourceHandler implements MuHandler {
                 }
             }
             try {
-                provider.sendTo(response, sendBody, maxAmountToSend);
+                provider.sendTo(request, response, sendBody, maxAmountToSend);
             } catch (IOException e) {
                 log.debug(request + " cancelled before full response sent to the client");
             }

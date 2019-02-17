@@ -21,7 +21,7 @@ public class ParameterizedHeader {
      *
      * @param parameters A map of parameters, such as <code>charset: UTF-8</code>
      */
-    ParameterizedHeader(Map<String, String> parameters) {
+    private ParameterizedHeader(Map<String, String> parameters) {
         notNull("parameters", parameters);
         this.parameters = parameters;
     }
@@ -34,6 +34,7 @@ public class ParameterizedHeader {
     }
 
     /**
+     * @param name The name of the parameter to get
      * @return Gets a single parameter, or null if there is no value
      */
     public String parameter(String name) {
@@ -41,6 +42,8 @@ public class ParameterizedHeader {
     }
 
     /**
+     * @param name The name of the parameter to get
+     * @param defaultValue The value to return if no parameter was set
      * @return Gets a single parameter, or null if there is no value
      */
     public String parameter(String name, String defaultValue) {

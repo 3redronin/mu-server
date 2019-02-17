@@ -43,6 +43,7 @@ public class ParameterizedHeaderWithValue {
     }
 
     /**
+     * @param name The name of the parameter to get
      * @return Gets a single parameter, or null if there is no value
      */
     public String parameter(String name) {
@@ -50,6 +51,8 @@ public class ParameterizedHeaderWithValue {
     }
 
     /**
+     * @param name The name of the parameter to get
+     * @param defaultValue The value to return if no parameter was set
      * @return Gets a single parameter, or null if there is no value
      */
     public String parameter(String name, String defaultValue) {

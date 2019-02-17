@@ -1,8 +1,6 @@
 package io.muserver.handlers;
 
-import io.muserver.MuException;
-import io.muserver.MuResponse;
-import io.muserver.Mutils;
+import io.muserver.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import sun.net.www.protocol.file.FileURLConnection;
@@ -14,10 +12,13 @@ import java.io.OutputStream;
 import java.net.JarURLConnection;
 import java.net.URL;
 import java.net.URLConnection;
-import java.nio.channels.Channels;
+import java.nio.ByteBuffer;
+import java.nio.channels.AsynchronousFileChannel;
+import java.nio.channels.CompletionHandler;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.Date;
 
 interface ResourceProvider {
@@ -31,7 +32,7 @@ interface ResourceProvider {
 
     boolean skipIfPossible(long bytes);
 
-    void sendTo(MuResponse response, boolean sendBody, long maxLen) throws IOException;
+    void sendTo(MuRequest request, MuResponse response, boolean sendBody, long maxLen) throws IOException;
 }
 
 interface ResourceProviderFactory {
@@ -51,10 +52,15 @@ interface ResourceProviderFactory {
 }
 
 
-class FileProvider implements ResourceProvider {
+class FileProvider implements ResourceProvider, CompletionHandler<Integer, Object> {
     private static final Logger log = LoggerFactory.getLogger(FileProvider.class);
     private final Path localPath;
-    private InputStream inputStream;
+    private AsynchronousFileChannel channel;
+    private long curPos = 0;
+    private ByteBuffer buf;
+    private AsyncHandle handle;
+    private long maxLen;
+    private long bytesSent = 0;
 
     FileProvider(Path baseDirectory, String relativePath) {
         if (relativePath.startsWith("/")) {
@@ -92,38 +98,60 @@ class FileProvider implements ResourceProvider {
 
     @Override
     public boolean skipIfPossible(long bytes) {
-        if (bytes > 0) {
-            long totalSkipped = 0;
-            while (totalSkipped < bytes) {
-                long skipped;
-                try {
-                    skipped = inputStream().skip(bytes);
-                } catch (IOException e) {
-                    return false;
-                }
-                if (skipped <= 0) {
-                    return false;
-                }
-                totalSkipped += skipped;
-            }
-        }
+        this.curPos = bytes;
         return true;
     }
 
     @Override
-    public void sendTo(MuResponse response, boolean sendBody, long maxLen) throws IOException {
-        try (InputStream in = inputStream()) {
-            ClasspathResourceProvider.sendToResponse(response, sendBody, maxLen, in);
+    public void sendTo(MuRequest request, MuResponse response, boolean sendBody, long maxLen) throws IOException {
+        if (sendBody) {
+            handle = request.handleAsync();
+            channel = AsynchronousFileChannel.open(localPath, StandardOpenOption.READ);
+            buf = ByteBuffer.allocate(8192);
+            channel.read(buf, curPos, handle, this);
+            this.maxLen = maxLen;
+        } else {
+            response.outputStream();
         }
     }
 
-    private InputStream inputStream() throws IOException {
-        if (this.inputStream == null) {
-            this.inputStream = Channels.newInputStream(Files.newByteChannel(localPath));
+    @Override
+    public void completed(Integer bytesRead, Object a) {
+        buf.flip();
+        if (bytesRead == -1) {
+            handle.complete();
+            try {
+                channel.close();
+            } catch (IOException ignored) {
+            }
+        } else {
+            long remaining = maxLen - bytesSent;
+            if (remaining < buf.limit()) {
+                buf.limit((int)remaining);
+            }
+            handle.write(buf, new WriteCallback() {
+                @Override
+                public void onFailure(Throwable reason) {
+                    // client probably disconnected... no big deal
+                    handle.complete();
+                }
+
+                @Override
+                public void onSuccess() {
+                    buf.clear();
+                    curPos += bytesRead;
+                    bytesSent += bytesRead;
+                    channel.read(buf, curPos, null, FileProvider.this);
+                }
+            });
         }
-        return this.inputStream;
     }
 
+    @Override
+    public void failed(Throwable exc, Object a) {
+        log.info("File read failure for " + localPath, exc);
+        handle.complete(exc);
+    }
 }
 
 class ClasspathResourceProvider implements ResourceProvider {
@@ -211,7 +239,7 @@ class ClasspathResourceProvider implements ResourceProvider {
     }
 
     @Override
-    public void sendTo(MuResponse response, boolean sendBody, long maxLen) throws IOException {
+    public void sendTo(MuRequest request, MuResponse response, boolean sendBody, long maxLen) throws IOException {
         sendToResponse(response, sendBody, maxLen, info.getInputStream());
     }
 

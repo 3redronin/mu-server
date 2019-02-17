@@ -36,7 +36,7 @@ public class ResourceHandlerTest {
     public void canServeFromRootOfServer() throws Exception {
         server = httpsServer()
             .withGzipEnabled(false)
-            .addHandler(ResourceHandlerBuilder.fileHandler("src/test/resources/sample-static"))
+            .addHandler(fileHandler("src/test/resources/sample-static"))
             .start();
 
         assertContentTypeAndContent("/index.html", "text/html", false);
@@ -134,7 +134,7 @@ public class ResourceHandlerTest {
         server = httpsServer()
             .withGzipEnabled(false)
             .addHandler(classpathHandler("/sample-static").withPathToServeFrom("/classpath"))
-            .addHandler(ResourceHandlerBuilder.fileHandler("src/test/resources/sample-static").withPathToServeFrom("/file"))
+            .addHandler(fileHandler("src/test/resources/sample-static").withPathToServeFrom("/file"))
             .start();
 
         try (Response resp = call(request().url(server.uri().resolve("/classpath/images").toURL()))) {
@@ -170,7 +170,7 @@ public class ResourceHandlerTest {
         server = httpsServer()
             .withGzipEnabled(false)
             .addHandler(classpathHandler("/sample-static").withPathToServeFrom("/classpath"))
-            .addHandler(ResourceHandlerBuilder.fileHandler("src/test/resources/sample-static").withPathToServeFrom("/file"))
+            .addHandler(fileHandler("src/test/resources/sample-static").withPathToServeFrom("/file"))
             .start();
 
         try (Response resp = call(request().url(server.uri().resolve("/file/filewithnoextension").toURL()))) {
@@ -205,7 +205,7 @@ public class ResourceHandlerTest {
     @Test
     public void canServeFromPath() throws Exception {
         server = httpsServer()
-            .addHandler(ResourceHandlerBuilder.fileHandler("src/test/resources/sample-static")
+            .addHandler(fileHandler("src/test/resources/sample-static")
                 .withPathToServeFrom("/blah")
                 .build())
             .start();
@@ -224,7 +224,7 @@ public class ResourceHandlerTest {
     @Test
     public void itCanDefaultToFilesSuchAsIndexHtml() throws Exception {
         server = httpsServer()
-            .addHandler(ResourceHandlerBuilder.fileHandler("src/test/resources/sample-static")
+            .addHandler(fileHandler("src/test/resources/sample-static")
                 .withPathToServeFrom("/blah")
                 .withDefaultFile("index.html"))
             .start();
@@ -240,7 +240,7 @@ public class ResourceHandlerTest {
     public void contentTypesAreCorrect() throws Exception {
         server = httpsServer()
             .withGzip(1200, gzippableMimeTypes(getResourceTypes()))
-            .addHandler(ResourceHandlerBuilder.fileHandler("src/test/resources/sample-static"))
+            .addHandler(fileHandler("src/test/resources/sample-static"))
             .start();
 
 //        assertContentTypeAndContent("/index.html", "text/html", false); // not sure why it's chunked but not gzipped. Probably just too small.
