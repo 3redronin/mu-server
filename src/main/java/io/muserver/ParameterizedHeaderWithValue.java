@@ -94,7 +94,7 @@ public class ParameterizedHeaderWithValue {
                     } else if (c == ',') {
                         i++;
                         break headerValueLoop;
-                    } else if (isVChar(c) || isOWS(c)) {
+                    } else if (ParseUtils.isVChar(c) || ParseUtils.isOWS(c)) {
                         buffer.append(c);
                     } else {
                         throw new IllegalArgumentException("Got ascii " + ((int) c) + " while in " + state + " at position " + i);
@@ -107,9 +107,9 @@ public class ParameterizedHeaderWithValue {
                         paramName = buffer.toString();
                         buffer.setLength(0);
                         state = State.PARAM_VALUE;
-                    } else if (isTChar(c)) {
+                    } else if (ParseUtils.isTChar(c)) {
                         buffer.append(c);
-                    } else if (isOWS(c)) {
+                    } else if (ParseUtils.isOWS(c)) {
                         if (buffer.length() > 0) {
                             throw new IllegalArgumentException("Got whitespace in parameter name while in " + state + " - header was " + buffer);
                         }
@@ -118,7 +118,7 @@ public class ParameterizedHeaderWithValue {
                     }
                 } else {
                     boolean isFirst = !isQuotedString && buffer.length() == 0;
-                    if (isFirst && isOWS(c)) {
+                    if (isFirst && ParseUtils.isOWS(c)) {
                         // ignore it
                     } else if (isFirst && c == '"') {
                         isQuotedString = true;
@@ -137,7 +137,7 @@ public class ParameterizedHeaderWithValue {
                                 buffer.append(c);
                             }
                         } else {
-                            if (isTChar(c)) {
+                            if (ParseUtils.isTChar(c)) {
                                 buffer.append(c);
                             } else if (c == ';') {
                                 if (parameters == null) {
@@ -147,7 +147,7 @@ public class ParameterizedHeaderWithValue {
                                 buffer.setLength(0);
                                 paramName = null;
                                 state = State.PARAM_NAME;
-                            } else if (isOWS(c)) {
+                            } else if (ParseUtils.isOWS(c)) {
                                 // ignore it
                             } else if (c == ',') {
                                 i++;
@@ -191,7 +191,7 @@ public class ParameterizedHeaderWithValue {
     public String toString() {
         StringBuilder sb = new StringBuilder(this.value());
         Map<String, String> parameters = this.parameters();
-        parameters.forEach((key, value) -> sb.append(';').append(key).append('=').append(ParameterizedHeader.quoteIfNeeded(value)));
+        parameters.forEach((key, value) -> sb.append(';').append(key).append('=').append(ParseUtils.quoteIfNeeded(value)));
         return sb.toString();
     }
 
@@ -209,15 +209,4 @@ public class ParameterizedHeaderWithValue {
         return Objects.hash(value, parameters);
     }
 
-    static boolean isTChar(char c) {
-        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9' || c == '!' ||
-            c == '#' || c == '$' || c == '%' || c == '&' || c == '\'' || c == '*' || c == '+' ||
-            c == '-' || c == '.' || c == '^' || c == '_' || c == '`' || c == '|' || c == '~');
-    }
-    static boolean isVChar(char c) {
-        return c >= 0x21 && c <= 0x7E;
-    }
-    static boolean isOWS(char c) {
-        return c == ' ' || c == '\t';
-    }
 }

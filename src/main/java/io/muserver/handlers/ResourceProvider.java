@@ -9,10 +9,12 @@ import sun.net.www.protocol.file.FileURLConnection;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.JarURLConnection;
 import java.net.URL;
 import java.net.URLConnection;
+import java.nio.channels.Channels;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -27,7 +29,9 @@ interface ResourceProvider {
 
     Date lastModified();
 
-    void sendTo(MuResponse response, boolean sendBody) throws IOException;
+    boolean skipIfPossible(long bytes);
+
+    void sendTo(MuResponse response, boolean sendBody, long maxLen) throws IOException;
 }
 
 interface ResourceProviderFactory {
@@ -50,6 +54,7 @@ interface ResourceProviderFactory {
 class FileProvider implements ResourceProvider {
     private static final Logger log = LoggerFactory.getLogger(FileProvider.class);
     private final Path localPath;
+    private InputStream inputStream;
 
     FileProvider(Path baseDirectory, String relativePath) {
         if (relativePath.startsWith("/")) {
@@ -86,14 +91,37 @@ class FileProvider implements ResourceProvider {
     }
 
     @Override
-    public void sendTo(MuResponse response, boolean sendBody) throws IOException {
-        if (sendBody) {
-            try (OutputStream os = response.outputStream()) {
-                Files.copy(localPath, os);
+    public boolean skipIfPossible(long bytes) {
+        if (bytes > 0) {
+            long totalSkipped = 0;
+            while (totalSkipped < bytes) {
+                long skipped;
+                try {
+                    skipped = inputStream().skip(bytes);
+                } catch (IOException e) {
+                    return false;
+                }
+                if (skipped <= 0) {
+                    return false;
+                }
+                totalSkipped += skipped;
             }
-        } else {
-            response.outputStream();
         }
+        return true;
+    }
+
+    @Override
+    public void sendTo(MuResponse response, boolean sendBody, long maxLen) throws IOException {
+        try (InputStream in = inputStream()) {
+            ClasspathResourceProvider.sendToResponse(response, sendBody, maxLen, in);
+        }
+    }
+
+    private InputStream inputStream() throws IOException {
+        if (this.inputStream == null) {
+            this.inputStream = Channels.newInputStream(Files.newByteChannel(localPath));
+        }
+        return this.inputStream;
     }
 
 }
@@ -163,10 +191,46 @@ class ClasspathResourceProvider implements ResourceProvider {
     }
 
     @Override
-    public void sendTo(MuResponse response, boolean sendBody) throws IOException {
+    public boolean skipIfPossible(long bytes) {
+        if (bytes > 0) {
+            long totalSkipped = 0;
+            while (totalSkipped < bytes) {
+                long skipped;
+                try {
+                    skipped = info.getInputStream().skip(bytes);
+                } catch (IOException e) {
+                    return false;
+                }
+                if (skipped <= 0) {
+                    return false;
+                }
+                totalSkipped += skipped;
+            }
+        }
+        return true;
+    }
+
+    @Override
+    public void sendTo(MuResponse response, boolean sendBody, long maxLen) throws IOException {
+        sendToResponse(response, sendBody, maxLen, info.getInputStream());
+    }
+
+    static void sendToResponse(MuResponse response, boolean sendBody, long maxLen, InputStream is) throws IOException {
         if (sendBody) {
+
             try (OutputStream out = response.outputStream()) {
-                Mutils.copy(info.getInputStream(), out, 8192);
+                byte[] buffer = new byte[8192];
+                long soFar = 0;
+                int read;
+                while ((read = is.read(buffer)) > -1) {
+                    soFar += read;
+                    if (soFar > maxLen) {
+                        read -= soFar - maxLen;
+                    }
+                    if (read > 0) {
+                        out.write(buffer, 0, read);
+                    }
+                }
             }
         } else {
             response.outputStream();

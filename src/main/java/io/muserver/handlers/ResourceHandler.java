@@ -1,6 +1,8 @@
 package io.muserver.handlers;
 
 import io.muserver.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.nio.file.Files;
@@ -8,6 +10,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.format.DateTimeParseException;
 import java.util.Date;
+import java.util.List;
 import java.util.Map;
 
 import static io.muserver.handlers.ResourceType.DEFAULT_EXTENSION_MAPPINGS;
@@ -17,6 +20,7 @@ import static io.muserver.handlers.ResourceType.DEFAULT_EXTENSION_MAPPINGS;
  * {@link ResourceHandlerBuilder#classpathHandler(String)}, {@link ResourceHandlerBuilder#fileHandler(File)} or one of its variants.
  */
 public class ResourceHandler implements MuHandler {
+    private static final Logger log = LoggerFactory.getLogger(ResourceHandler.class);
 
     private final Map<String, ResourceType> extensionToResourceType;
     private final String pathToServeFrom;
@@ -49,13 +53,17 @@ public class ResourceHandler implements MuHandler {
         if (!provider.exists()) {
             return false;
         }
+
+//        log.info("<< " + request + " - " + request.headers());
+
         if (provider.isDirectory()) {
             String goingTo = request.uri().getPath() + "/";
             response.redirect(goingTo);
         } else {
             String filename = requestPath.substring(requestPath.lastIndexOf('/'));
             Date lastModified = provider.lastModified();
-            addHeaders(response, filename, provider.fileSize(), lastModified);
+            Long totalSize = provider.fileSize();
+            addHeaders(response, filename, totalSize, lastModified);
             boolean sendBody = request.method() != Method.HEAD;
 
             String ims = request.headers().get(HeaderNames.IF_MODIFIED_SINCE);
@@ -67,12 +75,35 @@ public class ResourceHandler implements MuHandler {
                         response.status(304);
                         sendBody = false;
                     }
-                } catch (DateTimeParseException ignored) {
+                } catch (DateTimeParseException e) {
+                    log.info("Ignoring cache check due to invalid If-Modified-Since header value: " + ims, e);
                 }
             }
 
-            provider.sendTo(response, sendBody);
+            String rh = request.headers().get("range");
+            long maxAmountToSend = Long.MAX_VALUE;
+            if (rh != null && totalSize != null && response.status() != 304) {
+                try {
+                    List<BytesRange> requestedRanges = BytesRange.parse(totalSize, rh);
+                    if (requestedRanges.size() == 1) {
+                        BytesRange range = requestedRanges.get(0);
+                        boolean couldSkip = provider.skipIfPossible(range.from);
+                        if (couldSkip) {
+                            response.status(206);
+                            maxAmountToSend = range.length();
+                            response.headers().set(HeaderNames.CONTENT_LENGTH, maxAmountToSend);
+                            response.headers().set(HeaderNames.CONTENT_RANGE, range.toString());
+                        }
+                    }
+                } catch (IllegalArgumentException e) {
+                    log.info("Ignoring range request due to invalid Range header value: " + rh, e);
+                }
+            }
+            provider.sendTo(response, sendBody, maxAmountToSend);
         }
+
+//        log.info(">> " + response + " - " + response.headers());
+//        log.info("");
         return true;
     }
 
@@ -87,6 +118,7 @@ public class ResourceHandler implements MuHandler {
         }
         response.contentType(type.mimeType);
         Headers headers = response.headers();
+        headers.set(HeaderNames.ACCEPT_RANGES, HeaderValues.BYTES);
         headers.set(HeaderNames.VARY, "accept-encoding"); // to stop gzip caching issues
         if (fileSize != null) {
             headers.set(HeaderNames.CONTENT_LENGTH, fileSize);

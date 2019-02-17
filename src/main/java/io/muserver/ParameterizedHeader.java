@@ -3,8 +3,8 @@ package io.muserver;
 import java.util.*;
 
 import static io.muserver.Mutils.notNull;
-import static io.muserver.ParameterizedHeaderWithValue.isOWS;
-import static io.muserver.ParameterizedHeaderWithValue.isTChar;
+import static io.muserver.ParseUtils.isOWS;
+import static io.muserver.ParseUtils.isTChar;
 import static java.util.Collections.emptyMap;
 
 /**
@@ -170,21 +170,10 @@ public class ParameterizedHeader {
             sb.append(entry.getKey());
             String value = entry.getValue();
             if (value != null) {
-                sb.append('=').append(quoteIfNeeded(value));
+                sb.append('=').append(ParseUtils.quoteIfNeeded(value));
             }
         }
         return sb.toString();
-    }
-
-    static String quoteIfNeeded(String value) {
-        boolean needsQuoting = false;
-        for (int i = 0; i < value.length(); i++) {
-            if (!isTChar(value.charAt(i))) {
-                needsQuoting = true;
-                break;
-            }
-        }
-        return needsQuoting ? '"' + value.replace("\"", "\\\"") + '"' : value;
     }
 
     @Override
