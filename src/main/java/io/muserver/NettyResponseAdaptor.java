@@ -101,6 +101,11 @@ class NettyResponseAdaptor implements MuResponse {
     ChannelFuture write(ByteBuf data, boolean sync) {
         throwIfFinished();
         int size = data.writerIndex();
+
+        if (size == 0) {
+            return lastAction;
+        }
+
         bytesStreamed += size;
         ChannelFuture lastAction;
 

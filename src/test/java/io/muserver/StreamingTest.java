@@ -15,6 +15,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Arrays.asList;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.is;
 import static scaffolding.ClientUtils.*;
 
 public class StreamingTest {
@@ -38,6 +39,24 @@ public class StreamingTest {
         }
         assertThat(actual, equalTo(String.format("Hello, world%nWhat's happening?")));
 	}
+
+    @Test public void zeroByteWriteIsIgnored() throws Exception {
+        server = MuServerBuilder.httpServer()
+            .addHandler((request, response) -> {
+                response.contentType(ContentTypes.TEXT_PLAIN);
+                try (OutputStream out = response.outputStream()) {
+                    out.write(new byte[0]);
+                    out.flush();
+                    out.write("Hi".getBytes(UTF_8));
+                }
+                return true;
+            }).start();
+
+        try (Response resp = call(request().url(server.httpUri().toString()))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), equalTo(String.format("Hi")));
+        }
+    }
 
 	@Test public void requestDataCanBeReadFromTheInputStream() throws Exception {
 		server = MuServerBuilder.httpServer()
