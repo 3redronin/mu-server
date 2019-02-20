@@ -5,6 +5,7 @@ import org.junit.After;
 import org.junit.Test;
 import scaffolding.MuAssert;
 
+import java.io.BufferedOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
@@ -34,7 +35,7 @@ public class StreamingTest {
 				}).start();
 
         String actual;
-        try (Response resp = call(request().url(server.httpUri().toString()))) {
+        try (Response resp = call(request(server.uri()))) {
             actual = resp.body().string();
         }
         assertThat(actual, equalTo(String.format("Hello, world%nWhat's happening?")));
@@ -52,9 +53,25 @@ public class StreamingTest {
                 return true;
             }).start();
 
-        try (Response resp = call(request().url(server.httpUri().toString()))) {
+        try (Response resp = call(request(server.uri()))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.body().string(), equalTo(String.format("Hi")));
+            assertThat(resp.body().string(), equalTo("Hi"));
+        }
+    }
+
+    @Test public void bufferedOutputWritersAreOkay() throws Exception {
+        server = MuServerBuilder.httpServer()
+            .addHandler((request, response) -> {
+                response.contentType(ContentTypes.TEXT_PLAIN);
+                try (BufferedOutputStream writer = new BufferedOutputStream(response.outputStream(), 8192)) {
+                    writer.write("Hi".getBytes(UTF_8));
+                }
+                return true;
+            }).start();
+
+        try (Response resp = call(request(server.uri()))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), equalTo("Hi"));
         }
     }
 
@@ -75,8 +92,7 @@ public class StreamingTest {
 				}).start();
 
 		StringBuffer sentData = new StringBuffer();
-        try (Response resp = call(request()
-            .url(server.httpUri().toString())
+        try (Response resp = call(request(server.uri())
             .post(largeRequestBody(sentData)))) {
             String actual = new String(resp.body().bytes(), UTF_8);
             assertThat(actual, equalTo(sentData.toString()));
@@ -91,8 +107,7 @@ public class StreamingTest {
 				}).start();
 
 		StringBuffer sentData = new StringBuffer();
-        try (Response resp = call(request()
-            .url(server.httpUri().toString())
+        try (Response resp = call(request(server.uri())
             .post(largeRequestBody(sentData)))) {
             assertThat(resp.body().string(), equalTo(sentData.toString()));
         }
@@ -107,7 +122,7 @@ public class StreamingTest {
 					return true;
 				}).start();
 
-        try (Response ignored = call(request().url(server.httpUri().toString()))) {
+        try (Response ignored = call(request(server.uri()))) {
         }
 		assertThat(actual, equalTo(asList("Not Present", "Request body: ")));
 	}
