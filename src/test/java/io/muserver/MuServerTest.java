@@ -198,6 +198,11 @@ public class MuServerTest {
         }
     }
 
+    @Test
+    public void versionIsAvailable() {
+        assertThat(MuServer.artifactVersion(), equalTo("0.x"));
+    }
+
     @After
     public void stopIt() {
         scaffolding.MuAssert.stopAndCheck(server);
