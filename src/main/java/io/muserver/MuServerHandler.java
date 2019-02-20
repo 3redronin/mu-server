@@ -168,10 +168,10 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         State state = ctx.channel().attr(STATE_ATTRIBUTE).get();
         if (state != null) {
-            log.info(cause.getClass().getName() + " (" + cause.getMessage() + ") for " + ctx + " so will disconnect this client");
+            log.debug(cause.getClass().getName() + " (" + cause.getMessage() + ") for " + ctx + " so will disconnect this client");
             state.asyncContext.onDisconnected();
         } else {
-            log.info("Exception for unknown ctx " + ctx, cause);
+            log.debug("Exception for unknown ctx " + ctx, cause);
         }
     }
 }
