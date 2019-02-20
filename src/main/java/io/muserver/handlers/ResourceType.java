@@ -54,7 +54,7 @@ public class ResourceType {
             .add(HeaderNames.X_CONTENT_TYPE_OPTIONS, HeaderValues.NOSNIFF),
         true, asList("css"));
     public static final ResourceType TEXT_PLAIN = new ResourceType(ContentTypes.TEXT_PLAIN, noCache(), true,
-        asList("txt", "ini", "gitignore", "gitattributes", "cfg", "log", "out"));
+        asList("txt", "ini", "gitignore", "gitattributes", "cfg", "log", "out", "text"));
     public static final ResourceType TEXT_MARKDOWN = new ResourceType(ContentTypes.TEXT_MARKDOWN, shortCache(), true, asList("md"));
     public static final ResourceType TEXT_CSV = new ResourceType(ContentTypes.TEXT_CSV, noCache(), true, asList("csv"));
     public static final ResourceType APPLICATION_MSWORD = new ResourceType(ContentTypes.APPLICATION_MSWORD, shortCache(), false, asList("doc"));
@@ -114,13 +114,21 @@ public class ResourceType {
 
 
     static {
+        DEFAULT_EXTENSION_MAPPINGS = Collections.unmodifiableMap(getDefaultMapping());
+    }
+
+    /**
+     * Can be used as a base to customise mime types via {@link ResourceHandlerBuilder#withExtensionToResourceType(Map)}
+     * @return Returns the built-in mapping of file extension to resource type that can be added to in order to customise resource types.
+     */
+    public static HashMap<String, ResourceType> getDefaultMapping() {
         HashMap<String, ResourceType> map = new HashMap<>();
         for (ResourceType rt : getResourceTypes()) {
             for (String extension : rt.extensions) {
                 map.put(extension, rt);
             }
         }
-        DEFAULT_EXTENSION_MAPPINGS = Collections.unmodifiableMap(map);
+        return map;
     }
 
     public static Set<String> gzippableMimeTypes(List<ResourceType> resourceTypes) {
