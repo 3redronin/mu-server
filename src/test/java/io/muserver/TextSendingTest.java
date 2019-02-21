@@ -6,8 +6,10 @@ import org.junit.Test;
 import scaffolding.MuAssert;
 import scaffolding.StringUtils;
 
+import java.io.IOException;
 import java.util.List;
 
+import static io.muserver.MuServerBuilder.httpServer;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Arrays.asList;
 import static org.hamcrest.CoreMatchers.is;
@@ -24,14 +26,14 @@ public class TextSendingTest {
     @Test
     public void largeChunksOfTextCanBeWritten() throws Exception {
         String lotsoText = StringUtils.randomStringOfLength(70000);
-        server = MuServerBuilder.httpServer()
+        server = httpServer()
             .withGzipEnabled(false)
             .addHandler(Method.GET, "/", (request, response, pp) -> {
                 response.contentType(ContentTypes.TEXT_PLAIN);
                 response.write(lotsoText);
             }).start();
 
-        try (Response resp = call(request().url(server.httpUri().toString()))) {
+        try (Response resp = call(request(server.uri()))) {
             assertThat(resp.header("Content-Length"), is(String.valueOf(lotsoText.getBytes(UTF_8).length)));
             assertThat(resp.header("Transfer-Encoding"), is(nullValue()));
             assertThat(resp.body().string(), equalTo(lotsoText));
@@ -40,13 +42,13 @@ public class TextSendingTest {
 
     @Test
     public void emptyStringsAreFine() throws Exception {
-        server = MuServerBuilder.httpServer()
+        server = httpServer()
             .addHandler(Method.GET, "/", (request, response, pp) -> {
                 response.contentType(ContentTypes.TEXT_PLAIN);
                 response.write("");
             }).start();
 
-        try (Response resp = call(request().url(server.httpUri().toString()))) {
+        try (Response resp = call(request(server.uri()))) {
             assertThat(resp.header("Content-Length"), is("0"));
             assertThat(resp.body().string(), equalTo(""));
         }
@@ -56,7 +58,7 @@ public class TextSendingTest {
     public void textCanBeSentInChunks() throws Exception {
         List<String> chunks = asList("Hello", "World", StringUtils.randomStringOfLength(200000), "Yo");
 
-        server = MuServerBuilder.httpServer()
+        server = httpServer()
             .addHandler(Method.GET, "/", (request, response, pp) -> {
                 response.contentType(ContentTypes.TEXT_PLAIN);
                 for (String chunk : chunks) {
@@ -66,7 +68,7 @@ public class TextSendingTest {
 
         String expected = String.join("", chunks);
 
-        try (Response resp = call(request().url(server.httpUri().toString()))) {
+        try (Response resp = call(request(server.uri()))) {
             assertThat(resp.header("Content-Length"), is(nullValue()));
             assertThat(resp.header("Transfer-Encoding"), is("chunked"));
             assertThat(resp.body().string(), equalTo(expected));
@@ -75,12 +77,33 @@ public class TextSendingTest {
 
     @Test
     public void anEmptyHandlerIsA200WithNoContent() throws Exception {
-        server = MuServerBuilder.httpServer()
+        server = httpServer()
             .addHandler(Method.GET, "/", (request, response, pp) -> {
             }).start();
-        try (Response resp = call(request().url(server.httpUri().toString()))) {
+        try (Response resp = call(request(server.uri()))) {
             assertThat(resp.header("Content-Length"), is("0"));
             assertThat(resp.body().bytes().length, is(0));
+        }
+    }
+    
+    @Test
+    public void defaultsToTextPlainIfNoContentTypeSet() throws IOException {
+        server = httpServer()
+            .addHandler(Method.GET, "/html", (request, response, pp) -> {
+                response.contentType("text/html");
+                response.write("This is HTML");
+            })
+            .addHandler(Method.GET, "/text", (request, response, pp) -> {
+                response.write("This is text");
+            })
+            .start();
+        try (Response resp = call(request(server.uri().resolve("/html")))) {
+            assertThat(resp.header("Content-Type"), is("text/html"));
+            assertThat(resp.body().string(), is("This is HTML"));
+        }
+        try (Response resp = call(request(server.uri().resolve("/text")))) {
+            assertThat(resp.header("Content-Type"), is("text/plain"));
+            assertThat(resp.body().string(), is("This is text"));
         }
     }
 
