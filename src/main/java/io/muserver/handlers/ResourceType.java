@@ -28,12 +28,18 @@ public class ResourceType {
         this.extensions = extensions;
     }
 
-    public static final Headers shortCache() {
+    /**
+     * @return Creates and returns a Headers object with a single cache-control header set for 5 minutes.
+     */
+    public static Headers shortCache() {
         return new Headers()
             .add(HeaderNames.CACHE_CONTROL, "max-age=300");
     }
 
-    public static final Headers noCache() {
+    /**
+     * @return Creates and returns a Headers object with a single cache-control header set with no-cache.
+     */
+    public static Headers noCache() {
         return new Headers()
             .add(HeaderNames.CACHE_CONTROL, HeaderValues.NO_CACHE);
     }
@@ -69,11 +75,12 @@ public class ResourceType {
     public static final ResourceType IMAGE_JPEG = new ResourceType(ContentTypes.IMAGE_JPEG, shortCache(), false, asList("jpg", "jpeg"));
     public static final ResourceType TEXT_JAVASCRIPT = new ResourceType(ContentTypes.APPLICATION_JAVASCRIPT,
         new Headers()
-            .add(HeaderNames.CACHE_CONTROL, "max-age=300")
+            .add(HeaderNames.CACHE_CONTROL, "max-age=86400")
             .add(HeaderNames.X_CONTENT_TYPE_OPTIONS, HeaderValues.NOSNIFF),
         true, asList("js"));
     public static final ResourceType APPLICATION_JSON = new ResourceType(ContentTypes.APPLICATION_JSON, noCache(), true, asList("json"));
-    public static final ResourceType WEB_APP_MANIFEST = new ResourceType(ContentTypes.WEB_APP_MANIFEST, shortCache(), true, asList("webmanifest"));
+    public static final ResourceType WEB_APP_MANIFEST = new ResourceType(ContentTypes.WEB_APP_MANIFEST, new Headers()
+        .add(HeaderNames.CACHE_CONTROL, "max-age=300"), true, asList("webmanifest"));
     public static final ResourceType AUDIO_MIDI = new ResourceType(ContentTypes.AUDIO_MIDI, shortCache(), false, asList("mid", "midi"));
     public static final ResourceType VIDEO_MPEG = new ResourceType(ContentTypes.VIDEO_MPEG, shortCache(), false, asList("mpeg"));
     public static final ResourceType APPLICATION_VND_APPLE_INSTALLER_XML = new ResourceType(ContentTypes.APPLICATION_VND_APPLE_INSTALLER_XML, shortCache(), true, asList("mpkg"));
