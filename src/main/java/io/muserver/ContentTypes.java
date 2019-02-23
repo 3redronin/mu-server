@@ -320,5 +320,10 @@ public class ContentTypes {
      */
     public static final CharSequence VIDEO_X_MATROSKA = AsciiString.cached("video/x-matroska");
 
+    /**
+     * Web App Manifest files {@code "application/manifest+json"}
+     */
+    public static final CharSequence WEB_APP_MANIFEST = AsciiString.cached(" application/manifest+json");
+
     private ContentTypes() {}
 }

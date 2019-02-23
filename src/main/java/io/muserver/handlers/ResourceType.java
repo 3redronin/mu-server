@@ -54,7 +54,7 @@ public class ResourceType {
             .add(HeaderNames.X_CONTENT_TYPE_OPTIONS, HeaderValues.NOSNIFF),
         true, asList("css"));
     public static final ResourceType TEXT_PLAIN = new ResourceType(ContentTypes.TEXT_PLAIN, noCache(), true,
-        asList("txt", "ini", "gitignore", "gitattributes", "cfg", "log", "out", "text"));
+        asList("txt", "ini", "gitignore", "gitattributes", "cfg", "log", "out", "text", "properties"));
     public static final ResourceType TEXT_MARKDOWN = new ResourceType(ContentTypes.TEXT_MARKDOWN, shortCache(), true, asList("md"));
     public static final ResourceType TEXT_CSV = new ResourceType(ContentTypes.TEXT_CSV, noCache(), true, asList("csv"));
     public static final ResourceType APPLICATION_MSWORD = new ResourceType(ContentTypes.APPLICATION_MSWORD, shortCache(), false, asList("doc"));
@@ -73,6 +73,7 @@ public class ResourceType {
             .add(HeaderNames.X_CONTENT_TYPE_OPTIONS, HeaderValues.NOSNIFF),
         true, asList("js"));
     public static final ResourceType APPLICATION_JSON = new ResourceType(ContentTypes.APPLICATION_JSON, noCache(), true, asList("json"));
+    public static final ResourceType WEB_APP_MANIFEST = new ResourceType(ContentTypes.WEB_APP_MANIFEST, shortCache(), true, asList("webmanifest"));
     public static final ResourceType AUDIO_MIDI = new ResourceType(ContentTypes.AUDIO_MIDI, shortCache(), false, asList("mid", "midi"));
     public static final ResourceType VIDEO_MPEG = new ResourceType(ContentTypes.VIDEO_MPEG, shortCache(), false, asList("mpeg"));
     public static final ResourceType APPLICATION_VND_APPLE_INSTALLER_XML = new ResourceType(ContentTypes.APPLICATION_VND_APPLE_INSTALLER_XML, shortCache(), true, asList("mpkg"));
