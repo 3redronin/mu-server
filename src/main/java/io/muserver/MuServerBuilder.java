@@ -14,8 +14,6 @@ import io.netty.handler.codec.http.HttpRequestDecoder;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseEncoder;
 import io.netty.handler.codec.http.HttpServerKeepAliveHandler;
-import io.netty.handler.ssl.ClientAuth;
-import io.netty.handler.ssl.JdkSslContext;
 import io.netty.handler.traffic.GlobalTrafficShapingHandler;
 import io.netty.util.Attribute;
 import org.slf4j.Logger;
@@ -307,6 +305,7 @@ public class MuServerBuilder {
             GlobalTrafficShapingHandler trafficShapingHandler = new GlobalTrafficShapingHandler(workerGroup, 0, 0, 1000);
             MuStatsImpl stats = new MuStatsImpl(trafficShapingHandler.trafficCounter());
             AtomicReference<MuServer> serverRef = new AtomicReference<>();
+            SslContextProvider sslContextProvider = null;
 
             Channel httpChannel = httpPort < 0 ? null : createChannel(bossGroup, workerGroup, host, httpPort, null, trafficShapingHandler, stats, serverRef);
             Channel httpsChannel;
@@ -314,7 +313,8 @@ public class MuServerBuilder {
                 httpsChannel = null;
             } else {
                 SSLContext sslContextToUse = this.sslContext != null ? this.sslContext : SSLContextBuilder.unsignedLocalhostCert();
-                httpsChannel = createChannel(bossGroup, workerGroup, host, httpsPort, sslContextToUse, trafficShapingHandler, stats, serverRef);
+                sslContextProvider = new SslContextProvider(sslContextToUse);
+                httpsChannel = createChannel(bossGroup, workerGroup, host, httpsPort, sslContextProvider, trafficShapingHandler, stats, serverRef);
             }
             URI uri = null;
             if (httpChannel != null) {
@@ -328,7 +328,7 @@ public class MuServerBuilder {
             }
 
             InetSocketAddress serverAddress = (InetSocketAddress) channels.get(0).localAddress();
-            MuServer server = new MuServerImpl(uri, httpsUri, shutdown, stats, serverAddress);
+            MuServer server = new MuServerImpl(uri, httpsUri, shutdown, stats, serverAddress, sslContextProvider);
             serverRef.set(server);
             if (addShutdownHook) {
                 Runtime.getRuntime().addShutdownHook(new Thread(server::stop));
@@ -348,9 +348,8 @@ public class MuServerBuilder {
         return URI.create(protocol + "://" + host.toLowerCase() + ":" + a.getPort());
     }
 
-    private Channel createChannel(NioEventLoopGroup bossGroup, NioEventLoopGroup workerGroup, String host, int port, SSLContext rawSSLContext, GlobalTrafficShapingHandler trafficShapingHandler, MuStatsImpl stats, AtomicReference<MuServer> serverRef) throws InterruptedException {
-        boolean usesSsl = rawSSLContext != null;
-        JdkSslContext sslContext = usesSsl ? new JdkSslContext(rawSSLContext, false, ClientAuth.NONE) : null;
+    private Channel createChannel(NioEventLoopGroup bossGroup, NioEventLoopGroup workerGroup, String host, int port, SslContextProvider sslContextProvider, GlobalTrafficShapingHandler trafficShapingHandler, MuStatsImpl stats, AtomicReference<MuServer> serverRef) throws InterruptedException {
+        boolean usesSsl = sslContextProvider != null;
 
         ServerBootstrap b = new ServerBootstrap();
         b.group(bossGroup, workerGroup)
@@ -363,7 +362,7 @@ public class MuServerBuilder {
                     ChannelPipeline p = socketChannel.pipeline();
                     p.addLast(trafficShapingHandler);
                     if (usesSsl) {
-                        p.addLast("ssl", sslContext.newHandler(socketChannel.alloc()));
+                        p.addLast("ssl", sslContextProvider.get().newHandler(socketChannel.alloc()));
                     }
                     p.addLast("decoder", new HttpRequestDecoder(maxUrlSize + LENGTH_OF_METHOD_AND_PROTOCOL, maxHeadersSize, 8192));
                     p.addLast("encoder", new HttpResponseEncoder() {

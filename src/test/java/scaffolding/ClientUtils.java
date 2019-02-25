@@ -78,7 +78,7 @@ public class ClientUtils {
         throw new RuntimeException("Timed out too many times");
     }
 
-    private static SSLContext sslContextForTesting(TrustManager trustManager) {
+    public static SSLContext sslContextForTesting(TrustManager trustManager) {
         try {
             SSLContext context = SSLContext.getInstance("TLS");
             context.init(null, new TrustManager[]{trustManager}, null);
@@ -88,7 +88,7 @@ public class ClientUtils {
         }
     }
 
-    private static X509TrustManager veryTrustingTrustManager() {
+    public static X509TrustManager veryTrustingTrustManager() {
         return new X509TrustManager() {
             public void checkClientTrusted(java.security.cert.X509Certificate[] chain, String authType) {
             }

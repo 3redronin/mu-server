@@ -1,5 +1,6 @@
 package io.muserver;
 
+import javax.net.ssl.SSLContext;
 import java.net.InetSocketAddress;
 import java.net.URI;
 
@@ -10,10 +11,12 @@ class MuServerImpl implements MuServer {
     private final Runnable shutdown;
     private final MuStats stats;
     private final InetSocketAddress address;
+    private final SslContextProvider sslContextProvider;
 
-    MuServerImpl(URI httpUri, URI httpsUri, Runnable shutdown, MuStats stats, InetSocketAddress address) {
+    MuServerImpl(URI httpUri, URI httpsUri, Runnable shutdown, MuStats stats, InetSocketAddress address, SslContextProvider sslContextProvider) {
         this.stats = stats;
         this.address = address;
+        this.sslContextProvider = sslContextProvider;
         if (httpUri == null && httpsUri == null) {
             throw new IllegalArgumentException("One of httpUri and httpsUri must not be null");
         }
@@ -50,6 +53,11 @@ class MuServerImpl implements MuServer {
     @Override
     public InetSocketAddress address() {
         return address;
+    }
+
+    @Override
+    public void changeSSLContext(SSLContext newSSLContext) {
+        sslContextProvider.set(newSSLContext);
     }
 
     @Override

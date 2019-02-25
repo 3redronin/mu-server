@@ -1,5 +1,6 @@
 package io.muserver;
 
+import javax.net.ssl.SSLContext;
 import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -60,4 +61,10 @@ public interface MuServer {
             return "0.x";
         }
     }
+
+    /**
+     * Changes the HTTPS certificate. This can be changed without restarting the server.
+     * @param newSSLContext The new SSL Context to use.
+     */
+    void changeSSLContext(SSLContext newSSLContext);
 }
