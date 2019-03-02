@@ -1,0 +1,4 @@
+*.sh		eol=lf
+*.crt		eol=lf
+*.pem		eol=lf
+*.bat		eol=crlf
