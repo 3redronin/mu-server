@@ -210,9 +210,6 @@
                                 <goals>
                                     <goal>sign</goal>
                                 </goals>
-                                <configuration>
-                                    <keyname>my-key</keyname>
-                                </configuration>
                             </execution>
                         </executions>
                     </plugin>
