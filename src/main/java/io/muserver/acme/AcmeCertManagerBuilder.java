@@ -6,7 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * <p>A builder for creating an {@link AcmeCertManager} by specifying the domain name, ACME URL, a directory
+ * <p>A builder for creating an {@link AcmeCertManagerImpl} by specifying the domain name, ACME URL, a directory
  * to place certificates, and other optional data.</p>
  * <p>To use Let's Encrypt, you can use the {@link #letsEncrypt()} convenience method.</p>
  */
@@ -19,12 +19,17 @@ public class AcmeCertManagerBuilder {
     private String organizationalUnit;
     private String country;
     private String state;
+    private boolean useNoOp = false;
 
     /**
      * @return Returns a manager that can create and renew HTTPS certificates.
      * @throws IllegalStateException Thrown if no config dir, ACME server, or domain name is set.
      */
     public AcmeCertManager build() {
+        if (useNoOp) {
+            return new NoOpAcmeCertManager();
+        }
+
         if (configDir == null)
             throw new IllegalStateException("Please specify a configDir which is where certificates and keys will be kept");
         if (acmeServerURI == null)
@@ -32,7 +37,7 @@ public class AcmeCertManagerBuilder {
         if (domains.isEmpty()) {
             throw new IllegalStateException("Please specify a domain");
         }
-        return new AcmeCertManager(configDir, acmeServerURI, organization, organizationalUnit, country, state, domains);
+        return new AcmeCertManagerImpl(configDir, acmeServerURI, organization, organizationalUnit, country, state, domains);
     }
 
     /**
@@ -112,6 +117,17 @@ public class AcmeCertManagerBuilder {
     }
 
     /**
+     * Makes it so a no-op version of the manager is returned. In this case, the start and stop methods
+     * do nothing. Useful for disabling ACME integration during local development.
+     * @param disabled If true, then no certs will be acquired and an unsigned cert will be used
+     * @return This builder
+     */
+    public AcmeCertManagerBuilder disable(boolean disabled) {
+        this.useNoOp = disabled;
+        return this;
+    }
+
+    /**
      * @return Returns a new builder.
      */
     public static AcmeCertManagerBuilder acmeCertManager() {
@@ -130,5 +146,12 @@ public class AcmeCertManagerBuilder {
      */
     public static AcmeCertManagerBuilder letsEncryptStaging() {
         return acmeCertManager().withAcmeServerURI(URI.create("acme://letsencrypt.org/staging"));
+    }
+
+    /**
+     * @return Returns a builder that will do nothing. Useful for local development.
+     */
+    public static AcmeCertManagerBuilder noOpManager() {
+        return acmeCertManager().disable(true);
     }
 }

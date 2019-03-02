@@ -30,8 +30,8 @@ public class AcmeCertManagerTest {
 
     @Test
     public void canCreateKeyPairs() throws Exception {
-        KeyPair created = AcmeCertManager.loadOrCreateKeypair(new File(configDir, "acme-account-key.pem"));
-        KeyPair loaded = AcmeCertManager.loadOrCreateKeypair(new File(configDir, "acme-account-key.pem"));
+        KeyPair created = AcmeCertManagerImpl.loadOrCreateKeypair(new File(configDir, "acme-account-key.pem"));
+        KeyPair loaded = AcmeCertManagerImpl.loadOrCreateKeypair(new File(configDir, "acme-account-key.pem"));
         assertThat(loaded.getPrivate(), equalTo(created.getPrivate()));
         assertThat(loaded.getPublic(), equalTo(created.getPublic()));
     }
@@ -86,7 +86,7 @@ public class AcmeCertManagerTest {
 
     @Test
     public void checksWillNotWorkIfDNSIsNotRight() throws Exception {
-        AcmeCertManager certManager = AcmeCertManagerBuilder.letsEncryptStaging()
+        AcmeCertManagerImpl certManager = (AcmeCertManagerImpl) AcmeCertManagerBuilder.letsEncryptStaging()
             .withDomain("mu.example.org")
             .withConfigDir(configDir)
             .build();
@@ -99,6 +99,15 @@ public class AcmeCertManagerTest {
         } catch (CertificateOrderException ignored) {
             // Good!
         }
+    }
+
+    @Test
+    public void noOpDoesNothing() throws Exception {
+        AcmeCertManager noOp = AcmeCertManagerBuilder.noOpManager().build();
+        noOp.stop();
+        noOp.start(null);
+        noOp.createHandler();
+        noOp.createSSLContext();
     }
 
     private static String certInformation(URI uri) throws Exception{
