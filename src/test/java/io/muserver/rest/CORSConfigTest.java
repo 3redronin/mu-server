@@ -12,8 +12,16 @@ public class CORSConfigTest {
 
 
     @Test
-    public void regexCanBeUsed() {
+    public void regexPatternsCanBeUsed() {
         CORSConfig config = CORSConfigBuilder.corsConfig().withAllowedOriginRegex(Pattern.compile("http[s]?://.*\\.nz")).build();
+        assertThat(config.allowCors("http://apprunner.co.nz"), is(true));
+        assertThat(config.allowCors("https://apprunner.co.nz"), is(true));
+        assertThat(config.allowCors("https://apprunner.com.au"), is(false));
+    }
+
+    @Test
+    public void regexStringsCanBeUsed() {
+        CORSConfig config = CORSConfigBuilder.corsConfig().withAllowedOriginRegex("http[s]?://.*\\.nz").build();
         assertThat(config.allowCors("http://apprunner.co.nz"), is(true));
         assertThat(config.allowCors("https://apprunner.co.nz"), is(true));
         assertThat(config.allowCors("https://apprunner.com.au"), is(false));

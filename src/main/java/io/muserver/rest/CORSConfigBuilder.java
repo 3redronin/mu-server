@@ -3,6 +3,7 @@ package io.muserver.rest;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 
 import static java.util.Arrays.asList;
 
@@ -55,6 +56,17 @@ public class CORSConfigBuilder {
     public CORSConfigBuilder withAllowedOriginRegex(Pattern allowedOriginRegex) {
         this.allowedOriginRegex = allowedOriginRegex;
         return this;
+    }
+
+    /**
+     * The origin values that CORS requests are allowed for.
+     * @param allowedOriginRegex A regex to match, e.g. <code>"https://.*\\.example\\.org"</code> to allow
+     *                           all subdomains of <code>example.org</code> over HTTPS.
+     * @return This builder
+     * @throws PatternSyntaxException If the expression's syntax is invalid
+     */
+    public CORSConfigBuilder withAllowedOriginRegex(String allowedOriginRegex) {
+        return withAllowedOriginRegex(Pattern.compile(allowedOriginRegex));
     }
 
     /**
