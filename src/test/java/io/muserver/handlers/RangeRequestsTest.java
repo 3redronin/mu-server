@@ -8,7 +8,10 @@ import org.junit.Test;
 import java.io.IOException;
 import java.net.URI;
 
+import static io.muserver.ContextHandlerBuilder.context;
 import static io.muserver.MuServerBuilder.httpsServer;
+import static io.muserver.handlers.ResourceHandlerBuilder.classpathHandler;
+import static io.muserver.handlers.ResourceHandlerBuilder.fileHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.nullValue;
@@ -18,8 +21,8 @@ import static scaffolding.ClientUtils.request;
 public class RangeRequestsTest {
 
     private MuServer server = httpsServer()
-        .addHandler(ResourceHandlerBuilder.classpathHandler("/sample-static").withPathToServeFrom("/cp"))
-        .addHandler(ResourceHandlerBuilder.fileHandler("src/test/resources/sample-static").withPathToServeFrom("/fp"))
+        .addHandler(context("cp").addHandler(classpathHandler("/sample-static")))
+        .addHandler(context("fp").addHandler(fileHandler("src/test/resources/sample-static")))
         .start();
 
     @Test

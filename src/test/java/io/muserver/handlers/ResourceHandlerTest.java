@@ -63,8 +63,8 @@ public class ResourceHandlerTest {
     @Test
     public void lastModifiedSinceWorks() {
         server = httpsServer()
-            .addHandler(fileHandler("src/test/resources/sample-static").withPathToServeFrom("/file"))
-            .addHandler(classpathHandler("/sample-static").withPathToServeFrom("/classpath"))
+            .addHandler(context("/file").addHandler(fileHandler("src/test/resources/sample-static")))
+            .addHandler(context("/classpath").addHandler(classpathHandler("/sample-static")))
             .start();
 
         String[] dirs = {"file", "classpath"};
@@ -133,8 +133,8 @@ public class ResourceHandlerTest {
     public void directoriesResultIn302s() throws Exception {
         server = httpsServer()
             .withGzipEnabled(false)
-            .addHandler(classpathHandler("/sample-static").withPathToServeFrom("/classpath"))
-            .addHandler(fileHandler("src/test/resources/sample-static").withPathToServeFrom("/file"))
+            .addHandler(context("/classpath").addHandler(classpathHandler("/sample-static")))
+            .addHandler(context("/file").addHandler(fileHandler("src/test/resources/sample-static")))
             .start();
 
         try (Response resp = call(request().url(server.uri().resolve("/classpath/images").toURL()))) {
@@ -169,8 +169,8 @@ public class ResourceHandlerTest {
     public void filesCanHaveNoFileExtensions() throws IOException {
         server = httpsServer()
             .withGzipEnabled(false)
-            .addHandler(classpathHandler("/sample-static").withPathToServeFrom("/classpath"))
-            .addHandler(fileHandler("src/test/resources/sample-static").withPathToServeFrom("/file"))
+            .addHandler(context("/classpath").addHandler(classpathHandler("/sample-static")))
+            .addHandler(context("/file").addHandler(fileHandler("src/test/resources/sample-static")))
             .start();
 
         try (Response resp = call(request().url(server.uri().resolve("/file/filewithnoextension").toURL()))) {
@@ -224,9 +224,11 @@ public class ResourceHandlerTest {
     @Test
     public void itCanDefaultToFilesSuchAsIndexHtml() throws Exception {
         server = httpsServer()
-            .addHandler(fileHandler("src/test/resources/sample-static")
-                .withPathToServeFrom("/blah")
-                .withDefaultFile("index.html"))
+            .addHandler(
+                context("/blah").addHandler(
+                    fileHandler("src/test/resources/sample-static")
+                        .withDefaultFile("index.html"))
+            )
             .start();
 
         try (Response resp = call(request().url(server.httpsUri().resolve("/blah/").toURL()))) {

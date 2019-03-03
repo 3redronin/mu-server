@@ -37,7 +37,9 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
      * Specifies the path to serve the static from.
      * @param pathToServeFrom A path that static data should be served from. Defaults to <code>/</code>
      * @return The builder
+     * @deprecated Please use <code>ContextHandlerBuilder.context(pathToServeFrom).addHandler(resourceHandler)</code> instead.
      */
+    @Deprecated
     public ResourceHandlerBuilder withPathToServeFrom(String pathToServeFrom) {
         this.pathToServeFrom = pathToServeFrom;
         return this;

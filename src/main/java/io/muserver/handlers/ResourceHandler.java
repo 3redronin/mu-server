@@ -36,20 +36,14 @@ public class ResourceHandler implements MuHandler {
     }
 
     @Override
-    public boolean handle(MuRequest request, MuResponse response) throws Exception {
+    public boolean handle(MuRequest request, MuResponse response) {
         String requestPath = request.relativePath();
-        if (!requestPath.startsWith(pathToServeFrom)) {
-            return false;
-        }
         if (requestPath.endsWith("/") && defaultFile != null) {
             requestPath += defaultFile;
         }
+        String decodedRelativePath = Mutils.urlDecode(requestPath);
 
-        String pathWithoutWebPrefix = pathToServeFrom.equals("/")
-            ? requestPath
-            : requestPath.substring(pathToServeFrom.length());
-
-        String decodedRelativePath = Mutils.urlDecode(pathWithoutWebPrefix);
+        log.info("p " + requestPath + " , d " + decodedRelativePath);
         ResourceProvider provider = resourceProviderFactory.get(decodedRelativePath);
         if (!provider.exists()) {
             return false;
@@ -132,6 +126,15 @@ public class ResourceHandler implements MuHandler {
             headers.set(HeaderNames.LAST_MODIFIED, Mutils.toHttpDate(lastModified));
         }
         headers.add(type.headers);
+    }
+
+    /**
+     * @return This is a temporary accessor which will be demised. Do not use this.
+     * @deprecated This is a temporary accessor which will be demised. Do not use this.
+     */
+    @Deprecated
+    public String getPathToServeFrom() {
+        return pathToServeFrom;
     }
 
     /**

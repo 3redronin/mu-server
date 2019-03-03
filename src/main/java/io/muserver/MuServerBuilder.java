@@ -1,5 +1,6 @@
 package io.muserver;
 
+import io.muserver.handlers.ResourceHandler;
 import io.muserver.handlers.ResourceType;
 import io.muserver.rest.MuRuntimeDelegate;
 import io.netty.bootstrap.ServerBootstrap;
@@ -247,9 +248,24 @@ public class MuServerBuilder {
      */
     public MuServerBuilder addHandler(MuHandler handler) {
         if (handler != null) {
+            handler = getContextualHandlerForResourceHandler(handler);
             handlers.add(handler);
         }
         return this;
+    }
+
+    static MuHandler getContextualHandlerForResourceHandler(MuHandler handler) {
+        // Temporary workaround until the path-to-serve-from is demised
+        if (handler instanceof ResourceHandler) {
+            ResourceHandler rh = (ResourceHandler) handler;
+            String context = Mutils.trim(Mutils.coalesce(rh.getPathToServeFrom(), ""), "/");
+            if (!Mutils.nullOrEmpty(context)) {
+                handler = ContextHandlerBuilder.context(context)
+                    .addHandlerTemp(rh)
+                    .build();
+            }
+        }
+        return handler;
     }
 
     /**
