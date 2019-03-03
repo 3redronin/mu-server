@@ -116,6 +116,44 @@ when building the manager, then a no-op manager will be returned. You can then u
 manager as if it was a real one, however no certs will be requested and a self-signed cert
 will be used.
 
+## Packaging into an uber jar
+
+If packaged as an uber jar, you will need to exclude some files.
+The following is an example using the `maven-shade-plugin`:
+
+````xml
+<plugin>
+    <groupId>org.apache.maven.plugins</groupId>
+    <artifactId>maven-shade-plugin</artifactId>
+    <version>2.4.3</version>
+    <executions>
+        <execution>
+            <phase>package</phase>
+            <goals>
+                <goal>shade</goal>
+            </goals>
+            <configuration>
+                <transformers>
+                    <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                        <mainClass>org.example.yourapp.App</mainClass>
+                    </transformer>
+                </transformers>
+                <filters>
+                    <filter>
+                        <artifact>*:*</artifact>
+                        <excludes>
+                            <exclude>META-INF/*.SF</exclude>
+                            <exclude>META-INF/*.DSA</exclude>
+                            <exclude>META-INF/*.RSA</exclude>
+                        </excludes>
+                    </filter>
+                </filters>
+            </configuration>
+        </execution>
+    </executions>
+</plugin>
+````
+
 ### Acknowledgements
 
 This library is built using the excellent [ACME Java Client](https://github.com/shred/acme4j)
