@@ -91,9 +91,6 @@ public class CORSTest {
             assertThat(resp.header("Access-Control-Allow-Methods"), is("GET"));
             assertThat(resp.header("Vary"), is("origin"));
         }
-
-
-
     }
 
 
@@ -167,7 +164,6 @@ public class CORSTest {
             assertThat(resp.header("Access-Control-Max-Age"), is(nullValue()));
             assertThat(resp.header("Vary"), is("origin"));
         }
-
     }
 
     @Test
@@ -198,6 +194,60 @@ public class CORSTest {
             assertThat(resp.header("Vary"), is("origin"));
         }
 
+    }
+
+
+    @Test
+    public void partialPatternsAreNotAllowed() {
+        @Path("/things")
+        class Thing {
+            @GET
+            public String get() {
+                return "Hello!";
+            }
+        }
+        server = httpsServer().addHandler(
+            restHandler(new Thing())
+                .withCORS(CORSConfigBuilder.corsConfig()
+                    .withAllowedOrigins("http://example.com")
+                    .withAllowedOriginRegex("foo.example")
+                )
+        ).start();
+        try (okhttp3.Response resp = call(request()
+            .get()
+            .header("Origin", "http://foo.example")
+            .url(server.uri().resolve("/things").toString()))
+        ) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.header("Access-Control-Allow-Origin"), is("null"));
+        }
+    }
+
+    @Test
+    public void justOneRegexHasToMatchToWork() {
+        @Path("/things")
+        class Thing {
+            @GET
+            public String get() {
+                return "Hello!";
+            }
+        }
+        server = httpsServer().addHandler(
+            restHandler(new Thing())
+                .withCORS(CORSConfigBuilder.corsConfig()
+                    .withAllowedOrigins("http://example.com")
+                    .withAllowedOriginRegex("foo.example")
+                    .withAllowedOriginRegex("http(s)?://foo\\.ex.*le")
+                )
+        ).start();
+        try (okhttp3.Response resp = call(request()
+            .get()
+            .header("Origin", "http://foo.example")
+            .url(server.uri().resolve("/things").toString()))
+        ) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.header("Access-Control-Allow-Origin"), is("http://foo.example"));
+        }
     }
 
 

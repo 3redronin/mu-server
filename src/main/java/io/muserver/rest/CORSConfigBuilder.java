@@ -1,7 +1,9 @@
 package io.muserver.rest;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
@@ -14,7 +16,7 @@ public class CORSConfigBuilder {
 
     private boolean allowCredentials = false;
     private Collection<String> allowedOrigins = Collections.emptySet();
-    private Pattern allowedOriginRegex;
+    private List<Pattern> allowedOriginRegex = new ArrayList<>();
     private Collection<String> exposedHeaders = Collections.emptySet();
     private long maxAge = -1;
 
@@ -48,19 +50,21 @@ public class CORSConfigBuilder {
     }
 
     /**
-     * The origin values that CORS requests are allowed for.
+     * <p>The origin values that CORS requests are allowed for.</p>
+     * <p>If called multiple times, then just one of the patterns need to match to allow the origin.</p>
      * @param allowedOriginRegex A regex to match, e.g. <code>Pattern.compile("https://.*\\.example\\.org")</code> to allow
      *                           all subdomains of <code>example.org</code> over HTTPS.
      * @return This builder
      */
     public CORSConfigBuilder withAllowedOriginRegex(Pattern allowedOriginRegex) {
-        this.allowedOriginRegex = allowedOriginRegex;
+        this.allowedOriginRegex.add(allowedOriginRegex);
         return this;
     }
 
     /**
-     * The origin values that CORS requests are allowed for.
-     * @param allowedOriginRegex A regex to match, e.g. <code>"https://.*\\.example\\.org"</code> to allow
+     * <p>The origin values that CORS requests are allowed for.</p>
+     * <p>If called multiple times, then just one of the patterns need to match to allow the origin.</p>
+     * * @param allowedOriginRegex A regex to match, e.g. <code>"https://.*\\.example\\.org"</code> to allow
      *                           all subdomains of <code>example.org</code> over HTTPS.
      * @return This builder
      * @throws PatternSyntaxException If the expression's syntax is invalid

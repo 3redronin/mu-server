@@ -4,6 +4,7 @@ import io.muserver.*;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 import java.util.Set;
 import java.util.regex.Pattern;
 
@@ -17,12 +18,13 @@ public class CORSConfig {
 
     public final boolean allowCredentials;
     public final Collection<String> allowedOrigins;
-    public final Pattern allowedOriginRegex;
+    public final List<Pattern> allowedOriginRegex;
     public final Collection<String> exposedHeaders;
     public final long maxAge;
     private final String exposedHeadersCSV;
 
-    CORSConfig(boolean allowCredentials, Collection<String> allowedOrigins, Pattern allowedOriginRegex, Collection<String> exposedHeaders, long maxAge) {
+    CORSConfig(boolean allowCredentials, Collection<String> allowedOrigins, List<Pattern> allowedOriginRegex, Collection<String> exposedHeaders, long maxAge) {
+        Mutils.notNull("allowedOriginRegex", allowedOriginRegex);
         this.allowCredentials = allowCredentials;
         this.allowedOrigins = Collections.unmodifiableCollection(allowedOrigins);
         this.allowedOriginRegex = allowedOriginRegex;
@@ -74,7 +76,12 @@ public class CORSConfig {
         if (allowedOrigins == null || allowedOrigins.contains(origin)) {
             return true;
         }
-        return allowedOriginRegex != null && allowedOriginRegex.matcher(origin).matches();
+        for (Pattern pattern : allowedOriginRegex) {
+            if (pattern.matcher(origin).matches()) {
+                return true;
+            }
+        }
+        return false;
     }
 
 }
