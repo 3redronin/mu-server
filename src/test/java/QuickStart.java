@@ -7,10 +7,12 @@ import java.util.concurrent.TimeUnit;
 public class QuickStart {
 
     public static void main(String[] args) throws Exception {
+        boolean isLocal = false; // figure out from env somehow
 
         AcmeCertManager certManager = AcmeCertManagerBuilder.letsEncryptStaging()
             .withDomain("your-domain.example.org")
             .withConfigDir("target/ssl-config")
+            .disable(isLocal)
             .build();
 
         MuServer server = MuServerBuilder.muServer()
@@ -18,7 +20,7 @@ public class QuickStart {
             .withHttpsPort(443)
             .withHttpsConfig(certManager.createSSLContext())
             .addHandler(certManager.createHandler())
-            .addHandler(
+            .addHandler(isLocal ? null :
                 HttpsRedirectorBuilder.toHttpsPort(443)
                     .withHSTSExpireTime(1, TimeUnit.DAYS)
                     .includeSubDomains(true)
