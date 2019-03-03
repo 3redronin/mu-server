@@ -64,7 +64,7 @@ public class CORSConfigBuilder {
     /**
      * <p>The origin values that CORS requests are allowed for.</p>
      * <p>If called multiple times, then just one of the patterns need to match to allow the origin.</p>
-     * * @param allowedOriginRegex A regex to match, e.g. <code>"https://.*\\.example\\.org"</code> to allow
+     * @param allowedOriginRegex A regex to match, e.g. <code>"https://.*\\.example\\.org"</code> to allow
      *                           all subdomains of <code>example.org</code> over HTTPS.
      * @return This builder
      * @throws PatternSyntaxException If the expression's syntax is invalid
