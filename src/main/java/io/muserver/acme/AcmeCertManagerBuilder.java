@@ -63,6 +63,17 @@ public class AcmeCertManagerBuilder {
     }
 
     /**
+     * <p>Sets a directory that will be used to store user keys and certificates.</p>
+     * <p>This directory will hold your ACME account, private domain key, and the certificate so it is
+     * recommended that this directory is backed up and kept secure.</p>
+     * @param configDirPath a path to a directory
+     * @return This builder
+     */
+    public AcmeCertManagerBuilder withConfigDir(String configDirPath) {
+        return withConfigDir(new File(configDirPath));
+    }
+
+    /**
      * Sets the ACME server to use.
      * @param acmeServerURI The URL
      * @return This builder

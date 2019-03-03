@@ -30,7 +30,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 
-public class AcmeCertManagerImpl implements AcmeCertManager {
+class AcmeCertManagerImpl implements AcmeCertManager {
     private static final Logger log = LoggerFactory.getLogger(AcmeCertManagerImpl.class);
     private final ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor();
 
