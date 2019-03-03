@@ -66,93 +66,9 @@ deployed, you will now have free, automatically renewed SSL certificates.
 
 ### More details
 
-The AcmeCertManager needs to know the address of an ACME server. Convenience methods for the
-Let's Encrypt staging and production services are predefined, but any ACME service can be
-used:
-
-````java
-AcmeCertManagerBuilder.acmeCertManager()
-    .withAcmeServerURI(URI.create("ACME server URI"));
-````
-
-The config dir is where mu-acme will write various files. It is recommended that you back up
-this directory and keep it secure as it contains your ACME user key, domain private key, and
-the actual server certificate.
-
-With the cert manager built, you can start a server. Note that most ACME providers require you
-to have an HTTP port open on port 80. You can directly open port 80 like in the example above
-or use something like IP Tables to redirect port 80 to another port.
-
-The cert manager will provide the SSL context. The first time you start the server, there is
-no cert available, and a self-signed cert is temporarily used until one is acquired (which is
-typically within a few seconds). On subsequent server restarts, the cert from the `configDir`
-is used.
-
-The first handler you add to your server should be the handler from the cert manager. This is
-used by the library to prove that you own the domain and will not have any other effect.
-
-Finally, after starting the server, you need to start the cert manager. This will start a periodic
-check of the cert validity. If the cert is due to expire within 3 days, then a new cert is acquired
-and Mu Server will start using the new cert. No restart or manual intervention required.
-
-## HSTS and redirects
-
-Mu Server provides a handler which can redirect all traffic to HTTPS and set HSTS headers.
-Just add the following handler AFTER the acme handler when building the server:
-
-````java
-.addHandler(certManager.createHandler())
-.addHandler(
-    HttpsRedirectorBuilder.toHttpsPort(443)
-        .withHSTSExpireTime(365, TimeUnit.DAYS)
-        .includeSubDomains(true)
-)
-````
-
-## Running locally
-
-The `AcmeCertManagerBuilder` has a `disable(boolean)` method. If you pass true to this method
-when building the manager, then a no-op manager will be returned. You can then use the cert
-manager as if it was a real one, however no certs will be requested and a self-signed cert
-will be used.
-
-## Packaging into an uber jar
-
-If packaged as an uber jar, you will need to exclude some files.
-The following is an example using the `maven-shade-plugin`:
-
-````xml
-<plugin>
-    <groupId>org.apache.maven.plugins</groupId>
-    <artifactId>maven-shade-plugin</artifactId>
-    <version>2.4.3</version>
-    <executions>
-        <execution>
-            <phase>package</phase>
-            <goals>
-                <goal>shade</goal>
-            </goals>
-            <configuration>
-                <transformers>
-                    <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                        <mainClass>org.example.yourapp.App</mainClass>
-                    </transformer>
-                </transformers>
-                <filters>
-                    <filter>
-                        <artifact>*:*</artifact>
-                        <excludes>
-                            <exclude>META-INF/*.SF</exclude>
-                            <exclude>META-INF/*.DSA</exclude>
-                            <exclude>META-INF/*.RSA</exclude>
-                        </excludes>
-                    </filter>
-                </filters>
-            </configuration>
-        </execution>
-    </executions>
-</plugin>
-````
+For more information on how this works, and other configuration options, or how to handle this
+when running locally, and how to package into an uber jar, please see 
+[the Mu Server ACME integration documentation](https://muserver.io/letsencrypt).
 
 ### Acknowledgements
 
