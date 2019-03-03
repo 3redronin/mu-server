@@ -27,7 +27,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 
-public class FileProviderTest {
+public class AsyncFileProviderTest {
 
     private MuServer server;
     public static final File BIG_FILE_DIR = new File("src/test/big-files");

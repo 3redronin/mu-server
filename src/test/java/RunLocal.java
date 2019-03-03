@@ -15,7 +15,7 @@ import java.io.OutputStream;
 import java.net.URI;
 
 import static io.muserver.Mutils.urlEncode;
-import static io.muserver.handlers.FileProviderTest.BIG_FILE_DIR;
+import static io.muserver.handlers.AsyncFileProviderTest.BIG_FILE_DIR;
 
 public class RunLocal {
     private static final Logger log = LoggerFactory.getLogger(RunLocal.class);

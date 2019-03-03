@@ -3,23 +3,19 @@ package io.muserver.handlers;
 import io.muserver.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import sun.net.www.protocol.file.FileURLConnection;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.JarURLConnection;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
-import java.net.URLConnection;
 import java.nio.ByteBuffer;
 import java.nio.channels.AsynchronousFileChannel;
 import java.nio.channels.CompletionHandler;
-import java.nio.file.Files;
-import java.nio.file.LinkOption;
-import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
-import java.util.Date;
+import java.nio.file.*;
+import java.util.*;
+import java.util.stream.Stream;
 
 interface ResourceProvider {
     boolean exists();
@@ -43,17 +39,110 @@ interface ResourceProviderFactory {
         if (!Files.isDirectory(baseDirectory, LinkOption.NOFOLLOW_LINKS)) {
             throw new MuException(baseDirectory + " is not a directory");
         }
-        return relativePath -> new FileProvider(baseDirectory, relativePath);
+        return relativePath -> new AsyncFileProvider(baseDirectory, relativePath);
     }
 
     static ResourceProviderFactory classpathBased(String classpathBase) {
-        return relativePath -> new ClasspathResourceProvider(classpathBase, relativePath);
+        ClasspathCache classpathCache = new ClasspathCache(classpathBase);
+        try {
+            classpathCache.cacheItems();
+        } catch (Exception e) {
+            throw new MuException("Error while creating classpath provider", e);
+        }
+        return classpathCache;
     }
 }
 
 
-class FileProvider implements ResourceProvider, CompletionHandler<Integer, Object> {
-    private static final Logger log = LoggerFactory.getLogger(FileProvider.class);
+class ClasspathCache implements ResourceProviderFactory {
+    private final String basePath;
+    private final Map<String, ClasspathResourceProvider> all = new HashMap<>();
+
+    ClasspathCache(String basePath) {
+        this.basePath = basePath;
+    }
+
+    void cacheItems() throws URISyntaxException, IOException {
+        URL resource = ClasspathCache.class.getResource(basePath);
+        if (resource != null) {
+            URI uri = resource.toURI();
+            Path myPath;
+            if (uri.getScheme().equals("jar")) {
+                FileSystem fileSystem = FileSystems.newFileSystem(uri, Collections.emptyMap());
+                myPath = fileSystem.getPath(basePath);
+            } else {
+                myPath = Paths.get(uri);
+            }
+            Stream<Path> walk = Files.walk(myPath);
+            for (Iterator<Path> it = walk.iterator(); it.hasNext(); ) {
+                Path cur = it.next();
+                String relativePath = myPath.relativize(cur).toString().replace('\\', '/');
+
+                boolean exists = Files.exists(cur);
+                boolean directory = exists && Files.isDirectory(cur);
+
+                Long size;
+                try {
+                    size = Files.size(cur);
+                } catch (IOException e) {
+                    size = null;
+                }
+                Date lastModified;
+                try {
+                    lastModified = new Date(Files.getLastModifiedTime(cur).toMillis());
+                } catch (IOException e) {
+                    lastModified = null;
+                }
+                ClasspathResourceProvider crp = new ClasspathResourceProvider(exists, directory, size, lastModified, cur, null);
+                all.put(relativePath, crp);
+            }
+        }
+    }
+
+
+    @Override
+    public ResourceProvider get(String relativePath) {
+        if (relativePath.startsWith("./")) {
+            relativePath = relativePath.substring(1);
+        }
+        relativePath = Mutils.trim(relativePath, "/");
+        ClasspathResourceProvider cur = all.get(relativePath);
+        if (cur == null) {
+            return nullProvider;
+        }
+        return cur.newWithInputStream();
+    }
+
+
+    private static final ResourceProvider nullProvider = new ResourceProvider() {
+        public boolean exists() {
+            return false;
+        }
+
+        public boolean isDirectory() {
+            return false;
+        }
+
+        public Long fileSize() {
+            return null;
+        }
+
+        public Date lastModified() {
+            return null;
+        }
+
+        public boolean skipIfPossible(long bytes) {
+            return false;
+        }
+
+        public void sendTo(MuRequest request, MuResponse response, boolean sendBody, long maxLen) {
+        }
+    };
+}
+
+
+class AsyncFileProvider implements ResourceProvider, CompletionHandler<Integer, Object> {
+    private static final Logger log = LoggerFactory.getLogger(AsyncFileProvider.class);
     private final Path localPath;
     private AsynchronousFileChannel channel;
     private long curPos = 0;
@@ -62,7 +151,7 @@ class FileProvider implements ResourceProvider, CompletionHandler<Integer, Objec
     private long maxLen;
     private long bytesSent = 0;
 
-    FileProvider(Path baseDirectory, String relativePath) {
+    AsyncFileProvider(Path baseDirectory, String relativePath) {
         if (relativePath.startsWith("/")) {
             relativePath = "." + relativePath;
         }
@@ -80,7 +169,11 @@ class FileProvider implements ResourceProvider, CompletionHandler<Integer, Objec
 
     public Long fileSize() {
         try {
-            return Files.size(localPath);
+            long size = Files.size(localPath);
+            if (size == 0L && isDirectory()) {
+                return null;
+            }
+            return size;
         } catch (IOException e) {
             log.error("Error finding file size: " + e.getMessage());
             return null;
@@ -127,7 +220,7 @@ class FileProvider implements ResourceProvider, CompletionHandler<Integer, Objec
         } else {
             long remaining = maxLen - bytesSent;
             if (remaining < buf.limit()) {
-                buf.limit((int)remaining);
+                buf.limit((int) remaining);
             }
             handle.write(buf, new WriteCallback() {
                 @Override
@@ -141,7 +234,7 @@ class FileProvider implements ResourceProvider, CompletionHandler<Integer, Objec
                     buf.clear();
                     curPos += bytesRead;
                     bytesSent += bytesRead;
-                    channel.read(buf, curPos, null, FileProvider.this);
+                    channel.read(buf, curPos, null, AsyncFileProvider.this);
                 }
             });
         }
@@ -155,47 +248,34 @@ class FileProvider implements ResourceProvider, CompletionHandler<Integer, Objec
 }
 
 class ClasspathResourceProvider implements ResourceProvider {
-    private static final Logger log = LoggerFactory.getLogger(ClasspathResourceProvider.class);
-    private final URLConnection info;
+    private final boolean exists;
     private final boolean isDir;
+    private final Long fileSize;
+    private final Date lastModified;
+    private final Path path;
+    private final InputStream inputStream;
 
-    ClasspathResourceProvider(String classpathBase, String relativePath) {
-        URLConnection con;
-        String path = Mutils.join(classpathBase, "/", relativePath);
-        URL resource = ClasspathResourceProvider.class.getResource(path);
-        if (resource == null) {
-            con = null;
-        } else {
-            try {
-                con = resource.openConnection();
-            } catch (IOException e) {
-                log.error("Error opening " + resource, e);
-                con = null;
-            }
-        }
-        this.info = con;
-        boolean isDir = false;
-        if (con != null) {
-            if (con instanceof JarURLConnection) {
-                JarURLConnection juc = (JarURLConnection) con;
-                try {
-                    isDir = juc.getJarEntry().isDirectory();
-                } catch (IOException e) {
-                    log.error("Error checking if " + resource + " is a directory", e);
-                }
-            } else if (con instanceof FileURLConnection) {
-                FileURLConnection fuc = (FileURLConnection) con;
-                isDir = new File(fuc.getURL().getFile()).isDirectory();
-            } else {
-                log.warn("Unexpected jar entry type for " + resource + ": " + con.getClass());
-            }
-
-        }
+    ClasspathResourceProvider(boolean exists, boolean isDir, Long fileSize, Date lastModified, Path path, InputStream inputStream) {
+        this.exists = exists;
         this.isDir = isDir;
+        this.path = path;
+        this.inputStream = inputStream;
+        this.fileSize = isDir ? null : fileSize;
+        this.lastModified = lastModified;
+    }
+
+    ClasspathResourceProvider newWithInputStream() {
+        InputStream inputStream;
+        try {
+            inputStream = isDir ? null : Files.newInputStream(path, StandardOpenOption.READ);
+        } catch (IOException e) {
+            throw new MuException("Error while opening " + path + " from the classpath", e);
+        }
+        return new ClasspathResourceProvider(exists, isDir, fileSize, lastModified, path, inputStream);
     }
 
     public boolean exists() {
-        return info != null;
+        return exists;
     }
 
     @Override
@@ -205,17 +285,12 @@ class ClasspathResourceProvider implements ResourceProvider {
 
     @Override
     public Long fileSize() {
-        if (isDir) {
-            return null;
-        }
-        long size = info.getContentLengthLong();
-        return size >= 0 ? size : null;
+        return fileSize;
     }
 
     @Override
     public Date lastModified() {
-        long mod = info.getLastModified();
-        return mod >= 0 ? new Date(mod) : null;
+        return lastModified;
     }
 
     @Override
@@ -225,7 +300,7 @@ class ClasspathResourceProvider implements ResourceProvider {
             while (totalSkipped < bytes) {
                 long skipped;
                 try {
-                    skipped = info.getInputStream().skip(bytes);
+                    skipped = inputStream.skip(bytes);
                 } catch (IOException e) {
                     return false;
                 }
@@ -240,17 +315,13 @@ class ClasspathResourceProvider implements ResourceProvider {
 
     @Override
     public void sendTo(MuRequest request, MuResponse response, boolean sendBody, long maxLen) throws IOException {
-        sendToResponse(response, sendBody, maxLen, info.getInputStream());
-    }
-
-    static void sendToResponse(MuResponse response, boolean sendBody, long maxLen, InputStream is) throws IOException {
         if (sendBody) {
 
             try (OutputStream out = response.outputStream()) {
                 byte[] buffer = new byte[8192];
                 long soFar = 0;
                 int read;
-                while (soFar < maxLen && (read = is.read(buffer)) > -1) {
+                while (soFar < maxLen && (read = inputStream.read(buffer)) > -1) {
                     soFar += read;
                     if (soFar > maxLen) {
                         read -= soFar - maxLen;

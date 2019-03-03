@@ -43,16 +43,16 @@ public class ResourceHandler implements MuHandler {
         }
         String decodedRelativePath = Mutils.urlDecode(requestPath);
 
-        log.info("p " + requestPath + " , d " + decodedRelativePath);
         ResourceProvider provider = resourceProviderFactory.get(decodedRelativePath);
         if (!provider.exists()) {
             return false;
         }
 
-//        log.info("<< " + request + " - " + request.headers());
-
         if (provider.isDirectory()) {
             String goingTo = request.uri().getPath() + "/";
+            if (goingTo.endsWith("//")) {
+                return false;
+            }
             response.redirect(goingTo);
         } else {
             String filename = requestPath.substring(requestPath.lastIndexOf('/'));
@@ -101,8 +101,6 @@ public class ResourceHandler implements MuHandler {
             }
         }
 
-//        log.info(">> " + response + " - " + response.headers());
-//        log.info("");
         return true;
     }
 
