@@ -104,7 +104,7 @@ Just add the following handler AFTER the acme handler when building the server:
 .addHandler(certManager.createHandler())
 .addHandler(
     HttpsRedirectorBuilder.toHttpsPort(443)
-        .withHSTSExpireTime(1, TimeUnit.DAYS)
+        .withHSTSExpireTime(365, TimeUnit.DAYS)
         .includeSubDomains(true)
 )
 ````
