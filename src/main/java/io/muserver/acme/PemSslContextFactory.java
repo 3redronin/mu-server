@@ -18,6 +18,7 @@ import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
+import java.util.Collection;
 import java.util.UUID;
 
 class PemSslContextFactory {
@@ -25,7 +26,7 @@ class PemSslContextFactory {
     static SSLContext getSSLContextFromLetsEncrypt(File certFile, File privateKeyFile) throws Exception {
         String keyPassword = UUID.randomUUID().toString();
 
-        X509Certificate cert = loadX509Certificate(certFile);
+        Collection<X509Certificate> cert = loadX509Certificate(certFile);
 
         Key key;
         try (PEMParser pemParser = new PEMParser(new FileReader(privateKeyFile))) {
@@ -34,11 +35,12 @@ class PemSslContextFactory {
             key = kp.getPrivate();
         }
 
-
         KeyStore keystore = KeyStore.getInstance("JKS");
         keystore.load(null);
-        keystore.setCertificateEntry("cert-alias", cert);
-        keystore.setKeyEntry("key-alias", key, keyPassword.toCharArray(), new Certificate[]{cert});
+        for (X509Certificate x509Certificate : cert) {
+            keystore.setCertificateEntry("server", x509Certificate);
+        }
+        keystore.setKeyEntry("key-alias", key, keyPassword.toCharArray(), cert.toArray(new Certificate[0]));
 
         KeyManagerFactory kmf = KeyManagerFactory.getInstance("SunX509");
         kmf.init(keystore, keyPassword.toCharArray());
@@ -50,14 +52,13 @@ class PemSslContextFactory {
         return context;
     }
 
-    static X509Certificate loadX509Certificate(File certFile) throws IOException, CertificateException {
-        X509Certificate cert;
+    static Collection<X509Certificate> loadX509Certificate(File certFile) throws IOException, CertificateException {
+        Collection<X509Certificate> cert;
         try (FileInputStream fis = new FileInputStream(certFile)) {
             CertificateFactory fact = CertificateFactory.getInstance("X.509");
-            cert = (X509Certificate) fact.generateCertificate(fis);
+            cert = (Collection<X509Certificate>) fact.generateCertificates(fis);
         }
         return cert;
     }
-
 
 }

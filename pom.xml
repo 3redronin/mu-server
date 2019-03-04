@@ -6,7 +6,7 @@
 
     <groupId>io.muserver</groupId>
     <artifactId>mu-acme</artifactId>
-    <version>0.0-SNAPSHOT</version>
+    <version>0.1-SNAPSHOT</version>
     <name>mu-acme</name>
     <description>A library to make Mu Server work with LetsEncrypt and other ACME HTTPS certificate providers</description>
     <url>https://github.com/3redronin/mu-acme</url>

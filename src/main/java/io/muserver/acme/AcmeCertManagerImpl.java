@@ -22,6 +22,7 @@ import java.net.URI;
 import java.security.KeyPair;
 import java.security.Security;
 import java.security.cert.X509Certificate;
+import java.util.Collection;
 import java.util.Date;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -69,6 +70,8 @@ class AcmeCertManagerImpl implements AcmeCertManager {
         executorService.scheduleAtFixedRate(() -> {
                 try {
                     acquireCertIfNeeded(muServer);
+                } catch (CertificateOrderException coe) {
+                    log.warn(coe.getMessage());
                 } catch (Exception e) {
                     log.warn("Error while checking HTTPS cert renewal status", e);
                 }
@@ -88,6 +91,7 @@ class AcmeCertManagerImpl implements AcmeCertManager {
 
     /**
      * Forces a check of the cert validity, and creates or renews if needed.
+     *
      * @param muServer A started Mu Server instance, which means this method should be called after starting your server.
      * @throws Exception The certificate check or request failed.
      */
@@ -97,15 +101,19 @@ class AcmeCertManagerImpl implements AcmeCertManager {
             log.info("A new SSL cert is will be created as none exists.");
             shouldAcquire = true;
         } else {
-            X509Certificate x509Certificate = PemSslContextFactory.loadX509Certificate(certFile);
-            Date expiryDate = x509Certificate.getNotAfter();
+            Collection<X509Certificate> x509Certificates = PemSslContextFactory.loadX509Certificate(certFile);
 
-            Date soon = new Date(System.currentTimeMillis() + TimeUnit.DAYS.toMillis(3));
-            if (expiryDate.before(soon)) {
-                log.info("The SSL cert will be renewed as it expires at " + expiryDate);
-                shouldAcquire = true;
-            } else {
-                log.info("No SSL cert renewal needed as the cert does not expire until " + expiryDate);
+            for (X509Certificate x509Certificate : x509Certificates) {
+
+                Date expiryDate = x509Certificate.getNotAfter();
+
+                Date soon = new Date(System.currentTimeMillis() + TimeUnit.DAYS.toMillis(3));
+                if (expiryDate.before(soon)) {
+                    log.info("The SSL cert will be renewed as it expires at " + expiryDate);
+                    shouldAcquire = true;
+                } else {
+                    log.info("No SSL cert renewal needed as the cert does not expire until " + expiryDate);
+                }
             }
         }
         if (shouldAcquire) {
@@ -126,7 +134,10 @@ class AcmeCertManagerImpl implements AcmeCertManager {
         login = session.login(account.getLocation(), keyPair);
         log.info("Logged in with " + login.getAccount().getLocation());
         Order order = orderCert();
-        waitUntilValid("Waiting for certificate order", order::getStatus, () -> { order.update(); return null; });
+        waitUntilValid("Waiting for certificate order", order::getStatus, () -> {
+            order.update();
+            return null;
+        });
         Certificate cert = order.getCertificate();
         try (FileWriter fw = new FileWriter(certFile)) {
             cert.writeCertificate(fw);
@@ -192,7 +203,10 @@ class AcmeCertManagerImpl implements AcmeCertManager {
         currentContent = challenge.getAuthorization();
         challenge.trigger();
 
-        waitUntilValid("Waiting for authorization challenge to complete", auth::getStatus, () -> { auth.update(); return null; });
+        waitUntilValid("Waiting for authorization challenge to complete", auth::getStatus, () -> {
+            auth.update();
+            return null;
+        });
         currentContent = null;
         currentToken = null;
     }
@@ -200,7 +214,7 @@ class AcmeCertManagerImpl implements AcmeCertManager {
     private static void waitUntilValid(String description, Callable<Status> getStatus, Callable<Void> update) throws Exception {
         Status curStatus;
         int maxAttempts = 100;
-        while ( (curStatus = getStatus.call()) != Status.VALID) {
+        while ((curStatus = getStatus.call()) != Status.VALID) {
             if (curStatus == Status.INVALID) {
                 throw new CertificateOrderException(description + " but status is INVALID. Aborting attempt.");
             }
@@ -241,7 +255,6 @@ class AcmeCertManagerImpl implements AcmeCertManager {
         }
         return keyPair;
     }
-
 
 
 }
