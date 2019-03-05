@@ -5,11 +5,14 @@ import org.junit.Test;
 import scaffolding.MuAssert;
 
 import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
+import java.security.KeyStore;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -64,6 +67,20 @@ public class SSLContextBuilderTest {
             .withKeystorePassword("Very5ecure")
             .withKeyPassword("ActuallyNotSecure")
             .withKeystore(new FileInputStream("src/main/resources/io/muserver/resources/localhost.jks"));
+        test(sslContextBuilder);
+    }
+
+    @Test
+    public void canCreateFromKeystoreManagerFactory() throws Exception {
+        KeyManagerFactory kmf;
+        try (InputStream keystoreStream = getClass().getResourceAsStream("/io/muserver/resources/localhost.jks")) {
+            KeyStore ks = KeyStore.getInstance("JKS");
+            ks.load(keystoreStream, "Very5ecure".toCharArray());
+            kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+            kmf.init(ks, "ActuallyNotSecure".toCharArray());
+        }
+        SSLContextBuilder sslContextBuilder = SSLContextBuilder.sslContext()
+            .withKeyManagerFactory(kmf);
         test(sslContextBuilder);
     }
 

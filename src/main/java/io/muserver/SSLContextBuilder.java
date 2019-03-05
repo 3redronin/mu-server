@@ -13,13 +13,14 @@ import java.util.List;
 
 public class SSLContextBuilder {
     private static final Logger log = LoggerFactory.getLogger(SSLContextBuilder.class);
-    private String[] protocols = {"TLSv1.2"};
+    private String[] protocols = null;
     private String keystoreType = "JKS";
     private char[] keystorePassword = new char[0];
     private char[] keyPassword = new char[0];
     private InputStream keystoreStream;
     private SSLContext sslContext;
     private CipherSuiteFilter nettyCipherSuiteFilter;
+    private KeyManagerFactory keyManagerFactory;
 
     public SSLContextBuilder withKeystoreType(String keystoreType) {
         this.keystoreType = keystoreType;
@@ -40,6 +41,7 @@ public class SSLContextBuilder {
     }
 
     SSLContextBuilder withSSLContext(SSLContext sslContext) {
+        keyManagerFactory = null;
         this.sslContext = sslContext;
         return this;
     }
@@ -50,11 +52,15 @@ public class SSLContextBuilder {
     }
 
     public SSLContextBuilder withKeystore(InputStream keystoreStream) {
+        sslContext = null;
+        keyManagerFactory = null;
         this.keystoreStream = keystoreStream;
         return this;
     }
 
     public SSLContextBuilder withKeystore(File file) {
+        sslContext = null;
+        keyManagerFactory = null;
         if (!file.isFile()) {
             throw new IllegalArgumentException(Mutils.fullPath(file) + " does not exist");
         }
@@ -63,6 +69,23 @@ public class SSLContextBuilder {
         } catch (FileNotFoundException e) {
             throw new IllegalArgumentException("Could not open file", e);
         }
+        return this;
+    }
+
+    public SSLContextBuilder withKeystoreFromClasspath(String classpath) {
+        sslContext = null;
+        keyManagerFactory = null;
+        keystoreStream = SSLContextBuilder.class.getResourceAsStream(classpath);
+        if (keystoreStream == null) {
+            throw new IllegalArgumentException("Could not find " + classpath);
+        }
+        return this;
+    }
+
+    public SSLContextBuilder withKeyManagerFactory(KeyManagerFactory keyManagerFactory) {
+        this.keystoreStream = null;
+        this.sslContext = null;
+        this.keyManagerFactory = keyManagerFactory;
         return this;
     }
 
@@ -98,14 +121,6 @@ public class SSLContextBuilder {
      */
     public SSLContextBuilder withProtocols(String... protocols) {
         this.protocols = protocols;
-        return this;
-    }
-
-    public SSLContextBuilder withKeystoreFromClasspath(String classpath) {
-        keystoreStream = SSLContextBuilder.class.getResourceAsStream(classpath);
-        if (keystoreStream == null) {
-            throw new IllegalArgumentException("Could not find " + classpath);
-        }
         return this;
     }
 
@@ -161,6 +176,8 @@ public class SSLContextBuilder {
                 }
             }
             builder = SslContextBuilder.forServer(kmf);
+        } else if (keyManagerFactory != null) {
+            builder = SslContextBuilder.forServer(keyManagerFactory);
         } else {
             throw new IllegalStateException("No SSL info");
         }
