@@ -65,6 +65,14 @@ public interface MuServer {
     /**
      * Changes the HTTPS certificate. This can be changed without restarting the server.
      * @param newSSLContext The new SSL Context to use.
+     * @deprecated Use {@link #changeSSLContext(SSLContextBuilder)} instead.
      */
+    @Deprecated
     void changeSSLContext(SSLContext newSSLContext);
+
+    /**
+     * Changes the HTTPS certificate. This can be changed without restarting the server.
+     * @param newSSLContext The new SSL Context to use.
+     */
+    void changeSSLContext(SSLContextBuilder newSSLContext);
 }

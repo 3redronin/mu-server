@@ -47,12 +47,11 @@ public class HttpsTest {
         keytool -genkeypair -keystore pkcs12-keystore.p12 -storetype PKCS12 -storepass MY_PASSWORD -keyalg RSA -keysize 2048 -validity 999999 -dname "CN=My PKCS12 Certificate, OU=Ronin, O=MuServer, L=NA, ST=NA, C=NA" -ext san=dns:localhost,ip:127.0.0.1
          */
 
-        SSLContext originalCert = SSLContextBuilder.sslContext()
+        SSLContextBuilder originalCert = SSLContextBuilder.sslContext()
             .withKeystoreType("JKS")
             .withKeystorePassword("MY_PASSWORD")
             .withKeyPassword("MY_PASSWORD")
-            .withKeystoreFromClasspath("/jks-keystore.jks")
-            .build();
+            .withKeystoreFromClasspath("/jks-keystore.jks");
 
         server = httpsServer()
             .withHttpsConfig(originalCert)
@@ -67,12 +66,11 @@ public class HttpsTest {
 
         assertThat(certInformation(server.uri()), containsString("My JKS Certificate"));
 
-        SSLContext newCert = SSLContextBuilder.sslContext()
+        SSLContextBuilder newCert = SSLContextBuilder.sslContext()
             .withKeystoreType("PKCS12")
             .withKeystorePassword("MY_PASSWORD")
             .withKeyPassword("MY_PASSWORD")
-            .withKeystoreFromClasspath("/pkcs12-keystore.p12")
-            .build();
+            .withKeystoreFromClasspath("/pkcs12-keystore.p12");
 
         server.changeSSLContext(newCert);
 

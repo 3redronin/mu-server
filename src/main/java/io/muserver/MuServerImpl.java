@@ -57,7 +57,16 @@ class MuServerImpl implements MuServer {
 
     @Override
     public void changeSSLContext(SSLContext newSSLContext) {
-        sslContextProvider.set(newSSLContext);
+        changeSSLContext(SSLContextBuilder.sslContext().withSSLContext(newSSLContext));
+    }
+
+    @Override
+    public void changeSSLContext(SSLContextBuilder newSSLContext) {
+        try {
+            sslContextProvider.set(newSSLContext.toNettySslContext());
+        } catch (Exception e) {
+            throw new MuException("Error while changing SSL Certificate. The old one will still be used.", e);
+        }
     }
 
     @Override

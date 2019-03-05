@@ -1,17 +1,14 @@
 package io.muserver;
 
-import io.netty.handler.ssl.ClientAuth;
-import io.netty.handler.ssl.JdkSslContext;
 import io.netty.handler.ssl.SslContext;
 
-import javax.net.ssl.SSLContext;
 import java.util.concurrent.atomic.AtomicReference;
 
 class SslContextProvider {
 
     private final AtomicReference<SslContext> nettySslContext = new AtomicReference<>();
 
-    public SslContextProvider(SSLContext context) {
+    public SslContextProvider(SslContext context) {
         set(context);
     }
 
@@ -19,8 +16,7 @@ class SslContextProvider {
         return nettySslContext.get();
     }
 
-    public void set(SSLContext newValue) {
-        JdkSslContext sslContext = new JdkSslContext(newValue, false, ClientAuth.NONE);
-        nettySslContext.set(sslContext);
+    public void set(SslContext newValue) {
+        nettySslContext.set(newValue);
     }
 }

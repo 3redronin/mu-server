@@ -15,6 +15,8 @@ import io.netty.handler.codec.http.HttpRequestDecoder;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseEncoder;
 import io.netty.handler.codec.http.HttpServerKeepAliveHandler;
+import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.traffic.GlobalTrafficShapingHandler;
 import io.netty.util.Attribute;
 import org.slf4j.Logger;
@@ -49,11 +51,11 @@ public class MuServerBuilder {
     private int maxUrlSize = 8192 - LENGTH_OF_METHOD_AND_PROTOCOL;
     private List<AsyncMuHandler> asyncHandlers = new ArrayList<>();
     private List<MuHandler> handlers = new ArrayList<>();
-    private SSLContext sslContext;
     private boolean gzipEnabled = true;
     private Set<String> mimeTypesToGzip = ResourceType.gzippableMimeTypes(ResourceType.getResourceTypes());
     private boolean addShutdownHook = false;
     private String host;
+    private SSLContextBuilder sslContextBuilder;
 
     /**
      * @param port The HTTP port to use. A value of 0 will have a random port assigned; a value of -1 will
@@ -155,8 +157,7 @@ public class MuServerBuilder {
      * @return The current Mu-Server Builder
      */
     public MuServerBuilder withHttpsConfig(SSLContext sslContext) {
-        this.sslContext = sslContext;
-        return this;
+        return withHttpsConfig(SSLContextBuilder.sslContext().withSSLContext(sslContext));
     }
 
     /**
@@ -166,7 +167,8 @@ public class MuServerBuilder {
      * @return The current Mu-Server Builder
      */
     public MuServerBuilder withHttpsConfig(SSLContextBuilder sslContext) {
-        return withHttpsConfig(sslContext.build());
+        this.sslContextBuilder = sslContext;
+        return this;
     }
 
     /**
@@ -328,8 +330,9 @@ public class MuServerBuilder {
             if (httpsPort < 0) {
                 httpsChannel = null;
             } else {
-                SSLContext sslContextToUse = this.sslContext != null ? this.sslContext : SSLContextBuilder.unsignedLocalhostCert();
-                sslContextProvider = new SslContextProvider(sslContextToUse);
+                SSLContextBuilder toUse = this.sslContextBuilder != null ? this.sslContextBuilder : SSLContextBuilder.sslContext().withSSLContext(SSLContextBuilder.unsignedLocalhostCert());
+                SslContext nettySslContext = toUse.toNettySslContext();
+                sslContextProvider = new SslContextProvider(nettySslContext);
                 httpsChannel = createChannel(bossGroup, workerGroup, host, httpsPort, sslContextProvider, trafficShapingHandler, stats, serverRef);
             }
             URI uri = null;
@@ -378,7 +381,8 @@ public class MuServerBuilder {
                     ChannelPipeline p = socketChannel.pipeline();
                     p.addLast(trafficShapingHandler);
                     if (usesSsl) {
-                        p.addLast("ssl", sslContextProvider.get().newHandler(socketChannel.alloc()));
+                        SslHandler sslHandler = sslContextProvider.get().newHandler(socketChannel.alloc());
+                        p.addLast("ssl", sslHandler);
                     }
                     p.addLast("decoder", new HttpRequestDecoder(maxUrlSize + LENGTH_OF_METHOD_AND_PROTOCOL, maxHeadersSize, 8192));
                     p.addLast("encoder", new HttpResponseEncoder() {
