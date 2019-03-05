@@ -1,16 +1,17 @@
 package io.muserver.acme;
 
 import io.muserver.MuServer;
+import io.muserver.SSLContextBuilder;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
 
-import javax.net.ssl.SSLContext;
+import javax.net.ssl.KeyManagerFactory;
 import java.io.File;
 
 import static io.muserver.MuServerBuilder.httpsServer;
 import static org.hamcrest.Matchers.equalTo;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertThat;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 
@@ -23,10 +24,10 @@ public class PemSslContextFactoryTest {
     @Test
     public void letsEncryptCertsCanBeUsed() throws Exception {
 
-        SSLContext context = PemSslContextFactory.getSSLContextFromLetsEncrypt(certFile, keyFile);
+        KeyManagerFactory keyManagerFactory = PemSslContextFactory.getKeyManagerFactory(certFile, keyFile);
 
         server = httpsServer()
-            .withHttpsConfig(context)
+            .withHttpsConfig(SSLContextBuilder.sslContext().withKeyManagerFactory(keyManagerFactory))
             .addHandler((req, resp) -> {
                 resp.write("Hello");
                 return true;

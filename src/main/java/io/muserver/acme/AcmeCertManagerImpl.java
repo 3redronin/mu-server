@@ -13,7 +13,6 @@ import org.shredzone.acme4j.util.KeyPairUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.net.ssl.SSLContext;
 import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
@@ -147,13 +146,17 @@ class AcmeCertManagerImpl implements AcmeCertManager {
 
 
     @Override
-    public synchronized SSLContext createSSLContext() throws Exception {
+    public synchronized SSLContextBuilder createSSLContext() throws Exception {
         if (!certFile.isFile()) {
             log.info("No cert available yet. Using self-signed cert.");
-            return SSLContextBuilder.unsignedLocalhostCert();
+            return SSLContextBuilder.unsignedLocalhostCertBuilder();
         }
         log.info("Using " + Mutils.fullPath(certFile));
-        return PemSslContextFactory.getSSLContextFromLetsEncrypt(certFile, domainKeyFile);
+        return SSLContextBuilder.sslContext()
+            .withProtocols("TLSv1.2")
+            .withKeyManagerFactory(
+                PemSslContextFactory.getKeyManagerFactory(certFile, domainKeyFile)
+            );
     }
 
 

@@ -11,9 +11,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileReader;
 import java.io.IOException;
-import java.security.Key;
-import java.security.KeyPair;
-import java.security.KeyStore;
+import java.security.*;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
@@ -23,7 +21,7 @@ import java.util.UUID;
 
 class PemSslContextFactory {
 
-    static SSLContext getSSLContextFromLetsEncrypt(File certFile, File privateKeyFile) throws Exception {
+    static KeyManagerFactory getKeyManagerFactory(File certFile, File privateKeyFile) throws IOException, CertificateException, KeyStoreException, NoSuchAlgorithmException, UnrecoverableKeyException {
         String keyPassword = UUID.randomUUID().toString();
 
         Collection<X509Certificate> cert = loadX509Certificate(certFile);
@@ -44,12 +42,7 @@ class PemSslContextFactory {
 
         KeyManagerFactory kmf = KeyManagerFactory.getInstance("SunX509");
         kmf.init(keystore, keyPassword.toCharArray());
-
-        KeyManager[] km = kmf.getKeyManagers();
-
-        SSLContext context = SSLContext.getInstance("TLS");
-        context.init(km, null, null);
-        return context;
+        return kmf;
     }
 
     static Collection<X509Certificate> loadX509Certificate(File certFile) throws IOException, CertificateException {

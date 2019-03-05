@@ -18,8 +18,8 @@ class NoOpAcmeCertManager implements AcmeCertManager {
     }
 
     @Override
-    public SSLContext createSSLContext() throws Exception {
-        return SSLContextBuilder.unsignedLocalhostCert();
+    public SSLContextBuilder createSSLContext() {
+        return SSLContextBuilder.unsignedLocalhostCertBuilder();
     }
 
     @Override
