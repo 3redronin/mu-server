@@ -6,7 +6,7 @@ import java.util.Set;
 /**
  * A filter allowing the selection of SSL certificates
  */
-interface SSLCipherFilter {
+public interface SSLCipherFilter {
 
     /**
      * A method that returns the ciphers desired in the preferred order of use.
