@@ -23,6 +23,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLParameters;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
@@ -369,7 +370,6 @@ public class MuServerBuilder {
 
     private Channel createChannel(NioEventLoopGroup bossGroup, NioEventLoopGroup workerGroup, String host, int port, SslContextProvider sslContextProvider, GlobalTrafficShapingHandler trafficShapingHandler, MuStatsImpl stats, AtomicReference<MuServer> serverRef) throws InterruptedException {
         boolean usesSsl = sslContextProvider != null;
-
         ServerBootstrap b = new ServerBootstrap();
         b.group(bossGroup, workerGroup)
             .channel(NioServerSocketChannel.class)
@@ -382,6 +382,9 @@ public class MuServerBuilder {
                     p.addLast(trafficShapingHandler);
                     if (usesSsl) {
                         SslHandler sslHandler = sslContextProvider.get().newHandler(socketChannel.alloc());
+                        SSLParameters params = sslHandler.engine().getSSLParameters();
+                        params.setUseCipherSuitesOrder(true);
+                        sslHandler.engine().setSSLParameters(params);
                         p.addLast("ssl", sslHandler);
                     }
                     p.addLast("decoder", new HttpRequestDecoder(maxUrlSize + LENGTH_OF_METHOD_AND_PROTOCOL, maxHeadersSize, 8192));
