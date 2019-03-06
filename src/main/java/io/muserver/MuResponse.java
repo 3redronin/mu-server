@@ -57,13 +57,15 @@ public interface MuResponse {
     void sendChunk(String text);
 
     /**
-     * Redirects to the given URL. If relative, it will be converted to an absolute URL.
+     * <p>Redirects to the given URL. If relative, it will be converted to an absolute URL.</p>
+     * <p>The response code will be 302 unless the status is already set to 300, 301, or 303.</p>
      * @param url The full or relative URL to redirect to.
      */
     void redirect(String url);
 
     /**
-     * Redirects to the given URI. If relative, it will be converted to an absolute URL.
+     * <p>Redirects to the given URL. If relative, it will be converted to an absolute URL.</p>
+     * <p>The response code will be 302 unless the status is already set to 300, 301, or 303.</p>
      * @param uri The full or relative URI to redirect to.
      */
     void redirect(URI uri);

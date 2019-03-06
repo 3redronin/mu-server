@@ -45,6 +45,7 @@ public class HttpsRedirector implements MuHandler {
 
         URI newURI = new URI("https", uri.getUserInfo(), uri.getHost(), httpsPort, uri.getPath(), uri.getQuery(), uri.getFragment());
         if (request.method() == Method.GET || request.method() == Method.HEAD) {
+            response.status(301);
             response.redirect(newURI);
         } else {
             response.status(400);

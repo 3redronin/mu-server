@@ -42,7 +42,7 @@ public class HttpsRedirectorTest {
     public void doesRedirection() throws IOException {
         String newLocation;
         try (Response resp = call(request().url(server.httpUri().toString()))) {
-            assertThat(resp.code(), is(302));
+            assertThat(resp.code(), is(301));
             newLocation = resp.header("Location");
         }
         try (Response resp = call(request().url(newLocation))) {

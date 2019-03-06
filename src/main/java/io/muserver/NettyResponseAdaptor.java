@@ -173,7 +173,9 @@ class NettyResponseAdaptor implements MuResponse {
 
     public void redirect(URI newLocation) {
         URI absoluteUrl = request.uri().resolve(newLocation);
-        status(302);
+        if (status < 300 || status > 303) {
+            status(302);
+        }
         headers().set(HeaderNames.LOCATION, absoluteUrl.toString());
         HttpResponse resp = new EmptyHttpResponse(httpStatus());
         writeHeaders(resp, this.headers, request);
