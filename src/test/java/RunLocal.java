@@ -14,6 +14,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URI;
 
+import static io.muserver.MuServerBuilder.muServer;
 import static io.muserver.Mutils.urlEncode;
 import static io.muserver.handlers.AsyncFileProviderTest.BIG_FILE_DIR;
 
@@ -22,10 +23,9 @@ public class RunLocal {
 
     public static void main(String[] args) {
 
-        MuServer server = new MuServerBuilder().withHttpPort(0).withHttpsPort(0)
+        MuServer server = muServer()
             .withHttpPort(18080)
             .withHttpsPort(18443)
-            .withGzipEnabled(false)
             .addHandler(ResourceHandlerBuilder.fileHandler(BIG_FILE_DIR))
             .addHandler(ResourceHandlerBuilder.fileOrClasspath("src/test/resources/sample-static", "/sample-static"))
             .addHandler(Method.GET, "/api", (request, response, pathParams) -> {

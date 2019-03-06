@@ -331,8 +331,9 @@ public class MuServerBuilder {
             if (httpsPort < 0) {
                 httpsChannel = null;
             } else {
-                SSLContextBuilder toUse = this.sslContextBuilder != null ? this.sslContextBuilder : SSLContextBuilder.sslContext().withSSLContext(SSLContextBuilder.unsignedLocalhostCert());
+                SSLContextBuilder toUse = this.sslContextBuilder != null ? this.sslContextBuilder : SSLContextBuilder.unsignedLocalhostCertBuilder();
                 SslContext nettySslContext = toUse.toNettySslContext();
+                log.debug("SSL Context is " + nettySslContext);
                 sslContextProvider = new SslContextProvider(nettySslContext);
                 httpsChannel = createChannel(bossGroup, workerGroup, host, httpsPort, sslContextProvider, trafficShapingHandler, stats, serverRef);
             }
