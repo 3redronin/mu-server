@@ -183,7 +183,7 @@ public class SSLContextBuilder {
         }
 
         CipherSuiteFilter cipherFilter = nettyCipherSuiteFilter != null ? nettyCipherSuiteFilter : IdentityCipherSuiteFilter.INSTANCE;
-        return builder.sslProvider(SslProvider.JDK)
+        return builder
             .clientAuth(ClientAuth.NONE)
             .protocols(protocols)
             .ciphers(null, cipherFilter)

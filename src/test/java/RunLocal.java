@@ -26,7 +26,6 @@ public class RunLocal {
             .withHttpPort(18080)
             .withHttpsPort(18443)
             .withGzipEnabled(false)
-            .withHttpsConfig(SSLContextBuilder.unsignedLocalhostCert())
             .addHandler(ResourceHandlerBuilder.fileHandler(BIG_FILE_DIR))
             .addHandler(ResourceHandlerBuilder.fileOrClasspath("src/test/resources/sample-static", "/sample-static"))
             .addHandler(Method.GET, "/api", (request, response, pathParams) -> {
