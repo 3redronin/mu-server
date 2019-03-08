@@ -6,17 +6,21 @@ import org.junit.After;
 import org.junit.Test;
 import scaffolding.MuAssert;
 
+import javax.ws.rs.core.MediaType;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.MalformedURLException;
 import java.net.URI;
+import java.util.Collections;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static io.muserver.MuServerBuilder.httpServer;
+import static java.util.Collections.*;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.core.IsEqual.equalTo;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
@@ -26,7 +30,8 @@ public class HeadersTest {
 
 	private MuServer server;
 
-	@Test public void canGetAndSetThem() {
+	@Test
+    public void canGetAndSetThem() {
 		server = MuServerBuilder.httpServer()
 				.addHandler((request, response) -> {
 					String something = request.headers().get("X-Something");
@@ -41,7 +46,8 @@ public class HeadersTest {
         }
 	}
 
-	@Test public void aHandlerCanChangeTheHeadersOfASubsequentHandler() {
+	@Test
+    public void aHandlerCanChangeTheHeadersOfASubsequentHandler() {
 		String randomValue = UUID.randomUUID().toString();
 
 		server = MuServerBuilder.httpServer()
@@ -62,7 +68,8 @@ public class HeadersTest {
         }
 	}
 
-	@Test public void largeHeadersAreFineIfConfigured() {
+	@Test
+    public void largeHeadersAreFineIfConfigured() {
 		server = MuServerBuilder.httpServer()
 				.withMaxHeadersSize(33000)
 				.addHandler((request, response) -> {
@@ -76,7 +83,8 @@ public class HeadersTest {
         }
 	}
 
-	@Test public void urlsThatAreTooLongAreRejected() throws MalformedURLException {
+	@Test
+    public void urlsThatAreTooLongAreRejected() throws MalformedURLException {
 		AtomicBoolean handlerHit = new AtomicBoolean(false);
 		server = MuServerBuilder.httpServer()
 				.withMaxUrlSize(30)
@@ -92,7 +100,8 @@ public class HeadersTest {
 		assertThat(handlerHit.get(), is(false));
 	}
 
-	@Test public void a431IsReturnedIfTheHeadersAreTooLarge() {
+	@Test
+    public void a431IsReturnedIfTheHeadersAreTooLarge() {
 		server = MuServerBuilder.httpServer()
 				.withMaxHeadersSize(1024)
 				.addHandler((request, response) -> {
@@ -106,7 +115,8 @@ public class HeadersTest {
         }
 	}
 
-    @Test public void ifXForwardedHeadersAreSpecifiedThenRequestUriUsesThem() {
+    @Test
+    public void ifXForwardedHeadersAreSpecifiedThenRequestUriUsesThem() {
         URI[] actual = new URI[2];
         server = MuServerBuilder.httpServer()
             .withHttpPort(12752)
@@ -126,7 +136,8 @@ public class HeadersTest {
         assertThat(actual[0].toString(), equalTo("https://www.example.org/blah?query=value"));
     }
 
-    @Test public void ifMultipleXForwardedHeadersAreSpecifiedThenRequestUriUsesTheFirst() {
+    @Test
+    public void ifMultipleXForwardedHeadersAreSpecifiedThenRequestUriUsesTheFirst() {
         URI[] actual = new URI[2];
         server = MuServerBuilder.httpServer()
             .withHttpPort(12753)
@@ -147,7 +158,8 @@ public class HeadersTest {
         assertThat(actual[0].toString(), equalTo("https://www.example.org:12000/blah?query=value"));
     }
 
-    @Test public void ifNoResponseDataThenContentLengthIsZero() {
+    @Test
+    public void ifNoResponseDataThenContentLengthIsZero() {
         server = MuServerBuilder.httpServer()
             .addHandler((request, response) -> {
                 response.status(200);
@@ -304,4 +316,104 @@ public class HeadersTest {
 	Request.Builder xSomethingHeader(String value) {
 		return request().header("X-Something", value).url(server.httpUri().toString());
 	}
+
+	@Test
+    public void acceptHeaderCanBeParsed() {
+        Headers headers = new Headers();
+        assertThat(headers.accept(), equalTo(emptyList()));
+
+        headers.set("Accept", "text/html,application/xhtml+xml,application/xml ; q=0.9,image/webp,*/*;q=0.8");
+        assertThat(headers.accept(), contains(
+            ph("text/html"),
+            ph("application/xhtml+xml"),
+            ph("application/xml", "q", "0.9"),
+            ph("image/webp"),
+            ph("*/*", "q",  "0.8")
+        ));
+    }
+
+    @Test
+    public void acceptCharsetHeaderCanBeParsed() {
+        Headers headers = new Headers();
+        assertThat(headers.acceptCharset(), equalTo(emptyList()));
+
+        headers.set("Accept-Charset", "iso-8859-5, unicode-1-1;q=0.8");
+        assertThat(headers.acceptCharset(), contains(
+            ph("iso-8859-5"),
+            ph("unicode-1-1", "q", "0.8")
+        ));
+    }
+
+    @Test
+    public void acceptEncodingHeaderCanBeParsed() {
+        Headers headers = new Headers();
+        assertThat(headers.acceptEncoding(), equalTo(emptyList()));
+
+        headers.set("Accept-Encoding", "compress, gzip");
+        assertThat(headers.acceptEncoding(), contains(
+            ph("compress"),
+            ph("gzip")
+        ));
+
+        headers.set("Accept-Encoding", "*");
+        assertThat(headers.acceptEncoding(), contains(
+            ph("*")
+        ));
+
+        headers.set("Accept-Encoding", "compress;q=0.5, gzip;q=1.0");
+        assertThat(headers.acceptEncoding(), contains(
+            ph("compress", "q", "0.5"),
+            ph("gzip", "q", "1.0")
+        ));
+
+        headers.set("Accept-Encoding", "gzip;q=1.0, identity; q=0.5, *;q=0");
+        assertThat(headers.acceptEncoding(), contains(
+            ph("gzip", "q", "1.0"),
+            ph("identity", "q", "0.5"),
+            ph("*", "q", "0")
+        ));
+    }
+
+    @Test
+    public void acceptLanguageHeaderCanBeParsed() {
+        Headers headers = new Headers();
+        assertThat(headers.acceptLanguage(), equalTo(emptyList()));
+
+        headers.set("Accept-Language", "da, en-gb;q=0.8, en;q=0.7");
+        assertThat(headers.acceptLanguage(), contains(
+            ph("da"),
+            ph("en-gb", "q", "0.8"),
+            ph("en", "q", "0.7")
+        ));
+    }
+
+    @Test
+    public void cacheControlHeaderCanBeParsed() {
+        Headers headers = new Headers();
+        assertThat(headers.cacheControl().parameters(), equalTo(emptyMap()));
+
+        headers.set("Cache-Control", "max-age=60");
+        assertThat(headers.cacheControl().parameters(), equalTo(singletonMap("max-age", "60")));
+        headers.set("Cache-Control", "private, community=\"UCI\"");
+        assertThat(headers.cacheControl().parameters().keySet(), contains("private", "community"));
+        assertThat(headers.cacheControl().parameter("community"), equalTo("UCI"));
+    }
+
+    @Test
+    public void contentTypeCanBeParsed() {
+        Headers headers = new Headers();
+        assertThat(headers.contentType(), is(nullValue()));
+
+        headers.set("Content-Type", "text/html; charset=ISO-8859-4");
+        assertThat(headers.contentType(), equalTo(new MediaType("text", "html", "ISO-8859-4")));
+    }
+
+    private static ParameterizedHeaderWithValue ph(String value) {
+        return new ParameterizedHeaderWithValue(value, emptyMap());
+    }
+
+    private static ParameterizedHeaderWithValue ph(String value, String paramName, String paramValue) {
+        return new ParameterizedHeaderWithValue(value, Collections.singletonMap(paramName, paramValue));
+    }
+
 }

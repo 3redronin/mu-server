@@ -4,12 +4,14 @@ import io.netty.handler.codec.HeadersUtils;
 import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.HttpHeaders;
 
+import javax.ws.rs.core.MediaType;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 import static io.netty.util.internal.ObjectUtil.checkNotNull;
+import static java.util.Collections.emptyList;
 
 public class Headers implements Iterable<Map.Entry<String, String>> {
 
@@ -248,4 +250,74 @@ public class Headers implements Iterable<Map.Entry<String, String>> {
         return contains(HeaderNames.TRANSFER_ENCODING) || getInt(HeaderNames.CONTENT_LENGTH, -1) > 0;
     }
 
+    /**
+     * <p>Gets the <code>Accept-Charset</code> header value.</p>
+     * <p>For example, if a client sends <code>text/html,application/xml;q=0.9</code>
+     * then this would return a list of two values: text/html, and application/xml where application/xml
+     * has a parameter <code>q</code> of value <code>0.9</code></p>
+     * @return Returns a parsed <code>Accept</code> header, or an empty list if none specified.
+     */
+    public List<ParameterizedHeaderWithValue> accept() {
+        return getParameterizedHeaderWithValues(HeaderNames.ACCEPT);
+    }
+
+    /**
+     * <p>Gets the <code>Accept</code> header value.</p>
+     * <p>For example, if a client sends <code>iso-8859-5, unicode-1-1;q=0.8</code>
+     * then this would return a list of two values: iso-8859-5, and unicode-1-1 where unicode-1-1
+     * has a parameter <code>q</code> of value <code>0.8</code></p>
+     * @return Returns a parsed <code>Accept-Charset</code> header, or an empty list if none specified.
+     */
+    public List<ParameterizedHeaderWithValue> acceptCharset() {
+        return getParameterizedHeaderWithValues(HeaderNames.ACCEPT_CHARSET);
+    }
+
+    /**
+     * <p>Gets the <code>Accept-Encoding</code> header value.</p>
+     * <p>For example, if a client sends <code>gzip, deflate</code>
+     * then this would return a list of two values: gzip and deflate</p>
+     * @return Returns a parsed <code>Accept-Encoding</code> header, or an empty list if none specified.
+     */
+    public List<ParameterizedHeaderWithValue> acceptEncoding() {
+        return getParameterizedHeaderWithValues(HeaderNames.ACCEPT_ENCODING);
+    }
+
+    /**
+     * <p>Gets the <code>Accept-Language</code> header value.</p>
+     * <p>For example, if a client sends <code>en-US,en;q=0.5</code>
+     * then this would return a list of two values: en-US and en where en has a <code>q</code> value of <code>0.5</code></p>
+     * @return Returns a parsed <code>Accept-Language</code> header, or an empty list if none specified.
+     */
+    public List<ParameterizedHeaderWithValue> acceptLanguage() {
+        return getParameterizedHeaderWithValues(HeaderNames.ACCEPT_LANGUAGE);
+    }
+
+    private List<ParameterizedHeaderWithValue> getParameterizedHeaderWithValues(CharSequence headerName) {
+        String input = get(headerName);
+        if (input == null) {
+            return emptyList();
+        }
+        return ParameterizedHeaderWithValue.fromString(input);
+    }
+
+    /**
+     * Gets the <code>Cache-Control</code> header value.
+     * @return A map of cache control directives to their optional values. If no cache-control
+     * is in the header, then the resulting map will be empty.
+     */
+    public ParameterizedHeader cacheControl() {
+        return ParameterizedHeader.fromString(get(HeaderNames.CACHE_CONTROL));
+    }
+
+    /**
+     * Gets the parsed <code>Content-Type</code> header value.
+     * @return The media type of the content specified by the headers.
+     */
+    public MediaType contentType() {
+        String value = get(HeaderNames.CONTENT_TYPE);
+        if (value == null) {
+            return null;
+        }
+        return MediaTypeParser.fromString(value);
+    }
 }
