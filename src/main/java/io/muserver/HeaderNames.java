@@ -151,6 +151,10 @@ public final class HeaderNames {
      */
     public static final CharSequence EXPIRES = HttpHeaderNames.EXPIRES;
     /**
+     * {@code "forwarded"}
+     */
+    public static final CharSequence FORWARDED = AsciiString.cached("forwarded");
+    /**
      * {@code "from"}
      */
     public static final CharSequence FROM = HttpHeaderNames.FROM;

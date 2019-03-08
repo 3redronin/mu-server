@@ -5,10 +5,7 @@ import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.HttpHeaders;
 
 import javax.ws.rs.core.MediaType;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 import static io.netty.util.internal.ObjectUtil.checkNotNull;
 import static java.util.Collections.emptyList;
@@ -280,6 +277,21 @@ public class Headers implements Iterable<Map.Entry<String, String>> {
      */
     public List<ParameterizedHeaderWithValue> acceptEncoding() {
         return getParameterizedHeaderWithValues(HeaderNames.ACCEPT_ENCODING);
+    }
+
+    /**
+     * <p>Gets the <code>Forwarded</code> header value.</p>
+     * <p>For example, if a client sends <code>for=192.0.2.60;proto=http;by=203.0.113.43</code>
+     * then this would return a list of length one that has for, proto, and by values.</p>
+     * @return Returns a parsed <code>Forwarded</code> header, or an empty list if none specified.
+     */
+    public List<ForwardedHeader> forwarded() {
+        List<ForwardedHeader> results = new ArrayList<>();
+        List<String> all = getAll(HeaderNames.FORWARDED);
+        for (String s : all) {
+            results.addAll(ForwardedHeader.fromString(s));
+        }
+        return results;
     }
 
     /**

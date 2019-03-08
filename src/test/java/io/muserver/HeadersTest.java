@@ -408,6 +408,24 @@ public class HeadersTest {
         assertThat(headers.contentType(), equalTo(new MediaType("text", "html", "ISO-8859-4")));
     }
 
+    @Test
+    public void forwardedHeadersCanBeParsed() {
+        Headers headers = new Headers();
+        assertThat(headers.forwarded(), equalTo(emptyList()));
+
+        headers.set("Forwarded", "for=192.0.2.43");
+        assertThat(headers.forwarded(), contains(
+            new ForwardedHeader(null, "192.0.2.43", null, null, null)
+        ));
+
+        headers.set("Forwarded", "for=192.0.2.43," +
+            "      for=198.51.100.17;by=203.0.113.60;proto=http;host=example.com");
+        assertThat(headers.forwarded(), contains(
+            new ForwardedHeader(null, "192.0.2.43", null, null, null),
+            new ForwardedHeader("203.0.113.60", "198.51.100.17", "example.com", "http", null)
+        ));
+    }
+
     private static ParameterizedHeaderWithValue ph(String value) {
         return new ParameterizedHeaderWithValue(value, emptyMap());
     }
