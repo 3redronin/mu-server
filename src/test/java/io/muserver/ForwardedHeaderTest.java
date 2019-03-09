@@ -4,12 +4,14 @@ package io.muserver;
 import org.junit.Test;
 
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
+import static java.util.Arrays.asList;
 import static java.util.Collections.emptyList;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.contains;
-import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.*;
 
 public class ForwardedHeaderTest {
 
@@ -46,7 +48,33 @@ public class ForwardedHeaderTest {
         ));
     }
 
-    private static ForwardedHeader fwd(String by, String forValue, String host, String proto) {
+    @Test
+    public void getterWork() {
+        ForwardedHeader fwd = new ForwardedHeader("by", "for", "host", "proto", Collections.singletonMap("Hi", "World"));
+        assertThat(fwd.by(), is("by"));
+        assertThat(fwd.forValue(), is("for"));
+        assertThat(fwd.host(), is("host"));
+        assertThat(fwd.proto(), is("proto"));
+        assertThat(fwd.extensions(), is(Collections.singletonMap("Hi", "World")));
+    }
+
+    @Test
+    public void canRoundTrip() {
+        Map<String, String> extensions = new LinkedHashMap<>();
+        extensions.put("secret", "9823748923748937");
+        extensions.put("Hello", "Oh hi, world");
+        List<ForwardedHeader> original = asList(fwd("192.156.0.0", "10.10.10.10", "example.org", "https"),
+            new ForwardedHeader(null, "1.2.3.4", "machine.example.org", "http", extensions));
+
+        String asString = ForwardedHeader.toString(original);
+        assertThat(asString, equalTo("by=192.156.0.0;for=10.10.10.10;host=example.org;proto=https, " +
+            "for=1.2.3.4;host=machine.example.org;proto=http;secret=9823748923748937;Hello=\"Oh hi, world\""));
+
+        List<ForwardedHeader> recreated = ForwardedHeader.fromString(asString);
+        assertThat(original, equalTo(recreated));
+    }
+
+    static ForwardedHeader fwd(String by, String forValue, String host, String proto) {
         return new ForwardedHeader(by, forValue, host, proto, null);
     }
 

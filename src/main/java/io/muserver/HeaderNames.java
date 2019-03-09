@@ -5,9 +5,8 @@ import io.netty.util.AsciiString;
 
 /**
  * Standard HTTP header names.
- * <p>
- * These are all defined as lowercase to support HTTP/2 requirements while also not
- * violating HTTP/1.x requirements.  New header names should always be lowercase.
+ * <p>These are all defined as lowercase to support HTTP/2 requirements while also not
+ * violating HTTP/1.x requirements.  New header names should always be lowercase.</p
  */
 public final class HeaderNames {
     /**
@@ -357,7 +356,6 @@ public final class HeaderNames {
      * {@code "x-frame-options"}
      */
     public static final CharSequence X_FRAME_OPTIONS = HttpHeaderNames.X_FRAME_OPTIONS;
-
 
 
     private HeaderNames() {

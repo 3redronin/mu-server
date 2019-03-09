@@ -73,32 +73,17 @@ class NettyRequestAdapter implements MuRequest {
     }
 
     private static URI getUri(Headers h, String scheme, String hostHeader, URI requestUri, URI serverUri) {
-        String xforwardedProto = h.get(HeaderNames.X_FORWARDED_PROTO, scheme);
-        String xforwardedHost = h.get(HeaderNames.X_FORWARDED_HOST);
+        List<ForwardedHeader> forwarded = h.forwarded();
+        if (forwarded.isEmpty()) {
+            return serverUri;
+        }
+        ForwardedHeader f = forwarded.get(0);
         try {
-            String host, portFromHost = "-1";
-            if(xforwardedHost != null) {
-                int ipv6CheckAndIndex = xforwardedHost.lastIndexOf("]");
-                int lastColonCheckAndIndex = xforwardedHost.lastIndexOf(":");
-                if (ipv6CheckAndIndex != -1) {      // IPv6
-                    host = xforwardedHost.substring(0, ipv6CheckAndIndex + 1);
-                    if (ipv6CheckAndIndex < lastColonCheckAndIndex) { // has port
-                        portFromHost = xforwardedHost.substring(lastColonCheckAndIndex + 1);
-                    }
-                } else if(lastColonCheckAndIndex != -1) { // IPv4 or domain and has port
-                    host = xforwardedHost.substring(0, lastColonCheckAndIndex);
-                    portFromHost = xforwardedHost.substring(lastColonCheckAndIndex + 1);
-                } else {  // no port
-                    host = xforwardedHost;
-                }
-            } else {
-                host = hostHeader;
-            }
-            int port = h.getInt(HeaderNames.X_FORWARDED_PORT, xforwardedHost != null ? Integer.valueOf(portFromHost) : -1);
-            String portStr = (port != 80 && port != 443 && port > 0) ? ":" + port : "";
-            return new URI(xforwardedProto + "://" + host + portStr + requestUri);
+            String originalScheme = Mutils.coalesce(f.proto(), scheme);
+            String host = Mutils.coalesce(f.host(), hostHeader);
+            return new URI(originalScheme + "://" + host + requestUri);
         } catch (URISyntaxException e) {
-            log.warn("Could not create a URI object using X-Forwarded values " + xforwardedProto + " and " + xforwardedHost
+            log.warn("Could not create a URI object using Forwarded values " + f
                 + " so using local server URI. URL generation (including in redirects) may be incorrect.");
             return serverUri;
         }

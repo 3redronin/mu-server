@@ -15,7 +15,9 @@ import java.util.Collections;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static io.muserver.ForwardedHeaderTest.fwd;
 import static io.muserver.MuServerBuilder.httpServer;
+import static java.util.Arrays.asList;
 import static java.util.Collections.*;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.nullValue;
@@ -28,92 +30,92 @@ import static scaffolding.StringUtils.randomAsciiStringOfLength;
 
 public class HeadersTest {
 
-	private MuServer server;
+    private MuServer server;
 
-	@Test
+    @Test
     public void canGetAndSetThem() {
-		server = MuServerBuilder.httpServer()
-				.addHandler((request, response) -> {
-					String something = request.headers().get("X-Something");
-					response.headers().add("X-Response", something);
-					return true;
-				}).start();
+        server = MuServerBuilder.httpServer()
+            .addHandler((request, response) -> {
+                String something = request.headers().get("X-Something");
+                response.headers().add("X-Response", something);
+                return true;
+            }).start();
 
-		String randomValue = UUID.randomUUID().toString();
+        String randomValue = UUID.randomUUID().toString();
 
         try (Response resp = call(xSomethingHeader(randomValue))) {
             assertThat(resp.header("X-Response"), equalTo(randomValue));
         }
-	}
+    }
 
-	@Test
+    @Test
     public void aHandlerCanChangeTheHeadersOfASubsequentHandler() {
-		String randomValue = UUID.randomUUID().toString();
+        String randomValue = UUID.randomUUID().toString();
 
-		server = MuServerBuilder.httpServer()
-				.addHandler((request, response) -> {
-					request.headers().set("X-Something", randomValue);
-					return false;
-				})
-				.addHandler((request, response) -> {
-					String something = request.headers().get("X-Something");
-					response.headers().add("X-Response", something);
-					return true;
-				})
-				.start();
+        server = MuServerBuilder.httpServer()
+            .addHandler((request, response) -> {
+                request.headers().set("X-Something", randomValue);
+                return false;
+            })
+            .addHandler((request, response) -> {
+                String something = request.headers().get("X-Something");
+                response.headers().add("X-Response", something);
+                return true;
+            })
+            .start();
 
 
         try (Response resp = call(xSomethingHeader("OriginalValue"))) {
             assertThat(resp.header("X-Response"), equalTo(randomValue));
         }
-	}
+    }
 
-	@Test
+    @Test
     public void largeHeadersAreFineIfConfigured() {
-		server = MuServerBuilder.httpServer()
-				.withMaxHeadersSize(33000)
-				.addHandler((request, response) -> {
-					response.headers().add(request.headers());
-					return true;
-				}).start();
+        server = MuServerBuilder.httpServer()
+            .withMaxHeadersSize(33000)
+            .addHandler((request, response) -> {
+                response.headers().add(request.headers());
+                return true;
+            }).start();
 
-		String bigString = randomAsciiStringOfLength(32000);
+        String bigString = randomAsciiStringOfLength(32000);
         try (Response resp = call(xSomethingHeader(bigString))) {
             assertThat(resp.header("X-Something"), equalTo(bigString));
         }
-	}
+    }
 
-	@Test
+    @Test
     public void urlsThatAreTooLongAreRejected() throws MalformedURLException {
-		AtomicBoolean handlerHit = new AtomicBoolean(false);
-		server = MuServerBuilder.httpServer()
-				.withMaxUrlSize(30)
-				.addHandler((request, response) -> {
-					System.out.println("URI is " + request.uri());
-					handlerHit.set(true);
-					return true;
-				}).start();
+        AtomicBoolean handlerHit = new AtomicBoolean(false);
+        server = MuServerBuilder.httpServer()
+            .withMaxUrlSize(30)
+            .addHandler((request, response) -> {
+                System.out.println("URI is " + request.uri());
+                handlerHit.set(true);
+                return true;
+            }).start();
 
-        try (Response resp = call(request().url(server.httpUri().resolve("/this-is-much-longer-than-that-value-allowed-by-the-config-above-i-think").toURL()))) {
+        try (Response resp = call(request(server.httpUri().resolve("/this-is-much-longer-than-that-value-allowed-by-the-config-above-i-think")))) {
             assertThat(resp.code(), is(414));
         }
-		assertThat(handlerHit.get(), is(false));
-	}
+        assertThat(handlerHit.get(), is(false));
+    }
 
-	@Test
+    @Test
     public void a431IsReturnedIfTheHeadersAreTooLarge() {
-		server = MuServerBuilder.httpServer()
-				.withMaxHeadersSize(1024)
-				.addHandler((request, response) -> {
-					response.headers().add(request.headers());
-					return true;
-				}).start();
+        server = MuServerBuilder.httpServer()
+            .withMaxHeadersSize(1024)
+            .addHandler((request, response) -> {
+                response.headers().add(request.headers());
+                return true;
+            }).start();
 
         try (Response resp = call(xSomethingHeader(randomAsciiStringOfLength(1025)))) {
             assertThat(resp.code(), is(431));
             assertThat(resp.header("X-Something"), is(nullValue()));
         }
-	}
+    }
 
     @Test
     public void ifXForwardedHeadersAreSpecifiedThenRequestUriUsesThem() {
@@ -126,11 +128,11 @@ public class HeadersTest {
                 return true;
             }).start();
 
-        try (Response ignored = call(request()
+        try (Response ignored = call(request(server.httpUri().resolve("/blah?query=value"))
             .header("X-Forwarded-Proto", "https")
             .header("X-Forwarded-Host", "www.example.org")
             .header("X-Forwarded-Port", "443")
-            .url(server.httpUri().resolve("/blah?query=value").toString()))) {
+        )) {
         }
         assertThat(actual[1].toString(), equalTo("http://localhost:12752/blah?query=value"));
         assertThat(actual[0].toString(), equalTo("https://www.example.org/blah?query=value"));
@@ -147,12 +149,12 @@ public class HeadersTest {
                 return true;
             }).start();
 
-        try (Response ignored = call(request()
+        try (Response ignored = call(request(server.httpUri().resolve("/blah?query=value"))
             .header("X-Forwarded-Proto", "https")
             .addHeader("X-Forwarded-Proto", "http")
             .header("X-Forwarded-Host", "www.example.org:12000")
             .addHeader("X-Forwarded-Host", "localhost:8192")
-            .url(server.httpUri().resolve("/blah?query=value").toString()))) {
+        )) {
         }
         assertThat(actual[1].toString(), equalTo("http://localhost:12753/blah?query=value"));
         assertThat(actual[0].toString(), equalTo("https://www.example.org:12000/blah?query=value"));
@@ -169,7 +171,7 @@ public class HeadersTest {
             }).start();
 
 
-        try (Response resp = call(request().url(server.httpUri().toString()))) {
+        try (Response resp = call(request(server.httpUri()))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.header("X-Blah"), is("ha"));
             assertThat(resp.header("Content-Length"), is("0"));
@@ -177,7 +179,8 @@ public class HeadersTest {
         }
     }
 
-    @Test public void ifOutputStreamUsedThenTransferEncodingIsChunked() {
+    @Test
+    public void ifOutputStreamUsedThenTransferEncodingIsChunked() {
         server = MuServerBuilder.httpServer()
             .addHandler((request, response) -> {
                 response.status(200);
@@ -187,42 +190,45 @@ public class HeadersTest {
                 return true;
             }).start();
 
-        try (Response resp = call(request().url(server.httpUri().toString()))) {
+        try (Response resp = call(request(server.httpUri()))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.header("Content-Length"), is(nullValue()));
             assertThat(resp.header("Transfer-Encoding"), is("chunked"));
         }
     }
 
-    @Test public void aRequestHasXForwardHostHeaderDontThrowException() throws IOException {
-        final String host = "mu-server-io:1234";
+    @Test
+    public void aRequestHasXForwardHostHeaderDontThrowException() throws IOException {
         server = httpServer()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
                 response.writer().print(request.uri());
             })
             .start();
-        try (Response resp = call(request().header(HeaderNames.X_FORWARDED_HOST.toString(), host).url(server.uri().toString()))) {
+        try (Response resp = call(request(server.uri())
+            .header(HeaderNames.X_FORWARDED_HOST.toString(), "mu-server-io:1234"))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.body().string(), equalTo("http://"+host+"/"));
+            assertThat(resp.body().string(), equalTo("http://mu-server-io:1234/"));
         }
     }
 
-    @Test public void aRequestHasXForwardHostAndHasNoPortDontThrowException() throws IOException {
-        final String host = "mu-server-io";
+    @Test
+    public void aRequestHasXForwardHostAndHasNoPortDontThrowException() throws IOException {
         server = httpServer()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
                 response.writer().print(request.uri());
             })
             .start();
-        try (Response resp = call(request().header(HeaderNames.X_FORWARDED_HOST.toString(), host).url(server.uri().toString()))) {
+        try (Response resp = call(request(server.uri())
+            .header(HeaderNames.X_FORWARDED_HOST.toString(), "mu-server-io"))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.body().string(), equalTo("http://"+host+"/"));
+            assertThat(resp.body().string(), equalTo("http://mu-server-io/"));
         }
     }
 
-    @Test public void aRequestHasXForwardHostAndXForwardedPortDontThrowExceptionAndUserPort() throws IOException {
+    @Test
+    public void aRequestHasXForwardHostAndXForwardedPortDontThrowExceptionAndUsePort() throws IOException {
         final String host = "mu-server-io:9999";
         final String port = "8888";
         server = httpServer()
@@ -231,28 +237,33 @@ public class HeadersTest {
                 response.writer().print(request.uri());
             })
             .start();
-        try (Response resp = call(request().header(HeaderNames.X_FORWARDED_HOST.toString(), host).header(HeaderNames.X_FORWARDED_PORT.toString(), port).url(server.uri().toString()))) {
+        try (Response resp = call(request(server.uri())
+            .header(HeaderNames.X_FORWARDED_HOST.toString(), host)
+            .header(HeaderNames.X_FORWARDED_PORT.toString(), port))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.body().string(), equalTo("http://"+host.substring(0, host.lastIndexOf(":") + 1)+port+"/"));
+            assertThat(resp.body().string(), equalTo("http://mu-server-io:8888/"));
         }
     }
 
 
-    @Test public void aRquestWithErrorXForwardHostHeaderDontThrowException() throws IOException {
-        final String host = "mu-server-io<error>:1234";
+    @Test
+    public void aRquestWithErrorXForwardHostHeaderDontThrowException() throws IOException {
         server = httpServer()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
                 response.writer().print(request.uri());
             })
             .start();
-        try (Response resp = call(request().header(HeaderNames.X_FORWARDED_HOST.toString(), host).url(server.uri().toString()))) {
+        try (Response resp = call(request(server.uri())
+            .header(HeaderNames.X_FORWARDED_HOST.toString(), "mu-server-io<error>:1234")
+        )) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.body().string(), equalTo(server.uri().toString()+"/"));
+            assertThat(resp.body().string(), equalTo(server.uri().toString() + "/"));
         }
     }
 
-    @Test public void aRequestHasIPv6XForwardHostHeaderDontThrowException() throws IOException {
+    @Test
+    public void aRequestHasIPv6XForwardHostHeaderDontThrowException() throws IOException {
         final String host = "[2001:0db8:85a3:08d3:1319:8a2e:0370:7344]:1234";
         server = httpServer()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
@@ -260,13 +271,16 @@ public class HeadersTest {
                 response.writer().print(request.uri());
             })
             .start();
-        try (Response resp = call(request().header(HeaderNames.X_FORWARDED_HOST.toString(), host).url(server.uri().toString()))) {
+        try (Response resp = call(request(server.uri())
+            .header(HeaderNames.X_FORWARDED_HOST.toString(), host)
+        )) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.body().string(), equalTo("http://"+host+"/"));
+            assertThat(resp.body().string(), equalTo("http://" + host + "/"));
         }
     }
 
-    @Test public void anIPv6XForwardHostHeaderHasNoPortDontThrowException() throws IOException {
+    @Test
+    public void anIPv6XForwardHostHeaderHasNoPortDontThrowException() throws IOException {
         final String host = "[2001:0db8:85a3:08d3:1319:8a2e:0370:7344]";
         server = httpServer()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
@@ -274,50 +288,54 @@ public class HeadersTest {
                 response.writer().print(request.uri());
             })
             .start();
-        try (Response resp = call(request().header(HeaderNames.X_FORWARDED_HOST.toString(), host).url(server.uri().toString()))) {
+        try (Response resp = call(request(server.uri())
+            .header(HeaderNames.X_FORWARDED_HOST.toString(), host))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.body().string(), equalTo("http://"+host+"/"));
+            assertThat(resp.body().string(), equalTo("http://" + host + "/"));
         }
     }
 
-    @Test public void anIPv4XForwardHostHeaderDontThrowException() throws IOException {
-        final String host = "192.168.1.1:1234";
+    @Test
+    public void anIPv4XForwardHostHeaderDontThrowException() throws IOException {
         server = httpServer()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
                 response.writer().print(request.uri());
             })
             .start();
-        try (Response resp = call(request().header(HeaderNames.X_FORWARDED_HOST.toString(), host).url(server.uri().toString()))) {
+        try (Response resp = call(request(server.uri())
+            .header(HeaderNames.X_FORWARDED_HOST.toString(), "192.168.1.1:1234"))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.body().string(), equalTo("http://"+host+"/"));
+            assertThat(resp.body().string(), equalTo("http://192.168.1.1:1234/"));
         }
     }
 
-    @Test public void anIPv4XForwardHostHeaderHasNoPortDontThrowException() throws IOException {
-        final String host = "192.168.1.1";
+    @Test
+    public void anIPv4XForwardHostHeaderHasNoPortDontThrowException() throws IOException {
         server = httpServer()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
                 response.writer().print(request.uri());
             })
             .start();
-        try (Response resp = call(request().header(HeaderNames.X_FORWARDED_HOST.toString(), host).url(server.uri().toString()))) {
+        try (Response resp = call(request(server.uri())
+            .header(HeaderNames.X_FORWARDED_HOST.toString(), "192.168.1.1"))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.body().string(), equalTo("http://"+host+"/"));
+            assertThat(resp.body().string(), equalTo("http://192.168.1.1/"));
         }
     }
 
 
-    @After public void stopIt() {
+    @After
+    public void stopIt() {
         MuAssert.stopAndCheck(server);
-	}
+    }
 
-	Request.Builder xSomethingHeader(String value) {
-		return request().header("X-Something", value).url(server.httpUri().toString());
-	}
+    Request.Builder xSomethingHeader(String value) {
+        return request().header("X-Something", value).url(server.httpUri().toString());
+    }
 
-	@Test
+    @Test
     public void acceptHeaderCanBeParsed() {
         Headers headers = new Headers();
         assertThat(headers.accept(), equalTo(emptyList()));
@@ -328,7 +346,7 @@ public class HeadersTest {
             ph("application/xhtml+xml"),
             ph("application/xml", "q", "0.9"),
             ph("image/webp"),
-            ph("*/*", "q",  "0.8")
+            ph("*/*", "q", "0.8")
         ));
     }
 
@@ -418,11 +436,78 @@ public class HeadersTest {
             new ForwardedHeader(null, "192.0.2.43", null, null, null)
         ));
 
+        headers.set("X-Forwarded-For", "1.2.3.4"); // ignored as there is a Forwarded header
         headers.set("Forwarded", "for=192.0.2.43," +
             "      for=198.51.100.17;by=203.0.113.60;proto=http;host=example.com");
         assertThat(headers.forwarded(), contains(
-            new ForwardedHeader(null, "192.0.2.43", null, null, null),
-            new ForwardedHeader("203.0.113.60", "198.51.100.17", "example.com", "http", null)
+            fwd(null, "192.0.2.43", null, null),
+            fwd("203.0.113.60", "198.51.100.17", "example.com", "http")
+        ));
+    }
+
+    @Test
+    public void ifNoForwardedHeaderThenXForwardedIsUsed() {
+        Headers headers = new Headers();
+        headers.set("X-Forwarded-For", asList("192.0.2.43", "2001:db8:cafe::17"));
+        assertThat(headers.forwarded(), contains(
+            fwd(null, "192.0.2.43", null, null),
+            fwd(null, "2001:db8:cafe::17", null, null)
+        ));
+        assertThat(headers.forwarded().get(1).toString(), equalTo("for=\"2001:db8:cafe::17\""));
+
+        headers.clear();
+        headers.set("X-Forwarded-Host", asList("example.org", "internal.example.org"));
+        assertThat(headers.forwarded(), contains(
+            fwd(null, null, "example.org", null),
+            fwd(null, null, "internal.example.org", null)
+        ));
+
+        headers.clear();
+        headers.set("X-Forwarded-Host", asList("example.org", "internal.example.org"));
+        headers.set("X-Forwarded-Port", asList("80", "8088"));
+        assertThat(headers.forwarded(), contains(
+            fwd(null, null, "example.org:80", null),
+            fwd(null, null, "internal.example.org:8088", null)
+        ));
+
+        headers.clear();
+        headers.set("X-Forwarded-Proto", asList("http", "https"));
+        assertThat(headers.forwarded(), contains(
+            fwd(null, null, null, "http"),
+            fwd(null, null, null, "https")
+        ));
+    }
+
+    @Test
+    public void ifMultipleXForwardedHeadersHaveSameLengthsThenAllUsed() {
+        Headers headers = new Headers();
+        headers.add("X-Forwarded-For", "192.0.2.43");
+        headers.add("X-Forwarded-Host", "example.org");
+        headers.add("X-Forwarded-Proto", "https");
+
+        headers.add("X-Forwarded-Proto", "http");
+        headers.add("X-Forwarded-For", "10.0.0.0");
+        headers.add("X-Forwarded-Host", "internal.example.org");
+
+        assertThat(headers.forwarded(), contains(
+            fwd(null, "192.0.2.43", "example.org", "https"),
+            fwd(null, "10.0.0.0", "internal.example.org", "http")
+        ));
+    }
+
+    @Test
+    public void ifSomeXForwardedHeadersHaveLessValuesThanOthersThenTheyAreIgnored() {
+        Headers headers = new Headers();
+        headers.add("X-Forwarded-For", "192.0.2.43");
+        headers.add("X-Forwarded-Host", "example.org");
+        headers.add("X-Forwarded-Proto", "https");
+
+        headers.add("X-Forwarded-Proto", "http");
+        headers.add("X-Forwarded-Host", "internal.example.org");
+
+        assertThat(headers.forwarded(), contains(
+            fwd(null, null, "example.org", "https"),
+            fwd(null, null, "internal.example.org", "http")
         ));
     }
 

@@ -6,7 +6,7 @@ import static java.util.Collections.emptyList;
 import static java.util.Collections.emptyMap;
 
 /**
- * <p>Represents a <code>Forwarded</code> header</p>
+ * <p>Represents a <code>Forwarded</code> header as described by RFC-7239.</p>
  */
 public class ForwardedHeader {
 
@@ -28,28 +28,32 @@ public class ForwardedHeader {
     }
 
     /**
-     * @return The interface where the request came in to the proxy server, or <code>null</code> if not specified.
+     * @return The interface where the request came in to the proxy server (e.g. the IP address of the reverse
+     * proxy that forwarded this request), or <code>null</code> if not specified.
      */
     public String by() {
         return by;
     }
 
     /**
-     * @return The interface where the request came in to the proxy server, or <code>null</code> if not specified.
+     * @return The interface where the request came in to the proxy server, e.g. the IP address of the client
+     * that originated the request), or <code>null</code> if not specified.
      */
     public String forValue() {
         return forValue;
     }
 
     /**
-     * @return The Host request header field as received by the proxy, or <code>null</code> if not specified.
+     * @return The Host request header field as received by the proxy (e.g. the hostname used on the original
+     * request), or <code>null</code> if not specified.
      */
     public String host() {
         return host;
     }
 
     /**
-     * @return ndicates which protocol was used to make the request (typically "http" or "https"), or <code>null</code> if not specified.
+     * @return Indicates which protocol was used to make the request (typically "http" or "https"), or
+     * <code>null</code> if not specified.
      */
     public String proto() {
         return proto;
@@ -62,10 +66,13 @@ public class ForwardedHeader {
         return extensions;
     }
 
-    private enum State {PARAM_NAME, PARAM_VALUE}
 
+
+    private enum State {PARAM_NAME, PARAM_VALUE;}
     /**
      * <p>Parses the value of a <code>Forwarded</code> header into an object.</p>
+     * <p>Where multiple reverse proxies have resulted in multiple Forwarded headers, the first
+     * value in the list should contain the information of the original request.</p>
      * <p>Null or blank strings return an empty list.</p>
      * @param input The value to parse
      * @return A list of ForwardedHeader objects
@@ -223,6 +230,22 @@ public class ForwardedHeader {
         appendString(sb, "host", host);
         appendString(sb, "proto", proto);
         this.extensions().forEach((key, value) -> appendString(sb, key, value));
+        return sb.toString();
+    }
+
+    /**
+     * Converts a list of headers into a single string that can be put into a Forwarded header field.
+     * @param headers The headers to serialise
+     * @return An RFC-7239 compliant Forwarded header value.
+     */
+    public static String toString(List<ForwardedHeader> headers) {
+        StringBuilder sb = new StringBuilder();
+        for (ForwardedHeader header : headers) {
+            if (sb.length() > 0) {
+                sb.append(", ");
+            }
+            sb.append(header.toString());
+        }
         return sb.toString();
     }
 
