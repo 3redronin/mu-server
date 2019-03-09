@@ -74,7 +74,6 @@ public class AsyncSsePublisherTest {
         CountDownLatch somethingPublishedLatch = new CountDownLatch(1);
         CountDownLatch exceptionThrownLatch = new CountDownLatch(1);
         server = httpServer()
-            .withHttpPort(56802)
             .addHandler(Method.GET, "/streamer", (request, response, pathParams) -> {
 
                 AsyncSsePublisher ssePublisher = AsyncSsePublisher.start(request, response);
