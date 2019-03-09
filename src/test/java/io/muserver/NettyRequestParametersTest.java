@@ -9,8 +9,7 @@ import java.util.Map;
 import static java.util.Arrays.asList;
 import static java.util.Collections.emptyList;
 import static java.util.Collections.singletonList;
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.CoreMatchers.*;
 import static org.hamcrest.MatcherAssert.assertThat;
 
 public class NettyRequestParametersTest {
@@ -22,7 +21,7 @@ public class NettyRequestParametersTest {
         assertThat(params.get("age"), equalTo("10"));
         assertThat(params.get("car"), equalTo("Holden"));
         assertThat(params.get("name", "ignored"), equalTo("Frank Manger"));
-        assertThat(params.get("notThere"), equalTo(""));
+        assertThat(params.get("notThere"), is(nullValue()));
         assertThat(params.get("notThere", "Horza Culture"), equalTo("Horza Culture"));
     }
 

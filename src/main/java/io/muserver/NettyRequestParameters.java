@@ -2,7 +2,9 @@ package io.muserver;
 
 import io.netty.handler.codec.http.QueryStringDecoder;
 
-import java.util.*;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
 import static java.util.Collections.emptyList;
 
@@ -22,7 +24,7 @@ class NettyRequestParameters implements RequestParameters {
 
     @Override
     public String get(String name) {
-        return get(name, "");
+        return get(name, null);
     }
 
     @Override

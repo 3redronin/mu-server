@@ -38,7 +38,7 @@ public class ParametersTest {
         }
         assertThat(actual[0], equalTo("something"));
 		assertThat(actual[1], equalTo("something else i think"));
-		assertThat(actual[2], equalTo(""));
+		assertThat(actual[2], is(nullValue()));
 		assertThat(actual[3], equalTo("/something/here.html"));
 	}
 
@@ -70,6 +70,7 @@ public class ParametersTest {
             for (int i = 0; i < vals.size(); i++) {
                 actual.add(request.form().get("theNameOfTheFormParameter_" + i));
             }
+            actual.add(request.form().get("does-not-exist"));
             return true;
         }).start();
 
@@ -83,6 +84,7 @@ public class ParametersTest {
             .post(formBuilder.build())
         )) {
         }
+        vals.add(null);
         assertThat(actual, equalTo(vals));
     }
 

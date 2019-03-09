@@ -15,11 +15,11 @@ public interface RequestParameters {
     Map<String, List<String>> all();
 
     /**
-     * <p>Gets the value with the given name, or empty string if there is no parameter with that name.</p>
+     * <p>Gets the value with the given name, or null if there is no parameter with that name.</p>
      * <p>If there are multiple parameters with the same name, the first one is returned.</p>
      *
      * @param name The name of the parameter to get
-     * @return The value, or an empty string
+     * @return The value, or null
      */
     String get(String name);
 
@@ -29,7 +29,7 @@ public interface RequestParameters {
      *
      * @param name The name of the parameter to get
      * @param defaultValue The default value to use if there is no given value
-     * @return The value, or an empty string
+     * @return The value of the parameter, or the default value
      */
     String get(String name, String defaultValue);
 

@@ -33,11 +33,12 @@ public class HeadersTest {
     private MuServer server;
 
     @Test
-    public void canGetAndSetThem() {
+    public void canGetAndSetThem() throws IOException {
         server = MuServerBuilder.httpServer()
             .addHandler((request, response) -> {
                 String something = request.headers().get("X-Something");
                 response.headers().add("X-Response", something);
+                response.write("val: " + request.headers().get("not-on-request"));
                 return true;
             }).start();
 
@@ -45,6 +46,7 @@ public class HeadersTest {
 
         try (Response resp = call(xSomethingHeader(randomValue))) {
             assertThat(resp.header("X-Response"), equalTo(randomValue));
+            assertThat(resp.body().string(), is("val: null"));
         }
     }
 
