@@ -225,7 +225,7 @@ class NettyResponseAdaptor implements MuResponse {
                 new EmptyHttpResponse(httpStatus()) :
                 new DefaultFullHttpResponse(HTTP_1_1, httpStatus(), false);
             msg.headers().add(this.headers.nettyHeaders());
-            if (!isHead || !isFixedLength) {
+            if ((!isHead || !isFixedLength) && status != 204 && status != 205 && status != 304) {
                 msg.headers().set(HeaderNames.CONTENT_LENGTH, 0);
             }
             lastAction = ctx.writeAndFlush(msg);
