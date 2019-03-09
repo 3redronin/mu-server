@@ -120,7 +120,8 @@ abstract class ResourceMethodParam {
         }
 
         public Object defaultValue() {
-            return convertValue(parameterHandle, paramConverter, !lazyDefaultValue, defaultValue);
+            boolean skipConverter = defaultValue != null && !lazyDefaultValue;
+            return convertValue(parameterHandle, paramConverter, skipConverter, defaultValue);
         }
 
         public Object getValue(MuRequest request, RequestMatcher.MatchedMethod matchedMethod) throws IOException {

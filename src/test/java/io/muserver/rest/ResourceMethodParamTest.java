@@ -10,10 +10,7 @@ import javax.ws.rs.*;
 import javax.ws.rs.ext.ParamConverter;
 import javax.ws.rs.ext.ParamConverterProvider;
 import java.io.IOException;
-import java.util.Collections;
-import java.util.List;
-import java.util.Set;
-import java.util.SortedSet;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -422,6 +419,7 @@ public class ResourceMethodParamTest {
             @Path("list")
             public String getList(
                 @QueryParam("cats") List<Cat> cats) {
+                if (cats.isEmpty()) return "(empty)";
                 return cats.stream().map(d -> d.name).collect(Collectors.joining(", "));
             }
 
@@ -429,6 +427,7 @@ public class ResourceMethodParamTest {
             @Path("set")
             public String getSet(
                 @QueryParam("cats") Set<Cat> cats) {
+                if (cats.isEmpty()) return "(empty)";
                 return cats.stream().map(d -> d.name).sorted().collect(Collectors.joining(", "));
             }
 
@@ -436,6 +435,7 @@ public class ResourceMethodParamTest {
             @Path("sortedSet")
             public String getSortedSet(
                 @QueryParam("cats") SortedSet<Cat> cats) {
+                if (cats.isEmpty()) return "(empty)";
                 return cats.stream().map(d -> d.name).collect(Collectors.joining(", "));
             }
         }
@@ -448,6 +448,66 @@ public class ResourceMethodParamTest {
         }
         try (Response resp = call(request().url(server.uri().resolve("/cats/sortedSet?cats=Twinkle&cats=Little").toString()))) {
             assertThat(resp.body().string(), equalTo("Little, Twinkle"));
+        }
+
+        try (Response resp = call(request().url(server.uri().resolve("/cats/list").toString()))) {
+            assertThat(resp.body().string(), equalTo("(empty)"));
+        }
+        try (Response resp = call(request().url(server.uri().resolve("/cats/set").toString()))) {
+            assertThat(resp.body().string(), equalTo("(empty)"));
+        }
+        try (Response resp = call(request().url(server.uri().resolve("/cats/sortedSet").toString()))) {
+            assertThat(resp.body().string(), equalTo("(empty)"));
+        }
+    }
+
+    @Test
+    public void collectionsCanHaveDefaultValues() throws IOException {
+        @Path("cats")
+        class Cats {
+            @GET
+            @Path("list")
+            public String getList(
+                @QueryParam("cats") @DefaultValue("name 1, name 2") List<Cat> cats) {
+                if (cats.isEmpty()) return "(empty)";
+                return cats.stream().map(d -> d.name).collect(Collectors.joining(", "));
+            }
+
+            @GET
+            @Path("set")
+            public String getSet(
+                @QueryParam("cats") @DefaultValue("name 1, name 2") Set<Cat> cats) {
+                if (cats.isEmpty()) return "(empty)";
+                return cats.stream().map(d -> d.name).sorted().collect(Collectors.joining(", "));
+            }
+
+            @GET
+            @Path("sortedSet")
+            public String getSortedSet(
+                @QueryParam("cats") @DefaultValue("name 1, name 2") SortedSet<Cat> cats) {
+                if (cats.isEmpty()) return "(empty)";
+                return cats.stream().map(d -> d.name).collect(Collectors.joining(", "));
+            }
+        }
+        server = httpsServer().addHandler(restHandler(new Cats())).start();
+        try (Response resp = call(request().url(server.uri().resolve("/cats/list?cats=Little&cats=Twinkle").toString()))) {
+            assertThat(resp.body().string(), equalTo("Little, Twinkle"));
+        }
+        try (Response resp = call(request().url(server.uri().resolve("/cats/set?cats=Twinkle&cats=Little").toString()))) {
+            assertThat(resp.body().string(), equalTo("Little, Twinkle"));
+        }
+        try (Response resp = call(request().url(server.uri().resolve("/cats/sortedSet?cats=Twinkle&cats=Little").toString()))) {
+            assertThat(resp.body().string(), equalTo("Little, Twinkle"));
+        }
+
+        try (Response resp = call(request().url(server.uri().resolve("/cats/list").toString()))) {
+            assertThat(resp.body().string(), equalTo("name 1, name 2"));
+        }
+        try (Response resp = call(request().url(server.uri().resolve("/cats/set").toString()))) {
+            assertThat(resp.body().string(), equalTo("name 1, name 2"));
+        }
+        try (Response resp = call(request().url(server.uri().resolve("/cats/sortedSet").toString()))) {
+            assertThat(resp.body().string(), equalTo("name 1, name 2"));
         }
     }
 
@@ -475,6 +535,7 @@ public class ResourceMethodParamTest {
                 String[] bits = value.split("-");
                 return new Tail(Integer.parseInt(bits[0]), bits[1].equalsIgnoreCase("true"));
             }
+
             public String toString(Tail value) {
                 return "A tail";
             }
@@ -489,6 +550,83 @@ public class ResourceMethodParamTest {
             assertThat(resp.body().string(), equalTo("3cm - is not fuzzy"));
         }
     }
+
+    @Test
+    public void lazyDefaultValuesAreEvaluatedWhenUsed() throws IOException {
+        List<String> called = new ArrayList<>();
+        class LazyThing {
+            public String name;
+
+            LazyThing(String name) {
+                this.name = name;
+            }
+        }
+        class EagerThing {
+            public String name;
+
+            EagerThing(String name) {
+                this.name = name;
+            }
+        }
+        @Path("things")
+        class Things {
+            @GET
+            @Path("lazy")
+            public void lazy(@QueryParam("thing") @DefaultValue("lazy-value") LazyThing thing) {
+            }
+
+            @GET
+            @Path("eager")
+            public void eager(@QueryParam("thing") @DefaultValue("eager-value") EagerThing thing) {
+            }
+        }
+
+        @ParamConverter.Lazy
+        class LazyThingConverter implements ParamConverter<LazyThing> {
+            @Override
+            public LazyThing fromString(String value) {
+                called.add("Lazy " + value);
+                return new LazyThing(value);
+            }
+
+            @Override
+            public String toString(LazyThing value) {
+                return value.name;
+            }
+        }
+
+        class EagerThingConverter implements ParamConverter<EagerThing> {
+            @Override
+            public EagerThing fromString(String value) {
+                called.add("Eager " + value);
+                return new EagerThing(value);
+            }
+
+            @Override
+            public String toString(EagerThing value) {
+                return value.name;
+            }
+        }
+
+        server = httpsServer()
+            .addHandler(restHandler(new Things())
+                .addCustomParamConverter(LazyThing.class, new LazyThingConverter())
+                .addCustomParamConverter(EagerThing.class, new EagerThingConverter())
+            )
+            .start();
+
+        assertThat(called, contains("Eager eager-value"));
+        try (Response ignored = call(request(server.uri().resolve("/things/eager")))) {
+            assertThat(called, contains("Eager eager-value"));
+        }
+        try (Response ignored = call(request(server.uri().resolve("/things/lazy")))) {
+            assertThat(called, contains("Eager eager-value", "Lazy lazy-value"));
+        }
+        try (Response ignored = call(request(server.uri().resolve("/things/lazy")))) {
+            assertThat(called, contains("Eager eager-value", "Lazy lazy-value", "Lazy lazy-value"));
+        }
+    }
+
 
     @After
     public void stop() {

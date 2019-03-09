@@ -1,5 +1,7 @@
 package io.muserver.rest;
 
+import io.muserver.Mutils;
+
 import javax.ws.rs.InternalServerErrorException;
 import javax.ws.rs.ext.ParamConverter;
 import javax.ws.rs.ext.ParamConverterProvider;
@@ -100,9 +102,11 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
         }
         public Object fromString(String value) {
             Collection values = (Collection)collectionSupplier.get();
-            String[] parts = value.split(",");
-            Stream.of(parts).map(v -> genericTypeConverter.fromString(v))
-                .forEach(values::add);
+            if (!Mutils.nullOrEmpty(value)) {
+                String[] parts = value.split("\\s*,\\s*");
+                Stream.of(parts).map(v -> genericTypeConverter.fromString(v))
+                    .forEach(values::add);
+            }
             return values;
         }
         public String toString(Object value) {
@@ -138,6 +142,7 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
             this.stringToValue = stringToValue;
         }
         public T fromString(String value) {
+            if (Mutils.nullOrEmpty(value)) return null;
             return stringToValue.apply(value);
         }
         public String toString(T value) {
@@ -181,6 +186,7 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
             this.enumClass = enumClass;
         }
         public E fromString(String value) {
+            if (Mutils.nullOrEmpty(value)) return null;
             return Enum.valueOf(enumClass, value);
         }
         public String toString(E value) {
@@ -197,6 +203,7 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
             this.constructor = constructor;
         }
         public T fromString(String value) {
+            if (Mutils.nullOrEmpty(value)) return null;
             try {
                 return constructor.newInstance(value);
             } catch (Exception e) {
@@ -230,6 +237,7 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
             this.staticMethod = staticMethod;
         }
         public T fromString(String value) {
+            if (Mutils.nullOrEmpty(value)) return null;
             try {
                 return (T) staticMethod.invoke(null, value);
             } catch (Exception e) {
