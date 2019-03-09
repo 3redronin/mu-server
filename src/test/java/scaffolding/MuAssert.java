@@ -40,7 +40,8 @@ public class MuAssert {
                 sleep(50);
                 count++;
             }
-            assertThat(server.stats().activeRequests(), is(empty()));
+            assertThat("Expected no requests to still be in flight when stopping server",
+                server.stats().activeRequests(), is(empty()));
             server.stop();
         }
     }

@@ -9,7 +9,9 @@ import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.List;
 
+import static io.muserver.MuServerBuilder.httpServer;
 import static io.muserver.MuServerBuilder.httpsServer;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -45,8 +47,7 @@ public class UploadTest {
 
             }).start();
 
-        try (Response resp = call(request()
-            .url(server.uri().resolve("/upload").toString())
+        try (Response resp = call(request(server.uri().resolve("/upload"))
             .post(new MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
                 .addFormDataPart("Hello", "World")
@@ -63,6 +64,26 @@ public class UploadTest {
                 "non-existent: null"));
         }
     }
+
+    @Test
+    public void nothingUploadedResultsInNoFilesAvailable() throws IOException, InterruptedException {
+
+        server = httpServer()
+            .addHandler(Method.POST, "/upload", (request, response, pathParams) -> {
+                UploadedFile photo = request.uploadedFile("photo");
+                List<UploadedFile> photos = request.uploadedFiles("photo");
+                response.write(photo + " / " + photos.size());
+            }).start();
+        try (Response resp = call(request(server.uri().resolve("/upload"))
+            .post(new MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                .addFormDataPart("No", "Upload")
+                .build())
+        )) {
+            assertThat(resp.body().string(), is("null / 0"));
+        }
+    }
+
 
     @After
     public void stopIt() {

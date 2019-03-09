@@ -42,14 +42,18 @@ public class RunLocal {
             )
             .addHandler(Method.POST, "/upload", (request, response, pathParams) -> {
                 UploadedFile file = request.uploadedFile("theFile");
-                response.contentType(file.contentType());
-                response.headers().set(HeaderNames.CONTENT_LENGTH, file.size());
-                boolean ticked = request.form().getBoolean("ticked");
-                log.info("Form parameters: " + request.form().get("blah") + " - " + ticked);
-                log.info("Going to send " + file.size() + " bytes as " + file.contentType());
-                try (InputStream fileStream = file.asStream();
-                     OutputStream out = response.outputStream()) {
-                    Mutils.copy(fileStream, out, 8192);
+                if (file == null) {
+                    response.write("No file uploaded");
+                } else {
+                    response.contentType(file.contentType());
+                    response.headers().set(HeaderNames.CONTENT_LENGTH, file.size());
+                    boolean ticked = request.form().getBoolean("ticked");
+                    log.info("Form parameters: " + request.form().get("blah") + " - " + ticked);
+                    log.info("Going to send " + file.size() + " bytes as " + file.contentType());
+                    try (InputStream fileStream = file.asStream();
+                         OutputStream out = response.outputStream()) {
+                        Mutils.copy(fileStream, out, 8192);
+                    }
                 }
             })
             .addHandler(Method.GET, "/stream", (request, response, pathParams) -> {

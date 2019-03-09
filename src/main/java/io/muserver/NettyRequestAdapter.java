@@ -285,8 +285,12 @@ class NettyRequestAdapter implements MuRequest {
                 for (InterfaceHttpData bodyHttpData : bodyHttpDatas) {
                     if (bodyHttpData instanceof FileUpload) {
                         FileUpload fileUpload = (FileUpload) bodyHttpData;
-                        UploadedFile uploadedFile = new MuUploadedFile(fileUpload);
-                        addFile(fileUpload.getName(), uploadedFile);
+                        if (fileUpload.length() == 0 && Mutils.nullOrEmpty(fileUpload.getFilename())) {
+                            // nothing uploaded
+                        } else {
+                            UploadedFile uploadedFile = new MuUploadedFile(fileUpload);
+                            addFile(fileUpload.getName(), uploadedFile);
+                        }
                     } else if (bodyHttpData instanceof Attribute) {
                         Attribute a = (Attribute) bodyHttpData;
                         qse.addParam(a.getName(), a.getValue());
