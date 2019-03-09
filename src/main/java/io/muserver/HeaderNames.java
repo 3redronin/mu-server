@@ -4,9 +4,9 @@ import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.util.AsciiString;
 
 /**
- * Standard HTTP header names.
+ * <p>Standard HTTP header names.</p>
  * <p>These are all defined as lowercase to support HTTP/2 requirements while also not
- * violating HTTP/1.x requirements.  New header names should always be lowercase.</p
+ * violating HTTP/1.x requirements.  New header names should always be lowercase.</p>
  */
 public final class HeaderNames {
     /**

@@ -18,6 +18,11 @@ public class ForwardedHeader {
 
     /**
      * Creates a new Forwarded Header. All values are optional.
+     * @param by The address of the node proxying the request, or null
+     * @param forValue The address of the client that initiated the request, or null
+     * @param host The host that the client used, or null
+     * @param proto The protocol the client used, or null
+     * @param extensions Any extensions, or null
      */
     public ForwardedHeader(String by, String forValue, String host, String proto, Map<String, String> extensions) {
         this.by = by;
