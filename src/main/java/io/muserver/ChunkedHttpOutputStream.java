@@ -8,7 +8,7 @@ import java.io.OutputStream;
 class ChunkedHttpOutputStream extends OutputStream {
     private final NettyResponseAdaptor response;
 
-    boolean isClosed = false;
+    private boolean isClosed = false;
 
     ChunkedHttpOutputStream(NettyResponseAdaptor response) {
         this.response = response;

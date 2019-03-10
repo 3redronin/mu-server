@@ -4,6 +4,7 @@ import okhttp3.Response;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
+import scaffolding.MuAssert;
 
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -50,6 +51,7 @@ public class FixedLengthTest {
             // yay
         }
 
+        MuAssert.assertNotTimedOut("exception", errorSetLatch);
         assertThat(errors.toString(), equalTo("The declared content length for GET " + server.uri().resolve("/blah") + " was 20 bytes. " +
             "The current write is being aborted and the connection is being closed because it would have resulted in " +
             "59 bytes being sent."));

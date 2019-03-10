@@ -230,4 +230,13 @@ public class Mutils {
     public static <T> T coalesce(T... values) {
         return Stream.of(values).filter(Objects::nonNull).findFirst().orElse(null);
     }
+
+    static void closeSilently(Closeable closeable) {
+        if (closeable != null) {
+            try {
+                closeable.close();
+            } catch (Exception ignored) {
+            }
+        }
+    }
 }

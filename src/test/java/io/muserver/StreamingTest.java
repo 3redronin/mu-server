@@ -11,6 +11,7 @@ import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Arrays.asList;
@@ -40,6 +41,51 @@ public class StreamingTest {
         }
         assertThat(actual, equalTo(String.format("Hello, world%nWhat's happening?")));
 	}
+
+	@Test
+    public void flushingTheOutputStreamCausesDataToBeSentToClient() throws Exception {
+	    CountDownLatch latch1 = new CountDownLatch(1);
+	    CountDownLatch latch2 = new CountDownLatch(1);
+	    CountDownLatch latch3 = new CountDownLatch(1);
+	    CountDownLatch latch4 = new CountDownLatch(1);
+
+        server = MuServerBuilder.httpServer()
+            .addHandler((request, response) -> {
+                response.contentType(ContentTypes.TEXT_PLAIN);
+                OutputStream os = response.outputStream();
+                os.write("0".getBytes(UTF_8));
+                os.flush();
+                os.write("1".getBytes(UTF_8));
+                latch1.countDown();
+                MuAssert.assertNotTimedOut("latch2", latch2);
+                os.flush();
+                latch3.countDown();
+                MuAssert.assertNotTimedOut("latch4", latch4);
+                return true;
+            }).start();
+
+        try (Response resp = call(request(server.uri()))) {
+            StringBuilder sb = new StringBuilder();
+            int read;
+            byte[] buffer = new byte[8192];
+            InputStream bs = resp.body().byteStream();
+            MuAssert.assertNotTimedOut("latch1", latch1);
+            while ((read = bs.read(buffer)) < 1) {
+            }
+            sb.append(new String(buffer, 0, read, UTF_8));
+            assertThat("Expecting '0' is written and flushed; '1' is written but not flushed",
+                sb.toString(), equalTo("0"));
+            latch2.countDown();
+            MuAssert.assertNotTimedOut("latch3", latch3);
+            while ((read = bs.read(buffer)) < 1) {
+            }
+            sb.append(new String(buffer, 0, read, UTF_8));
+            assertThat(sb.toString(), equalTo("01"));
+            latch4.countDown();
+
+        }
+
+    }
 
     @Test public void zeroByteWriteIsIgnored() throws Exception {
         server = MuServerBuilder.httpServer()
@@ -98,6 +144,7 @@ public class StreamingTest {
             assertThat(actual, equalTo(sentData.toString()));
         }
 	}
+
 
 	@Test public void theWholeRequestBodyCanBeReadAsAStringWithABlockingCall() throws Exception {
 		server = MuServerBuilder.httpServer()

@@ -11,6 +11,7 @@ import io.netty.util.CharsetUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.BufferedOutputStream;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
@@ -33,12 +34,12 @@ class NettyResponseAdaptor implements MuResponse {
     private ChannelFuture lastAction;
     private int status = 200;
     private PrintWriter writer;
-    private ChunkedHttpOutputStream outputStream;
+    private OutputStream outputStream;
     private long bytesStreamed = 0;
     private long declaredLength = -1;
 
     private enum OutputState {
-        NOTHING, FULL_SENT, STREAMING, STREAMING_COMPLETE
+        NOTHING, FULL_SENT, STREAMING, STREAMING_COMPLETE, FINISHED
     }
 
     NettyResponseAdaptor(ChannelHandlerContext ctx, NettyRequestAdapter request) {
@@ -73,17 +74,17 @@ class NettyResponseAdaptor implements MuResponse {
             headers.set(HeaderNames.TRANSFER_ENCODING, HeaderValues.CHUNKED);
         }
 
-        writeHeaders(response, headers, request);
+        writeHeaders(response, headers);
 
         lastAction = ctx.write(response);
     }
 
-    private static void writeHeaders(HttpResponse response, Headers headers, NettyRequestAdapter request) {
+    private static void writeHeaders(HttpResponse response, Headers headers) {
         response.headers().add(headers.nettyHeaders());
     }
 
     private void throwIfFinished() {
-        if (outputState == OutputState.FULL_SENT || outputState == OutputState.STREAMING_COMPLETE) {
+        if (outputState == OutputState.FULL_SENT || outputState == OutputState.FINISHED) {
             throw new IllegalStateException("Cannot write data as response has already completed");
         }
     }
@@ -111,7 +112,7 @@ class NettyResponseAdaptor implements MuResponse {
         ChannelFuture lastAction;
 
         if (declaredLength > -1 && bytesStreamed > declaredLength) {
-            complete(true);
+            ctx.channel().close();
             throw new IllegalStateException("The declared content length for " + request + " was " + declaredLength + " bytes. " +
                 "The current write is being aborted and the connection is being closed because it would have resulted in " +
                 bytesStreamed + " bytes being sent.");
@@ -151,7 +152,7 @@ class NettyResponseAdaptor implements MuResponse {
             headers.set(HeaderNames.CONTENT_TYPE, TEXT_PLAIN);
         }
 
-        writeHeaders(resp, this.headers, request);
+        writeHeaders(resp, this.headers);
         HttpUtil.setContentLength(resp, bodyLength);
         lastAction = ctx.writeAndFlush(resp).syncUninterruptibly();
     }
@@ -178,7 +179,7 @@ class NettyResponseAdaptor implements MuResponse {
         }
         headers().set(HeaderNames.LOCATION, absoluteUrl.toString());
         HttpResponse resp = new EmptyHttpResponse(httpStatus());
-        writeHeaders(resp, this.headers, request);
+        writeHeaders(resp, this.headers);
         HttpUtil.setContentLength(resp, 0);
         lastAction = ctx.writeAndFlush(resp);
         outputState = OutputState.FULL_SENT;
@@ -199,7 +200,7 @@ class NettyResponseAdaptor implements MuResponse {
     public OutputStream outputStream() {
         if (this.outputStream == null) {
             startStreaming();
-            this.outputStream = new ChunkedHttpOutputStream(this);
+            this.outputStream = new BufferedOutputStream(new ChunkedHttpOutputStream(this), 4096);
         }
         return this.outputStream;
     }
@@ -218,6 +219,9 @@ class NettyResponseAdaptor implements MuResponse {
     }
 
     ChannelFuture complete(boolean forceDisconnect) {
+        if (outputState == OutputState.FINISHED) {
+            return lastAction;
+        }
         boolean shouldDisconnect = forceDisconnect || !request.isKeepAliveRequested();
         boolean isFixedLength = declaredLength >= 0;
         if (outputState == OutputState.NOTHING) {
@@ -232,14 +236,9 @@ class NettyResponseAdaptor implements MuResponse {
         } else if (outputState == OutputState.STREAMING) {
 
             if (!isHead) {
-                if (writer != null) {
-                    writer.close();
-                }
-                if (outputStream != null) {
-                    outputStream.close();
-                }
+                Mutils.closeSilently(writer);
+                Mutils.closeSilently(outputStream);
             }
-            outputState = OutputState.STREAMING_COMPLETE;
             boolean badFixedLength = !isHead && isFixedLength && declaredLength != bytesStreamed && status != 304;
             if (badFixedLength) {
                 shouldDisconnect = true;
@@ -259,6 +258,7 @@ class NettyResponseAdaptor implements MuResponse {
                 lastAction = lastAction.addListener(ChannelFutureListener.CLOSE);
             }
         }
+        this.outputState = OutputState.FINISHED;
         return lastAction;
     }
 

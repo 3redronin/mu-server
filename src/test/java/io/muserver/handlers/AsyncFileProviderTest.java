@@ -39,6 +39,7 @@ public class AsyncFileProviderTest {
     public void canReadFilesFromFileSystem() throws Exception {
 
         server = httpServer()
+            .withGzipEnabled(false)
             .addHandler(fileHandler(BIG_FILE_DIR))
             .start();
 
@@ -53,7 +54,7 @@ public class AsyncFileProviderTest {
 
             try (Response resp = call(request(downloadUri))) {
                 assertThat(resp.code(), is(200));
-                assertThat(resp.headers().get("content-length"), equalTo(String.valueOf(file.length())));
+                assertThat(resp.headers().toString(), resp.headers().get("content-length"), equalTo(String.valueOf(file.length())));
                 assertThat(resp.headers().get("last-modified"), equalTo(Mutils.toHttpDate(new Date(file.lastModified()))));
                 assertThat(isEqual(new FileInputStream(file), resp.body().byteStream()), is(true));
             }
