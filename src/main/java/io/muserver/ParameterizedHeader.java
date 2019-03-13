@@ -130,13 +130,13 @@ public class ParameterizedHeader {
                             buffer.append(c);
                         }
                     } else {
-                        if (isTChar(c)) {
-                            buffer.append(c);
-                        } else if (c == ',') {
+                        if (c == ',') {
                             parameters.put(paramName, buffer.toString());
                             buffer.setLength(0);
                             paramName = null;
                             state = State.PARAM_NAME;
+                        } else if (isTChar(c)) {
+                            buffer.append(c);
                         } else if (isOWS(c)) {
                             // ignore it
                         } else {

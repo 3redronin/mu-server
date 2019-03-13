@@ -17,7 +17,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.Future;
@@ -73,17 +72,18 @@ class NettyRequestAdapter implements MuRequest {
     }
 
     private static URI getUri(Headers h, String scheme, String hostHeader, URI requestUri, URI serverUri) {
-        List<ForwardedHeader> forwarded = h.forwarded();
-        if (forwarded.isEmpty()) {
-            return serverUri;
-        }
-        ForwardedHeader f = forwarded.get(0);
         try {
+            List<ForwardedHeader> forwarded = h.forwarded();
+            if (forwarded.isEmpty()) {
+                return serverUri;
+            }
+            ForwardedHeader f = forwarded.get(0);
+
             String originalScheme = Mutils.coalesce(f.proto(), scheme);
             String host = Mutils.coalesce(f.host(), hostHeader);
             return new URI(originalScheme + "://" + host + requestUri);
-        } catch (URISyntaxException e) {
-            log.warn("Could not create a URI object using Forwarded values " + f
+        } catch (Exception e) {
+            log.warn("Could not create a URI object using header values " + h
                 + " so using local server URI. URL generation (including in redirects) may be incorrect.");
             return serverUri;
         }

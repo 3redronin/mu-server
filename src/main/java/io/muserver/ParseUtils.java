@@ -18,7 +18,8 @@ class ParseUtils {
     static String quoteIfNeeded(String value) {
         boolean needsQuoting = false;
         for (int i = 0; i < value.length(); i++) {
-            if (!isTChar(value.charAt(i))) {
+            char c = value.charAt(i);
+            if (!isTChar(c)) {
                 needsQuoting = true;
                 break;
             }

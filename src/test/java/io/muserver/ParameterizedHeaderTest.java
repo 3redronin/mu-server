@@ -43,8 +43,8 @@ public class ParameterizedHeaderTest {
         String[] bads = { "你/好", "text/html; q", "text/html; q=好", "badly-quoted-boy=I'm \" bad at quoting", "badly-quoted-boy=\"I'm \" bad at quoting\"" };
         for (String bad : bads) {
             try {
-                fromString(bad);
-                fail(bad + " should have thrown an exception");
+                ParameterizedHeader parameterizedHeader = fromString(bad);
+                fail(bad + " should have thrown an exception but was " + parameterizedHeader);
             } catch (Exception e) {
                 assertThat("Wrong exception type for " + bad, e, instanceOf(IllegalArgumentException.class));
             }

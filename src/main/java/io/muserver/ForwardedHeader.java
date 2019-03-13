@@ -145,10 +145,7 @@ public class ForwardedHeader {
                                 buffer.append(c);
                             }
                         } else {
-                            if (ParseUtils.isTChar(c)) {
-                                buffer.append(c);
-                            } else if (c == ';') {
-
+                            if (c == ';') {
                                 String val = buffer.toString();
                                 switch (paramName.toLowerCase()) {
                                     case "by":
@@ -174,11 +171,13 @@ public class ForwardedHeader {
                                 buffer.setLength(0);
                                 paramName = null;
                                 state = State.PARAM_NAME;
-                            } else if (ParseUtils.isOWS(c)) {
-                                // ignore it
                             } else if (c == ',') {
                                 i++;
                                 break headerValueLoop;
+                            } else if (ParseUtils.isVChar(c)) {
+                                buffer.append(c);
+                            } else if (ParseUtils.isOWS(c)) {
+                                // ignore it
                             } else {
                                 throw new IllegalArgumentException("Got character code " + ((int) c) + " (" + c + ") while parsing parameter value");
                             }

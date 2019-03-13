@@ -74,6 +74,27 @@ public class ForwardedHeaderTest {
         assertThat(original, equalTo(recreated));
     }
 
+    @Test
+    public void canRoundTripWithQuotedStrings() {
+        ForwardedHeader fwd = fwd(null, null, "example.org:9090", null);
+        String asString = fwd.toString();
+        assertThat(asString, equalTo("host=\"example.org:9090\""));
+        List<ForwardedHeader> forwardedHeaders = ForwardedHeader.fromString(asString);
+        assertThat(forwardedHeaders, contains(fwd));
+        assertThat(forwardedHeaders.get(0).host(), equalTo("example.org:9090"));
+    }
+
+    @Test
+    public void canHaveColonsInHostNames() {
+        List<ForwardedHeader> forwardedHeaders = ForwardedHeader.fromString("for=10.10.0.10;proto=https;host=host.example.org:8000;by=127.0.0.1");
+        assertThat(forwardedHeaders, hasSize(1));
+        ForwardedHeader fwd = forwardedHeaders.get(0);
+        assertThat(fwd.forValue(), is("10.10.0.10"));
+        assertThat(fwd.proto(), is("https"));
+        assertThat(fwd.host(), is("host.example.org:8000"));
+        assertThat(fwd.by(), is("127.0.0.1"));
+    }
+
     static ForwardedHeader fwd(String by, String forValue, String host, String proto) {
         return new ForwardedHeader(by, forValue, host, proto, null);
     }

@@ -247,6 +247,26 @@ public class HeadersTest {
         }
     }
 
+    @Test
+    public void forwardedHostsCanHaveColons() throws IOException {
+        server = httpServer()
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.status(200);
+                PrintWriter writer = response.writer();
+                writer.print(ForwardedHeader.toString(request.headers().forwarded()));
+                writer.print(" - " + request.uri());
+            })
+            .start();
+        try (Response resp = call(request(server.uri())
+            .header(HeaderNames.X_FORWARDED_FOR.toString(), "10.10.0.10")
+            .header(HeaderNames.X_FORWARDED_PROTO.toString(), "https")
+            .header(HeaderNames.X_FORWARDED_HOST.toString(), "host.example.org:8000")
+            .header(HeaderNames.FORWARDED.toString(), "for=10.10.0.10;proto=https;host=host.example.org:8000;by=127.0.0.1")
+        )) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), equalTo("by=127.0.0.1;for=10.10.0.10;host=\"host.example.org:8000\";proto=https - https://host.example.org:8000/"));
+        }
+    }
 
     @Test
     public void aRquestWithErrorXForwardHostHeaderDontThrowException() throws IOException {
