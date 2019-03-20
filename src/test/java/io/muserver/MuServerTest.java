@@ -88,13 +88,14 @@ public class MuServerTest {
             .withHttpPort(12809)
             .addHandler((request, response) -> {
                 handlersHit.add("Logger");
-                request.state(randomText);
+                request.attribute("random", randomText);
                 return false;
             })
             .addHandler(Method.GET, "/blah", (request, response, pathParams) -> {
                 handlersHit.add("BlahHandler");
                 response.status(202);
-                response.write("This is a test and this is the state: " + request.state());
+                response.write("This is a test and this is the state: " + request.attribute("random")
+                + " and this does not exist: " + request.attribute("blah"));
             })
             .addHandler((request, response) -> {
                 handlersHit.add("LastHandler");
@@ -104,7 +105,8 @@ public class MuServerTest {
 
         try (Response resp = call(request().url("http://localhost:12809/blah"))) {
             assertThat(resp.code(), is(202));
-            assertThat(resp.body().string(), equalTo("This is a test and this is the state: " + randomText));
+            assertThat(resp.body().string(), equalTo("This is a test and this is the state: "
+                + randomText + " and this does not exist: null"));
             assertThat(handlersHit, equalTo(asList("Logger", "BlahHandler")));
         }
     }

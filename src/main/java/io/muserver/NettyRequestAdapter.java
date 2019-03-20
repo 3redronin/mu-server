@@ -46,7 +46,7 @@ class NettyRequestAdapter implements MuRequest {
     private String relativePath;
     private HttpPostMultipartRequestDecoder multipartRequestDecoder;
     private HashMap<String, List<UploadedFile>> uploads;
-    private Object state;
+    private Map<String, Object> attributes;
     private volatile AsyncHandleImpl asyncHandle;
 
     NettyRequestAdapter(Channel channel, HttpRequest request, AtomicReference<MuServer> serverRef, Method method) {
@@ -233,12 +233,30 @@ class NettyRequestAdapter implements MuRequest {
 
     @Override
     public Object state() {
-        return state;
+        return attribute("_value_");
     }
 
     @Override
     public void state(Object value) {
-        this.state = value;
+        attribute("_value_", value);
+    }
+
+    @Override
+    public Object attribute(String key) {
+        Mutils.notNull("key", key);
+        if (attributes == null) {
+            return null;
+        }
+        return attributes.get(key);
+    }
+
+    @Override
+    public void attribute(String key, Object value) {
+        Mutils.notNull("key", key);
+        if (attributes == null) {
+            attributes = new HashMap<>();
+        }
+        attributes.put(key, value);
     }
 
     @Override

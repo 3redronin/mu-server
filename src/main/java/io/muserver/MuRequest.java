@@ -205,7 +205,9 @@ public interface MuRequest {
      * <p>Gets request-specific state that was added with {@link #state(Object)}.</p>
      * <p>An example is getting user information in a view handler that was previously set by an authentication handler.</p>
      * @return An object previously set by {@link #state(Object)}, or <code>null</code> if it was never set.
+     * @deprecated Use {@link #attribute(String)} instead
      */
+    @Deprecated
     Object state();
 
     /**
@@ -213,8 +215,27 @@ public interface MuRequest {
      * <p>An example use case is if you have a authentication handler that uses this method to set user information on
      * the request, and then a subsequent handler calls {@link #state()} to get the user info.</p>
      * @param value Any object to store as state.
+     * @deprecated Use {@link #attribute(String, Object)} instead with a key name
      */
+    @Deprecated
     void state(Object value);
+
+    /**
+     * <p>Gets request-specific state that was added with {@link #attribute(String, Object)}.</p>
+     * <p>An example is getting user information in a view handler that was previously set by an authentication handler.</p>
+     * @param key The key the object is associated with.
+     * @return An object previously set by {@link #attribute(String, Object)}, or <code>null</code> if it was never set.
+     */
+    Object attribute(String key);
+
+    /**
+     * <p>Sets the given object as state associated with the given key that is bound to this request which any subsequent handlers can access.</p>
+     * <p>An example use case is if you have a authentication handler that uses this method to set user information on
+     * the request, and then a subsequent handler calls {@link #attribute(String)} to get the user info.</p>
+     * @param key The key to associate the value with.
+     * @param value Any object to store as state.
+     */
+    void attribute(String key, Object value);
 
     /**
      * <p>Specifies that you want to handle this response asynchronously.</p>
