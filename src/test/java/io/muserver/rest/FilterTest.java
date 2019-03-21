@@ -205,7 +205,7 @@ public class FilterTest {
             ).start();
         try (Response resp = call(request().url(server.uri().resolve("/something").toString()))) {
             assertThat(resp.code(), is(400));
-            assertThat(resp.body().string(), is("<h1>400 Bad Request</h1>Bad!!!"));
+            assertThat(resp.body().string(), is("<h1>400 Bad Request</h1><p>Bad!!!</p>"));
         }
     }
 

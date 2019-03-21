@@ -4,7 +4,10 @@ import io.muserver.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.ws.rs.*;
+import javax.ws.rs.BadRequestException;
+import javax.ws.rs.NotAllowedException;
+import javax.ws.rs.ServerErrorException;
+import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.*;
 import javax.ws.rs.ext.MessageBodyReader;
 import javax.ws.rs.ext.MessageBodyWriter;
@@ -150,7 +153,7 @@ public class RestHandler implements MuHandler {
                     sendResponse(0, requestContext, muResponse, acceptHeaders, produces, directlyProduces, result);
                 }
             }
-        } catch (NotFoundException e) {
+        } catch (NotMatchedException e) {
             return false;
         } catch (Exception ex) {
             if (ex instanceof WebApplicationException) {
@@ -251,7 +254,7 @@ public class RestHandler implements MuHandler {
                         log.info("Sending a 500 to the client with ErrorID=" + errorID + " for " + requestContext.muRequest, e);
                         toSend.entity(entity + "<p>ErrorID=" + errorID + "</p>");
                     } else {
-                        toSend.entity(entity + Mutils.htmlEncode(e.getMessage()));
+                        toSend.entity(entity + "<p>" + Mutils.htmlEncode(e.getMessage()) + "</p>");
                     }
                 }
                 sendResponse(nestingLevel + 1, requestContext, muResponse, acceptHeaders, produces, directlyProduces, toSend.build());

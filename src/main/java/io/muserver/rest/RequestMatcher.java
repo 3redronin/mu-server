@@ -4,7 +4,6 @@ import io.muserver.Method;
 
 import javax.ws.rs.NotAcceptableException;
 import javax.ws.rs.NotAllowedException;
-import javax.ws.rs.NotFoundException;
 import javax.ws.rs.NotSupportedException;
 import javax.ws.rs.core.MediaType;
 import java.net.URI;
@@ -38,18 +37,18 @@ class RequestMatcher {
         this.roots = roots;
     }
 
-    public MatchedMethod findResourceMethod(Method httpMethod, String path, List<MediaType> acceptHeaders, String requestBodyContentType) throws NotFoundException, NotAllowedException, NotAcceptableException, NotSupportedException {
+    public MatchedMethod findResourceMethod(Method httpMethod, String path, List<MediaType> acceptHeaders, String requestBodyContentType) throws NotAllowedException, NotAcceptableException, NotSupportedException, NotMatchedException {
         Set<MatchedMethod> candidateMethods = getMatchedMethodsForPath(path);
         return stepThreeIdentifyTheMethodThatWillHandleTheRequest(httpMethod, candidateMethods, requestBodyContentType, acceptHeaders);
     }
 
-    public Set<MatchedMethod> getMatchedMethodsForPath(String path) {
+    public Set<MatchedMethod> getMatchedMethodsForPath(String path) throws NotMatchedException {
         StepOneOutput stepOneOutput = stepOneIdentifyASetOfCandidateRootResourceClassesMatchingTheRequest(path);
         URI methodURI = stepOneOutput.unmatchedGroup == null ? null : URI.create(UriPattern.trimSlashes(stepOneOutput.unmatchedGroup));
         return stepTwoObtainASetOfCandidateResourceMethodsForTheRequest(methodURI, stepOneOutput.candidates);
     }
 
-    StepOneOutput stepOneIdentifyASetOfCandidateRootResourceClassesMatchingTheRequest(String uri) throws NotFoundException {
+    StepOneOutput stepOneIdentifyASetOfCandidateRootResourceClassesMatchingTheRequest(String uri) throws NotMatchedException {
         List<MatchedClass> candidates = roots.stream()
             .map(rc -> new MatchedClass(rc, rc.pathPattern.matcher(uri)))
             .filter(rc -> {
@@ -75,7 +74,7 @@ class RequestMatcher {
             })
             .collect(toList());
         if (candidates.isEmpty()) {
-            throw new NotFoundException();
+            throw new NotMatchedException();
         }
         // Set Rmatch to be the first member of E and set U to be the value of the final capturing group of Rmatch when matched against U
         UriPattern rMatch = candidates.get(0).resourceClass.pathPattern;
@@ -89,7 +88,7 @@ class RequestMatcher {
         return new StepOneOutput(u, c0);
     }
 
-    private Set<MatchedMethod> stepTwoObtainASetOfCandidateResourceMethodsForTheRequest(URI relativeUri, List<MatchedClass> candidateClasses) {
+    private Set<MatchedMethod> stepTwoObtainASetOfCandidateResourceMethodsForTheRequest(URI relativeUri, List<MatchedClass> candidateClasses) throws NotMatchedException {
         if (relativeUri == null) {
             // handle section 3.7.2 - 2(a)
             Set<MatchedMethod> candidates = new HashSet<>();
@@ -144,7 +143,7 @@ class RequestMatcher {
         });
 
         if (candidates.isEmpty()) {
-            throw new NotFoundException();
+            throw new NotMatchedException();
         }
 
         UriPattern matcher = candidates.get(0).resourceMethod.pathPattern;
@@ -152,7 +151,7 @@ class RequestMatcher {
         if (!m.isEmpty()) {
             return m;
         }
-        throw new NotFoundException();
+        throw new NotMatchedException();
     }
 
     static class MatchedClass {

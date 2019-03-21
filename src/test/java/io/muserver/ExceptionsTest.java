@@ -25,8 +25,8 @@ public class ExceptionsTest {
         try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
             assertThat(resp.code(), is(404));
             String body = resp.body().string();
-            assertThat(body, containsString("404 Not Found"));
-            assertThat(body, containsString("I could not find the thing"));
+            assertThat(body, containsString("<h1>404 Not Found</h1>"));
+            assertThat(body, containsString("<p>I could not find the thing</p>"));
         }
     }
     @Test
@@ -37,8 +37,8 @@ public class ExceptionsTest {
         try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
             assertThat(resp.code(), is(404));
             String body = resp.body().string();
-            assertThat(body, containsString("404 Not Found"));
-            assertThat(body, containsString("HTTP 404 Not Found"));
+            assertThat(body, containsString("<h1>404 Not Found</h1>"));
+            assertThat(body, containsString("<p>This page is not available. Sorry about that.</p>"));
         }
     }
 

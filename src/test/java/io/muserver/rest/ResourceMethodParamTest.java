@@ -260,7 +260,7 @@ public class ResourceMethodParamTest {
         }
         try (Response resp = call(request().url(server.uri().resolve("/samples?breedOne=BAD_DOG").toString()))) {
             assertThat(resp.code(), is(400));
-            assertThat(resp.body().string(), startsWith("<h1>400 Bad Request</h1>Could not convert String value &quot;BAD_DOG&quot; to a"));
+            assertThat(resp.body().string(), startsWith("<h1>400 Bad Request</h1><p>Could not convert String value &quot;BAD_DOG&quot; to a"));
         }
     }
 

@@ -1,8 +1,6 @@
 package io.muserver.rest;
 
 import io.muserver.Method;
-import io.muserver.MuServer;
-import io.muserver.MuServerBuilder;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -31,19 +29,19 @@ public class RequestMatcherTest {
     private final ResourceClass resourceAnother = ResourceClass.fromObject(new ResourceAnother(), paramConverterProviders);
     private final RequestMatcher rm = new RequestMatcher(set(resourceOne, resourceOneV2, resourceSomething, resourceAnother, resourceSomethingYeah));
 
-    @Test(expected = NotFoundException.class)
-    public void throwsIfNoValidCandidates() {
+    @Test(expected = NotMatchedException.class)
+    public void throwsIfNoValidCandidates() throws NotMatchedException {
         assertThat(stepOneMatches(URI.create("api/three"), rm), empty());
     }
 
     @Test
-    public void findsTheMostSpecificInstanceAvailable() {
+    public void findsTheMostSpecificInstanceAvailable() throws NotMatchedException {
         assertThat(stepOneMatches(URI.create("api/resources/one/2"), rm),
             contains(resourceOneV2));
     }
 
     @Test
-    public void ifMultipleMatchesThenTheLongestPathRegexWins() {
+    public void ifMultipleMatchesThenTheLongestPathRegexWins() throws NotMatchedException {
         URI uri = URI.create("api/widgets/something-else-yeah");
         assertThat(resourceSomething.matches(uri), is(false));
         assertThat(resourceSomethingYeah.matches(uri), is(true));
@@ -52,19 +50,19 @@ public class RequestMatcherTest {
             contains(resourceSomethingYeah));
     }
 
-    private List<ResourceClass> stepOneMatches(URI uri, RequestMatcher rm1) {
+    private List<ResourceClass> stepOneMatches(URI uri, RequestMatcher rm1) throws NotMatchedException {
         return rm1.stepOneIdentifyASetOfCandidateRootResourceClassesMatchingTheRequest(uri.toString()).candidates
             .stream().map(rm -> rm.resourceClass).collect(toList());
     }
 
-    @Test(expected = NotFoundException.class)
-    public void ifJustThePrefixMatchesThenItDoesNotMatchIfThereAreNoSubResourceMethods() {
+    @Test(expected = NotMatchedException.class)
+    public void ifJustThePrefixMatchesThenItDoesNotMatchIfThereAreNoSubResourceMethods() throws NotMatchedException {
         rm.stepOneIdentifyASetOfCandidateRootResourceClassesMatchingTheRequest("/api/widgets/something-else-yeah/uhuh");
     }
 
 
     @Test
-    public void ifMultipleMatchesWithEqualPathRegexLengthThenMostNamedGroupsWins() {
+    public void ifMultipleMatchesWithEqualPathRegexLengthThenMostNamedGroupsWins() throws NotMatchedException {
 
         @Path("/api/widgets/b")
         class ResourceSomething {
@@ -86,7 +84,7 @@ public class RequestMatcherTest {
     }
 
     @Test
-    public void ifMultipleMatchesWithEqualPathRegexLengthAndEqualNamedGroupsThenOneWithMostNonDefaultGroupsWins() {
+    public void ifMultipleMatchesWithEqualPathRegexLengthAndEqualNamedGroupsThenOneWithMostNonDefaultGroupsWins() throws NotMatchedException {
         @Path("/api/people/{name}/belts/{id}")
         class PeopleBelts {
         }
@@ -109,7 +107,7 @@ public class RequestMatcherTest {
     }
 
     @Test
-    public void multipleMatchesOnlyOccurWhenURLsAreTheSameExceptForVariableNames() {
+    public void multipleMatchesOnlyOccurWhenURLsAreTheSameExceptForVariableNames() throws NotMatchedException {
         @Path("/api/people/{name}/belts/{another:[A-Z]+}")
         class PeopleBelts {
         }
@@ -152,7 +150,7 @@ public class RequestMatcherTest {
     }
 
     @Test
-    public void methodsWithOnlyAPathParamWork() {
+    public void methodsWithOnlyAPathParamWork() throws NotMatchedException {
 
         @Path("api/fruits")
         class Fruit {
@@ -179,7 +177,7 @@ public class RequestMatcherTest {
     }
 
     @Test
-    public void pathsOnClassesAreMatchedFirst() {
+    public void pathsOnClassesAreMatchedFirst() throws NotMatchedException {
         // test example taken from https://bill.burkecentral.com/2013/05/29/the-poor-jax-rs-request-dispatching-algorithm/
 
         @Path("/foo")
@@ -208,7 +206,7 @@ public class RequestMatcherTest {
     }
 
     @Test
-    public void matchedMethodsMergePathParamsFromResourceClass() {
+    public void matchedMethodsMergePathParamsFromResourceClass() throws NotMatchedException {
         @Path("api/{fruitFamily}")
         class Fruit {
             @GET
@@ -231,7 +229,7 @@ public class RequestMatcherTest {
         String get();
     }
     @Test
-    public void paramsCanBeDefinedOnTheInterface() {
+    public void paramsCanBeDefinedOnTheInterface() throws NotMatchedException {
         class FruitImpl implements FruitInterface {
             public String get() { return ""; }
         }
@@ -244,7 +242,7 @@ public class RequestMatcherTest {
     }
 
     @Test
-    public void acceptHeadersAreUsedForMethodMatching() {
+    public void acceptHeadersAreUsedForMethodMatching() throws NotMatchedException {
         @Path("pictures")
         class PictureThat {
 
@@ -271,7 +269,7 @@ public class RequestMatcherTest {
     }
 
     @Test
-    public void defaultAcceptHeadersCanBeSpecifiedAtTheClassLevel() {
+    public void defaultAcceptHeadersCanBeSpecifiedAtTheClassLevel() throws NotMatchedException {
         @Path("pictures")
         @Produces("application/json")
         class PictureThat {
@@ -298,7 +296,7 @@ public class RequestMatcherTest {
     }
 
     @Test
-    public void consumesCanBeUsedToMatchMethods() {
+    public void consumesCanBeUsedToMatchMethods() throws NotMatchedException {
         @Path("pictures")
         class PictureThat {
 
@@ -323,7 +321,7 @@ public class RequestMatcherTest {
         assertNotAcceptable(rm, asList(MediaType.valueOf("text/plain")), "application/json");
     }
 
-    private static String nameOf(RequestMatcher rm, List<MediaType> acceptHeaders, String requestBodyContentType) {
+    private static String nameOf(RequestMatcher rm, List<MediaType> acceptHeaders, String requestBodyContentType) throws NotMatchedException {
         return rm.findResourceMethod(Method.GET, "pictures", acceptHeaders, requestBodyContentType).resourceMethod.methodHandle.getName();
     }
 

@@ -1,5 +1,6 @@
 package io.muserver;
 
+import io.muserver.rest.MuRuntimeDelegate;
 import io.netty.util.concurrent.DefaultThreadFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -9,12 +10,21 @@ import javax.ws.rs.NotFoundException;
 import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.Response;
 import java.nio.ByteBuffer;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 class SyncHandlerAdapter implements AsyncMuHandler {
+
+    private static final Map<String, String> exceptionMessageMap = new HashMap<>();
+    static {
+        MuRuntimeDelegate.ensureSet();
+        exceptionMessageMap.put(new NotFoundException().getMessage(), "This page is not available. Sorry about that.");
+    }
+
     private static final Logger log = LoggerFactory.getLogger(SyncHandlerAdapter.class);
     private final List<MuHandler> muHandlers;
     private static final ExecutorService executor = Executors.newCachedThreadPool(new DefaultThreadFactory("muhandler"));
@@ -50,7 +60,7 @@ class SyncHandlerAdapter implements AsyncMuHandler {
                     }
                 }
                 if (!handled) {
-                    throw new NotFoundException("This page is not available. Sorry about that.");
+                    throw new NotFoundException();
                 }
 
 
@@ -69,6 +79,7 @@ class SyncHandlerAdapter implements AsyncMuHandler {
         });
         return true;
     }
+
 
     static boolean dealWithUnhandledException(MuRequest request, MuResponse response, Throwable ex) {
         boolean forceDisconnect = true;
@@ -96,8 +107,10 @@ class SyncHandlerAdapter implements AsyncMuHandler {
                 response.headers().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
             }
             response.contentType(ContentTypes.TEXT_HTML);
+            String message = wae.getMessage();
+            message = exceptionMessageMap.getOrDefault(message, message);
             response.write("<h1>" + exResp.getStatus() + " " + exResp.getStatusInfo().getReasonPhrase() + "</h1><p>" +
-                Mutils.htmlEncode(wae.getMessage()) + "</p>");
+                Mutils.htmlEncode(message) + "</p>");
         }
         return forceDisconnect;
     }

@@ -5,13 +5,11 @@ import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
 
-import javax.ws.rs.GET;
-import javax.ws.rs.NotFoundException;
-import javax.ws.rs.POST;
-import javax.ws.rs.Path;
+import javax.ws.rs.*;
 
 import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
+import static org.hamcrest.CoreMatchers.allOf;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
@@ -26,14 +24,29 @@ public class ExceptionsTest {
         @Path("samples")
         class Sample {
             @GET
+            @Path("/custom-message")
             public String get() {
-                throw new NotFoundException("This is ignored");
+                throw new NotFoundException("This is a custom error message");
+            }
+
+            @GET
+            @Path("/default-message")
+            public String getDefault() {
+                throw new NotFoundException();
             }
         }
         this.server = httpsServer().addHandler(restHandler(new Sample())).start();
-        try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
+        try (Response resp = call(request().url(server.uri().resolve("/samples/custom-message").toString()))) {
             assertThat(resp.code(), is(404));
-            assertThat(resp.body().string(), containsString("404 Not Found"));
+            assertThat(resp.body().string(), allOf(
+                containsString("<h1>404 Not Found</h1>"),
+                containsString("<p>This is a custom error message</p>")));
+        }
+        try (Response resp = call(request().url(server.uri().resolve("/samples/default-message").toString()))) {
+            assertThat(resp.code(), is(404));
+            assertThat(resp.body().string(), allOf(
+                containsString("<h1>404 Not Found</h1>"),
+                containsString("<p>HTTP 404 Not Found</p>")));
         }
     }
 
@@ -69,6 +82,38 @@ public class ExceptionsTest {
             assertThat(resp.body().string(), containsString("404 Not Found"));
         }
     }
+
+    @Test
+    public void clientExceptionsAre400s() throws Exception {
+        @Path("samples")
+        class Sample {
+            @GET
+            @Path("/custom-message")
+            public String get() {
+                throw new ClientErrorException("This is custom client error", 400);
+            }
+
+            @GET
+            @Path("/default-message")
+            public String getDefault() {
+                throw new ClientErrorException(400);
+            }
+        }
+        this.server = httpsServer().addHandler(restHandler(new Sample())).start();
+        try (Response resp = call(request().url(server.uri().resolve("/samples/custom-message").toString()))) {
+            assertThat(resp.code(), is(400));
+            assertThat(resp.body().string(), allOf(
+                containsString("<h1>400 Bad Request</h1>"),
+                containsString("<p>This is custom client error</p>")));
+        }
+        try (Response resp = call(request().url(server.uri().resolve("/samples/default-message").toString()))) {
+            assertThat(resp.code(), is(400));
+            assertThat(resp.body().string(), allOf(
+                containsString("<h1>400 Bad Request</h1>"),
+                containsString("<p>HTTP 400 Bad Request</p>")));
+        }
+    }
+
 
     @After
     public void stop() {

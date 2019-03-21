@@ -140,7 +140,7 @@ public class BasicAuthTest {
             .header(HttpHeaders.AUTHORIZATION, "Basic " + base64Encode("Frank:password123"))
         )) {
             assertThat(resp.code(), is(403));
-            assertThat(resp.body().string(), is("<h1>403 Forbidden</h1>This requires an Admin role"));
+            assertThat(resp.body().string(), is("<h1>403 Forbidden</h1><p>This requires an Admin role</p>"));
         }
     }
 
