@@ -12,6 +12,7 @@ import javax.ws.rs.PathParam;
 import java.io.IOException;
 
 import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
@@ -35,6 +36,15 @@ public class RestHandlerTest {
         try (okhttp3.Response resp = call(request().url(server.uri().resolve("/api/fruit%20bits/orange").toString()))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.body().string(), is("{ \"name\": \"orange\" }"));
+        }
+    }
+
+    @Test
+    public void voidMethodsReturn204() {
+        try (okhttp3.Response resp = call(request(server.uri().resolve("/api/fruit%20bits/nothing")))) {
+            assertThat(resp.code(), is(204));
+            assertThat(resp.header("Content-Length"), is(nullValue()));
+            assertThat(resp.body().contentLength(), is(0L));
         }
     }
 
@@ -63,6 +73,11 @@ public class RestHandlerTest {
             }
             return "not found";
         }
+
+        @GET
+        @Path("/nothing")
+        public void nothing() {}
+
     }
 
     @After
