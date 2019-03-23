@@ -48,6 +48,14 @@ public class RestHandlerTest {
         }
     }
 
+    @Test
+    public void nullValuesReturn204() {
+        try (okhttp3.Response resp = call(request(server.uri().resolve("/api/fruit%20bits/nothing2")))) {
+            assertThat(resp.code(), is(204));
+            assertThat(resp.header("Content-Length"), is(nullValue()));
+            assertThat(resp.body().contentLength(), is(0L));
+        }
+    }
 
     @Test(expected = IllegalArgumentException.class)
     public void throwsIfObjectDoesNotHavePathAnnotation() {
@@ -77,6 +85,12 @@ public class RestHandlerTest {
         @GET
         @Path("/nothing")
         public void nothing() {}
+
+        @GET
+        @Path("/nothing2")
+        public String nothing2() {
+            return null;
+        }
 
     }
 
