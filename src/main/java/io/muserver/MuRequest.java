@@ -15,7 +15,7 @@ import java.util.Set;
  * <p>You can read the body as an input stream with {@link #inputStream()} or if you expect a string call {@link #readBodyAsString()}.
  * If form values were posted as the request, see {@link #form()}</p>
  * <p>Getting the value of a cookie by name is done by calling {@link #cookie(String)}</p>
- * <p>If you need to share request-specific data between handlers, use {@link #state(Object)} to set and {@link #state()} to get.</p>
+ * <p>If you need to share request-specific data between handlers, use {@link #attribute(String, Object)} to set and {@link #attribute(String)} to get.</p>
  */
 public interface MuRequest {
 
