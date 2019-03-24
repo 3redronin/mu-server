@@ -41,7 +41,10 @@ public class CookieTest {
     public void canSetThemFromTheServer() throws IOException {
         server = httpServer()
             .addHandler((request, response) -> {
-                Cookie cookie = Cookie.secureCookie("Session", "Some value");
+                Cookie cookie = CookieBuilder.newSecureCookie()
+                    .withName("Session")
+                    .withValue("Some-value")
+                    .build();
                 response.addCookie(cookie);
                 return true;
             }).start();
@@ -52,7 +55,7 @@ public class CookieTest {
         assertThat(cookies, hasSize(1));
         okhttp3.Cookie actual = cookies.get(0);
         assertThat(actual.name(), equalTo("Session"));
-        assertThat(actual.value(), equalTo("Some value"));
+        assertThat(actual.value(), equalTo("Some-value"));
         assertThat(actual.domain(), equalTo("localhost"));
         assertThat(actual.hostOnly(), equalTo(true));
         assertThat(actual.persistent(), equalTo(false));
@@ -97,8 +100,11 @@ public class CookieTest {
         AtomicReference<Optional<String>> nonExistentCookieLookup = new AtomicReference<>();
         server = httpServer()
             .addHandler(Method.GET, "/set", (request, response, pathParams) -> {
-                Cookie cookie = Cookie.secureCookie("ASession", "SomeValue");
-                Cookie cookie2 = new Cookie("Another", "Blah");
+                Cookie cookie = CookieBuilder.newSecureCookie()
+                    .withName("ASession")
+                    .withValue("SomeValue")
+                    .build();
+                Cookie cookie2 = CookieBuilder.newCookie().withName("Another").withValue("Blah").build();
                 response.addCookie(cookie);
                 response.addCookie(cookie2);
             })
@@ -124,10 +130,13 @@ public class CookieTest {
     }
 
     @Test
-    public void cookieValuesAreNotUrlEncoded() throws IOException {
+    public void cookieValuesCanBeUrlEncoded() throws IOException {
         server = httpServer()
             .addHandler((request, response) -> {
-                response.addCookie(Cookie.secureCookie("A thing", "Some value & another thing=umm"));
+                response.addCookie(CookieBuilder.newSecureCookie()
+                    .withName("A-thing")
+                    .withUrlEncodedValue("Some value & another thing=umm")
+                    .build());
                 return true;
             }).start();
 
@@ -136,9 +145,8 @@ public class CookieTest {
 
         assertThat(cookies, hasSize(1));
         okhttp3.Cookie actual = cookies.get(0);
-        assertThat(actual.name(), equalTo("A thing"));
-        assertThat(actual.value(), equalTo("Some value & another thing=umm"));
-
+        assertThat(actual.name(), equalTo("A-thing"));
+        assertThat(actual.value(), equalTo("Some%20value%20%26%20another%20thing%3Dumm"));
     }
 
     private List<okhttp3.Cookie> getCookies() {

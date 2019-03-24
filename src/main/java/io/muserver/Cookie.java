@@ -10,20 +10,31 @@ import java.util.stream.Collectors;
  * A cookie
  */
 public class Cookie {
+
     final DefaultCookie nettyCookie;
 
     /**
-     * Creates a new cookie with secure settings such as HttpOnly and Secure set to true.
+     * <p>Creates a new cookie with secure settings such as HttpOnly and Secure set to true.</p>
      * @param name The name of the cookie
      * @param value The value of the cookie
      * @return Returns a new cookie that can be sent to the response
+     * @deprecated Please use {@link CookieBuilder#newSecureCookie()} instead
      */
+    @Deprecated
     public static Cookie secureCookie(String name, String value) {
-        Cookie cookie = new Cookie(name, value);
-        cookie.setHttpOnly(true);
-        cookie.setSecure(true);
-        return cookie;
+        return CookieBuilder.newSecureCookie()
+            .withName(name)
+            .withValue(value)
+            .build();
     }
+
+    /**
+     * <p>Creates a new cookie with secure settings such as HttpOnly and Secure set to true.</p>
+     * @param name The name of the cookie
+     * @param value The value of the cookie
+     * @deprecated Please use {@link CookieBuilder#newCookie()} instead
+     */
+    @Deprecated
     public Cookie(String name, String value) {
         nettyCookie = new DefaultCookie(name, value);
     }
@@ -36,6 +47,12 @@ public class Cookie {
         return nettyCookie.value();
     }
 
+    /**
+     * Sets the value of the cookie.
+     * @param value The value to set.
+     * @deprecated Please create cookies with the {@link CookieBuilder}
+     */
+    @Deprecated
     public void setValue(String value) {
         nettyCookie.setValue(value);
     }
@@ -44,6 +61,12 @@ public class Cookie {
         return nettyCookie.domain();
     }
 
+    /**
+     *
+     * @param domain domain
+     * @deprecated Please create cookies with the {@link CookieBuilder}
+     */
+    @Deprecated
     public void setDomain(String domain) {
         nettyCookie.setDomain(domain);
     }
@@ -52,6 +75,12 @@ public class Cookie {
         return nettyCookie.path();
     }
 
+    /**
+     *
+     * @param path path
+     * @deprecated Please create cookies with the {@link CookieBuilder}
+     */
+    @Deprecated
     public void setPath(String path) {
         nettyCookie.setPath(path);
     }
@@ -60,22 +89,43 @@ public class Cookie {
         return nettyCookie.maxAge();
     }
 
-    public void setMaxAge(long maxAge) {
-        nettyCookie.setMaxAge(maxAge);
+    /**
+     *
+     * @param maxAgeInSeconds max
+     * @deprecated Please create cookies with the {@link CookieBuilder}
+     */
+    @Deprecated
+    public void setMaxAge(long maxAgeInSeconds) {
+        nettyCookie.setMaxAge(maxAgeInSeconds);
     }
 
     public boolean isSecure() {
         return nettyCookie.isSecure();
     }
 
+    /**
+     *
+     * @param secure secure
+     * @deprecated Please create cookies with the {@link CookieBuilder}
+     */
+    @Deprecated
     public void setSecure(boolean secure) {
         nettyCookie.setSecure(secure);
     }
 
+    /**
+     * @return Returns the HTTPOnly value
+     */
     public boolean isHttpOnly() {
         return nettyCookie.isHttpOnly();
     }
 
+    /**
+     *
+     * @param httpOnly httpOnly
+     * @deprecated Please create cookies with the {@link CookieBuilder}
+     */
+    @Deprecated
     public void setHttpOnly(boolean httpOnly) {
         nettyCookie.setHttpOnly(httpOnly);
     }
