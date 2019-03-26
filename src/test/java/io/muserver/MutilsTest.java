@@ -2,6 +2,7 @@ package io.muserver;
 
 import org.junit.Test;
 
+import java.nio.ByteBuffer;
 import java.time.format.DateTimeParseException;
 import java.util.Date;
 
@@ -48,6 +49,23 @@ public class MutilsTest {
     @Test(expected = DateTimeParseException.class)
     public void throwsIfBadFormat() {
         Mutils.fromHttpDate("28Jul 2018 13:50:55");
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void toByteBufferThrowsIfTextNull() {
+        Mutils.toByteBuffer(null);
+    }
+
+    @Test
+    public void toByteBufferWithEmptyStringWorks() {
+        ByteBuffer bb = Mutils.toByteBuffer("");
+        assertThat(bb.remaining(), is(0));
+    }
+
+    @Test
+    public void toByteBufferWithNonEmptyStringWorks() {
+        ByteBuffer bb = Mutils.toByteBuffer("Hello world");
+        assertThat(bb.remaining(), is(11));
     }
 
 }

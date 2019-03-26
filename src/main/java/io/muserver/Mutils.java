@@ -3,6 +3,7 @@ package io.muserver;
 import java.io.*;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
+import java.nio.ByteBuffer;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -10,6 +11,8 @@ import java.time.format.DateTimeParseException;
 import java.util.Date;
 import java.util.Objects;
 import java.util.stream.Stream;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 public class Mutils {
 
@@ -238,5 +241,19 @@ public class Mutils {
             } catch (Exception ignored) {
             }
         }
+    }
+
+    /**
+     * Converts a string to a ByteBuffer with UTF-8 encoding.
+     * @param text Some text to convert
+     * @return A ByteBuffer containing the text as UTF-8 encoded bytes
+     * @throws IllegalArgumentException if text is null
+     */
+    public static ByteBuffer toByteBuffer(String text) {
+        notNull("text", text);
+        if (text.isEmpty()) {
+            return ByteBuffer.allocate(0);
+        }
+        return ByteBuffer.wrap(text.getBytes(UTF_8));
     }
 }

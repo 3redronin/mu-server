@@ -9,7 +9,6 @@ import org.junit.Test;
 import java.io.IOException;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
@@ -43,7 +42,7 @@ public class AsyncTest {
                 changeListener.addListener(new ChangeListener() {
                     @Override
                     public void onData(String data) {
-                        ctx.write(ByteBuffer.wrap((data + "\n").getBytes(StandardCharsets.UTF_8)));
+                        ctx.write(Mutils.toByteBuffer(data + "\n"));
                     }
 
                     @Override
@@ -88,7 +87,7 @@ public class AsyncTest {
                 changeListener.addListener(new ChangeListener() {
                     public void onData(String data) {
                         try {
-                            ByteBuffer text = ByteBuffer.wrap((data + "\n").getBytes(StandardCharsets.UTF_8));
+                            ByteBuffer text = Mutils.toByteBuffer(data + "\n");
                             ctx.write(text, new WriteCallback() {
                                 @Override
                                 public void onFailure(Throwable reason) throws Exception {

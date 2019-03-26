@@ -1,11 +1,8 @@
 package io.muserver;
 
-import java.nio.ByteBuffer;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.TimeUnit;
-
-import static java.nio.charset.StandardCharsets.UTF_8;
 
 /**
  * <p>An interface for sending Server-Sent Events (SSE) to a client with async callbacks.</p>
@@ -141,7 +138,7 @@ class AsyncSsePublisherImpl implements AsyncSsePublisher {
 
     private CompletionStage<?> write(String text) {
         CompletableFuture<?> stage = new CompletableFuture<>();
-        asyncHandle.write(ByteBuffer.wrap(text.getBytes(UTF_8)), new WriteCallback() {
+        asyncHandle.write(Mutils.toByteBuffer(text), new WriteCallback() {
             @Override
             public void onFailure(Throwable reason) {
                 stage.completeExceptionally(reason);
