@@ -1,7 +1,7 @@
 # mu-acme
 
 A simple way to get free HTTPS certs for your [Mu Server](https://muserver.io/) from 
-[Let's Encrypt](https://letsencrypt.org/) or other ACME providers.
+[Let's Encrypt](https://letsencrypt.org/) or other ACME providers with automated renewal.
 
 [![Javadocs](https://www.javadoc.io/badge/io.muserver/mu-acme.svg)](https://www.javadoc.io/doc/io.muserver/mu-acme)
 

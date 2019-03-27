@@ -9,12 +9,14 @@ import javax.net.ssl.SSLContext;
 class NoOpAcmeCertManager implements AcmeCertManager {
     @Override
     public void start(MuServer muServer) {
-
     }
 
     @Override
     public void stop() {
+    }
 
+    @Override
+    public void forceRenew() {
     }
 
     @Override

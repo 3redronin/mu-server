@@ -46,6 +46,7 @@ class AcmeCertManagerImpl implements AcmeCertManager {
     private final String organizationalUnit;
     private final String country;
     private final String state;
+    private MuServer muServer;
 
     AcmeCertManagerImpl(File configDir, URI acmeServerURI, String organization, String organizationalUnit, String country, String state, List<String> domains) {
         this.acmeServerURI = acmeServerURI;
@@ -63,12 +64,14 @@ class AcmeCertManagerImpl implements AcmeCertManager {
 
     @Override
     public void start(MuServer muServer) {
+        Mutils.notNull("muServer", muServer);
         if (muServer.httpUri() == null) {
             log.warn("Automated SSL will not work as there is no HTTP URL available on port 80.");
         }
+        this.muServer = muServer;
         executorService.scheduleAtFixedRate(() -> {
                 try {
-                    acquireCertIfNeeded(muServer);
+                    acquireCertIfNeeded();
                 } catch (CertificateOrderException coe) {
                     log.warn(coe.getMessage());
                 } catch (Exception e) {
@@ -88,16 +91,21 @@ class AcmeCertManagerImpl implements AcmeCertManager {
         }
     }
 
-    /**
-     * Forces a check of the cert validity, and creates or renews if needed.
-     *
-     * @param muServer A started Mu Server instance, which means this method should be called after starting your server.
-     * @throws Exception The certificate check or request failed.
-     */
-    synchronized void acquireCertIfNeeded(MuServer muServer) throws Exception {
+    @Override
+    public void forceRenew() throws Exception {
+        if (muServer == null) {
+            throw new IllegalStateException("Renewal can only occur after the start(MuServer) method is called");
+        }
+        acquireCert();
+        muServer.changeSSLContext(createSSLContext());
+        log.info("Mu Server HTTPS cert updated");
+    }
+
+
+    synchronized void acquireCertIfNeeded() throws Exception {
         boolean shouldAcquire = false;
         if (!certFile.isFile()) {
-            log.info("A new SSL cert is will be created as none exists.");
+            log.info("A new SSL cert will be created as none exists.");
             shouldAcquire = true;
         } else {
             Collection<X509Certificate> x509Certificates = PemSslContextFactory.loadX509Certificate(certFile);
@@ -106,7 +114,7 @@ class AcmeCertManagerImpl implements AcmeCertManager {
 
                 Date expiryDate = x509Certificate.getNotAfter();
 
-                Date soon = new Date(System.currentTimeMillis() + TimeUnit.DAYS.toMillis(3));
+                Date soon = new Date(System.currentTimeMillis() + TimeUnit.DAYS.toMillis(7));
                 if (expiryDate.before(soon)) {
                     log.info("The SSL cert will be renewed as it expires at " + expiryDate);
                     shouldAcquire = true;
@@ -116,9 +124,7 @@ class AcmeCertManagerImpl implements AcmeCertManager {
             }
         }
         if (shouldAcquire) {
-            acquireCert();
-            muServer.changeSSLContext(createSSLContext());
-            log.info("Mu Server HTTPS cert updated");
+            forceRenew();
         }
     }
 

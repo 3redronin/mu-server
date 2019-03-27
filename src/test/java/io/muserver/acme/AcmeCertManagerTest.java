@@ -93,11 +93,15 @@ public class AcmeCertManagerTest {
 
         server = MuServerBuilder.httpsServer().start();
 
+        certManager.start(server);
+
         try {
-            certManager.acquireCertIfNeeded(server);
+            certManager.acquireCertIfNeeded();
             Assert.fail("Acquiring a cert shouldn't work here");
         } catch (CertificateOrderException ignored) {
             // Good!
+        } finally {
+            certManager.stop();
         }
     }
 
