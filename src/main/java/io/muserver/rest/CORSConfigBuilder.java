@@ -52,25 +52,40 @@ public class CORSConfigBuilder {
     /**
      * <p>The origin values that CORS requests are allowed for.</p>
      * <p>If called multiple times, then just one of the patterns need to match to allow the origin.</p>
+     * <p>Note: this is a no-op if <code>null</code> is used.</p>
      * @param allowedOriginRegex A regex to match, e.g. <code>Pattern.compile("https://.*\\.example\\.org")</code> to allow
      *                           all subdomains of <code>example.org</code> over HTTPS.
      * @return This builder
      */
     public CORSConfigBuilder withAllowedOriginRegex(Pattern allowedOriginRegex) {
-        this.allowedOriginRegex.add(allowedOriginRegex);
+        if (allowedOriginRegex != null) {
+            this.allowedOriginRegex.add(allowedOriginRegex);
+        }
         return this;
     }
 
     /**
      * <p>The origin values that CORS requests are allowed for.</p>
      * <p>If called multiple times, then just one of the patterns need to match to allow the origin.</p>
+     * <p>Note: this is a no-op if <code>null</code> is used.</p>
      * @param allowedOriginRegex A regex to match, e.g. <code>"https://.*\\.example\\.org"</code> to allow
      *                           all subdomains of <code>example.org</code> over HTTPS.
      * @return This builder
      * @throws PatternSyntaxException If the expression's syntax is invalid
      */
     public CORSConfigBuilder withAllowedOriginRegex(String allowedOriginRegex) {
+        if (allowedOriginRegex == null) {
+            return this;
+        }
         return withAllowedOriginRegex(Pattern.compile(allowedOriginRegex));
+    }
+
+    /**
+     * Adds all localhost URLs (whether http or https) as allowed origins.
+     * @return This builder
+     */
+    public CORSConfigBuilder withLocalhostAllowed() {
+        return withAllowedOriginRegex(Pattern.compile("https?://localhost(:[0-9]+)?"));
     }
 
     /**

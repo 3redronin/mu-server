@@ -43,4 +43,15 @@ public class CORSConfigTest {
         assertThat(config.allowCors("https://apprunner.com.au"), is(false));
     }
 
+    @Test
+    public void localhostUrlsCanBeAllowedEasily() {
+        CORSConfig config = CORSConfigBuilder.corsConfig().withLocalhostAllowed().build();
+        assertThat(config.allowCors("http://localhost"), is(true));
+        assertThat(config.allowCors("https://localhost"), is(true));
+        assertThat(config.allowCors("https://localhost:8080"), is(true));
+        assertThat(config.allowCors("http://localhost:8080"), is(true));
+        assertThat(config.allowCors("https://localhoster"), is(false));
+        assertThat(config.allowCors("https://localhost.com"), is(false));
+    }
+
 }
