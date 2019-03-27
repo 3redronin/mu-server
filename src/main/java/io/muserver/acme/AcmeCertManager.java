@@ -30,6 +30,8 @@ public interface AcmeCertManager {
 
     /**
      * Forces a renew of the certificate now, even if the certs are not nearing expiry.
+     * @throws IllegalStateException Thrown if called before {@link #start(MuServer)} is called.
+     * @throws Exception Thrown if the certificate cannot be loaded.
      */
     void forceRenew() throws Exception;
 

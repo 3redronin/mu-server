@@ -66,7 +66,7 @@ class AcmeCertManagerImpl implements AcmeCertManager {
     public void start(MuServer muServer) {
         Mutils.notNull("muServer", muServer);
         if (muServer.httpUri() == null) {
-            log.warn("Automated SSL will not work as there is no HTTP URL available on port 80.");
+            log.warn("Automated SSL will not work as there is no HTTP URL available.");
         }
         this.muServer = muServer;
         executorService.scheduleAtFixedRate(() -> {
