@@ -2,6 +2,7 @@ package io.muserver;
 
 import okhttp3.Response;
 import org.junit.*;
+import scaffolding.RawClient;
 
 import java.io.IOException;
 import java.net.ConnectException;
@@ -198,6 +199,21 @@ public class MuServerTest {
             assertThat(resp.code(), is(405));
             assertThat(resp.body().string(), containsString("405 Method Not Allowed"));
         }
+    }
+
+    @Test
+    public void returns400IfNoHostHeaderPresent() throws Exception {
+        server = httpServer().start();
+        RawClient rawClient = RawClient.create(server.uri());
+        rawClient.sendStartLine("GET", "/");
+        rawClient.sendHeader("NotHost", "Blah");
+        rawClient.endHeaders();
+        rawClient.flushRequest();
+
+        while (!rawClient.responseString().contains("\n")) {
+            Thread.sleep(10);
+        }
+        assertThat(rawClient.responseString(), startsWith("HTTP/1.1 400 Bad Request"));
     }
 
     @Test

@@ -82,6 +82,11 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
                     }
                 }
 
+                if (!request.headers().contains(HttpHeaderNames.HOST)) {
+                    sendSimpleResponse(ctx, "400 Bad Request", 400);
+                    return;
+                }
+
                 boolean handled = false;
 
                 Method method;
