@@ -98,7 +98,7 @@ class OpenApiDocumentor implements MuHandler {
 
         if (relativePath.equals(openApiJsonUrl)) {
             response.contentType(ContentTypes.APPLICATION_JSON);
-            corsConfig.writeHeaders(request, response, emptySet());
+            corsConfig.writeHeadersInternal(request, response, emptySet());
             response.headers().set("Access-Control-Allow-Methods", "GET");
 
             try (OutputStreamWriter osw = new OutputStreamWriter(response.outputStream(), StandardCharsets.UTF_8);

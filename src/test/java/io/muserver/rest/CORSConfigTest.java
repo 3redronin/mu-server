@@ -10,6 +10,13 @@ import static org.hamcrest.Matchers.is;
 
 public class CORSConfigTest {
 
+    @Test
+    public void everythingCanBeAllowed() {
+        CORSConfig config = CORSConfigBuilder.corsConfig().withAllOriginsAllowed().build();
+        assertThat(config.allowCors("http://apprunner.co.nz"), is(true));
+        assertThat(config.allowCors("https://apprunner.co.nz"), is(true));
+        assertThat(config.allowCors("https://apprunner.com.au"), is(true));
+    }
 
     @Test
     public void regexPatternsCanBeUsed() {

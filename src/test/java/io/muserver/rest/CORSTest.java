@@ -55,8 +55,8 @@ public class CORSTest {
             assertThat(resp.code(), is(200));
             assertThat(resp.header("Access-Control-Allow-Origin"), is("http://foo.example"));
             assertThat(resp.header("Access-Control-Allow-Methods"), is("GET, HEAD, OPTIONS"));
-            assertThat(resp.header("Access-Control-Allow-Headers"), is("Content-Type, X-PINGOTHER"));
-            assertThat(resp.header("Access-Control-Expose-Headers"), is(nullValue()));
+            assertThat(resp.header("Access-Control-Allow-Headers"), is(nullValue()));
+            assertThat(resp.header("Access-Control-Expose-Headers"), is("X-PINGOTHER, Content-Type"));
             assertThat(resp.header("Access-Control-Max-Age"), is("500"));
             assertThat(resp.header("Vary"), is("origin"));
         }
@@ -109,7 +109,8 @@ public class CORSTest {
             restHandler(new Thing())
                 .withCORS(CORSConfigBuilder.corsConfig()
                     .withAllowedOrigins(asList("http://example.com", "http://foo.example"))
-                    .withExposedHeaders(asList("X-PINGOTHER", "Content-Type"))
+                    .withExposedHeaders(asList("X-EXPOSED", "X-BLAH"))
+                    .withAllowedHeaders(asList("X-PINGOTHER", "Content-Type"))
                     .withMaxAge(500)
                     .withAllowCredentials(true)
                 )
@@ -126,7 +127,7 @@ public class CORSTest {
             assertThat(resp.header("Access-Control-Allow-Origin"), is("http://foo.example"));
             assertThat(resp.header("Access-Control-Allow-Methods"), is("GET, HEAD, OPTIONS"));
             assertThat(resp.header("Access-Control-Allow-Headers"), is(nullValue()));
-            assertThat(resp.header("Access-Control-Expose-Headers"), is("Content-Type, X-PINGOTHER"));
+            assertThat(resp.header("Access-Control-Expose-Headers"), is("X-EXPOSED, X-BLAH"));
             assertThat(resp.header("Access-Control-Max-Age"), is(nullValue()));
             assertThat(resp.header("Vary"), is("origin"));
         }

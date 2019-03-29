@@ -1,6 +1,7 @@
 package io.muserver.rest;
 
 import io.muserver.MuHandlerBuilder;
+import io.muserver.handlers.CORSHandlerBuilder;
 import io.muserver.openapi.InfoObject;
 import io.muserver.openapi.OpenAPIObjectBuilder;
 
@@ -18,6 +19,7 @@ import static io.muserver.openapi.PathsObjectBuilder.pathsObject;
 
 /**
  * Used to create a {@link RestHandler} for handling JAX-RS REST resources.
+ *
  * @see #restHandler(Object...)
  */
 public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
@@ -42,6 +44,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
 
     /**
      * Adds one or more rest resources to this handler
+     *
      * @param resources One or more instances of classes that are decorated with {@link javax.ws.rs.Path} annotations.
      * @return This builder
      */
@@ -54,7 +57,8 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * <p>Registers an object that can write custom classes to responses.</p>
      * <p>For example, if you return an instance of <code>MyClass</code> from a REST method, you need to specify how
      * that gets serialised with a <code>MessageBodyWriter&lt;MyClass&gt;</code> writer.</p>
-     * @param <T> The type of object that the writer can serialise
+     *
+     * @param <T>    The type of object that the writer can serialise
      * @param writer A response body writer
      * @return This builder
      */
@@ -67,7 +71,8 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * <p>Registers an object that can deserialise request bodies into custom classes.</p>
      * <p>For example, if you specify that the request body is a <code>MyClass</code>, you need to specify how
      * that gets deserialised with a <code>MessageBodyReader&lt;MyClass&gt;</code> reader.</p>
-     * @param <T> The type of object that the reader can deserialise
+     *
+     * @param <T>    The type of object that the reader can deserialise
      * @param reader A request body reader
      * @return This builder
      */
@@ -80,6 +85,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * <p>Registers an object that can convert rest method parameters (e.g. querystring, header, form or path params)
      * into custom classes.</p>
      * <p>In most cases, it is easier to instead use {@link #addCustomParamConverter(Class, ParamConverter)}</p>
+     *
      * @param paramConverterProvider A provider of parameter converters
      * @return This builder
      */
@@ -92,9 +98,10 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * <p>Registers a parameter converter class that convert strings to and from a custom class.</p>
      * <p>This allows you to specify query string parameters, form values, header params and path params as custom classes.</p>
      * <p>For more functionality, {@link #addCustomParamConverterProvider(ParamConverterProvider)} is also available.</p>
+     *
      * @param paramClass The class that this converter is meant for.
-     * @param converter The converter
-     * @param <P> The type of the parameter
+     * @param converter  The converter
+     * @param <P>        The type of the parameter
      * @return This builder
      */
     public <P> RestHandlerBuilder addCustomParamConverter(Class<P> paramClass, ParamConverter<P> converter) {
@@ -194,8 +201,9 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * <p>For example, you may create a custom exception such as a ValidationException that you throw from your
      * jax-rs methods. A mapper for this exception type could return a Response with a 400 code and a custom
      * validation error message.</p>
-     * @param <T> The exception type that the mapper can handle
-     * @param exceptionClass The type of exception to map.
+     *
+     * @param <T>             The exception type that the mapper can handle
+     * @param exceptionClass  The type of exception to map.
      * @param exceptionMapper A function that creates a {@link javax.ws.rs.core.Response} suitable for the exception.
      * @return Returns this builder.
      */
@@ -249,6 +257,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     /**
      * <p>Creates a handler builder for JAX-RS REST services.</p>
      * <p>Note that CORS is disabled by default.</p>
+     *
      * @param resources Instances of classes that have a {@link javax.ws.rs.Path} annotation.
      * @return Returns a builder that can be used to specify more config
      */
@@ -258,19 +267,26 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
 
     /**
      * <p>Specifies the CORS config for the REST services. Defaults to {@link CORSConfigBuilder#disabled()}</p>
-     * @see CORSConfigBuilder
+     * <p>Note: an alternative to adding CORS config to the Rest Handler Builder is to add a handler with
+     * {@link CORSHandlerBuilder#corsHandler()} which can apply the headers to all handlers (not just JAX-RS endpoints).</p>
+     *
      * @param corsConfig The CORS config to use
      * @return This builder.
+     * @see CORSConfigBuilder
      */
     public RestHandlerBuilder withCORS(CORSConfig corsConfig) {
         this.corsConfig = corsConfig;
         return this;
     }
+
     /**
      * <p>Specifies the CORS config for the REST services. Defaults to {@link CORSConfigBuilder#disabled()}</p>
-     * @see CORSConfigBuilder
+     * <p>Note: an alternative to adding CORS config to the Rest Handler Builder is to add a handler with
+     * {@link CORSHandlerBuilder#corsHandler()} which can apply the headers to all handlers (not just JAX-RS endpoints).</p>
+     *
      * @param corsConfig The CORS config to use
      * @return This builder.
+     * @see CORSConfigBuilder
      */
     public RestHandlerBuilder withCORS(CORSConfigBuilder corsConfig) {
         return withCORS(corsConfig.build());
@@ -290,6 +306,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * <p>Registers a request filter, which is run before a rest method is executed.</p>
      * <p>It will be run after the method has been matched, or if the {@link PreMatching} annotation is applied to the
      * filter then it will run before matching occurs.</p>
+     *
      * @param filter The filter to register
      * @return This builder
      */
@@ -304,6 +321,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
 
     /**
      * Registers a response filter, which is called after execution of a method takes place.
+     *
      * @param filter The filter to register
      * @return This builder
      */

@@ -85,14 +85,14 @@ public class RestHandler implements MuHandler {
                 } else if (requestContext.getMuMethod() == Method.OPTIONS) {
                     Set<RequestMatcher.MatchedMethod> matchedMethodsForPath = requestMatcher.getMatchedMethodsForPath(relativePath);
                     muResponse.headers().set(HeaderNames.ALLOW, getAllowedMethods(matchedMethodsForPath));
-                    corsConfig.writeHeaders(muRequest, muResponse, matchedMethodsForPath);
+                    corsConfig.writeHeadersInternal(muRequest, muResponse, matchedMethodsForPath);
                     return true;
                 } else {
                     throw e;
                 }
             }
 
-            corsConfig.writeHeaders(muRequest, muResponse, Collections.singleton(mm));
+            corsConfig.writeHeadersInternal(muRequest, muResponse, Collections.singleton(mm));
 
             List<MediaType> produces = producesRef = mm.resourceMethod.resourceClass.produces;
             List<MediaType> directlyProduces = directlyProducesRef = mm.resourceMethod.directlyProduces;

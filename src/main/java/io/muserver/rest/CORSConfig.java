@@ -21,23 +21,43 @@ public class CORSConfig {
     public final List<Pattern> allowedOriginRegex;
     public final Collection<String> exposedHeaders;
     public final long maxAge;
+    public final Collection<String> allowedHeaders;
     private final String exposedHeadersCSV;
+    private final String allowedHeadersCSV;
 
-    CORSConfig(boolean allowCredentials, Collection<String> allowedOrigins, List<Pattern> allowedOriginRegex, Collection<String> exposedHeaders, long maxAge) {
+    CORSConfig(boolean allowCredentials, Collection<String> allowedOrigins, List<Pattern> allowedOriginRegex, Collection<String> allowedHeaders, Collection<String> exposedHeaders, long maxAge) {
         Mutils.notNull("allowedOriginRegex", allowedOriginRegex);
         this.allowCredentials = allowCredentials;
-        this.allowedOrigins = Collections.unmodifiableCollection(allowedOrigins);
+        this.allowedOrigins = allowedOrigins == null ? null : Collections.unmodifiableCollection(allowedOrigins);
         this.allowedOriginRegex = allowedOriginRegex;
-        this.exposedHeaders = Collections.unmodifiableCollection(exposedHeaders);
         this.maxAge = maxAge;
-        this.exposedHeadersCSV = exposedHeaders.stream().sorted().collect(joining(", "));
+        this.allowedHeaders = allowedHeaders;
+        this.allowedHeadersCSV = String.join(", ", allowedHeaders);
+        this.exposedHeaders = Collections.unmodifiableCollection(exposedHeaders);
+        this.exposedHeadersCSV = String.join(", ", exposedHeaders);
     }
 
-    boolean writeHeaders(MuRequest request, MuResponse response, Set<RequestMatcher.MatchedMethod> matchedMethodsForPath) {
+    /**
+     * Adds CORS headers to the response, if neeeded.
+     *
+     * @param request        The request
+     * @param response       The response to add headers to
+     * @param allowedMethods The methods
+     * @return Returns true if any Access Control headers were added; otherwise false. (Note: the <code>Vary: origin</code> header is always added.
+     */
+    public boolean writeHeaders(MuRequest request, MuResponse response, Set<Method> allowedMethods) {
+        boolean written = writeHeadersInternal(request, response, null);
+        if (written) {
+            response.headers().set(HeaderNames.ACCESS_CONTROL_ALLOW_METHODS, getAllowedString(allowedMethods));
+        }
+        return written;
+    }
+
+    boolean writeHeadersInternal(MuRequest request, MuResponse response, Set<RequestMatcher.MatchedMethod> matchedMethodsForPath) {
 
         response.headers().add(HeaderNames.VARY, HeaderNames.ORIGIN);
 
-        String origin  = request.headers().get(HeaderNames.ORIGIN);
+        String origin = request.headers().get(HeaderNames.ORIGIN);
         if (Mutils.nullOrEmpty(origin)) {
             return false;
         }
@@ -45,11 +65,17 @@ public class CORSConfig {
         Headers respHeaders = response.headers();
         if (allowCors(origin)) {
             respHeaders.set(HeaderNames.ACCESS_CONTROL_ALLOW_ORIGIN, origin);
-            respHeaders.set(HeaderNames.ACCESS_CONTROL_ALLOW_METHODS, getAllowedMethods(matchedMethodsForPath));
+            if (matchedMethodsForPath != null) {
+                String allowed = getAllowedMethods(matchedMethodsForPath);
+                respHeaders.set(HeaderNames.ACCESS_CONTROL_ALLOW_METHODS, allowed);
+            }
             if (request.method() == Method.OPTIONS) {
                 respHeaders.set(HeaderNames.ACCESS_CONTROL_MAX_AGE, maxAge);
-                respHeaders.set(HeaderNames.ACCESS_CONTROL_ALLOW_HEADERS, exposedHeadersCSV);
-            } else {
+                if (!allowedHeaders.isEmpty()) {
+                    respHeaders.set(HeaderNames.ACCESS_CONTROL_ALLOW_HEADERS, allowedHeadersCSV);
+                }
+            }
+            if (!exposedHeaders.isEmpty()) {
                 respHeaders.set(HeaderNames.ACCESS_CONTROL_EXPOSE_HEADERS, exposedHeadersCSV);
             }
             if (allowCredentials) {
@@ -64,7 +90,12 @@ public class CORSConfig {
     }
 
     static String getAllowedMethods(Set<RequestMatcher.MatchedMethod> matchedMethodsForPath) {
-        Set<Method> allowed = matchedMethodsForPath.stream().map(m -> m.resourceMethod.httpMethod).collect(toSet());
+        Set<Method> methods = matchedMethodsForPath.stream().map(m -> m.resourceMethod.httpMethod).collect(toSet());
+        return getAllowedString(methods);
+    }
+
+
+    static String getAllowedString(Set<Method> allowed) {
         if (allowed.contains(Method.GET)) {
             allowed.add(Method.HEAD);
         }
