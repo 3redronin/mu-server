@@ -143,7 +143,7 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
     public static void sendPlainText(AsyncContext asyncContext, String message, int statusCode) {
         MuResponse resp = asyncContext.response;
         resp.status(statusCode);
-        resp.contentType(ContentTypes.TEXT_PLAIN);
+        resp.contentType(ContentTypes.TEXT_PLAIN_UTF8);
         resp.write(message);
     }
 
@@ -163,9 +163,10 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
     }
 
     private static ChannelFuture sendSimpleResponse(ChannelHandlerContext ctx, String message, int code) {
-        FullHttpResponse response = new DefaultFullHttpResponse(HTTP_1_1, HttpResponseStatus.valueOf(code), copiedBuffer(message.getBytes(UTF_8)));
-        response.headers().set(HeaderNames.CONTENT_TYPE, ContentTypes.TEXT_PLAIN);
-        response.headers().set(HeaderNames.CONTENT_LENGTH, message.length());
+        byte[] bytes = message.getBytes(UTF_8);
+        FullHttpResponse response = new DefaultFullHttpResponse(HTTP_1_1, HttpResponseStatus.valueOf(code), copiedBuffer(bytes));
+        response.headers().set(HeaderNames.CONTENT_TYPE, ContentTypes.TEXT_PLAIN_UTF8);
+        response.headers().set(HeaderNames.CONTENT_LENGTH, bytes.length);
         return ctx.writeAndFlush(response);
     }
 

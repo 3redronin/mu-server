@@ -99,7 +99,7 @@ public class OpenApiDocumentorTest {
     public void canGenerateHtml() throws IOException {
         try (okhttp3.Response resp = call(request().url(server.uri().resolve("/api.html").toString()))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.header("Content-Type"), equalTo("text/html"));
+            assertThat(resp.header("Content-Type"), equalTo("text/html; charset=utf-8"));
             String responseBody = resp.body().string();
             File outputFile = new File("target/openapi.html");
             System.out.println("Creating " + outputFile.getCanonicalPath() + " which is the sample API documentation for your viewing pleasure.");

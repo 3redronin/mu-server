@@ -102,7 +102,7 @@ public class TextSendingTest {
             assertThat(resp.body().string(), is("This is HTML"));
         }
         try (Response resp = call(request(server.uri().resolve("/text")))) {
-            assertThat(resp.header("Content-Type"), is("text/plain"));
+            assertThat(resp.header("Content-Type"), is("text/plain; charset=utf-8"));
             assertThat(resp.body().string(), is("This is text"));
         }
     }

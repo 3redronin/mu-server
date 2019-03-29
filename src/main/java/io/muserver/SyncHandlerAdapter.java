@@ -106,7 +106,7 @@ class SyncHandlerAdapter implements AsyncMuHandler {
             if (forceDisconnect) {
                 response.headers().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
             }
-            response.contentType(ContentTypes.TEXT_HTML);
+            response.contentType(ContentTypes.TEXT_HTML_UTF8);
             String message = wae.getMessage();
             message = exceptionMessageMap.getOrDefault(message, message);
             response.write("<h1>" + exResp.getStatus() + " " + exResp.getStatusInfo().getReasonPhrase() + "</h1><p>" +

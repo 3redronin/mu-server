@@ -11,9 +11,19 @@ public class ContentTypes {
     public static final CharSequence TEXT_PLAIN = HttpHeaderValues.TEXT_PLAIN;
 
     /**
+     * Plain text: {@code "text/plain; charset=utf-8"}
+     */
+    public static final CharSequence TEXT_PLAIN_UTF8 = AsciiString.cached("text/plain; charset=utf-8");
+
+    /**
      * Markdown: {@code "text/markdown"}
      */
     public static final CharSequence TEXT_MARKDOWN = AsciiString.cached("text/markdown");
+
+    /**
+     * Markdown: {@code "text/markdown; charset=utf-8"}
+     */
+    public static final CharSequence TEXT_MARKDOWN_UTF8 = AsciiString.cached("text/markdown; charset=utf-8");
 
     /**
      * AAC audio file:  {@code "audio/aac"}
@@ -61,9 +71,19 @@ public class ContentTypes {
     public static final CharSequence TEXT_CSS = AsciiString.cached("text/css");
 
     /**
+     * Cascading Style Sheets (CSS):  {@code "text/css; charset=utf-8"}
+     */
+    public static final CharSequence TEXT_CSS_UTF8 = AsciiString.cached("text/css; charset=utf-8");
+
+    /**
      * Comma-separated values (CSV):  {@code "text/csv"}
      */
     public static final CharSequence TEXT_CSV = AsciiString.cached("text/csv");
+
+    /**
+     * Comma-separated values (CSV):  {@code "text/csv; charset=utf-8"}
+     */
+    public static final CharSequence TEXT_CSV_UTF8 = AsciiString.cached("text/csv; charset=utf-8");
 
     /**
      * Microsoft Word:  {@code "application/msword"}
@@ -96,6 +116,11 @@ public class ContentTypes {
     public static final CharSequence TEXT_HTML = AsciiString.cached("text/html");
 
     /**
+     * HyperText Markup Language (HTML):  {@code "text/html; charset=utf-8"}
+     */
+    public static final CharSequence TEXT_HTML_UTF8 = AsciiString.cached("text/html; charset=utf-8");
+
+    /**
      * Icon format:  {@code "image/x-icon"}
      */
     public static final CharSequence IMAGE_X_ICON = AsciiString.cached("image/x-icon");
@@ -104,6 +129,11 @@ public class ContentTypes {
      * iCalendar format:  {@code "text/calendar"}
      */
     public static final CharSequence TEXT_CALENDAR = AsciiString.cached("text/calendar");
+
+    /**
+     * iCalendar format:  {@code "text/calendar; charset=utf-8"}
+     */
+    public static final CharSequence TEXT_CALENDAR_UTF8 = AsciiString.cached("text/calendar; charset=utf-8");
 
     /**
      * Java Archive (JAR):  {@code "application/java-archive"}

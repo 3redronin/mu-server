@@ -132,7 +132,7 @@ public class MediaTypesTest {
         .header("accept", "text")
         )) {
             assertThat(resp.code(), is(400));
-            assertThat(resp.header("Content-Type"), is("text/plain"));
+            assertThat(resp.header("Content-Type"), is("text/plain; charset=utf-8"));
         }
 
     }
@@ -155,10 +155,10 @@ public class MediaTypesTest {
         }
         this.server = httpsServer().addHandler(restHandler(new Widget())).start();
         try (Response resp = call(request().url(server.uri().resolve("/things/string").toString()))) {
-            assertThat(resp.header("Content-Type"), is("text/plain"));
+            assertThat(resp.header("Content-Type"), is("text/plain;charset=utf-8"));
         }
         try (Response resp = call(request().url(server.uri().resolve("/things/int").toString()))) {
-            assertThat(resp.header("Content-Type"), is("text/plain;charset=UTF-8"));
+            assertThat(resp.header("Content-Type"), is("text/plain;charset=utf-8"));
         }
     }
 

@@ -46,7 +46,7 @@ public class EntityProvidersTest {
             }
         }
         startServer(new Sample());
-        stringCheck("text/plain", randomStringOfLength(128 * 1024), "text/plain", "/samples");
+        stringCheck("text/plain", randomStringOfLength(128 * 1024), "text/plain;charset=utf-8", "/samples");
     }
 
     @Test
@@ -69,7 +69,7 @@ public class EntityProvidersTest {
             .url(server.uri().resolve("/samples").toString())
         )) {
             assertThat(resp.code(), equalTo(200));
-            assertThat(resp.header("Content-Type"), equalTo("text/plain"));
+            assertThat(resp.header("Content-Type"), equalTo("text/plain;charset=utf-8"));
             assertThat(resp.body().string(), equalTo("--HELLO WORLD--"));
         }
     }

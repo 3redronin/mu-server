@@ -21,7 +21,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.concurrent.Future;
 
-import static io.muserver.ContentTypes.TEXT_PLAIN;
+import static io.muserver.ContentTypes.TEXT_PLAIN_UTF8;
 import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 
 class NettyResponseAdaptor implements MuResponse {
@@ -149,7 +149,7 @@ class NettyResponseAdaptor implements MuResponse {
             : new DefaultFullHttpResponse(HTTP_1_1, httpStatus(), body, false);
 
         if (!headers.contains(HeaderNames.CONTENT_TYPE)) {
-            headers.set(HeaderNames.CONTENT_TYPE, TEXT_PLAIN);
+            headers.set(HeaderNames.CONTENT_TYPE, TEXT_PLAIN_UTF8);
         }
 
         writeHeaders(resp, this.headers);

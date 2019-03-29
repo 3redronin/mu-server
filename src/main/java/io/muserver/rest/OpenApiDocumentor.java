@@ -106,7 +106,7 @@ class OpenApiDocumentor implements MuHandler {
                 builtApi.writeJson(writer);
             }
         } else {
-            response.contentType(ContentTypes.TEXT_HTML);
+            response.contentType(ContentTypes.TEXT_HTML_UTF8);
             response.headers().set("X-UA-Compatible", "IE=edge");
 
             try (OutputStreamWriter osw = new OutputStreamWriter(response.outputStream(), StandardCharsets.UTF_8);

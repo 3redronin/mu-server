@@ -63,7 +63,7 @@ public class RestHandler implements MuHandler {
             acceptHeaders = MediaTypeDeterminer.parseAcceptHeaders(muRequest.headers().getAll(HeaderNames.ACCEPT));
         } catch (IllegalArgumentException e) {
             muResponse.status(400);
-            muResponse.contentType("text/plain");
+            muResponse.contentType(ContentTypes.TEXT_PLAIN_UTF8);
             muResponse.write(e.getMessage());
             return true;
         }
@@ -260,7 +260,7 @@ public class RestHandler implements MuHandler {
                 sendResponse(nestingLevel + 1, requestContext, muResponse, acceptHeaders, produces, directlyProduces, toSend.build());
             } else {
                 muResponse.status(r.getStatus());
-                muResponse.contentType(ContentTypes.TEXT_PLAIN);
+                muResponse.contentType(ContentTypes.TEXT_PLAIN_UTF8);
                 Response.StatusType statusInfo = r.getStatusInfo();
                 String message = statusInfo.getStatusCode() + " " + statusInfo.getReasonPhrase() + " - " + e.getMessage();
                 muResponse.write(message);

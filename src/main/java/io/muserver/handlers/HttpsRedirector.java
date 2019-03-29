@@ -50,7 +50,7 @@ public class HttpsRedirector implements MuHandler {
             response.redirect(newURI);
         } else {
             response.status(400);
-            response.contentType("text/plain");
+            response.contentType(ContentTypes.TEXT_PLAIN_UTF8);
             response.write("HTTP is not supported for this endpoint. Please use the HTTPS endpoint at " + newURI.resolve("/"));
         }
         return true;

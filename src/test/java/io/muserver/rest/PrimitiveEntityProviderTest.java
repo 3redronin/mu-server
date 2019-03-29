@@ -180,7 +180,7 @@ public class PrimitiveEntityProviderTest {
             .url(server.uri().resolve("/samples").toString())
         )) {
             assertThat(resp.code(), equalTo(200));
-            assertThat(resp.header("Content-Type"), equalTo("text/plain;charset=UTF-8"));
+            assertThat(resp.header("Content-Type"), equalTo("text/plain;charset=utf-8"));
             assertThat(resp.body().string(), equalTo("123"));
         }
     }
@@ -189,11 +189,11 @@ public class PrimitiveEntityProviderTest {
     private void check(Object value) throws IOException {
         String content = String.valueOf(value);
         try (Response resp = call(request()
-            .post(RequestBody.create(MediaType.parse("text/plain;charset=UTF-8"), content))
+            .post(RequestBody.create(MediaType.parse("text/plain;charset=utf-8"), content))
             .url(server.uri().resolve("/samples").toString())
         )) {
             assertThat(resp.code(), equalTo(200));
-            assertThat(resp.header("Content-Type"), equalTo("text/plain;charset=UTF-8"));
+            assertThat(resp.header("Content-Type"), equalTo("text/plain;charset=utf-8"));
 //            assertThat(resp.header("Content-Length"), equalTo("" + value.toString().getBytes(UTF_8).length));
             assertThat(resp.body().string(), equalTo(content));
         }
