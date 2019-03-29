@@ -7,10 +7,13 @@ import scaffolding.MuAssert;
 
 import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLContext;
+import java.io.IOException;
 import java.net.URI;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
+import java.util.concurrent.atomic.AtomicReference;
 
+import static io.muserver.MuServerBuilder.httpServer;
 import static io.muserver.MuServerBuilder.httpsServer;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
@@ -20,9 +23,12 @@ public class HttpsTest {
 
     private MuServer server;
 
-    @Test public void canCreate() throws Exception {
+    @Test
+    public void canCreate() throws Exception {
+        AtomicReference<SSLInfo> actualSSLInfo = new AtomicReference<>();
         server = httpsServer().withHttpsPort(9443).withHttpsConfig(SSLContextBuilder.unsignedLocalhostCert())
             .addHandler((request, response) -> {
+                actualSSLInfo.set(request.server().sslInfo());
                 response.write("This is encrypted and the URL is " + request.uri());
                 return true;
             })
@@ -31,11 +37,29 @@ public class HttpsTest {
         try (Response resp = call(request(server.httpsUri()))) {
             assertThat(resp.body().string(), equalTo("This is encrypted and the URL is https://localhost:9443/"));
         }
+        assertThat(actualSSLInfo.get().providerName(), isOneOf("JDK", "OpenSSL"));
+        System.out.println("actualSSLInfo.get() = " + actualSSLInfo.get());
+        assertThat(actualSSLInfo.get().protocols(), hasItem("TLSv1.2"));
+        assertThat(actualSSLInfo.get().ciphers().size(), greaterThan(0));
     }
 
-    @Test public void httpIsNotAvailableUnlessRequested() {
+    @Test
+    public void httpIsNotAvailableUnlessRequested() {
         server = httpsServer().start();
         assertThat(server.httpUri(), is(nullValue()));
+    }
+
+    @Test
+    public void sslInfoIsNullForHttp() throws IOException {
+        server = httpServer()
+            .addHandler((req, res) -> {
+                res.write("SSLInfo: " + req.server().sslInfo());
+                return true;
+            })
+            .start();
+        try (Response resp = call(request(server.uri()))) {
+            assertThat(resp.body().string(), equalTo("SSLInfo: null"));
+        }
     }
 
     @Test

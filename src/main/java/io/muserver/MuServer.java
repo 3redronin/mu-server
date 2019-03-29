@@ -75,4 +75,10 @@ public interface MuServer {
      * @param newSSLContext The new SSL Context to use.
      */
     void changeSSLContext(SSLContextBuilder newSSLContext);
+
+    /**
+     * Gets the SSL info of the server, or null if SSL is not enabled.
+     * @return A description of the actual SSL settings used, or null.
+     */
+    SSLInfo sslInfo();
 }

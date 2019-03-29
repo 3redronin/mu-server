@@ -15,6 +15,7 @@ import java.net.URI;
 import java.security.KeyStore;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.MuServerBuilder.httpsServer;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -86,10 +87,16 @@ public class SSLContextBuilderTest {
 
     @Test
     public void protocolsCanBeSpecified() throws Exception {
+        AtomicReference<SSLInfo> initialSSLInfo = new AtomicReference<>();
+        AtomicReference<SSLInfo> eventualSSLInfo = new AtomicReference<>();
+
         SSLContextBuilder sslContextBuilder = SSLContextBuilder.unsignedLocalhostCertBuilder();
         MuServer server = httpsServer()
             .withHttpsConfig(sslContextBuilder)
-            .addHandler(Method.GET, "/", (req, resp, pp) -> resp.write("Hello"))
+            .addHandler(Method.GET, "/", (req, resp, pp) -> {
+                initialSSLInfo.set(req.server().sslInfo());
+                resp.write("Hello");
+            })
             .start();
         String cipher;
         try (Response resp = call(request(server.uri()))) {
@@ -108,7 +115,10 @@ public class SSLContextBuilderTest {
         });
         server = httpsServer()
             .withHttpsConfig(sslContextBuilder)
-            .addHandler(Method.GET, "/", (req, resp, pp) -> resp.write("Hello"))
+            .addHandler(Method.GET, "/", (req, resp, pp) -> {
+                eventualSSLInfo.set(req.server().sslInfo());
+                resp.write("Hello");
+            })
             .start();
         try (Response resp = call(request(server.uri()))) {
             assertThat(resp.code(), is(200));
@@ -117,6 +127,9 @@ public class SSLContextBuilderTest {
         } finally {
             MuAssert.stopAndCheck(server);
         }
+
+        assertThat(initialSSLInfo.get().ciphers(), hasItem(cipher));
+        assertThat(eventualSSLInfo.get().ciphers(), not(hasItem(cipher)));
 
     }
 
