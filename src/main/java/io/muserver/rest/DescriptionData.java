@@ -1,5 +1,6 @@
 package io.muserver.rest;
 
+import io.muserver.Mutils;
 import io.muserver.openapi.ExternalDocumentationObject;
 import io.muserver.openapi.TagObject;
 
@@ -46,8 +47,20 @@ class DescriptionData {
         }
     }
 
-    TagObject toTag() {
-        return tagObject().withName(summary).withDescription(description).withExternalDocs(externalDocumentation).build();
+    TagObject toTag(String tagName) {
+        Mutils.notNull("tagName", tagName);
+        return tagObject()
+            .withName(tagName)
+            .withDescription(summaryAndDescription())
+            .withExternalDocs(externalDocumentation)
+            .build();
     }
 
+    public String summaryAndDescription() {
+        String s = Mutils.coalesce(summary, "");
+        if (!Mutils.nullOrEmpty(description)) {
+            s += " - " + description;
+        }
+        return s;
+    }
 }

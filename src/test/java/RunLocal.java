@@ -38,7 +38,9 @@ public class RunLocal {
                 )
                     .withOpenApiJsonUrl("/openapi.json")
                     .withOpenApiHtmlUrl("/api.html")
-                    .withCORS(CORSConfigBuilder.corsConfig().withAllowedOrigins("http://localhost:3200").withExposedHeaders("Content-Type"))
+                    .withCORS(CORSConfigBuilder.corsConfig()
+                        .withAllOriginsAllowed()
+                        .withExposedHeaders("Content-Type"))
             )
             .addHandler(Method.POST, "/upload", (request, response, pathParams) -> {
                 UploadedFile file = request.uploadedFile("theFile");

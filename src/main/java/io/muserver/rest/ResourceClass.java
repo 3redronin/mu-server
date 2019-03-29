@@ -127,7 +127,7 @@ class ResourceClass {
 
         List<Class<? extends Annotation>> classLevelNameBindingAnnotations = getNameBindingAnnotations(annotationSource);
 
-        TagObject tag = DescriptionData.fromAnnotation(annotationSource, annotationSource.getSimpleName()).toTag();
+        TagObject tag = DescriptionData.fromAnnotation(annotationSource, annotationSource.getSimpleName()).toTag(annotationSource.getSimpleName());
         ResourceClass resourceClass = new ResourceClass(pathPattern, path.value(), restResource, consumesList, producesList, tag, classLevelNameBindingAnnotations);
         resourceClass.setupMethodInfo(paramConverterProviders);
         return resourceClass;

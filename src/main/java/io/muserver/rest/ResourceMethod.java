@@ -154,7 +154,7 @@ class ResourceMethod {
                                                         .withDefaultValue(n.defaultValue());
                                                     if (n.descriptionData != null) {
                                                         schemaObjectBuilder.withExample(n.descriptionData.example)
-                                                            .withDescription(n.descriptionData.description);
+                                                            .withDescription(n.descriptionData.summaryAndDescription());
                                                     }
                                                     return schemaObjectBuilder.build();
                                                 }))

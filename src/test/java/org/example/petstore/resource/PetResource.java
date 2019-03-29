@@ -172,16 +172,15 @@ public class PetResource {
 
     @POST
     @Path("/{petId}")
-    @Consumes({MediaType.APPLICATION_FORM_URLENCODED})
-    @Description("Updates a pet in the store with form data")
-    @ApiResponses(value = {
-        @ApiResponse(code = "405", message = "Invalid input")})
+    @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
+    @Description(value = "Updates a pet in the store with form data", details = "There are other options that don't use forms")
+    @ApiResponse(code = "405", message = "Invalid input")
     public Response updatePetWithForm(
         @Required
         @Description("ID of pet that needs to be updated")
         @PathParam("petId") Long petId,
         @Required
-        @Description("Updated name of the pet")
+        @Description(value = "Updated name of the pet", details = "More details about that")
         @FormParam("name") String name,
         @Required
         @Description("Updated status of the pet")

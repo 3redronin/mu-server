@@ -40,7 +40,7 @@ abstract class ResourceMethodParam {
         ValueSource source = getSource(parameterHandle);
         boolean isRequired = source == ValueSource.PATH_PARAM || hasDeclared(parameterHandle, Required.class);
         if (source == ValueSource.MESSAGE_BODY) {
-            DescriptionData descriptionData = getDescriptionDataForParameter(parameterHandle, "requestBody");
+            DescriptionData descriptionData = DescriptionData.fromAnnotation(parameterHandle, "requestBody");
             return new MessageBodyParam(index, source, parameterHandle, descriptionData, isRequired);
         } else if (source == ValueSource.CONTEXT) {
             return new ContextParam(index, source, parameterHandle);
@@ -63,21 +63,9 @@ abstract class ResourceMethodParam {
             if (key.length() == 0) {
                 throw new WebApplicationException("No parameter specified for the " + source + " in " + parameterHandle);
             }
-            DescriptionData descriptionData = getDescriptionDataForParameter(parameterHandle, key);
+            DescriptionData descriptionData = DescriptionData.fromAnnotation(parameterHandle, key);
             return new RequestBasedParam(index, source, parameterHandle, defaultValue, encodedRequested, lazyDefaultValue, converter, descriptionData, key, isDeprecated, isRequired);
         }
-    }
-
-    private static DescriptionData getDescriptionDataForParameter(Parameter parameterHandle, String key) {
-        DescriptionData descriptionData = DescriptionData.fromAnnotation(parameterHandle, key);
-        if (!key.equals(descriptionData.summary)) {
-            String paramDesc = descriptionData.summary;
-            if (descriptionData.description != null) {
-                paramDesc += "\n" + descriptionData.description;
-            }
-            descriptionData = new DescriptionData(key, paramDesc, descriptionData.externalDocumentation, descriptionData.example);
-        }
-        return descriptionData;
     }
 
     static class RequestBasedParam extends ResourceMethodParam {
@@ -96,8 +84,8 @@ abstract class ResourceMethodParam {
                 .withDeprecated(isDeprecated);
             ExternalDocumentationObject externalDoc = null;
             if (descriptionData != null) {
-                builder.withName(descriptionData.summary)
-                    .withDescription(descriptionData.description)
+                builder.withName(key)
+                    .withDescription(descriptionData.summaryAndDescription())
                     .withExample(descriptionData.example);
                 externalDoc = descriptionData.externalDocumentation;
             }

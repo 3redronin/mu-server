@@ -90,7 +90,7 @@ public class OpenApiDocumentorTest {
                 .getJSONObject("name");
 
             assertThat(updateByFormDataName.getString("type"), is("string"));
-            assertThat(updateByFormDataName.getString("description"), is("Updated name of the pet"));
+            assertThat(updateByFormDataName.getString("description"), is("Updated name of the pet - More details about that"));
 
         }
     }
