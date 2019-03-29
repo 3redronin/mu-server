@@ -7,6 +7,7 @@ import io.netty.handler.codec.http.HttpHeaders;
 import javax.ws.rs.core.MediaType;
 import java.util.*;
 
+import static io.muserver.NettyRequestParameters.isTruthy;
 import static io.netty.util.internal.ObjectUtil.checkNotNull;
 import static java.util.Collections.emptyList;
 
@@ -42,10 +43,53 @@ public class Headers implements Iterable<Map.Entry<String, String>> {
         return entries.getInt(name, defaultValue);
     }
 
+    public long getLong(String name, long defaultValue) {
+        try {
+            String stringVal = get(name, null);
+            if (stringVal == null) {
+                return defaultValue;
+            }
+            return Long.parseLong(stringVal, 10);
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
+    }
+
+    public float getFloat(String name, float defaultValue) {
+        try {
+            String stringVal = get(name, null);
+            if (stringVal == null) {
+                return defaultValue;
+            }
+            return Float.parseFloat(stringVal);
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
+    }
+
+    public double getDouble(String name, double defaultValue) {
+        try {
+            String stringVal = get(name, null);
+            if (stringVal == null) {
+                return defaultValue;
+            }
+            return Double.parseDouble(stringVal);
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
+    }
+
+    public boolean getBoolean(String name) {
+        String val = get(name, "").toLowerCase();
+        return isTruthy(val);
+    }
+
+    @Deprecated
     public Short getShort(CharSequence name) {
         return entries.getShort(name);
     }
 
+    @Deprecated
     public short getShort(CharSequence name, short defaultValue) {
         return entries.getShort(name, defaultValue);
     }
@@ -130,6 +174,7 @@ public class Headers implements Iterable<Map.Entry<String, String>> {
         return this;
     }
 
+    @Deprecated
     public Headers addShort(CharSequence name, short value) {
         entries.addShort(name, value);
         return this;

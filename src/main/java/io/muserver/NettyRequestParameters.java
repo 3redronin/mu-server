@@ -39,7 +39,11 @@ class NettyRequestParameters implements RequestParameters {
     @Override
     public int getInt(String name, int defaultValue) {
         try {
-            return Integer.parseInt(get(name, ""), 10);
+            String stringVal = get(name, null);
+            if (stringVal == null) {
+                return defaultValue;
+            }
+            return Integer.parseInt(stringVal, 10);
         } catch (NumberFormatException e) {
             return defaultValue;
         }
@@ -48,7 +52,11 @@ class NettyRequestParameters implements RequestParameters {
     @Override
     public long getLong(String name, long defaultValue) {
         try {
-            return Long.parseLong(get(name, ""), 10);
+            String stringVal = get(name, null);
+            if (stringVal == null) {
+                return defaultValue;
+            }
+            return Long.parseLong(stringVal, 10);
         } catch (NumberFormatException e) {
             return defaultValue;
         }
@@ -57,7 +65,11 @@ class NettyRequestParameters implements RequestParameters {
     @Override
     public float getFloat(String name, float defaultValue) {
         try {
-            return Float.parseFloat(get(name, ""));
+            String stringVal = get(name, null);
+            if (stringVal == null) {
+                return defaultValue;
+            }
+            return Float.parseFloat(stringVal);
         } catch (NumberFormatException e) {
             return defaultValue;
         }
@@ -66,7 +78,11 @@ class NettyRequestParameters implements RequestParameters {
     @Override
     public double getDouble(String name, double defaultValue) {
         try {
-            return Double.parseDouble(get(name, ""));
+            String stringVal = get(name, null);
+            if (stringVal == null) {
+                return defaultValue;
+            }
+            return Double.parseDouble(stringVal);
         } catch (NumberFormatException e) {
             return defaultValue;
         }

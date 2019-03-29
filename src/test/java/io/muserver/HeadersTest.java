@@ -51,6 +51,29 @@ public class HeadersTest {
     }
 
     @Test
+    public void canParsePrimitives() {
+        Headers headers = new Headers();
+        headers.set("decimal", "1.234");
+        headers.set("int", "1234");
+        headers.set("bool", "true");
+        headers.set("nobool", "false");
+
+        assertThat(headers.getFloat("decimal", 1.3f), is(1.234f));
+        assertThat(headers.getFloat("decimaldewey", 1.3f), is(1.3f));
+        assertThat(headers.getDouble("decimal", 1.3), is(1.234));
+        assertThat(headers.getDouble("decimaldewey", 1.3), is(1.3));
+
+        assertThat(headers.getInt("int", 123456789), is(1234));
+        assertThat(headers.getInt("clint", 123456789), is(123456789));
+        assertThat(headers.getLong("int", 123456789L), is(1234L));
+        assertThat(headers.getLong("clint", 123456789L), is(123456789L));
+
+        assertThat(headers.getBoolean("bool"), is(true));
+        assertThat(headers.getBoolean("nobool"), is(false));
+        assertThat(headers.getBoolean("reallynobool"), is(false));
+    }
+
+    @Test
     public void aHandlerCanChangeTheHeadersOfASubsequentHandler() {
         String randomValue = UUID.randomUUID().toString();
 
