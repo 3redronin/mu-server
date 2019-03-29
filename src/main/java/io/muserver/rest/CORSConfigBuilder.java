@@ -153,7 +153,7 @@ public class CORSConfigBuilder {
      * <p>On preflight OPTIONS requests, specifies which headers are allowed to be sent on the request, aside from the "simple" headers.</p>
      * <p>The "simple" headers are <code>Accept</code>, <code>Accept-Language</code>, <code>Content-Language</code>,
      * <code>Content-Type</code> (but only with a MIME type of <code>application/x-www-form-urlencoded</code>, <code>multipart/form-data</code>, or <code>text/plain</code>).
-     * You do not need to specify the simple headers.</p>     * @param headerNames The names of headers to allow, for example <code>Content-Type</code>
+     * You do not need to specify the simple headers.</p>
      * @param headerNames The names of headers to allow, for example <code>Content-Length</code>
      * @return This builder
      */
