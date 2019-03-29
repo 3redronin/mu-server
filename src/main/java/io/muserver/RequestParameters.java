@@ -77,9 +77,9 @@ public interface RequestParameters {
     boolean getBoolean(String name);
 
     /**
-     * Gets all the querystring parameters with the given name, or an empty list if none are found.
+     * Gets all the parameters with the given name, or an empty list if none are found.
      *
-     * @param name The querystring parameter name to get
+     * @param name The parameter name to get
      * @return All values of the parameter with the given name
      */
     List<String> getAll(String name);

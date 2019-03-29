@@ -23,26 +23,61 @@ public class Headers implements Iterable<Map.Entry<String, String>> {
         this.entries = entries;
     }
 
+    /**
+     * <p>Gets the value with the given name, or null if there is no parameter with that name.</p>
+     * <p>If there are multiple parameters with the same name, the first one is returned.</p>
+     *
+     * @param name The name of the parameter to get
+     * @return The value, or null
+     */
     public String get(String name) {
         return entries.get(name);
     }
 
+    /**
+     * <p>Gets the value with the given name, or null if there is no parameter with that name.</p>
+     * <p>If there are multiple parameters with the same name, the first one is returned.</p>
+     *
+     * @param name The name of the parameter to get
+     * @return The value, or null
+     */
     public String get(CharSequence name) {
         return entries.get(name);
     }
 
+    /**
+     * <p>Gets the value with the given name, or the default value if there is no parameter with that name.</p>
+     * <p>If there are multiple parameters with the same name, the first one is returned.</p>
+     *
+     * @param name The name of the parameter to get
+     * @param defaultValue The default value to use if there is no given value
+     * @return The value of the parameter, or the default value
+     */
     public String get(CharSequence name, String defaultValue) {
         return entries.get(name, defaultValue);
     }
 
+    @Deprecated
     public Integer getInt(CharSequence name) {
         return entries.getInt(name);
     }
 
+    /**
+     * Gets the parameter as an integer, or returns the default value if it was not specified or was in an invalid format.
+     * @param name The name of the parameter.
+     * @param defaultValue The value to use if none was specified, or an invalid format was used.
+     * @return Returns the parameter value as an integer.
+     */
     public int getInt(CharSequence name, int defaultValue) {
         return entries.getInt(name, defaultValue);
     }
 
+    /**
+     * Gets the parameter as a long, or returns the default value if it was not specified or was in an invalid format.
+     * @param name The name of the parameter.
+     * @param defaultValue The value to use if none was specified, or an invalid format was used.
+     * @return Returns the parameter value as a long.
+     */
     public long getLong(String name, long defaultValue) {
         try {
             String stringVal = get(name, null);
@@ -55,6 +90,12 @@ public class Headers implements Iterable<Map.Entry<String, String>> {
         }
     }
 
+    /**
+     * Gets the parameter as a float, or returns the default value if it was not specified or was in an invalid format.
+     * @param name The name of the parameter.
+     * @param defaultValue The value to use if none was specified, or an invalid format was used.
+     * @return Returns the parameter value as a float.
+     */
     public float getFloat(String name, float defaultValue) {
         try {
             String stringVal = get(name, null);
@@ -67,6 +108,12 @@ public class Headers implements Iterable<Map.Entry<String, String>> {
         }
     }
 
+    /**
+     * Gets the parameter as a double, or returns the default value if it was not specified or was in an invalid format.
+     * @param name The name of the parameter.
+     * @param defaultValue The value to use if none was specified, or an invalid format was used.
+     * @return Returns the parameter value as a double.
+     */
     public double getDouble(String name, double defaultValue) {
         try {
             String stringVal = get(name, null);
@@ -79,6 +126,13 @@ public class Headers implements Iterable<Map.Entry<String, String>> {
         }
     }
 
+    /**
+     * <p>Gets a parameter as a boolean, where values such as <code>true</code>, <code>on</code> and <code>yes</code> as
+     * considered true, and other values (or no parameter with the name) is considered false.</p>
+     * <p>This can be used to access checkbox values as booleans.</p>
+     * @param name The name of the parameter.
+     * @return Returns true if the value was truthy, or false if it was falsy or not specified.
+     */
     public boolean getBoolean(String name) {
         String val = get(name, "").toLowerCase();
         return isTruthy(val);
@@ -102,10 +156,22 @@ public class Headers implements Iterable<Map.Entry<String, String>> {
         return entries.getTimeMillis(name, defaultValue);
     }
 
+    /**
+     * Gets all the parameters with the given name, or an empty list if none are found.
+     *
+     * @param name The parameter name to get
+     * @return All values of the parameter with the given name
+     */
     public List<String> getAll(String name) {
         return entries.getAll(name);
     }
 
+    /**
+     * Gets all the parameters with the given name, or an empty list if none are found.
+     *
+     * @param name The parameter name to get
+     * @return All values of the parameter with the given name
+     */
     public List<String> getAll(CharSequence name) {
         return entries.getAll(name);
     }
@@ -114,20 +180,26 @@ public class Headers implements Iterable<Map.Entry<String, String>> {
         return entries.entries();
     }
 
+    /**
+     * Returns true if the given parameter is specified with any value
+     * @param name The name of the value
+     * @return True if it's specified; otherwise false.
+     */
     public boolean contains(String name) {
+        return entries.contains(name);
+    }
+
+    /**
+     * Returns true if the given parameter is specified with any value
+     * @param name The name of the value
+     * @return True if it's specified; otherwise false.
+     */
+    public boolean contains(CharSequence name) {
         return entries.contains(name);
     }
 
     public Iterator<Map.Entry<String, String>> iterator() {
         return entries.iteratorAsString();
-    }
-
-    public Iterator<Map.Entry<CharSequence, CharSequence>> iteratorCharSequence() {
-        return entries.iteratorCharSequence();
-    }
-
-    public boolean contains(CharSequence name) {
-        return entries.contains(name);
     }
 
     public boolean isEmpty() {
@@ -222,6 +294,7 @@ public class Headers implements Iterable<Map.Entry<String, String>> {
         return this;
     }
 
+    @Deprecated
     public Headers setShort(CharSequence name, short value) {
         entries.setShort(name, value);
         return this;
@@ -276,7 +349,7 @@ public class Headers implements Iterable<Map.Entry<String, String>> {
 
 
     public String toString() {
-        return HeadersUtils.toString(getClass(), iteratorCharSequence(), size());
+        return HeadersUtils.toString(getClass(), entries.iteratorCharSequence(), size());
     }
 
     HttpHeaders nettyHeaders() {
