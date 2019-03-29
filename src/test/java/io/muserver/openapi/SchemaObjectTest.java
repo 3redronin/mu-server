@@ -39,11 +39,19 @@ public class SchemaObjectTest {
         schemaObject().withType("string").withDefaultValue("blah").build().writeJson(writer);
         assertThat(writer.toString(), containsString("\"default\":\"blah\""));
     }
+
     @Test
     public void defaultNumbersAllowed() throws IOException {
         Writer writer = new StringWriter();
         schemaObject().withType("number").withDefaultValue(1).build().writeJson(writer);
         assertThat(writer.toString(), containsString("\"default\":1"));
+    }
+
+    @Test
+    public void noDefaultsForPrimitivesIfNotSet() throws IOException {
+        Writer writer = new StringWriter();
+        schemaObject().withType("number").build().writeJson(writer);
+        assertThat(writer.toString(), not(containsString("\"default\"")));
     }
 
     @Test

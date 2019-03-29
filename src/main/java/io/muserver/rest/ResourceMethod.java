@@ -135,7 +135,7 @@ class ResourceMethod {
             if (!formParams.isEmpty()) {
                 List<String> required = new ArrayList<>();
                 requestBody = requestBodyObject()
-                    .withContent(Collections.singletonMap(effectiveConsumes.get(0).toString(),
+                    .withContent(singletonMap(effectiveConsumes.get(0).toString(),
                         mediaTypeObject()
                             .withSchema(
                                 schemaObject()

@@ -178,7 +178,7 @@ public class PetResource {
     public Response updatePetWithForm(
         @Required
         @Description("ID of pet that needs to be updated")
-        @PathParam("petId") Long petId,
+        @PathParam("petId") long petId,
         @Required
         @Description(value = "Updated name of the pet", details = "More details about that")
         @FormParam("name") String name,

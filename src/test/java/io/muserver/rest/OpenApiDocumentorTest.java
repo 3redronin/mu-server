@@ -78,13 +78,27 @@ public class OpenApiDocumentorTest {
             assertThat(findByTagsParam.getJSONObject("schema").getString("type"), equalTo("string"));
 
 
-            JSONObject updateByFormData = paths.getJSONObject("/pet/{petId}")
-                .getJSONObject("post")
+            JSONObject post = paths.getJSONObject("/pet/{petId}")
+                .getJSONObject("post");
+
+            JSONArray parameters = post.getJSONArray("parameters");
+            assertThat(parameters.length(), is(1));
+            JSONObject pathParam = parameters.getJSONObject(0);
+            assertThat(pathParam.getString("name"), is("petId"));
+            assertThat(pathParam.getBoolean("required"), is(true));
+            JSONObject pathParamSchema = pathParam.getJSONObject("schema");
+            assertThat(pathParamSchema.has("default"), is(false));
+            assertThat(pathParamSchema.getBoolean("nullable"), is(false));
+            assertThat(pathParamSchema.getString("format"), is("int64"));
+            assertThat(pathParamSchema.getString("type"), is("integer"));
+
+            JSONObject updateByFormData = post
                 .getJSONObject("requestBody")
                 .getJSONObject("content")
                 .getJSONObject("application/x-www-form-urlencoded")
                 .getJSONObject("schema");
             assertThat(updateByFormData.has("deprecated"), is(false));
+            assertThat(updateByFormData.has("default"), is(false));
 
             JSONObject updateByFormDataName = updateByFormData.getJSONObject("properties")
                 .getJSONObject("name");

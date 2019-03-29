@@ -91,7 +91,7 @@ abstract class ResourceMethodParam {
             }
             return builder.withSchema(
                 schemaObjectFrom(parameterHandle.getType())
-                    .withDefaultValue(defaultValue())
+                    .withDefaultValue(source == ValueSource.PATH_PARAM ? null : defaultValue())
                     .withExternalDocs(externalDoc)
                     .build()
             );
