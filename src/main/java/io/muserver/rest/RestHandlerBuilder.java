@@ -1,6 +1,7 @@
 package io.muserver.rest;
 
 import io.muserver.MuHandlerBuilder;
+import io.muserver.Mutils;
 import io.muserver.handlers.CORSHandlerBuilder;
 import io.muserver.openapi.InfoObject;
 import io.muserver.openapi.OpenAPIObjectBuilder;
@@ -13,9 +14,9 @@ import java.io.InputStream;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
 import java.util.*;
-import java.util.stream.Stream;
 
 import static io.muserver.openapi.PathsObjectBuilder.pathsObject;
+import static java.util.Arrays.asList;
 
 /**
  * Used to create a {@link RestHandler} for handling JAX-RS REST resources.
@@ -24,7 +25,7 @@ import static io.muserver.openapi.PathsObjectBuilder.pathsObject;
  */
 public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
 
-    private Object[] resources;
+    private List<Object> resources = new ArrayList<>();
     private final List<MessageBodyWriter> customWriters = new ArrayList<>();
     private final List<MessageBodyReader> customReaders = new ArrayList<>();
     private final List<ParamConverterProvider> customParamConverterProviders = new ArrayList<>();
@@ -39,7 +40,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     private CORSConfig corsConfig = CORSConfigBuilder.disabled().build();
 
     public RestHandlerBuilder(Object... resources) {
-        this.resources = resources;
+        addResource(resources);
     }
 
     /**
@@ -49,7 +50,8 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * @return This builder
      */
     public RestHandlerBuilder addResource(Object... resources) {
-        this.resources = Stream.of(this.resources, resources).flatMap(Stream::of).toArray(Object[]::new);
+        Mutils.notNull("resources", resources);
+        this.resources.addAll(asList(resources));
         return this;
     }
 
