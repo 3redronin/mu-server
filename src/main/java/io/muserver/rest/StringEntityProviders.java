@@ -33,7 +33,7 @@ class StringEntityProviders {
     );
 
 
-    @Produces({"text/plain; charset=utf-8", "*/*"})
+    @Produces({"text/plain;charset=utf-8", "*/*"})
     @Consumes({"text/plain", "*/*"})
     static class StringMessageReaderWriter implements MessageBodyWriter<String>, MessageBodyReader<String> {
         private StringMessageReaderWriter() {}
@@ -66,7 +66,7 @@ class StringEntityProviders {
         }
     }
 
-    @Produces({"text/plain; charset=utf-8", "*/*"})
+    @Produces({"text/plain;charset=utf-8", "*/*"})
     @Consumes({"text/plain", "*/*"})
     static class CharArrayReaderWriter implements MessageBodyWriter<char[]>, MessageBodyReader<char[]> {
         private CharArrayReaderWriter() {}

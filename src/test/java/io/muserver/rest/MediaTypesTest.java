@@ -132,13 +132,13 @@ public class MediaTypesTest {
         .header("accept", "text")
         )) {
             assertThat(resp.code(), is(400));
-            assertThat(resp.header("Content-Type"), is("text/plain; charset=utf-8"));
+            assertThat(resp.header("Content-Type"), is("text/plain;charset=utf-8"));
         }
 
     }
 
     @Test
-    public void ifReturnTypeIsStringThenDefaultsToTextPlain() throws IOException {
+    public void ifReturnTypeIsStringThenDefaultsToTextPlain() {
         @Path("things")
         class Widget {
 

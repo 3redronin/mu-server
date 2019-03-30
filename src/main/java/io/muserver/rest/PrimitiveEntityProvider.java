@@ -21,7 +21,7 @@ import java.util.function.Function;
 
 import static java.util.Arrays.asList;
 
-@Produces("text/plain; charset=utf-8")
+@Produces("text/plain;charset=utf-8")
 @Consumes("text/plain")
 class PrimitiveEntityProvider<T> implements MessageBodyWriter<T>, MessageBodyReader<T> {
 
