@@ -38,8 +38,14 @@ class NettyResponseAdaptor implements MuResponse {
     private long bytesStreamed = 0;
     private long declaredLength = -1;
 
+
+
     private enum OutputState {
-        NOTHING, FULL_SENT, STREAMING, STREAMING_COMPLETE, FINISHED
+        NOTHING, FULL_SENT, STREAMING, STREAMING_COMPLETE, FINISHED, DISCONNECTED
+    }
+
+    public void onClientDisconnected(boolean wasCompleted) {
+        outputState = OutputState.DISCONNECTED;
     }
 
     NettyResponseAdaptor(ChannelHandlerContext ctx, NettyRequestAdapter request) {
@@ -84,7 +90,7 @@ class NettyResponseAdaptor implements MuResponse {
     }
 
     private void throwIfFinished() {
-        if (outputState == OutputState.FULL_SENT || outputState == OutputState.FINISHED) {
+        if (outputState == OutputState.FULL_SENT || outputState == OutputState.FINISHED || outputState == OutputState.DISCONNECTED) {
             throw new IllegalStateException("Cannot write data as response has already completed");
         }
     }

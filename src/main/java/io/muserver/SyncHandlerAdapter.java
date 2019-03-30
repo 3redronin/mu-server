@@ -85,7 +85,7 @@ class SyncHandlerAdapter implements AsyncMuHandler {
         boolean forceDisconnect = true;
 
         if (response.hasStartedSendingData()) {
-            log.warn("Unhandled error from handler for " + request + " (note that a " + response.status() +
+            log.info("Unhandled error from handler for " + request + " (note that a " + response.status() +
                 " was already sent to the client before the error occurred and so the client may receive an incomplete response)", ex);
         } else {
             WebApplicationException wae;

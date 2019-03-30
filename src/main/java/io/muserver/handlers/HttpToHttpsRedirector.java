@@ -8,7 +8,7 @@ import java.net.URI;
 import java.nio.ByteBuffer;
 
 /**
- * @deprecated Use {@link HttpsRedirector#toHttpsPort(int)} instead and add it as standard handler.
+ * @deprecated Use {@link HttpsRedirectorBuilder#toHttpsPort(int)} instead and add it as standard handler.
  */
 @Deprecated
 public class HttpToHttpsRedirector implements AsyncMuHandler {
