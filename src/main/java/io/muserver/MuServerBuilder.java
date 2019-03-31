@@ -47,7 +47,6 @@ public class MuServerBuilder {
     private int httpsPort = -1;
     private int maxHeadersSize = 8192;
     private int maxUrlSize = 8192 - LENGTH_OF_METHOD_AND_PROTOCOL;
-    private List<AsyncMuHandler> asyncHandlers = new ArrayList<>();
     private List<MuHandler> handlers = new ArrayList<>();
     private boolean gzipEnabled = true;
     private Set<String> mimeTypesToGzip = ResourceType.gzippableMimeTypes(ResourceType.getResourceTypes());
@@ -207,19 +206,14 @@ public class MuServerBuilder {
     }
 
     /**
-     * <p>xAdds a new Asynchronous handler. This is for cases where async handling of requests and
-     * responses is required; in other cases use {@link #addHandler(MuHandler)},
-     * {@link #addHandler(MuHandlerBuilder)} or {@link #addHandler(Method, String, RouteHandler)}.</p>
-     * <p>Note that async handlers are executed in the order added to the builder, but all async
-     * handlers are executed before synchronous handlers.</p>
-     * @param handler An Async Handler
+     * <p>Throws an exception. Do not use.</p>
+     * @param handler Ignored
      * @deprecated For async handling, add a normal {@link MuHandler} and call {@link MuRequest#handleAsync()}
-     * @return The current Mu-Server builder
+     * @return Never returns
      */
     @Deprecated
     public MuServerBuilder addAsyncHandler(AsyncMuHandler handler) {
-        asyncHandlers.add(handler);
-        return this;
+        throw new RuntimeException("This method is not supported. For async handling, add a normal MuHandler and call MuRequest#handleAsync()");
     }
 
     /**
@@ -296,9 +290,8 @@ public class MuServerBuilder {
             throw new IllegalArgumentException("No ports were configured. Please call MuServerBuilder.withHttpPort(int) or MuServerBuilder.withHttpsPort(int)");
         }
 
-        if (!handlers.isEmpty()) {
-            asyncHandlers.add(new SyncHandlerAdapter(handlers));
-        }
+        NettyHandlerAdapter nettyHandlerAdapter = new NettyHandlerAdapter(handlers);
+
         NioEventLoopGroup bossGroup = new NioEventLoopGroup(1);
         NioEventLoopGroup workerGroup = new NioEventLoopGroup();
         List<Channel> channels = new ArrayList<>();
@@ -323,7 +316,7 @@ public class MuServerBuilder {
             AtomicReference<MuServer> serverRef = new AtomicReference<>();
             SslContextProvider sslContextProvider = null;
 
-            Channel httpChannel = httpPort < 0 ? null : createChannel(bossGroup, workerGroup, host, httpPort, null, trafficShapingHandler, stats, serverRef);
+            Channel httpChannel = httpPort < 0 ? null : createChannel(bossGroup, workerGroup, nettyHandlerAdapter, host, httpPort, null, trafficShapingHandler, stats, serverRef);
             Channel httpsChannel;
             if (httpsPort < 0) {
                 httpsChannel = null;
@@ -332,7 +325,7 @@ public class MuServerBuilder {
                 SslContext nettySslContext = toUse.toNettySslContext();
                 log.debug("SSL Context is " + nettySslContext);
                 sslContextProvider = new SslContextProvider(nettySslContext);
-                httpsChannel = createChannel(bossGroup, workerGroup, host, httpsPort, sslContextProvider, trafficShapingHandler, stats, serverRef);
+                httpsChannel = createChannel(bossGroup, workerGroup, nettyHandlerAdapter, host, httpsPort, sslContextProvider, trafficShapingHandler, stats, serverRef);
             }
             URI uri = null;
             if (httpChannel != null) {
@@ -366,7 +359,7 @@ public class MuServerBuilder {
         return URI.create(protocol + "://" + host.toLowerCase() + ":" + a.getPort());
     }
 
-    private Channel createChannel(NioEventLoopGroup bossGroup, NioEventLoopGroup workerGroup, String host, int port, SslContextProvider sslContextProvider, GlobalTrafficShapingHandler trafficShapingHandler, MuStatsImpl stats, AtomicReference<MuServer> serverRef) throws InterruptedException {
+    private Channel createChannel(NioEventLoopGroup bossGroup, NioEventLoopGroup workerGroup, NettyHandlerAdapter nettyHandlerAdapter, String host, int port, SslContextProvider sslContextProvider, GlobalTrafficShapingHandler trafficShapingHandler, MuStatsImpl stats, AtomicReference<MuServer> serverRef) throws InterruptedException {
         boolean usesSsl = sslContextProvider != null;
         String proto = usesSsl ? "https" : "http";
         ServerBootstrap b = new ServerBootstrap();
@@ -395,7 +388,7 @@ public class MuServerBuilder {
                         p.addLast("compressor", new SelectiveHttpContentCompressor(minimumGzipSize, mimeTypesToGzip));
                     }
                     p.addLast("keepalive", new HttpServerKeepAliveHandler());
-                    p.addLast("muhandler", new MuServerHandler(asyncHandlers, stats, serverRef, proto));
+                    p.addLast("muhandler", new MuServerHandler(nettyHandlerAdapter, stats, serverRef, proto));
                 }
             });
         ChannelFuture bound = host == null ? b.bind(port) : b.bind(host, port);

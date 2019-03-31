@@ -35,7 +35,7 @@ public class HttpToHttpsRedirector implements AsyncMuHandler {
         return true;
     }
 
-    public void onRequestData(AsyncContext ctx, ByteBuffer buffer) throws Exception {
+    public void onRequestData(AsyncContext ctx, ByteBuffer buffer) {
     }
 
     public void onRequestComplete(AsyncContext ctx) {

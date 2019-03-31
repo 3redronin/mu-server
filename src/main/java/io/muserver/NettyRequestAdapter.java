@@ -399,7 +399,7 @@ class NettyRequestAdapter implements MuRequest {
         public void complete(Throwable throwable) {
             boolean forceDisconnect = true;
             try {
-                forceDisconnect = SyncHandlerAdapter.dealWithUnhandledException(request, request.nettyAsyncContext.response, throwable);
+                forceDisconnect = NettyHandlerAdapter.dealWithUnhandledException(request, request.nettyAsyncContext.response, throwable);
             } finally {
                 request.nettyAsyncContext.complete(forceDisconnect);
             }

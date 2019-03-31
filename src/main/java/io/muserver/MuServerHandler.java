@@ -12,7 +12,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
-import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static io.netty.buffer.Unpooled.copiedBuffer;
@@ -23,23 +22,23 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
     private static final Logger log = LoggerFactory.getLogger(MuServerHandler.class);
     private static final AttributeKey<State> STATE_ATTRIBUTE = AttributeKey.newInstance("state");
 
-    private final List<AsyncMuHandler> handlers;
+    private final NettyHandlerAdapter nettyHandlerAdapter;
     private final MuStatsImpl stats;
     private final AtomicReference<MuServer> serverRef;
     private final String proto;
 
-    MuServerHandler(List<AsyncMuHandler> handlers, MuStatsImpl stats, AtomicReference<MuServer> serverRef, String proto) {
-        this.handlers = handlers;
+    MuServerHandler(NettyHandlerAdapter nettyHandlerAdapter, MuStatsImpl stats, AtomicReference<MuServer> serverRef, String proto) {
+        this.nettyHandlerAdapter = nettyHandlerAdapter;
         this.stats = stats;
         this.serverRef = serverRef;
         this.proto = proto;
     }
 
     private static final class State {
-        public final AsyncContext asyncContext;
-        public final AsyncMuHandler handler;
+        final AsyncContext asyncContext;
+        final NettyHandlerAdapter handler;
 
-        private State(AsyncContext asyncContext, AsyncMuHandler handler) {
+        private State(AsyncContext asyncContext, NettyHandlerAdapter handler) {
             this.asyncContext = asyncContext;
             this.handler = handler;
         }
@@ -54,7 +53,7 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
         super.channelInactive(ctx);
     }
 
-    protected void channelRead0(ChannelHandlerContext ctx, Object msg) throws Exception {
+    protected void channelRead0(ChannelHandlerContext ctx, Object msg) {
         try {
             onChannelRead(ctx, msg);
         } catch (Exception e) {
@@ -88,8 +87,6 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
                     return;
                 }
 
-                boolean handled = false;
-
                 Method method;
                 try {
                     method = Method.fromNetty(request.method());
@@ -101,18 +98,8 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
                 stats.onRequestStarted(muRequest);
 
                 AsyncContext asyncContext = new AsyncContext(muRequest, new NettyResponseAdaptor(ctx, muRequest), stats);
-
-                for (AsyncMuHandler handler : handlers) {
-                    handled = handler.onHeaders(asyncContext, asyncContext.request.headers());
-                    if (handled) {
-                        ctx.channel().attr(STATE_ATTRIBUTE).set(new State(asyncContext, handler));
-                        break;
-                    }
-                }
-                if (!handled) {
-                    send404(asyncContext);
-                    asyncContext.complete(false);
-                }
+                ctx.channel().attr(STATE_ATTRIBUTE).set(new State(asyncContext, nettyHandlerAdapter));
+                nettyHandlerAdapter.onHeaders(asyncContext, asyncContext.request.headers());
             }
 
         } else if (msg instanceof HttpContent) {
@@ -134,18 +121,6 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
                 }
             }
         }
-    }
-
-    public static void send404(AsyncContext asyncContext) {
-        sendPlainText(asyncContext, "404 Not Found", 404);
-    }
-
-
-    public static void sendPlainText(AsyncContext asyncContext, String message, int statusCode) {
-        MuResponse resp = asyncContext.response;
-        resp.status(statusCode);
-        resp.contentType(ContentTypes.TEXT_PLAIN_UTF8);
-        resp.write(message);
     }
 
     private void handleHttpRequestDecodeFailure(ChannelHandlerContext ctx, Throwable cause) {

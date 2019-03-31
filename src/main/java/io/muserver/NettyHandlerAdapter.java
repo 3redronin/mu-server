@@ -17,7 +17,7 @@ import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-class SyncHandlerAdapter implements AsyncMuHandler {
+class NettyHandlerAdapter {
 
     private static final Map<String, String> exceptionMessageMap = new HashMap<>();
     static {
@@ -25,16 +25,16 @@ class SyncHandlerAdapter implements AsyncMuHandler {
         exceptionMessageMap.put(new NotFoundException().getMessage(), "This page is not available. Sorry about that.");
     }
 
-    private static final Logger log = LoggerFactory.getLogger(SyncHandlerAdapter.class);
+    private static final Logger log = LoggerFactory.getLogger(NettyHandlerAdapter.class);
     private final List<MuHandler> muHandlers;
     private static final ExecutorService executor = Executors.newCachedThreadPool(new DefaultThreadFactory("muhandler"));
 
-    SyncHandlerAdapter(List<MuHandler> muHandlers) {
+    NettyHandlerAdapter(List<MuHandler> muHandlers) {
         this.muHandlers = muHandlers;
     }
 
 
-    public boolean onHeaders(AsyncContext ctx, Headers headers) throws Exception {
+    void onHeaders(AsyncContext ctx, Headers headers) {
 
         NettyRequestAdapter request = (NettyRequestAdapter) ctx.request;
         if (headers.hasBody()) {
@@ -77,7 +77,6 @@ class SyncHandlerAdapter implements AsyncMuHandler {
                 }
             }
         });
-        return true;
     }
 
 
@@ -115,11 +114,11 @@ class SyncHandlerAdapter implements AsyncMuHandler {
         return forceDisconnect;
     }
 
-    public void onRequestData(AsyncContext ctx, ByteBuffer buffer) {
+    void onRequestData(AsyncContext ctx, ByteBuffer buffer) {
         ctx.requestBody.handOff(buffer);
     }
 
-    public void onRequestComplete(AsyncContext ctx) {
+    void onRequestComplete(AsyncContext ctx) {
         try {
             GrowableByteBufferInputStream inputBuffer = ctx.requestBody;
             if (inputBuffer != null) {
