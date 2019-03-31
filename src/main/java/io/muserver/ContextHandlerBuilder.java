@@ -15,6 +15,7 @@ public class ContextHandlerBuilder implements MuHandlerBuilder<ContextHandler> {
 
     /**
      * Sets the path to serve from.
+     * <p>If a null or empty path is given, then it is as if the child handlers are not added to a context.</p>
      *
      * @param path The path, such as <code>api</code> or <code>/api/</code> etc
      * @return Returns the current builder.
@@ -29,6 +30,7 @@ public class ContextHandlerBuilder implements MuHandlerBuilder<ContextHandler> {
      * {@link #addHandler(Method, String, RouteHandler)} will be served relative to the path given.</p>
      * <p>Request handlers can get the context they are served from by using the {@link MuRequest#contextPath()} and
      * can get the path relative to handler with {@link MuRequest#relativePath()}.</p>
+     * <p>If a null or empty path is given, then it is as if the child handlers are not added to a context.</p>
      *
      * @param path The path to serve handlers from, for example <code>api</code> or <code>/api/</code> (which are equivalent).
      * @return Returns a builder with methods to add handlers to this context.

@@ -123,14 +123,34 @@ public class ContextHandlerTest {
                 }))
             .start();
 
-        try (Response resp = call(request().url(server.uri().resolve("/").toString()))) {
+        try (Response resp = call(request(server.uri().resolve("/")))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.body().string(), equalTo("context=;relative=/"));
         }
-        try (Response resp = call(request().url(server.uri().resolve("").toString()))) {
+        try (Response resp = call(request(server.uri().resolve("")))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.body().string(), equalTo("context=;relative=/"));
         }
+    }
+
+    @Test
+    public void ifContextIsEmptyThenItJustPassesToChildHandlers() throws IOException {
+        String[] empties = {"", "/", " ", " / ", "//", null};
+        for (String empty : empties) {
+            server = httpsServer()
+                .addHandler(
+                    context(empty)
+                        .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                            response.write("I got it. " + request.contextPath().isEmpty() + " and "
+                                + request.relativePath());
+                        }))
+                .start();
+            try (Response resp = call(request(server.uri().resolve("/")))) {
+                assertThat(resp.code(), is(200));
+                assertThat(resp.body().string(), equalTo("I got it. true and /"));
+            }
+        }
+
     }
 
     @After
