@@ -18,7 +18,6 @@ import io.netty.handler.codec.http.HttpServerKeepAliveHandler;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.traffic.GlobalTrafficShapingHandler;
-import io.netty.util.Attribute;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,8 +30,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
-
-import static io.muserver.MuServerHandler.PROTO_ATTRIBUTE;
 
 /**
  * <p>A builder for creating a web server.</p>
@@ -371,14 +368,13 @@ public class MuServerBuilder {
 
     private Channel createChannel(NioEventLoopGroup bossGroup, NioEventLoopGroup workerGroup, String host, int port, SslContextProvider sslContextProvider, GlobalTrafficShapingHandler trafficShapingHandler, MuStatsImpl stats, AtomicReference<MuServer> serverRef) throws InterruptedException {
         boolean usesSsl = sslContextProvider != null;
+        String proto = usesSsl ? "https" : "http";
         ServerBootstrap b = new ServerBootstrap();
         b.group(bossGroup, workerGroup)
             .channel(NioServerSocketChannel.class)
             .childHandler(new ChannelInitializer<SocketChannel>() {
 
                 protected void initChannel(SocketChannel socketChannel) throws Exception {
-                    Attribute<String> proto = socketChannel.attr(PROTO_ATTRIBUTE);
-                    proto.set(usesSsl ? "https" : "http");
                     ChannelPipeline p = socketChannel.pipeline();
                     p.addLast(trafficShapingHandler);
                     if (usesSsl) {
@@ -399,7 +395,7 @@ public class MuServerBuilder {
                         p.addLast("compressor", new SelectiveHttpContentCompressor(minimumGzipSize, mimeTypesToGzip));
                     }
                     p.addLast("keepalive", new HttpServerKeepAliveHandler());
-                    p.addLast("muhandler", new MuServerHandler(asyncHandlers, stats, serverRef));
+                    p.addLast("muhandler", new MuServerHandler(asyncHandlers, stats, serverRef, proto));
                 }
             });
         ChannelFuture bound = host == null ? b.bind(port) : b.bind(host, port);

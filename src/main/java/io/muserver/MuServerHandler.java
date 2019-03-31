@@ -21,17 +21,18 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 class MuServerHandler extends SimpleChannelInboundHandler<Object> {
     private static final Logger log = LoggerFactory.getLogger(MuServerHandler.class);
-    static final AttributeKey<String> PROTO_ATTRIBUTE = AttributeKey.newInstance("proto");
     private static final AttributeKey<State> STATE_ATTRIBUTE = AttributeKey.newInstance("state");
 
     private final List<AsyncMuHandler> handlers;
     private final MuStatsImpl stats;
     private final AtomicReference<MuServer> serverRef;
+    private final String proto;
 
-    public MuServerHandler(List<AsyncMuHandler> handlers, MuStatsImpl stats, AtomicReference<MuServer> serverRef) {
+    MuServerHandler(List<AsyncMuHandler> handlers, MuStatsImpl stats, AtomicReference<MuServer> serverRef, String proto) {
         this.handlers = handlers;
         this.stats = stats;
         this.serverRef = serverRef;
+        this.proto = proto;
     }
 
     private static final class State {
@@ -96,7 +97,7 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
                     sendSimpleResponse(ctx, "405 Method Not Allowed", 405);
                     return;
                 }
-                NettyRequestAdapter muRequest = new NettyRequestAdapter(ctx.channel(), request, serverRef, method);
+                NettyRequestAdapter muRequest = new NettyRequestAdapter(ctx.channel(), request, serverRef, method, proto);
                 stats.onRequestStarted(muRequest);
 
                 AsyncContext asyncContext = new AsyncContext(muRequest, new NettyResponseAdaptor(ctx, muRequest), stats);
@@ -118,7 +119,7 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
             HttpContent content = (HttpContent) msg;
             State state = ctx.channel().attr(STATE_ATTRIBUTE).get();
             if (state == null) {
-                log.info("Got a chunk of message for an unknown request. This can happen when a request is rejected based on headers, and then the rejected body arrives.");
+                log.debug("Got a chunk of message for an unknown request. This can happen when a request is rejected based on headers, and then the rejected body arrives.");
             } else {
                 ByteBuf byteBuf = content.content();
                 if (byteBuf.capacity() > 0) {

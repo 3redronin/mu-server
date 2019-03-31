@@ -51,11 +51,10 @@ class NettyRequestAdapter implements MuRequest {
     private Map<String, Object> attributes;
     private volatile AsyncHandleImpl asyncHandle;
 
-    NettyRequestAdapter(Channel channel, HttpRequest request, AtomicReference<MuServer> serverRef, Method method) {
+    NettyRequestAdapter(Channel channel, HttpRequest request, AtomicReference<MuServer> serverRef, Method method, String proto) {
         this.channel = channel;
         this.request = request;
         this.serverRef = serverRef;
-        String proto = channel.attr(MuServerHandler.PROTO_ATTRIBUTE).get();
         String host = request.headers().get(HeaderNames.HOST);
         this.serverUri = URI.create(proto + "://" + host + request.uri());
         this.headers = new Headers(request.headers());
