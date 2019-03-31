@@ -56,9 +56,9 @@ class NettyRequestAdapter implements MuRequest {
         this.request = request;
         this.serverRef = serverRef;
         String host = request.headers().get(HeaderNames.HOST);
-        this.serverUri = URI.create(proto + "://" + host + request.uri());
+        this.serverUri = URI.create(proto + "://" + host + request.uri()).normalize();
         this.headers = new Headers(request.headers());
-        this.uri = getUri(headers, proto, host, URI.create(request.uri()), serverUri);
+        this.uri = getUri(headers, proto, host, request.uri(), serverUri);
         this.relativePath = this.uri.getRawPath();
         this.query = new NettyRequestParameters(new QueryStringDecoder(request.uri(), true));
         this.method = method;
@@ -72,7 +72,7 @@ class NettyRequestAdapter implements MuRequest {
         return HttpUtil.isKeepAlive(request);
     }
 
-    private static URI getUri(Headers h, String scheme, String hostHeader, URI requestUri, URI serverUri) {
+    private static URI getUri(Headers h, String scheme, String hostHeader, String requestUri, URI serverUri) {
         try {
             List<ForwardedHeader> forwarded = h.forwarded();
             if (forwarded.isEmpty()) {
@@ -82,7 +82,7 @@ class NettyRequestAdapter implements MuRequest {
 
             String originalScheme = Mutils.coalesce(f.proto(), scheme);
             String host = Mutils.coalesce(f.host(), hostHeader);
-            return new URI(originalScheme + "://" + host + requestUri);
+            return new URI(originalScheme + "://" + host + requestUri).normalize();
         } catch (Exception e) {
             log.warn("Could not create a URI object using header values " + h
                 + " so using local server URI. URL generation (including in redirects) may be incorrect.");
