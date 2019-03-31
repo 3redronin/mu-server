@@ -45,7 +45,7 @@ public class AsyncContext {
     void onDisconnected() {
         boolean wasCompleted = isComplete();
         ((NettyRequestAdapter) request).onClientDisconnected(wasCompleted);
-        ((NettyResponseAdaptor) response).onClientDisconnected(wasCompleted);
+        ((NettyResponseAdaptor) response).onClientDisconnected();
         if (!wasCompleted) {
             complete(true);
         }

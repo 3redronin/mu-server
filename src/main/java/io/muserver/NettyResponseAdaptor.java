@@ -7,16 +7,17 @@ import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.*;
 import io.netty.handler.codec.http.cookie.ServerCookieEncoder;
-import io.netty.util.CharsetUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.ws.rs.core.MediaType;
 import java.io.BufferedOutputStream;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.net.URI;
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.concurrent.Future;
@@ -38,13 +39,11 @@ class NettyResponseAdaptor implements MuResponse {
     private long bytesStreamed = 0;
     private long declaredLength = -1;
 
-
-
     private enum OutputState {
         NOTHING, FULL_SENT, STREAMING, STREAMING_COMPLETE, FINISHED, DISCONNECTED
     }
 
-    public void onClientDisconnected(boolean wasCompleted) {
+    void onClientDisconnected() {
         outputState = OutputState.DISCONNECTED;
     }
 
@@ -170,8 +169,16 @@ class NettyResponseAdaptor implements MuResponse {
         lastAction = write(textToBuffer(text), true);
     }
 
-    private static ByteBuf textToBuffer(String text) {
-        return Unpooled.copiedBuffer(text, CharsetUtil.UTF_8);
+    private ByteBuf textToBuffer(String text) {
+        Charset charset = StandardCharsets.UTF_8;
+        MediaType type = headers().contentType();
+        if (type != null) {
+            String encoding = type.getParameters().get("charset");
+            if (!Mutils.nullOrEmpty(encoding)) {
+                charset = Charset.forName(encoding);
+            }
+        }
+        return Unpooled.copiedBuffer(text, charset);
     }
 
     public void redirect(String newLocation) {

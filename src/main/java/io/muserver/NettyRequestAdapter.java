@@ -13,11 +13,13 @@ import io.netty.handler.codec.http.multipart.InterfaceHttpData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.ws.rs.core.MediaType;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
 import java.util.*;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicReference;
@@ -139,7 +141,16 @@ class NettyRequestAdapter implements MuRequest {
 
 
     public String readBodyAsString() throws IOException {
-        return new String(readBodyAsBytes(), UTF_8); // TODO: respect the charset of the content-type if provided
+        MediaType mediaType = headers().contentType();
+        Charset bodyCharset = UTF_8;
+        if (mediaType != null) {
+            String charset = mediaType.getParameters().get("charset");
+            if (!Mutils.nullOrEmpty(charset)) {
+                bodyCharset = Charset.forName(charset);
+            }
+        }
+        byte[] bytes = readBodyAsBytes();
+        return new String(bytes, bodyCharset);
     }
 
     private void claimingBodyRead() {

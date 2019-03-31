@@ -1,9 +1,11 @@
 package io.muserver;
 
+import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.junit.*;
 import scaffolding.RawClient;
 
+import java.io.File;
 import java.io.IOException;
 import java.net.ConnectException;
 import java.net.InetAddress;
@@ -96,7 +98,7 @@ public class MuServerTest {
                 handlersHit.add("BlahHandler");
                 response.status(202);
                 response.write("This is a test and this is the state: " + request.attribute("random")
-                + " and this does not exist: " + request.attribute("blah"));
+                    + " and this does not exist: " + request.attribute("blah"));
             })
             .addHandler((request, response) -> {
                 handlersHit.add("LastHandler");
@@ -214,6 +216,29 @@ public class MuServerTest {
             Thread.sleep(10);
         }
         assertThat(rawClient.responseString(), startsWith("HTTP/1.1 400 Bad Request"));
+    }
+
+    @Test
+    public void nonUTF8IsSupported() throws IOException {
+        File warAndPeaceInRussian = new File("src/test/resources/sample-static/war-and-peace-in-ISO-8859-5.txt");
+        assertThat("Couldn't find " + Mutils.fullPath(warAndPeaceInRussian), warAndPeaceInRussian.isFile(), is(true));
+
+        server = httpServer()
+            .addHandler((req, resp) -> {
+                resp.contentType(req.headers().contentType().toString());
+                String body = req.readBodyAsString();
+                resp.write(body);
+                return true;
+            })
+            .start();
+
+        try (Response resp = call(request(server.uri())
+            .post(RequestBody.create(okhttp3.MediaType.get("text/plain; charset=ISO-8859-5"), warAndPeaceInRussian))
+        )) {
+            assertThat(resp.header("Content-Type"), is("text/plain;charset=ISO-8859-5"));
+            String body = resp.body().string();
+            assertThat(body, containsString("ЧАСТЬ ПЕРВАЯ."));
+        }
     }
 
     @Test

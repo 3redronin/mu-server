@@ -22,9 +22,11 @@ public interface MuRequest {
     /**
      * <p>Gets the content type of the request body, for example <code>application/json</code> or <code>null</code>
      * if there is no body.</p>
-     * <p>Note: If the Content-Type header included a charset, then this will NOT be returned by this method.</p>
+     * <p>Note: If the Content-Type header included a charset, then this will NOT be returned by this method. In order
+     * to get the charset, use <code>request.headers().contentType()</code> and access the <code>charset</code> parameter on that.</p>
      * @return The content type of the request body (specified by the <code>Content-Type</code> request header),
      * or <code>null</code> if there is no body.
+     * @see Headers#contentType()
      */
     String contentType();
 
@@ -68,13 +70,10 @@ public interface MuRequest {
 
     /**
      * Returns the request body as a string.
-     * <p>
-     * This is a blocking call which waits until the whole request is available. If you need the raw bytes, or to stream
-     * the request body, then use the {@link #inputStream()} instead.
-     * <p>
-     * The content type of the request body is assumed to be UTF-8.
-     * <p>
-     * Note: this can only be read once and cannot be used with {@link #inputStream()} ()} or {@link #form()}.
+     * <p>This is a blocking call which waits until the whole request is available. If you need the raw bytes, or to stream
+     * the request body, then use the {@link #inputStream()} instead.</p>
+     * <p>The content type of the request body is assumed to be UTF-8 if no encoding is specified</p>
+     * <p>Note: this can only be read once and cannot be used with {@link #inputStream()} ()} or {@link #form()}.</p>
      *
      * @return The content of the request body, or an empty string if there is no request body
      * @throws IOException if there is an exception during reading the request, e.g. if the HTTP connection is stopped during a request
