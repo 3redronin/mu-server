@@ -16,6 +16,7 @@ import org.slf4j.LoggerFactory;
 import javax.ws.rs.core.MediaType;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.ByteBuffer;
@@ -280,7 +281,9 @@ class NettyRequestAdapter implements MuRequest {
 
     @Override
     public String remoteAddress() {
-        return ((InetSocketAddress)channel.remoteAddress()).getAddress().getHostAddress();
+        InetSocketAddress isa = (InetSocketAddress) channel.remoteAddress();
+        InetAddress a = isa.getAddress();
+        return a.getHostAddress();
     }
 
     @Override
