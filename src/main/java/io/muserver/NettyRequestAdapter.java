@@ -282,6 +282,9 @@ class NettyRequestAdapter implements MuRequest {
     @Override
     public String remoteAddress() {
         InetSocketAddress isa = (InetSocketAddress) channel.remoteAddress();
+        if (isa == null) {
+            return null;
+        }
         InetAddress a = isa.getAddress();
         return a.getHostAddress();
     }

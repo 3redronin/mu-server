@@ -246,7 +246,7 @@ public interface MuRequest {
     /**
      * Gets the address that the request came from. Warning: this may not be the client's address and instead
      * may be an intermediary such as a network gateway.
-     * @return The IP address of the client, or of a gateway with NAT, etc.
+     * @return The IP address of the client, or of a gateway with NAT, etc, or null if the client has already disconnected.
      */
     String remoteAddress();
 
