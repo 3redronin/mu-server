@@ -84,8 +84,12 @@ class NettyHandlerAdapter {
         boolean forceDisconnect = true;
 
         if (response.hasStartedSendingData()) {
-            log.info("Unhandled error from handler for " + request + " (note that a " + response.status() +
-                " was already sent to the client before the error occurred and so the client may receive an incomplete response)", ex);
+            if (((NettyResponseAdaptor)response).clientDisconnected()) {
+                log.debug("Client disconnected before " + request + " was complete");
+            } else {
+                log.info("Unhandled error from handler for " + request + " (note that a " + response.status() +
+                    " was already sent to the client before the error occurred and so the client may receive an incomplete response)", ex);
+            }
         } else {
             WebApplicationException wae;
             if (ex instanceof WebApplicationException) {

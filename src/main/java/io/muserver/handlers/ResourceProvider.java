@@ -213,10 +213,7 @@ class AsyncFileProvider implements ResourceProvider, CompletionHandler<Integer, 
         buf.flip();
         if (bytesRead == -1) {
             handle.complete();
-            try {
-                channel.close();
-            } catch (IOException ignored) {
-            }
+            closeChannelQuietly();
         } else {
 
             // for range requests, more bytes may be read than should be written, so the write is limited
@@ -229,6 +226,7 @@ class AsyncFileProvider implements ResourceProvider, CompletionHandler<Integer, 
                 @Override
                 public void onFailure(Throwable reason) {
                     // client probably disconnected... no big deal
+                    closeChannelQuietly();
                     handle.complete();
                 }
 
@@ -240,6 +238,14 @@ class AsyncFileProvider implements ResourceProvider, CompletionHandler<Integer, 
                     channel.read(buf, curPos, null, AsyncFileProvider.this);
                 }
             });
+        }
+    }
+
+    private void closeChannelQuietly() {
+        try {
+            channel.close();
+        } catch (IOException e) {
+            log.debug("Error while closing file channel " + localPath, e);
         }
     }
 

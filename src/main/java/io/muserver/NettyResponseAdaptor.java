@@ -231,6 +231,10 @@ class NettyResponseAdaptor implements MuResponse {
         return outputState != OutputState.NOTHING;
     }
 
+    boolean clientDisconnected() {
+        return outputState == OutputState.DISCONNECTED;
+    }
+
     ChannelFuture complete(boolean forceDisconnect) {
         if (outputState == OutputState.FINISHED) {
             return lastAction;
@@ -271,7 +275,9 @@ class NettyResponseAdaptor implements MuResponse {
                 lastAction = lastAction.addListener(ChannelFutureListener.CLOSE);
             }
         }
-        this.outputState = OutputState.FINISHED;
+        if (this.outputState != OutputState.DISCONNECTED) {
+            this.outputState = OutputState.FINISHED;
+        }
         return lastAction;
     }
 
