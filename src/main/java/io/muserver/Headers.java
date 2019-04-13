@@ -167,8 +167,32 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
 
     Headers clear();
 
+    /**
+     * Checks if a header with the given name exists with the given value.
+     * @param name The case-insensitive header name to check.
+     * @param value The value to check for.
+     * @param ignoreCase If true, the case of the value is ignored.
+     * @return True if a header name with the given value exists.
+     */
     boolean contains(String name, String value, boolean ignoreCase);
 
+    /**
+     * Checks if a header with the given name exists with the given value.
+     * @param name The case-insensitive header name to check.
+     * @param value The value to check for.
+     * @param ignoreCase If true, the case of the value is ignored.
+     * @return True if a header name with the given value exists.
+     */
+    boolean contains(CharSequence name, CharSequence value, boolean ignoreCase);
+
+    /**
+     * Similar to {@link #contains(String, String, boolean)} but returns true even if a value occurs in a comma-separated
+     * header list.
+     * @param name The case-insensitive header name to check.
+     * @param value The value to check for.
+     * @param ignoreCase If true, the case of the value is ignored.
+     * @return True if a header name with the given value exists.
+     */
     boolean containsValue(CharSequence name, CharSequence value, boolean ignoreCase);
 
     @Deprecated
@@ -179,8 +203,6 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
 
     @Deprecated
     Iterator<Map.Entry<String, String>> iteratorAsString();
-
-    boolean contains(CharSequence name, CharSequence value, boolean ignoreCase);
 
     boolean equals(Object o);
 

@@ -286,6 +286,11 @@ class H1Headers implements Headers {
     }
 
     @Override
+    public boolean contains(CharSequence name, CharSequence value, boolean ignoreCase) {
+        return entries.contains(name, value, ignoreCase);
+    }
+
+    @Override
     public boolean containsValue(CharSequence name, CharSequence value, boolean ignoreCase) {
         return entries.containsValue(name, value, ignoreCase);
     }
@@ -303,11 +308,6 @@ class H1Headers implements Headers {
     @Override
     public Iterator<Map.Entry<String, String>> iteratorAsString() {
         return entries.iteratorAsString();
-    }
-
-    @Override
-    public boolean contains(CharSequence name, CharSequence value, boolean ignoreCase) {
-        return entries.contains(name, value, ignoreCase);
     }
 
     @Override

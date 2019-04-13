@@ -24,30 +24,40 @@ class H2Headers implements Headers {
         this.entries = entries;
     }
 
+    private static CharSequence toLower(CharSequence name) {
+        Mutils.notNull("name", name);
+        if (name instanceof String) {
+            return ((String)name).toLowerCase();
+        }
+        return name;
+    }
+
     @Override
     public String get(String name) {
-        return entries.get(name).toString();
+        return get((CharSequence)name);
     }
 
     @Override
     public String get(CharSequence name) {
-        return entries.get(name).toString();
+        CharSequence val = entries.get(toLower(name));
+        return val == null ? null : val.toString();
     }
 
     @Override
     public String get(CharSequence name, String defaultValue) {
-        return entries.get(name, defaultValue).toString();
+        CharSequence val = entries.get(toLower(name), defaultValue);
+        return val == null ? null : val.toString();
     }
 
     @Override
     @Deprecated
     public Integer getInt(CharSequence name) {
-        return entries.getInt(name);
+        return entries.getInt(toLower(name));
     }
 
     @Override
     public int getInt(CharSequence name, int defaultValue) {
-        return entries.getInt(name, defaultValue);
+        return entries.getInt(toLower(name), defaultValue);
     }
 
     @Override
@@ -98,23 +108,23 @@ class H2Headers implements Headers {
     @Override
     @Deprecated
     public Short getShort(CharSequence name) {
-        return entries.getShort(name);
+        return entries.getShort(toLower(name));
     }
 
     @Override
     @Deprecated
     public short getShort(CharSequence name, short defaultValue) {
-        return entries.getShort(name, defaultValue);
+        return entries.getShort(toLower(name), defaultValue);
     }
 
     @Override
     public Long getTimeMillis(CharSequence name) {
-        return entries.getTimeMillis(name);
+        return entries.getTimeMillis(toLower(name));
     }
 
     @Override
     public long getTimeMillis(CharSequence name, long defaultValue) {
-        return entries.getTimeMillis(name, defaultValue);
+        return entries.getTimeMillis(toLower(name), defaultValue);
     }
 
     @Override
@@ -124,7 +134,7 @@ class H2Headers implements Headers {
 
     @Override
     public List<String> getAll(CharSequence name) {
-        return entries.getAll(name).stream().map(CharSequence::toString).collect(Collectors.toList());
+        return entries.getAll(toLower(name)).stream().map(CharSequence::toString).collect(Collectors.toList());
     }
 
     @Override
@@ -138,12 +148,12 @@ class H2Headers implements Headers {
 
     @Override
     public boolean contains(String name) {
-        return entries.contains(name);
+        return contains((CharSequence)name);
     }
 
     @Override
     public boolean contains(CharSequence name) {
-        return entries.contains(name);
+        return entries.contains(toLower(name));
     }
 
     @Override
@@ -180,14 +190,13 @@ class H2Headers implements Headers {
 
     @Override
     public Headers add(String name, Object value) {
-        entries.addObject(name, value);
-        return this;
+        return add((CharSequence)name, value);
     }
 
 
     @Override
     public Headers add(CharSequence name, Object value) {
-        entries.addObject(name, value);
+        entries.addObject(toLower(name), value);
         return this;
     }
 
@@ -198,6 +207,7 @@ class H2Headers implements Headers {
 
     @Override
     public Headers add(CharSequence name, Iterable<?> values) {
+        name = toLower(name);
         for (Object value : values) {
             entries.addObject(name, value);
         }
@@ -214,14 +224,14 @@ class H2Headers implements Headers {
 
     @Override
     public Headers addInt(CharSequence name, int value) {
-        entries.addInt(name, value);
+        entries.addInt(toLower(name), value);
         return this;
     }
 
     @Override
     @Deprecated
     public Headers addShort(CharSequence name, short value) {
-        entries.addShort(name, value);
+        entries.addShort(toLower(name), value);
         return this;
     }
 
@@ -232,7 +242,7 @@ class H2Headers implements Headers {
 
     @Override
     public Headers set(CharSequence name, Object value) {
-        entries.setObject(name, value);
+        entries.setObject(toLower(name), value);
         return this;
     }
 
@@ -243,6 +253,7 @@ class H2Headers implements Headers {
 
     @Override
     public Headers set(CharSequence name, Iterable<?> values) {
+        name = toLower(name);
         entries.remove(name);
         return add(name, values);
     }
@@ -268,26 +279,25 @@ class H2Headers implements Headers {
 
     @Override
     public Headers setInt(CharSequence name, int value) {
-        entries.setInt(name, value);
+        entries.setInt(toLower(name), value);
         return this;
     }
 
     @Override
     @Deprecated
     public Headers setShort(CharSequence name, short value) {
-        entries.setShort(name, value);
+        entries.setShort(toLower(name), value);
         return this;
     }
 
     @Override
     public Headers remove(String name) {
-        entries.remove(name);
-        return this;
+        return remove((CharSequence)name);
     }
 
     @Override
     public Headers remove(CharSequence name) {
-        entries.remove(name);
+        entries.remove(toLower(name));
         return this;
     }
 
@@ -299,12 +309,17 @@ class H2Headers implements Headers {
 
     @Override
     public boolean contains(String name, String value, boolean ignoreCase) {
-        return entries.contains(name, value, ignoreCase);
+        return contains((CharSequence)name, value, ignoreCase);
+    }
+
+    @Override
+    public boolean contains(CharSequence name, CharSequence value, boolean ignoreCase) {
+        return entries.contains(toLower(name), value, ignoreCase);
     }
 
     @Override
     public boolean containsValue(CharSequence name, CharSequence value, boolean ignoreCase) {
-        return entries.contains(name, value, ignoreCase);
+        return entries.contains(toLower(name), value, ignoreCase);
     }
 
     @Override
@@ -320,11 +335,6 @@ class H2Headers implements Headers {
     @Override
     public Iterator<Map.Entry<String, String>> iteratorAsString() {
         return iterator();
-    }
-
-    @Override
-    public boolean contains(CharSequence name, CharSequence value, boolean ignoreCase) {
-        return entries.contains(name, value, ignoreCase);
     }
 
     @Override
