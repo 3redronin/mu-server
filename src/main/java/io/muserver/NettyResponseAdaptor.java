@@ -20,6 +20,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.Map;
 import java.util.concurrent.Future;
 
 import static io.muserver.ContentTypes.TEXT_PLAIN_UTF8;
@@ -31,7 +32,7 @@ class NettyResponseAdaptor implements MuResponse {
     private OutputState outputState = OutputState.NOTHING;
     private final ChannelHandlerContext ctx;
     private final NettyRequestAdapter request;
-    private final Headers headers = new Headers();
+    private final H1Headers headers = new H1Headers();
     private ChannelFuture lastAction;
     private int status = 200;
     private PrintWriter writer;
@@ -85,7 +86,10 @@ class NettyResponseAdaptor implements MuResponse {
     }
 
     private static void writeHeaders(HttpResponse response, Headers headers) {
-        response.headers().add(headers.nettyHeaders());
+        HttpHeaders rh = response.headers();
+        for (Map.Entry<String, String> header : headers) {
+            rh.add(header.getKey(), header.getValue());
+        }
     }
 
     private void throwIfFinished() {
@@ -245,7 +249,7 @@ class NettyResponseAdaptor implements MuResponse {
             HttpResponse msg = isHead ?
                 new EmptyHttpResponse(httpStatus()) :
                 new DefaultFullHttpResponse(HTTP_1_1, httpStatus(), false);
-            msg.headers().add(this.headers.nettyHeaders());
+            writeHeaders(msg, this.headers);
             if ((!isHead || !isFixedLength) && status != 204 && status != 205 && status != 304) {
                 msg.headers().set(HeaderNames.CONTENT_LENGTH, 0);
             }

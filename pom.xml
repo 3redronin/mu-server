@@ -6,7 +6,7 @@
 
     <groupId>io.muserver</groupId>
     <artifactId>mu-server</artifactId>
-    <version>0.26-SNAPSHOT</version>
+    <version>0.27-SNAPSHOT</version>
 
     <name>mu-server</name>
     <description>A simple but powerful web server framework</description>
@@ -74,6 +74,11 @@
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-codec</artifactId>
+            <version>${netty.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec-http2</artifactId>
             <version>${netty.version}</version>
         </dependency>
         <dependency>

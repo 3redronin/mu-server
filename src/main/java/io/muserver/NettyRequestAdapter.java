@@ -58,7 +58,7 @@ class NettyRequestAdapter implements MuRequest {
         this.serverRef = serverRef;
         String host = request.headers().get(HeaderNames.HOST);
         this.serverUri = URI.create(proto + "://" + host + request.uri()).normalize();
-        this.headers = new Headers(request.headers());
+        this.headers = new H1Headers(request.headers());
         this.uri = getUri(headers, proto, host, request.uri(), serverUri);
         this.relativePath = this.uri.getRawPath();
         this.query = new NettyRequestParameters(new QueryStringDecoder(request.uri(), true));

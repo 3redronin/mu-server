@@ -3,11 +3,14 @@ package io.muserver.rest;
 
 import io.muserver.HeaderNames;
 import io.muserver.Headers;
+import io.muserver.MuException;
 
 import javax.ws.rs.core.*;
+import javax.ws.rs.ext.RuntimeDelegate;
 import java.lang.annotation.Annotation;
 import java.net.URI;
 import java.util.*;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static java.util.Arrays.asList;
@@ -18,13 +21,13 @@ class JaxRSResponse extends Response {
         MuRuntimeDelegate.ensureSet();
     }
 
-    private final Headers headers;
+    private final MultivaluedMap<String, Object> headers;
     private final StatusType status;
     private final Object entity;
     private final MediaType type;
     private final NewCookie[] cookies;
 
-    JaxRSResponse(StatusType status, Headers headers, Object entity, MediaType type, NewCookie[] cookies) {
+    JaxRSResponse(StatusType status, MultivaluedMap<String, Object> headers, Object entity, MediaType type, NewCookie[] cookies) {
         this.status = status;
         this.headers = headers;
         this.entity = entity;
@@ -150,20 +153,25 @@ class JaxRSResponse extends Response {
 
     @Override
     public MultivaluedMap<String, Object> getMetadata() {
-        MultivaluedMap<String, Object> map = new MultivaluedHashMap<>();
-        for (String name : headers.names()) {
-            map.addAll(name, headers.getAll(name));
-        }
-        return map;
+        return headers;
     }
 
     Headers getMuHeaders() {
-        return this.headers;
+        throw NotImplementedException.notYet();
     }
 
     @Override
     public MultivaluedMap<String, String> getStringHeaders() {
-        return muHeadersToJax(headers);
+
+        MultivaluedMap<String, String> map = new MultivaluedHashMap<>();
+        for (Map.Entry<String, List<Object>> entry : headers.entrySet()) {
+            map.put(entry.getKey(), entry.getValue()
+                .stream()
+                .map(JaxRSResponse::headerValueToString)
+                .collect(Collectors.toList())
+            );
+        }
+        return map;
     }
 
     static <T> MultivaluedMap<String, String> muHeadersToJax(Headers headers) {
@@ -184,16 +192,27 @@ class JaxRSResponse extends Response {
 
     @Override
     public String getHeaderString(String name) {
-        return headers.get(name);
+        return headerValueToString(headers.getFirst(name));
     }
 
+    private static String headerValueToString(Object value) {
+        if (value == null || value instanceof String) {
+            return (String)value;
+        }
+        try {
+            RuntimeDelegate.HeaderDelegate headerDelegate = MuRuntimeDelegate.getInstance().createHeaderDelegate(value.getClass());
+            return headerDelegate.toString(value);
+        } catch (MuException e) {
+            return value.toString();
+        }
+    }
 
     public static class Builder extends Response.ResponseBuilder {
         static {
             MuRuntimeDelegate.ensureSet();
         }
 
-        private final Headers headers = new Headers();
+        private final MultivaluedMap<String, Object> headers = new MultivaluedHashMap<>();
         private final List<Link> linkHeaders = new ArrayList<>();
         private StatusType status;
         private Object entity;
@@ -205,16 +224,16 @@ class JaxRSResponse extends Response {
         @Override
         public Response build() {
             for (Link linkHeader : linkHeaders) {
-                headers.add(HeaderNames.LINK, linkHeader.toString());
+                headers.add(HeaderNames.LINK.toString(), linkHeader.toString());
             }
             MediaType typeToUse = this.type;
             if (typeToUse == null) {
-                String ct = headers.get(HeaderNames.CONTENT_TYPE);
+                String ct = (String) headers.getFirst(HeaderNames.CONTENT_TYPE.toString());
                 if (ct != null) {
                     typeToUse = MediaType.valueOf(ct);
                 }
             } else {
-                headers.set(HeaderNames.CONTENT_TYPE, typeToUse.toString());
+                headers.replace(HeaderNames.CONTENT_TYPE.toString(), Collections.singletonList(typeToUse.toString()));
             }
             return new JaxRSResponse(status, headers, entity, typeToUse, cookies);
         }
@@ -299,12 +318,12 @@ class JaxRSResponse extends Response {
 
         private ResponseBuilder header(CharSequence name, Object value) {
             if (value instanceof Iterable) {
-                ((Iterable)value).forEach(v -> header(name, v));
+                ((Iterable) value).forEach(v -> header(name, v));
             } else {
                 if (value == null) {
-                    headers.remove(name);
+                    headers.remove(name.toString());
                 } else {
-                    headers.add(name, value);
+                    headers.add(name.toString(), value);
                 }
             }
             return this;

@@ -4,17 +4,14 @@ import io.muserver.handlers.ResourceHandler;
 import io.muserver.handlers.ResourceType;
 import io.muserver.rest.MuRuntimeDelegate;
 import io.netty.bootstrap.ServerBootstrap;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelInitializer;
-import io.netty.channel.ChannelPipeline;
+import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
-import io.netty.handler.codec.http.HttpRequestDecoder;
-import io.netty.handler.codec.http.HttpResponse;
-import io.netty.handler.codec.http.HttpResponseEncoder;
-import io.netty.handler.codec.http.HttpServerKeepAliveHandler;
+import io.netty.handler.codec.http.*;
+import io.netty.handler.codec.http2.*;
+import io.netty.handler.ssl.ApplicationProtocolNames;
+import io.netty.handler.ssl.ApplicationProtocolNegotiationHandler;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.traffic.GlobalTrafficShapingHandler;
@@ -30,6 +27,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+
+import static io.netty.handler.logging.LogLevel.INFO;
 
 /**
  * <p>A builder for creating a web server.</p>
@@ -377,22 +376,87 @@ public class MuServerBuilder {
                         sslHandler.engine().setSSLParameters(params);
                         p.addLast("ssl", sslHandler);
                     }
-                    p.addLast("decoder", new HttpRequestDecoder(maxUrlSize + LENGTH_OF_METHOD_AND_PROTOCOL, maxHeadersSize, 8192));
-                    p.addLast("encoder", new HttpResponseEncoder() {
-                        @Override
-                        protected boolean isContentAlwaysEmpty(HttpResponse msg) {
-                            return super.isContentAlwaysEmpty(msg) || msg instanceof NettyResponseAdaptor.EmptyHttpResponse;
+
+                    if (Toggles.http2 && usesSsl) {
+                        p.addLast("http1or2", new Http2OrHttpHandler(nettyHandlerAdapter, stats, serverRef, proto));
+                    } else {
+                        p.addLast("decoder", new HttpRequestDecoder(maxUrlSize + LENGTH_OF_METHOD_AND_PROTOCOL, maxHeadersSize, 8192));
+                        p.addLast("encoder", new HttpResponseEncoder() {
+                            @Override
+                            protected boolean isContentAlwaysEmpty(HttpResponse msg) {
+                                return super.isContentAlwaysEmpty(msg) || msg instanceof NettyResponseAdaptor.EmptyHttpResponse;
+                            }
+                        });
+                        if (gzipEnabled) {
+                            p.addLast("compressor", new SelectiveHttpContentCompressor(minimumGzipSize, mimeTypesToGzip));
                         }
-                    });
-                    if (gzipEnabled) {
-                        p.addLast("compressor", new SelectiveHttpContentCompressor(minimumGzipSize, mimeTypesToGzip));
+                        p.addLast("keepalive", new HttpServerKeepAliveHandler());
+                        p.addLast("muhandler", new Http1Handler(nettyHandlerAdapter, stats, serverRef, proto));
                     }
-                    p.addLast("keepalive", new HttpServerKeepAliveHandler());
-                    p.addLast("muhandler", new MuServerHandler(nettyHandlerAdapter, stats, serverRef, proto));
                 }
             });
         ChannelFuture bound = host == null ? b.bind(port) : b.bind(host, port);
         return bound.sync().channel();
+    }
+
+    /**
+     * Negotiates with the browser if HTTP2 or HTTP is going to be used. Once decided, the Netty
+     * pipeline is setup with the correct handlers for the selected protocol.
+     */
+    static class Http2OrHttpHandler extends ApplicationProtocolNegotiationHandler {
+        private static final Logger log = LoggerFactory.getLogger(Http2OrHttpHandler.class);
+        private NettyHandlerAdapter nettyHandlerAdapter;
+        private MuStatsImpl stats;
+        private AtomicReference<MuServer> serverRef;
+        private String proto;
+
+        Http2OrHttpHandler(NettyHandlerAdapter nettyHandlerAdapter, MuStatsImpl stats, AtomicReference<MuServer> serverRef, String proto) {
+            super(ApplicationProtocolNames.HTTP_1_1);
+            this.nettyHandlerAdapter = nettyHandlerAdapter;
+            this.stats = stats;
+            this.serverRef = serverRef;
+            this.proto = proto;
+        }
+
+        @Override
+        protected void configurePipeline(ChannelHandlerContext ctx, String protocol) throws Exception {
+            log.info("Got " + protocol);
+            if (ApplicationProtocolNames.HTTP_2.equals(protocol)) {
+                ctx.pipeline().addLast(new Http2HandlerBuilder().build());
+                return;
+            }
+
+            if (ApplicationProtocolNames.HTTP_1_1.equals(protocol)) {
+                ctx.pipeline().addLast(new HttpServerCodec(),
+                    new Http1Handler(nettyHandlerAdapter, stats, serverRef, proto));
+                return;
+            }
+
+            throw new IllegalStateException("unknown protocol: " + protocol);
+        }
+    }
+
+    static class Http2HandlerBuilder
+        extends AbstractHttp2ConnectionHandlerBuilder<Http2Handler, Http2HandlerBuilder> {
+
+        private static final Http2FrameLogger logger = new Http2FrameLogger(INFO, Http2Handler.class);
+
+        public Http2HandlerBuilder() {
+            frameLogger(logger);
+        }
+
+        @Override
+        public Http2Handler build() {
+            return super.build();
+        }
+
+        @Override
+        protected Http2Handler build(Http2ConnectionDecoder decoder, Http2ConnectionEncoder encoder,
+                                     Http2Settings initialSettings) {
+            Http2Handler handler = new Http2Handler(decoder, encoder, initialSettings);
+            frameListener(handler);
+            return handler;
+        }
     }
 
     /**
@@ -419,4 +483,6 @@ public class MuServerBuilder {
     public static MuServerBuilder httpsServer() {
         return muServer().withHttpsPort(0);
     }
+
+
 }

@@ -3,7 +3,6 @@ package io.muserver.rest;
 import io.muserver.HeaderNames;
 import io.muserver.Headers;
 import io.muserver.MuServer;
-import org.hamcrest.MatcherAssert;
 import org.junit.Test;
 
 import javax.ws.rs.GET;
@@ -21,6 +20,9 @@ import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 
 public class JaxRSResponseTest {
+    static {
+        MuRuntimeDelegate.ensureSet();
+    }
 
     @Test
     public void headersCanBeGottenFromIt() {
@@ -44,7 +46,7 @@ public class JaxRSResponseTest {
         assertThat(response.getStatus(), is(201));
 
         Headers actual = response.getMuHeaders();
-        MatcherAssert.assertThat(actual.get(HeaderNames.ALLOW), equalTo("HEAD,GET"));
+        assertThat(actual.get(HeaderNames.ALLOW), equalTo("HEAD,GET"));
         assertThat(actual.get(HeaderNames.CACHE_CONTROL), equalTo("private, no-transform, must-revalidate, max-age=10"));
         assertThat(actual.get(HeaderNames.CONTENT_LOCATION), equalTo("http://localhost:8080"));
         assertThat(actual.get(HeaderNames.CONTENT_ENCODING), equalTo("UTF-8"));
@@ -107,6 +109,18 @@ public class JaxRSResponseTest {
         } finally {
             server.stop();
         }
+    }
+
+    @Test
+    public void usesHeaderDelegatesIfAvailable() {
+        Response resp = JaxRSResponse.ok()
+            .header("cache", cacheControl())
+            .header("string-val", "A string val")
+            .header("int-val", 1234)
+            .build();
+        assertThat(resp.getHeaderString("cache"), is("private, no-transform, must-revalidate, max-age=10"));
+        assertThat(resp.getHeaderString("string-val"), is("A string val"));
+        assertThat(resp.getHeaderString("int-val"), is("1234"));
     }
 
     private static CacheControl cacheControl() {

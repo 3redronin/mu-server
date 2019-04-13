@@ -19,7 +19,7 @@ public class JaxRsHttpHeadersAdapterTest {
         MuRuntimeDelegate.ensureSet();
     }
 
-    private final Headers reqHeaders = new Headers();
+    private final Headers reqHeaders = Headers.http1Headers();
     private final Set<Cookie> cookies = new HashSet<>();
     private final JaxRsHttpHeadersAdapter httpHeaders = new JaxRsHttpHeadersAdapter(reqHeaders, cookies);
 

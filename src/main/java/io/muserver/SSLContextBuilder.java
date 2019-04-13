@@ -182,6 +182,14 @@ public class SSLContextBuilder {
             throw new IllegalStateException("No SSL info");
         }
 
+        if (Toggles.http2) {
+            builder.applicationProtocolConfig(new ApplicationProtocolConfig(
+                ApplicationProtocolConfig.Protocol.ALPN, ApplicationProtocolConfig.SelectorFailureBehavior.NO_ADVERTISE,
+                ApplicationProtocolConfig.SelectedListenerFailureBehavior.ACCEPT,
+                ApplicationProtocolNames.HTTP_2, ApplicationProtocolNames.HTTP_1_1
+            ));
+        }
+
         CipherSuiteFilter cipherFilter = nettyCipherSuiteFilter != null ? nettyCipherSuiteFilter : IdentityCipherSuiteFilter.INSTANCE;
         return builder
             .clientAuth(ClientAuth.NONE)

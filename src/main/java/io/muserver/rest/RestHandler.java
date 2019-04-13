@@ -190,7 +190,7 @@ public class RestHandler implements MuHandler {
 
                 JaxRSResponse jaxRSResponse = obj.response;
                 if (jaxRSResponse == null) {
-                    jaxRSResponse = new JaxRSResponse(Response.Status.fromStatusCode(obj.status()), new Headers(), obj.entity, null, new NewCookie[0]);
+                    jaxRSResponse = new JaxRSResponse(Response.Status.fromStatusCode(obj.status()), new MultivaluedHashMap<>(), obj.entity, null, new NewCookie[0]);
                 }
 
                 MuResponseContext responseContext = new MuResponseContext(jaxRSResponse, obj, requestContext.getMuMethod() == Method.HEAD ? NullOutputStream.INSTANCE :  new LazyAccessOutputStream(muResponse));

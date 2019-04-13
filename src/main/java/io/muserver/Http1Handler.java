@@ -18,8 +18,8 @@ import static io.netty.buffer.Unpooled.copiedBuffer;
 import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
-class MuServerHandler extends SimpleChannelInboundHandler<Object> {
-    private static final Logger log = LoggerFactory.getLogger(MuServerHandler.class);
+class Http1Handler extends SimpleChannelInboundHandler<Object> {
+    private static final Logger log = LoggerFactory.getLogger(Http1Handler.class);
     private static final AttributeKey<State> STATE_ATTRIBUTE = AttributeKey.newInstance("state");
 
     private final NettyHandlerAdapter nettyHandlerAdapter;
@@ -27,7 +27,7 @@ class MuServerHandler extends SimpleChannelInboundHandler<Object> {
     private final AtomicReference<MuServer> serverRef;
     private final String proto;
 
-    MuServerHandler(NettyHandlerAdapter nettyHandlerAdapter, MuStatsImpl stats, AtomicReference<MuServer> serverRef, String proto) {
+    Http1Handler(NettyHandlerAdapter nettyHandlerAdapter, MuStatsImpl stats, AtomicReference<MuServer> serverRef, String proto) {
         this.nettyHandlerAdapter = nettyHandlerAdapter;
         this.stats = stats;
         this.serverRef = serverRef;
