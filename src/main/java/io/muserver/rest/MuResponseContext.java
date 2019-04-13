@@ -21,6 +21,7 @@ class MuResponseContext implements ContainerResponseContext {
     private ObjWithType objWithType;
     private Annotation[] entityAnnotations = new Annotation[0];
     private OutputStream outputStream;
+    private MediaType mediaType;
 
     MuResponseContext(JaxRSResponse jaxRSResponse, ObjWithType objWithType, OutputStream outputStream) {
         this.jaxRSResponse = jaxRSResponse;
@@ -87,7 +88,7 @@ class MuResponseContext implements ContainerResponseContext {
 
     @Override
     public MediaType getMediaType() {
-        return jaxRSResponse.getMediaType();
+        return mediaType;
     }
 
     @Override
@@ -159,6 +160,7 @@ class MuResponseContext implements ContainerResponseContext {
     public void setEntity(Object entity, Annotation[] annotations, MediaType mediaType) {
         this.objWithType = ObjWithType.objType(entity);
         this.entityAnnotations = annotations;
+        this.mediaType = mediaType;
         if (mediaType == null) {
             jaxRSResponse.getHeaders().remove(HeaderNames.CONTENT_TYPE.toString());
         } else {

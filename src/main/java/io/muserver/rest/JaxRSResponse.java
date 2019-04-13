@@ -190,7 +190,7 @@ class JaxRSResponse extends Response {
 
     @Override
     public MultivaluedMap<String, String> getStringHeaders() {
-        MultivaluedMap<String, String> map = new MultivaluedHashMap<>();
+        MultivaluedMap<String, String> map = new LowercasedMultivaluedHashMap<>();
         for (Map.Entry<String, List<Object>> entry : headers.entrySet()) {
             map.put(entry.getKey(), entry.getValue()
                 .stream()
@@ -202,7 +202,7 @@ class JaxRSResponse extends Response {
     }
 
     static MultivaluedMap<String, Object> muHeadersToJaxObj(Headers headers) {
-        MultivaluedMap<String, Object> map = new MultivaluedHashMap<>();
+        MultivaluedMap<String, Object> map = new LowercasedMultivaluedHashMap<>();
         for (String name : headers.names()) {
             map.addAll(name, headers.getAll(name));
         }
@@ -234,7 +234,7 @@ class JaxRSResponse extends Response {
             MuRuntimeDelegate.ensureSet();
         }
 
-        private final MultivaluedMap<String, Object> headers = new MultivaluedHashMap<>();
+        private final MultivaluedMap<String, Object> headers = new LowercasedMultivaluedHashMap<>();
         private final List<Link> linkHeaders = new ArrayList<>();
         private StatusType status;
         private Object entity;
@@ -255,7 +255,7 @@ class JaxRSResponse extends Response {
                     typeToUse = MediaType.valueOf(ct);
                 }
             } else {
-                headers.replace(HeaderNames.CONTENT_TYPE.toString(), Collections.singletonList(typeToUse.toString()));
+                headers.putSingle(HeaderNames.CONTENT_TYPE.toString(), typeToUse.toString());
             }
             return new JaxRSResponse(status, headers, entity, typeToUse, cookies, linkHeaders, annotations);
         }
@@ -353,7 +353,7 @@ class JaxRSResponse extends Response {
 
         @Override
         public ResponseBuilder header(String name, Object value) {
-            return header((CharSequence) name.toLowerCase(), value);
+            return header((CharSequence) name, value);
         }
 
         @Override
@@ -361,7 +361,7 @@ class JaxRSResponse extends Response {
             this.headers.clear();
             if (headers != null) {
                 for (Map.Entry<String, List<Object>> entry : headers.entrySet()) {
-                    this.headers.add(entry.getKey().toLowerCase(), entry.getValue());
+                    this.headers.add(entry.getKey(), entry.getValue());
                 }
             }
             return this;

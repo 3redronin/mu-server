@@ -102,13 +102,13 @@ public class JaxRSResponseTest {
         MuServer server = httpServer().addHandler(restHandler(new Blah())).start();
         try (okhttp3.Response resp = call(request().url(server.uri().resolve("/complex").toString()))) {
             assertThat(resp.code(), is(500));
-            assertThat(resp.headers("content-type"), contains(equalTo("application/octet-stream")));
-            assertThat(resp.headers("cache-control"), contains(equalTo("no-store, max-age=1000, s-maxage=31536000")));
-            assertThat(resp.headers("content-location"), contains(equalTo("http://example.org")));
-            assertThat(resp.headers("content-encoding"), contains(equalTo("UTF-8")));
-            assertThat(resp.headers("content-language"), contains(equalTo("zh-CN")));
-            assertThat(resp.headers("last-modified"), contains(equalTo("Mon, 11 Feb 2019 15:58:18 GMT")));
-            assertThat(resp.headers("expires"), contains(equalTo("Tue, 12 Feb 2019 14:11:38 GMT")));
+            assertThat(resp.headers(HttpHeaders.CONTENT_TYPE), contains(equalTo("application/octet-stream")));
+            assertThat(resp.headers(HttpHeaders.CACHE_CONTROL), contains(equalTo("no-store, max-age=1000, s-maxage=31536000")));
+            assertThat(resp.headers(HttpHeaders.CONTENT_LOCATION), contains(equalTo("http://example.org")));
+            assertThat(resp.headers(HttpHeaders.CONTENT_ENCODING), contains(equalTo("UTF-8")));
+            assertThat(resp.headers(HttpHeaders.CONTENT_LANGUAGE), contains(equalTo("zh-CN")));
+            assertThat(resp.headers(HttpHeaders.LAST_MODIFIED), contains(equalTo("Mon, 11 Feb 2019 15:58:18 GMT")));
+            assertThat(resp.headers(HttpHeaders.EXPIRES), contains(equalTo("Tue, 12 Feb 2019 14:11:38 GMT")));
             assertThat(resp.headers("link"), containsInAnyOrder(
                 equalTo("<http://example.org/contact>; rel=\"contact\""),
                 equalTo("<http://example.org/terms>; rel=\"terms\""),
