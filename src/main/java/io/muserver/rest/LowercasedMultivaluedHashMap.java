@@ -6,9 +6,9 @@ import java.util.Map;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
-public class LowercasedMultivaluedHashMap<V> extends AbstractMultivaluedMap<String, V> {
+class LowercasedMultivaluedHashMap<V> extends AbstractMultivaluedMap<String, V> {
 
-    public LowercasedMultivaluedHashMap() {
+    LowercasedMultivaluedHashMap() {
         super(new LowercasedHashMap<>());
     }
 

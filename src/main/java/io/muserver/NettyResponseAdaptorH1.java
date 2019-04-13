@@ -12,7 +12,7 @@ import java.util.Map;
 import static io.muserver.ContentTypes.TEXT_PLAIN_UTF8;
 import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 
-public class NettyResponseAdaptorH1 extends NettyResponseAdaptor {
+class NettyResponseAdaptorH1 extends NettyResponseAdaptor {
 
     private final ChannelHandlerContext ctx;
     private final H1Headers headers;
