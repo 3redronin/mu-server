@@ -4,6 +4,8 @@ package io.muserver.rest;
 import io.muserver.HeaderNames;
 import io.muserver.Headers;
 import io.muserver.MuException;
+import io.muserver.Mutils;
+import io.netty.handler.codec.http.HttpHeaderNames;
 
 import javax.ws.rs.core.*;
 import javax.ws.rs.ext.RuntimeDelegate;
@@ -26,15 +28,23 @@ class JaxRSResponse extends Response {
     private final Object entity;
     private final MediaType type;
     private final NewCookie[] cookies;
+    private final List<Link> links;
+    private final Annotation[] annotations;
 
-    JaxRSResponse(StatusType status, MultivaluedMap<String, Object> headers, Object entity, MediaType type, NewCookie[] cookies) {
+    JaxRSResponse(StatusType status, MultivaluedMap<String, Object> headers, Object entity, MediaType type, NewCookie[] cookies, List<Link> links, Annotation[] annotations) {
         this.status = status;
         this.headers = headers;
         this.entity = entity;
         this.type = type;
         this.cookies = cookies;
+        this.links = links;
+        this.annotations = annotations;
     }
 
+    public Annotation[] getAnnotations() {
+        if (annotations == null) return new Annotation[0];
+        return annotations;
+    }
 
     @Override
     public int getStatus() {
@@ -93,17 +103,26 @@ class JaxRSResponse extends Response {
 
     @Override
     public Locale getLanguage() {
-        throw NotImplementedException.notYet();
+        String h = getHeaderString(HeaderNames.CONTENT_LANGUAGE.toString());
+        if (h == null) return null;
+        return Locale.forLanguageTag(h);
     }
 
     @Override
     public int getLength() {
-        throw NotImplementedException.notYet();
+        String l = getHeaderString(HeaderNames.CONTENT_LENGTH.toString());
+        if (l == null) return -1;
+        try {
+            return Integer.parseInt(l);
+        } catch (NumberFormatException e) {
+            return -1;
+        }
     }
 
     @Override
     public Set<String> getAllowedMethods() {
-        throw NotImplementedException.notYet();
+        String allow = getHeaderString(HeaderNames.ALLOW.toString());
+        return allow == null ? Collections.emptySet() : new HashSet<>(asList(allow.split(",")));
     }
 
     @Override
@@ -113,42 +132,55 @@ class JaxRSResponse extends Response {
 
     @Override
     public EntityTag getEntityTag() {
-        throw NotImplementedException.notYet();
+        Object first = headers.getFirst(HeaderNames.ETAG.toString());
+        if (first == null || first instanceof  EntityTag) return (EntityTag)first;
+        return EntityTag.valueOf(first.toString());
     }
 
     @Override
     public Date getDate() {
-        throw NotImplementedException.notYet();
+        return dateFromHeader("date");
+    }
+
+    private Date dateFromHeader(String name) {
+        Object date = headers.getFirst(name);
+        if (date == null || date.getClass().isAssignableFrom(Date.class)) return (Date)date;
+        return Mutils.fromHttpDate(date.toString());
     }
 
     @Override
     public Date getLastModified() {
-        throw NotImplementedException.notYet();
+        return dateFromHeader("last-modified");
     }
 
     @Override
     public URI getLocation() {
-        throw NotImplementedException.notYet();
+        String s = getHeaderString("location");
+        return s == null ? null : URI.create(s);
     }
 
     @Override
     public Set<Link> getLinks() {
-        throw NotImplementedException.notYet();
+        return new HashSet<>(links);
     }
 
     @Override
     public boolean hasLink(String relation) {
-        throw NotImplementedException.notYet();
+        return links.stream().anyMatch(link -> link.getRels().contains(relation));
     }
 
     @Override
     public Link getLink(String relation) {
-        throw NotImplementedException.notYet();
+        return links.stream().filter(link -> link.getRels().contains(relation)).findFirst().orElse(null);
     }
 
     @Override
     public Link.Builder getLinkBuilder(String relation) {
-        throw NotImplementedException.notYet();
+        Link link = getLink(relation);
+        if (link == null) {
+            return null;
+        }
+        return Link.fromLink(link);
     }
 
     @Override
@@ -156,13 +188,8 @@ class JaxRSResponse extends Response {
         return headers;
     }
 
-    Headers getMuHeaders() {
-        throw NotImplementedException.notYet();
-    }
-
     @Override
     public MultivaluedMap<String, String> getStringHeaders() {
-
         MultivaluedMap<String, String> map = new MultivaluedHashMap<>();
         for (Map.Entry<String, List<Object>> entry : headers.entrySet()) {
             map.put(entry.getKey(), entry.getValue()
@@ -170,14 +197,6 @@ class JaxRSResponse extends Response {
                 .map(JaxRSResponse::headerValueToString)
                 .collect(Collectors.toList())
             );
-        }
-        return map;
-    }
-
-    static <T> MultivaluedMap<String, String> muHeadersToJax(Headers headers) {
-        MultivaluedMap<String, String> map = new MultivaluedHashMap<>();
-        for (String name : headers.names()) {
-            map.addAll(name, headers.getAll(name));
         }
         return map;
     }
@@ -198,6 +217,9 @@ class JaxRSResponse extends Response {
     private static String headerValueToString(Object value) {
         if (value == null || value instanceof String) {
             return (String)value;
+        }
+        if (value.getClass().isAssignableFrom(Date.class)) {
+            return Mutils.toHttpDate((Date)value);
         }
         try {
             RuntimeDelegate.HeaderDelegate headerDelegate = MuRuntimeDelegate.getInstance().createHeaderDelegate(value.getClass());
@@ -235,7 +257,7 @@ class JaxRSResponse extends Response {
             } else {
                 headers.replace(HeaderNames.CONTENT_TYPE.toString(), Collections.singletonList(typeToUse.toString()));
             }
-            return new JaxRSResponse(status, headers, entity, typeToUse, cookies);
+            return new JaxRSResponse(status, headers, entity, typeToUse, cookies, linkHeaders, annotations);
         }
 
         @Override
@@ -286,14 +308,14 @@ class JaxRSResponse extends Response {
         @Override
         public ResponseBuilder allow(Set<String> methods) {
             if (methods == null) {
-                return header(HttpHeaders.ALLOW, null);
+                return header(HttpHeaderNames.ALLOW, null);
             }
 
             StringBuilder allow = new StringBuilder();
             for (String m : methods) {
                 append(allow, true, m);
             }
-            return header(HttpHeaders.ALLOW, allow.toString());
+            return header(HttpHeaderNames.ALLOW, allow.toString());
         }
 
         private void append(StringBuilder sb, boolean v, String s) {
@@ -331,14 +353,16 @@ class JaxRSResponse extends Response {
 
         @Override
         public ResponseBuilder header(String name, Object value) {
-            return header((CharSequence) name, value);
+            return header((CharSequence) name.toLowerCase(), value);
         }
 
         @Override
         public ResponseBuilder replaceAll(MultivaluedMap<String, Object> headers) {
             this.headers.clear();
-            for (Map.Entry<String, List<Object>> entry : headers.entrySet()) {
-                this.headers.add(entry.getKey(), entry.getValue());
+            if (headers != null) {
+                for (Map.Entry<String, List<Object>> entry : headers.entrySet()) {
+                    this.headers.add(entry.getKey().toLowerCase(), entry.getValue());
+                }
             }
             return this;
         }
@@ -382,6 +406,9 @@ class JaxRSResponse extends Response {
         @Override
         public ResponseBuilder cookie(NewCookie... cookies) {
             this.cookies = cookies;
+            if (cookies == null) {
+                headers.remove(HeaderNames.SET_COOKIE.toString());
+            }
             return this;
         }
 

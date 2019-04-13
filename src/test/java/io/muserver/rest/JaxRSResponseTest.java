@@ -1,8 +1,7 @@
 package io.muserver.rest;
 
-import io.muserver.HeaderNames;
-import io.muserver.Headers;
 import io.muserver.MuServer;
+import io.muserver.Mutils;
 import org.junit.Test;
 
 import javax.ws.rs.GET;
@@ -45,19 +44,33 @@ public class JaxRSResponseTest {
         JaxRSResponse response = (JaxRSResponse) builder.build();
         assertThat(response.getStatus(), is(201));
 
-        Headers actual = response.getMuHeaders();
-        assertThat(actual.get(HeaderNames.ALLOW), equalTo("HEAD,GET"));
-        assertThat(actual.get(HeaderNames.CACHE_CONTROL), equalTo("private, no-transform, must-revalidate, max-age=10"));
-        assertThat(actual.get(HeaderNames.CONTENT_LOCATION), equalTo("http://localhost:8080"));
-        assertThat(actual.get(HeaderNames.CONTENT_ENCODING), equalTo("UTF-8"));
-        assertThat(actual.get(HeaderNames.EXPIRES), equalTo("Mon, 1 Jan 2018 02:24:12 GMT"));
-        assertThat(actual.get(HeaderNames.CONTENT_LANGUAGE), equalTo("fr-CA"));
-        assertThat(actual.get(HeaderNames.LAST_MODIFIED), equalTo("Mon, 1 Jan 2018 02:23:20 GMT"));
-        assertThat(actual.getAll(HeaderNames.LINK), contains(equalTo("<http://www.example.org>; rel=\"meta\"")));
-        assertThat(actual.get(HeaderNames.LOCATION), equalTo("/some-location"));
-        assertThat(actual.get(HeaderNames.ETAG), equalTo("W/\"lkajsd\\\"fkljsklfdj\""));
-//        assertThat(actual.get(HeaderNames.VARY), equalTo("???"));
-        assertThat(actual.get("X-Another"), equalTo("something"));
+        MultivaluedMap<String, String> actual = response.getStringHeaders();
+        assertThat(actual.get("allow"), contains("HEAD,GET"));
+        assertThat(response.getAllowedMethods(), containsInAnyOrder("HEAD", "GET"));
+        assertThat(actual.get("cache-control"), contains("private, no-transform, must-revalidate, max-age=10"));
+        assertThat(response.getLength(), is(-1));
+        assertThat(actual.get("content-location"), contains("http://localhost:8080"));
+        assertThat(actual.get("content-encoding"), contains("UTF-8"));
+        assertThat(actual.get("expires"), contains("Mon, 1 Jan 2018 02:24:12 GMT"));
+        assertThat(actual.get("content-language"), contains("fr-CA"));
+        assertThat(response.getLanguage(), equalTo(Locale.CANADA_FRENCH));
+        assertThat(actual.get("last-modified"), contains("Mon, 1 Jan 2018 02:23:20 GMT"));
+        assertThat(response.getLastModified(), equalTo(Mutils.fromHttpDate("Mon, 1 Jan 2018 02:23:20 GMT")));
+
+        assertThat(actual.get("link"), contains("<http://www.example.org>; rel=\"meta\""));
+        assertThat(response.hasLink("meta"), is(true));
+        assertThat(response.hasLink("beta"), is(false));
+        assertThat(response.getLink("meta"), equalTo(Link.valueOf("<http://www.example.org>; rel=\"meta\"")));
+        assertThat(response.getLink("beta"), is(nullValue()));
+        assertThat(response.getLinks(), containsInAnyOrder(Link.valueOf("<http://www.example.org>; rel=\"meta\"")));
+        assertThat(response.getLinkBuilder("meta").title("I-built-this").build().toString(), equalTo("<http://www.example.org>; rel=\"meta\"; title=\"I-built-this\""));
+
+        assertThat(actual.get("location"), contains("/some-location"));
+        assertThat(response.getLocation(), equalTo(URI.create("/some-location")));
+        assertThat(actual.get("etag"), contains("W/\"lkajsd\\\"fkljsklfdj\""));
+        assertThat(response.getEntityTag().toString(), is("W/\"lkajsd\\\"fkljsklfdj\""));
+//        assertThat(actual.get("Vary"), equalTo("???"));
+        assertThat(actual.get("x-another"), contains("something"));
     }
 
     @Test
@@ -121,6 +134,13 @@ public class JaxRSResponseTest {
         assertThat(resp.getHeaderString("cache"), is("private, no-transform, must-revalidate, max-age=10"));
         assertThat(resp.getHeaderString("string-val"), is("A string val"));
         assertThat(resp.getHeaderString("int-val"), is("1234"));
+    }
+
+    @Test
+    public void getDateWorks() {
+        assertThat(JaxRSResponse.ok().build().getDate(), is(nullValue()));
+        Date now = new Date();
+        assertThat(JaxRSResponse.ok().header("date", now).build().getDate(), is(now));
     }
 
     private static CacheControl cacheControl() {

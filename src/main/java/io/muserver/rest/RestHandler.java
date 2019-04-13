@@ -190,19 +190,20 @@ public class RestHandler implements MuHandler {
 
                 JaxRSResponse jaxRSResponse = obj.response;
                 if (jaxRSResponse == null) {
-                    jaxRSResponse = new JaxRSResponse(Response.Status.fromStatusCode(obj.status()), new MultivaluedHashMap<>(), obj.entity, null, new NewCookie[0]);
+                    jaxRSResponse = new JaxRSResponse(Response.Status.fromStatusCode(obj.status()), new MultivaluedHashMap<>(), obj.entity, null, new NewCookie[0], emptyList(), new Annotation[0]);
                 }
 
                 MuResponseContext responseContext = new MuResponseContext(jaxRSResponse, obj, requestContext.getMuMethod() == Method.HEAD ? NullOutputStream.INSTANCE :  new LazyAccessOutputStream(muResponse));
                 if (obj.entity != null) {
-                    Annotation[] annotations = new Annotation[0]; // TODO set this properly
                     MediaType responseMediaType = MediaTypeDeterminer.determine(obj, produces, directlyProduces, entityProviders.writers, acceptHeaders);
-                    responseContext.setEntity(result, annotations, responseMediaType);
+                    responseContext.setEntity(result, jaxRSResponse.getAnnotations(), responseMediaType);
                 }
 
                 filterManagerThing.onBeforeSendResponse(requestContext, responseContext);
                 muResponse.status(responseContext.getStatus());
-                muResponse.headers().setAll(responseContext.muHeaders());
+                for (Map.Entry<String, List<String>> entry : responseContext.getStringHeaders().entrySet()) {
+                    muResponse.headers().add(entry.getKey(), entry.getValue());
+                }
 
                 for (NewCookie cookie : jaxRSResponse.getCookies().values()) {
                     muResponse.headers().add(HeaderNames.SET_COOKIE, cookie.toString());
@@ -212,7 +213,6 @@ public class RestHandler implements MuHandler {
                 if (entity == null) {
                     muResponse.headers().set(HeaderNames.CONTENT_LENGTH, 0);
                 } else {
-
 
                     MediaType responseMediaType = responseContext.getMediaType();
                     Annotation[] entityAnnotations = responseContext.getEntityAnnotations();

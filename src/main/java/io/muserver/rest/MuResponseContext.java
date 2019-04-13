@@ -1,7 +1,6 @@
 package io.muserver.rest;
 
 import io.muserver.HeaderNames;
-import io.muserver.Headers;
 
 import javax.ws.rs.container.ContainerResponseContext;
 import javax.ws.rs.core.*;
@@ -9,12 +8,14 @@ import java.io.OutputStream;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
 import java.net.URI;
-import java.util.*;
+import java.util.Date;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 
 class MuResponseContext implements ContainerResponseContext {
 
     private final Map<String, NewCookie> cookies;
-    private final Headers muHeaders;
     private Response.StatusType status;
     private final JaxRSResponse jaxRSResponse;
     private ObjWithType objWithType;
@@ -23,19 +24,10 @@ class MuResponseContext implements ContainerResponseContext {
 
     MuResponseContext(JaxRSResponse jaxRSResponse, ObjWithType objWithType, OutputStream outputStream) {
         this.jaxRSResponse = jaxRSResponse;
-        this.muHeaders = jaxRSResponse.getMuHeaders();
         this.objWithType = objWithType;
         this.outputStream = outputStream;
         this.cookies = jaxRSResponse.getCookies();
         this.status = jaxRSResponse.getStatusInfo();
-    }
-
-    Headers muHeaders() {
-        return muHeaders;
-    }
-
-    JaxRsHttpHeadersAdapter headersAdapter() {
-        return new JaxRsHttpHeadersAdapter(muHeaders, Collections.emptySet());
     }
 
     @Override
@@ -65,37 +57,37 @@ class MuResponseContext implements ContainerResponseContext {
 
     @Override
     public MultivaluedMap<String, String> getStringHeaders() {
-        return JaxRSResponse.muHeadersToJax(muHeaders);
+        return jaxRSResponse.getStringHeaders();
     }
 
     @Override
     public String getHeaderString(String name) {
-        return headersAdapter().getHeaderString(name);
+        return jaxRSResponse.getHeaderString(name);
     }
 
     @Override
     public Set<String> getAllowedMethods() {
-        throw NotImplementedException.notYet();
+        return jaxRSResponse.getAllowedMethods();
     }
 
     @Override
     public Date getDate() {
-        return headersAdapter().getDate();
+        return jaxRSResponse.getDate();
     }
 
     @Override
     public Locale getLanguage() {
-        return headersAdapter().getLanguage();
+        return jaxRSResponse.getLanguage();
     }
 
     @Override
     public int getLength() {
-        return headersAdapter().getLength();
+        return jaxRSResponse.getLength();
     }
 
     @Override
     public MediaType getMediaType() {
-        return headersAdapter().getMediaType();
+        return jaxRSResponse.getMediaType();
     }
 
     @Override
@@ -115,8 +107,7 @@ class MuResponseContext implements ContainerResponseContext {
 
     @Override
     public URI getLocation() {
-        String s = muHeaders.get(HeaderNames.LOCATION, null);
-        return s == null ? null : URI.create(s);
+        return jaxRSResponse.getLocation();
     }
 
     @Override
@@ -169,9 +160,9 @@ class MuResponseContext implements ContainerResponseContext {
         this.objWithType = ObjWithType.objType(entity);
         this.entityAnnotations = annotations;
         if (mediaType == null) {
-            muHeaders.remove(HeaderNames.CONTENT_TYPE);
+            jaxRSResponse.getHeaders().remove(HeaderNames.CONTENT_TYPE.toString());
         } else {
-            muHeaders.set(HeaderNames.CONTENT_TYPE, mediaType.toString());
+            jaxRSResponse.getHeaders().putSingle(HeaderNames.CONTENT_TYPE.toString(), mediaType.toString());
         }
     }
 

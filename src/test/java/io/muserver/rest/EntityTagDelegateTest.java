@@ -33,5 +33,12 @@ public class EntityTagDelegateTest {
         del.fromString("W/33a64df551425fcc5\"");
     }
 
+    @Test
+    public void canHandleSpecialCharacters() {
+        EntityTag tag = del.fromString("W/\"lkajsd\\\"fkljsklfdj\"");
+        assertThat(tag.isWeak(), is(true));
+        assertThat(tag.getValue(), is("lkajsd\"fkljsklfdj"));
+        assertThat(tag.toString(), is("W/\"lkajsd\\\"fkljsklfdj\""));
+    }
 
 }

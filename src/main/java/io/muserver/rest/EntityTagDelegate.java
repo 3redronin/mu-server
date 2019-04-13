@@ -12,9 +12,9 @@ class EntityTagDelegate implements RuntimeDelegate.HeaderDelegate<EntityTag> {
         }
 
         if (value.startsWith("\"")) {
-            return new EntityTag(value.substring(1, value.length() -1), false);
+            return new EntityTag(unquote(value.substring(1, value.length() -1)), false);
         } else if (value.startsWith("W/\"")) {
-            return new EntityTag(value.substring(3, value.length() -1), true);
+            return new EntityTag(unquote(value.substring(3, value.length() -1)), true);
         }
 
         throw new IllegalArgumentException("Not a value etag value");
@@ -24,6 +24,10 @@ class EntityTagDelegate implements RuntimeDelegate.HeaderDelegate<EntityTag> {
     public String toString(EntityTag value) {
         String quotedValue = quoted(value.getValue());
         return value.isWeak() ? "W/" + quotedValue : quotedValue;
+    }
+
+    private static String unquote(String val) {
+        return val.replace("\\\"", "\"" );
     }
 
     private static String quoted(String val) {

@@ -4,9 +4,11 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.handler.codec.http.*;
+import io.netty.handler.codec.http.DefaultFullHttpResponse;
+import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http.cookie.ServerCookieEncoder;
+import io.netty.handler.codec.http2.Http2Headers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -20,27 +22,23 @@ import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
-import java.util.Map;
 import java.util.concurrent.Future;
 
-import static io.muserver.ContentTypes.TEXT_PLAIN_UTF8;
-import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
-
-class NettyResponseAdaptor implements MuResponse {
+abstract class NettyResponseAdaptor implements MuResponse {
     private static final Logger log = LoggerFactory.getLogger(NettyResponseAdaptor.class);
-    private final boolean isHead;
-    private OutputState outputState = OutputState.NOTHING;
-    private final ChannelHandlerContext ctx;
-    private final NettyRequestAdapter request;
-    private final H1Headers headers = new H1Headers();
-    private ChannelFuture lastAction;
-    private int status = 200;
+    protected final boolean isHead;
+    protected OutputState outputState = OutputState.NOTHING;
+    protected final NettyRequestAdapter request;
+    protected ChannelFuture lastAction;
+    private final Headers headers;
+    protected int status = 200;
     private PrintWriter writer;
     private OutputStream outputStream;
-    private long bytesStreamed = 0;
-    private long declaredLength = -1;
+    protected long bytesStreamed = 0;
+    protected long declaredLength = -1;
+    private final int httpVersion;
 
-    private enum OutputState {
+    protected enum OutputState {
         NOTHING, FULL_SENT, STREAMING, STREAMING_COMPLETE, FINISHED, DISCONNECTED
     }
 
@@ -48,12 +46,12 @@ class NettyResponseAdaptor implements MuResponse {
         outputState = OutputState.DISCONNECTED;
     }
 
-    NettyResponseAdaptor(ChannelHandlerContext ctx, NettyRequestAdapter request) {
-        this.ctx = ctx;
+    NettyResponseAdaptor(NettyRequestAdapter request, Headers headers, int httpVersion) {
+        this.headers = headers;
         this.request = request;
         this.isHead = request.method() == Method.HEAD;
-
-        headers.set(HeaderNames.DATE, Mutils.toHttpDate(new Date()));
+        this.httpVersion = httpVersion;
+        this.headers.set(HeaderNames.DATE, Mutils.toHttpDate(new Date()));
     }
 
     public int status() {
@@ -67,32 +65,23 @@ class NettyResponseAdaptor implements MuResponse {
         status = value;
     }
 
-    private void startStreaming() {
+    protected void startStreaming() {
         if (outputState != OutputState.NOTHING) {
             throw new IllegalStateException("Cannot start streaming when state is " + outputState);
         }
         outputState = OutputState.STREAMING;
-        HttpResponse response = isHead ? new EmptyHttpResponse(httpStatus()) : new DefaultHttpResponse(HTTP_1_1, httpStatus(), false);
-        declaredLength = headers.contains(HeaderNames.CONTENT_LENGTH)
-            ? Long.parseLong(headers.get(HeaderNames.CONTENT_LENGTH))
-            : -1;
-        if (declaredLength == -1) {
-            headers.set(HeaderNames.TRANSFER_ENCODING, HeaderValues.CHUNKED);
-        }
+        if (httpVersion == 1) {
 
-        writeHeaders(response, headers);
 
-        lastAction = ctx.write(response);
-    }
+        } else {
 
-    private static void writeHeaders(HttpResponse response, Headers headers) {
-        HttpHeaders rh = response.headers();
-        for (Map.Entry<String, String> header : headers) {
-            rh.add(header.getKey(), header.getValue());
+            Http2Headers entries = ((H2Headers) headers).entries;
+            entries.status(httpStatus().codeAsText());
+
         }
     }
 
-    private void throwIfFinished() {
+    protected void throwIfFinished() {
         if (outputState == OutputState.FULL_SENT || outputState == OutputState.FINISHED || outputState == OutputState.DISCONNECTED) {
             throw new IllegalStateException("Cannot write data as response has already completed");
         }
@@ -109,62 +98,8 @@ class NettyResponseAdaptor implements MuResponse {
         return write(Unpooled.wrappedBuffer(data), false);
     }
 
-    ChannelFuture write(ByteBuf data, boolean sync) {
-        throwIfFinished();
-        int size = data.writerIndex();
+    abstract ChannelFuture write(ByteBuf data, boolean sync);
 
-        if (size == 0) {
-            return lastAction;
-        }
-
-        bytesStreamed += size;
-        ChannelFuture lastAction;
-
-        if (declaredLength > -1 && bytesStreamed > declaredLength) {
-            ctx.channel().close();
-            throw new IllegalStateException("The declared content length for " + request + " was " + declaredLength + " bytes. " +
-                "The current write is being aborted and the connection is being closed because it would have resulted in " +
-                bytesStreamed + " bytes being sent.");
-        } else {
-            boolean isLast = bytesStreamed == declaredLength;
-            if (isLast) {
-                outputState = OutputState.FULL_SENT;
-            }
-
-            ByteBuf content = Unpooled.wrappedBuffer(data);
-            HttpContent msg = isLast ? new DefaultLastHttpContent(content) : new DefaultHttpContent(content);
-            lastAction = ctx.writeAndFlush(msg);
-        }
-        if (sync) {
-            // force exception if writes fail
-            lastAction = lastAction.syncUninterruptibly();
-        }
-        this.lastAction = lastAction;
-        return lastAction;
-    }
-
-
-    public void write(String text) {
-        throwIfFinished();
-        if (outputState != OutputState.NOTHING) {
-            String what = outputState == OutputState.FULL_SENT ? "twice for one response" : "after sending chunks";
-            throw new IllegalStateException("You cannot call write " + what + ". If you want to send text in multiple chunks, use sendChunk instead.");
-        }
-        outputState = OutputState.FULL_SENT;
-        ByteBuf body = textToBuffer(text);
-        long bodyLength = body.writerIndex();
-        FullHttpResponse resp = isHead ?
-            new EmptyHttpResponse(httpStatus())
-            : new DefaultFullHttpResponse(HTTP_1_1, httpStatus(), body, false);
-
-        if (!headers.contains(HeaderNames.CONTENT_TYPE)) {
-            headers.set(HeaderNames.CONTENT_TYPE, TEXT_PLAIN_UTF8);
-        }
-
-        writeHeaders(resp, this.headers);
-        HttpUtil.setContentLength(resp, bodyLength);
-        lastAction = ctx.writeAndFlush(resp).syncUninterruptibly();
-    }
 
     public void sendChunk(String text) {
         if (outputState == OutputState.NOTHING) {
@@ -173,7 +108,7 @@ class NettyResponseAdaptor implements MuResponse {
         lastAction = write(textToBuffer(text), true);
     }
 
-    private ByteBuf textToBuffer(String text) {
+    protected ByteBuf textToBuffer(String text) {
         Charset charset = StandardCharsets.UTF_8;
         MediaType type = headers().contentType();
         if (type != null) {
@@ -189,18 +124,7 @@ class NettyResponseAdaptor implements MuResponse {
         redirect(URI.create(newLocation));
     }
 
-    public void redirect(URI newLocation) {
-        URI absoluteUrl = request.uri().resolve(newLocation);
-        if (status < 300 || status > 303) {
-            status(302);
-        }
-        headers().set(HeaderNames.LOCATION, absoluteUrl.toString());
-        HttpResponse resp = new EmptyHttpResponse(httpStatus());
-        writeHeaders(resp, this.headers);
-        HttpUtil.setContentLength(resp, 0);
-        lastAction = ctx.writeAndFlush(resp);
-        outputState = OutputState.FULL_SENT;
-    }
+
 
     public Headers headers() {
         return headers;
@@ -246,14 +170,7 @@ class NettyResponseAdaptor implements MuResponse {
         boolean shouldDisconnect = forceDisconnect || !request.isKeepAliveRequested();
         boolean isFixedLength = declaredLength >= 0;
         if (outputState == OutputState.NOTHING) {
-            HttpResponse msg = isHead ?
-                new EmptyHttpResponse(httpStatus()) :
-                new DefaultFullHttpResponse(HTTP_1_1, httpStatus(), false);
-            writeHeaders(msg, this.headers);
-            if ((!isHead || !isFixedLength) && status != 204 && status != 205 && status != 304) {
-                msg.headers().set(HeaderNames.CONTENT_LENGTH, 0);
-            }
-            lastAction = ctx.writeAndFlush(msg);
+            sendEmptyResponse(isFixedLength);
         } else if (outputState == OutputState.STREAMING) {
 
             if (!isHead) {
@@ -263,18 +180,18 @@ class NettyResponseAdaptor implements MuResponse {
             boolean badFixedLength = !isHead && isFixedLength && declaredLength != bytesStreamed && status != 304;
             if (badFixedLength) {
                 shouldDisconnect = true;
-                if (ctx.channel().isOpen()) {
+                if (connectionOpen()) {
                     log.warn("Closing client connection for " + request + " because " + declaredLength + " bytes was the " +
                         "expected length, however " + bytesStreamed + " bytes were sent.");
                 }
             } else {
-                lastAction = ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
+                lastAction = writeLastContentMarker();
             }
         }
 
         if (shouldDisconnect) {
             if (lastAction == null) {
-                lastAction = ctx.channel().close();
+                lastAction = closeConnection();
             } else {
                 lastAction = lastAction.addListener(ChannelFutureListener.CLOSE);
             }
@@ -285,7 +202,15 @@ class NettyResponseAdaptor implements MuResponse {
         return lastAction;
     }
 
-    private HttpResponseStatus httpStatus() {
+    protected abstract ChannelFuture closeConnection();
+
+    protected abstract boolean connectionOpen();
+
+    protected abstract ChannelFuture writeLastContentMarker();
+
+    protected abstract void sendEmptyResponse(boolean isFixedLength);
+
+    protected HttpResponseStatus httpStatus() {
         return HttpResponseStatus.valueOf(status());
     }
 

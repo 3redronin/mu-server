@@ -97,7 +97,8 @@ class Http1Handler extends SimpleChannelInboundHandler<Object> {
                 NettyRequestAdapter muRequest = new NettyRequestAdapter(ctx.channel(), request, serverRef, method, proto);
                 stats.onRequestStarted(muRequest);
 
-                AsyncContext asyncContext = new AsyncContext(muRequest, new NettyResponseAdaptor(ctx, muRequest), stats);
+
+                AsyncContext asyncContext = new AsyncContext(muRequest, new NettyResponseAdaptorH1(ctx, muRequest, new H1Headers()), stats);
                 ctx.channel().attr(STATE_ATTRIBUTE).set(new State(asyncContext, nettyHandlerAdapter));
                 nettyHandlerAdapter.onHeaders(asyncContext, asyncContext.request.headers());
             }

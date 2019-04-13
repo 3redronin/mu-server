@@ -13,7 +13,7 @@ import static io.netty.util.internal.ObjectUtil.checkNotNull;
 
 class H2Headers implements Headers {
 
-    private final Http2Headers entries;
+    final Http2Headers entries;
 
     H2Headers() {
         this(new DefaultHttp2Headers());
