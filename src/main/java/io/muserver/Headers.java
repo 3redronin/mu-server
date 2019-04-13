@@ -125,6 +125,9 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
 
     boolean isEmpty();
 
+    /**
+     * @return The number of headers. Repeated headers are counted twice.
+     */
     int size();
 
     Set<String> names();
@@ -282,10 +285,18 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
      */
     MediaType contentType();
 
+    /**
+     * Creates new headers for HTTP1 requests
+     * @return An empty headers object.
+     */
     static Headers http1Headers() {
         return new H1Headers();
     }
 
+    /**
+     * Creates new headers for HTTP2 requests
+     * @return An empty headers object.
+     */
     static Headers http2Headers() {
         return new H2Headers();
     }

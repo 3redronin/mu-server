@@ -10,7 +10,6 @@ import java.util.stream.Collectors;
 
 import static io.muserver.NettyRequestParameters.isTruthy;
 import static io.netty.util.internal.ObjectUtil.checkNotNull;
-import static java.util.Collections.emptyList;
 
 class H2Headers implements Headers {
 
@@ -361,79 +360,27 @@ class H2Headers implements Headers {
 
     @Override
     public List<ParameterizedHeaderWithValue> accept() {
-        return getParameterizedHeaderWithValues(HeaderNames.ACCEPT);
+        return Headtils.getParameterizedHeaderWithValues(this, HeaderNames.ACCEPT);
     }
 
     @Override
     public List<ParameterizedHeaderWithValue> acceptCharset() {
-        return getParameterizedHeaderWithValues(HeaderNames.ACCEPT_CHARSET);
+        return Headtils.getParameterizedHeaderWithValues(this, HeaderNames.ACCEPT_CHARSET);
     }
 
     @Override
     public List<ParameterizedHeaderWithValue> acceptEncoding() {
-        return getParameterizedHeaderWithValues(HeaderNames.ACCEPT_ENCODING);
+        return Headtils.getParameterizedHeaderWithValues(this, HeaderNames.ACCEPT_ENCODING);
     }
 
     @Override
     public List<ForwardedHeader> forwarded() {
-        List<String> all = getAll(HeaderNames.FORWARDED);
-        if (all.isEmpty()) {
-
-            List<String> hosts = getAll(HeaderNames.X_FORWARDED_HOST);
-            List<String> ports = getAll(HeaderNames.X_FORWARDED_PORT);
-            List<String> protos = getAll(HeaderNames.X_FORWARDED_PROTO);
-            List<String> fors = getAll(HeaderNames.X_FORWARDED_FOR);
-            int max = Math.max(Math.max(Math.max(hosts.size(), protos.size()), fors.size()), ports.size());
-            if (max == 0) {
-                return emptyList();
-            }
-            List<ForwardedHeader> results = new ArrayList<>();
-
-            boolean includeHost = hosts.size() == max;
-            boolean includeProto = protos.size() == max;
-            boolean includeFor = fors.size() == max;
-            boolean includePort = ports.size() == max;
-            String curHost = includePort && !includeHost ? get(HeaderNames.HOST) : null;
-
-            for (int i = 0; i < max; i++) {
-                String host = includeHost ? hosts.get(i) : null;
-                String port = includePort ? ports.get(i) : null;
-                String proto = includeProto ? protos.get(i) : null;
-                String forValue = includeFor ? fors.get(i) : null;
-                boolean useDefaultPort = port == null || (proto != null &&
-                    ((proto.equalsIgnoreCase("http") && "80".equals(port))
-                    || proto.equalsIgnoreCase("https") && "443".equals(port)));
-                String hostToUse =
-                    includeHost ? host
-                    : includePort ? curHost
-                    : null;
-                if (hostToUse != null && !useDefaultPort) {
-                    hostToUse = hostToUse.replaceFirst(":[0-9]+$", "") + ":" + port;
-                }
-                results.add(new ForwardedHeader(null, forValue, hostToUse, proto, null));
-            }
-
-            return results;
-        } else {
-            List<ForwardedHeader> results = new ArrayList<>();
-            for (String s : all) {
-                results.addAll(ForwardedHeader.fromString(s));
-            }
-            return results;
-        }
+        return Headtils.getForwardedHeaders(this);
     }
 
     @Override
     public List<ParameterizedHeaderWithValue> acceptLanguage() {
-        return getParameterizedHeaderWithValues(HeaderNames.ACCEPT_LANGUAGE);
-    }
-
-    private List<ParameterizedHeaderWithValue> getParameterizedHeaderWithValues(CharSequence headerName) {
-        String input = get(headerName);
-        if (input == null) {
-            return emptyList();
-        }
-        return ParameterizedHeaderWithValue.fromString(input);
+        return Headtils.getParameterizedHeaderWithValues(this, HeaderNames.ACCEPT_LANGUAGE);
     }
 
     @Override
@@ -443,10 +390,6 @@ class H2Headers implements Headers {
 
     @Override
     public MediaType contentType() {
-        String value = get(HeaderNames.CONTENT_TYPE);
-        if (value == null) {
-            return null;
-        }
-        return MediaTypeParser.fromString(value);
+        return Headtils.getMediaType(this);
     }
 }

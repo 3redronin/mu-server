@@ -4,6 +4,7 @@ import org.junit.Test;
 
 import javax.ws.rs.core.MediaType;
 import java.util.Collections;
+import java.util.Map;
 
 import static io.muserver.ForwardedHeaderTest.fwd;
 import static java.util.Arrays.asList;
@@ -29,10 +30,17 @@ public class H1AndH2HeadersTest {
             assertThat(headers.getAll("headeR"), contains("1", "2", "3"));
             assertThat(headers.contains("HEader"), is(true));
             assertThat(headers.contains("HEAder", "1", false), is(true));
+            assertThat(headers.containsValue("HEAder", "1", false), is(true));
             if (headers instanceof H1Headers) {
                 assertThat(headers.names(), contains("Header", "hEader", "heAder"));
             } else {
                 assertThat(headers.names(), contains("header"));
+            }
+            assertThat(headers.size(), is(3));
+
+            assertThat(headers.isEmpty(), is(false));
+            for (Map.Entry<String, String> header : headers) {
+                assertThat(header.getKey().toLowerCase(), is("header"));
             }
         }
     }
