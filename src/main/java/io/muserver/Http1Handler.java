@@ -20,7 +20,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 class Http1Handler extends SimpleChannelInboundHandler<Object> {
     private static final Logger log = LoggerFactory.getLogger(Http1Handler.class);
-    private static final AttributeKey<State> STATE_ATTRIBUTE = AttributeKey.newInstance("state");
+    static final AttributeKey<State> STATE_ATTRIBUTE = AttributeKey.newInstance("state");
 
     private final NettyHandlerAdapter nettyHandlerAdapter;
     private final MuStatsImpl stats;
@@ -34,11 +34,11 @@ class Http1Handler extends SimpleChannelInboundHandler<Object> {
         this.proto = proto;
     }
 
-    private static final class State {
+    static final class State {
         final AsyncContext asyncContext;
         final NettyHandlerAdapter handler;
 
-        private State(AsyncContext asyncContext, NettyHandlerAdapter handler) {
+        State(AsyncContext asyncContext, NettyHandlerAdapter handler) {
             this.asyncContext = asyncContext;
             this.handler = handler;
         }
@@ -94,7 +94,8 @@ class Http1Handler extends SimpleChannelInboundHandler<Object> {
                     sendSimpleResponse(ctx, "405 Method Not Allowed", 405);
                     return;
                 }
-                NettyRequestAdapter muRequest = new NettyRequestAdapter(ctx.channel(), request, serverRef, method, proto);
+                final H1Headers headers = new H1Headers(request.headers());
+                NettyRequestAdapter muRequest = new NettyRequestAdapter(ctx.channel(), request, headers, serverRef, method, proto, request.uri(), HttpUtil.isKeepAlive(request), headers.get(HeaderNames.HOST));
                 stats.onRequestStarted(muRequest);
 
 

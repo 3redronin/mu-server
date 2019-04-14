@@ -51,17 +51,18 @@ class NettyRequestAdapter implements MuRequest {
     private HashMap<String, List<UploadedFile>> uploads;
     private Map<String, Object> attributes;
     private volatile AsyncHandleImpl asyncHandle;
+    private final boolean keepalive;
 
-    NettyRequestAdapter(Channel channel, HttpRequest request, AtomicReference<MuServer> serverRef, Method method, String proto) {
+    NettyRequestAdapter(Channel channel, HttpRequest request, Headers headers, AtomicReference<MuServer> serverRef, Method method, String proto, String uri, boolean keepalive, String host) {
         this.channel = channel;
         this.request = request;
         this.serverRef = serverRef;
-        String host = request.headers().get(HeaderNames.HOST);
-        this.serverUri = URI.create(proto + "://" + host + request.uri()).normalize();
-        this.headers = new H1Headers(request.headers());
-        this.uri = getUri(headers, proto, host, request.uri(), serverUri);
+        this.keepalive = keepalive;
+        this.serverUri = URI.create(proto + "://" + host + uri).normalize();
+        this.headers = headers;
+        this.uri = getUri(headers, proto, host, uri, serverUri);
         this.relativePath = this.uri.getRawPath();
-        this.query = new NettyRequestParameters(new QueryStringDecoder(request.uri(), true));
+        this.query = new NettyRequestParameters(new QueryStringDecoder(uri, true));
         this.method = method;
     }
 
@@ -70,7 +71,7 @@ class NettyRequestAdapter implements MuRequest {
     }
 
     boolean isKeepAliveRequested() {
-        return HttpUtil.isKeepAlive(request);
+        return keepalive;
     }
 
     private static URI getUri(Headers h, String scheme, String hostHeader, String requestUri, URI serverUri) {

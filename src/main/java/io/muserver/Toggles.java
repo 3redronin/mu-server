@@ -11,6 +11,6 @@ public class Toggles {
      */
     public static boolean fixedLengthResponsesEnabled = false;
 
-    static boolean http2 = false;
+    static boolean http2 = true;
 
 }

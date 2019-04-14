@@ -10,6 +10,7 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.http.*;
 import io.netty.handler.codec.http2.*;
+import io.netty.handler.logging.LogLevel;
 import io.netty.handler.ssl.ApplicationProtocolNames;
 import io.netty.handler.ssl.ApplicationProtocolNegotiationHandler;
 import io.netty.handler.ssl.SslContext;
@@ -27,8 +28,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
-
-import static io.netty.handler.logging.LogLevel.INFO;
 
 /**
  * <p>A builder for creating a web server.</p>
@@ -420,9 +419,8 @@ public class MuServerBuilder {
 
         @Override
         protected void configurePipeline(ChannelHandlerContext ctx, String protocol) throws Exception {
-            log.info("Got " + protocol);
             if (ApplicationProtocolNames.HTTP_2.equals(protocol)) {
-                ctx.pipeline().addLast(new Http2HandlerBuilder().build());
+                ctx.pipeline().addLast(new Http2HandlerBuilder(serverRef, nettyHandlerAdapter, stats).build());
                 return;
             }
 
@@ -439,9 +437,15 @@ public class MuServerBuilder {
     static class Http2HandlerBuilder
         extends AbstractHttp2ConnectionHandlerBuilder<Http2Handler, Http2HandlerBuilder> {
 
-        private static final Http2FrameLogger logger = new Http2FrameLogger(INFO, Http2Handler.class);
+        private static final Http2FrameLogger logger = new Http2FrameLogger(LogLevel.DEBUG, Http2Handler.class);
+        private final AtomicReference<MuServer> serverRef;
+        private final NettyHandlerAdapter nettyHandlerAdapter;
+        private final MuStatsImpl stats;
 
-        public Http2HandlerBuilder() {
+        public Http2HandlerBuilder(AtomicReference<MuServer> serverRef, NettyHandlerAdapter nettyHandlerAdapter, MuStatsImpl stats) {
+            this.serverRef = serverRef;
+            this.nettyHandlerAdapter = nettyHandlerAdapter;
+            this.stats = stats;
             frameLogger(logger);
         }
 
@@ -453,7 +457,7 @@ public class MuServerBuilder {
         @Override
         protected Http2Handler build(Http2ConnectionDecoder decoder, Http2ConnectionEncoder encoder,
                                      Http2Settings initialSettings) {
-            Http2Handler handler = new Http2Handler(decoder, encoder, initialSettings);
+            Http2Handler handler = new Http2Handler(decoder, encoder, initialSettings, serverRef, nettyHandlerAdapter, stats);
             frameListener(handler);
             return handler;
         }

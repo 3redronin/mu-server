@@ -14,13 +14,15 @@ import static io.netty.util.internal.ObjectUtil.checkNotNull;
 class H2Headers implements Headers {
 
     final Http2Headers entries;
+    private boolean hasRequestBody;
 
     H2Headers() {
-        this(new DefaultHttp2Headers());
+        this(new DefaultHttp2Headers(), false);
     }
 
-    H2Headers(Http2Headers entries) {
+    H2Headers(Http2Headers entries, boolean hasRequestBody) {
         this.entries = entries;
+        this.hasRequestBody = hasRequestBody;
     }
 
     private static CharSequence toLower(CharSequence name) {
@@ -355,7 +357,7 @@ class H2Headers implements Headers {
 
     @Override
     public boolean hasBody() {
-        return contains(HeaderNames.TRANSFER_ENCODING) || getInt(HeaderNames.CONTENT_LENGTH, -1) > 0;
+        return hasRequestBody;
     }
 
     @Override

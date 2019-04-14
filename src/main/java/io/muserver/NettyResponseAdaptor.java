@@ -8,7 +8,6 @@ import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http.cookie.ServerCookieEncoder;
-import io.netty.handler.codec.http2.Http2Headers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,6 +22,8 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.concurrent.Future;
+
+import static io.muserver.ContentTypes.TEXT_PLAIN_UTF8;
 
 abstract class NettyResponseAdaptor implements MuResponse {
     private static final Logger log = LoggerFactory.getLogger(NettyResponseAdaptor.class);
@@ -69,16 +70,10 @@ abstract class NettyResponseAdaptor implements MuResponse {
         if (outputState != OutputState.NOTHING) {
             throw new IllegalStateException("Cannot start streaming when state is " + outputState);
         }
+        declaredLength = headers.contains(HeaderNames.CONTENT_LENGTH)
+            ? Long.parseLong(headers.get(HeaderNames.CONTENT_LENGTH))
+            : -1;
         outputState = OutputState.STREAMING;
-        if (httpVersion == 1) {
-
-
-        } else {
-
-            Http2Headers entries = ((H2Headers) headers).entries;
-            entries.status(httpStatus().codeAsText());
-
-        }
     }
 
     protected void throwIfFinished() {
@@ -98,8 +93,39 @@ abstract class NettyResponseAdaptor implements MuResponse {
         return write(Unpooled.wrappedBuffer(data), false);
     }
 
-    abstract ChannelFuture write(ByteBuf data, boolean sync);
+    protected final ChannelFuture write(ByteBuf data, boolean sync) {
+        throwIfFinished();
+        int size = data.writerIndex();
+        if (size == 0) {
+            return lastAction;
+        }
 
+        bytesStreamed += size;
+        ChannelFuture lastAction;
+
+        if (declaredLength > -1 && bytesStreamed > declaredLength) {
+            closeConnection();
+            throw new IllegalStateException("The declared content length for " + request + " was " + declaredLength + " bytes. " +
+                "The current write is being aborted and the connection is being closed because it would have resulted in " +
+                bytesStreamed + " bytes being sent.");
+        } else {
+            boolean isLast = bytesStreamed == declaredLength;
+            if (isLast) {
+                outputState = OutputState.FULL_SENT;
+            }
+
+            ByteBuf content = Unpooled.wrappedBuffer(data);
+            lastAction = writeToChannel(isLast, content);
+        }
+        if (sync) {
+            // force exception if writes fail
+            lastAction = lastAction.syncUninterruptibly();
+        }
+        this.lastAction = lastAction;
+        return lastAction;
+    }
+
+    abstract ChannelFuture writeToChannel(boolean isLast, ByteBuf content);
 
     public void sendChunk(String text) {
         if (outputState == OutputState.NOTHING) {
@@ -170,7 +196,8 @@ abstract class NettyResponseAdaptor implements MuResponse {
         boolean shouldDisconnect = forceDisconnect || !request.isKeepAliveRequested();
         boolean isFixedLength = declaredLength >= 0;
         if (outputState == OutputState.NOTHING) {
-            sendEmptyResponse(isFixedLength);
+            boolean addContentLengthHeader = ((!isHead || !isFixedLength) && status != 204 && status != 205 && status != 304);
+            sendEmptyResponse(addContentLengthHeader);
         } else if (outputState == OutputState.STREAMING) {
 
             if (!isHead) {
@@ -202,13 +229,49 @@ abstract class NettyResponseAdaptor implements MuResponse {
         return lastAction;
     }
 
+    @Override
+    public void write(String text) {
+        throwIfFinished();
+        if (outputState != OutputState.NOTHING) {
+            String what = outputState == OutputState.FULL_SENT ? "twice for one response" : "after sending chunks";
+            throw new IllegalStateException("You cannot call write " + what + ". If you want to send text in multiple chunks, use sendChunk instead.");
+        }
+        outputState = OutputState.FULL_SENT;
+        ByteBuf body = textToBuffer(text);
+        long bodyLength = body.writerIndex();
+
+        if (!headers.contains(HeaderNames.CONTENT_TYPE)) {
+            headers.set(HeaderNames.CONTENT_TYPE, TEXT_PLAIN_UTF8);
+        }
+        headers.set(HeaderNames.CONTENT_LENGTH, bodyLength);
+
+        writeFullResponse(body);
+    }
+
+    protected abstract void writeFullResponse(ByteBuf body);
+
     protected abstract ChannelFuture closeConnection();
 
     protected abstract boolean connectionOpen();
 
     protected abstract ChannelFuture writeLastContentMarker();
 
-    protected abstract void sendEmptyResponse(boolean isFixedLength);
+    public final void redirect(URI newLocation) {
+        URI absoluteUrl = request.uri().resolve(newLocation);
+        if (status < 300 || status > 303) {
+            status(302);
+        }
+        headers.set(HeaderNames.LOCATION, absoluteUrl.toString());
+        headers.set(HeaderNames.CONTENT_LENGTH, HeaderValues.ZERO);
+
+        writeRedirectResponse();
+
+        outputState = OutputState.FULL_SENT;
+    }
+
+    protected abstract void writeRedirectResponse();
+
+    protected abstract void sendEmptyResponse(boolean addContentLengthHeader);
 
     protected HttpResponseStatus httpStatus() {
         return HttpResponseStatus.valueOf(status());

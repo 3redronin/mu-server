@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.util.List;
 
 import static io.muserver.MuServerBuilder.httpServer;
+import static io.muserver.MuServerBuilder.httpsServer;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Arrays.asList;
 import static org.hamcrest.CoreMatchers.is;
@@ -88,7 +89,7 @@ public class TextSendingTest {
     
     @Test
     public void defaultsToTextPlainIfNoContentTypeSet() throws IOException {
-        server = httpServer()
+        server = httpsServer()
             .addHandler(Method.GET, "/html", (request, response, pp) -> {
                 response.contentType("text/html");
                 response.write("This is HTML");
