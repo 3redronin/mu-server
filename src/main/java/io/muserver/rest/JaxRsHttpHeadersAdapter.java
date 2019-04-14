@@ -3,7 +3,10 @@ package io.muserver.rest;
 import io.muserver.HeaderNames;
 import io.muserver.Headers;
 
-import javax.ws.rs.core.*;
+import javax.ws.rs.core.Cookie;
+import javax.ws.rs.core.HttpHeaders;
+import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.MultivaluedMap;
 import java.util.*;
 
 import static java.util.stream.Collectors.joining;
@@ -39,7 +42,7 @@ class JaxRsHttpHeadersAdapter implements HttpHeaders {
     @Override
     public MultivaluedMap<String, String> getRequestHeaders() {
         if (copy == null) {
-            MultivaluedMap<String, String> c = new MultivaluedHashMap<>();
+            MultivaluedMap<String, String> c = new LowercasedMultivaluedHashMap<>();
             for (Map.Entry<String, String> entry : muHeaders) {
                 c.add(entry.getKey(), entry.getValue());
             }

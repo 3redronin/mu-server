@@ -85,8 +85,8 @@ class EntityProviders {
 
 
     static boolean requestHasContent(MultivaluedMap<String, String> headers) {
-        String len = headers.getFirst("Content-Length");
-        return headers.containsKey("Transfer-Encoding") || (len != null && Long.parseLong(len) > 0);
+        String len = headers.getFirst("content-length");
+        return headers.containsKey("transfer-encoding") || (len != null && Long.parseLong(len) > 0);
     }
 
     static Charset charsetFor(MediaType mediaType) {

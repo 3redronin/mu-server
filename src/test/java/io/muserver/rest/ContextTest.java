@@ -13,6 +13,7 @@ import javax.ws.rs.Path;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.UriInfo;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -120,9 +121,9 @@ public class ContextTest {
             @GET
             public String get(@Context HttpHeaders headers) {
                 StringBuilder sb = new StringBuilder();
-                for (Map.Entry<String, List<String>> entry : headers.getRequestHeaders().entrySet()) {
-                    String header = entry.getKey();
-                    if (header.startsWith("X-")) {
+                for (Map.Entry<String, List<String>> entry : headers.getRequestHeaders().entrySet().stream().sorted(Comparator.comparing(Map.Entry::getKey)).collect(Collectors.toList())) {
+                    String header = entry.getKey().toLowerCase();
+                    if (header.startsWith("x-")) {
                         sb.append(header).append("=").append(entry.getValue().get(0)).append(" ");
                     }
                 }
@@ -138,7 +139,7 @@ public class ContextTest {
             .header("X-Something-Else", "Another blah")
         )) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.body().string(), equalTo("X-Something-Else=Another blah X-Something=Blah "));
+            assertThat(resp.body().string(), equalTo("x-something=Blah x-something-else=Another blah "));
         }
     }
 

@@ -101,4 +101,8 @@ public class ClientUtils {
             }
         };
     }
+
+    public static boolean isHttp2(Response response) {
+        return response.protocol().name().equalsIgnoreCase("HTTP_2");
+    }
 }

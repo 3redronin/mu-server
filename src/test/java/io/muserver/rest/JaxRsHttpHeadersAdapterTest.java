@@ -46,8 +46,8 @@ public class JaxRsHttpHeadersAdapterTest {
 
     @Test
     public void getRequestHeaders() {
-        reqHeaders.add("Now", "NoLight");
-        reqHeaders.add("X-Blah", "something");
+        reqHeaders.add("now", "NoLight");
+        reqHeaders.add("x-blah", "something");
 
         MultivaluedHashMap<String,String> expected = new MultivaluedHashMap<>();
         for (Map.Entry<String, String> entry : reqHeaders) {

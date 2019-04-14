@@ -1,7 +1,6 @@
 package io.muserver.rest;
 
 import io.muserver.MuServer;
-import io.muserver.MuServerBuilder;
 import okhttp3.FormBody;
 import okhttp3.MediaType;
 import okhttp3.RequestBody;
@@ -17,6 +16,8 @@ import javax.ws.rs.core.MultivaluedMap;
 import java.io.IOException;
 import java.io.Reader;
 
+import static io.muserver.MuServerBuilder.httpsServer;
+import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static java.util.stream.Collectors.toList;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
@@ -37,7 +38,7 @@ public class StringEntityProvidersTest {
                 return value;
             }
         }
-        startServer(new Sample());
+        this.server = httpsServer().addHandler(restHandler(new Sample())).start();
         check(StringUtils.randomStringOfLength(64 * 1024));
         checkNoBody();
     }
@@ -52,7 +53,7 @@ public class StringEntityProvidersTest {
                 return value;
             }
         }
-        startServer(new Sample());
+        this.server = httpsServer().addHandler(restHandler(new Sample())).start();
         check(StringUtils.randomStringOfLength(64 * 1024));
         checkNoBody();
     }
@@ -73,7 +74,7 @@ public class StringEntityProvidersTest {
                 return sb.toString();
             }
         }
-        startServer(new Sample());
+        this.server = httpsServer().addHandler(restHandler(new Sample())).start();
         check(StringUtils.randomStringOfLength(64 * 1024));
         checkNoBody();
     }
@@ -99,7 +100,7 @@ public class StringEntityProvidersTest {
                 return form;
             }
         }
-        startServer(new Sample());
+        this.server = httpsServer().addHandler(restHandler(new Sample())).start();
         try (Response resp = call(
             request()
                 .url(server.uri().resolve("/samples").toString())
@@ -136,9 +137,9 @@ public class StringEntityProvidersTest {
 
     private void check(String value, String mimeType) throws IOException {
         try (Response resp = call(
-            request()
+            request(server.uri().resolve("/samples"))
                 .post(RequestBody.create(MediaType.parse(mimeType), value))
-                .url(server.uri().resolve("/samples").toString()))) {
+        )) {
             assertThat(resp.code(), equalTo(200));
             assertThat(resp.header("Content-Type"), equalTo(mimeType));
             assertThat(resp.body().string(), equalTo(value));
@@ -146,19 +147,13 @@ public class StringEntityProvidersTest {
     }
 
     private void checkNoBody() throws IOException {
-        try (Response resp = call(request()
+        try (Response resp = call(request(server.uri().resolve("/samples"))
             .post(RequestBody.create(MediaType.parse("text/plain"), ""))
-            .url(server.uri().resolve("/samples").toString())
         )) {
             assertThat(resp.code(), equalTo(400));
             assertThat(resp.body().string(), containsString("400 Bad Request"));
         }
 
-    }
-
-
-    private void startServer(Object restResource) {
-        this.server = MuServerBuilder.httpsServer().addHandler(RestHandlerBuilder.restHandler(restResource).build()).start();
     }
 
     @After

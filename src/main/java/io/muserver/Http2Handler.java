@@ -15,7 +15,6 @@ import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.Http1Handler.STATE_ATTRIBUTE;
-import static io.netty.handler.codec.http.HttpResponseStatus.OK;
 
 /**
  * A simple handler that responds with the message "Hello World!".
@@ -42,17 +41,6 @@ public final class Http2Handler extends Http2ConnectionHandler implements Http2F
         ctx.close();
     }
 
-    /**
-     * Sends a "Hello World" DATA frame to the client.
-     */
-    private void sendResponse(ChannelHandlerContext ctx, int streamId, ByteBuf payload) {
-        // Send a frame for the response status
-        Http2Headers headers = new DefaultHttp2Headers().status(OK.codeAsText());
-        encoder().writeHeaders(ctx, streamId, headers, 0, false, ctx.newPromise());
-        encoder().writeData(ctx, streamId, payload, 0, true, ctx.newPromise());
-
-        // no need to call flush as channelReadComplete(...) will take care of it.
-    }
 
     @Override
     public int onDataRead(ChannelHandlerContext ctx, int streamId, ByteBuf data, int padding, boolean endOfStream) {
@@ -72,10 +60,6 @@ public final class Http2Handler extends Http2ConnectionHandler implements Http2F
             if (endOfStream) {
                 state.handler.onRequestComplete(state.asyncContext);
             }
-        }
-
-        if (endOfStream) {
-            sendResponse(ctx, streamId, data.retain());
         }
         return processed;
     }
@@ -154,7 +138,14 @@ public final class Http2Handler extends Http2ConnectionHandler implements Http2F
                 throw new IllegalStateException("Can't set stuff");
             }
         };
-        H2Headers muHeaders = new H2Headers(headers, !endOfStream);
+        boolean hasRequestBody = !endOfStream;
+        if (hasRequestBody) {
+            long bodyLen = headers.getLong(HeaderNames.CONTENT_LENGTH, -1L);
+            if (bodyLen == 0) {
+                hasRequestBody = false;
+            }
+        }
+        H2Headers muHeaders = new H2Headers(headers, hasRequestBody);
         NettyRequestAdapter muReq = new NettyRequestAdapter(ctx.channel(), nettyReq, muHeaders, serverRef, muMethod, "https", uri, true, headers.authority().toString());
         NettyResponseAdaptorH2 resp = new NettyResponseAdaptorH2(ctx, muReq, new H2Headers(), encoder(), streamId);
 

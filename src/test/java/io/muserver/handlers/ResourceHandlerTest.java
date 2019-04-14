@@ -5,6 +5,7 @@ import io.muserver.Mutils;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
+import scaffolding.ClientUtils;
 
 import java.io.IOException;
 import java.net.MalformedURLException;
@@ -111,7 +112,10 @@ public class ResourceHandlerTest {
         try (Response resp = call(request().head().url(url))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.headers().toMultimap(), equalTo(headersFromGET));
-            assertThat(resp.body().contentLength(), is(0L));
+            if (!ClientUtils.isHttp2(resp)) {
+                // TODO: this is broken on okhttpclient until https://github.com/square/okhttp/issues/4948 is fixed
+                assertThat(resp.body().contentLength(), is(0L));
+            }
         }
 
         assertNotFound("/d/index.html");
@@ -263,7 +267,12 @@ public class ResourceHandlerTest {
             assertThat(resp.body().string(), is(readResource("/sample-static" + urlDecode(relativePath))));
 
             if (expectGzip) {
-                assertThat(resp.headers().toString(), resp.header("Transfer-Encoding"), is("chunked"));
+
+                if (ClientUtils.isHttp2(resp)) {
+                    assertThat(resp.headers().toString(), resp.header("Transfer-Encoding"), is(nullValue()));
+                } else {
+                    assertThat(resp.headers().toString(), resp.header("Transfer-Encoding"), is("chunked"));
+                }
                 // doesn't gzip from tests... because of okhttpclient?
 //                assertThat(resp.headers().toString(), resp.header("Content-Encoding"), is("gzip"));
             } else {
@@ -287,9 +296,13 @@ public class ResourceHandlerTest {
 //                assertThat(headersFromHEAD, equalTo(headersFromGET));
 //            }
             assertThat(resp.header("Vary"), is("accept-encoding"));
-            assertThat(resp.body().contentLength(), is(0L));
-        }
 
+            if (!ClientUtils.isHttp2(resp)) {
+                // TODO: this is broken on okhttpclient until https://github.com/square/okhttp/issues/4948 is fixed
+                assertThat(resp.body().contentLength(), is(0L));
+            }
+
+        }
 
     }
 
