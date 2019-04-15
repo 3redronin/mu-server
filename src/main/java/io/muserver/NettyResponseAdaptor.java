@@ -37,7 +37,6 @@ abstract class NettyResponseAdaptor implements MuResponse {
     private OutputStream outputStream;
     protected long bytesStreamed = 0;
     protected long declaredLength = -1;
-    private final int httpVersion;
 
     protected enum OutputState {
         NOTHING, FULL_SENT, STREAMING, STREAMING_COMPLETE, FINISHED, DISCONNECTED
@@ -47,11 +46,10 @@ abstract class NettyResponseAdaptor implements MuResponse {
         outputState = OutputState.DISCONNECTED;
     }
 
-    NettyResponseAdaptor(NettyRequestAdapter request, Headers headers, int httpVersion) {
+    NettyResponseAdaptor(NettyRequestAdapter request, Headers headers) {
         this.headers = headers;
         this.request = request;
         this.isHead = request.method() == Method.HEAD;
-        this.httpVersion = httpVersion;
         this.headers.set(HeaderNames.DATE, Mutils.toHttpDate(new Date()));
     }
 

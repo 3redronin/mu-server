@@ -15,7 +15,7 @@ class NettyResponseAdaptorH1 extends NettyResponseAdaptor {
     private final H1Headers headers;
 
     NettyResponseAdaptorH1(ChannelHandlerContext ctx, NettyRequestAdapter request, H1Headers headers) {
-        super(request, headers, 1);
+        super(request, headers);
         this.ctx = ctx;
         this.headers = headers;
     }

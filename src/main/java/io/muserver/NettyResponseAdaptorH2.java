@@ -14,7 +14,7 @@ class NettyResponseAdaptorH2 extends NettyResponseAdaptor {
     private final int streamId;
 
     NettyResponseAdaptorH2(ChannelHandlerContext ctx, NettyRequestAdapter request, H2Headers headers, Http2ConnectionEncoder encoder, int streamId) {
-        super(request, headers, 2);
+        super(request, headers);
         this.ctx = ctx;
         this.headers = headers;
         this.encoder = encoder;
@@ -24,7 +24,11 @@ class NettyResponseAdaptorH2 extends NettyResponseAdaptor {
     @Override
     protected ChannelFuture writeToChannel(boolean isLast, ByteBuf content) {
         ChannelPromise channelPromise = ctx.newPromise();
-        ctx.executor().execute(() -> encoder.writeData(ctx, streamId, content, 0, isLast, channelPromise));
+        if (ctx.executor().inEventLoop()) {
+            encoder.writeData(ctx, streamId, content, 0, isLast, channelPromise);
+        } else {
+            ctx.executor().execute(() -> encoder.writeData(ctx, streamId, content, 0, isLast, channelPromise));
+        }
         ctx.channel().flush();
         return channelPromise;
     }
