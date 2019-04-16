@@ -62,7 +62,7 @@ public class ResourceHandlerTest {
     }
 
     @Test
-    public void lastModifiedSinceWorks() {
+    public void lastModifiedSinceWorks() throws Exception {
         server = httpsServer()
             .addHandler(context("/file").addHandler(fileHandler("src/test/resources/sample-static")))
             .addHandler(context("/classpath").addHandler(classpathHandler("/sample-static")))
@@ -76,6 +76,7 @@ public class ResourceHandlerTest {
                 assertThat(resp.code(), is(200));
                 lastModified = resp.header("last-modified");
                 assertThat(lastModified, is(notNullValue()));
+                resp.body().string();
             }
             try (Response resp = call(request(imageUri).header("If-Modified-Since", lastModified))) {
                 assertThat(resp.code(), is(304));

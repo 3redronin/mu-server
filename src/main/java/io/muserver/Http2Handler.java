@@ -36,8 +36,13 @@ public final class Http2Handler extends Http2ConnectionHandler implements Http2F
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-        super.exceptionCaught(ctx, cause);
-        cause.printStackTrace();
+        Http1Handler.State state = ctx.channel().attr(STATE_ATTRIBUTE).get();
+        if (state != null) {
+            log.debug(cause.getClass().getName() + " (" + cause.getMessage() + ") for " + ctx + " so will disconnect this client");
+            state.asyncContext.onDisconnected();
+        } else {
+            log.debug("Exception for unknown ctx " + ctx, cause);
+        }
         ctx.close();
     }
 
@@ -203,5 +208,6 @@ public final class Http2Handler extends Http2ConnectionHandler implements Http2F
                                Http2Flags flags, ByteBuf payload) {
         log.warn("UnknownFrame");
     }
+
 }
 
