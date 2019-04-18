@@ -14,20 +14,20 @@ import org.slf4j.LoggerFactory;
 import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static io.muserver.Http1Handler.STATE_ATTRIBUTE;
+import static io.muserver.Http1Connection.STATE_ATTRIBUTE;
 
 /**
  * A simple handler that responds with the message "Hello World!".
  */
-public final class Http2Handler extends Http2ConnectionHandler implements Http2FrameListener {
-    private static final Logger log = LoggerFactory.getLogger(Http2Handler.class);
+public final class Http2Connection extends Http2ConnectionHandler implements Http2FrameListener {
+    private static final Logger log = LoggerFactory.getLogger(Http2Connection.class);
 
     private final AtomicReference<MuServer> serverRef;
     private final NettyHandlerAdapter nettyHandlerAdapter;
     private final MuStatsImpl stats;
 
-    Http2Handler(Http2ConnectionDecoder decoder, Http2ConnectionEncoder encoder,
-                 Http2Settings initialSettings, AtomicReference<MuServer> serverRef, NettyHandlerAdapter nettyHandlerAdapter, MuStatsImpl stats) {
+    Http2Connection(Http2ConnectionDecoder decoder, Http2ConnectionEncoder encoder,
+                    Http2Settings initialSettings, AtomicReference<MuServer> serverRef, NettyHandlerAdapter nettyHandlerAdapter, MuStatsImpl stats) {
         super(decoder, encoder, initialSettings);
         this.serverRef = serverRef;
         this.nettyHandlerAdapter = nettyHandlerAdapter;
@@ -36,7 +36,7 @@ public final class Http2Handler extends Http2ConnectionHandler implements Http2F
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-        Http1Handler.State state = ctx.channel().attr(STATE_ATTRIBUTE).get();
+        Http1Connection.State state = ctx.channel().attr(STATE_ATTRIBUTE).get();
         if (state != null) {
             log.debug(cause.getClass().getName() + " (" + cause.getMessage() + ") for " + ctx + " so will disconnect this client");
             state.asyncContext.onCancelled(true);
@@ -51,7 +51,7 @@ public final class Http2Handler extends Http2ConnectionHandler implements Http2F
     public int onDataRead(ChannelHandlerContext ctx, int streamId, ByteBuf data, int padding, boolean endOfStream) {
         int processed = data.readableBytes() + padding;
 
-        Http1Handler.State state = ctx.channel().attr(STATE_ATTRIBUTE).get();
+        Http1Connection.State state = ctx.channel().attr(STATE_ATTRIBUTE).get();
         if (state == null) {
             log.debug("Got a chunk of message for an unknown request. This can happen when a request is rejected based on headers, and then the rejected body arrives.");
         } else {
@@ -152,10 +152,10 @@ public final class Http2Handler extends Http2ConnectionHandler implements Http2F
         }
         H2Headers muHeaders = new H2Headers(headers, hasRequestBody);
         NettyRequestAdapter muReq = new NettyRequestAdapter(ctx.channel(), nettyReq, muHeaders, serverRef, muMethod, "https", uri, true, headers.authority().toString());
-        NettyResponseAdaptorH2 resp = new NettyResponseAdaptorH2(ctx, muReq, new H2Headers(), encoder(), streamId);
+        Http2Response resp = new Http2Response(ctx, muReq, new H2Headers(), encoder(), streamId);
 
         AsyncContext asyncContext = new AsyncContext(muReq, resp, stats);
-        ctx.channel().attr(STATE_ATTRIBUTE).set(new Http1Handler.State(asyncContext, nettyHandlerAdapter));
+        ctx.channel().attr(STATE_ATTRIBUTE).set(new Http1Connection.State(asyncContext, nettyHandlerAdapter));
         nettyHandlerAdapter.onHeaders(asyncContext, muHeaders);
     }
 
@@ -172,7 +172,7 @@ public final class Http2Handler extends Http2ConnectionHandler implements Http2F
 
     @Override
     public void onRstStreamRead(ChannelHandlerContext ctx, int streamId, long errorCode) {
-        Http1Handler.State state = ctx.channel().attr(STATE_ATTRIBUTE).get();
+        Http1Connection.State state = ctx.channel().attr(STATE_ATTRIBUTE).get();
         if (state != null) {
             state.asyncContext.onCancelled(false);
         }
@@ -201,7 +201,7 @@ public final class Http2Handler extends Http2ConnectionHandler implements Http2F
 
     @Override
     public void onGoAwayRead(ChannelHandlerContext ctx, int lastStreamId, long errorCode, ByteBuf debugData) {
-        Http1Handler.State state = ctx.channel().attr(STATE_ATTRIBUTE).get();
+        Http1Connection.State state = ctx.channel().attr(STATE_ATTRIBUTE).get();
         if (state != null) {
             state.asyncContext.onCancelled(true);
         }

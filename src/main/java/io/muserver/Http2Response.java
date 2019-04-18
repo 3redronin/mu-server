@@ -7,13 +7,13 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http2.Http2ConnectionEncoder;
 
-class NettyResponseAdaptorH2 extends NettyResponseAdaptor {
+class Http2Response extends NettyResponseAdaptor {
     private final ChannelHandlerContext ctx;
     private final H2Headers headers;
     private final Http2ConnectionEncoder encoder;
     private final int streamId;
 
-    NettyResponseAdaptorH2(ChannelHandlerContext ctx, NettyRequestAdapter request, H2Headers headers, Http2ConnectionEncoder encoder, int streamId) {
+    Http2Response(ChannelHandlerContext ctx, NettyRequestAdapter request, H2Headers headers, Http2ConnectionEncoder encoder, int streamId) {
         super(request, headers);
         this.ctx = ctx;
         this.headers = headers;

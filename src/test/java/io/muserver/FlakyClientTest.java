@@ -14,6 +14,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import static io.muserver.MuServerBuilder.httpServer;
+import static io.muserver.MuServerBuilder.httpsServer;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
 import static scaffolding.ClientUtils.call;
@@ -24,8 +25,17 @@ public class FlakyClientTest {
     private MuServer server;
 
     @Test
-    public void canHandleStuffWithoutBreaking() throws InterruptedException, IOException {
-        server = httpServer()
+    public void canHandleStuffWithoutBreakingOverHttp() throws InterruptedException, IOException {
+        runTest(httpServer());
+    }
+
+    @Test
+    public void canHandleStuffWithoutBreakingOverHttps() throws InterruptedException, IOException {
+        runTest(httpsServer());
+    }
+
+    protected void runTest(MuServerBuilder muServerBuilder) throws InterruptedException, IOException {
+        server = muServerBuilder
             .addHandler(Method.GET, "/full", (req, resp, pp) -> {
                 try {
                     resp.write("A full length message");

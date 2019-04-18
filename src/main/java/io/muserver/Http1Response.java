@@ -11,13 +11,13 @@ import java.util.Map;
 
 import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 
-class NettyResponseAdaptorH1 extends NettyResponseAdaptor {
-    private static final Logger log = LoggerFactory.getLogger(NettyResponseAdaptorH1.class);
+class Http1Response extends NettyResponseAdaptor {
+    private static final Logger log = LoggerFactory.getLogger(Http1Response.class);
 
     private final ChannelHandlerContext ctx;
     private final H1Headers headers;
 
-    NettyResponseAdaptorH1(ChannelHandlerContext ctx, NettyRequestAdapter request, H1Headers headers) {
+    Http1Response(ChannelHandlerContext ctx, NettyRequestAdapter request, H1Headers headers) {
         super(request, headers);
         this.ctx = ctx;
         this.headers = headers;

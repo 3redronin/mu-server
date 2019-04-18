@@ -18,8 +18,8 @@ import static io.netty.buffer.Unpooled.copiedBuffer;
 import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
-class Http1Handler extends SimpleChannelInboundHandler<Object> {
-    private static final Logger log = LoggerFactory.getLogger(Http1Handler.class);
+class Http1Connection extends SimpleChannelInboundHandler<Object> {
+    private static final Logger log = LoggerFactory.getLogger(Http1Connection.class);
     static final AttributeKey<State> STATE_ATTRIBUTE = AttributeKey.newInstance("state");
 
     private final NettyHandlerAdapter nettyHandlerAdapter;
@@ -27,7 +27,7 @@ class Http1Handler extends SimpleChannelInboundHandler<Object> {
     private final AtomicReference<MuServer> serverRef;
     private final String proto;
 
-    Http1Handler(NettyHandlerAdapter nettyHandlerAdapter, MuStatsImpl stats, AtomicReference<MuServer> serverRef, String proto) {
+    Http1Connection(NettyHandlerAdapter nettyHandlerAdapter, MuStatsImpl stats, AtomicReference<MuServer> serverRef, String proto) {
         this.nettyHandlerAdapter = nettyHandlerAdapter;
         this.stats = stats;
         this.serverRef = serverRef;
@@ -99,7 +99,7 @@ class Http1Handler extends SimpleChannelInboundHandler<Object> {
                 stats.onRequestStarted(muRequest);
 
 
-                AsyncContext asyncContext = new AsyncContext(muRequest, new NettyResponseAdaptorH1(ctx, muRequest, new H1Headers()), stats);
+                AsyncContext asyncContext = new AsyncContext(muRequest, new Http1Response(ctx, muRequest, new H1Headers()), stats);
                 ctx.channel().attr(STATE_ATTRIBUTE).set(new State(asyncContext, nettyHandlerAdapter));
                 nettyHandlerAdapter.onHeaders(asyncContext, asyncContext.request.headers());
             }

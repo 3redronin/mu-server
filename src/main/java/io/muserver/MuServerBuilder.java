@@ -390,7 +390,7 @@ public class MuServerBuilder {
                             p.addLast("compressor", new SelectiveHttpContentCompressor(minimumGzipSize, mimeTypesToGzip));
                         }
                         p.addLast("keepalive", new HttpServerKeepAliveHandler());
-                        p.addLast("muhandler", new Http1Handler(nettyHandlerAdapter, stats, serverRef, proto));
+                        p.addLast("muhandler", new Http1Connection(nettyHandlerAdapter, stats, serverRef, proto));
                     }
                 }
             });
@@ -420,13 +420,13 @@ public class MuServerBuilder {
         @Override
         protected void configurePipeline(ChannelHandlerContext ctx, String protocol) throws Exception {
             if (ApplicationProtocolNames.HTTP_2.equals(protocol)) {
-                ctx.pipeline().addLast(new Http2HandlerBuilder(serverRef, nettyHandlerAdapter, stats).build());
+                ctx.pipeline().addLast(new Http2ConnectionBuilder(serverRef, nettyHandlerAdapter, stats).build());
                 return;
             }
 
             if (ApplicationProtocolNames.HTTP_1_1.equals(protocol)) {
                 ctx.pipeline().addLast(new HttpServerCodec(),
-                    new Http1Handler(nettyHandlerAdapter, stats, serverRef, proto));
+                    new Http1Connection(nettyHandlerAdapter, stats, serverRef, proto));
                 return;
             }
 
@@ -434,15 +434,15 @@ public class MuServerBuilder {
         }
     }
 
-    static class Http2HandlerBuilder
-        extends AbstractHttp2ConnectionHandlerBuilder<Http2Handler, Http2HandlerBuilder> {
+    static class Http2ConnectionBuilder
+        extends AbstractHttp2ConnectionHandlerBuilder<Http2Connection, Http2ConnectionBuilder> {
 
-        private static final Http2FrameLogger logger = new Http2FrameLogger(LogLevel.DEBUG, Http2Handler.class);
+        private static final Http2FrameLogger logger = new Http2FrameLogger(LogLevel.INFO, Http2Connection.class);
         private final AtomicReference<MuServer> serverRef;
         private final NettyHandlerAdapter nettyHandlerAdapter;
         private final MuStatsImpl stats;
 
-        public Http2HandlerBuilder(AtomicReference<MuServer> serverRef, NettyHandlerAdapter nettyHandlerAdapter, MuStatsImpl stats) {
+        public Http2ConnectionBuilder(AtomicReference<MuServer> serverRef, NettyHandlerAdapter nettyHandlerAdapter, MuStatsImpl stats) {
             this.serverRef = serverRef;
             this.nettyHandlerAdapter = nettyHandlerAdapter;
             this.stats = stats;
@@ -450,14 +450,14 @@ public class MuServerBuilder {
         }
 
         @Override
-        public Http2Handler build() {
+        public Http2Connection build() {
             return super.build();
         }
 
         @Override
-        protected Http2Handler build(Http2ConnectionDecoder decoder, Http2ConnectionEncoder encoder,
-                                     Http2Settings initialSettings) {
-            Http2Handler handler = new Http2Handler(decoder, encoder, initialSettings, serverRef, nettyHandlerAdapter, stats);
+        protected Http2Connection build(Http2ConnectionDecoder decoder, Http2ConnectionEncoder encoder,
+                                        Http2Settings initialSettings) {
+            Http2Connection handler = new Http2Connection(decoder, encoder, initialSettings, serverRef, nettyHandlerAdapter, stats);
             frameListener(handler);
             return handler;
         }
