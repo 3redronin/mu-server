@@ -200,7 +200,8 @@ public class RestHandler implements MuHandler {
                 }
 
                 filterManagerThing.onBeforeSendResponse(requestContext, responseContext);
-                muResponse.status(responseContext.getStatus());
+                int status = responseContext.getStatus();
+                muResponse.status(status);
                 for (Map.Entry<String, List<String>> entry : responseContext.getStringHeaders().entrySet()) {
                     muResponse.headers().add(entry.getKey(), entry.getValue());
                 }
@@ -211,7 +212,9 @@ public class RestHandler implements MuHandler {
 
                 Object entity = responseContext.getEntity();
                 if (entity == null) {
-                    muResponse.headers().set(HeaderNames.CONTENT_LENGTH, 0);
+                    if (status != 204 && status != 304 && status != 205) {
+                        muResponse.headers().set(HeaderNames.CONTENT_LENGTH, HeaderValues.ZERO);
+                    }
                 } else {
 
                     MediaType responseMediaType = responseContext.getMediaType();

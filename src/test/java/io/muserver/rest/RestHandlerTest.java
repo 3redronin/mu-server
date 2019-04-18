@@ -14,6 +14,7 @@ import java.io.IOException;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.lessThanOrEqualTo;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 
@@ -44,7 +45,7 @@ public class RestHandlerTest {
         try (okhttp3.Response resp = call(request(server.uri().resolve("/api/fruit%20bits/nothing")))) {
             assertThat(resp.code(), is(204));
             assertThat(resp.header("Content-Length"), is(nullValue()));
-            assertThat(resp.body().contentLength(), is(0L));
+            assertThat(resp.body().contentLength(), lessThanOrEqualTo(0L));
         }
     }
 
@@ -53,7 +54,7 @@ public class RestHandlerTest {
         try (okhttp3.Response resp = call(request(server.uri().resolve("/api/fruit%20bits/nothing2")))) {
             assertThat(resp.code(), is(204));
             assertThat(resp.header("Content-Length"), is(nullValue()));
-            assertThat(resp.body().contentLength(), is(0L));
+            assertThat(resp.body().contentLength(), lessThanOrEqualTo(0L));
         }
     }
 
