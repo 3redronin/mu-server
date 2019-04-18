@@ -4,12 +4,15 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 
 import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 
 class NettyResponseAdaptorH1 extends NettyResponseAdaptor {
+    private static final Logger log = LoggerFactory.getLogger(NettyResponseAdaptorH1.class);
 
     private final ChannelHandlerContext ctx;
     private final H1Headers headers;
@@ -43,6 +46,15 @@ class NettyResponseAdaptorH1 extends NettyResponseAdaptor {
     ChannelFuture writeToChannel(boolean isLast, ByteBuf content) {
         HttpContent msg = isLast ? new DefaultLastHttpContent(content) : new DefaultHttpContent(content);
         return ctx.writeAndFlush(msg);
+    }
+
+    @Override
+    protected boolean onBadRequestSent() {
+        if (connectionOpen()) {
+            log.warn("Closing client connection for " + request + " because " + declaredLength + " bytes was the " +
+                "expected length, however " + bytesStreamed + " bytes were sent.");
+        }
+        return true;
     }
 
 

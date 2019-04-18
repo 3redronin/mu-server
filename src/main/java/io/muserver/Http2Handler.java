@@ -39,7 +39,7 @@ public final class Http2Handler extends Http2ConnectionHandler implements Http2F
         Http1Handler.State state = ctx.channel().attr(STATE_ATTRIBUTE).get();
         if (state != null) {
             log.debug(cause.getClass().getName() + " (" + cause.getMessage() + ") for " + ctx + " so will disconnect this client");
-            state.asyncContext.onDisconnected();
+            state.asyncContext.onCancelled(true);
         } else {
             log.debug("Exception for unknown ctx " + ctx, cause);
         }
@@ -172,6 +172,10 @@ public final class Http2Handler extends Http2ConnectionHandler implements Http2F
 
     @Override
     public void onRstStreamRead(ChannelHandlerContext ctx, int streamId, long errorCode) {
+        Http1Handler.State state = ctx.channel().attr(STATE_ATTRIBUTE).get();
+        if (state != null) {
+            state.asyncContext.onCancelled(false);
+        }
     }
 
     @Override
@@ -197,6 +201,10 @@ public final class Http2Handler extends Http2ConnectionHandler implements Http2F
 
     @Override
     public void onGoAwayRead(ChannelHandlerContext ctx, int lastStreamId, long errorCode, ByteBuf debugData) {
+        Http1Handler.State state = ctx.channel().attr(STATE_ATTRIBUTE).get();
+        if (state != null) {
+            state.asyncContext.onCancelled(true);
+        }
     }
 
     @Override
@@ -206,7 +214,7 @@ public final class Http2Handler extends Http2ConnectionHandler implements Http2F
     @Override
     public void onUnknownFrame(ChannelHandlerContext ctx, byte frameType, int streamId,
                                Http2Flags flags, ByteBuf payload) {
-        log.warn("UnknownFrame");
+        log.warn("UnknownFrame for " + streamId);
     }
 
 }

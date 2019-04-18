@@ -42,12 +42,12 @@ public class AsyncContext {
         return completed.get();
     }
 
-    void onDisconnected() {
+    void onCancelled(boolean forceDisconnect) {
         boolean wasCompleted = isComplete();
-        ((NettyRequestAdapter) request).onClientDisconnected(wasCompleted);
-        ((NettyResponseAdaptor) response).onClientDisconnected();
+        ((NettyRequestAdapter) request).onCancelled(wasCompleted);
+        ((NettyResponseAdaptor) response).onCancelled();
         if (!wasCompleted) {
-            complete(true);
+            complete(forceDisconnect);
         }
     }
 }

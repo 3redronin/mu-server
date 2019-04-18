@@ -48,7 +48,7 @@ class Http1Handler extends SimpleChannelInboundHandler<Object> {
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         State state = ctx.channel().attr(STATE_ATTRIBUTE).get();
         if (state != null) {
-            state.asyncContext.onDisconnected();
+            state.asyncContext.onCancelled(true);
         }
         super.channelInactive(ctx);
     }
@@ -153,7 +153,7 @@ class Http1Handler extends SimpleChannelInboundHandler<Object> {
         State state = ctx.channel().attr(STATE_ATTRIBUTE).get();
         if (state != null) {
             log.debug(cause.getClass().getName() + " (" + cause.getMessage() + ") for " + ctx + " so will disconnect this client");
-            state.asyncContext.onDisconnected();
+            state.asyncContext.onCancelled(true);
         } else {
             log.debug("Exception for unknown ctx " + ctx, cause);
         }

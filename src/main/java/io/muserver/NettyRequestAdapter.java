@@ -370,7 +370,7 @@ class NettyRequestAdapter implements MuRequest {
         }
     }
 
-    public void onClientDisconnected(boolean complete) {
+    public void onCancelled(boolean complete) {
         if (asyncHandle != null) {
             asyncHandle.onClientDisconnected(complete);
         }

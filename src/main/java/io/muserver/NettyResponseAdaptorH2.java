@@ -34,6 +34,11 @@ class NettyResponseAdaptorH2 extends NettyResponseAdaptor {
     }
 
     @Override
+    protected boolean onBadRequestSent() {
+        return false; // the stream is bad, but the connection is fine. Doesn't matter.
+    }
+
+    @Override
     protected void startStreaming() {
         super.startStreaming();
         writeHeaders(false);

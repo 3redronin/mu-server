@@ -42,7 +42,7 @@ abstract class NettyResponseAdaptor implements MuResponse {
         NOTHING, FULL_SENT, STREAMING, STREAMING_COMPLETE, FINISHED, DISCONNECTED
     }
 
-    void onClientDisconnected() {
+    void onCancelled() {
         outputState = OutputState.DISCONNECTED;
     }
 
@@ -204,11 +204,7 @@ abstract class NettyResponseAdaptor implements MuResponse {
             }
             boolean badFixedLength = !isHead && isFixedLength && declaredLength != bytesStreamed && status != 304;
             if (badFixedLength) {
-                shouldDisconnect = true;
-                if (connectionOpen()) {
-                    log.warn("Closing client connection for " + request + " because " + declaredLength + " bytes was the " +
-                        "expected length, however " + bytesStreamed + " bytes were sent.");
-                }
+                shouldDisconnect = onBadRequestSent();
             } else {
                 lastAction = writeLastContentMarker();
             }
@@ -226,6 +222,12 @@ abstract class NettyResponseAdaptor implements MuResponse {
         }
         return lastAction;
     }
+
+    /**
+     * Called when the number of bytes declared is different from the number sent
+     * @return True to disconnect the connection; otherwise false
+     */
+    protected abstract boolean onBadRequestSent();
 
     @Override
     public void write(String text) {
