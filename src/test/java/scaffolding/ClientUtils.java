@@ -10,7 +10,6 @@ import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
-import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
@@ -61,21 +60,16 @@ public class ClientUtils {
         return new Request.Builder();
     }
     public static Request.Builder request(URI uri) {
-        return new Request.Builder().url(uri.toString());
+        return request().url(uri.toString());
     }
 
     public static Response call(Request.Builder request) {
-        for (int i = 0; i < 1; i++) {
-            Request req = request.build();
-            try {
-                return client.newCall(req).execute();
-            } catch (SocketTimeoutException ste) {
-                log.warn("Timeout... will let it retry", ste);
-            } catch (IOException e) {
-                throw new RuntimeException("Error while calling " + req, e);
-            }
+        Request req = request.build();
+        try {
+            return client.newCall(req).execute();
+        } catch (IOException e) {
+            throw new RuntimeException("Error while calling " + req, e);
         }
-        throw new RuntimeException("Timed out too many times");
     }
 
     public static SSLContext sslContextForTesting(TrustManager trustManager) {

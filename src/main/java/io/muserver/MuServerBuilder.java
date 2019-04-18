@@ -437,7 +437,7 @@ public class MuServerBuilder {
     static class Http2ConnectionBuilder
         extends AbstractHttp2ConnectionHandlerBuilder<Http2Connection, Http2ConnectionBuilder> {
 
-        private static final Http2FrameLogger logger = new Http2FrameLogger(LogLevel.INFO, Http2Connection.class);
+        private static final Http2FrameLogger logger = new Http2FrameLogger(LogLevel.DEBUG, Http2Connection.class);
         private final AtomicReference<MuServer> serverRef;
         private final NettyHandlerAdapter nettyHandlerAdapter;
         private final MuStatsImpl stats;

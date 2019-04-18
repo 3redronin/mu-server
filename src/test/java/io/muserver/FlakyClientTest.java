@@ -34,7 +34,7 @@ public class FlakyClientTest {
         runTest(httpsServer());
     }
 
-    protected void runTest(MuServerBuilder muServerBuilder) throws InterruptedException, IOException {
+    private void runTest(MuServerBuilder muServerBuilder) throws InterruptedException, IOException {
         server = muServerBuilder
             .addHandler(Method.GET, "/full", (req, resp, pp) -> {
                 try {
