@@ -38,7 +38,6 @@ public class HttpsTest {
             assertThat(resp.body().string(), equalTo("This is encrypted and the URL is https://localhost:9443/"));
         }
         assertThat(actualSSLInfo.get().providerName(), isOneOf("JDK", "OpenSSL"));
-        System.out.println("actualSSLInfo.get() = " + actualSSLInfo.get());
         assertThat(actualSSLInfo.get().protocols(), hasItem("TLSv1.2"));
         assertThat(actualSSLInfo.get().ciphers().size(), greaterThan(0));
     }
