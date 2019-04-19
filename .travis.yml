@@ -2,7 +2,9 @@ language: java
 jdk:
   - oraclejdk8
   - oraclejdk11
+  - oraclejdk12
   - openjdk10
   - openjdk11
+  - openjdk12
 before_install:
    - "export M2_HOME=/usr/local/maven"

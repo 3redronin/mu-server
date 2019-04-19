@@ -167,6 +167,9 @@
                     <target>1.8</target>
                     <failOnWarning>true</failOnWarning>
                     <showWarnings>true</showWarnings>
+                    <compilerArgs>
+                        <arg>-Xlint:-options</arg>
+                    </compilerArgs>
                 </configuration>
             </plugin>
             <plugin>
