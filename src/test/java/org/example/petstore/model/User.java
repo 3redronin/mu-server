@@ -17,10 +17,6 @@
 package org.example.petstore.model;
 
 
-import javax.xml.bind.annotation.XmlElement;
-import javax.xml.bind.annotation.XmlRootElement;
-
-@XmlRootElement(name = "User")
 public class User {
   private long id;
   private String username;
@@ -31,7 +27,6 @@ public class User {
   private String phone;
   private int userStatus;
 
-  @XmlElement(name = "id")
   public long getId() {
     return id;
   }
@@ -40,7 +35,6 @@ public class User {
     this.id = id;
   }
 
-  @XmlElement(name = "firstName")
   public String getFirstName() {
     return firstName;
   }
@@ -49,7 +43,6 @@ public class User {
     this.firstName = firstName;
   }
 
-  @XmlElement(name = "username")
   public String getUsername() {
     return username;
   }
@@ -58,7 +51,6 @@ public class User {
     this.username = username;
   }
 
-  @XmlElement(name = "lastName")
   public String getLastName() {
     return lastName;
   }
@@ -67,7 +59,6 @@ public class User {
     this.lastName = lastName;
   }
 
-  @XmlElement(name = "email")
   public String getEmail() {
     return email;
   }
@@ -76,7 +67,6 @@ public class User {
     this.email = email;
   }
 
-  @XmlElement(name = "password")
   public String getPassword() {
     return password;
   }
@@ -85,7 +75,6 @@ public class User {
     this.password = password;
   }
 
-  @XmlElement(name = "phone")
   public String getPhone() {
     return phone;
   }
@@ -94,7 +83,6 @@ public class User {
     this.phone = phone;
   }
 
-  @XmlElement(name = "userStatus")
 //  @ApiModelProperty(value = "User Status", allowableValues = "1-registered,2-active,3-closed")
   public int getUserStatus() {
     return userStatus;

@@ -17,10 +17,6 @@
 package org.example.petstore.model;
 
 
-import javax.xml.bind.annotation.XmlElement;
-import javax.xml.bind.annotation.XmlRootElement;
-
-@XmlRootElement(name = "Vehicle")
 //@JsonTypeInfo(
 //        use = JsonTypeInfo.Id.NAME, // Were binding by providing a name
 //        include = JsonTypeInfo.As.PROPERTY, // The name is provided in a property
@@ -35,7 +31,6 @@ public class Vehicle {
   private long id;
   private String name;
 
-  @XmlElement(name = "id")
   public long getId() {
     return id;
   }
@@ -44,7 +39,6 @@ public class Vehicle {
     this.id = id;
   }
 
-  @XmlElement(name = "name")
 //  @ApiModelProperty(example = "kit", required = true)
   public String getName() {
     return name;

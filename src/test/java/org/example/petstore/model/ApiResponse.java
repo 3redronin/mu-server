@@ -16,9 +16,7 @@
 
 package org.example.petstore.model;
 
-import javax.xml.bind.annotation.XmlTransient;
 
-@javax.xml.bind.annotation.XmlRootElement
 public class ApiResponse {
   public static final int ERROR = 1;
   public static final int WARNING = 2;
@@ -57,7 +55,6 @@ public class ApiResponse {
     this.message = message;
   }
 
-  @XmlTransient
   public int getCode() {
     return code;
   }

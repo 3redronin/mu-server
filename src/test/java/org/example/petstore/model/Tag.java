@@ -16,15 +16,10 @@
 
 package org.example.petstore.model;
 
-import javax.xml.bind.annotation.XmlElement;
-import javax.xml.bind.annotation.XmlRootElement;
-
-@XmlRootElement(name = "Tag")
 public class Tag {
   private long id;
   private String name;
 
-  @XmlElement(name = "id")
   public long getId() {
     return id;
   }
@@ -33,7 +28,6 @@ public class Tag {
     this.id = id;
   }
 
-  @XmlElement(name = "name")
   public String getName() {
     return name;
   }

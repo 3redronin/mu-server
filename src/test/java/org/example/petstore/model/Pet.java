@@ -16,13 +16,9 @@
 
 package org.example.petstore.model;
 
-import javax.xml.bind.annotation.XmlElement;
-import javax.xml.bind.annotation.XmlElementWrapper;
-import javax.xml.bind.annotation.XmlRootElement;
 import java.util.ArrayList;
 import java.util.List;
 
-@XmlRootElement(name = "Pet")
 //@ApiModel(value = "Pet", subTypes = {Cat.class}, discriminator = "type")
 public class Pet {
   private long id;
@@ -32,7 +28,6 @@ public class Pet {
   private List<Tag> tags = new ArrayList<Tag>();
   private String status;
 
-  @XmlElement(name = "id")
   public long getId() {
     return id;
   }
@@ -41,7 +36,6 @@ public class Pet {
     this.id = id;
   }
 
-  @XmlElement(name = "category")
   public Category getCategory() {
     return category;
   }
@@ -50,7 +44,6 @@ public class Pet {
     this.category = category;
   }
 
-  @XmlElement(name = "name")
 //  @ApiModelProperty(example = "doggie", required = true)
   public String getName() {
     return name;
@@ -60,8 +53,6 @@ public class Pet {
     this.name = name;
   }
 
-  @XmlElementWrapper(name = "photoUrls")
-  @XmlElement(name = "photoUrl", required = true)
   public List<String> getPhotoUrls() {
     return photoUrls;
   }
@@ -70,8 +61,6 @@ public class Pet {
     this.photoUrls = photoUrls;
   }
 
-  @XmlElementWrapper(name = "tags")
-  @XmlElement(name = "tag")
   public List<Tag> getTags() {
     return tags;
   }
@@ -80,7 +69,6 @@ public class Pet {
     this.tags = tags;
   }
 
-  @XmlElement(name = "status")
 //  @ApiModelProperty(value = "pet status in the store", allowableValues = "available,pending,sold")
   public String getStatus() {
     return status;

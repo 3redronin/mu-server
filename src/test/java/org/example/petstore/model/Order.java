@@ -17,11 +17,8 @@
 package org.example.petstore.model;
 
 
-import javax.xml.bind.annotation.XmlElement;
-import javax.xml.bind.annotation.XmlRootElement;
 import java.util.Date;
 
-@XmlRootElement(name = "Order")
 public class Order {
   private long id;
   private long petId;
@@ -30,7 +27,6 @@ public class Order {
   private String status;
   private boolean complete;
 
-  @XmlElement(name = "id")
   public long getId() {
     return id;
   }
@@ -47,7 +43,6 @@ public class Order {
     this.complete = complete;
   }
 
-  @XmlElement(name = "petId")
   public long getPetId() {
     return petId;
   }
@@ -56,7 +51,6 @@ public class Order {
     this.petId = petId;
   }
 
-  @XmlElement(name = "quantity")
   public int getQuantity() {
     return quantity;
   }
@@ -65,7 +59,6 @@ public class Order {
     this.quantity = quantity;
   }
 
-  @XmlElement(name = "status")
 //  @ApiModelProperty(value = "Order Status", allowableValues = "placed, approved, delivered")
   public String getStatus() {
     return status;
@@ -75,7 +68,6 @@ public class Order {
     this.status = status;
   }
 
-  @XmlElement(name = "shipDate")
   public Date getShipDate() {
     return shipDate;
   }
