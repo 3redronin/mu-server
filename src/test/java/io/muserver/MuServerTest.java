@@ -9,12 +9,12 @@ import java.io.File;
 import java.io.IOException;
 import java.net.ConnectException;
 import java.net.InetAddress;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-import static io.muserver.MuServerBuilder.httpServer;
-import static io.muserver.MuServerBuilder.muServer;
+import static io.muserver.MuServerBuilder.*;
 import static java.util.Arrays.asList;
 import static org.hamcrest.CoreMatchers.*;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -223,7 +223,7 @@ public class MuServerTest {
         File warAndPeaceInRussian = new File("src/test/resources/sample-static/war-and-peace-in-ISO-8859-5.txt");
         assertThat("Couldn't find " + Mutils.fullPath(warAndPeaceInRussian), warAndPeaceInRussian.isFile(), is(true));
 
-        server = httpServer()
+        server = httpsServer()
             .addHandler((req, resp) -> {
                 resp.contentType(req.headers().contentType().toString());
                 String body = req.readBodyAsString();
@@ -238,6 +238,27 @@ public class MuServerTest {
             assertThat(resp.header("Content-Type"), is("text/plain;charset=ISO-8859-5"));
             String body = resp.body().string();
             assertThat(body, containsString("ЧАСТЬ ПЕРВАЯ."));
+        }
+    }
+
+    @Test
+    public void zeroBytesCanBeWrittenToTheResponse() throws IOException {
+        server = httpsServer()
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.contentType("text/plain");
+                AsyncHandle handle = request.handleAsync();
+                handle.write(ByteBuffer.allocateDirect(0));
+                handle.write(ByteBuffer.allocateDirect(0));
+                handle.write(Mutils.toByteBuffer("Hello"));
+                handle.write(ByteBuffer.allocateDirect(0));
+                handle.write(ByteBuffer.allocateDirect(0));
+                handle.complete();
+            })
+            .start();
+        try (Response resp = call(request(server.uri()))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.header("Content-Type"), is("text/plain"));
+            assertThat(resp.body().string(), is("Hello"));
         }
     }
 
