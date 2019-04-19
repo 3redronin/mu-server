@@ -3,7 +3,6 @@ package scaffolding;
 import io.netty.util.ResourceLeakDetector;
 import okhttp3.*;
 import okio.BufferedSink;
-import org.slf4j.LoggerFactory;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
@@ -16,8 +15,6 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class ClientUtils {
-
-    private static final org.slf4j.Logger log = LoggerFactory.getLogger(ClientUtils.class);
 
     public static final OkHttpClient client;
     private static X509TrustManager veryTrustingTrustManager = veryTrustingTrustManager();

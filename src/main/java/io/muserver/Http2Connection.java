@@ -2,11 +2,8 @@ package io.muserver;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.handler.codec.DecoderResult;
-import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
-import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http2.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -77,72 +74,7 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
         Method muMethod = Method.fromNetty(nettyMeth);
 
         final String uri = headers.path().toString();
-        HttpRequest nettyReq = new HttpRequest() {
-            @Override
-            public HttpMethod getMethod() {
-                return nettyMeth;
-            }
-
-            @Override
-            public HttpMethod method() {
-                return nettyMeth;
-            }
-
-            @Override
-            public HttpRequest setMethod(HttpMethod method) {
-                throw new IllegalStateException("Can't set stuff");
-            }
-
-            @Override
-            public String getUri() {
-                return uri;
-            }
-
-            @Override
-            public String uri() {
-                return uri;
-            }
-
-            @Override
-            public HttpRequest setUri(String uri) {
-                throw new IllegalStateException("Can't set stuff");
-            }
-
-            @Override
-            public HttpRequest setProtocolVersion(HttpVersion version) {
-                throw new IllegalStateException("Can't set stuff");
-            }
-
-            @Override
-            public HttpVersion getProtocolVersion() {
-                return HttpVersion.valueOf("HTTP/2");
-            }
-
-            @Override
-            public HttpVersion protocolVersion() {
-                return HttpVersion.valueOf("HTTP/2");
-            }
-
-            @Override
-            public HttpHeaders headers() {
-                throw new IllegalStateException("blah");
-            }
-
-            @Override
-            public DecoderResult getDecoderResult() {
-                return DecoderResult.SUCCESS;
-            }
-
-            @Override
-            public DecoderResult decoderResult() {
-                return DecoderResult.SUCCESS;
-            }
-
-            @Override
-            public void setDecoderResult(DecoderResult result) {
-                throw new IllegalStateException("Can't set stuff");
-            }
-        };
+        HttpRequest nettyReq = new Http2To1RequestAdapter(nettyMeth, uri, headers);
         boolean hasRequestBody = !endOfStream;
         if (hasRequestBody) {
             long bodyLen = headers.getLong(HeaderNames.CONTENT_LENGTH, -1L);
@@ -217,7 +149,6 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
     @Override
     public void onUnknownFrame(ChannelHandlerContext ctx, byte frameType, int streamId,
                                Http2Flags flags, ByteBuf payload) {
-        log.warn("UnknownFrame for " + streamId);
     }
 
 }
