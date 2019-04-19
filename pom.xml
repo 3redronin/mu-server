@@ -208,38 +208,6 @@
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-enforcer-plugin</artifactId>
-                <version>3.0.0-M2</version>
-                <executions>
-                    <execution>
-                        <id>enforce-versions</id>
-                        <goals>
-                            <goal>enforce</goal>
-                        </goals>
-                        <configuration>
-                            <rules>
-                                <bannedDependencies>
-                                    <excludes>
-                                        <exclude>*:*:*:*:runtime</exclude>
-                                        <exclude>*:*:*:*:compile</exclude>
-                                    </excludes>
-                                    <includes>
-                                        <include>org.slf4j:slf4j-api</include>
-                                        <include>javax.ws.rs:javax.ws.rs-api</include>
-                                        <include>io.netty:*</include>
-                                    </includes>
-                                </bannedDependencies>
-                                <dependencyConvergence/>
-                                <requireMavenVersion>
-                                    <version>3.0.4</version>
-                                </requireMavenVersion>
-                            </rules>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-source-plugin</artifactId>
                 <version>3.0.1</version>
                 <executions>
@@ -284,7 +252,41 @@
                             </execution>
                         </executions>
                     </plugin>
-
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-enforcer-plugin</artifactId>
+                        <version>3.0.0-M2</version>
+                        <executions>
+                            <execution>
+                                <id>enforce-versions</id>
+                                <goals>
+                                    <goal>enforce</goal>
+                                </goals>
+                                <configuration>
+                                    <rules>
+                                        <bannedDependencies>
+                                            <excludes>
+                                                <exclude>*:*:*:*:runtime</exclude>
+                                                <exclude>*:*:*:*:compile</exclude>
+                                            </excludes>
+                                            <includes>
+                                                <include>org.slf4j:slf4j-api</include>
+                                                <include>javax.ws.rs:javax.ws.rs-api</include>
+                                                <include>io.netty:*</include>
+                                            </includes>
+                                        </bannedDependencies>
+                                        <dependencyConvergence/>
+                                        <requireMavenVersion>
+                                            <version>3.0.4</version>
+                                        </requireMavenVersion>
+                                        <requireJavaVersion>
+                                            <version>1.8.0</version>
+                                        </requireJavaVersion>
+                                    </rules>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
                 </plugins>
             </build>
         </profile>
