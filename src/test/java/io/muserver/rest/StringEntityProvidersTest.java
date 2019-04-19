@@ -1,6 +1,7 @@
 package io.muserver.rest;
 
 import io.muserver.MuServer;
+import io.muserver.Mutils;
 import okhttp3.FormBody;
 import okhttp3.MediaType;
 import okhttp3.RequestBody;
@@ -13,12 +14,15 @@ import javax.ws.rs.POST;
 import javax.ws.rs.Path;
 import javax.ws.rs.Produces;
 import javax.ws.rs.core.MultivaluedMap;
+import java.io.File;
 import java.io.IOException;
 import java.io.Reader;
 
 import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static java.util.stream.Collectors.toList;
+import static org.hamcrest.CoreMatchers.containsString;
+import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static scaffolding.ClientUtils.call;
@@ -40,6 +44,31 @@ public class StringEntityProvidersTest {
         this.server = httpsServer().addHandler(restHandler(new Sample())).start();
         check(StringUtils.randomStringOfLength(64 * 1024));
         check("");
+    }
+
+    @Test
+    public void nonUTF8IsSupported() throws IOException {
+        File warAndPeaceInRussian = new File("src/test/resources/sample-static/war-and-peace-in-ISO-8859-5.txt");
+        assertThat("Couldn't find " + Mutils.fullPath(warAndPeaceInRussian), warAndPeaceInRussian.isFile(), is(true));
+
+        @Path("samples")
+        class Sample {
+            @POST
+            @Produces("text/plain;charset=ISO-8859-5")
+            public String echo(String value) {
+                return value;
+            }
+        }
+        this.server = httpsServer().addHandler(restHandler(new Sample())).start();
+
+        try (Response resp = call(request(server.uri().resolve("/samples"))
+            .post(RequestBody.create(okhttp3.MediaType.get("text/plain; charset=ISO-8859-5"), warAndPeaceInRussian))
+        )) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.header("Content-Type"), is("text/plain;charset=ISO-8859-5"));
+            String body = resp.body().string();
+            assertThat(body, containsString("ЧАСТЬ ПЕРВАЯ."));
+        }
     }
 
     @Test
