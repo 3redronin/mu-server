@@ -152,6 +152,9 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
         }
         H2Headers muHeaders = new H2Headers(headers, hasRequestBody);
         NettyRequestAdapter muReq = new NettyRequestAdapter(ctx.channel(), nettyReq, muHeaders, serverRef, muMethod, "https", uri, true, headers.authority().toString());
+
+        stats.onRequestStarted(muReq);
+
         Http2Response resp = new Http2Response(ctx, muReq, new H2Headers(), encoder(), streamId);
 
         AsyncContext asyncContext = new AsyncContext(muReq, resp, stats);
