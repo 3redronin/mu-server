@@ -54,7 +54,11 @@ class PrimitiveEntityProvider<T> implements MessageBodyWriter<T>, MessageBodyRea
         Charset charset = EntityProviders.charsetFor(mediaType);
         byte[] bytes = Mutils.toByteArray(entityStream, 2048);
         if (bytes.length == 0) {
-            throw new NoContentException("No value specified for this " + type.getName() + " parameter. If optional, then use a @DefaultValue annotation.");
+            if (type.isPrimitive()) {
+                throw new NoContentException("No value specified for this " + type.getName() + " parameter. If optional, then use a @DefaultValue annotation.");
+            } else {
+                return null;
+            }
         }
         String stringVal = new String(bytes, charset);
         return stringToValue.apply(stringVal);

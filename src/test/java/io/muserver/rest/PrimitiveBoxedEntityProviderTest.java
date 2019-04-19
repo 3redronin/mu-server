@@ -16,13 +16,12 @@ import static io.muserver.MuServerBuilder.httpServer;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 import static scaffolding.MuAssert.stopAndCheck;
 
-public class PrimitiveEntityProviderTest {
+public class PrimitiveBoxedEntityProviderTest {
 
     private MuServer server;
 
@@ -31,7 +30,7 @@ public class PrimitiveEntityProviderTest {
         @Path("samples")
         class Sample {
             @POST
-            public boolean echo(boolean value) {
+            public Boolean echo(Boolean value) {
                 return value;
             }
         }
@@ -46,7 +45,7 @@ public class PrimitiveEntityProviderTest {
         @Path("samples")
         class Sample {
             @POST
-            public int echo(int value) {
+            public Integer echo(Integer value) {
                 return value;
             }
         }
@@ -64,7 +63,7 @@ public class PrimitiveEntityProviderTest {
         @Path("samples")
         class Sample {
             @POST
-            public short echo(short value) {
+            public Short echo(Short value) {
                 return value;
             }
         }
@@ -82,7 +81,7 @@ public class PrimitiveEntityProviderTest {
         @Path("samples")
         class Sample {
             @POST
-            public long echo(long value) {
+            public Long echo(Long value) {
                 return value;
             }
         }
@@ -100,7 +99,7 @@ public class PrimitiveEntityProviderTest {
         @Path("samples")
         class Sample {
             @POST
-            public char echo(char value) {
+            public Character echo(Character value) {
                 return value;
             }
         }
@@ -119,7 +118,7 @@ public class PrimitiveEntityProviderTest {
         @Path("samples")
         class Sample {
             @POST
-            public byte echo(byte value) {
+            public Byte echo(Byte value) {
                 return value;
             }
         }
@@ -136,7 +135,7 @@ public class PrimitiveEntityProviderTest {
         @Path("samples")
         class Sample {
             @POST
-            public float echo(float value) {
+            public Float echo(Float value) {
                 return value;
             }
         }
@@ -154,7 +153,7 @@ public class PrimitiveEntityProviderTest {
         @Path("samples")
         class Sample {
             @POST
-            public double echo(double value) {
+            public Double echo(Double value) {
                 return value;
             }
         }
@@ -204,8 +203,8 @@ public class PrimitiveEntityProviderTest {
             .post(RequestBody.create(MediaType.parse("text/plain"), ""))
             .url(server.uri().resolve("/samples").toString())
         )) {
-            assertThat(resp.code(), equalTo(400));
-            assertThat(resp.body().string(), containsString("400 Bad Request"));
+            assertThat(resp.code(), equalTo(204));
+            assertThat(resp.body().string(), equalTo(""));
         }
     }
 
