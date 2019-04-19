@@ -20,7 +20,6 @@ import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
@@ -40,7 +39,7 @@ public class BinaryEntityProvidersTest {
         }
         startServer(new Sample());
         check(StringUtils.randomBytes(64 * 1024));
-        checkNoBody();
+        check(new byte[0]);
     }
 
     @Test
@@ -55,7 +54,7 @@ public class BinaryEntityProvidersTest {
         }
         startServer(new Sample());
         check(StringUtils.randomBytes(64 * 1024));
-        checkNoBody();
+        check(new byte[0]);
     }
 
     @Test
@@ -74,7 +73,7 @@ public class BinaryEntityProvidersTest {
         }
         startServer(new Sample());
         check(Mutils.toByteArray(new FileInputStream(sample), 8192), "image/jpeg");
-        checkNoBody();
+        check(new byte[0], "image/jpeg");
     }
 
     @Test
@@ -91,7 +90,7 @@ public class BinaryEntityProvidersTest {
         }
         startServer(new Sample());
         check(StringUtils.randomStringOfLength(32 * 1024).getBytes(UTF_8));
-        checkNoBody();
+        check(new byte[0]);
     }
 
     @Test
@@ -177,17 +176,6 @@ public class BinaryEntityProvidersTest {
         }
         assertThat("Expected " + value.length + " bytes; got " + actual.length, new String(actual, UTF_8), equalTo(new String(value, UTF_8)));
     }
-
-    private void checkNoBody() throws IOException {
-        try (Response resp = call(request()
-            .post(RequestBody.create(MediaType.parse("text/plain"), ""))
-            .url(server.uri().resolve("/samples").toString())
-        )) {
-            assertThat(resp.code(), equalTo(400));
-            assertThat(resp.body().string(), containsString("400 Bad Request"));
-        }
-    }
-
 
     private void startServer(Object restResource) {
         this.server = httpsServer().addHandler(restHandler(restResource).build()).start();

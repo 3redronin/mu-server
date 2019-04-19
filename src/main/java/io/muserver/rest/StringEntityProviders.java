@@ -59,9 +59,6 @@ class StringEntityProviders {
         }
 
         public String readFrom(Class<String> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
-            if (!EntityProviders.requestHasContent(httpHeaders)) {
-                return "";
-            }
             return new String(Mutils.toByteArray(entityStream, 2048), EntityProviders.charsetFor(mediaType));
         }
     }
@@ -80,9 +77,6 @@ class StringEntityProviders {
 
         @Override
         public char[] readFrom(Class<char[]> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
-            if (!EntityProviders.requestHasContent(httpHeaders)) {
-                return new char[0];
-            }
             InputStreamReader reader = new InputStreamReader(entityStream, EntityProviders.charsetFor(mediaType));
             CharArrayWriter charArrayWriter = new CharArrayWriter();
             char[] buffer = new char[2048];
@@ -136,9 +130,6 @@ class StringEntityProviders {
 
         @Override
         public MultivaluedMap<String, String> readFrom(Class<MultivaluedMap<String, String>> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
-            if (!EntityProviders.requestHasContent(httpHeaders)) {
-                return new MultivaluedHashMap<>();
-            }
             String body = new String(Mutils.toByteArray(entityStream, 2048), EntityProviders.charsetFor(mediaType));
             QueryStringDecoder formDecoder = new QueryStringDecoder(body, false);
             Map<String, List<String>> parameters = formDecoder.parameters();

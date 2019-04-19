@@ -3,7 +3,6 @@ package io.muserver.rest;
 import javax.ws.rs.InternalServerErrorException;
 import javax.ws.rs.NotSupportedException;
 import javax.ws.rs.core.MediaType;
-import javax.ws.rs.core.MultivaluedMap;
 import javax.ws.rs.ext.MessageBodyReader;
 import javax.ws.rs.ext.MessageBodyWriter;
 import java.lang.annotation.Annotation;
@@ -81,12 +80,6 @@ class EntityProviders {
         writers.addAll(PrimitiveEntityProvider.primitiveEntryProviders);
         writers.addAll(BinaryEntityProviders.binaryEntityWriters);
         return writers;
-    }
-
-
-    static boolean requestHasContent(MultivaluedMap<String, String> headers) {
-        String len = headers.getFirst("content-length");
-        return headers.containsKey("transfer-encoding") || (len != null && Long.parseLong(len) > 0);
     }
 
     static Charset charsetFor(MediaType mediaType) {

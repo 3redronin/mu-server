@@ -39,9 +39,6 @@ class BinaryEntityProviders {
         }
 
         public byte[] readFrom(Class<byte[]> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
-            if (!EntityProviders.requestHasContent(httpHeaders)) {
-                return new byte[0];
-            }
             return Mutils.toByteArray(entityStream, 2048);
         }
 

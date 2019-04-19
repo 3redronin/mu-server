@@ -20,7 +20,6 @@ import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static java.util.stream.Collectors.toList;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
@@ -40,7 +39,7 @@ public class StringEntityProvidersTest {
         }
         this.server = httpsServer().addHandler(restHandler(new Sample())).start();
         check(StringUtils.randomStringOfLength(64 * 1024));
-        checkNoBody();
+        check("");
     }
 
     @Test
@@ -55,7 +54,7 @@ public class StringEntityProvidersTest {
         }
         this.server = httpsServer().addHandler(restHandler(new Sample())).start();
         check(StringUtils.randomStringOfLength(64 * 1024));
-        checkNoBody();
+        check("");
     }
 
     @Test
@@ -76,7 +75,7 @@ public class StringEntityProvidersTest {
         }
         this.server = httpsServer().addHandler(restHandler(new Sample())).start();
         check(StringUtils.randomStringOfLength(64 * 1024));
-        checkNoBody();
+        check("");
     }
 
     @Test
@@ -144,16 +143,6 @@ public class StringEntityProvidersTest {
             assertThat(resp.header("Content-Type"), equalTo(mimeType));
             assertThat(resp.body().string(), equalTo(value));
         }
-    }
-
-    private void checkNoBody() throws IOException {
-        try (Response resp = call(request(server.uri().resolve("/samples"))
-            .post(RequestBody.create(MediaType.parse("text/plain"), ""))
-        )) {
-            assertThat(resp.code(), equalTo(400));
-            assertThat(resp.body().string(), containsString("400 Bad Request"));
-        }
-
     }
 
     @After

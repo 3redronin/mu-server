@@ -245,7 +245,7 @@ public class AsynchronousProcessingTest {
         @Path("samples")
         class Sample {
             @POST
-            public void echo(@Suspended AsyncResponse ar, byte[] input) {
+            public void echo(@Suspended AsyncResponse ar, int input) {
                 methodCalled.set(true);
             }
         }

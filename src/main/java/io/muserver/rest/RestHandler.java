@@ -108,13 +108,7 @@ public class RestHandler implements MuHandler {
             for (ResourceMethodParam param : rm.params) {
                 Object paramValue;
                 if (param.source == ResourceMethodParam.ValueSource.MESSAGE_BODY) {
-                    if (requestContext.hasEntity()) {
-                        paramValue = readRequestEntity(requestContentType, rm, param.parameterHandle, requestContext.getEntityStream(), entityProviders, requestContext.getHeaders());
-                    } else {
-                        throw new BadRequestException("No request body was sent to the " + param.parameterHandle.getName()
-                            + " parameter of the resource method \"" + rm.methodHandle + "\" "
-                            + "- if this should be optional then specify an @DefaultValue annotation on the parameter");
-                    }
+                    paramValue = readRequestEntity(requestContentType, rm, param.parameterHandle, requestContext.getEntityStream(), entityProviders, requestContext.getHeaders());
                 } else if (param.source == ResourceMethodParam.ValueSource.CONTEXT) {
                     paramValue = getContextParam(requestContext, muResponse, relativePath, mm, param, entityProviders);
 
@@ -193,7 +187,7 @@ public class RestHandler implements MuHandler {
                     jaxRSResponse = new JaxRSResponse(Response.Status.fromStatusCode(obj.status()), new LowercasedMultivaluedHashMap<>(), obj.entity, null, new NewCookie[0], emptyList(), new Annotation[0]);
                 }
 
-                MuResponseContext responseContext = new MuResponseContext(jaxRSResponse, obj, requestContext.getMuMethod() == Method.HEAD ? NullOutputStream.INSTANCE :  new LazyAccessOutputStream(muResponse));
+                MuResponseContext responseContext = new MuResponseContext(jaxRSResponse, obj, requestContext.getMuMethod() == Method.HEAD ? NullOutputStream.INSTANCE : new LazyAccessOutputStream(muResponse));
                 if (obj.entity != null) {
                     MediaType responseMediaType = MediaTypeDeterminer.determine(obj, produces, directlyProduces, entityProviders.writers, acceptHeaders);
                     responseContext.setEntity(result, jaxRSResponse.getAnnotations(), responseMediaType);

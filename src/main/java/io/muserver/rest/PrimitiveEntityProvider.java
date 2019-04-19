@@ -51,11 +51,11 @@ class PrimitiveEntityProvider<T> implements MessageBodyWriter<T>, MessageBodyRea
     }
 
     public T readFrom(Class<T> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
-        if (!EntityProviders.requestHasContent(httpHeaders)) {
-            throw new NoContentException("No value specified for this " + type.getName() + " parameter. If optional, then use a @DefaultValue annotation.");
-        }
         Charset charset = EntityProviders.charsetFor(mediaType);
         byte[] bytes = Mutils.toByteArray(entityStream, 2048);
+        if (bytes.length == 0) {
+            throw new NoContentException("No value specified for this " + type.getName() + " parameter. If optional, then use a @DefaultValue annotation.");
+        }
         String stringVal = new String(bytes, charset);
         return stringToValue.apply(stringVal);
     }
