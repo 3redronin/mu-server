@@ -2,7 +2,10 @@ package io.muserver;
 
 import okhttp3.Headers;
 import okhttp3.*;
-import org.junit.*;
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
@@ -28,7 +31,6 @@ public class UploadTest {
     }
 
     @Test
-    @Ignore("Not supported by HTTP2")
     public void filesCanBeUploadedAlongSideFormParams() throws IOException {
 
         server = httpsServer()
@@ -64,7 +66,7 @@ public class UploadTest {
     }
 
     @Test
-    public void nothingUploadedResultsInNoFilesAvailable() throws IOException, InterruptedException {
+    public void nothingUploadedResultsInNoFilesAvailable() throws IOException {
 
         server = httpServer()
             .addHandler(Method.POST, "/upload", (request, response, pathParams) -> {
