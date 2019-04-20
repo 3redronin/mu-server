@@ -73,7 +73,7 @@ public class MediaTypesTest {
             .url(server.uri().resolve("/things").toString())
             .header("Accept","text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8" ))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.header("Content-Type"), is("text/plain"));
+            assertThat(resp.header("Content-Type"), is("text/plain;charset=utf-8"));
             assertThat(resp.body().string(), equalTo("[]"));
         }
 
@@ -96,7 +96,7 @@ public class MediaTypesTest {
             .url(server.uri().resolve("/things").toString())
             .header("Accept","text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" ))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.header("Content-Type"), is("text/plain"));
+            assertThat(resp.header("Content-Type"), is("text/plain;charset=utf-8"));
             assertThat(resp.body().string(), equalTo("[]"));
         }
     }

@@ -223,7 +223,11 @@ public class RestHandler implements MuHandler {
                         muResponse.headers().set(HeaderNames.CONTENT_LENGTH.toString(), size);
                     }
 
-                    muResponse.headers().set(HeaderNames.CONTENT_TYPE, responseMediaType.toString());
+                    String contentType = responseMediaType.toString();
+                    if (responseMediaType.getType().equals("text") && !responseMediaType.getParameters().containsKey("charset")) {
+                        contentType += ";charset=utf-8";
+                    }
+                    muResponse.headers().set(HeaderNames.CONTENT_TYPE, contentType);
 
                     messageBodyWriter.writeTo(entity, entityType, entityGenericType, entityAnnotations, responseMediaType, muHeadersToJaxObj(muResponse.headers()), responseContext.getEntityStream());
 

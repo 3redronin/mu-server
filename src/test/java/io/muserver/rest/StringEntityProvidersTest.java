@@ -1,5 +1,6 @@
 package io.muserver.rest;
 
+import io.muserver.ContentTypes;
 import io.muserver.MuServer;
 import io.muserver.Mutils;
 import okhttp3.FormBody;
@@ -32,7 +33,7 @@ public class StringEntityProvidersTest {
     private MuServer server;
 
     @Test
-    public void stringsSupported() throws Exception {
+    public void stringsSupportedAndCharsetIsSetToUTF8ByDefault() throws Exception {
         @Path("samples")
         class Sample {
             @POST
@@ -160,7 +161,7 @@ public class StringEntityProvidersTest {
     }
 
     private void check(String value) throws IOException {
-        check(value, "text/plain");
+        check(value, ContentTypes.TEXT_PLAIN_UTF8.toString());
     }
 
     private void check(String value, String mimeType) throws IOException {
