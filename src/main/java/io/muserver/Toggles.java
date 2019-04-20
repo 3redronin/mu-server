@@ -11,6 +11,9 @@ public class Toggles {
      */
     public static boolean fixedLengthResponsesEnabled = false;
 
-    static boolean http2 = true && !"1.8".equals(System.getProperty("java.specification.version"));
+    /**
+     * Enables experimental HTTP2 support.
+     */
+    public static boolean http2 = false;
 
 }

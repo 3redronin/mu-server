@@ -1,5 +1,6 @@
 package scaffolding;
 
+import io.muserver.Toggles;
 import io.netty.util.ResourceLeakDetector;
 import okhttp3.*;
 import okio.BufferedSink;
@@ -20,6 +21,8 @@ public class ClientUtils {
     private static X509TrustManager veryTrustingTrustManager = veryTrustingTrustManager();
 
     static {
+        Toggles.http2 = false && !"1.8".equals(System.getProperty("java.specification.version"));
+
         Logger.getLogger(OkHttpClient.class.getName()).setLevel(Level.FINE);
         boolean isDebug = ManagementFactory.getRuntimeMXBean().getInputArguments().toString().contains("jdwp");
         client = new OkHttpClient.Builder()
