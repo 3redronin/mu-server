@@ -50,13 +50,14 @@ public class ContextTest {
             }
         }
         this.server = muServer()
-            .withHttpsPort(50977)
+            .withHttpsPort(0)
             .addHandler(restHandler(new Sample()))
             .start();
+        int port = server.uri().getPort();
         try (Response resp = call(request().url(server.uri().resolve("/samples/zample/barmpit?hoo=har%20har").toString()))) {
-            assertThat(resp.body().string(), equalTo("https://localhost:50977/\nsamples/zample/barmpit\n" +
-                "https://localhost:50977/samples/zample/barmpit\n" +
-                "https://localhost:50977/samples/zample/barmpit?hoo=har%20har\nhar har\nhar%20har\n" +
+            assertThat(resp.body().string(), equalTo("https://localhost:" + port + "/\nsamples/zample/barmpit\n" +
+                "https://localhost:" + port + "/samples/zample/barmpit\n" +
+                "https://localhost:" + port + "/samples/zample/barmpit?hoo=har%20har\nhar har\nhar%20har\n" +
                 "Sample Resource Class\nsamples/zample/barmpit:samples"));
         }
     }

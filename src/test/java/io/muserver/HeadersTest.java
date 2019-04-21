@@ -4,6 +4,7 @@ import okhttp3.Request;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
+import scaffolding.ClientUtils;
 import scaffolding.MuAssert;
 
 import java.io.IOException;
@@ -180,12 +181,12 @@ public class HeadersTest {
     }
 
     @Test
-    public void ifOutputStreamUsedThenTransferEncodingIsChunked() {
+    public void ifOutputStreamUsedThenTransferEncodingIsUnknown() throws IOException {
         server = httpsServer()
             .addHandler((request, response) -> {
                 response.status(200);
                 try (PrintWriter writer = response.writer()) {
-                    writer.println("Why, hello there");
+                    writer.print("Why, hello there");
                 }
                 return true;
             }).start();
@@ -193,7 +194,12 @@ public class HeadersTest {
         try (Response resp = call(request(server.uri()))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.header("Content-Length"), is(nullValue()));
-            assertThat(resp.header("Transfer-Encoding"), is("chunked"));
+            assertThat(resp.body().string(), is("Why, hello there"));
+            if (ClientUtils.isHttp2(resp)) {
+                assertThat(resp.header("Transfer-Encoding"), is(nullValue()));
+            } else {
+                assertThat(resp.header("Transfer-Encoding"), is("chunked"));
+            }
         }
     }
 
