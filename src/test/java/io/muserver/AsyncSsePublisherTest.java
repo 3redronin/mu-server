@@ -9,7 +9,6 @@ import scaffolding.TestSseClient;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static io.muserver.MuServerBuilder.httpServer;
 import static io.muserver.MuServerBuilder.httpsServer;
 import static java.util.Arrays.asList;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -73,7 +72,7 @@ public class AsyncSsePublisherTest {
         AtomicReference<Throwable> thrownException = new AtomicReference<>();
         CountDownLatch somethingPublishedLatch = new CountDownLatch(1);
         CountDownLatch exceptionThrownLatch = new CountDownLatch(1);
-        server = httpServer()
+        server = httpsServer()
             .addHandler(Method.GET, "/streamer", (request, response, pathParams) -> {
 
                 AsyncSsePublisher ssePublisher = AsyncSsePublisher.start(request, response);

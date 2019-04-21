@@ -8,12 +8,11 @@ import scaffolding.MuAssert;
 
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.net.MalformedURLException;
 import java.net.URI;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static io.muserver.MuServerBuilder.httpServer;
+import static io.muserver.MuServerBuilder.httpsServer;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -33,7 +32,7 @@ public class HeadersTest {
 
     @Test
     public void canGetAndSetThem() throws IOException {
-        server = MuServerBuilder.httpServer()
+        server = httpsServer()
             .addHandler((request, response) -> {
                 String something = request.headers().get("X-Something");
                 response.headers().add("X-Response", something);
@@ -53,7 +52,7 @@ public class HeadersTest {
     public void aHandlerCanChangeTheHeadersOfASubsequentHandler() {
         String randomValue = UUID.randomUUID().toString();
 
-        server = MuServerBuilder.httpServer()
+        server = httpsServer()
             .addHandler((request, response) -> {
                 request.headers().set("X-Something", randomValue);
                 return false;
@@ -73,7 +72,7 @@ public class HeadersTest {
 
     @Test
     public void largeHeadersAreFineIfConfigured() {
-        server = MuServerBuilder.httpServer()
+        server = httpsServer()
             .withMaxHeadersSize(33000)
             .addHandler((request, response) -> {
                 response.headers().add(request.headers());
@@ -87,9 +86,9 @@ public class HeadersTest {
     }
 
     @Test
-    public void urlsThatAreTooLongAreRejected() throws MalformedURLException {
+    public void urlsThatAreTooLongAreRejected() {
         AtomicBoolean handlerHit = new AtomicBoolean(false);
-        server = MuServerBuilder.httpServer()
+        server = httpsServer()
             .withMaxUrlSize(30)
             .addHandler((request, response) -> {
                 System.out.println("URI is " + request.uri());
@@ -97,7 +96,7 @@ public class HeadersTest {
                 return true;
             }).start();
 
-        try (Response resp = call(request(server.httpUri().resolve("/this-is-much-longer-than-that-value-allowed-by-the-config-above-i-think")))) {
+        try (Response resp = call(request(server.uri().resolve("/this-is-much-longer-than-that-value-allowed-by-the-config-above-i-think")))) {
             assertThat(resp.code(), is(414));
         }
         assertThat(handlerHit.get(), is(false));
@@ -105,7 +104,7 @@ public class HeadersTest {
 
     @Test
     public void a431IsReturnedIfTheHeadersAreTooLarge() {
-        server = MuServerBuilder.httpServer()
+        server = httpsServer()
             .withMaxHeadersSize(1024)
             .addHandler((request, response) -> {
                 response.headers().add(request.headers());
@@ -121,7 +120,7 @@ public class HeadersTest {
     @Test
     public void ifXForwardedHeadersAreSpecifiedThenRequestUriUsesThem() {
         URI[] actual = new URI[2];
-        server = MuServerBuilder.httpServer()
+        server = httpsServer()
             .withHttpPort(12752)
             .addHandler((request, response) -> {
                 actual[0] = request.uri();
@@ -142,7 +141,7 @@ public class HeadersTest {
     @Test
     public void ifMultipleXForwardedHeadersAreSpecifiedThenRequestUriUsesTheFirst() {
         URI[] actual = new URI[2];
-        server = MuServerBuilder.httpServer()
+        server = httpsServer()
             .withHttpPort(12753)
             .addHandler((request, response) -> {
                 actual[0] = request.uri();
@@ -163,7 +162,7 @@ public class HeadersTest {
 
     @Test
     public void ifNoResponseDataThenContentLengthIsZero() {
-        server = MuServerBuilder.httpServer()
+        server = httpsServer()
             .addHandler((request, response) -> {
                 response.status(200);
                 response.headers().add("X-Blah", "ha");
@@ -172,7 +171,7 @@ public class HeadersTest {
             }).start();
 
 
-        try (Response resp = call(request(server.httpUri()))) {
+        try (Response resp = call(request(server.uri()))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.header("X-Blah"), is("ha"));
             assertThat(resp.header("Content-Length"), is("0"));
@@ -182,7 +181,7 @@ public class HeadersTest {
 
     @Test
     public void ifOutputStreamUsedThenTransferEncodingIsChunked() {
-        server = MuServerBuilder.httpServer()
+        server = httpsServer()
             .addHandler((request, response) -> {
                 response.status(200);
                 try (PrintWriter writer = response.writer()) {
@@ -191,7 +190,7 @@ public class HeadersTest {
                 return true;
             }).start();
 
-        try (Response resp = call(request(server.httpUri()))) {
+        try (Response resp = call(request(server.uri()))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.header("Content-Length"), is(nullValue()));
             assertThat(resp.header("Transfer-Encoding"), is("chunked"));
@@ -200,7 +199,7 @@ public class HeadersTest {
 
     @Test
     public void aRequestHasXForwardHostHeaderDontThrowException() throws IOException {
-        server = httpServer()
+        server = httpsServer()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
                 response.writer().print(request.uri());
@@ -209,13 +208,13 @@ public class HeadersTest {
         try (Response resp = call(request(server.uri())
             .header(HeaderNames.X_FORWARDED_HOST.toString(), "mu-server-io:1234"))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.body().string(), equalTo("http://mu-server-io:1234/"));
+            assertThat(resp.body().string(), equalTo("https://mu-server-io:1234/"));
         }
     }
 
     @Test
     public void aRequestHasXForwardHostAndHasNoPortDontThrowException() throws IOException {
-        server = httpServer()
+        server = httpsServer()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
                 response.writer().print(request.uri());
@@ -224,7 +223,7 @@ public class HeadersTest {
         try (Response resp = call(request(server.uri())
             .header(HeaderNames.X_FORWARDED_HOST.toString(), "mu-server-io"))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.body().string(), equalTo("http://mu-server-io/"));
+            assertThat(resp.body().string(), equalTo("https://mu-server-io/"));
         }
     }
 
@@ -232,7 +231,7 @@ public class HeadersTest {
     public void aRequestHasXForwardHostAndXForwardedPortDontThrowExceptionAndUsePort() throws IOException {
         final String host = "mu-server-io:9999";
         final String port = "8888";
-        server = httpServer()
+        server = httpsServer()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
                 response.writer().print(request.uri());
@@ -242,13 +241,13 @@ public class HeadersTest {
             .header(HeaderNames.X_FORWARDED_HOST.toString(), host)
             .header(HeaderNames.X_FORWARDED_PORT.toString(), port))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.body().string(), equalTo("http://mu-server-io:8888/"));
+            assertThat(resp.body().string(), equalTo("https://mu-server-io:8888/"));
         }
     }
 
     @Test
     public void forwardedHostsCanHaveColons() throws IOException {
-        server = httpServer()
+        server = httpsServer()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
                 PrintWriter writer = response.writer();
@@ -269,7 +268,7 @@ public class HeadersTest {
 
     @Test
     public void aRquestWithErrorXForwardHostHeaderDontThrowException() throws IOException {
-        server = httpServer()
+        server = httpsServer()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
                 response.writer().print(request.uri());
@@ -286,7 +285,7 @@ public class HeadersTest {
     @Test
     public void aRequestHasIPv6XForwardHostHeaderDontThrowException() throws IOException {
         final String host = "[2001:0db8:85a3:08d3:1319:8a2e:0370:7344]:1234";
-        server = httpServer()
+        server = httpsServer()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
                 response.writer().print(request.uri());
@@ -296,14 +295,14 @@ public class HeadersTest {
             .header(HeaderNames.X_FORWARDED_HOST.toString(), host)
         )) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.body().string(), equalTo("http://" + host + "/"));
+            assertThat(resp.body().string(), equalTo("https://" + host + "/"));
         }
     }
 
     @Test
     public void anIPv6XForwardHostHeaderHasNoPortDontThrowException() throws IOException {
         final String host = "[2001:0db8:85a3:08d3:1319:8a2e:0370:7344]";
-        server = httpServer()
+        server = httpsServer()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
                 response.writer().print(request.uri());
@@ -312,13 +311,13 @@ public class HeadersTest {
         try (Response resp = call(request(server.uri())
             .header(HeaderNames.X_FORWARDED_HOST.toString(), host))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.body().string(), equalTo("http://" + host + "/"));
+            assertThat(resp.body().string(), equalTo("https://" + host + "/"));
         }
     }
 
     @Test
     public void anIPv4XForwardHostHeaderDontThrowException() throws IOException {
-        server = httpServer()
+        server = httpsServer()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
                 response.writer().print(request.uri());
@@ -327,13 +326,13 @@ public class HeadersTest {
         try (Response resp = call(request(server.uri())
             .header(HeaderNames.X_FORWARDED_HOST.toString(), "192.168.1.1:1234"))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.body().string(), equalTo("http://192.168.1.1:1234/"));
+            assertThat(resp.body().string(), equalTo("https://192.168.1.1:1234/"));
         }
     }
 
     @Test
     public void anIPv4XForwardHostHeaderHasNoPortDontThrowException() throws IOException {
-        server = httpServer()
+        server = httpsServer()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
                 response.writer().print(request.uri());
@@ -342,12 +341,12 @@ public class HeadersTest {
         try (Response resp = call(request(server.uri())
             .header(HeaderNames.X_FORWARDED_HOST.toString(), "192.168.1.1"))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.body().string(), equalTo("http://192.168.1.1/"));
+            assertThat(resp.body().string(), equalTo("https://192.168.1.1/"));
         }
     }
 
     Request.Builder xSomethingHeader(String value) {
-        return request().header("X-Something", value).url(server.httpUri().toString());
+        return request().header("X-Something", value).url(server.uri().toString());
     }
 
 }

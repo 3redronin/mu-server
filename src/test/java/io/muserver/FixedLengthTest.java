@@ -11,7 +11,7 @@ import java.io.PrintWriter;
 import java.net.ProtocolException;
 import java.util.concurrent.CountDownLatch;
 
-import static io.muserver.MuServerBuilder.httpServer;
+import static io.muserver.MuServerBuilder.httpsServer;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static scaffolding.ClientUtils.call;
@@ -25,7 +25,7 @@ public class FixedLengthTest {
 
     @Test
     public void ifMoreThanDeclaredAreSentThenAnExceptionIsThrownAndConnectionIsClosed() throws IOException {
-        server = httpServer()
+        server = httpsServer()
             .addHandler((req, resp) -> {
                 resp.contentType("text/plain");
                 resp.headers().set(HeaderNames.CONTENT_LENGTH, 20);
@@ -59,7 +59,7 @@ public class FixedLengthTest {
 
     @Test
     public void ifLessThanDeclaredAreSentThenAnExceptionIsThrownAndConnectionIsClosed() throws IOException {
-        server = httpServer()
+        server = httpsServer()
             .addHandler((req, resp) -> {
                 resp.contentType("text/plain");
                 resp.headers().set(HeaderNames.CONTENT_LENGTH, 20);

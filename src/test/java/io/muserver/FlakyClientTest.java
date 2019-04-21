@@ -13,7 +13,6 @@ import java.io.IOException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-import static io.muserver.MuServerBuilder.httpServer;
 import static io.muserver.MuServerBuilder.httpsServer;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
@@ -26,7 +25,7 @@ public class FlakyClientTest {
 
     @Test
     public void canHandleStuffWithoutBreakingOverHttp() throws InterruptedException, IOException {
-        runTest(httpServer());
+        runTest(httpsServer());
     }
 
     @Test

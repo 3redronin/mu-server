@@ -14,6 +14,7 @@ import java.util.Collections;
 import java.util.List;
 
 import static io.muserver.MuServerBuilder.httpServer;
+import static io.muserver.MuServerBuilder.httpsServer;
 import static java.util.Arrays.asList;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
@@ -26,7 +27,7 @@ public class ParametersTest {
 
 	@Test public void queryStringsCanBeGot() throws MalformedURLException {
 		Object[] actual = new Object[4];
-		server = httpServer().addHandler((request, response) -> {
+		server = httpsServer().addHandler((request, response) -> {
 			actual[0] = request.query().get("value1");
 			actual[1] = request.query().get("value2");
 			actual[2] = request.query().get("unspecified");
@@ -44,7 +45,7 @@ public class ParametersTest {
 
 	@Test public void queryStringParametersCanAppearMultipleTimes() throws MalformedURLException {
 		Object[] actual = new Object[3];
-		server = httpServer().addHandler((request, response) -> {
+		server = httpsServer().addHandler((request, response) -> {
 			actual[0] = request.query().getAll("value1");
 			actual[1] = request.query().getAll("value2");
 			actual[2] = request.query().getAll("unspecified");
@@ -66,7 +67,7 @@ public class ParametersTest {
         }
 
         List<String> actual = new ArrayList<>();
-        server = httpServer().addHandler((request, response) -> {
+        server = httpsServer().addHandler((request, response) -> {
             for (int i = 0; i < vals.size(); i++) {
                 actual.add(request.form().get("theNameOfTheFormParameter_" + i));
             }
@@ -90,7 +91,7 @@ public class ParametersTest {
 
     @Test public void formParametersWithMultipleValuesCanBeGot() throws MalformedURLException {
         Object[] actual = new Object[3];
-        server = httpServer().addHandler((request, response) -> {
+        server = httpsServer().addHandler((request, response) -> {
             actual[0] = request.form().getAll("value1");
             actual[1] = request.form().getAll("value2");
             actual[2] = request.form().getAll("unspecified");
@@ -113,7 +114,7 @@ public class ParametersTest {
 
     @Test public void exceptionsThrownWhenTryingToReadBodyAfterReadingFormData() {
         Throwable[] actual = new Throwable[1];
-        server = httpServer().addHandler((request, response) -> {
+        server = httpsServer().addHandler((request, response) -> {
             request.form().get("blah");
             try {
                 request.readBodyAsString();
@@ -124,7 +125,7 @@ public class ParametersTest {
         }).start();
 
         try (Response ignored = call(request()
-            .url(server.httpUri().toString())
+            .url(server.uri().toString())
             .post(new FormBody.Builder()
                 .add("blah", "something")
                 .build())
@@ -197,6 +198,6 @@ public class ParametersTest {
 	}
 
     URL http(String str) throws MalformedURLException {
-        return server.httpUri().resolve(str).toURL();
+        return server.uri().resolve(str).toURL();
     }
 }

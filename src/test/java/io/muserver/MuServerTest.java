@@ -38,15 +38,15 @@ public class MuServerTest {
 
     @Test
     public void portZeroCanBeUsed() {
-        server = httpServer().start();
-        try (Response resp = call(request().url(server.httpUri().toString()))) {
+        server = httpsServer().start();
+        try (Response resp = call(request().url(server.uri().toString()))) {
             assertThat(resp.code(), is(404));
         }
     }
 
     @Test
     public void unhandledExceptionsResultIn500sIfNoResponseSent() {
-        server = httpServer()
+        server = httpsServer()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 throw new RuntimeException("I'm the fire starter");
             })
@@ -58,7 +58,7 @@ public class MuServerTest {
 
     @Test
     public void unhandledExceptionsAreJustLoggedIfResponsesAreAlreadyStarted() {
-        server = httpServer()
+        server = httpsServer()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
                 response.writer().print("Hello");
@@ -72,7 +72,7 @@ public class MuServerTest {
 
     @Test
     public void queryToStringIsAUrlString() throws IOException {
-        server = httpServer()
+        server = httpsServer()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.write(request.query().toString());
             })
@@ -87,7 +87,7 @@ public class MuServerTest {
         List<String> handlersHit = new ArrayList<>();
         String randomText = UUID.randomUUID().toString();
 
-        server = httpServer()
+        server = httpsServer()
             .withHttpPort(12809)
             .addHandler((request, response) -> {
                 handlersHit.add("Logger");
@@ -119,7 +119,7 @@ public class MuServerTest {
         Assume.assumeNotNull(hostname);
 
         for (String host : asList("127.0.0.1", "localhost")) {
-            MuServer server = httpServer()
+            MuServer server = httpsServer()
                 .withInterface(host)
                 .addHandler(Method.GET, "/", (req, resp, pp) -> resp.write("Hello"))
                 .start();
@@ -138,7 +138,7 @@ public class MuServerTest {
         Assume.assumeNotNull(hostname);
 
         for (String host : asList("127.0.0.1", "localhost")) {
-            MuServer server = httpServer()
+            MuServer server = httpsServer()
                 .withInterface(host)
                 .addHandler(Method.GET, "/", (req, resp, pp) -> resp.write("Hello from " + req.server().address().getAddress().getHostAddress()))
                 .start();
@@ -153,11 +153,11 @@ public class MuServerTest {
     @Test
     public void ifBoundTo0000ThenExternalAccessIsPossible() throws IOException {
         Assume.assumeNotNull(hostname);
-        server = httpServer()
+        server = httpsServer()
             .withInterface("0.0.0.0")
             .addHandler(Method.GET, "/", (req, resp, pp) -> resp.write("Hello from " + server.address().getHostString()))
             .start();
-        try (Response resp = call(request().url("http://" + hostname + ":" + server.uri().getPort()))) {
+        try (Response resp = call(request().url("https://" + hostname + ":" + server.uri().getPort()))) {
             assertThat(resp.body().string(), startsWith("Hello from 0"));
         }
     }
@@ -165,18 +165,18 @@ public class MuServerTest {
     @Test
     public void ifBoundToHostnameThenExternalAccessIsPossible() throws IOException {
         Assume.assumeNotNull(hostname);
-        server = httpServer()
+        server = httpsServer()
             .withInterface(hostname)
             .addHandler(Method.GET, "/", (req, resp, pp) -> resp.write("Hello from " + server.uri().getHost()))
             .start();
-        try (Response resp = call(request().url("http://" + hostname + ":" + server.uri().getPort()))) {
+        try (Response resp = call(request().url("https://" + hostname + ":" + server.uri().getPort()))) {
             assertThat(resp.body().string(), equalTo("Hello from " + hostname));
         }
     }
 
     @Test
     public void theClientIpAddressOrSomethingLikeThatIsAvailable() throws IOException {
-        server = httpServer()
+        server = httpsServer()
             .addHandler(Method.GET, "/", (req, resp, pp) -> resp.write("Hello there " + req.remoteAddress()))
             .start();
         try (Response resp = call(request().url(server.uri().toString()))) {
@@ -196,7 +196,7 @@ public class MuServerTest {
 
     @Test
     public void returnsA405ForUnsupportedMethods() throws IOException {
-        server = httpServer().start();
+        server = httpsServer().start();
         try (Response resp = call(request().method("COFFEE", null).url(server.uri().toString()))) {
             assertThat(resp.code(), is(405));
             assertThat(resp.body().string(), containsString("405 Method Not Allowed"));

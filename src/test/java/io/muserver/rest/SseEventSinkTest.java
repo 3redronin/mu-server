@@ -27,7 +27,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import static io.muserver.MuServerBuilder.httpServer;
+import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Arrays.asList;
@@ -89,7 +89,7 @@ public class SseEventSinkTest {
             }
         }
 
-        server = httpServer().addHandler(
+        server = httpsServer().addHandler(
             restHandler(new Streamer())
                 .addCustomWriter(new DogWriter())
         ).start();
@@ -133,7 +133,7 @@ public class SseEventSinkTest {
             }
         }
 
-        server = httpServer().addHandler(restHandler(new Streamer())).start();
+        server = httpsServer().addHandler(restHandler(new Streamer())).start();
 
         try (SseClient.ServerSentEvent ignored = sseClient.newServerSentEvent(request().url(server.uri().resolve("/streamer/eventStream").toString()).build(), listener)) {
             Thread.sleep(50);

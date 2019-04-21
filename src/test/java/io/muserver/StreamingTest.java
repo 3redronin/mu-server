@@ -25,7 +25,7 @@ public class StreamingTest {
 	private MuServer server;
 
 	@Test public void textCanBeWrittenWithThePrintWriter() throws Exception {
-		server = MuServerBuilder.httpServer()
+		server = MuServerBuilder.httpsServer()
 				.addHandler((request, response) -> {
                     response.contentType(ContentTypes.TEXT_PLAIN);
 					try (PrintWriter writer = response.writer()) {
@@ -49,7 +49,7 @@ public class StreamingTest {
 	    CountDownLatch latch3 = new CountDownLatch(1);
 	    CountDownLatch latch4 = new CountDownLatch(1);
 
-        server = MuServerBuilder.httpServer()
+        server = MuServerBuilder.httpsServer()
             .addHandler((request, response) -> {
                 response.contentType(ContentTypes.TEXT_PLAIN);
                 OutputStream os = response.outputStream();
@@ -88,7 +88,7 @@ public class StreamingTest {
     }
 
     @Test public void zeroByteWriteIsIgnored() throws Exception {
-        server = MuServerBuilder.httpServer()
+        server = MuServerBuilder.httpsServer()
             .addHandler((request, response) -> {
                 response.contentType(ContentTypes.TEXT_PLAIN);
                 try (OutputStream out = response.outputStream()) {
@@ -106,7 +106,7 @@ public class StreamingTest {
     }
 
     @Test public void bufferedOutputWritersAreOkay() throws Exception {
-        server = MuServerBuilder.httpServer()
+        server = MuServerBuilder.httpsServer()
             .addHandler((request, response) -> {
                 response.contentType(ContentTypes.TEXT_PLAIN);
                 try (BufferedOutputStream writer = new BufferedOutputStream(response.outputStream(), 8192)) {
@@ -122,7 +122,7 @@ public class StreamingTest {
     }
 
 	@Test public void requestDataCanBeReadFromTheInputStream() throws Exception {
-		server = MuServerBuilder.httpServer()
+		server = MuServerBuilder.httpsServer()
             .withGzipEnabled(false)
 				.addHandler((request, response) -> {
 					try (InputStream in = request.inputStream().get();
@@ -147,7 +147,7 @@ public class StreamingTest {
 
 
 	@Test public void theWholeRequestBodyCanBeReadAsAStringWithABlockingCall() throws Exception {
-		server = MuServerBuilder.httpServer()
+		server = MuServerBuilder.httpsServer()
 				.addHandler((request, response) -> {
 					response.write(request.readBodyAsString());
 					return true;
@@ -162,7 +162,7 @@ public class StreamingTest {
 
 	@Test public void thereIsNoInputStreamIfThereIsNoRequestBody() throws Exception {
 		List<String> actual = new ArrayList<>();
-		server = MuServerBuilder.httpServer()
+		server = MuServerBuilder.httpsServer()
 				.addHandler((request, response) -> {
 					actual.add(request.inputStream().isPresent() ? "Present" : "Not Present");
 					actual.add("Request body: " + request.readBodyAsString());

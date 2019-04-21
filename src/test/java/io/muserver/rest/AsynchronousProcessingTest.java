@@ -30,7 +30,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static io.muserver.MuServerBuilder.httpServer;
+import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static java.util.stream.Collectors.toSet;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -61,7 +61,7 @@ public class AsynchronousProcessingTest {
                 });
             }
         }
-        this.server = httpServer().addHandler(restHandler(new Sample())).start();
+        this.server = httpsServer().addHandler(restHandler(new Sample())).start();
         try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
             assertThat(resp.code(), is(202));
             assertThat(resp.body().string(), equalTo("Suspended/cancelled/done: truefalsefalse"));
@@ -88,7 +88,7 @@ public class AsynchronousProcessingTest {
                 return cs;
             }
         }
-        this.server = httpServer().addHandler(restHandler(new Sample())).start();
+        this.server = httpsServer().addHandler(restHandler(new Sample())).start();
         try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
             assertThat(resp.code(), is(202));
             assertThat(resp.body().string(), equalTo("The response body"));
@@ -107,7 +107,7 @@ public class AsynchronousProcessingTest {
                 });
             }
         }
-        this.server = httpServer().addHandler(restHandler(new Sample())).start();
+        this.server = httpsServer().addHandler(restHandler(new Sample())).start();
         try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
             assertThat(resp.code(), is(400));
             assertThat(resp.body().string(), equalTo("<h1>400 Bad Request</h1><p>Bad bad bad request</p>"));
@@ -130,7 +130,7 @@ public class AsynchronousProcessingTest {
                 afterSentLatch.countDown();
             }
         }
-        this.server = httpServer().addHandler(restHandler(new Sample())).start();
+        this.server = httpsServer().addHandler(restHandler(new Sample())).start();
         try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
             assertThat(resp.code(), is(503));
             assertThat(resp.body().string(), equalTo("<h1>503 Service Unavailable</h1><p>Timed out</p>"));
@@ -156,7 +156,7 @@ public class AsynchronousProcessingTest {
                 ar.setTimeout(10, TimeUnit.MILLISECONDS);
             }
         }
-        this.server = httpServer()
+        this.server = httpsServer()
             .addHandler(restHandler(new Sample())
                 .addCustomWriter(new MessageBodyWriter<Hawk>() {
                     public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, javax.ws.rs.core.MediaType mediaType) {
@@ -194,7 +194,7 @@ public class AsynchronousProcessingTest {
                 });
             }
         }
-        this.server = httpServer().addHandler(restHandler(new Sample())).start();
+        this.server = httpsServer().addHandler(restHandler(new Sample())).start();
         try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
             assertThat(resp.code(), is(503));
             assertThat(resp.header("Retry-After"), is(nullValue()));
@@ -226,7 +226,7 @@ public class AsynchronousProcessingTest {
                 );
             }
         }
-        this.server = httpServer().addHandler(restHandler(new Sample())).start();
+        this.server = httpsServer().addHandler(restHandler(new Sample())).start();
         OkHttpClient impatientClient = ClientUtils.client.newBuilder().readTimeout(200, TimeUnit.MILLISECONDS).build();
         try (Response ignored = impatientClient.newCall(request().url(server.uri().resolve("/samples").toString()).build()).execute()) {
             Assert.fail("This test expected a client timeout");
@@ -249,7 +249,7 @@ public class AsynchronousProcessingTest {
                 methodCalled.set(true);
             }
         }
-        this.server = httpServer().addHandler(restHandler(new Sample())).start();
+        this.server = httpsServer().addHandler(restHandler(new Sample())).start();
         try (Response resp = call(request()
             .post(RequestBody.create(MediaType.parse("text/plain"), ""))
             .url(server.uri().resolve("/samples").toString())

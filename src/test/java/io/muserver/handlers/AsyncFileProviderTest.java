@@ -18,7 +18,7 @@ import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.util.Date;
 
-import static io.muserver.MuServerBuilder.httpServer;
+import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.Mutils.urlEncode;
 import static io.muserver.handlers.ResourceHandlerBuilder.fileHandler;
 import static org.hamcrest.CoreMatchers.equalTo;
@@ -38,7 +38,7 @@ public class AsyncFileProviderTest {
     @Test
     public void canReadFilesFromFileSystem() throws Exception {
 
-        server = httpServer()
+        server = httpsServer()
             .withGzipEnabled(false)
             .addHandler(fileHandler(BIG_FILE_DIR))
             .start();
@@ -50,7 +50,7 @@ public class AsyncFileProviderTest {
             if (SKIP_LARGE_FILES && isLarge) {
                 continue;
             }
-            URI downloadUri = server.httpUri().resolve("/" + urlEncode(file.getName()));
+            URI downloadUri = server.uri().resolve("/" + urlEncode(file.getName()));
 
             try (Response resp = call(request(downloadUri))) {
                 assertThat(resp.code(), is(200));

@@ -17,7 +17,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.net.URI;
 
-import static io.muserver.MuServerBuilder.httpServer;
+import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.openapi.ExternalDocumentationObjectBuilder.externalDocumentationObject;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -28,7 +28,7 @@ import static scaffolding.ClientUtils.request;
 
 public class OpenApiDocumentorTest {
 
-    private final MuServer server = httpServer()
+    private final MuServer server = httpsServer()
         .addHandler(RestHandlerBuilder.restHandler(
             new PetResource(), new PetStoreResource(), new UserResource(), new VehicleResource()
             ).withOpenApiDocument(OpenAPIObjectBuilder.openAPIObject()
