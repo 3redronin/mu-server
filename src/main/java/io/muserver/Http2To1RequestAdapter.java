@@ -2,17 +2,19 @@ package io.muserver;
 
 import io.netty.handler.codec.DecoderResult;
 import io.netty.handler.codec.http.*;
+import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.Http2Headers;
-
-import java.util.Map;
+import io.netty.handler.codec.http2.HttpConversionUtil;
 
 class Http2To1RequestAdapter implements HttpRequest {
     private final HttpMethod nettyMeth;
     private final String uri;
     private final Http2Headers headers;
+    private final int streamId;
     private HttpHeaders http1Headers;
 
-    public Http2To1RequestAdapter(HttpMethod nettyMeth, String uri, Http2Headers headers) {
+    Http2To1RequestAdapter(int streamId, HttpMethod nettyMeth, String uri, Http2Headers headers) {
+        this.streamId = streamId;
         this.nettyMeth = nettyMeth;
         this.uri = uri;
         this.headers = headers;
@@ -67,11 +69,10 @@ class Http2To1RequestAdapter implements HttpRequest {
     public HttpHeaders headers() {
         if (http1Headers == null) {
             HttpHeaders adapter = new DefaultHttpHeaders();
-            for (Map.Entry<CharSequence, CharSequence> header : headers) {
-                CharSequence key = header.getKey();
-                if (key.charAt(0) != ':') {
-                    adapter.add(key, header.getValue());
-                }
+            try {
+                HttpConversionUtil.addHttp2ToHttpHeaders(streamId, headers, adapter, HttpVersion.HTTP_1_1, false, true);
+            } catch (Http2Exception e) {
+                throw new MuException("Error while preparing headers for multipart form upload");
             }
             http1Headers = adapter;
         }

@@ -74,7 +74,7 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
         Method muMethod = Method.fromNetty(nettyMeth);
 
         final String uri = headers.path().toString();
-        HttpRequest nettyReq = new Http2To1RequestAdapter(nettyMeth, uri, headers);
+        HttpRequest nettyReq = new Http2To1RequestAdapter(streamId, nettyMeth, uri, headers);
         boolean hasRequestBody = !endOfStream;
         if (hasRequestBody) {
             long bodyLen = headers.getLong(HeaderNames.CONTENT_LENGTH, -1L);
