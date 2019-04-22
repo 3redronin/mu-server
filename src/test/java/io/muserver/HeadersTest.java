@@ -87,24 +87,25 @@ public class HeadersTest {
     }
 
     @Test
-    public void urlsThatAreTooLongAreRejected() {
+    public void urlsThatAreTooLongAreRejected() throws IOException {
         AtomicBoolean handlerHit = new AtomicBoolean(false);
         server = httpsServer()
             .withMaxUrlSize(30)
             .addHandler((request, response) -> {
-                System.out.println("URI is " + request.uri());
                 handlerHit.set(true);
                 return true;
             }).start();
 
         try (Response resp = call(request(server.uri().resolve("/this-is-much-longer-than-that-value-allowed-by-the-config-above-i-think")))) {
             assertThat(resp.code(), is(414));
+            assertThat(resp.header("Content-Type"), is("text/plain;charset=utf-8"));
+            assertThat(resp.body().string(), is("414 Request-URI Too Long"));
         }
         assertThat(handlerHit.get(), is(false));
     }
 
     @Test
-    public void a431IsReturnedIfTheHeadersAreTooLarge() {
+    public void a431IsReturnedIfTheHeadersAreTooLarge() throws IOException {
         server = httpsServer()
             .withMaxHeadersSize(1024)
             .addHandler((request, response) -> {
@@ -114,7 +115,9 @@ public class HeadersTest {
 
         try (Response resp = call(xSomethingHeader(randomAsciiStringOfLength(1025)))) {
             assertThat(resp.code(), is(431));
+            assertThat(resp.header("Content-Type"), is("text/plain;charset=utf-8"));
             assertThat(resp.header("X-Something"), is(nullValue()));
+            assertThat(resp.body().string(), is("431 HTTP headers too large"));
         }
     }
 

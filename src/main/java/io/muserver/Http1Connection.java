@@ -124,10 +124,10 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
         if (cause instanceof TooLongFrameException) {
             if (cause.getMessage().contains("header is larger")) {
                 code = 431;
-                message = "HTTP headers too large";
+                message = "431 HTTP headers too large";
             } else if (cause.getMessage().contains("line is larger")) {
                 code = 414;
-                message = "URI too long";
+                message = "414 Request-URI Too Long";
             }
         }
         sendSimpleResponse(ctx, message, code).addListener(ChannelFutureListener.CLOSE);

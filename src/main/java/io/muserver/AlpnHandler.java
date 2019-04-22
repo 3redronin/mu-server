@@ -25,7 +25,7 @@ class AlpnHandler extends ApplicationProtocolNegotiationHandler {
     @Override
     protected void configurePipeline(ChannelHandlerContext ctx, String protocol) {
         if (ApplicationProtocolNames.HTTP_2.equals(protocol)) {
-            ctx.pipeline().addLast(new Http2ConnectionBuilder(serverRef, nettyHandlerAdapter, stats).build());
+            ctx.pipeline().addLast(new Http2ConnectionBuilder(serverRef, nettyHandlerAdapter, stats, settings).build());
             return;
         }
 

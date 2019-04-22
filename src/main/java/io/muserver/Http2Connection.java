@@ -24,13 +24,15 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
     private final AtomicReference<MuServer> serverRef;
     private final NettyHandlerAdapter nettyHandlerAdapter;
     private final MuStatsImpl stats;
+    private final MuServerBuilder.ServerSettings settings;
 
     Http2Connection(Http2ConnectionDecoder decoder, Http2ConnectionEncoder encoder,
-                    Http2Settings initialSettings, AtomicReference<MuServer> serverRef, NettyHandlerAdapter nettyHandlerAdapter, MuStatsImpl stats) {
+                    Http2Settings initialSettings, AtomicReference<MuServer> serverRef, NettyHandlerAdapter nettyHandlerAdapter, MuStatsImpl stats, MuServerBuilder.ServerSettings settings) {
         super(decoder, encoder, initialSettings);
         this.serverRef = serverRef;
         this.nettyHandlerAdapter = nettyHandlerAdapter;
         this.stats = stats;
+        this.settings = settings;
     }
 
     @Override
@@ -88,6 +90,11 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
         }
 
         final String uri = headers.path().toString();
+        if (uri.length() > settings.maxUrlSize) {
+            sendSimpleResponse(ctx, streamId, "414 Request-URI Too Long", 414);
+            return;
+        }
+
         HttpRequest nettyReq = new Http2To1RequestAdapter(streamId, nettyMeth, uri, headers);
         boolean hasRequestBody = !endOfStream;
         if (hasRequestBody) {
