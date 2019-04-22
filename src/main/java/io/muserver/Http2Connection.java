@@ -37,10 +37,10 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        Http1Connection.State state = ctx.channel().attr(STATE_ATTRIBUTE).get();
-        if (state != null) {
+        AsyncContext asyncContext = ctx.channel().attr(STATE_ATTRIBUTE).get();
+        if (asyncContext != null) {
             log.debug(cause.getClass().getName() + " (" + cause.getMessage() + ") for " + ctx + " so will disconnect this client");
-            state.asyncContext.onCancelled(true);
+            asyncContext.onCancelled(true);
         } else {
             log.debug("Exception for unknown ctx " + ctx, cause);
         }
@@ -63,13 +63,13 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
     public int onDataRead(ChannelHandlerContext ctx, int streamId, ByteBuf data, int padding, boolean endOfStream) {
         int processed = data.readableBytes() + padding;
 
-        Http1Connection.State state = ctx.channel().attr(STATE_ATTRIBUTE).get();
-        if (state == null) {
+        AsyncContext asyncContext = ctx.channel().attr(STATE_ATTRIBUTE).get();
+        if (asyncContext == null) {
             log.debug("Got a chunk of message for an unknown request. This can happen when a request is rejected based on headers, and then the rejected body arrives.");
         } else {
-            NettyHandlerAdapter.passDataToHandler(data, state);
+            NettyHandlerAdapter.passDataToHandler(data, nettyHandlerAdapter, asyncContext);
             if (endOfStream) {
-                state.handler.onRequestComplete(state.asyncContext);
+                nettyHandlerAdapter.onRequestComplete(asyncContext);
             }
         }
         return processed;
@@ -110,7 +110,7 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
         Http2Response resp = new Http2Response(ctx, muReq, new H2Headers(), encoder(), streamId);
 
         AsyncContext asyncContext = new AsyncContext(muReq, resp, stats);
-        ctx.channel().attr(STATE_ATTRIBUTE).set(new Http1Connection.State(asyncContext, nettyHandlerAdapter));
+        ctx.channel().attr(STATE_ATTRIBUTE).set(asyncContext);
         nettyHandlerAdapter.onHeaders(asyncContext, muHeaders);
     }
 
@@ -127,9 +127,9 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
 
     @Override
     public void onRstStreamRead(ChannelHandlerContext ctx, int streamId, long errorCode) {
-        Http1Connection.State state = ctx.channel().attr(STATE_ATTRIBUTE).get();
-        if (state != null) {
-            state.asyncContext.onCancelled(false);
+        AsyncContext asyncContext = ctx.channel().attr(STATE_ATTRIBUTE).get();
+        if (asyncContext != null) {
+            asyncContext.onCancelled(false);
         }
     }
 
@@ -156,9 +156,9 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
 
     @Override
     public void onGoAwayRead(ChannelHandlerContext ctx, int lastStreamId, long errorCode, ByteBuf debugData) {
-        Http1Connection.State state = ctx.channel().attr(STATE_ATTRIBUTE).get();
-        if (state != null) {
-            state.asyncContext.onCancelled(true);
+        AsyncContext asyncContext = ctx.channel().attr(STATE_ATTRIBUTE).get();
+        if (asyncContext != null) {
+            asyncContext.onCancelled(true);
         }
     }
 

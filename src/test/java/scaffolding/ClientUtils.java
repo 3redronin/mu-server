@@ -27,6 +27,7 @@ public class ClientUtils {
         boolean isDebug = ManagementFactory.getRuntimeMXBean().getInputArguments().toString().contains("jdwp");
         client = new OkHttpClient.Builder()
             .retryOnConnectionFailure(false)
+//            .protocols(asList(Protocol.HTTP_1_1))
             .followRedirects(false)
             .followSslRedirects(false)
             .hostnameVerifier((hostname, session) -> true)

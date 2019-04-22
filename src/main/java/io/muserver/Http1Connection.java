@@ -19,7 +19,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 class Http1Connection extends SimpleChannelInboundHandler<Object> {
     private static final Logger log = LoggerFactory.getLogger(Http1Connection.class);
-    static final AttributeKey<State> STATE_ATTRIBUTE = AttributeKey.newInstance("state");
+    static final AttributeKey<AsyncContext> STATE_ATTRIBUTE = AttributeKey.newInstance("state");
 
     private final NettyHandlerAdapter nettyHandlerAdapter;
     private final MuStatsImpl stats;
@@ -33,21 +33,11 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
         this.proto = proto;
     }
 
-    static final class State {
-        final AsyncContext asyncContext;
-        final NettyHandlerAdapter handler;
-
-        State(AsyncContext asyncContext, NettyHandlerAdapter handler) {
-            this.asyncContext = asyncContext;
-            this.handler = handler;
-        }
-    }
-
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-        State state = ctx.channel().attr(STATE_ATTRIBUTE).get();
-        if (state != null) {
-            state.asyncContext.onCancelled(true);
+        AsyncContext asyncContext = ctx.channel().attr(STATE_ATTRIBUTE).get();
+        if (asyncContext != null) {
+            asyncContext.onCancelled(true);
         }
         super.channelInactive(ctx);
     }
@@ -99,20 +89,20 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
 
 
                 AsyncContext asyncContext = new AsyncContext(muRequest, new Http1Response(ctx, muRequest, new H1Headers()), stats);
-                ctx.channel().attr(STATE_ATTRIBUTE).set(new State(asyncContext, nettyHandlerAdapter));
+                ctx.channel().attr(STATE_ATTRIBUTE).set(asyncContext);
                 nettyHandlerAdapter.onHeaders(asyncContext, asyncContext.request.headers());
             }
 
         } else if (msg instanceof HttpContent) {
             HttpContent content = (HttpContent) msg;
-            State state = ctx.channel().attr(STATE_ATTRIBUTE).get();
-            if (state == null) {
+            AsyncContext asyncContext = ctx.channel().attr(STATE_ATTRIBUTE).get();
+            if (asyncContext == null) {
                 log.debug("Got a chunk of message for an unknown request. This can happen when a request is rejected based on headers, and then the rejected body arrives.");
             } else {
                 ByteBuf byteBuf = content.content();
-                NettyHandlerAdapter.passDataToHandler(byteBuf, state);
+                NettyHandlerAdapter.passDataToHandler(byteBuf, nettyHandlerAdapter, asyncContext);
                 if (msg instanceof LastHttpContent) {
-                    state.handler.onRequestComplete(state.asyncContext);
+                    nettyHandlerAdapter.onRequestComplete(asyncContext);
                 }
             }
         }
@@ -143,12 +133,13 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        State state = ctx.channel().attr(STATE_ATTRIBUTE).get();
-        if (state != null) {
+        AsyncContext asyncContext = ctx.channel().attr(STATE_ATTRIBUTE).get();
+        if (asyncContext != null) {
             log.debug(cause.getClass().getName() + " (" + cause.getMessage() + ") for " + ctx + " so will disconnect this client");
-            state.asyncContext.onCancelled(true);
+            asyncContext.onCancelled(true);
         } else {
             log.debug("Exception for unknown ctx " + ctx, cause);
         }
+        ctx.close();
     }
 }

@@ -34,13 +34,13 @@ class NettyHandlerAdapter {
         this.muHandlers = muHandlers;
     }
 
-    static void passDataToHandler(ByteBuf data, Http1Connection.State state) {
+    static void passDataToHandler(ByteBuf data, NettyHandlerAdapter nettyHandlerAdapter, AsyncContext asyncContext) {
         if (data.capacity() > 0) {
             ByteBuf copy = data.copy();
             ByteBuffer byteBuffer = ByteBuffer.allocate(data.capacity());
             copy.readBytes(byteBuffer).release();
             byteBuffer.flip();
-            state.handler.onRequestData(state.asyncContext, byteBuffer);
+            nettyHandlerAdapter.onRequestData(asyncContext, byteBuffer);
         }
     }
 
