@@ -24,6 +24,7 @@ class Http2ConnectionBuilder
 
     @Override
     public Http2Connection build() {
+        initialSettings().maxHeaderListSize(settings.maxHeadersSize);
         return super.build();
     }
 

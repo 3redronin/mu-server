@@ -59,7 +59,6 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
         return Http2Response.writeToChannel(ctx, encoder(), streamId, content, true);
     }
 
-
     @Override
     public int onDataRead(ChannelHandlerContext ctx, int streamId, ByteBuf data, int padding, boolean endOfStream) {
         int processed = data.readableBytes() + padding;

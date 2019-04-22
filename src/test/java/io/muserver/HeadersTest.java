@@ -18,8 +18,7 @@ import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.IsEqual.equalTo;
-import static scaffolding.ClientUtils.call;
-import static scaffolding.ClientUtils.request;
+import static scaffolding.ClientUtils.*;
 import static scaffolding.StringUtils.randomAsciiStringOfLength;
 
 public class HeadersTest {
@@ -115,9 +114,11 @@ public class HeadersTest {
 
         try (Response resp = call(xSomethingHeader(randomAsciiStringOfLength(1025)))) {
             assertThat(resp.code(), is(431));
-            assertThat(resp.header("Content-Type"), is("text/plain;charset=utf-8"));
-            assertThat(resp.header("X-Something"), is(nullValue()));
-            assertThat(resp.body().string(), is("431 HTTP headers too large"));
+            if (!isHttp2(resp)) { // for HTTP2, netty sends a 431 with no body
+                assertThat(resp.body().string(), is("431 Request Header Fields Too Large"));
+                assertThat(resp.header("X-Something"), is(nullValue()));
+                assertThat(resp.header("Content-Type"), is("text/plain;charset=utf-8"));
+            }
         }
     }
 
