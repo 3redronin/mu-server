@@ -1,6 +1,7 @@
 package io.muserver;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
@@ -12,6 +13,8 @@ import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.Http1Connection.STATE_ATTRIBUTE;
+import static io.netty.buffer.Unpooled.copiedBuffer;
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 /**
  * A simple handler that responds with the message "Hello World!".
@@ -43,6 +46,18 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
         ctx.close();
     }
 
+    private ChannelFuture sendSimpleResponse(ChannelHandlerContext ctx, int streamId, String message, int code) {
+        byte[] bytes = message.getBytes(UTF_8);
+        ByteBuf content = copiedBuffer(bytes) ;
+
+        Http2Headers headers = new DefaultHttp2Headers();
+        headers.status(String.valueOf(code));
+        headers.set(HeaderNames.CONTENT_TYPE, ContentTypes.TEXT_PLAIN_UTF8);
+        headers.set(HeaderNames.CONTENT_LENGTH, String.valueOf(bytes.length));
+        encoder().writeHeaders(ctx, streamId, headers, 0, false, ctx.newPromise());
+        return Http2Response.writeToChannel(ctx, encoder(), streamId, content, true);
+    }
+
 
     @Override
     public int onDataRead(ChannelHandlerContext ctx, int streamId, ByteBuf data, int padding, boolean endOfStream) {
@@ -71,7 +86,13 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
                               Http2Headers headers, int padding, boolean endOfStream) {
 
         HttpMethod nettyMeth = HttpMethod.valueOf(headers.method().toString().toUpperCase());
-        Method muMethod = Method.fromNetty(nettyMeth);
+        Method muMethod;
+        try {
+            muMethod = Method.fromNetty(nettyMeth);
+        } catch (IllegalArgumentException e) {
+            sendSimpleResponse(ctx, streamId, "405 Method Not Allowed", 405);
+            return;
+        }
 
         final String uri = headers.path().toString();
         HttpRequest nettyReq = new Http2To1RequestAdapter(streamId, nettyMeth, uri, headers);

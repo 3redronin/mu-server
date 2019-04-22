@@ -23,6 +23,10 @@ class Http2Response extends NettyResponseAdaptor {
 
     @Override
     protected ChannelFuture writeToChannel(boolean isLast, ByteBuf content) {
+        return writeToChannel(ctx, encoder, streamId, content, isLast);
+    }
+
+    static ChannelFuture writeToChannel(ChannelHandlerContext ctx, Http2ConnectionEncoder encoder, int streamId, ByteBuf content, boolean isLast) {
         ChannelPromise channelPromise = ctx.newPromise();
         if (ctx.executor().inEventLoop()) {
             encoder.writeData(ctx, streamId, content, 0, isLast, channelPromise);

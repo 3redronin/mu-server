@@ -81,7 +81,7 @@ class NettyHandlerAdapter {
 
 
     static boolean dealWithUnhandledException(MuRequest request, MuResponse response, Throwable ex) {
-        boolean forceDisconnect = true;
+        boolean forceDisconnect = response instanceof Http1Response;
 
         if (response.hasStartedSendingData()) {
             if (((NettyResponseAdaptor)response).clientDisconnected()) {

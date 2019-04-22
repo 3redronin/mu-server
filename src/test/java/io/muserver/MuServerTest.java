@@ -123,7 +123,7 @@ public class MuServerTest {
                 .withInterface(host)
                 .addHandler(Method.GET, "/", (req, resp, pp) -> resp.write("Hello"))
                 .start();
-            try (Response ignored = call(request().url("http://" + hostname + ":" + server.uri().getPort()))) {
+            try (Response ignored = call(request().url("https://" + hostname + ":" + server.uri().getPort()))) {
                 Assert.fail("Should have failed to call");
             } catch (RuntimeException rex) {
                 assertThat(rex.getCause(), instanceOf(ConnectException.class));
@@ -197,7 +197,7 @@ public class MuServerTest {
     @Test
     public void returnsA405ForUnsupportedMethods() throws IOException {
         server = httpsServer().start();
-        try (Response resp = call(request().method("COFFEE", null).url(server.uri().toString()))) {
+        try (Response resp = call(request(server.uri()).method("COFFEE", null))) {
             assertThat(resp.code(), is(405));
             assertThat(resp.body().string(), containsString("405 Method Not Allowed"));
         }
