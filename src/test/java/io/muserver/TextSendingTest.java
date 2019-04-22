@@ -16,8 +16,7 @@ import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.nullValue;
-import static scaffolding.ClientUtils.call;
-import static scaffolding.ClientUtils.request;
+import static scaffolding.ClientUtils.*;
 
 public class TextSendingTest {
 
@@ -70,7 +69,11 @@ public class TextSendingTest {
 
         try (Response resp = call(request(server.uri()))) {
             assertThat(resp.header("Content-Length"), is(nullValue()));
-            assertThat(resp.header("Transfer-Encoding"), is("chunked"));
+            if (isHttp2(resp)) {
+                assertThat(resp.header("Transfer-Encoding"), is(nullValue()));
+            } else {
+                assertThat(resp.header("Transfer-Encoding"), is("chunked"));
+            }
             assertThat(resp.body().string(), equalTo(expected));
         }
     }
