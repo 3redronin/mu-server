@@ -4,15 +4,17 @@ import io.muserver.handlers.ResourceHandler;
 import io.muserver.handlers.ResourceType;
 import io.muserver.rest.MuRuntimeDelegate;
 import io.netty.bootstrap.ServerBootstrap;
-import io.netty.channel.*;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.ChannelPipeline;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
-import io.netty.handler.codec.http.*;
-import io.netty.handler.codec.http2.*;
-import io.netty.handler.logging.LogLevel;
-import io.netty.handler.ssl.ApplicationProtocolNames;
-import io.netty.handler.ssl.ApplicationProtocolNegotiationHandler;
+import io.netty.handler.codec.http.HttpRequestDecoder;
+import io.netty.handler.codec.http.HttpResponse;
+import io.netty.handler.codec.http.HttpResponseEncoder;
+import io.netty.handler.codec.http.HttpServerKeepAliveHandler;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.traffic.GlobalTrafficShapingHandler;
@@ -278,6 +280,47 @@ public class MuServerBuilder {
         return addHandler(Routes.route(method, uriTemplate, handler));
     }
 
+    static class ServerSettings {
+        final long minimumGzipSize;
+        final int maxHeadersSize;
+        final int maxUrlSize;
+        final boolean gzipEnabled;
+        final Set<String> mimeTypesToGzip;
+
+        public ServerSettings(long minimumGzipSize, int maxHeadersSize, int maxUrlSize, boolean gzipEnabled, Set<String> mimeTypesToGzip) {
+            this.minimumGzipSize = minimumGzipSize;
+            this.maxHeadersSize = maxHeadersSize;
+            this.maxUrlSize = maxUrlSize;
+            this.gzipEnabled = gzipEnabled;
+            this.mimeTypesToGzip = mimeTypesToGzip;
+        }
+    }
+
+    /**
+     * Creates a new server builder. Call {@link #withHttpsPort(int)} or {@link #withHttpPort(int)} to specify
+     * the port to use, and call {@link #start()} to start the server.
+     * @return A new Mu-Server builder
+     */
+    public static MuServerBuilder muServer() {
+        return new MuServerBuilder();
+    }
+
+    /**
+     * Creates a new server builder which will run as HTTP on a random port.
+     * @return A new Mu-Server builder with the HTTP port set to 0
+     */
+    public static MuServerBuilder httpServer() {
+        return muServer().withHttpPort(0);
+    }
+
+    /**
+     * Creates a new server builder which will run as HTTPS on a random port.
+     * @return A new Mu-Server builder with the HTTPS port set to 0
+     */
+    public static MuServerBuilder httpsServer() {
+        return muServer().withHttpsPort(0);
+    }
+
 
     /**
      * Creates and starts this server. An exception is thrown if it fails to start.
@@ -287,6 +330,8 @@ public class MuServerBuilder {
         if (httpPort < 0 && httpsPort < 0) {
             throw new IllegalArgumentException("No ports were configured. Please call MuServerBuilder.withHttpPort(int) or MuServerBuilder.withHttpsPort(int)");
         }
+
+        ServerSettings settings = new ServerSettings(minimumGzipSize, maxHeadersSize, maxUrlSize, gzipEnabled, mimeTypesToGzip);
 
         NettyHandlerAdapter nettyHandlerAdapter = new NettyHandlerAdapter(handlers);
 
@@ -314,7 +359,7 @@ public class MuServerBuilder {
             AtomicReference<MuServer> serverRef = new AtomicReference<>();
             SslContextProvider sslContextProvider = null;
 
-            Channel httpChannel = httpPort < 0 ? null : createChannel(bossGroup, workerGroup, nettyHandlerAdapter, host, httpPort, null, trafficShapingHandler, stats, serverRef);
+            Channel httpChannel = httpPort < 0 ? null : createChannel(bossGroup, workerGroup, nettyHandlerAdapter, host, httpPort, null, trafficShapingHandler, stats, serverRef, settings);
             Channel httpsChannel;
             if (httpsPort < 0) {
                 httpsChannel = null;
@@ -323,7 +368,7 @@ public class MuServerBuilder {
                 SslContext nettySslContext = toUse.toNettySslContext();
                 log.debug("SSL Context is " + nettySslContext);
                 sslContextProvider = new SslContextProvider(nettySslContext);
-                httpsChannel = createChannel(bossGroup, workerGroup, nettyHandlerAdapter, host, httpsPort, sslContextProvider, trafficShapingHandler, stats, serverRef);
+                httpsChannel = createChannel(bossGroup, workerGroup, nettyHandlerAdapter, host, httpsPort, sslContextProvider, trafficShapingHandler, stats, serverRef, settings);
             }
             URI uri = null;
             if (httpChannel != null) {
@@ -357,7 +402,7 @@ public class MuServerBuilder {
         return URI.create(protocol + "://" + host.toLowerCase() + ":" + a.getPort());
     }
 
-    private Channel createChannel(NioEventLoopGroup bossGroup, NioEventLoopGroup workerGroup, NettyHandlerAdapter nettyHandlerAdapter, String host, int port, SslContextProvider sslContextProvider, GlobalTrafficShapingHandler trafficShapingHandler, MuStatsImpl stats, AtomicReference<MuServer> serverRef) throws InterruptedException {
+    private static Channel createChannel(NioEventLoopGroup bossGroup, NioEventLoopGroup workerGroup, NettyHandlerAdapter nettyHandlerAdapter, String host, int port, SslContextProvider sslContextProvider, GlobalTrafficShapingHandler trafficShapingHandler, MuStatsImpl stats, AtomicReference<MuServer> serverRef, ServerSettings settings) throws InterruptedException {
         boolean usesSsl = sslContextProvider != null;
         String proto = usesSsl ? "https" : "http";
         ServerBootstrap b = new ServerBootstrap();
@@ -365,7 +410,7 @@ public class MuServerBuilder {
             .channel(NioServerSocketChannel.class)
             .childHandler(new ChannelInitializer<SocketChannel>() {
 
-                protected void initChannel(SocketChannel socketChannel) throws Exception {
+                protected void initChannel(SocketChannel socketChannel) {
                     ChannelPipeline p = socketChannel.pipeline();
                     p.addLast(trafficShapingHandler);
                     if (usesSsl) {
@@ -375,118 +420,33 @@ public class MuServerBuilder {
                         sslHandler.engine().setSSLParameters(params);
                         p.addLast("ssl", sslHandler);
                     }
-
                     if (Toggles.http2 && usesSsl) {
-                        p.addLast("http1or2", new Http2OrHttpHandler(nettyHandlerAdapter, stats, serverRef, proto));
+                        p.addLast("http1or2", new AlpnHandler(nettyHandlerAdapter, stats, serverRef, proto, settings));
                     } else {
-                        p.addLast("decoder", new HttpRequestDecoder(maxUrlSize + LENGTH_OF_METHOD_AND_PROTOCOL, maxHeadersSize, 8192));
-                        p.addLast("encoder", new HttpResponseEncoder() {
-                            @Override
-                            protected boolean isContentAlwaysEmpty(HttpResponse msg) {
-                                return super.isContentAlwaysEmpty(msg) || msg instanceof NettyResponseAdaptor.EmptyHttpResponse;
-                            }
-                        });
-                        if (gzipEnabled) {
-                            p.addLast("compressor", new SelectiveHttpContentCompressor(minimumGzipSize, mimeTypesToGzip));
-                        }
-                        p.addLast("keepalive", new HttpServerKeepAliveHandler());
-                        p.addLast("muhandler", new Http1Connection(nettyHandlerAdapter, stats, serverRef, proto));
+                        setupHttp1Pipeline(p, settings, nettyHandlerAdapter, stats, serverRef, proto);
                     }
                 }
+
+
             });
         ChannelFuture bound = host == null ? b.bind(port) : b.bind(host, port);
         return bound.sync().channel();
     }
-
-    /**
-     * Negotiates with the browser if HTTP2 or HTTP is going to be used. Once decided, the Netty
-     * pipeline is setup with the correct handlers for the selected protocol.
-     */
-    static class Http2OrHttpHandler extends ApplicationProtocolNegotiationHandler {
-        private static final Logger log = LoggerFactory.getLogger(Http2OrHttpHandler.class);
-        private NettyHandlerAdapter nettyHandlerAdapter;
-        private MuStatsImpl stats;
-        private AtomicReference<MuServer> serverRef;
-        private String proto;
-
-        Http2OrHttpHandler(NettyHandlerAdapter nettyHandlerAdapter, MuStatsImpl stats, AtomicReference<MuServer> serverRef, String proto) {
-            super(ApplicationProtocolNames.HTTP_1_1);
-            this.nettyHandlerAdapter = nettyHandlerAdapter;
-            this.stats = stats;
-            this.serverRef = serverRef;
-            this.proto = proto;
-        }
-
-        @Override
-        protected void configurePipeline(ChannelHandlerContext ctx, String protocol) throws Exception {
-            if (ApplicationProtocolNames.HTTP_2.equals(protocol)) {
-                ctx.pipeline().addLast(new Http2ConnectionBuilder(serverRef, nettyHandlerAdapter, stats).build());
-                return;
+    static void setupHttp1Pipeline(ChannelPipeline p, ServerSettings settings, NettyHandlerAdapter nettyHandlerAdapter, MuStatsImpl stats, AtomicReference<MuServer> serverRef, String proto) {
+        p.addLast("decoder", new HttpRequestDecoder(settings.maxUrlSize + LENGTH_OF_METHOD_AND_PROTOCOL, settings.maxHeadersSize, 8192));
+        p.addLast("encoder", new HttpResponseEncoder() {
+            @Override
+            protected boolean isContentAlwaysEmpty(HttpResponse msg) {
+                return super.isContentAlwaysEmpty(msg) || msg instanceof NettyResponseAdaptor.EmptyHttpResponse;
             }
-
-            if (ApplicationProtocolNames.HTTP_1_1.equals(protocol)) {
-                ctx.pipeline().addLast(new HttpServerCodec(),
-                    new Http1Connection(nettyHandlerAdapter, stats, serverRef, proto));
-                return;
-            }
-
-            throw new IllegalStateException("unknown protocol: " + protocol);
+        });
+        if (settings.gzipEnabled) {
+            p.addLast("compressor", new SelectiveHttpContentCompressor(settings.minimumGzipSize, settings.mimeTypesToGzip));
         }
+        p.addLast("keepalive", new HttpServerKeepAliveHandler());
+        p.addLast("muhandler", new Http1Connection(nettyHandlerAdapter, stats, serverRef, proto));
     }
 
-    static class Http2ConnectionBuilder
-        extends AbstractHttp2ConnectionHandlerBuilder<Http2Connection, Http2ConnectionBuilder> {
-
-        private static final Http2FrameLogger logger = new Http2FrameLogger(LogLevel.DEBUG, Http2Connection.class);
-        private final AtomicReference<MuServer> serverRef;
-        private final NettyHandlerAdapter nettyHandlerAdapter;
-        private final MuStatsImpl stats;
-
-        public Http2ConnectionBuilder(AtomicReference<MuServer> serverRef, NettyHandlerAdapter nettyHandlerAdapter, MuStatsImpl stats) {
-            this.serverRef = serverRef;
-            this.nettyHandlerAdapter = nettyHandlerAdapter;
-            this.stats = stats;
-            frameLogger(logger);
-        }
-
-        @Override
-        public Http2Connection build() {
-            return super.build();
-        }
-
-        @Override
-        protected Http2Connection build(Http2ConnectionDecoder decoder, Http2ConnectionEncoder encoder,
-                                        Http2Settings initialSettings) {
-            Http2Connection handler = new Http2Connection(decoder, encoder, initialSettings, serverRef, nettyHandlerAdapter, stats);
-            frameListener(handler);
-            return handler;
-        }
-    }
-
-    /**
-     * Creates a new server builder. Call {@link #withHttpsPort(int)} or {@link #withHttpPort(int)} to specify
-     * the port to use, and call {@link #start()} to start the server.
-     * @return A new Mu-Server builder
-     */
-    public static MuServerBuilder muServer() {
-        return new MuServerBuilder();
-    }
-
-    /**
-     * Creates a new server builder which will run as HTTP on a random port.
-     * @return A new Mu-Server builder with the HTTP port set to 0
-     */
-    public static MuServerBuilder httpServer() {
-        return muServer().withHttpPort(0);
-    }
-
-    /**
-     * Creates a new server builder which will run as HTTPS on a random port.
-     * @return A new Mu-Server builder with the HTTPS port set to 0
-     */
-    public static MuServerBuilder httpsServer() {
-        return muServer().withHttpsPort(0);
-    }
 
 
 }

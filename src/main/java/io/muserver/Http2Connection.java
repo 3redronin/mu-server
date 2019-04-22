@@ -34,7 +34,7 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
     }
 
     @Override
-    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         Http1Connection.State state = ctx.channel().attr(STATE_ATTRIBUTE).get();
         if (state != null) {
             log.debug(cause.getClass().getName() + " (" + cause.getMessage() + ") for " + ctx + " so will disconnect this client");
