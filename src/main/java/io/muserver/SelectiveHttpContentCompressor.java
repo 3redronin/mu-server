@@ -24,7 +24,14 @@ class SelectiveHttpContentCompressor extends HttpContentCompressor {
         }
 
         String contentType = response.headers().get(HttpHeaderNames.CONTENT_TYPE);
-        if (contentType == null || !contentTypes.contains(contentType)) {
+        if (contentType == null) {
+            return null;
+        }
+        int i = contentType.indexOf(";");
+        if (i > -1) {
+            contentType = contentType.substring(0, i);
+        }
+        if (!contentTypes.contains(contentType.trim())) {
             return null;
         }
         return super.beginEncode(response, acceptEncoding);
