@@ -6,8 +6,12 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http2.Http2ConnectionEncoder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 class Http2Response extends NettyResponseAdaptor {
+    private static final Logger log = LoggerFactory.getLogger(Http2Response.class);
+
     private final ChannelHandlerContext ctx;
     private final H2Headers headers;
     private final Http2ConnectionEncoder encoder;
@@ -46,6 +50,12 @@ class Http2Response extends NettyResponseAdaptor {
     protected void startStreaming() {
         super.startStreaming();
         writeHeaders(false);
+    }
+
+    @Override
+    protected void onContentLengthMismatch() {
+        // don't really care for http2
+        log.info("The declared content length for " + request + " was " + declaredLength + " bytes however " + bytesStreamed + " bytes being sent.");
     }
 
     private void writeHeaders(boolean isEnd) {

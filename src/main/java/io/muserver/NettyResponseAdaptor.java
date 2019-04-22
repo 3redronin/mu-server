@@ -94,21 +94,19 @@ abstract class NettyResponseAdaptor implements MuResponse {
 
         bytesStreamed += size;
         ChannelFuture lastAction;
+        boolean isLast = bytesStreamed == declaredLength;
 
         if (declaredLength > -1 && bytesStreamed > declaredLength) {
-            closeConnection();
-            throw new IllegalStateException("The declared content length for " + request + " was " + declaredLength + " bytes. " +
-                "The current write is being aborted and the connection is being closed because it would have resulted in " +
-                bytesStreamed + " bytes being sent.");
-        } else {
-            boolean isLast = bytesStreamed == declaredLength;
-            if (isLast) {
-                outputState = OutputState.FULL_SENT;
-            }
-
-            ByteBuf content = Unpooled.wrappedBuffer(data);
-            lastAction = writeToChannel(isLast, content);
+            onContentLengthMismatch();
+            isLast = true;
         }
+
+        if (isLast) {
+            outputState = OutputState.FULL_SENT;
+        }
+
+        ByteBuf content = Unpooled.wrappedBuffer(data);
+        lastAction = writeToChannel(isLast, content);
         if (sync) {
             // force exception if writes fail
             lastAction = lastAction.syncUninterruptibly();
@@ -116,6 +114,8 @@ abstract class NettyResponseAdaptor implements MuResponse {
         this.lastAction = lastAction;
         return lastAction;
     }
+
+    protected abstract void onContentLengthMismatch();
 
     abstract ChannelFuture writeToChannel(boolean isLast, ByteBuf content);
 
@@ -141,7 +141,6 @@ abstract class NettyResponseAdaptor implements MuResponse {
     public void redirect(String newLocation) {
         redirect(URI.create(newLocation));
     }
-
 
 
     public Headers headers() {
@@ -199,9 +198,8 @@ abstract class NettyResponseAdaptor implements MuResponse {
             boolean badFixedLength = !isHead && isFixedLength && declaredLength != bytesStreamed && status != 304;
             if (badFixedLength) {
                 shouldDisconnect = onBadRequestSent();
-            } else {
-                lastAction = writeLastContentMarker();
             }
+            lastAction = writeLastContentMarker();
         }
 
         if (shouldDisconnect) {
@@ -219,6 +217,7 @@ abstract class NettyResponseAdaptor implements MuResponse {
 
     /**
      * Called when the number of bytes declared is different from the number sent
+     *
      * @return True to disconnect the connection; otherwise false
      */
     protected abstract boolean onBadRequestSent();

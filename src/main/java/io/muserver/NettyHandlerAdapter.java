@@ -1,6 +1,7 @@
 package io.muserver;
 
 import io.muserver.rest.MuRuntimeDelegate;
+import io.netty.buffer.ByteBuf;
 import io.netty.util.concurrent.DefaultThreadFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,6 +34,15 @@ class NettyHandlerAdapter {
         this.muHandlers = muHandlers;
     }
 
+    static void passDataToHandler(ByteBuf data, Http1Connection.State state) {
+        if (data.capacity() > 0) {
+            ByteBuf copy = data.copy();
+            ByteBuffer byteBuffer = ByteBuffer.allocate(data.capacity());
+            copy.readBytes(byteBuffer).release();
+            byteBuffer.flip();
+            state.handler.onRequestData(state.asyncContext, byteBuffer);
+        }
+    }
 
     void onHeaders(AsyncContext ctx, Headers headers) {
 

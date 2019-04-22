@@ -22,6 +22,7 @@ public class RunLocal {
     private static final Logger log = LoggerFactory.getLogger(RunLocal.class);
 
     public static void main(String[] args) {
+        Toggles.http2 = true;
 
         MuServer server = muServer()
             .withHttpPort(18080)

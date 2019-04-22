@@ -9,7 +9,6 @@ import io.netty.handler.codec.http2.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.Http1Connection.STATE_ATTRIBUTE;
@@ -67,13 +66,7 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
         if (state == null) {
             log.debug("Got a chunk of message for an unknown request. This can happen when a request is rejected based on headers, and then the rejected body arrives.");
         } else {
-            if (data.capacity() > 0) {
-                ByteBuf copy = data.copy();
-                ByteBuffer byteBuffer = ByteBuffer.allocate(data.capacity());
-                copy.readBytes(byteBuffer).release();
-                byteBuffer.flip();
-                state.handler.onRequestData(state.asyncContext, byteBuffer);
-            }
+            NettyHandlerAdapter.passDataToHandler(data, state);
             if (endOfStream) {
                 state.handler.onRequestComplete(state.asyncContext);
             }

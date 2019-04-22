@@ -11,7 +11,6 @@ import io.netty.util.AttributeKey;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static io.netty.buffer.Unpooled.copiedBuffer;
@@ -111,13 +110,7 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
                 log.debug("Got a chunk of message for an unknown request. This can happen when a request is rejected based on headers, and then the rejected body arrives.");
             } else {
                 ByteBuf byteBuf = content.content();
-                if (byteBuf.capacity() > 0) {
-                    ByteBuf copy = byteBuf.copy();
-                    ByteBuffer byteBuffer = ByteBuffer.allocate(byteBuf.capacity());
-                    copy.readBytes(byteBuffer).release();
-                    byteBuffer.flip();
-                    state.handler.onRequestData(state.asyncContext, byteBuffer);
-                }
+                NettyHandlerAdapter.passDataToHandler(byteBuf, state);
                 if (msg instanceof LastHttpContent) {
                     state.handler.onRequestComplete(state.asyncContext);
                 }

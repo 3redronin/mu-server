@@ -34,6 +34,14 @@ class Http1Response extends NettyResponseAdaptor {
         lastAction = ctx.write(response);
     }
 
+    @Override
+    protected void onContentLengthMismatch() {
+        closeConnection();
+        throw new IllegalStateException("The declared content length for " + request + " was " + declaredLength + " bytes. " +
+            "The current write is being aborted and the connection is being closed because it would have resulted in " +
+            bytesStreamed + " bytes being sent.");
+    }
+
     private static void writeHeaders(HttpResponse response, Headers headers) {
         HttpHeaders rh = response.headers();
         for (Map.Entry<String, String> header : headers) {
