@@ -16,13 +16,15 @@ class Http2Response extends NettyResponseAdaptor {
     private final H2Headers headers;
     private final Http2ConnectionEncoder encoder;
     private final int streamId;
+    private final MuServerBuilder.ServerSettings settings;
 
-    Http2Response(ChannelHandlerContext ctx, NettyRequestAdapter request, H2Headers headers, Http2ConnectionEncoder encoder, int streamId) {
+    Http2Response(ChannelHandlerContext ctx, NettyRequestAdapter request, H2Headers headers, Http2ConnectionEncoder encoder, int streamId, MuServerBuilder.ServerSettings settings) {
         super(request, headers);
         this.ctx = ctx;
         this.headers = headers;
         this.encoder = encoder;
         this.streamId = streamId;
+        this.settings = settings;
     }
 
     @Override
@@ -60,6 +62,15 @@ class Http2Response extends NettyResponseAdaptor {
 
     private void writeHeaders(boolean isEnd) {
         headers.entries.status(httpStatus().codeAsText());
+
+        CharSequence enc = Http2Connection.compressionToUse(request.headers());
+        if (enc != null) {
+            if (settings.shouldCompress(headers.get(HeaderNames.CONTENT_LENGTH), headers.get(HeaderNames.CONTENT_TYPE))) {
+                // by setting the header value, the CompressorHttp2ConnectionEncoder added by the Http2ConnectionBuilder will encode the bytes
+                headers.set(HeaderNames.CONTENT_ENCODING, enc);
+            }
+        }
+
         encoder.writeHeaders(ctx, streamId, headers.entries, 0, isEnd, ctx.newPromise());
         if (isEnd) {
             ctx.channel().flush();

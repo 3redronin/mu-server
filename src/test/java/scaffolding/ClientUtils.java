@@ -21,18 +21,19 @@ public class ClientUtils {
     private static X509TrustManager veryTrustingTrustManager = veryTrustingTrustManager();
 
     static {
-        Toggles.http2 = false && !"1.8".equals(System.getProperty("java.specification.version"));
+        Toggles.http2 = true && !"1.8".equals(System.getProperty("java.specification.version"));
 
         Logger.getLogger(OkHttpClient.class.getName()).setLevel(Level.FINE);
         boolean isDebug = ManagementFactory.getRuntimeMXBean().getInputArguments().toString().contains("jdwp");
         client = new OkHttpClient.Builder()
             .retryOnConnectionFailure(false)
-//            .protocols(asList(Protocol.HTTP_1_1))
+//            .protocols(Collections.singletonList(Protocol.HTTP_1_1))
             .followRedirects(false)
             .followSslRedirects(false)
             .hostnameVerifier((hostname, session) -> true)
             .readTimeout(isDebug ? 180 : 20, TimeUnit.SECONDS)
             .sslSocketFactory(sslContextForTesting(veryTrustingTrustManager).getSocketFactory(), veryTrustingTrustManager).build();
+
         ResourceLeakDetector.setLevel(ResourceLeakDetector.Level.PARANOID);
     }
 

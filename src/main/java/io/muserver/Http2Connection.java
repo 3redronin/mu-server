@@ -3,6 +3,7 @@ package io.muserver;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.handler.codec.http.HttpHeaderValues;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http2.*;
@@ -106,12 +107,24 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
         NettyRequestAdapter muReq = new NettyRequestAdapter(ctx.channel(), nettyReq, muHeaders, serverRef, muMethod, "https", uri, true, headers.authority().toString());
 
         stats.onRequestStarted(muReq);
-
-        Http2Response resp = new Http2Response(ctx, muReq, new H2Headers(), encoder(), streamId);
+        Http2Response resp = new Http2Response(ctx, muReq, new H2Headers(), encoder(), streamId, settings);
 
         AsyncContext asyncContext = new AsyncContext(muReq, resp, stats);
         ctx.channel().attr(STATE_ATTRIBUTE).set(asyncContext);
         nettyHandlerAdapter.onHeaders(asyncContext, muHeaders);
+    }
+
+    static CharSequence compressionToUse(Headers requestHeaders) {
+        for (ParameterizedHeaderWithValue encVal : requestHeaders.acceptEncoding()) {
+            String enc = encVal.value();
+            if (HttpHeaderValues.GZIP.contentEqualsIgnoreCase(enc)) {
+                return HeaderValues.GZIP;
+            }
+            if (HttpHeaderValues.DEFLATE.contentEqualsIgnoreCase(enc)) {
+                return HeaderValues.DEFLATE;
+            }
+        }
+        return null;
     }
 
     @Override

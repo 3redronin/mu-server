@@ -287,12 +287,29 @@ public class MuServerBuilder {
         final boolean gzipEnabled;
         final Set<String> mimeTypesToGzip;
 
-        public ServerSettings(long minimumGzipSize, int maxHeadersSize, int maxUrlSize, boolean gzipEnabled, Set<String> mimeTypesToGzip) {
+        ServerSettings(long minimumGzipSize, int maxHeadersSize, int maxUrlSize, boolean gzipEnabled, Set<String> mimeTypesToGzip) {
             this.minimumGzipSize = minimumGzipSize;
             this.maxHeadersSize = maxHeadersSize;
             this.maxUrlSize = maxUrlSize;
             this.gzipEnabled = gzipEnabled;
             this.mimeTypesToGzip = mimeTypesToGzip;
+        }
+
+        boolean shouldCompress(String declaredLength, String contentType) {
+            if (!gzipEnabled) {
+                return false;
+            }
+            if (declaredLength != null && Long.parseLong(declaredLength) <= minimumGzipSize) {
+                return false;
+            }
+            if (contentType == null) {
+                return false;
+            }
+            int i = contentType.indexOf(";");
+            if (i > -1) {
+                contentType = contentType.substring(0, i);
+            }
+            return mimeTypesToGzip.contains(contentType.trim());
         }
     }
 
@@ -441,7 +458,7 @@ public class MuServerBuilder {
             }
         });
         if (settings.gzipEnabled) {
-            p.addLast("compressor", new SelectiveHttpContentCompressor(settings.minimumGzipSize, settings.mimeTypesToGzip));
+            p.addLast("compressor", new SelectiveHttpContentCompressor(settings));
         }
         p.addLast("keepalive", new HttpServerKeepAliveHandler());
         p.addLast("muhandler", new Http1Connection(nettyHandlerAdapter, stats, serverRef, proto));

@@ -19,7 +19,7 @@ import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 
 public class GzipTest {
-    public static final String LOTS_OF_TEXT = StringUtils.randomAsciiStringOfLength(20000);
+    private static final String LOTS_OF_TEXT = StringUtils.randomAsciiStringOfLength(20000);
     private MuServer server;
 
     @Test
@@ -71,7 +71,7 @@ public class GzipTest {
 
     private void compareZippedVsNotZipped(String path) throws IOException {
         String unzipped;
-        try (Response resp = call(request(server.uri().resolve(path)).header("Accept-Encoding", "gzip"))) {
+        try (Response resp = call(request(server.uri().resolve(path)).header("Accept-Encoding", "hmm, gzip, deflate"))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.header("content-encoding"), is("gzip"));
             try (ByteArrayOutputStream boas = new ByteArrayOutputStream();
