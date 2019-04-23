@@ -9,6 +9,7 @@ import scaffolding.StringUtils;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.zip.GZIPInputStream;
 
 import static io.muserver.MuServerBuilder.httpsServer;
@@ -53,6 +54,23 @@ public class GzipTest {
             })
             .start();
         compareZippedVsNotZipped("/");
+    }
+
+    @Test
+    public void thatWhichIsEncodedShallNotBeEncodedAgain() throws IOException {
+        server = httpsServer()
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.contentType(ContentTypes.TEXT_PLAIN_UTF8);
+                response.headers().set(HeaderNames.CONTENT_ENCODING, "identity");
+                response.write(LOTS_OF_TEXT);
+            })
+            .start();
+        try (Response resp = call(request(server.uri().resolve("/")).header("Accept-Encoding", "umm,gzip"))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.header("content-encoding"), is("identity"));
+            assertThat(resp.header("content-length"), is(String.valueOf(LOTS_OF_TEXT.getBytes(StandardCharsets.UTF_8).length)));
+            assertThat(resp.body().string(), equalTo(LOTS_OF_TEXT));
+        }
     }
 
     @Test
