@@ -83,12 +83,12 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
                     sendSimpleResponse(ctx, "405 Method Not Allowed", 405);
                     return;
                 }
-                final H1Headers headers = new H1Headers(request.headers());
+                final Http1Headers headers = new Http1Headers(request.headers());
                 NettyRequestAdapter muRequest = new NettyRequestAdapter(ctx.channel(), request, headers, serverRef, method, proto, request.uri(), HttpUtil.isKeepAlive(request), headers.get(HeaderNames.HOST));
                 stats.onRequestStarted(muRequest);
 
 
-                AsyncContext asyncContext = new AsyncContext(muRequest, new Http1Response(ctx, muRequest, new H1Headers()), stats);
+                AsyncContext asyncContext = new AsyncContext(muRequest, new Http1Response(ctx, muRequest, new Http1Headers()), stats);
                 ctx.channel().attr(STATE_ATTRIBUTE).set(asyncContext);
                 nettyHandlerAdapter.onHeaders(asyncContext, asyncContext.request.headers());
             }

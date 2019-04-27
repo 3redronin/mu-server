@@ -26,7 +26,7 @@ public interface MuRequest {
      * to get the charset, use <code>request.headers().contentType()</code> and access the <code>charset</code> parameter on that.</p>
      * @return The content type of the request body (specified by the <code>Content-Type</code> request header),
      * or <code>null</code> if there is no body.
-     * @see H1Headers#contentType()
+     * @see Headers#contentType()
      */
     String contentType();
 

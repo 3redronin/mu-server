@@ -13,12 +13,12 @@ class Http2Response extends NettyResponseAdaptor {
     private static final Logger log = LoggerFactory.getLogger(Http2Response.class);
 
     private final ChannelHandlerContext ctx;
-    private final H2Headers headers;
+    private final Http2Headers headers;
     private final Http2ConnectionEncoder encoder;
     private final int streamId;
     private final MuServerBuilder.ServerSettings settings;
 
-    Http2Response(ChannelHandlerContext ctx, NettyRequestAdapter request, H2Headers headers, Http2ConnectionEncoder encoder, int streamId, MuServerBuilder.ServerSettings settings) {
+    Http2Response(ChannelHandlerContext ctx, NettyRequestAdapter request, Http2Headers headers, Http2ConnectionEncoder encoder, int streamId, MuServerBuilder.ServerSettings settings) {
         super(request, headers);
         this.ctx = ctx;
         this.headers = headers;

@@ -290,7 +290,7 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
      * @return An empty headers object.
      */
     static Headers http1Headers() {
-        return new H1Headers();
+        return new Http1Headers();
     }
 
     /**
@@ -298,6 +298,6 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
      * @return An empty headers object.
      */
     static Headers http2Headers() {
-        return new H2Headers();
+        return new Http2Headers();
     }
 }

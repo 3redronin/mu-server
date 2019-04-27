@@ -15,9 +15,9 @@ class Http1Response extends NettyResponseAdaptor {
     private static final Logger log = LoggerFactory.getLogger(Http1Response.class);
 
     private final ChannelHandlerContext ctx;
-    private final H1Headers headers;
+    private final Http1Headers headers;
 
-    Http1Response(ChannelHandlerContext ctx, NettyRequestAdapter request, H1Headers headers) {
+    Http1Response(ChannelHandlerContext ctx, NettyRequestAdapter request, Http1Headers headers) {
         super(request, headers);
         this.ctx = ctx;
         this.headers = headers;

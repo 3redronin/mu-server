@@ -52,7 +52,7 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
         byte[] bytes = message.getBytes(UTF_8);
         ByteBuf content = copiedBuffer(bytes) ;
 
-        Http2Headers headers = new DefaultHttp2Headers();
+        io.netty.handler.codec.http2.Http2Headers headers = new DefaultHttp2Headers();
         headers.status(String.valueOf(code));
         headers.set(HeaderNames.CONTENT_TYPE, ContentTypes.TEXT_PLAIN_UTF8);
         headers.set(HeaderNames.CONTENT_LENGTH, String.valueOf(bytes.length));
@@ -78,7 +78,7 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
 
     @Override
     public void onHeadersRead(ChannelHandlerContext ctx, int streamId,
-                              Http2Headers headers, int padding, boolean endOfStream) {
+                              io.netty.handler.codec.http2.Http2Headers headers, int padding, boolean endOfStream) {
 
         HttpMethod nettyMeth = HttpMethod.valueOf(headers.method().toString().toUpperCase());
         Method muMethod;
@@ -103,11 +103,11 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
                 hasRequestBody = false;
             }
         }
-        H2Headers muHeaders = new H2Headers(headers, hasRequestBody);
+        Http2Headers muHeaders = new Http2Headers(headers, hasRequestBody);
         NettyRequestAdapter muReq = new NettyRequestAdapter(ctx.channel(), nettyReq, muHeaders, serverRef, muMethod, "https", uri, true, headers.authority().toString());
 
         stats.onRequestStarted(muReq);
-        Http2Response resp = new Http2Response(ctx, muReq, new H2Headers(), encoder(), streamId, settings);
+        Http2Response resp = new Http2Response(ctx, muReq, new Http2Headers(), encoder(), streamId, settings);
 
         AsyncContext asyncContext = new AsyncContext(muReq, resp, stats);
         ctx.channel().attr(STATE_ATTRIBUTE).set(asyncContext);
@@ -128,7 +128,7 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
     }
 
     @Override
-    public void onHeadersRead(ChannelHandlerContext ctx, int streamId, Http2Headers headers, int streamDependency,
+    public void onHeadersRead(ChannelHandlerContext ctx, int streamId, io.netty.handler.codec.http2.Http2Headers headers, int streamDependency,
                               short weight, boolean exclusive, int padding, boolean endOfStream) {
         onHeadersRead(ctx, streamId, headers, padding, endOfStream);
     }
@@ -164,7 +164,7 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
 
     @Override
     public void onPushPromiseRead(ChannelHandlerContext ctx, int streamId, int promisedStreamId,
-                                  Http2Headers headers, int padding) {
+                                  io.netty.handler.codec.http2.Http2Headers headers, int padding) {
     }
 
     @Override
