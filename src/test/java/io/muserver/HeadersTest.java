@@ -10,6 +10,7 @@ import scaffolding.MuAssert;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.URI;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -45,6 +46,25 @@ public class HeadersTest {
         try (Response resp = call(xSomethingHeader(randomValue))) {
             assertThat(resp.header("X-Response"), equalTo(randomValue));
             assertThat(resp.body().string(), is("val: null"));
+        }
+    }
+
+    @Test
+    public void pseudoHeadersAreNotPresentInHeaders() throws IOException {
+        server = httpsServer()
+            .addHandler((request, response) -> {
+                for (Map.Entry<String, String> header : request.headers()) {
+                    if (header.getKey().startsWith(":")) {
+                        response.sendChunk(header + " ");
+                    }
+                }
+                return true;
+            }).start();
+
+        String randomValue = UUID.randomUUID().toString();
+
+        try (Response resp = call(xSomethingHeader(randomValue))) {
+            assertThat(resp.body().string(), is(""));
         }
     }
 

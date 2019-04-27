@@ -7,6 +7,7 @@ import io.netty.handler.codec.http2.Http2Headers;
 import javax.ws.rs.core.MediaType;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static io.muserver.NettyRequestParameters.isTruthy;
 import static io.netty.util.internal.ObjectUtil.checkNotNull;
@@ -28,14 +29,14 @@ class H2Headers implements Headers {
     private static CharSequence toLower(CharSequence name) {
         Mutils.notNull("name", name);
         if (name instanceof String) {
-            return ((String)name).toLowerCase();
+            return ((String) name).toLowerCase();
         }
         return name;
     }
 
     @Override
     public String get(String name) {
-        return get((CharSequence)name);
+        return get((CharSequence) name);
     }
 
     @Override
@@ -141,15 +142,15 @@ class H2Headers implements Headers {
     @Override
     public List<Map.Entry<String, String>> entries() {
         List<Map.Entry<String, String>> all = new ArrayList<>(size());
-        for (Map.Entry<CharSequence, CharSequence> entry : entries) {
-            all.add(new AbstractMap.SimpleImmutableEntry<>(entry.getKey().toString(), entry.getValue().toString()));
+        for (Map.Entry<String, String> e : this) {
+            all.add(e);
         }
         return all;
     }
 
     @Override
     public boolean contains(String name) {
-        return contains((CharSequence)name);
+        return contains((CharSequence) name);
     }
 
     @Override
@@ -160,18 +161,11 @@ class H2Headers implements Headers {
     @Override
     public Iterator<Map.Entry<String, String>> iterator() {
         Iterator<Map.Entry<CharSequence, CharSequence>> it = entries.iterator();
-        return new Iterator<Map.Entry<String, String>>() {
-            @Override
-            public boolean hasNext() {
-                return it.hasNext();
-            }
 
-            @Override
-            public Map.Entry<String, String> next() {
-                Map.Entry<CharSequence, CharSequence> e = it.next();
-                return new AbstractMap.SimpleImmutableEntry<>(e.getKey().toString(), e.getValue().toString());
-            }
-        };
+        return Stream.generate(it::next).limit(entries.size())
+            .filter(e -> e.getKey().charAt(0) != ':')
+            .map(e -> (Map.Entry<String, String>) new AbstractMap.SimpleImmutableEntry<>(e.getKey().toString(), e.getValue().toString()))
+            .iterator();
     }
 
     @Override
@@ -186,12 +180,14 @@ class H2Headers implements Headers {
 
     @Override
     public Set<String> names() {
-        return entries.names().stream().map(CharSequence::toString).collect(Collectors.toSet());
+        return entries.names().stream()
+            .filter(name -> name.charAt(0) != ':')
+            .map(CharSequence::toString).collect(Collectors.toSet());
     }
 
     @Override
     public Headers add(String name, Object value) {
-        return add((CharSequence)name, value);
+        return add((CharSequence) name, value);
     }
 
 
@@ -203,7 +199,7 @@ class H2Headers implements Headers {
 
     @Override
     public Headers add(String name, Iterable<?> values) {
-        return add((CharSequence)name, values);
+        return add((CharSequence) name, values);
     }
 
     @Override
@@ -238,7 +234,7 @@ class H2Headers implements Headers {
 
     @Override
     public Headers set(String name, Object value) {
-        return set((CharSequence)name, value);
+        return set((CharSequence) name, value);
     }
 
     @Override
@@ -249,7 +245,7 @@ class H2Headers implements Headers {
 
     @Override
     public Headers set(String name, Iterable<?> values) {
-        return set((CharSequence)name, values);
+        return set((CharSequence) name, values);
     }
 
     @Override
@@ -293,7 +289,7 @@ class H2Headers implements Headers {
 
     @Override
     public Headers remove(String name) {
-        return remove((CharSequence)name);
+        return remove((CharSequence) name);
     }
 
     @Override
@@ -310,7 +306,7 @@ class H2Headers implements Headers {
 
     @Override
     public boolean contains(String name, String value, boolean ignoreCase) {
-        return contains((CharSequence)name, value, ignoreCase);
+        return contains((CharSequence) name, value, ignoreCase);
     }
 
     @Override

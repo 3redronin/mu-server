@@ -1,10 +1,12 @@
 package io.muserver;
 
+import io.netty.handler.codec.http2.DefaultHttp2Headers;
+import io.netty.handler.codec.http2.Http2Headers;
 import org.junit.Test;
 
 import javax.ws.rs.core.MediaType;
-import java.util.Collections;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 import static io.muserver.ForwardedHeaderTest.fwd;
 import static java.util.Arrays.asList;
@@ -13,6 +15,7 @@ import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.core.IsEqual.equalTo;
 
 public class H1AndH2HeadersTest {
@@ -253,6 +256,28 @@ public class H1AndH2HeadersTest {
                 fwd(null, null, "internal.example.org", "http")
             ));
         }
+    }
+
+    @Test
+    public void allTheIteratorsIgnorePseudoHeaders() {
+        Http2Headers nettyHeady = new DefaultHttp2Headers();
+        nettyHeady.method("GET");
+        nettyHeady.path("/");
+        nettyHeady.scheme("http");
+        nettyHeady.authority("localhost");
+        nettyHeady.set("content-type", "text/html");
+        nettyHeady.set("content-length", "123");
+        H2Headers headers = new H2Headers(nettyHeady, false);
+        assertThat(stringsFrom(headers.iterator()), is("content-type=text/html content-length=123"));
+        assertThat(stringsFrom(headers.iteratorAsString()), is("content-type=text/html content-length=123"));
+        assertThat(stringsFrom(headers.entries().iterator()), is("content-type=text/html content-length=123"));
+        assertThat(headers.names(), containsInAnyOrder("content-type", "content-length"));
+    }
+
+    static String stringsFrom(Iterator<Map.Entry<String, String>> iterator) {
+        List<Map.Entry<String,String>> list = new ArrayList<>();
+        iterator.forEachRemaining(list::add);
+        return list.stream().map(e -> e.getKey() + "=" + e.getValue()).collect(Collectors.joining(" "));
     }
 
     private static ParameterizedHeaderWithValue ph(String value) {
