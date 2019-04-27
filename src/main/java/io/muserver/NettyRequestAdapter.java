@@ -70,6 +70,11 @@ class NettyRequestAdapter implements MuRequest {
         return asyncHandle != null;
     }
 
+    @Override
+    public String protocol() {
+        return request.protocolVersion().text();
+    }
+
     boolean isKeepAliveRequested() {
         return keepalive;
     }

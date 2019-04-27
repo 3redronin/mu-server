@@ -2,6 +2,7 @@ package io.muserver;
 
 import okhttp3.RequestBody;
 import okhttp3.Response;
+import org.hamcrest.Matchers;
 import org.junit.*;
 import scaffolding.RawClient;
 
@@ -238,6 +239,21 @@ public class MuServerTest {
             assertThat(resp.header("Content-Type"), is("text/plain;charset=ISO-8859-5"));
             String body = resp.body().string();
             assertThat(body, containsString("ЧАСТЬ ПЕРВАЯ."));
+        }
+    }
+
+    @Test
+    public void requestProtocolIsAvailable() throws IOException {
+        server = httpsServer()
+            .addHandler((req, resp) -> {
+                resp.write(req.protocol());
+                return true;
+            })
+            .start();
+
+        try (Response resp = call(request(server.uri()))) {
+            String body = resp.body().string();
+            assertThat(body, Matchers.isOneOf("HTTP/1.1", "HTTP/2"));
         }
     }
 

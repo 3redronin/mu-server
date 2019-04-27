@@ -259,4 +259,10 @@ public interface MuRequest {
      * @return Returns try if {@link #handleAsync()} has been called and this is an async response
      */
     boolean isAsync();
+
+    /**
+     * The protocol for the request.
+     * @return A string such as <code>HTTP/1.1</code> or <code>HTTP/2</code>
+     */
+    String protocol();
 }
