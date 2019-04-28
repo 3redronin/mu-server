@@ -57,12 +57,12 @@ class Http2To1RequestAdapter implements HttpRequest {
 
     @Override
     public HttpVersion getProtocolVersion() {
-        return HttpVersion.valueOf("HTTP/2");
+        return HttpVersion.valueOf("HTTP/2.0");
     }
 
     @Override
     public HttpVersion protocolVersion() {
-        return new HttpVersion("HTTP/2.2", true);
+        return new HttpVersion("HTTP/2.0", true);
     }
 
     @Override

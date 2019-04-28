@@ -84,7 +84,8 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
                     return;
                 }
                 final Http1Headers headers = new Http1Headers(request.headers());
-                NettyRequestAdapter muRequest = new NettyRequestAdapter(ctx.channel(), request, headers, serverRef, method, proto, request.uri(), HttpUtil.isKeepAlive(request), headers.get(HeaderNames.HOST));
+                NettyRequestAdapter muRequest = new NettyRequestAdapter(ctx.channel(), request, headers, serverRef, method,
+                    proto, request.uri(), HttpUtil.isKeepAlive(request), headers.get(HeaderNames.HOST), request.protocolVersion().text());
                 stats.onRequestStarted(muRequest);
 
 

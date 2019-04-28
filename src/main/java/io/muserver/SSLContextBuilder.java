@@ -157,7 +157,7 @@ public class SSLContextBuilder {
         }
     }
 
-    SslContext toNettySslContext() throws Exception {
+    SslContext toNettySslContext(boolean http2) throws Exception {
         SslContextBuilder builder;
         if (sslContext != null) {
             return new JdkSslContext(sslContext, false, ClientAuth.NONE);
@@ -182,7 +182,7 @@ public class SSLContextBuilder {
             throw new IllegalStateException("No SSL info");
         }
 
-        if (Toggles.http2) {
+        if (http2) {
             builder.applicationProtocolConfig(new ApplicationProtocolConfig(
                 ApplicationProtocolConfig.Protocol.ALPN, ApplicationProtocolConfig.SelectorFailureBehavior.NO_ADVERTISE,
                 ApplicationProtocolConfig.SelectedListenerFailureBehavior.ACCEPT,

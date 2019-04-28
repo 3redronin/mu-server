@@ -376,16 +376,17 @@ public class MuServerBuilder {
             AtomicReference<MuServer> serverRef = new AtomicReference<>();
             SslContextProvider sslContextProvider = null;
 
-            Channel httpChannel = httpPort < 0 ? null : createChannel(bossGroup, workerGroup, nettyHandlerAdapter, host, httpPort, null, trafficShapingHandler, stats, serverRef, settings);
+            Channel httpChannel = httpPort < 0 ? null : createChannel(bossGroup, workerGroup, nettyHandlerAdapter, host, httpPort, null, trafficShapingHandler, stats, serverRef, settings, false);
             Channel httpsChannel;
+            boolean http2Enabled = Toggles.http2;
             if (httpsPort < 0) {
                 httpsChannel = null;
             } else {
                 SSLContextBuilder toUse = this.sslContextBuilder != null ? this.sslContextBuilder : SSLContextBuilder.unsignedLocalhostCertBuilder();
-                SslContext nettySslContext = toUse.toNettySslContext();
+                SslContext nettySslContext = toUse.toNettySslContext(http2Enabled);
                 log.debug("SSL Context is " + nettySslContext);
                 sslContextProvider = new SslContextProvider(nettySslContext);
-                httpsChannel = createChannel(bossGroup, workerGroup, nettyHandlerAdapter, host, httpsPort, sslContextProvider, trafficShapingHandler, stats, serverRef, settings);
+                httpsChannel = createChannel(bossGroup, workerGroup, nettyHandlerAdapter, host, httpsPort, sslContextProvider, trafficShapingHandler, stats, serverRef, settings, http2Enabled);
             }
             URI uri = null;
             if (httpChannel != null) {
@@ -399,7 +400,7 @@ public class MuServerBuilder {
             }
 
             InetSocketAddress serverAddress = (InetSocketAddress) channels.get(0).localAddress();
-            MuServer server = new MuServerImpl(uri, httpsUri, shutdown, stats, serverAddress, sslContextProvider);
+            MuServer server = new MuServerImpl(uri, httpsUri, shutdown, stats, serverAddress, sslContextProvider, http2Enabled);
             serverRef.set(server);
             if (addShutdownHook) {
                 Runtime.getRuntime().addShutdownHook(new Thread(server::stop));
@@ -419,7 +420,7 @@ public class MuServerBuilder {
         return URI.create(protocol + "://" + host.toLowerCase() + ":" + a.getPort());
     }
 
-    private static Channel createChannel(NioEventLoopGroup bossGroup, NioEventLoopGroup workerGroup, NettyHandlerAdapter nettyHandlerAdapter, String host, int port, SslContextProvider sslContextProvider, GlobalTrafficShapingHandler trafficShapingHandler, MuStatsImpl stats, AtomicReference<MuServer> serverRef, ServerSettings settings) throws InterruptedException {
+    private static Channel createChannel(NioEventLoopGroup bossGroup, NioEventLoopGroup workerGroup, NettyHandlerAdapter nettyHandlerAdapter, String host, int port, SslContextProvider sslContextProvider, GlobalTrafficShapingHandler trafficShapingHandler, MuStatsImpl stats, AtomicReference<MuServer> serverRef, ServerSettings settings, final boolean http2) throws InterruptedException {
         boolean usesSsl = sslContextProvider != null;
         String proto = usesSsl ? "https" : "http";
         ServerBootstrap b = new ServerBootstrap();
@@ -437,7 +438,7 @@ public class MuServerBuilder {
                         sslHandler.engine().setSSLParameters(params);
                         p.addLast("ssl", sslHandler);
                     }
-                    if (Toggles.http2 && usesSsl) {
+                    if (http2 && usesSsl) {
                         p.addLast("http1or2", new AlpnHandler(nettyHandlerAdapter, stats, serverRef, proto, settings));
                     } else {
                         setupHttp1Pipeline(p, settings, nettyHandlerAdapter, stats, serverRef, proto);

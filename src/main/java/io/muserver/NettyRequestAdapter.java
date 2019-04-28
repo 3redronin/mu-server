@@ -52,12 +52,14 @@ class NettyRequestAdapter implements MuRequest {
     private Map<String, Object> attributes;
     private volatile AsyncHandleImpl asyncHandle;
     private final boolean keepalive;
+    private final String protocol;
 
-    NettyRequestAdapter(Channel channel, HttpRequest request, Headers headers, AtomicReference<MuServer> serverRef, Method method, String proto, String uri, boolean keepalive, String host) {
+    NettyRequestAdapter(Channel channel, HttpRequest request, Headers headers, AtomicReference<MuServer> serverRef, Method method, String proto, String uri, boolean keepalive, String host, String protocol) {
         this.channel = channel;
         this.request = request;
         this.serverRef = serverRef;
         this.keepalive = keepalive;
+        this.protocol = protocol;
         this.serverUri = URI.create(proto + "://" + host + uri).normalize();
         this.headers = headers;
         this.uri = getUri(headers, proto, host, uri, serverUri);
@@ -72,7 +74,7 @@ class NettyRequestAdapter implements MuRequest {
 
     @Override
     public String protocol() {
-        return request.protocolVersion().text();
+        return protocol;
     }
 
     boolean isKeepAliveRequested() {

@@ -12,11 +12,13 @@ class MuServerImpl implements MuServer {
     private final MuStats stats;
     private final InetSocketAddress address;
     private final SslContextProvider sslContextProvider;
+    private final boolean http2Enabled;
 
-    MuServerImpl(URI httpUri, URI httpsUri, Runnable shutdown, MuStats stats, InetSocketAddress address, SslContextProvider sslContextProvider) {
+    MuServerImpl(URI httpUri, URI httpsUri, Runnable shutdown, MuStats stats, InetSocketAddress address, SslContextProvider sslContextProvider, boolean http2Enabled) {
         this.stats = stats;
         this.address = address;
         this.sslContextProvider = sslContextProvider;
+        this.http2Enabled = http2Enabled;
         if (httpUri == null && httpsUri == null) {
             throw new IllegalArgumentException("One of httpUri and httpsUri must not be null");
         }
@@ -64,7 +66,7 @@ class MuServerImpl implements MuServer {
     public void changeSSLContext(SSLContextBuilder newSSLContext) {
         Mutils.notNull("newSSLContext", newSSLContext);
         try {
-            sslContextProvider.set(newSSLContext.toNettySslContext());
+            sslContextProvider.set(newSSLContext.toNettySslContext(http2Enabled));
         } catch (Exception e) {
             throw new MuException("Error while changing SSL Certificate. The old one will still be used.", e);
         }
