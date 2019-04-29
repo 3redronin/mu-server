@@ -38,7 +38,7 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        AsyncContext asyncContext = ctx.channel().attr(STATE_ATTRIBUTE).get();
+        AsyncContext asyncContext = getAsyncContext(ctx);
         if (asyncContext != null) {
             log.debug(cause.getClass().getName() + " (" + cause.getMessage() + ") for " + ctx + " so will disconnect this client");
             asyncContext.onCancelled(true);
@@ -46,6 +46,10 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
             log.debug("Exception for unknown ctx " + ctx, cause);
         }
         ctx.close();
+    }
+
+    static AsyncContext getAsyncContext(ChannelHandlerContext ctx) {
+        return ctx.channel().attr(STATE_ATTRIBUTE).get();
     }
 
     private ChannelFuture sendSimpleResponse(ChannelHandlerContext ctx, int streamId, String message, int code) {
@@ -64,7 +68,7 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
     public int onDataRead(ChannelHandlerContext ctx, int streamId, ByteBuf data, int padding, boolean endOfStream) {
         int processed = data.readableBytes() + padding;
 
-        AsyncContext asyncContext = ctx.channel().attr(STATE_ATTRIBUTE).get();
+        AsyncContext asyncContext = getAsyncContext(ctx);
         if (asyncContext == null) {
             log.debug("Got a chunk of message for an unknown request. This can happen when a request is rejected based on headers, and then the rejected body arrives.");
         } else {
@@ -142,7 +146,7 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
 
     @Override
     public void onRstStreamRead(ChannelHandlerContext ctx, int streamId, long errorCode) {
-        AsyncContext asyncContext = ctx.channel().attr(STATE_ATTRIBUTE).get();
+        AsyncContext asyncContext = getAsyncContext(ctx);
         if (asyncContext != null) {
             asyncContext.onCancelled(false);
         }
@@ -171,7 +175,7 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
 
     @Override
     public void onGoAwayRead(ChannelHandlerContext ctx, int lastStreamId, long errorCode, ByteBuf debugData) {
-        AsyncContext asyncContext = ctx.channel().attr(STATE_ATTRIBUTE).get();
+        AsyncContext asyncContext = getAsyncContext(ctx);
         if (asyncContext != null) {
             asyncContext.onCancelled(true);
         }

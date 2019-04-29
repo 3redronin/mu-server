@@ -68,6 +68,7 @@ class Http2Response extends NettyResponseAdaptor {
             if (settings.shouldCompress(headers.get(HeaderNames.CONTENT_LENGTH), headers.get(HeaderNames.CONTENT_TYPE))) {
                 // by setting the header value, the CompressorHttp2ConnectionEncoder added by the Http2ConnectionBuilder will encode the bytes
                 headers.set(HeaderNames.CONTENT_ENCODING, enc);
+                ctx.channel().attr(MuCompressorHttp2ConnectionEncoder.SHOULD_COMPRESS).set(MuCompressorHttp2ConnectionEncoder.TOKEN);
             }
         }
 

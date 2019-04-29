@@ -32,7 +32,7 @@ class Http2ConnectionBuilder
     protected Http2Connection build(Http2ConnectionDecoder decoder, Http2ConnectionEncoder encoder,
                                     Http2Settings initialSettings) {
         if (settings.gzipEnabled) {
-            encoder = new CompressorHttp2ConnectionEncoder(encoder, CompressorHttp2ConnectionEncoder.DEFAULT_COMPRESSION_LEVEL, CompressorHttp2ConnectionEncoder.DEFAULT_WINDOW_BITS, CompressorHttp2ConnectionEncoder.DEFAULT_MEM_LEVEL);
+            encoder = new MuCompressorHttp2ConnectionEncoder(encoder, CompressorHttp2ConnectionEncoder.DEFAULT_COMPRESSION_LEVEL, CompressorHttp2ConnectionEncoder.DEFAULT_WINDOW_BITS, CompressorHttp2ConnectionEncoder.DEFAULT_MEM_LEVEL);
         }
         Http2Connection handler = new Http2Connection(decoder, encoder, initialSettings, serverRef, nettyHandlerAdapter, stats, settings);
         frameListener(handler);

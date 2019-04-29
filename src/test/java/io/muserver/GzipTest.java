@@ -106,6 +106,30 @@ public class GzipTest {
         }
     }
 
+    @Test
+    public void ifTheResponseIsAlreadyCompressedThenDoNotRecompress() throws IOException {
+        server = httpsServer()
+            .addHandler(Method.GET, "/overview.txt", (request, response, pathParams) -> {
+                response.headers().set(HeaderNames.CONTENT_TYPE, ContentTypes.TEXT_PLAIN_UTF8);
+                response.headers().set(HeaderNames.CONTENT_ENCODING, "gzip");
+                InputStream in = getClass().getResourceAsStream("/sample-static/overview.txt.gz");
+                Mutils.copy(in, response.outputStream(), 8192);
+            })
+            .start();
+        try (Response resp = call(request(server.uri().resolve("/overview.txt")).header("Accept-Encoding", "hmm, gzip, deflate"))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.header("content-type"), is("text/plain;charset=utf-8"));
+            assertThat(resp.header("content-encoding"), is("gzip"));
+
+            try (ByteArrayOutputStream boas = new ByteArrayOutputStream();
+                 InputStream is = new GZIPInputStream(resp.body().byteStream())) {
+                Mutils.copy(is, boas, 8192);
+                String unzipped = boas.toString("UTF-8");
+                assertThat(unzipped, startsWith("<!doctype html>"));
+            }
+        }
+    }
+
     @After
     public void stopIt() {
         MuAssert.stopAndCheck(server);
