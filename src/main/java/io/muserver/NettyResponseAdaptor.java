@@ -127,6 +127,7 @@ abstract class NettyResponseAdaptor implements MuResponse {
     }
 
     protected ByteBuf textToBuffer(String text) {
+        if (text == null) text = "";
         Charset charset = StandardCharsets.UTF_8;
         MediaType type = headers().contentType();
         if (type != null) {

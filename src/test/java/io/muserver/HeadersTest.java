@@ -14,6 +14,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static io.muserver.MuServerBuilder.httpServer;
 import static io.muserver.MuServerBuilder.httpsServer;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.nullValue;
@@ -140,6 +141,27 @@ public class HeadersTest {
                 assertThat(resp.header("Content-Type"), is("text/plain;charset=utf-8"));
             }
         }
+    }
+
+    @Test
+    public void largeHeadersCanBeConfigured() throws Exception {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < 26000; i++) {
+            sb.append("a");
+        }
+        String value = sb.toString();
+        server = httpServer()
+            .withMaxHeadersSize(value.length() + 1000)
+            .addHandler(Method.GET, "/", (req, resp, pp) -> {
+                resp.write(req.headers().get("X-Large"));
+            })
+            .start();
+
+
+        try (Response resp = call(request(server.uri()).header("x-Large", value))) {
+            assertThat(resp.body().string(), equalTo(value));
+        }
+
     }
 
     @Test
