@@ -145,16 +145,18 @@ public class ParametersTest {
                     "|serverRawPath=" + request.serverURI().getRawPath() + "|\n");
                 return true;
             }).start();
-        RawClient client = RawClient.create(server.uri());
-        client.sendStartLine("GET", "/a%20space/a+plus?a%20space=a%20value&a+space=a+value2&a%2Bplus=s%2Bplus");
-        client.sendHeader("Host", server.uri().getAuthority());
-        client.endHeaders();
-        client.flushRequest();
+        String r;
+        try (RawClient client = RawClient.create(server.uri())) {
+            client.sendStartLine("GET", "/a%20space/a+plus?a%20space=a%20value&a+space=a+value2&a%2Bplus=s%2Bplus");
+            client.sendHeader("Host", server.uri().getAuthority());
+            client.endHeaders();
+            client.flushRequest();
 
-        while (client.bytesReceived() == 0) {
-            Thread.sleep(10);
+            while (client.bytesReceived() == 0) {
+                Thread.sleep(10);
+            }
+            r = client.responseString();
         }
-        String r = client.responseString();
         assertThat(r, containsString("|path=/a space/a+plus|"));
         assertThat(r, containsString("|rawPath=/a%20space/a+plus|"));
         assertThat(r, containsString("|serverPath=/a space/a+plus|"));
@@ -175,16 +177,18 @@ public class ParametersTest {
                     "");
                 return true;
             }).start();
-        RawClient client = RawClient.create(server.uri());
-        client.sendStartLine("GET", "/a%20space/a+plus?a%20space=a%20value&a+space=a+value2&a%2Bplus=a%2Bplus");
-        client.sendHeader("Host", server.uri().getAuthority());
-        client.endHeaders();
-        client.flushRequest();
+        String r;
+        try (RawClient client = RawClient.create(server.uri())) {
+            client.sendStartLine("GET", "/a%20space/a+plus?a%20space=a%20value&a+space=a+value2&a%2Bplus=a%2Bplus");
+            client.sendHeader("Host", server.uri().getAuthority());
+            client.endHeaders();
+            client.flushRequest();
 
-        while (client.bytesReceived() == 0) {
-            Thread.sleep(10);
+            while (client.bytesReceived() == 0) {
+                Thread.sleep(10);
+            }
+            r = client.responseString();
         }
-        String r = client.responseString();
         assertThat(r, containsString("|a space=[a value, a value2]|"));
         assertThat(r, containsString("|a+plus=[a+plus]|"));
         assertThat(r, containsString("|serverQS=a space=a value&a+space=a+value2&a+plus=a+plus|"));

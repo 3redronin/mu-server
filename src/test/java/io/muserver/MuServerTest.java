@@ -252,16 +252,17 @@ public class MuServerTest {
     @Test
     public void returns400IfNoHostHeaderPresent() throws Exception {
         server = httpServer().start();
-        RawClient rawClient = RawClient.create(server.uri());
-        rawClient.sendStartLine("GET", "/");
-        rawClient.sendHeader("NotHost", "Blah");
-        rawClient.endHeaders();
-        rawClient.flushRequest();
+        try (RawClient rawClient = RawClient.create(server.uri())) {
+            rawClient.sendStartLine("GET", "/");
+            rawClient.sendHeader("NotHost", "Blah");
+            rawClient.endHeaders();
+            rawClient.flushRequest();
 
-        while (!rawClient.responseString().contains("\n")) {
-            Thread.sleep(10);
+            while (!rawClient.responseString().contains("\n")) {
+                Thread.sleep(10);
+            }
+            assertThat(rawClient.responseString(), startsWith("HTTP/1.1 400 Bad Request"));
         }
-        assertThat(rawClient.responseString(), startsWith("HTTP/1.1 400 Bad Request"));
     }
 
     @Test
