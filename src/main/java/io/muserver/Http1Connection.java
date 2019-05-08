@@ -11,6 +11,8 @@ import io.netty.util.AttributeKey;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static io.netty.buffer.Unpooled.copiedBuffer;
@@ -84,8 +86,17 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
                     return;
                 }
                 final Http1Headers headers = new Http1Headers(request.headers());
+
+                String relativeUri;
+                try {
+                    relativeUri = getRelativeUri(request);
+                } catch (Exception e) {
+                    sendSimpleResponse(ctx, "400 Bad Request", 400);
+                    return;
+                }
+
                 NettyRequestAdapter muRequest = new NettyRequestAdapter(ctx.channel(), request, headers, serverRef, method,
-                    proto, request.uri(), HttpUtil.isKeepAlive(request), headers.get(HeaderNames.HOST), request.protocolVersion().text());
+                    proto, relativeUri, HttpUtil.isKeepAlive(request), headers.get(HeaderNames.HOST), request.protocolVersion().text());
                 stats.onRequestStarted(muRequest);
 
 
@@ -107,6 +118,16 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
                 }
             }
         }
+    }
+
+    private static String getRelativeUri(HttpRequest request) throws URISyntaxException {
+        URI requestUri = new URI(request.uri()).normalize();
+        String s = requestUri.getRawPath();
+        String q = requestUri.getRawQuery();
+        if (q != null) {
+            s += "?" + q;
+        }
+        return s;
     }
 
     private void handleHttpRequestDecodeFailure(ChannelHandlerContext ctx, Throwable cause) {

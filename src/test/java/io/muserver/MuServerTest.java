@@ -10,6 +10,7 @@ import java.io.File;
 import java.io.IOException;
 import java.net.ConnectException;
 import java.net.InetAddress;
+import java.net.URI;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
@@ -201,6 +202,50 @@ public class MuServerTest {
         try (Response resp = call(request(server.uri()).method("COFFEE", null))) {
             assertThat(resp.code(), is(405));
             assertThat(resp.body().string(), containsString("405 Method Not Allowed"));
+        }
+    }
+
+    @Test
+    public void absoluteURIsInTheRequestLineAreFine() throws IOException, InterruptedException {
+        server = httpServer()
+            .addHandler((req, resp) -> {
+                resp.write(req.uri().toString() + " path=" + req.uri().getPath() + " and query=" + req.query().get("query"));
+                return true;
+            })
+            .start();
+        URI target = server.uri().resolve("/blah%20blah?query=ha%20ha");
+        try (RawClient client = RawClient.create(server.uri())
+            .sendStartLine("GET", target.toString())
+            .sendHeader("Host", server.uri().getAuthority())
+            .endHeaders()
+            .flushRequest()) {
+            while (client.responseString().isEmpty()) {
+                Thread.sleep(100);
+            }
+            assertThat(client.responseString(), endsWith("\r\n\r\n" + target + " path=/blah blah and query=ha ha"));
+        }
+    }
+
+
+    @Test
+    public void invalidRequestPathsReturn400() throws IOException, InterruptedException {
+        server = httpServer()
+            .addHandler((req, resp) -> {
+                resp.write(req.uri().toString() + " path=" + req.uri().getPath() + " and query=" + req.query().get("query"));
+                return true;
+            })
+            .start();
+        try (RawClient client = RawClient.create(server.uri())
+            .sendStartLine("GET", "/<blah>/")
+            .sendHeader("Host", server.uri().getAuthority())
+            .endHeaders()
+            .flushRequest()) {
+            while (client.responseString().isEmpty()) {
+                Thread.sleep(100);
+            }
+            String body = client.responseString();
+            assertThat(body, startsWith("HTTP/1.1 400 Bad Request"));
+            assertThat(body, endsWith("400 Bad Request"));
         }
     }
 
