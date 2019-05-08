@@ -21,7 +21,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 class Http1Connection extends SimpleChannelInboundHandler<Object> {
     private static final Logger log = LoggerFactory.getLogger(Http1Connection.class);
-    static final AttributeKey<AsyncContext> STATE_ATTRIBUTE = AttributeKey.newInstance("state");
+    private static final AttributeKey<AsyncContext> STATE_ATTRIBUTE = AttributeKey.newInstance("state"); // todo, just store as a volatile field?
 
     private final NettyHandlerAdapter nettyHandlerAdapter;
     private final MuStatsImpl stats;

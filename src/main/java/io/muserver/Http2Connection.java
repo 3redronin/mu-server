@@ -10,9 +10,9 @@ import io.netty.handler.codec.http2.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static io.muserver.Http1Connection.STATE_ATTRIBUTE;
 import static io.netty.buffer.Unpooled.copiedBuffer;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
@@ -26,6 +26,7 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
     private final NettyHandlerAdapter nettyHandlerAdapter;
     private final MuStatsImpl stats;
     private final MuServerBuilder.ServerSettings settings;
+    private final ConcurrentHashMap<Integer, AsyncContext> contexts = new ConcurrentHashMap<>();
 
     Http2Connection(Http2ConnectionDecoder decoder, Http2ConnectionEncoder encoder,
                     Http2Settings initialSettings, AtomicReference<MuServer> serverRef, NettyHandlerAdapter nettyHandlerAdapter, MuStatsImpl stats, MuServerBuilder.ServerSettings settings) {
@@ -38,18 +39,14 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        AsyncContext asyncContext = getAsyncContext(ctx);
-        if (asyncContext != null) {
-            log.debug(cause.getClass().getName() + " (" + cause.getMessage() + ") for " + ctx + " so will disconnect this client");
-            asyncContext.onCancelled(true);
-        } else {
-            log.debug("Exception for unknown ctx " + ctx, cause);
-        }
-        ctx.close();
+        closeAllAndDisconnect(ctx);
     }
 
-    static AsyncContext getAsyncContext(ChannelHandlerContext ctx) {
-        return ctx.channel().attr(STATE_ATTRIBUTE).get();
+    private void closeAllAndDisconnect(ChannelHandlerContext ctx) {
+        for (AsyncContext asyncContext : contexts.values()) {
+            asyncContext.onCancelled(true);
+        }
+        ctx.close();
     }
 
     private ChannelFuture sendSimpleResponse(ChannelHandlerContext ctx, int streamId, String message, int code) {
@@ -68,13 +65,14 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
     public int onDataRead(ChannelHandlerContext ctx, int streamId, ByteBuf data, int padding, boolean endOfStream) {
         int processed = data.readableBytes() + padding;
 
-        AsyncContext asyncContext = getAsyncContext(ctx);
+        AsyncContext asyncContext = contexts.get(streamId);
         if (asyncContext == null) {
             log.debug("Got a chunk of message for an unknown request. This can happen when a request is rejected based on headers, and then the rejected body arrives.");
         } else {
             NettyHandlerAdapter.passDataToHandler(data, nettyHandlerAdapter, asyncContext);
             if (endOfStream) {
                 nettyHandlerAdapter.onRequestComplete(asyncContext);
+                contexts.remove(streamId);
             }
         }
         return processed;
@@ -116,7 +114,7 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
         Http2Response resp = new Http2Response(ctx, muReq, new Http2Headers(), encoder(), streamId, settings);
 
         AsyncContext asyncContext = new AsyncContext(muReq, resp, stats);
-        ctx.channel().attr(STATE_ATTRIBUTE).set(asyncContext);
+        contexts.put(streamId, asyncContext);
         nettyHandlerAdapter.onHeaders(asyncContext, muHeaders);
     }
 
@@ -146,7 +144,7 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
 
     @Override
     public void onRstStreamRead(ChannelHandlerContext ctx, int streamId, long errorCode) {
-        AsyncContext asyncContext = getAsyncContext(ctx);
+        AsyncContext asyncContext = contexts.get(streamId);
         if (asyncContext != null) {
             asyncContext.onCancelled(false);
         }
@@ -175,10 +173,7 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
 
     @Override
     public void onGoAwayRead(ChannelHandlerContext ctx, int lastStreamId, long errorCode, ByteBuf debugData) {
-        AsyncContext asyncContext = getAsyncContext(ctx);
-        if (asyncContext != null) {
-            asyncContext.onCancelled(true);
-        }
+        closeAllAndDisconnect(ctx);
     }
 
     @Override

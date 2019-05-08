@@ -49,7 +49,7 @@ public class CookieTest {
                 return true;
             }).start();
 
-        client.newCall(request().url(serverUrl()).build()).execute();
+        client.newCall(request().url(serverUrl()).build()).execute().close();
         List<okhttp3.Cookie> cookies = getCookies();
 
         assertThat(cookies, hasSize(1));
@@ -115,12 +115,12 @@ public class CookieTest {
             })
             .start();
 
-        client.newCall(request().url(serverUrl().resolve("/set")).build()).execute();
+        client.newCall(request().url(serverUrl().resolve("/set")).build()).execute().close();
         List<okhttp3.Cookie> cookies = getCookies();
 
         assertThat(cookies, hasSize(2));
 
-        client.newCall(request().url(serverUrl().resolve("/save")).build()).execute();
+        client.newCall(request().url(serverUrl().resolve("/save")).build()).execute().close();
         assertThat(actualSentCookies, hasSize(2));
 
         assertThat(nonExistentCookieLookup.get().isPresent(), is(false));
@@ -140,7 +140,7 @@ public class CookieTest {
                 return true;
             }).start();
 
-        client.newCall(request().url(serverUrl()).build()).execute();
+        client.newCall(request().url(serverUrl()).build()).execute().close();
         List<okhttp3.Cookie> cookies = getCookies();
 
         assertThat(cookies, hasSize(1));
