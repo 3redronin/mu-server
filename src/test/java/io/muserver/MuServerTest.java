@@ -10,7 +10,6 @@ import java.io.File;
 import java.io.IOException;
 import java.net.ConnectException;
 import java.net.InetAddress;
-import java.net.URI;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
@@ -206,23 +205,37 @@ public class MuServerTest {
     }
 
     @Test
-    public void absoluteURIsInTheRequestLineAreFine() throws IOException, InterruptedException {
+    public void absoluteURIsInTheRequestLineAreFine() throws Exception {
         server = httpServer()
             .addHandler((req, resp) -> {
                 resp.write(req.uri().toString() + " path=" + req.uri().getPath() + " and query=" + req.query().get("query"));
                 return true;
             })
             .start();
-        URI target = server.uri().resolve("/blah%20blah?query=ha%20ha");
+        runUriTest(server.uri().resolve("/blah%20blah?query=ha%20ha").toString(), server.uri().resolve("/blah%20blah?query=ha%20ha") + " path=/blah blah and query=ha ha");
+    }
+
+    @Test
+    public void absoluteURIsWithoutPathsInTheRequestLineAreFine() throws Exception {
+        server = httpServer()
+            .addHandler((req, resp) -> {
+                resp.write(req.uri().toString() + " path=" + req.uri().getPath() + " and query=" + req.query().get("query"));
+                return true;
+            })
+            .start();
+        runUriTest("localhost:443", server.uri().resolve("/") + " path=/ and query=null");
+    }
+
+    private void runUriTest(String requestLineUri, String expectedBody) throws InterruptedException, IOException {
         try (RawClient client = RawClient.create(server.uri())
-            .sendStartLine("GET", target.toString())
+            .sendStartLine("GET", requestLineUri)
             .sendHeader("Host", server.uri().getAuthority())
             .endHeaders()
             .flushRequest()) {
             while (client.responseString().isEmpty()) {
                 Thread.sleep(100);
             }
-            assertThat(client.responseString(), endsWith("\r\n\r\n" + target + " path=/blah blah and query=ha ha"));
+            assertThat(client.responseString(), endsWith("\r\n\r\n" + expectedBody));
         }
     }
 

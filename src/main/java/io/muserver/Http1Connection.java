@@ -123,6 +123,9 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
     private static String getRelativeUri(HttpRequest request) throws URISyntaxException {
         URI requestUri = new URI(request.uri()).normalize();
         String s = requestUri.getRawPath();
+        if (Mutils.nullOrEmpty(s)) {
+            s = "/";
+        }
         String q = requestUri.getRawQuery();
         if (q != null) {
             s += "?" + q;
