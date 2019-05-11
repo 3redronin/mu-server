@@ -198,11 +198,11 @@ class AsyncFileProvider implements ResourceProvider, CompletionHandler<Integer, 
     @Override
     public void sendTo(MuRequest request, MuResponse response, boolean sendBody, long maxLen) throws IOException {
         if (sendBody) {
+            this.maxLen = maxLen;
             handle = request.handleAsync();
             channel = AsynchronousFileChannel.open(localPath, StandardOpenOption.READ);
             buf = ByteBuffer.allocate(8192);
             channel.read(buf, curPos, handle, this);
-            this.maxLen = maxLen;
         } else {
             response.outputStream();
         }
