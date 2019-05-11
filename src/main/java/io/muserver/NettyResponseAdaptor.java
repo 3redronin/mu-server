@@ -120,6 +120,7 @@ abstract class NettyResponseAdaptor implements MuResponse {
     abstract ChannelFuture writeToChannel(boolean isLast, ByteBuf content);
 
     public void sendChunk(String text) {
+        throwIfFinished();
         if (outputState == OutputState.NOTHING) {
             startStreaming();
         }
