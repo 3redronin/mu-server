@@ -35,12 +35,16 @@ class Http2Response extends NettyResponseAdaptor {
     static ChannelFuture writeToChannel(ChannelHandlerContext ctx, Http2ConnectionEncoder encoder, int streamId, ByteBuf content, boolean isLast) {
         ChannelPromise channelPromise = ctx.newPromise();
         if (ctx.executor().inEventLoop()) {
-            encoder.writeData(ctx, streamId, content, 0, isLast, channelPromise);
+            writeToChannelForReal(ctx, encoder, streamId, content, isLast, channelPromise);
         } else {
-            ctx.executor().execute(() -> encoder.writeData(ctx, streamId, content, 0, isLast, channelPromise));
+            ctx.executor().execute(() -> writeToChannelForReal(ctx, encoder, streamId, content, isLast, channelPromise));
         }
-        ctx.channel().flush();
         return channelPromise;
+    }
+
+    private static void writeToChannelForReal(ChannelHandlerContext ctx, Http2ConnectionEncoder encoder, int streamId, ByteBuf content, boolean isLast, ChannelPromise channelPromise) {
+        encoder.writeData(ctx, streamId, content, 0, isLast, channelPromise);
+        ctx.channel().flush();
     }
 
     @Override
@@ -72,6 +76,14 @@ class Http2Response extends NettyResponseAdaptor {
             }
         }
 
+        if (ctx.executor().inEventLoop()) {
+            writeHeadersForReal(isEnd);
+        } else {
+            ctx.executor().execute(() -> writeHeadersForReal(isEnd));
+        }
+    }
+
+    private void writeHeadersForReal(boolean isEnd) {
         encoder.writeHeaders(ctx, streamId, headers.entries, 0, isEnd, ctx.newPromise());
         if (isEnd) {
             ctx.channel().flush();
@@ -91,6 +103,7 @@ class Http2Response extends NettyResponseAdaptor {
 
     @Override
     protected ChannelFuture closeConnection() {
+
         return ctx.channel().close();
     }
 
