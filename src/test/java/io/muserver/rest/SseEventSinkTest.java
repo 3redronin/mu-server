@@ -108,7 +108,8 @@ public class SseEventSinkTest {
     }
 
     @Test
-    public void theCallbacksCanBeUsedToDetectClientDisconnections() throws Exception {
+    public void theCallbacksCanBeUsedToDetectClientDisconnections() {
+        CountDownLatch oneSentLatch = new CountDownLatch(1);
         CountDownLatch failureLatch = new CountDownLatch(1);
         @Path("/streamer")
         class Streamer {
@@ -118,6 +119,7 @@ public class SseEventSinkTest {
                     .whenComplete((o, throwable) -> {
                         if (throwable == null) {
                             sendStuff(sink, sse);
+                            oneSentLatch.countDown();
                         } else {
                             failureLatch.countDown();
                         }
@@ -135,12 +137,11 @@ public class SseEventSinkTest {
 
         server = httpsServer().addHandler(restHandler(new Streamer())).start();
 
-        try (SseClient.ServerSentEvent ignored = sseClient.newServerSentEvent(request().url(server.uri().resolve("/streamer/eventStream").toString()).build(), listener)) {
-            Thread.sleep(50);
+        try (SseClient.ServerSentEvent ignored = sseClient.newServerSentEvent(request(server.uri().resolve("/streamer/eventStream")).build(), listener)) {
+            MuAssert.assertNotTimedOut("Waiting for one message", oneSentLatch);
         }
         MuAssert.assertNotTimedOut("Timed out waiting for error", failureLatch);
     }
-
 
     @After
     public void stop() {
