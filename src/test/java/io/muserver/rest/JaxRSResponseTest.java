@@ -3,6 +3,7 @@ package io.muserver.rest;
 import io.muserver.MuServer;
 import io.muserver.Mutils;
 import org.junit.Test;
+import scaffolding.ServerUtils;
 
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
@@ -11,7 +12,6 @@ import java.net.URI;
 import java.util.Date;
 import java.util.Locale;
 
-import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
@@ -99,7 +99,7 @@ public class JaxRSResponseTest {
             }
         }
 
-        MuServer server = httpsServer().addHandler(restHandler(new Blah())).start();
+        MuServer server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Blah())).start();
         try (okhttp3.Response resp = call(request().url(server.uri().resolve("/complex").toString()))) {
             assertThat(resp.code(), is(500));
             assertThat(resp.headers(HttpHeaders.CONTENT_TYPE), contains(equalTo("application/octet-stream")));

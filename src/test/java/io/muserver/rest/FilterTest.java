@@ -7,6 +7,7 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 import okio.BufferedSink;
 import org.junit.Test;
+import scaffolding.ServerUtils;
 
 import javax.ws.rs.*;
 import javax.ws.rs.container.*;
@@ -21,7 +22,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static io.muserver.ContextHandlerBuilder.context;
-import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static java.util.Arrays.asList;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -70,7 +70,7 @@ public class FilterTest {
     @Test
     public void requestUrisAndMethodsCanBeChangedSoThatThingsCanMatch() throws IOException {
         LoggingFilter loggingFilter = new LoggingFilter();
-        MuServer server = httpsServer()
+        MuServer server = ServerUtils.httpsServerForTest()
             .addHandler(
                 restHandler(new TheWay())
                     .addRequestFilter(loggingFilter)
@@ -91,7 +91,7 @@ public class FilterTest {
     @Test
     public void itWorksWithContextsToo() throws IOException {
         LoggingFilter loggingFilter = new LoggingFilter();
-        MuServer server = httpsServer()
+        MuServer server = ServerUtils.httpsServerForTest()
             .addHandler(context("in a context")
                 .addHandler(
                     restHandler(new TheWay())
@@ -133,7 +133,7 @@ public class FilterTest {
             }
         }
 
-        MuServer server = httpsServer()
+        MuServer server = ServerUtils.httpsServerForTest()
             .addHandler(
                 restHandler(new Something())
                     .addRequestFilter(new RequestInputChanger())
@@ -170,7 +170,7 @@ public class FilterTest {
                 requestContext.abortWith(javax.ws.rs.core.Response.status(409).entity("Blocked!").build());
             }
         }
-        MuServer server = httpsServer()
+        MuServer server = ServerUtils.httpsServerForTest()
             .addHandler(
                 restHandler(new TheWay())
                     .addRequestFilter(new MethodChangingFilter())
@@ -198,7 +198,7 @@ public class FilterTest {
                 throw new BadRequestException("Bad!!!");
             }
         }
-        MuServer server = httpsServer()
+        MuServer server = ServerUtils.httpsServerForTest()
             .addHandler(
                 restHandler(new TheWay())
                     .addRequestFilter(new MethodChangingFilter())
@@ -226,7 +226,7 @@ public class FilterTest {
         }
 
 
-        MuServer server = httpsServer()
+        MuServer server = ServerUtils.httpsServerForTest()
             .addHandler(
                 restHandler(new TheWay())
                     .addResponseFilter(new ContainerResponseFilter() {

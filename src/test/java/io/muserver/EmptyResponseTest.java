@@ -4,10 +4,10 @@ import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.ClientUtils;
+import scaffolding.ServerUtils;
 
 import java.io.IOException;
 
-import static io.muserver.MuServerBuilder.httpsServer;
 import static org.hamcrest.CoreMatchers.*;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static scaffolding.ClientUtils.request;
@@ -17,7 +17,7 @@ public class EmptyResponseTest {
 
     @Test
     public void a304HasNoBody() throws IOException {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> response.status(304))
             .start();
 

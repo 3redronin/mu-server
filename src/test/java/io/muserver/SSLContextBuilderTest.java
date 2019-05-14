@@ -3,6 +3,7 @@ package io.muserver;
 import okhttp3.Response;
 import org.junit.Test;
 import scaffolding.MuAssert;
+import scaffolding.ServerUtils;
 
 import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.KeyManagerFactory;
@@ -17,7 +18,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static io.muserver.MuServerBuilder.httpsServer;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.*;
@@ -91,7 +91,7 @@ public class SSLContextBuilderTest {
         AtomicReference<SSLInfo> eventualSSLInfo = new AtomicReference<>();
 
         SSLContextBuilder sslContextBuilder = SSLContextBuilder.unsignedLocalhostCertBuilder();
-        MuServer server = httpsServer()
+        MuServer server = ServerUtils.httpsServerForTest()
             .withHttpsConfig(sslContextBuilder)
             .addHandler(Method.GET, "/", (req, resp, pp) -> {
                 initialSSLInfo.set(req.server().sslInfo());
@@ -113,7 +113,7 @@ public class SSLContextBuilderTest {
             selected.remove(cipher);
             return selected;
         });
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .withHttpsConfig(sslContextBuilder)
             .addHandler(Method.GET, "/", (req, resp, pp) -> {
                 eventualSSLInfo.set(req.server().sslInfo());
@@ -143,7 +143,7 @@ public class SSLContextBuilderTest {
     }
 
     private static void test(SSLContextBuilder sslContextBuilder) throws IOException {
-        MuServer server = httpsServer()
+        MuServer server = ServerUtils.httpsServerForTest()
             .withHttpsConfig(sslContextBuilder)
             .addHandler(Method.GET, "/", (req, resp, pp) -> resp.write("Hello"))
             .start();

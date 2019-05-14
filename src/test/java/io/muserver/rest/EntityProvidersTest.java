@@ -1,7 +1,6 @@
 package io.muserver.rest;
 
 import io.muserver.MuServer;
-import io.muserver.MuServerBuilder;
 import okhttp3.MediaType;
 import okhttp3.RequestBody;
 import okhttp3.Response;
@@ -9,6 +8,7 @@ import org.example.MyStringReaderWriter;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.ClientUtils;
+import scaffolding.ServerUtils;
 
 import javax.ws.rs.GET;
 import javax.ws.rs.POST;
@@ -59,7 +59,7 @@ public class EntityProvidersTest {
             }
         }
 
-        this.server = MuServerBuilder.httpsServer().addHandler(
+        this.server = ServerUtils.httpsServerForTest().addHandler(
             RestHandlerBuilder.restHandler(new Sample())
                 .addCustomReader(new MyStringReaderWriter())
                 .addCustomWriter(new MyStringReaderWriter())
@@ -125,7 +125,7 @@ public class EntityProvidersTest {
             }
         }
 
-        this.server = MuServerBuilder.httpsServer().addHandler(
+        this.server = ServerUtils.httpsServerForTest().addHandler(
             RestHandlerBuilder.restHandler(new Sample())
                 .addCustomWriter(new DogWriter())
                 .addCustomWriter(new DogListWriter())
@@ -154,7 +154,7 @@ public class EntityProvidersTest {
     }
 
     private void startServer(Object restResource) {
-        this.server = MuServerBuilder.httpsServer().addHandler(RestHandlerBuilder.restHandler(restResource).build()).start();
+        this.server = ServerUtils.httpsServerForTest().addHandler(RestHandlerBuilder.restHandler(restResource).build()).start();
     }
 
     @After

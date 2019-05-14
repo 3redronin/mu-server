@@ -4,11 +4,11 @@ import io.muserver.MuServer;
 import okhttp3.internal.Util;
 import org.junit.After;
 import org.junit.Test;
+import scaffolding.ServerUtils;
 
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
 
-import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static java.util.Arrays.asList;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -33,7 +33,7 @@ public class CORSTest {
             }
 
         }
-        server = httpsServer().addHandler(
+        server = ServerUtils.httpsServerForTest().addHandler(
             restHandler(new Thing())
                 .withCORS(CORSConfigBuilder.corsConfig()
                     .withAllowedOrigins(asList("http://example.com", "http://foo.example"))
@@ -74,7 +74,7 @@ public class CORSTest {
             }
 
         }
-        server = httpsServer().addHandler(
+        server = ServerUtils.httpsServerForTest().addHandler(
             restHandler(new Thing())
                 .withCORS(CORSConfigBuilder.corsConfig()
                     .withAllowedOrigins(asList("http://example.com", "http://foo.example"))
@@ -105,7 +105,7 @@ public class CORSTest {
             }
 
         }
-        server = httpsServer().addHandler(
+        server = ServerUtils.httpsServerForTest().addHandler(
             restHandler(new Thing())
                 .withCORS(CORSConfigBuilder.corsConfig()
                     .withAllowedOrigins(asList("http://example.com", "http://foo.example"))
@@ -145,7 +145,7 @@ public class CORSTest {
             }
 
         }
-        server = httpsServer().addHandler(
+        server = ServerUtils.httpsServerForTest().addHandler(
             restHandler(new Thing()).withCORS(CORSConfigBuilder.disabled())).start();
         try (okhttp3.Response resp = call(request()
             .method("OPTIONS", Util.EMPTY_REQUEST)
@@ -177,7 +177,7 @@ public class CORSTest {
             }
 
         }
-        server = httpsServer().addHandler(
+        server = ServerUtils.httpsServerForTest().addHandler(
             restHandler(new Thing()).withCORS(CORSConfigBuilder.corsConfig().withAllowedOrigins(asList("http://localhost")))).start();
         try (okhttp3.Response resp = call(request()
             .method("OPTIONS", Util.EMPTY_REQUEST)
@@ -205,7 +205,7 @@ public class CORSTest {
                 return "Hello!";
             }
         }
-        server = httpsServer().addHandler(
+        server = ServerUtils.httpsServerForTest().addHandler(
             restHandler(new Thing())
                 .withCORS(CORSConfigBuilder.corsConfig()
                     .withAllowedOrigins("http://example.com")
@@ -231,7 +231,7 @@ public class CORSTest {
                 return "Hello!";
             }
         }
-        server = httpsServer().addHandler(
+        server = ServerUtils.httpsServerForTest().addHandler(
             restHandler(new Thing())
                 .withCORS(CORSConfigBuilder.corsConfig()
                     .withAllowedOrigins("http://example.com")

@@ -5,10 +5,7 @@ import okhttp3.Dispatcher;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-import scaffolding.ClientUtils;
-import scaffolding.MuAssert;
-import scaffolding.SseClient;
-import scaffolding.TestSseClient;
+import scaffolding.*;
 
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
@@ -22,7 +19,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 
-import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
@@ -78,7 +74,7 @@ public class SseBroadcasterImplTest {
         }
 
         Streamer streamer = new Streamer();
-        server = httpsServer().addHandler(restHandler(streamer)).start();
+        server = ServerUtils.httpsServerForTest().addHandler(restHandler(streamer)).start();
 
         List<TestSseClient> listeners = new ArrayList<>();
         for (int i = 0; i < numberOfSubscribers; i++) {

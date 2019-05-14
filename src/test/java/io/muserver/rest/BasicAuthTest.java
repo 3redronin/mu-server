@@ -8,6 +8,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import scaffolding.MuAssert;
+import scaffolding.ServerUtils;
 
 import javax.ws.rs.ClientErrorException;
 import javax.ws.rs.GET;
@@ -25,7 +26,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.Mutils.htmlEncode;
 import static java.util.Arrays.asList;
 import static java.util.Collections.singletonMap;
@@ -172,7 +172,7 @@ public class BasicAuthTest {
 
         html.append("</body></html>");
 
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .withHttpsPort(port)
             .addHandler(
                 RestHandlerBuilder.restHandler(new Thing())

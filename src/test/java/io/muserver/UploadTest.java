@@ -6,12 +6,12 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import scaffolding.ServerUtils;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
 
-import static io.muserver.MuServerBuilder.httpsServer;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static scaffolding.ClientUtils.call;
@@ -32,7 +32,7 @@ public class UploadTest {
     @Test
     public void filesCanBeUploadedAlongSideFormParams() throws IOException {
 
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(Method.POST, "/upload", (request, response, pathParams) -> {
                 response.sendChunk(request.form().get("Hello")
                     + "\n" + request.form().get("The name"));
@@ -67,7 +67,7 @@ public class UploadTest {
     @Test
     public void nothingUploadedResultsInNoFilesAvailable() throws IOException {
 
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(Method.POST, "/upload", (request, response, pathParams) -> {
                 UploadedFile photo = request.uploadedFile("photo");
                 List<UploadedFile> photos = request.uploadedFiles("photo");

@@ -9,6 +9,7 @@ import org.junit.Before;
 import org.junit.Test;
 import scaffolding.ClientUtils;
 import scaffolding.MuAssert;
+import scaffolding.ServerUtils;
 
 import javax.ws.rs.CookieParam;
 import javax.ws.rs.GET;
@@ -18,7 +19,6 @@ import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
@@ -39,7 +39,7 @@ public class CookieTest {
 
     @Test
     public void canSetThemFromTheServer() throws IOException {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler((request, response) -> {
                 Cookie cookie = CookieBuilder.newSecureCookie()
                     .withName("Session")
@@ -81,7 +81,7 @@ public class CookieTest {
             }
         }
 
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(restHandler(new Biscuits())).start();
 
         try (Response setResp = client.newCall(request().url(server.uri().resolve("/biscuits/set").toString()).build()).execute()) {
@@ -98,7 +98,7 @@ public class CookieTest {
         Set<Cookie> actualSentCookies = new HashSet<>();
         AtomicReference<Optional<String>> sessionLookup = new AtomicReference<>();
         AtomicReference<Optional<String>> nonExistentCookieLookup = new AtomicReference<>();
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/set", (request, response, pathParams) -> {
                 Cookie cookie = CookieBuilder.newSecureCookie()
                     .withName("ASession")
@@ -131,7 +131,7 @@ public class CookieTest {
 
     @Test
     public void cookieValuesCanBeUrlEncoded() throws IOException {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler((request, response) -> {
                 response.addCookie(CookieBuilder.newSecureCookie()
                     .withName("A-thing")

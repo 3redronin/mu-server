@@ -5,6 +5,7 @@ import okio.BufferedSink;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
+import scaffolding.ServerUtils;
 
 import java.io.IOException;
 import java.net.SocketTimeoutException;
@@ -17,7 +18,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static io.muserver.MuServerBuilder.httpsServer;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.*;
@@ -31,7 +31,7 @@ public class AsyncTest {
 
         DatabaseListenerSimulator changeListener = new DatabaseListenerSimulator(10);
 
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler((request, response) -> {
                 response.headers().add("X-Pre-Header", "Hello");
                 return false;
@@ -80,7 +80,7 @@ public class AsyncTest {
 
         AtomicLong connectionsDuringListening = new AtomicLong();
 
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler((request, response) -> {
                 AsyncHandle ctx = request.handleAsync();
                 connectionsDuringListening.set(request.server().stats().activeConnections());
@@ -139,7 +139,7 @@ public class AsyncTest {
 
         DatabaseListenerSimulator changeListener = new DatabaseListenerSimulator(10);
 
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler((request, response) -> {
                 AsyncHandle ctx = request.handleAsync();
 
@@ -168,7 +168,7 @@ public class AsyncTest {
     @Test
     public void requestBodiesCanBeReadAsynchronously() throws IOException {
         List<Throwable> errors = new ArrayList<>();
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler((request, response) -> {
                 AsyncHandle ctx = request.handleAsync();
                 ctx.setReadListener(new RequestBodyListener() {

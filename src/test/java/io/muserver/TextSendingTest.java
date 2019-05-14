@@ -4,12 +4,12 @@ import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.MuAssert;
+import scaffolding.ServerUtils;
 import scaffolding.StringUtils;
 
 import java.io.IOException;
 import java.util.List;
 
-import static io.muserver.MuServerBuilder.httpsServer;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Arrays.asList;
 import static org.hamcrest.CoreMatchers.is;
@@ -25,7 +25,7 @@ public class TextSendingTest {
     @Test
     public void largeChunksOfTextCanBeWritten() throws Exception {
         String lotsoText = StringUtils.randomStringOfLength(70000);
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .withGzipEnabled(false)
             .addHandler(Method.GET, "/", (request, response, pp) -> {
                 response.contentType(ContentTypes.TEXT_PLAIN);
@@ -41,7 +41,7 @@ public class TextSendingTest {
 
     @Test
     public void emptyStringsAreFine() throws Exception {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/", (request, response, pp) -> {
                 response.contentType(ContentTypes.TEXT_PLAIN);
                 response.write("");
@@ -57,7 +57,7 @@ public class TextSendingTest {
     public void textCanBeSentInChunks() throws Exception {
         List<String> chunks = asList("Hello", "World", StringUtils.randomStringOfLength(200000), "Yo");
 
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/", (request, response, pp) -> {
                 response.contentType(ContentTypes.TEXT_PLAIN);
                 for (String chunk : chunks) {
@@ -80,7 +80,7 @@ public class TextSendingTest {
 
     @Test
     public void anEmptyHandlerIsA200WithNoContent() throws Exception {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/", (request, response, pp) -> {
             }).start();
         try (Response resp = call(request(server.uri()))) {
@@ -91,7 +91,7 @@ public class TextSendingTest {
     
     @Test
     public void defaultsToTextPlainIfNoContentTypeSet() throws IOException {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/html", (request, response, pp) -> {
                 response.contentType("text/html");
                 response.write("This is HTML");

@@ -9,6 +9,7 @@ import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.MuAssert;
+import scaffolding.ServerUtils;
 import scaffolding.StringUtils;
 
 import javax.ws.rs.*;
@@ -16,7 +17,6 @@ import javax.ws.rs.core.StreamingOutput;
 import java.io.*;
 import java.util.concurrent.CountDownLatch;
 
-import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -178,7 +178,7 @@ public class BinaryEntityProvidersTest {
     }
 
     private void startServer(Object restResource) {
-        this.server = httpsServer().addHandler(restHandler(restResource).build()).start();
+        this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(restResource).build()).start();
     }
 
     @After

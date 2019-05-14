@@ -1,10 +1,10 @@
 package io.muserver.rest;
 
 import io.muserver.MuServer;
-import io.muserver.MuServerBuilder;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.MuAssert;
+import scaffolding.ServerUtils;
 
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
@@ -19,7 +19,7 @@ import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 
 public class RestHandlerTest {
-    private MuServer server = MuServerBuilder.httpsServer()
+    private MuServer server = ServerUtils.httpsServerForTest()
         .addHandler(RestHandlerBuilder.restHandler(new Fruit()).build())
         .start();
 

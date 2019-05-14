@@ -3,6 +3,7 @@ package io.muserver;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.ClientUtils;
+import scaffolding.ServerUtils;
 import scaffolding.SseClient;
 import scaffolding.TestSseClient;
 
@@ -13,7 +14,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static io.muserver.MuServerBuilder.httpsServer;
 import static java.util.Arrays.asList;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
@@ -34,7 +34,7 @@ public class SsePublisherTest {
             "    \"value1\": \"Something\"\n" +
             "}";
 
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/streamer", (request, response, pathParams) -> {
 
                 SsePublisher ssePublisher = SsePublisher.start(request, response);
@@ -81,7 +81,7 @@ public class SsePublisherTest {
         AtomicReference<Throwable> thrownException = new AtomicReference<>();
         CountDownLatch somethingPublishedLatch = new CountDownLatch(1);
         CountDownLatch exceptionThrownLatch = new CountDownLatch(1);
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/streamer", (request, response, pathParams) -> {
 
                 SsePublisher ssePublisher = SsePublisher.start(request, response);

@@ -3,6 +3,7 @@ package io.muserver.rest;
 import io.muserver.MuServer;
 import org.junit.After;
 import org.junit.Test;
+import scaffolding.ServerUtils;
 
 import javax.ws.rs.GET;
 import javax.ws.rs.HEAD;
@@ -11,7 +12,6 @@ import javax.ws.rs.Path;
 import javax.ws.rs.core.Response;
 import java.io.IOException;
 
-import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
@@ -38,7 +38,7 @@ public class HeadTest {
                 return Response.status(400).type("application/json").build();
             }
         }
-        server = httpsServer().addHandler(restHandler(new Thing())).start();
+        server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Thing())).start();
         try (okhttp3.Response resp = call(request()
             .head()
             .url(server.uri().resolve("/things").toString()))) {
@@ -62,7 +62,7 @@ public class HeadTest {
                 return Response.status(409).type("text/plain").entity("I am an entity of the state").build();
             }
         }
-        server = httpsServer().addHandler(restHandler(new Thing())).start();
+        server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Thing())).start();
         try (okhttp3.Response resp = call(request()
             .get()
             .url(server.uri().resolve("/things").toString()))) {
@@ -89,7 +89,7 @@ public class HeadTest {
                 return Response.status(400).type("application/json").entity("I am an entity").build();
             }
         }
-        server = httpsServer().addHandler(restHandler(new Thing())).start();
+        server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Thing())).start();
         try (okhttp3.Response resp = call(request()
             .head()
             .url(server.uri().resolve("/things").toString()))) {

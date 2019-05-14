@@ -3,6 +3,7 @@ package io.muserver.rest;
 import io.muserver.MuServer;
 import okhttp3.Response;
 import org.junit.Test;
+import scaffolding.ServerUtils;
 
 import javax.ws.rs.GET;
 import javax.ws.rs.NameBinding;
@@ -19,7 +20,6 @@ import java.lang.annotation.Target;
 import java.util.ArrayList;
 import java.util.List;
 
-import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
@@ -68,7 +68,7 @@ public class FilterBindingTest {
         }
 
         LoggingFilter loggingFilter = new LoggingFilter();
-        MuServer server = httpsServer()
+        MuServer server = ServerUtils.httpsServerForTest()
             .addHandler(
                 restHandler(new TheWay())
                     .addRequestFilter(loggingFilter)
@@ -102,7 +102,7 @@ public class FilterBindingTest {
         }
 
         LoggingFilter loggingFilter = new LoggingFilter();
-        MuServer server = httpsServer()
+        MuServer server = ServerUtils.httpsServerForTest()
             .addHandler(
                 restHandler(new TheWay())
                     .addRequestFilter(loggingFilter)

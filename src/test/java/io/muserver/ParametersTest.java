@@ -6,6 +6,7 @@ import org.junit.After;
 import org.junit.Test;
 import scaffolding.MuAssert;
 import scaffolding.RawClient;
+import scaffolding.ServerUtils;
 
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -14,7 +15,6 @@ import java.util.Collections;
 import java.util.List;
 
 import static io.muserver.MuServerBuilder.httpServer;
-import static io.muserver.MuServerBuilder.httpsServer;
 import static java.util.Arrays.asList;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
@@ -27,7 +27,7 @@ public class ParametersTest {
 
 	@Test public void queryStringsCanBeGot() throws MalformedURLException {
 		Object[] actual = new Object[4];
-		server = httpsServer().addHandler((request, response) -> {
+        server = ServerUtils.httpsServerForTest().addHandler((request, response) -> {
 			actual[0] = request.query().get("value1");
 			actual[1] = request.query().get("value2");
 			actual[2] = request.query().get("unspecified");
@@ -45,7 +45,7 @@ public class ParametersTest {
 
 	@Test public void queryStringParametersCanAppearMultipleTimes() throws MalformedURLException {
 		Object[] actual = new Object[3];
-		server = httpsServer().addHandler((request, response) -> {
+        server = ServerUtils.httpsServerForTest().addHandler((request, response) -> {
 			actual[0] = request.query().getAll("value1");
 			actual[1] = request.query().getAll("value2");
 			actual[2] = request.query().getAll("unspecified");
@@ -67,7 +67,7 @@ public class ParametersTest {
         }
 
         List<String> actual = new ArrayList<>();
-        server = httpsServer().addHandler((request, response) -> {
+        server = ServerUtils.httpsServerForTest().addHandler((request, response) -> {
             for (int i = 0; i < vals.size(); i++) {
                 actual.add(request.form().get("theNameOfTheFormParameter_" + i));
             }
@@ -91,7 +91,7 @@ public class ParametersTest {
 
     @Test public void formParametersWithMultipleValuesCanBeGot() throws MalformedURLException {
         Object[] actual = new Object[3];
-        server = httpsServer().addHandler((request, response) -> {
+        server = ServerUtils.httpsServerForTest().addHandler((request, response) -> {
             actual[0] = request.form().getAll("value1");
             actual[1] = request.form().getAll("value2");
             actual[2] = request.form().getAll("unspecified");
@@ -114,7 +114,7 @@ public class ParametersTest {
 
     @Test public void exceptionsThrownWhenTryingToReadBodyAfterReadingFormData() {
         Throwable[] actual = new Throwable[1];
-        server = httpsServer().addHandler((request, response) -> {
+        server = ServerUtils.httpsServerForTest().addHandler((request, response) -> {
             request.form().get("blah");
             try {
                 request.readBodyAsString();

@@ -3,10 +3,10 @@ package io.muserver.rest;
 import io.muserver.MuRequest;
 import io.muserver.MuResponse;
 import io.muserver.MuServer;
-import io.muserver.MuServerBuilder;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
+import scaffolding.ServerUtils;
 
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
@@ -105,7 +105,7 @@ public class ContextTest {
                 resp.sendChunk(" world");
             }
         }
-        this.server = MuServerBuilder.httpsServer()
+        this.server = ServerUtils.httpsServerForTest()
             .addHandler(restHandler(new Sample()))
             .start();
         try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
@@ -131,7 +131,7 @@ public class ContextTest {
                 return sb.toString();
             }
         }
-        this.server = MuServerBuilder.httpsServer()
+        this.server = ServerUtils.httpsServerForTest()
             .addHandler(restHandler(new Sample()))
             .start();
         try (Response resp = call(request()

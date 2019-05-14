@@ -4,12 +4,12 @@ import io.muserver.MuServer;
 import okhttp3.internal.Util;
 import org.junit.After;
 import org.junit.Test;
+import scaffolding.ServerUtils;
 
 import javax.ws.rs.*;
 import javax.ws.rs.core.Response;
 import java.io.IOException;
 
-import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
@@ -36,7 +36,7 @@ public class OptionsTest {
                 return Response.status(400).type("application/json").build();
             }
         }
-        server = httpsServer().addHandler(restHandler(new Thing())).start();
+        server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Thing())).start();
         try (okhttp3.Response resp = call(request()
             .method("OPTIONS", Util.EMPTY_REQUEST)
             .url(server.uri().resolve("/things").toString()))) {
@@ -63,7 +63,7 @@ public class OptionsTest {
             public void delete() {
             }
         }
-        server = httpsServer().addHandler(restHandler(new Thing())).start();
+        server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Thing())).start();
         try (okhttp3.Response resp = call(request()
             .method("OPTIONS", Util.EMPTY_REQUEST)
             .url(server.uri().resolve("/things").toString()))) {
@@ -85,7 +85,7 @@ public class OptionsTest {
         @Path("/things")
         class Thing {
         }
-        server = httpsServer().addHandler(restHandler(new Thing())).start();
+        server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Thing())).start();
         try (okhttp3.Response resp = call(request()
             .method("OPTIONS", Util.EMPTY_REQUEST)
             .url(server.uri().resolve("/things/nothing").toString()))) {

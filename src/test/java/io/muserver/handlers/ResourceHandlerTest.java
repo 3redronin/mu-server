@@ -6,6 +6,7 @@ import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.ClientUtils;
+import scaffolding.ServerUtils;
 
 import java.io.IOException;
 import java.net.MalformedURLException;
@@ -16,7 +17,6 @@ import java.util.List;
 import java.util.Map;
 
 import static io.muserver.ContextHandlerBuilder.context;
-import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.Mutils.urlDecode;
 import static io.muserver.Mutils.urlEncode;
 import static io.muserver.handlers.ResourceHandlerBuilder.*;
@@ -35,7 +35,7 @@ public class ResourceHandlerTest {
 
     @Test
     public void canServeFromRootOfServer() throws Exception {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .withGzipEnabled(false)
             .addHandler(fileHandler("src/test/resources/sample-static"))
             .start();
@@ -49,7 +49,7 @@ public class ResourceHandlerTest {
 
     @Test
     public void classpathCanBeUsed() throws Exception {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .withGzipEnabled(false)
             .addHandler(fileOrClasspath("src/test/resources/does-not-exist", "/sample-static"))
             .start();
@@ -63,7 +63,7 @@ public class ResourceHandlerTest {
 
     @Test
     public void lastModifiedSinceWorks() throws Exception {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(context("/file").addHandler(fileHandler("src/test/resources/sample-static")))
             .addHandler(context("/classpath").addHandler(classpathHandler("/sample-static")))
             .start();
@@ -91,7 +91,7 @@ public class ResourceHandlerTest {
 
     @Test
     public void contextsCanBeUsed() throws Exception {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .withGzipEnabled(false)
             .addHandler(context("/a")
                 .addHandler(context("/b")
@@ -123,7 +123,7 @@ public class ResourceHandlerTest {
 
     @Test
     public void requestsWithDotDotOrTildesResultIn404s() throws Exception {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .withGzipEnabled(false)
             .addHandler(fileOrClasspath("src/test/resources/does-not-exist", "/sample-static"))
             .start();
@@ -135,7 +135,7 @@ public class ResourceHandlerTest {
 
     @Test
     public void directoriesResultIn302s() throws Exception {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .withGzipEnabled(false)
             .addHandler(context("/classpath").addHandler(classpathHandler("/sample-static")))
             .addHandler(context("/file").addHandler(fileHandler("src/test/resources/sample-static")))
@@ -155,7 +155,7 @@ public class ResourceHandlerTest {
 
     @Test
     public void callsToContextNamesWithoutTrailingSlashesResultIn302() throws Exception {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(context("my-app")
                 .addHandler(classpathHandler("/sample-static"))
             )
@@ -171,7 +171,7 @@ public class ResourceHandlerTest {
 
     @Test
     public void filesCanHaveNoFileExtensions() throws IOException {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .withGzipEnabled(false)
             .addHandler(context("/classpath").addHandler(classpathHandler("/sample-static")))
             .addHandler(context("/file").addHandler(fileHandler("src/test/resources/sample-static")))
@@ -208,7 +208,7 @@ public class ResourceHandlerTest {
 
     @Test
     public void canServeFromPath() throws Exception {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(fileHandler("src/test/resources/sample-static")
                 .withPathToServeFrom("/blah")
                 .build())
@@ -227,7 +227,7 @@ public class ResourceHandlerTest {
 
     @Test
     public void itCanDefaultToFilesSuchAsIndexHtml() throws Exception {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(
                 context("/blah").addHandler(
                     fileHandler("src/test/resources/sample-static")
@@ -244,7 +244,7 @@ public class ResourceHandlerTest {
 
     @Test
     public void contentTypesAreCorrect() throws Exception {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .withGzip(1200, gzippableMimeTypes(getResourceTypes()))
             .addHandler(fileHandler("src/test/resources/sample-static"))
             .start();

@@ -4,12 +4,12 @@ import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.ClientUtils;
+import scaffolding.ServerUtils;
 
 import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static io.muserver.MuServerBuilder.httpsServer;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -21,7 +21,7 @@ public class RoutesTest {
 
     @Test
     public void canRouteToExactMatches() {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/blah", requestCounter)
             .start();
 
@@ -39,7 +39,7 @@ public class RoutesTest {
 
     @Test
     public void canRouteToSlash() {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/", requestCounter)
             .start();
         assertThat(call(Method.GET, "/"), is(200)); // should this be 404?
@@ -47,7 +47,7 @@ public class RoutesTest {
 
     @Test
     public void jaxrsTemplatesCanBeUsed() throws IOException {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/blah/{id : [0-9]+}/ha",
                 (request, response, pathParams) -> response.write(pathParams.get("id")))
             .start();
@@ -67,7 +67,7 @@ public class RoutesTest {
 
     @Test
     public void pathParametersAreUrlDecoded() throws IOException {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/blah ha/{name}/ha",
                 (request, response, pathParams) -> response.write(pathParams.get("name")))
             .start();

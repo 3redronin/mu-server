@@ -6,6 +6,7 @@ import io.muserver.SSLContextBuilder;
 import okhttp3.Response;
 import org.hamcrest.Matchers;
 import org.junit.Test;
+import scaffolding.ServerUtils;
 
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
@@ -17,7 +18,6 @@ import java.net.URI;
 import java.util.HashMap;
 import java.util.Map;
 
-import static io.muserver.MuServerBuilder.httpsServer;
 import static org.hamcrest.CoreMatchers.*;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static scaffolding.ClientUtils.call;
@@ -242,7 +242,7 @@ public class MuUriBuilderTest {
         assertThat(UriBuilder.fromResource(FruitResource.class).build().toString(), equalTo("v1/fruits"));
         assertThat(UriBuilder.fromMethod(FruitResource.class, "getOne").build("some thing").toString(), equalTo("v1/fruits/some%20thing"));
 
-        MuServer server = httpsServer().withHttpsPort(15647).withHttpsConfig(SSLContextBuilder.unsignedLocalhostCert())
+        MuServer server = ServerUtils.httpsServerForTest().withHttpsPort(15647).withHttpsConfig(SSLContextBuilder.unsignedLocalhostCert())
             .addHandler(ContextHandlerBuilder.context("api")
                 .addHandler(RestHandlerBuilder.restHandler(new FruitResource(), new DogResource()).build()))
             .start();

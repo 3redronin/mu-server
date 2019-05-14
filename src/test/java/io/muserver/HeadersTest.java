@@ -6,6 +6,7 @@ import org.junit.After;
 import org.junit.Test;
 import scaffolding.ClientUtils;
 import scaffolding.MuAssert;
+import scaffolding.ServerUtils;
 
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -15,7 +16,6 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static io.muserver.MuServerBuilder.httpServer;
-import static io.muserver.MuServerBuilder.httpsServer;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -34,7 +34,7 @@ public class HeadersTest {
 
     @Test
     public void canGetAndSetThem() throws IOException {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler((request, response) -> {
                 String something = request.headers().get("X-Something");
                 response.headers().add("X-Response", something);
@@ -52,7 +52,7 @@ public class HeadersTest {
 
     @Test
     public void pseudoHeadersAreNotPresentInHeaders() throws IOException {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler((request, response) -> {
                 for (Map.Entry<String, String> header : request.headers()) {
                     if (header.getKey().startsWith(":")) {
@@ -73,7 +73,7 @@ public class HeadersTest {
     public void aHandlerCanChangeTheHeadersOfASubsequentHandler() {
         String randomValue = UUID.randomUUID().toString();
 
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler((request, response) -> {
                 request.headers().set("X-Something", randomValue);
                 return false;
@@ -93,7 +93,7 @@ public class HeadersTest {
 
     @Test
     public void largeHeadersAreFineIfConfigured() {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .withMaxHeadersSize(33000)
             .addHandler((request, response) -> {
                 response.headers().add(request.headers());
@@ -109,7 +109,7 @@ public class HeadersTest {
     @Test
     public void urlsThatAreTooLongAreRejected() throws IOException {
         AtomicBoolean handlerHit = new AtomicBoolean(false);
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .withMaxUrlSize(30)
             .addHandler((request, response) -> {
                 handlerHit.set(true);
@@ -126,7 +126,7 @@ public class HeadersTest {
 
     @Test
     public void a431IsReturnedIfTheHeadersAreTooLarge() throws IOException {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .withMaxHeadersSize(1024)
             .addHandler((request, response) -> {
                 response.headers().add(request.headers());
@@ -167,7 +167,7 @@ public class HeadersTest {
     @Test
     public void ifXForwardedHeadersAreSpecifiedThenRequestUriUsesThem() {
         URI[] actual = new URI[2];
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .withHttpPort(12752)
             .addHandler((request, response) -> {
                 actual[0] = request.uri();
@@ -188,7 +188,7 @@ public class HeadersTest {
     @Test
     public void ifMultipleXForwardedHeadersAreSpecifiedThenRequestUriUsesTheFirst() {
         URI[] actual = new URI[2];
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .withHttpPort(12753)
             .addHandler((request, response) -> {
                 actual[0] = request.uri();
@@ -209,7 +209,7 @@ public class HeadersTest {
 
     @Test
     public void ifNoResponseDataThenContentLengthIsZero() {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler((request, response) -> {
                 response.status(200);
                 response.headers().add("X-Blah", "ha");
@@ -228,7 +228,7 @@ public class HeadersTest {
 
     @Test
     public void ifOutputStreamUsedThenTransferEncodingIsUnknown() throws IOException {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler((request, response) -> {
                 response.status(200);
                 try (PrintWriter writer = response.writer()) {
@@ -251,7 +251,7 @@ public class HeadersTest {
 
     @Test
     public void aRequestHasXForwardHostHeaderDontThrowException() throws IOException {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
                 response.writer().print(request.uri());
@@ -266,7 +266,7 @@ public class HeadersTest {
 
     @Test
     public void aRequestHasXForwardHostAndHasNoPortDontThrowException() throws IOException {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
                 response.writer().print(request.uri());
@@ -283,7 +283,7 @@ public class HeadersTest {
     public void aRequestHasXForwardHostAndXForwardedPortDontThrowExceptionAndUsePort() throws IOException {
         final String host = "mu-server-io:9999";
         final String port = "8888";
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
                 response.writer().print(request.uri());
@@ -299,7 +299,7 @@ public class HeadersTest {
 
     @Test
     public void forwardedHostsCanHaveColons() throws IOException {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
                 PrintWriter writer = response.writer();
@@ -320,7 +320,7 @@ public class HeadersTest {
 
     @Test
     public void aRquestWithErrorXForwardHostHeaderDontThrowException() throws IOException {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
                 response.writer().print(request.uri());
@@ -337,7 +337,7 @@ public class HeadersTest {
     @Test
     public void aRequestHasIPv6XForwardHostHeaderDontThrowException() throws IOException {
         final String host = "[2001:0db8:85a3:08d3:1319:8a2e:0370:7344]:1234";
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
                 response.writer().print(request.uri());
@@ -354,7 +354,7 @@ public class HeadersTest {
     @Test
     public void anIPv6XForwardHostHeaderHasNoPortDontThrowException() throws IOException {
         final String host = "[2001:0db8:85a3:08d3:1319:8a2e:0370:7344]";
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
                 response.writer().print(request.uri());
@@ -369,7 +369,7 @@ public class HeadersTest {
 
     @Test
     public void anIPv4XForwardHostHeaderDontThrowException() throws IOException {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
                 response.writer().print(request.uri());
@@ -384,7 +384,7 @@ public class HeadersTest {
 
     @Test
     public void anIPv4XForwardHostHeaderHasNoPortDontThrowException() throws IOException {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
                 response.writer().print(request.uri());

@@ -6,13 +6,13 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
+import scaffolding.ServerUtils;
 
 import javax.ws.rs.GET;
 import javax.ws.rs.POST;
 import javax.ws.rs.Path;
 import java.io.IOException;
 
-import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -34,7 +34,7 @@ public class PrimitiveBoxedEntityProviderTest {
                 return value;
             }
         }
-        this.server = httpsServer().addHandler(restHandler(new Sample())).start();
+        this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Sample())).start();
         check(true);
         check(false);
         checkNoBody();
@@ -49,7 +49,7 @@ public class PrimitiveBoxedEntityProviderTest {
                 return value;
             }
         }
-        this.server = httpsServer().addHandler(restHandler(new Sample())).start();
+        this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Sample())).start();
         check(Integer.MAX_VALUE);
         check(Integer.MIN_VALUE);
         check(0);
@@ -67,7 +67,7 @@ public class PrimitiveBoxedEntityProviderTest {
                 return value;
             }
         }
-        this.server = httpsServer().addHandler(restHandler(new Sample())).start();
+        this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Sample())).start();
         check(Short.MAX_VALUE);
         check(Short.MIN_VALUE);
         check((short)0);
@@ -85,7 +85,7 @@ public class PrimitiveBoxedEntityProviderTest {
                 return value;
             }
         }
-        this.server = httpsServer().addHandler(restHandler(new Sample())).start();
+        this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Sample())).start();
         check(Long.MAX_VALUE);
         check(Long.MIN_VALUE);
         check((long)0);
@@ -103,7 +103,7 @@ public class PrimitiveBoxedEntityProviderTest {
                 return value;
             }
         }
-        this.server = httpsServer().addHandler(restHandler(new Sample())).start();
+        this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Sample())).start();
         check(Character.MAX_VALUE);
         check('好');
         check('�');
@@ -122,7 +122,7 @@ public class PrimitiveBoxedEntityProviderTest {
                 return value;
             }
         }
-        this.server = httpsServer().addHandler(restHandler(new Sample())).start();
+        this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Sample())).start();
         check(Byte.MAX_VALUE);
         check(Byte.MIN_VALUE);
         check((byte)0);
@@ -139,7 +139,7 @@ public class PrimitiveBoxedEntityProviderTest {
                 return value;
             }
         }
-        this.server = httpsServer().addHandler(restHandler(new Sample())).start();
+        this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Sample())).start();
         check(Float.MAX_VALUE);
         check(Float.MIN_VALUE);
         check((float)0);
@@ -157,7 +157,7 @@ public class PrimitiveBoxedEntityProviderTest {
                 return value;
             }
         }
-        this.server = httpsServer().addHandler(restHandler(new Sample())).start();
+        this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Sample())).start();
         check(Double.MAX_VALUE);
         check(Double.MIN_VALUE);
         check((double)0);
@@ -175,7 +175,7 @@ public class PrimitiveBoxedEntityProviderTest {
                 return 123;
             }
         }
-        this.server = httpsServer().addHandler(restHandler(new Sample())).start();
+        this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Sample())).start();
         try (Response resp = call(request()
             .url(server.uri().resolve("/samples").toString())
         )) {

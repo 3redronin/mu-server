@@ -7,6 +7,7 @@ import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.MuAssert;
+import scaffolding.ServerUtils;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -18,7 +19,6 @@ import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.util.Date;
 
-import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.Mutils.urlEncode;
 import static io.muserver.handlers.ResourceHandlerBuilder.fileHandler;
 import static org.hamcrest.CoreMatchers.equalTo;
@@ -38,7 +38,7 @@ public class AsyncFileProviderTest {
     @Test
     public void canReadFilesFromFileSystem() throws Exception {
 
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .withGzipEnabled(false)
             .addHandler(fileHandler(BIG_FILE_DIR))
             .start();

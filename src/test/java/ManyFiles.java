@@ -15,7 +15,7 @@ public class ManyFiles {
         File dir = new File(System.getenv("DIR_WITH_LOTS_OF_JPGS"));
         MuServer server = muServer()
             .withHttpsPort(14000)
-            .withHttp2Config(http2Enabled().enabled(false))
+            .withHttp2Config(http2Enabled())
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.contentType(ContentTypes.TEXT_HTML_UTF8);
                 response.sendChunk("<h1>Photos</h1>");

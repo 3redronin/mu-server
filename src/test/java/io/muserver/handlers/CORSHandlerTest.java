@@ -6,8 +6,8 @@ import okhttp3.Response;
 import okhttp3.internal.Util;
 import org.junit.After;
 import org.junit.Test;
+import scaffolding.ServerUtils;
 
-import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.handlers.CORSHandlerBuilder.corsHandler;
 import static org.hamcrest.Matchers.*;
 import static org.junit.Assert.assertThat;
@@ -20,7 +20,7 @@ public class CORSHandlerTest {
 
     @Test
     public void onlyVaryIsAddedForSameOrigin() {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(corsHandler()
                 .withCORSConfig(CORSHandlerBuilder.config().withAllOriginsAllowed())
             )
@@ -38,7 +38,7 @@ public class CORSHandlerTest {
 
     @Test
     public void accessHeadersAddedIfOriginIsDifferent() {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(corsHandler()
                 .withCORSConfig(CORSHandlerBuilder.config().withAllOriginsAllowed())
             )
@@ -56,7 +56,7 @@ public class CORSHandlerTest {
 
     @Test
     public void optionsIsDifferentFromPost() {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(corsHandler()
                 .withCORSConfig(
                     CORSHandlerBuilder.config()

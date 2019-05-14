@@ -4,6 +4,7 @@ import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.MuAssert;
+import scaffolding.ServerUtils;
 
 import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLContext;
@@ -14,7 +15,6 @@ import java.security.cert.X509Certificate;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.MuServerBuilder.httpServer;
-import static io.muserver.MuServerBuilder.httpsServer;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.*;
@@ -26,7 +26,7 @@ public class HttpsTest {
     @Test
     public void canCreate() throws Exception {
         AtomicReference<SSLInfo> actualSSLInfo = new AtomicReference<>();
-        server = httpsServer().withHttpsPort(9443).withHttpsConfig(SSLContextBuilder.unsignedLocalhostCert())
+        server = ServerUtils.httpsServerForTest().withHttpsPort(9443).withHttpsConfig(SSLContextBuilder.unsignedLocalhostCert())
             .addHandler((request, response) -> {
                 actualSSLInfo.set(request.server().sslInfo());
                 response.write("This is encrypted and the URL is " + request.uri());
@@ -44,7 +44,7 @@ public class HttpsTest {
 
     @Test
     public void httpIsNotAvailableUnlessRequested() {
-        server = httpsServer().start();
+        server = ServerUtils.httpsServerForTest().start();
         assertThat(server.httpUri(), is(nullValue()));
     }
 
@@ -76,7 +76,7 @@ public class HttpsTest {
             .withKeyPassword("MY_PASSWORD")
             .withKeystoreFromClasspath("/jks-keystore.jks");
 
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .withHttpsConfig(originalCert)
             .addHandler((request, response) -> {
                 response.write("This is encrypted");

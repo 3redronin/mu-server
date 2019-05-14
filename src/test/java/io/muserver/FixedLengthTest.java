@@ -5,13 +5,13 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 import scaffolding.MuAssert;
+import scaffolding.ServerUtils;
 
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.ProtocolException;
 import java.util.concurrent.CountDownLatch;
 
-import static io.muserver.MuServerBuilder.httpsServer;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
@@ -25,7 +25,7 @@ public class FixedLengthTest {
 
     @Test
     public void ifMoreThanDeclaredAreSentThenAnExceptionIsThrownAndConnectionIsClosedForHttp1() throws IOException {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler((req, resp) -> {
                 resp.contentType("text/plain");
                 resp.headers().set(HeaderNames.CONTENT_LENGTH, 20);
@@ -73,7 +73,7 @@ public class FixedLengthTest {
 
     @Test
     public void ifLessThanDeclaredAreSentThenAnExceptionIsThrownAndConnectionIsClosed() throws IOException {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler((req, resp) -> {
                 resp.contentType("text/plain");
                 resp.headers().set(HeaderNames.CONTENT_LENGTH, 20);

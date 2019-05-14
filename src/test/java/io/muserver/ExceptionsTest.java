@@ -3,10 +3,10 @@ package io.muserver;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
+import scaffolding.ServerUtils;
 
 import javax.ws.rs.NotFoundException;
 
-import static io.muserver.MuServerBuilder.httpsServer;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
@@ -19,7 +19,7 @@ public class ExceptionsTest {
 
     @Test
     public void notFoundExceptionsConvertTo404() throws Exception {
-        this.server = httpsServer().addHandler(Method.GET, "/samples", (req, res, pp) -> {
+        this.server = ServerUtils.httpsServerForTest().addHandler(Method.GET, "/samples", (req, res, pp) -> {
             throw new NotFoundException("I could not find the thing");
         }).start();
         try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
@@ -31,7 +31,7 @@ public class ExceptionsTest {
     }
     @Test
     public void notFoundExceptionsConvertTo404WithDefaultMessage() throws Exception {
-        this.server = httpsServer().addHandler(Method.GET, "/samples", (req, res, pp) -> {
+        this.server = ServerUtils.httpsServerForTest().addHandler(Method.GET, "/samples", (req, res, pp) -> {
             throw new NotFoundException();
         }).start();
         try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
@@ -44,7 +44,7 @@ public class ExceptionsTest {
 
     @Test
     public void nonJaxRSExceptionsShowAs500WithoutOriginalInfo() throws Exception {
-        this.server = httpsServer().addHandler(Method.GET, "/samples", (req, res, pp) -> {
+        this.server = ServerUtils.httpsServerForTest().addHandler(Method.GET, "/samples", (req, res, pp) -> {
             throw new RuntimeException("This is some secret information");
         }).start();
         try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
@@ -59,7 +59,7 @@ public class ExceptionsTest {
 
     @Test
     public void default404IsANotFoundException() throws Exception {
-        this.server = httpsServer().addHandler((req, resp) -> false).start();
+        this.server = ServerUtils.httpsServerForTest().addHandler((req, resp) -> false).start();
         try (Response resp = call(request().url(server.uri().resolve("/does-not-exist").toString()))) {
             assertThat(resp.code(), is(404));
             String body = resp.body().string();

@@ -8,13 +8,13 @@ import org.junit.After;
 import org.junit.Test;
 import scaffolding.ClientUtils;
 import scaffolding.MuAssert;
+import scaffolding.ServerUtils;
 
 import java.io.IOException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import static io.muserver.MuServerBuilder.httpServer;
-import static io.muserver.MuServerBuilder.httpsServer;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
 import static scaffolding.ClientUtils.call;
@@ -31,7 +31,7 @@ public class FlakyClientTest {
 
     @Test
     public void canHandleStuffWithoutBreakingOverHttps() throws InterruptedException, IOException {
-        runTest(httpsServer());
+        runTest(ServerUtils.httpsServerForTest());
     }
 
     private void runTest(MuServerBuilder muServerBuilder) throws InterruptedException, IOException {

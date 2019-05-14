@@ -6,6 +6,7 @@ import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.MuAssert;
+import scaffolding.ServerUtils;
 
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
@@ -13,7 +14,6 @@ import javax.ws.rs.Produces;
 import java.io.IOException;
 import java.util.List;
 
-import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static java.util.Arrays.asList;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -45,7 +45,7 @@ public class MediaTypesTest {
             }
         }
 
-        this.server = httpsServer().addHandler(restHandler(new Widget())).start();
+        this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Widget())).start();
 
         assertSelected("/pictures", asList("image/gif"), ";)");
         assertSelected("/pictures", asList("image/jpeg"), ";)");
@@ -67,7 +67,7 @@ public class MediaTypesTest {
             }
         }
 
-        this.server = httpsServer().addHandler(restHandler(new Widget())).start();
+        this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Widget())).start();
 
         try (Response resp = call(request()
             .url(server.uri().resolve("/things").toString())
@@ -90,7 +90,7 @@ public class MediaTypesTest {
             }
         }
 
-        this.server = httpsServer().addHandler(restHandler(new Widget())).start();
+        this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Widget())).start();
 
         try (Response resp = call(request()
             .url(server.uri().resolve("/things").toString())
@@ -111,7 +111,7 @@ public class MediaTypesTest {
                 return "[]";
             }
         }
-        this.server = httpsServer().addHandler(restHandler(new Widget())).start();
+        this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Widget())).start();
         try (Response resp = call(request().url(server.uri().resolve("/things").toString()))) {
             assertThat(resp.header("Content-Type"), is("application/json"));
         }
@@ -127,7 +127,7 @@ public class MediaTypesTest {
                 return "[]";
             }
         }
-        this.server = httpsServer().addHandler(restHandler(new Widget())).start();
+        this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Widget())).start();
         try (Response resp = call(request().url(server.uri().resolve("/things").toString())
         .header("accept", "text")
         )) {
@@ -153,7 +153,7 @@ public class MediaTypesTest {
                 return 42;
             }
         }
-        this.server = httpsServer().addHandler(restHandler(new Widget())).start();
+        this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Widget())).start();
         try (Response resp = call(request().url(server.uri().resolve("/things/string").toString()))) {
             assertThat(resp.header("Content-Type"), is("text/plain;charset=utf-8"));
         }

@@ -4,10 +4,10 @@ import io.muserver.MuServer;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
+import scaffolding.ServerUtils;
 
 import javax.ws.rs.*;
 
-import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.CoreMatchers.allOf;
 import static org.hamcrest.CoreMatchers.is;
@@ -35,7 +35,7 @@ public class ExceptionsTest {
                 throw new NotFoundException();
             }
         }
-        this.server = httpsServer().addHandler(restHandler(new Sample())).start();
+        this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Sample())).start();
         try (Response resp = call(request().url(server.uri().resolve("/samples/custom-message").toString()))) {
             assertThat(resp.code(), is(404));
             assertThat(resp.body().string(), allOf(
@@ -59,7 +59,7 @@ public class ExceptionsTest {
                 throw new NotFoundException("This is ignored");
             }
         }
-        this.server = httpsServer().addHandler(restHandler(new Sample())).start();
+        this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Sample())).start();
         try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
             assertThat(resp.code(), is(405));
             assertThat(resp.body().string(), containsString("405 Method Not Allowed"));
@@ -76,7 +76,7 @@ public class ExceptionsTest {
                 return "This should not be called";
             }
         }
-        this.server = httpsServer().addHandler(restHandler(new Sample())).start();
+        this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Sample())).start();
         try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
             assertThat(resp.code(), is(404));
             assertThat(resp.body().string(), containsString("404 Not Found"));
@@ -99,7 +99,7 @@ public class ExceptionsTest {
                 throw new ClientErrorException(400);
             }
         }
-        this.server = httpsServer().addHandler(restHandler(new Sample())).start();
+        this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Sample())).start();
         try (Response resp = call(request().url(server.uri().resolve("/samples/custom-message").toString()))) {
             assertThat(resp.code(), is(400));
             assertThat(resp.body().string(), allOf(

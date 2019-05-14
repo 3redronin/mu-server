@@ -11,13 +11,13 @@ import org.example.petstore.resource.VehicleResource;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.Test;
+import scaffolding.ServerUtils;
 
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.net.URI;
 
-import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.openapi.ExternalDocumentationObjectBuilder.externalDocumentationObject;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -28,7 +28,7 @@ import static scaffolding.ClientUtils.request;
 
 public class OpenApiDocumentorTest {
 
-    private final MuServer server = httpsServer()
+    private final MuServer server = ServerUtils.httpsServerForTest()
         .addHandler(RestHandlerBuilder.restHandler(
             new PetResource(), new PetStoreResource(), new UserResource(), new VehicleResource()
             ).withOpenApiDocument(OpenAPIObjectBuilder.openAPIObject()

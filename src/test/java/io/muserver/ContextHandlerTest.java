@@ -5,6 +5,7 @@ import okhttp3.Response;
 import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Test;
+import scaffolding.ServerUtils;
 
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
@@ -12,7 +13,6 @@ import java.io.IOException;
 import java.net.URL;
 
 import static io.muserver.ContextHandlerBuilder.context;
-import static io.muserver.MuServerBuilder.httpsServer;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -34,7 +34,7 @@ public class ContextHandlerTest {
             }
         }
 
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(
                 context("some context")
                     .addHandler(
@@ -72,7 +72,7 @@ public class ContextHandlerTest {
             }
         }
 
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(
                 context("/some context/")
                     .addHandler(
@@ -101,7 +101,7 @@ public class ContextHandlerTest {
 
     @Test
     public void callsToContextNamesWithoutTrailingSlashesResultIn302() throws Exception {
-        server = MuServerBuilder.httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(context("my-app"))
             .start();
 
@@ -116,7 +116,7 @@ public class ContextHandlerTest {
     @Test
     public void contextIsEmptyStringIfNotUsed() throws IOException {
 
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(
                 Routes.route(Method.GET, "/", (request, response, pathParams) -> {
                     response.write("context=" + request.contextPath() + ";relative=" + request.relativePath());
@@ -137,7 +137,7 @@ public class ContextHandlerTest {
     public void ifContextIsEmptyThenItJustPassesToChildHandlers() throws IOException {
         String[] empties = {"", "/", " ", " / ", "//", null};
         for (String empty : empties) {
-            server = httpsServer()
+            server = ServerUtils.httpsServerForTest()
                 .addHandler(
                     context(empty)
                         .addHandler(Method.GET, "/", (request, response, pathParams) -> {

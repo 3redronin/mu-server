@@ -9,6 +9,7 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
+import scaffolding.ServerUtils;
 import scaffolding.StringUtils;
 
 import javax.ws.rs.POST;
@@ -19,7 +20,6 @@ import java.io.File;
 import java.io.IOException;
 import java.io.Reader;
 
-import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static java.util.stream.Collectors.toList;
 import static org.hamcrest.CoreMatchers.containsString;
@@ -42,7 +42,7 @@ public class StringEntityProvidersTest {
                 return value;
             }
         }
-        this.server = httpsServer().addHandler(restHandler(new Sample())).start();
+        this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Sample())).start();
         check(StringUtils.randomStringOfLength(64 * 1024));
         check("");
     }
@@ -60,7 +60,7 @@ public class StringEntityProvidersTest {
                 return value;
             }
         }
-        this.server = httpsServer().addHandler(restHandler(new Sample())).start();
+        this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Sample())).start();
 
         try (Response resp = call(request(server.uri().resolve("/samples"))
             .post(RequestBody.create(okhttp3.MediaType.get("text/plain; charset=ISO-8859-5"), warAndPeaceInRussian))
@@ -82,7 +82,7 @@ public class StringEntityProvidersTest {
                 return value;
             }
         }
-        this.server = httpsServer().addHandler(restHandler(new Sample())).start();
+        this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Sample())).start();
         check(StringUtils.randomStringOfLength(64 * 1024));
         check("");
     }
@@ -103,7 +103,7 @@ public class StringEntityProvidersTest {
                 return sb.toString();
             }
         }
-        this.server = httpsServer().addHandler(restHandler(new Sample())).start();
+        this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Sample())).start();
         check(StringUtils.randomStringOfLength(64 * 1024));
         check("");
     }
@@ -129,7 +129,7 @@ public class StringEntityProvidersTest {
                 return form;
             }
         }
-        this.server = httpsServer().addHandler(restHandler(new Sample())).start();
+        this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Sample())).start();
         try (Response resp = call(
             request()
                 .url(server.uri().resolve("/samples").toString())

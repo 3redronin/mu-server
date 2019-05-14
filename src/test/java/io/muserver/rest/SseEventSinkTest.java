@@ -4,10 +4,7 @@ package io.muserver.rest;
 import io.muserver.MuServer;
 import org.junit.After;
 import org.junit.Test;
-import scaffolding.ClientUtils;
-import scaffolding.MuAssert;
-import scaffolding.SseClient;
-import scaffolding.TestSseClient;
+import scaffolding.*;
 
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
@@ -27,7 +24,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Arrays.asList;
@@ -89,7 +85,7 @@ public class SseEventSinkTest {
             }
         }
 
-        server = httpsServer().addHandler(
+        server = ServerUtils.httpsServerForTest().addHandler(
             restHandler(new Streamer())
                 .addCustomWriter(new DogWriter())
         ).start();
@@ -135,7 +131,7 @@ public class SseEventSinkTest {
             }
         }
 
-        server = httpsServer().addHandler(restHandler(new Streamer())).start();
+        server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Streamer())).start();
 
         try (SseClient.ServerSentEvent ignored = sseClient.newServerSentEvent(request(server.uri().resolve("/streamer/eventStream")).build(), listener)) {
             MuAssert.assertNotTimedOut("Waiting for one message", oneSentLatch);

@@ -5,6 +5,7 @@ import okhttp3.Response;
 import org.hamcrest.Matchers;
 import org.junit.*;
 import scaffolding.RawClient;
+import scaffolding.ServerUtils;
 
 import java.io.File;
 import java.io.IOException;
@@ -15,7 +16,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-import static io.muserver.MuServerBuilder.*;
+import static io.muserver.MuServerBuilder.httpServer;
+import static io.muserver.MuServerBuilder.muServer;
 import static java.util.Arrays.asList;
 import static org.hamcrest.CoreMatchers.*;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -39,7 +41,7 @@ public class MuServerTest {
 
     @Test
     public void portZeroCanBeUsed() {
-        server = httpsServer().start();
+        server = ServerUtils.httpsServerForTest().start();
         try (Response resp = call(request().url(server.uri().toString()))) {
             assertThat(resp.code(), is(404));
         }
@@ -47,7 +49,7 @@ public class MuServerTest {
 
     @Test
     public void unhandledExceptionsResultIn500sIfNoResponseSent() {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 throw new RuntimeException("I'm the fire starter");
             })
@@ -59,7 +61,7 @@ public class MuServerTest {
 
     @Test
     public void unhandledExceptionsAreJustLoggedIfResponsesAreAlreadyStarted() {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
                 response.writer().print("Hello");
@@ -73,7 +75,7 @@ public class MuServerTest {
 
     @Test
     public void queryToStringIsAUrlString() throws IOException {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.write(request.query().toString());
             })
@@ -88,7 +90,7 @@ public class MuServerTest {
         List<String> handlersHit = new ArrayList<>();
         String randomText = UUID.randomUUID().toString();
 
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .withHttpPort(12809)
             .addHandler((request, response) -> {
                 handlersHit.add("Logger");
@@ -120,7 +122,7 @@ public class MuServerTest {
         Assume.assumeNotNull(hostname);
 
         for (String host : asList("127.0.0.1", "localhost")) {
-            MuServer server = httpsServer()
+            MuServer server = ServerUtils.httpsServerForTest()
                 .withInterface(host)
                 .addHandler(Method.GET, "/", (req, resp, pp) -> resp.write("Hello"))
                 .start();
@@ -139,7 +141,7 @@ public class MuServerTest {
         Assume.assumeNotNull(hostname);
 
         for (String host : asList("127.0.0.1", "localhost")) {
-            MuServer server = httpsServer()
+            MuServer server = ServerUtils.httpsServerForTest()
                 .withInterface(host)
                 .addHandler(Method.GET, "/", (req, resp, pp) -> resp.write("Hello from " + req.server().address().getAddress().getHostAddress()))
                 .start();
@@ -154,7 +156,7 @@ public class MuServerTest {
     @Test
     public void ifBoundTo0000ThenExternalAccessIsPossible() throws IOException {
         Assume.assumeNotNull(hostname);
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .withInterface("0.0.0.0")
             .addHandler(Method.GET, "/", (req, resp, pp) -> resp.write("Hello from " + server.address().getHostString()))
             .start();
@@ -166,7 +168,7 @@ public class MuServerTest {
     @Test
     public void ifBoundToHostnameThenExternalAccessIsPossible() throws IOException {
         Assume.assumeNotNull(hostname);
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .withInterface(hostname)
             .addHandler(Method.GET, "/", (req, resp, pp) -> resp.write("Hello from " + server.uri().getHost()))
             .start();
@@ -177,7 +179,7 @@ public class MuServerTest {
 
     @Test
     public void theClientIpAddressOrSomethingLikeThatIsAvailable() throws IOException {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/", (req, resp, pp) -> resp.write("Hello there " + req.remoteAddress()))
             .start();
         try (Response resp = call(request().url(server.uri().toString()))) {
@@ -197,7 +199,7 @@ public class MuServerTest {
 
     @Test
     public void returnsA405ForUnsupportedMethods() throws IOException {
-        server = httpsServer().start();
+        server = ServerUtils.httpsServerForTest().start();
         try (Response resp = call(request(server.uri()).method("COFFEE", null))) {
             assertThat(resp.code(), is(405));
             assertThat(resp.body().string(), containsString("405 Method Not Allowed"));
@@ -283,7 +285,7 @@ public class MuServerTest {
         File warAndPeaceInRussian = new File("src/test/resources/sample-static/war-and-peace-in-ISO-8859-5.txt");
         assertThat("Couldn't find " + Mutils.fullPath(warAndPeaceInRussian), warAndPeaceInRussian.isFile(), is(true));
 
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler((req, resp) -> {
                 resp.contentType(req.headers().contentType().toString());
                 String body = req.readBodyAsString();
@@ -303,7 +305,7 @@ public class MuServerTest {
 
     @Test
     public void requestProtocolIsAvailable() throws IOException {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler((req, resp) -> {
                 resp.write(req.protocol());
                 return true;
@@ -318,7 +320,7 @@ public class MuServerTest {
 
     @Test
     public void zeroBytesCanBeWrittenToTheResponse() throws IOException {
-        server = httpsServer()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.contentType("text/plain");
                 AsyncHandle handle = request.handleAsync();
