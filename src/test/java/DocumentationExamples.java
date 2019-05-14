@@ -1,5 +1,6 @@
 import io.muserver.MuServer;
 import io.muserver.MuServerBuilder;
+import io.muserver.rest.CORSConfigBuilder;
 import io.muserver.rest.Description;
 import io.muserver.rest.Required;
 import io.muserver.rest.RestHandlerBuilder;
@@ -19,7 +20,7 @@ public class DocumentationExamples {
         class Fruit {
             @GET
             public void all(@QueryParam("jam") @Required @DefaultValue("strawberry") @Description(value = "The jam", example = "Mango", documentationUrl = "http://example.org/looooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong-url")
-                            String jam) {
+                                String jam) {
 
             }
         }
@@ -30,6 +31,7 @@ public class DocumentationExamples {
                 RestHandlerBuilder.restHandler(new Fruit(), new PetResource(), new PetStoreResource(), new UserResource(), new VehicleResource())
                     .withOpenApiHtmlUrl("/docs.html")
                     .withOpenApiJsonUrl("/api.json")
+                    .withCORS(CORSConfigBuilder.corsConfig().withAllOriginsAllowed())
             ).start();
         System.out.println("Browse documentation at " + server.uri().resolve("/docs.html")
             + " and " + server.uri().resolve("/api.json"));

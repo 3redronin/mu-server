@@ -116,7 +116,6 @@ public class ResourceHandler implements MuHandler {
         response.contentType(type.mimeType);
         Headers headers = response.headers();
         headers.set(HeaderNames.ACCEPT_RANGES, HeaderValues.BYTES);
-        headers.set(HeaderNames.VARY, "accept-encoding"); // to stop gzip caching issues
         if (fileSize != null) {
             headers.set(HeaderNames.CONTENT_LENGTH, fileSize);
         }

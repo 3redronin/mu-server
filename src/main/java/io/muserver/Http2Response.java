@@ -67,6 +67,8 @@ class Http2Response extends NettyResponseAdaptor {
     private void writeHeaders(boolean isEnd) {
         headers.entries.status(httpStatus().codeAsText());
 
+        addVaryHeader();
+
         CharSequence enc = Http2Connection.compressionToUse(request.headers());
         if (enc != null && !headers.entries.contains(HeaderNames.CONTENT_ENCODING)) {
             if (settings.shouldCompress(headers.get(HeaderNames.CONTENT_LENGTH), headers.get(HeaderNames.CONTENT_TYPE))) {

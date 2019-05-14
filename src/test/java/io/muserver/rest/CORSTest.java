@@ -58,7 +58,7 @@ public class CORSTest {
             assertThat(resp.header("Access-Control-Allow-Headers"), is(nullValue()));
             assertThat(resp.header("Access-Control-Expose-Headers"), is("X-PINGOTHER, Content-Type"));
             assertThat(resp.header("Access-Control-Max-Age"), is("500"));
-            assertThat(resp.header("Vary"), is("origin"));
+            assertThat(resp.header("Vary"), is("origin, accept-encoding"));
         }
 
     }
@@ -89,7 +89,7 @@ public class CORSTest {
             assertThat(resp.code(), is(200));
             assertThat(resp.header("Access-Control-Allow-Origin"), is("http://foo.example"));
             assertThat(resp.header("Access-Control-Allow-Methods"), is("GET"));
-            assertThat(resp.header("Vary"), is("origin"));
+            assertThat(resp.header("Vary"), is("origin, accept-encoding"));
         }
     }
 
@@ -129,11 +129,10 @@ public class CORSTest {
             assertThat(resp.header("Access-Control-Allow-Headers"), is(nullValue()));
             assertThat(resp.header("Access-Control-Expose-Headers"), is("X-EXPOSED, X-BLAH"));
             assertThat(resp.header("Access-Control-Max-Age"), is(nullValue()));
-            assertThat(resp.header("Vary"), is("origin"));
+            assertThat(resp.header("Vary"), is("origin, accept-encoding"));
         }
 
     }
-
 
     @Test
     public void ifDisabledThenOriginIsNotSet() {
@@ -163,7 +162,7 @@ public class CORSTest {
             assertThat(resp.header("Access-Control-Allow-Methods"), is(nullValue()));
             assertThat(resp.header("Access-Control-Allow-Headers"), is(nullValue()));
             assertThat(resp.header("Access-Control-Max-Age"), is(nullValue()));
-            assertThat(resp.header("Vary"), is("origin"));
+            assertThat(resp.header("Vary"), is("origin, accept-encoding"));
         }
     }
 
@@ -192,11 +191,10 @@ public class CORSTest {
             assertThat(resp.header("Access-Control-Allow-Methods"), is(nullValue()));
             assertThat(resp.header("Access-Control-Allow-Headers"), is(nullValue()));
             assertThat(resp.header("Access-Control-Max-Age"), is(nullValue()));
-            assertThat(resp.header("Vary"), is("origin"));
+            assertThat(resp.header("Vary"), is("origin, accept-encoding"));
         }
 
     }
-
 
     @Test
     public void partialPatternsAreNotAllowed() {

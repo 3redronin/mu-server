@@ -67,8 +67,8 @@ public class GzipTest {
             .start();
         try (Response resp = call(request(server.uri().resolve("/")).header("Accept-Encoding", "umm,gzip"))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.header("content-encoding"), is("identity"));
-            assertThat(resp.header("content-length"), is(String.valueOf(LOTS_OF_TEXT.getBytes(StandardCharsets.UTF_8).length)));
+            assertThat(resp.headers("content-encoding"), contains("identity"));
+            assertThat(resp.headers("content-length"), contains(String.valueOf(LOTS_OF_TEXT.getBytes(StandardCharsets.UTF_8).length)));
             assertThat(resp.body().string(), equalTo(LOTS_OF_TEXT));
         }
     }
@@ -91,7 +91,8 @@ public class GzipTest {
         String unzipped;
         try (Response resp = call(request(server.uri().resolve(path)).header("Accept-Encoding", "hmm, gzip, deflate"))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.header("content-encoding"), is("gzip"));
+            assertThat(resp.headers("content-encoding"), contains("gzip"));
+            assertThat(resp.headers("vary"), contains("accept-encoding"));
             try (ByteArrayOutputStream boas = new ByteArrayOutputStream();
                  InputStream is = new GZIPInputStream(resp.body().byteStream())) {
                 Mutils.copy(is, boas, 8192);
@@ -102,6 +103,7 @@ public class GzipTest {
         try (Response resp = call(request(server.uri().resolve(path)).header("Accept-Encoding", "invalid"))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.header("content-encoding"), is(nullValue()));
+            assertThat(resp.headers("vary"), contains("accept-encoding"));
             assertThat(resp.body().string(), equalTo(unzipped));
         }
     }
@@ -118,8 +120,9 @@ public class GzipTest {
             .start();
         try (Response resp = call(request(server.uri().resolve("/overview.txt")).header("Accept-Encoding", "hmm, gzip, deflate"))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.header("content-type"), is("text/plain;charset=utf-8"));
-            assertThat(resp.header("content-encoding"), is("gzip"));
+            assertThat(resp.headers("content-type"), contains("text/plain;charset=utf-8"));
+            assertThat(resp.headers("content-encoding"), contains("gzip"));
+            assertThat(resp.headers("vary"), contains("accept-encoding"));
 
             try (ByteArrayOutputStream boas = new ByteArrayOutputStream();
                  InputStream is = new GZIPInputStream(resp.body().byteStream())) {

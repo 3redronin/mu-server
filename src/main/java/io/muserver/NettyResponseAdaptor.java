@@ -71,6 +71,18 @@ abstract class NettyResponseAdaptor implements MuResponse {
         outputState = OutputState.STREAMING;
     }
 
+    protected void addVaryHeader() {
+        String vary = headers.get(HeaderNames.VARY);
+        if (Mutils.nullOrEmpty(vary)) {
+            headers.set(HeaderNames.VARY, HeaderNames.ACCEPT_ENCODING);
+        } else {
+            if (!vary.toLowerCase().contains(HeaderNames.ACCEPT_ENCODING)) {
+                vary += ", " + HeaderNames.ACCEPT_ENCODING;
+                headers.set(HeaderNames.VARY, vary);
+            }
+        }
+    }
+
     protected void throwIfFinished() {
         if (outputState == OutputState.FULL_SENT || outputState == OutputState.FINISHED || outputState == OutputState.DISCONNECTED) {
             throw new IllegalStateException("Cannot write data as response has already completed");

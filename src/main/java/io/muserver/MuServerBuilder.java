@@ -53,6 +53,7 @@ public class MuServerBuilder {
     private boolean addShutdownHook = false;
     private String host;
     private SSLContextBuilder sslContextBuilder;
+    private Http2Config http2Config;
 
     /**
      * @param port The HTTP port to use. A value of 0 will have a random port assigned; a value of -1 will
@@ -177,6 +178,27 @@ public class MuServerBuilder {
     public MuServerBuilder withHttpsPort(int port) {
         this.httpsPort = port;
         return this;
+    }
+
+    /**
+     * Sets the configuration for HTTP2
+     * @param http2Config A config
+     * @return The current Mu-Server builder
+     * @see Http2ConfigBuilder
+     */
+    public MuServerBuilder withHttp2Config(Http2Config http2Config) {
+        this.http2Config = http2Config;
+        return this;
+    }
+
+    /**
+     * Sets the configuration for HTTP2
+     * @param http2Config A config
+     * @return The current Mu-Server builder
+     * @see Http2ConfigBuilder
+     */
+    public MuServerBuilder withHttp2Config(Http2ConfigBuilder http2Config) {
+        return withHttp2Config(http2Config.build());
     }
 
     /**
@@ -378,7 +400,7 @@ public class MuServerBuilder {
 
             Channel httpChannel = httpPort < 0 ? null : createChannel(bossGroup, workerGroup, nettyHandlerAdapter, host, httpPort, null, trafficShapingHandler, stats, serverRef, settings, false);
             Channel httpsChannel;
-            boolean http2Enabled = Toggles.http2;
+            boolean http2Enabled = http2Config != null && http2Config.enabled;
             if (httpsPort < 0) {
                 httpsChannel = null;
             } else {

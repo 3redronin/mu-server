@@ -30,7 +30,7 @@ class Http1Response extends NettyResponseAdaptor {
         if (declaredLength == -1) {
             headers.set(HeaderNames.TRANSFER_ENCODING, HeaderValues.CHUNKED);
         }
-        writeHeaders(response, headers);
+        writeHeaders(response);
         lastAction = ctx.write(response);
     }
 
@@ -42,9 +42,10 @@ class Http1Response extends NettyResponseAdaptor {
             bytesStreamed + " bytes being sent.");
     }
 
-    private static void writeHeaders(HttpResponse response, Headers headers) {
+    private void writeHeaders(HttpResponse response) {
+        addVaryHeader();
         HttpHeaders rh = response.headers();
-        for (Map.Entry<String, String> header : headers) {
+        for (Map.Entry<String, String> header : this.headers) {
             rh.add(header.getKey(), header.getValue());
         }
     }
@@ -71,7 +72,7 @@ class Http1Response extends NettyResponseAdaptor {
         FullHttpResponse resp = isHead ?
             new EmptyHttpResponse(httpStatus())
             : new DefaultFullHttpResponse(HTTP_1_1, httpStatus(), body, false);
-        writeHeaders(resp, this.headers);
+        writeHeaders(resp);
         lastAction = ctx.writeAndFlush(resp).syncUninterruptibly();
     }
 
@@ -79,7 +80,7 @@ class Http1Response extends NettyResponseAdaptor {
     @Override
     protected void writeRedirectResponse() {
         HttpResponse resp = new EmptyHttpResponse(httpStatus());
-        writeHeaders(resp, this.headers);
+        writeHeaders(resp);
         lastAction = ctx.writeAndFlush(resp);
     }
 
@@ -88,7 +89,7 @@ class Http1Response extends NettyResponseAdaptor {
         HttpResponse msg = isHead ?
             new EmptyHttpResponse(httpStatus()) :
             new DefaultFullHttpResponse(HTTP_1_1, httpStatus(), false);
-        writeHeaders(msg, this.headers);
+        writeHeaders(msg);
         if (addContentLengthHeader) {
             msg.headers().set(HeaderNames.CONTENT_LENGTH, 0);
         }

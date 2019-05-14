@@ -12,7 +12,8 @@ public class Toggles {
     public static boolean fixedLengthResponsesEnabled = false;
 
     /**
-     * Enables experimental HTTP2 support.
+     * An obsolete toggle that does nothing.
+     * @deprecated Use Http2ConfigBuilder instead
      */
     public static boolean http2 = false;
 
