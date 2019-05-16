@@ -9,10 +9,10 @@ import scaffolding.StringUtils;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.zip.GZIPInputStream;
 
 import static io.muserver.handlers.ResourceHandlerBuilder.classpathHandler;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.call;
@@ -68,7 +68,7 @@ public class GzipTest {
         try (Response resp = call(request(server.uri().resolve("/")).header("Accept-Encoding", "umm,gzip"))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.headers("content-encoding"), contains("identity"));
-            assertThat(resp.headers("content-length"), contains(String.valueOf(LOTS_OF_TEXT.getBytes(StandardCharsets.UTF_8).length)));
+            assertThat(resp.headers("content-length"), contains(String.valueOf(LOTS_OF_TEXT.getBytes(UTF_8).length)));
             assertThat(resp.body().string(), equalTo(LOTS_OF_TEXT));
         }
     }
@@ -92,7 +92,6 @@ public class GzipTest {
         try (Response resp = call(request(server.uri().resolve(path)).header("Accept-Encoding", "hmm, gzip, deflate"))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.headers("content-encoding"), contains("gzip"));
-            assertThat(resp.header("content-length"), is(nullValue()));
             assertThat(resp.headers("vary"), contains("accept-encoding"));
             try (ByteArrayOutputStream boas = new ByteArrayOutputStream();
                  InputStream is = new GZIPInputStream(resp.body().byteStream())) {
