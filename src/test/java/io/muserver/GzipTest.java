@@ -4,7 +4,6 @@ import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.MuAssert;
-import scaffolding.ServerUtils;
 import scaffolding.StringUtils;
 
 import java.io.ByteArrayOutputStream;
@@ -18,6 +17,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
+import static scaffolding.ServerUtils.httpsServerForTest;
 
 public class GzipTest {
     private static final String LOTS_OF_TEXT = StringUtils.randomAsciiStringOfLength(20000);
@@ -25,7 +25,7 @@ public class GzipTest {
 
     @Test
     public void resourcesCanBeGzipped() throws IOException {
-        server = ServerUtils.httpsServerForTest()
+        server = httpsServerForTest()
             .addHandler(classpathHandler("/sample-static"))
             .start();
         compareZippedVsNotZipped("/overview.txt");
@@ -33,7 +33,7 @@ public class GzipTest {
 
     @Test
     public void responseWriteCanBeGZipped() throws IOException {
-        server = ServerUtils.httpsServerForTest()
+        server = httpsServerForTest()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.contentType(ContentTypes.TEXT_PLAIN_UTF8);
                 response.write(LOTS_OF_TEXT);
@@ -44,7 +44,7 @@ public class GzipTest {
 
     @Test
     public void asyncWritesCanBeGzipped() throws IOException {
-        server = ServerUtils.httpsServerForTest()
+        server = httpsServerForTest()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.contentType(ContentTypes.TEXT_PLAIN_UTF8);
                 AsyncHandle asyncHandle = request.handleAsync();
@@ -58,7 +58,7 @@ public class GzipTest {
 
     @Test
     public void thatWhichIsEncodedShallNotBeEncodedAgain() throws IOException {
-        server = ServerUtils.httpsServerForTest()
+        server = httpsServerForTest()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.contentType(ContentTypes.TEXT_PLAIN_UTF8);
                 response.headers().set(HeaderNames.CONTENT_ENCODING, "identity");
@@ -76,7 +76,7 @@ public class GzipTest {
     @Test
     public void sendChunkCanBeGzipped() throws IOException {
         String someText = StringUtils.randomAsciiStringOfLength(800);
-        server = ServerUtils.httpsServerForTest()
+        server = httpsServerForTest()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.contentType(ContentTypes.TEXT_PLAIN_UTF8);
                 for (int i = 0; i < 20; i++) {
@@ -92,6 +92,7 @@ public class GzipTest {
         try (Response resp = call(request(server.uri().resolve(path)).header("Accept-Encoding", "hmm, gzip, deflate"))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.headers("content-encoding"), contains("gzip"));
+            assertThat(resp.header("content-length"), is(nullValue()));
             assertThat(resp.headers("vary"), contains("accept-encoding"));
             try (ByteArrayOutputStream boas = new ByteArrayOutputStream();
                  InputStream is = new GZIPInputStream(resp.body().byteStream())) {
@@ -110,7 +111,7 @@ public class GzipTest {
 
     @Test
     public void ifTheResponseIsAlreadyCompressedThenDoNotRecompress() throws IOException {
-        server = ServerUtils.httpsServerForTest()
+        server = httpsServerForTest()
             .addHandler(Method.GET, "/overview.txt", (request, response, pathParams) -> {
                 response.headers().set(HeaderNames.CONTENT_TYPE, ContentTypes.TEXT_PLAIN_UTF8);
                 response.headers().set(HeaderNames.CONTENT_ENCODING, "gzip");

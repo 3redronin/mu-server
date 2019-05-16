@@ -69,19 +69,22 @@ public class HeadTest {
             assertThat(resp.code(), is(400));
             assertThat(resp.header("Content-Type"), is("application/json"));
             assertThat(resp.body().string(), is("I am an entity"));
+            assertThat(resp.header("Content-Length"), is("14"));
         }
         try (okhttp3.Response resp = call(request()
             .head()
             .url(server.uri().resolve("/things").toString()))) {
             assertThat(resp.code(), is(400));
             assertThat(resp.header("Content-Type"), is("application/json"));
-            assertThat(resp.body().contentLength(), is(0L));
+            assertThat(resp.header("Content-Length"), is("14"));
+            assertThat(resp.body().string(), is(""));
+
         }
         // Note: transfer type changes from chunked to a specific length
     }
 
     @Test
-    public void a405IsReturnedIfNoHeadAndNoGet() {
+    public void a405IsReturnedIfNoHeadAndNoGet() throws IOException {
         @Path("/things")
         class Thing {
             @POST
@@ -94,7 +97,7 @@ public class HeadTest {
             .head()
             .url(server.uri().resolve("/things").toString()))) {
             assertThat(resp.code(), is(405));
-            assertThat(resp.body().contentLength(), is(0L));
+            assertThat(resp.body().string(), is(""));
         }
     }
 

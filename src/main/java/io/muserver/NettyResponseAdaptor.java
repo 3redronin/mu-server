@@ -199,7 +199,7 @@ abstract class NettyResponseAdaptor implements MuResponse {
             return lastAction;
         }
         boolean shouldDisconnect = forceDisconnect || !request.isKeepAliveRequested();
-        boolean isFixedLength = declaredLength >= 0;
+        boolean isFixedLength = headers.contains(HeaderNames.CONTENT_LENGTH);
         if (outputState == OutputState.NOTHING) {
             boolean addContentLengthHeader = ((!isHead || !isFixedLength) && status != 204 && status != 205 && status != 304);
             sendEmptyResponse(addContentLengthHeader);

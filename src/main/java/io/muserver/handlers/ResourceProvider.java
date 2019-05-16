@@ -203,8 +203,6 @@ class AsyncFileProvider implements ResourceProvider, CompletionHandler<Integer, 
             channel = AsynchronousFileChannel.open(localPath, StandardOpenOption.READ);
             buf = ByteBuffer.allocate(8192);
             channel.read(buf, curPos, handle, this);
-        } else {
-            response.outputStream();
         }
     }
 
@@ -340,8 +338,6 @@ class ClasspathResourceProvider implements ResourceProvider {
                     }
                 }
             }
-        } else {
-            response.outputStream();
         }
     }
 
