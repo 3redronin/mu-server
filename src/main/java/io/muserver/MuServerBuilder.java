@@ -419,6 +419,7 @@ public class MuServerBuilder {
             if (httpsChannel != null) {
                 channels.add(httpsChannel);
                 httpsUri = getUriFromChannel(httpsChannel, "https", host);
+                ((SSLInfoImpl)sslContextProvider.sslInfo()).setHttpsUri(httpsUri);
             }
 
             InetSocketAddress serverAddress = (InetSocketAddress) channels.get(0).localAddress();

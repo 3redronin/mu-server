@@ -17,7 +17,7 @@ class SslContextProvider {
     private final AtomicReference<SslContext> nettySslContext = new AtomicReference<>();
     private volatile SSLInfo sslInfo;
 
-    public SslContextProvider(SslContext context) {
+    SslContextProvider(SslContext context) {
         set(context);
     }
 
@@ -42,4 +42,5 @@ class SslContextProvider {
     SSLInfo sslInfo() {
         return sslInfo;
     }
+
 }

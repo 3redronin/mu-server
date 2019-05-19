@@ -12,6 +12,8 @@ import java.io.IOException;
 import java.net.URI;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
+import java.util.Date;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.MuServerBuilder.httpServer;
@@ -24,9 +26,9 @@ public class HttpsTest {
     private MuServer server;
 
     @Test
-    public void canCreate() throws Exception {
+    public void canGetInfoAboutHttps() throws Exception {
         AtomicReference<SSLInfo> actualSSLInfo = new AtomicReference<>();
-        server = ServerUtils.httpsServerForTest().withHttpsPort(9443).withHttpsConfig(SSLContextBuilder.unsignedLocalhostCert())
+        server = ServerUtils.httpsServerForTest().withHttpsConfig(SSLContextBuilder.unsignedLocalhostCert())
             .addHandler((request, response) -> {
                 actualSSLInfo.set(request.server().sslInfo());
                 response.write("This is encrypted and the URL is " + request.uri());
@@ -35,11 +37,18 @@ public class HttpsTest {
             .start();
 
         try (Response resp = call(request(server.httpsUri()))) {
-            assertThat(resp.body().string(), equalTo("This is encrypted and the URL is https://localhost:9443/"));
+            assertThat(resp.body().string(), equalTo("This is encrypted and the URL is https://localhost:"
+                + server.httpsUri().getPort() + "/"));
         }
-        assertThat(actualSSLInfo.get().providerName(), isOneOf("JDK", "OpenSSL"));
-        assertThat(actualSSLInfo.get().protocols(), hasItem("TLSv1.2"));
-        assertThat(actualSSLInfo.get().ciphers().size(), greaterThan(0));
+        SSLInfo sslInfo = actualSSLInfo.get();
+        assertThat(sslInfo.providerName(), isOneOf("JDK", "OpenSSL"));
+        assertThat(sslInfo.protocols(), hasItem("TLSv1.2"));
+        assertThat(sslInfo.ciphers().size(), greaterThan(0));
+
+        List<X509Certificate> certificates = sslInfo.certificates();
+        assertThat(certificates, hasSize(1));
+        assertThat(certificates.get(0).getNotAfter(), equalTo(new Date(4667278027000L)));
+        assertThat(certificates, equalTo(sslInfo.certificates())); // check that cached calls work
     }
 
     @Test
