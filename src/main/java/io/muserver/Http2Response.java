@@ -72,9 +72,9 @@ class Http2Response extends NettyResponseAdaptor {
         CharSequence enc = Http2Connection.compressionToUse(request.headers());
         if (enc != null && !headers.entries.contains(HeaderNames.CONTENT_ENCODING)) {
             if (settings.shouldCompress(headers.get(HeaderNames.CONTENT_LENGTH), headers.get(HeaderNames.CONTENT_TYPE))) {
-                // by setting the header value, the CompressorHttp2ConnectionEncoder added by the Http2ConnectionBuilder will encode the bytes
-                headers.set(HeaderNames.CONTENT_ENCODING, enc);
-                ctx.channel().attr(MuCompressorHttp2ConnectionEncoder.SHOULD_COMPRESS).set(MuCompressorHttp2ConnectionEncoder.TOKEN);
+                // By setting the header value, the CompressorHttp2ConnectionEncoder added by the Http2ConnectionBuilder will encode the bytes.
+                // The mu- prefix is what indicates to the compressor that we want to compress it, and MuGzipHttp2ConnectionEncoder removes the mu- prefix.
+                headers.set(HeaderNames.CONTENT_ENCODING, "mu-" + enc);
             }
         }
 
