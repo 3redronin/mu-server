@@ -357,14 +357,24 @@ class NettyRequestAdapter implements MuRequest {
     }
 
     void addContext(String contextToAdd) {
+        contextToAdd = normaliseContext(contextToAdd);
+        this.contextPath = this.contextPath + contextToAdd;
+        this.relativePath = this.relativePath.substring(contextToAdd.length());
+    }
+
+    void setPaths(String contextPath, String relativePath) {
+        this.contextPath = contextPath;
+        this.relativePath = relativePath;
+    }
+
+    private static String normaliseContext(String contextToAdd) {
         if (contextToAdd.endsWith("/")) {
             contextToAdd = contextToAdd.substring(0, contextToAdd.length() - 1);
         }
         if (!contextToAdd.startsWith("/")) {
             contextToAdd = "/" + contextToAdd;
         }
-        this.contextPath = this.contextPath + contextToAdd;
-        this.relativePath = this.relativePath.substring(contextToAdd.length());
+        return contextToAdd;
     }
 
     void clean() {

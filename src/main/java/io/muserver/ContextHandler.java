@@ -34,6 +34,8 @@ public class ContextHandler implements MuHandler {
             return true;
         }
         if (rp.startsWith(slashContextSlash) || !hasContext) {
+            String originalContextPath = request.contextPath();
+            String originalRelativePath = request.relativePath();
             if (hasContext) {
                 ((NettyRequestAdapter) request).addContext(contextPath);
             }
@@ -42,6 +44,7 @@ public class ContextHandler implements MuHandler {
                     return true;
                 }
             }
+            ((NettyRequestAdapter) request).setPaths(originalContextPath, originalRelativePath);
         }
         return false;
     }

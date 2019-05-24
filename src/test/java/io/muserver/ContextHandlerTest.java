@@ -150,7 +150,22 @@ public class ContextHandlerTest {
                 assertThat(resp.body().string(), equalTo("I got it. true and /"));
             }
         }
+    }
 
+    @Test
+    public void contextsOnlyApplyToHandlersAddedToThem() throws IOException {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(context("a"))
+            .addHandler(Method.GET, "/b", (request, response, pathParams) -> {
+                response.write(request.contextPath() + " - " + request.relativePath());
+            })
+            .start();
+        try (Response resp = call(request(server.uri().resolve("/b")))) {
+            assertThat(resp.body().string(), is(" - /b"));
+        }
+        try (Response resp = call(request(server.uri().resolve("/a/b")))) {
+            assertThat(resp.code(), is(404));
+        }
     }
 
     @After
