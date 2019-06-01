@@ -21,6 +21,8 @@ public class UploadTest {
 
     private MuServer server;
     public static File guangzhou = new File("src/test/resources/sample-static/images/guangzhou.jpeg");
+    public static File guangzhouChina = new File("src/test/resources/sample-static/images/guangzhou, china.jpeg");
+    public static File friends = new File("src/test/resources/sample-static/images/friends.jpg");
 
     @Before
     public void check() throws IOException {
@@ -63,6 +65,38 @@ public class UploadTest {
                 "non-existent: null"));
         }
     }
+
+    @Test
+    public void multipleWithSameNameCanBeUploaded() throws IOException {
+
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(Method.POST, "/upload", (request, response, pathParams) -> {
+                List<UploadedFile> images = request.uploadedFiles("image");
+                for (UploadedFile image : images) {
+                    response.sendChunk(image.filename() + " is " + image.asBytes().length + " bytes\n");
+                }
+                response.sendChunk("\nnon-existent: " + request.uploadedFiles("nothing").size());
+            }).start();
+
+        try (Response resp = call(request(server.uri().resolve("/upload"))
+            .post(new MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                .addPart(Headers.of("Content-Disposition", "form-data; name=\"image\"; filename=\"guangzhou.jpeg\""),
+                    RequestBody.create(MediaType.parse("image/jpeg"), guangzhou))
+                .addPart(Headers.of("Content-Disposition", "form-data; name=\"image\"; filename=\"guangzhou, china.jpeg\""),
+                    RequestBody.create(MediaType.parse("image/jpeg"), guangzhouChina))
+                .addPart(Headers.of("Content-Disposition", "form-data; name=\"image\"; filename=\"friends.jpg\""),
+                    RequestBody.create(MediaType.parse("image/jpeg"), friends))
+                .build())
+        )) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), is("guangzhou.jpeg is 372987 bytes\n" +
+                "guangzhou  china.jpeg is 372987 bytes\n" +
+                "friends.jpg is 1712954 bytes\n\n" +
+                "non-existent: 0"));
+        }
+    }
+
 
     @Test
     public void nothingUploadedResultsInNoFilesAvailable() throws IOException {

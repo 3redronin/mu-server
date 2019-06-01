@@ -1,14 +1,12 @@
 package io.muserver.openapi;
 
+import io.muserver.UploadedFile;
 import org.junit.Test;
 
 import java.io.IOException;
 import java.io.StringWriter;
 import java.io.Writer;
-import java.util.Collection;
-import java.util.Date;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 import static io.muserver.openapi.SchemaObjectBuilder.schemaObject;
 import static io.muserver.openapi.SchemaObjectBuilder.schemaObjectFrom;
@@ -202,6 +200,30 @@ public class SchemaObjectTest {
         assertThat(schema.items.type, equalTo("string"));
     }
 
+
+    @SuppressWarnings("WeakerAccess")
+    public List<String> listOfString = new ArrayList<>();
+    @Test
+    public void genericTypesCanBeKnown() throws NoSuchFieldException {
+        SchemaObject schema = schemaObjectFrom(listOfString.getClass(), getClass().getField("listOfString").getGenericType()).build();
+        assertThat(schema.type, equalTo("array"));
+        assertThat(schema.format, is(nullValue()));
+        assertThat(schema.nullable, is(true));
+        assertThat(schema.items.type, equalTo("string"));
+    }
+
+
+    @SuppressWarnings("WeakerAccess")
+    public List<UploadedFile> listOfUploadedFiles = new ArrayList<>();
+    @Test
+    public void genericTypesCanBeKnownForFiles() throws NoSuchFieldException {
+        SchemaObject schema = schemaObjectFrom(listOfUploadedFiles.getClass(), getClass().getField("listOfUploadedFiles").getGenericType()).build();
+        assertThat(schema.type, equalTo("array"));
+        assertThat(schema.format, is(nullValue()));
+        assertThat(schema.nullable, is(true));
+        assertThat(schema.items.type, equalTo("string"));
+        assertThat(schema.items.format, equalTo("binary"));
+    }
 
 
 

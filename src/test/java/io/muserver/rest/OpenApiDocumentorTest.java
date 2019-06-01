@@ -1,6 +1,7 @@
 package io.muserver.rest;
 
 import io.muserver.MuServer;
+import io.muserver.UploadedFile;
 import io.muserver.openapi.InfoObjectBuilder;
 import io.muserver.openapi.LicenseObjectBuilder;
 import io.muserver.openapi.OpenAPIObjectBuilder;
@@ -13,10 +14,15 @@ import org.json.JSONObject;
 import org.junit.Test;
 import scaffolding.ServerUtils;
 
+import javax.ws.rs.Consumes;
+import javax.ws.rs.FormParam;
+import javax.ws.rs.POST;
+import javax.ws.rs.Path;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.net.URI;
+import java.util.List;
 
 import static io.muserver.openapi.ExternalDocumentationObjectBuilder.externalDocumentationObject;
 import static org.hamcrest.CoreMatchers.is;
@@ -28,9 +34,19 @@ import static scaffolding.ClientUtils.request;
 
 public class OpenApiDocumentorTest {
 
+    @Path("/uploads")
+    static class FileUploadResource {
+        @POST
+        @Consumes(javax.ws.rs.core.MediaType.MULTIPART_FORM_DATA)
+        public void create(@FormParam("images") List<UploadedFile> images,
+                           @FormParam("oneThing") UploadedFile oneThing,
+                           @FormParam("requiredThing") @Required UploadedFile requiredThing) {
+        }
+    }
+
     private final MuServer server = ServerUtils.httpsServerForTest()
         .addHandler(RestHandlerBuilder.restHandler(
-            new PetResource(), new PetStoreResource(), new UserResource(), new VehicleResource()
+            new PetResource(), new PetStoreResource(), new UserResource(), new VehicleResource(), new FileUploadResource()
             ).withOpenApiDocument(OpenAPIObjectBuilder.openAPIObject()
                 .withInfo(InfoObjectBuilder.infoObject()
                     .withTitle("Mu Server Sample API")
@@ -43,8 +59,8 @@ public class OpenApiDocumentorTest {
                     .withDescription("The swagger version of this API")
                     .withUrl(URI.create("http://petstore.swagger.io"))
                     .build()))
-            .withOpenApiJsonUrl("/openapi.json")
-            .withOpenApiHtmlUrl("/api.html")
+                .withOpenApiJsonUrl("/openapi.json")
+                .withOpenApiHtmlUrl("/api.html")
         )
         .start();
 
@@ -122,6 +138,35 @@ public class OpenApiDocumentorTest {
             }
         }
 
+    }
+
+    @Test
+    public void fileUploadsAreCorrect() throws IOException {
+        try (okhttp3.Response resp = call(request().url(server.uri().resolve("/openapi.json").toString()))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.header("Content-Type"), equalTo("application/json"));
+            String responseBody = resp.body().string();
+            JSONObject json = new JSONObject(responseBody);
+
+            JSONObject params = json.getJSONObject("paths")
+                .getJSONObject("/uploads")
+                .getJSONObject("post")
+                .getJSONObject("requestBody")
+                .getJSONObject("content")
+                .getJSONObject("multipart/form-data")
+                .getJSONObject("schema")
+                .getJSONObject("properties");
+
+            JSONObject oneThing = params.getJSONObject("oneThing");
+            assertThat(oneThing.getString("type"), is("string"));
+            assertThat(oneThing.getString("format"), is("binary"));
+
+            JSONObject images = params.getJSONObject("images");
+            assertThat(images.getString("type"), is("array"));
+            JSONObject items = images.getJSONObject("items");
+            assertThat(items.getString("type"), is("string"));
+            assertThat(items.getString("format"), is("binary"));
+        }
     }
 
 }

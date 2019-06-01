@@ -1,5 +1,9 @@
 package io.muserver.openapi;
 
+import io.muserver.UploadedFile;
+
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
 import java.util.Collection;
 import java.util.Date;
 import java.util.List;
@@ -290,24 +294,51 @@ public class SchemaObjectBuilder {
      * @return A new builder
      */
     public static SchemaObjectBuilder schemaObjectFrom(Class<?> from) {
+        return schemaObjectFrom(from, null);
+    }
+
+    /**
+     * Creates a builder for a {@link SchemaObject} with the type and format based on the given class and generic type.
+     * @param from Type type to build from, e.g. if the type is <code>List.class</code> then the <code>type</code> will
+     *             be set as <code>array</code>.
+     * @param parameterizedType The generic type of the class, e.g. a String if the type is <code>List&lt;String&gt;</code>
+     * @return A new builder
+     */
+    public static SchemaObjectBuilder schemaObjectFrom(Class<?> from, Type parameterizedType) {
         String jsonType = jsonType(from);
         return schemaObject()
             .withType(jsonType)
             .withFormat(jsonFormat(from))
             .withNullable(!from.isPrimitive())
-            .withItems(itemsFor(from, "array".equals(jsonType)));
+            .withItems(itemsFor(from, parameterizedType, "array".equals(jsonType)));
     }
 
-    private static SchemaObject itemsFor(Class<?> from, boolean isJsonArray) {
+    private static SchemaObject itemsFor(Class<?> from, Type parameterizedType, boolean isJsonArray) {
         Class<?> componentType = from.getComponentType();
         if (componentType == null) {
-            return isJsonArray ? schemaObject().withType("object").build() : null;
+            if (isJsonArray) {
+                SchemaObjectBuilder schemaObjectBuilder = schemaObject().withType("object");
+                if (parameterizedType instanceof ParameterizedType) {
+                    Type[] actualTypeArguments = ((ParameterizedType) parameterizedType).getActualTypeArguments();
+                    if (actualTypeArguments.length == 1) {
+                        Type argType = actualTypeArguments[0];
+                        if (argType instanceof Class<?>) {
+                            Class<?> argClass = (Class<?>) argType;
+                            schemaObjectBuilder.withType(jsonType(argClass))
+                                .withFormat(jsonFormat(argClass));
+                        }
+                    }
+                }
+                return schemaObjectBuilder.build();
+            } else {
+                return null;
+            }
         }
         return schemaObjectFrom(componentType).build();
     }
 
     private static String jsonType(Class<?> type) {
-        if (CharSequence.class.isAssignableFrom(type) || type.equals(byte.class) || type.equals(Byte.class) || type.isAssignableFrom(Date.class)) {
+        if (CharSequence.class.isAssignableFrom(type) || type.equals(byte.class) || type.equals(Byte.class) || type.isAssignableFrom(Date.class) || UploadedFile.class.isAssignableFrom(type)) {
             return "string";
         } else if (type.equals(boolean.class) || type.equals(Boolean.class)) {
             return "boolean";
@@ -334,6 +365,8 @@ public class SchemaObjectBuilder {
             return "byte";
         } else if (type.equals(Date.class)) {
             return "date-time";
+        } else if (UploadedFile.class.isAssignableFrom(type)) {
+            return "binary";
         }
         return null;
     }

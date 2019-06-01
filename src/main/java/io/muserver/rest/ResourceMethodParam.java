@@ -1,6 +1,7 @@
 package io.muserver.rest;
 
 import io.muserver.MuRequest;
+import io.muserver.UploadedFile;
 import io.muserver.openapi.ExternalDocumentationObject;
 import io.muserver.openapi.ParameterObjectBuilder;
 
@@ -12,6 +13,7 @@ import javax.ws.rs.ext.ParamConverterProvider;
 import java.io.IOException;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Parameter;
+import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.List;
 
@@ -113,6 +115,23 @@ abstract class ResourceMethodParam {
         }
 
         public Object getValue(MuRequest request, RequestMatcher.MatchedMethod matchedMethod) throws IOException {
+
+            Class<?> paramClass = parameterHandle.getType();
+            if (UploadedFile.class.isAssignableFrom(paramClass)) {
+                return request.uploadedFile(key);
+            } else if (List.class.isAssignableFrom(paramClass)) {
+                Type t = parameterHandle.getParameterizedType();
+                if (t instanceof ParameterizedType) {
+                    Type[] actualTypeArguments = ((ParameterizedType) t).getActualTypeArguments();
+                    if (actualTypeArguments.length == 1) {
+                        Type argType = actualTypeArguments[0];
+                        if (argType instanceof Class<?> && UploadedFile.class.isAssignableFrom((Class<?>) argType)) {
+                            return request.uploadedFiles(key);
+                        }
+                    }
+                }
+            }
+
             String specifiedValue =
                 source == ValueSource.COOKIE_PARAM ? request.cookie(key).orElse("") // TODO make request.cookie return a string and default it
                     : source == ValueSource.HEADER_PARAM ? String.join(",", request.headers().getAll(key))

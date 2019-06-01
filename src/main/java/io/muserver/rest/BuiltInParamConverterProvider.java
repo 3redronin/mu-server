@@ -1,6 +1,7 @@
 package io.muserver.rest;
 
 import io.muserver.Mutils;
+import io.muserver.UploadedFile;
 
 import javax.ws.rs.InternalServerErrorException;
 import javax.ws.rs.ext.ParamConverter;
@@ -65,6 +66,9 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
                 return converter;
             }
         }
+        if (UploadedFile.class.isAssignableFrom(rawType)) {
+            return new UploadedFileConverter();
+        }
         if (rawType.isEnum()) {
             return new EnumConverter(rawType);
         }
@@ -91,6 +95,17 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
             }
         }
         return null;
+    }
+
+    private static class UploadedFileConverter implements ParamConverter<UploadedFile> {
+        @Override
+        public UploadedFile fromString(String value) {
+            return null;
+        }
+        @Override
+        public String toString(UploadedFile value) {
+            return value.filename();
+        }
     }
 
     private static class CollectionConverter implements ParamConverter {

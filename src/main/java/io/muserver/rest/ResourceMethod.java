@@ -148,7 +148,7 @@ class ResourceMethod {
                                                     if (n.isRequired) {
                                                         required.add(n.key);
                                                     }
-                                                    SchemaObjectBuilder schemaObjectBuilder = schemaObjectFrom(n.parameterHandle.getType())
+                                                    SchemaObjectBuilder schemaObjectBuilder = schemaObjectFrom(n.parameterHandle.getType(), n.parameterHandle.getParameterizedType())
                                                         .withNullable(!n.isRequired)
                                                         .withDeprecated(n.isDeprecated)
                                                         .withDefaultValue(n.defaultValue());
