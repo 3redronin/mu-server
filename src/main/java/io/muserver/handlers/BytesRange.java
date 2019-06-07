@@ -14,7 +14,7 @@ class BytesRange {
         this.from = Math.max(0, from);
         this.to = to;
         this.total = total;
-        if (from >= to || to >= total) {
+        if (from > to || to >= total) {
             throw new IllegalArgumentException("The range " + from + " and " + to + " is invalid for length " + total);
         }
     }

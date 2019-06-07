@@ -56,6 +56,15 @@ public class BytesRangeTest {
     }
 
     @Test
+    public void finalByteSupported() {
+        BytesRange r = BytesRange.parse(1000L, "bytes=999-999").get(0);
+        assertThat(r.from, is(999L));
+        assertThat(r.to, is(999L));
+        assertThat(r.length(), is(1L));
+        assertThat(r.toString(), is("bytes 999-999/1000"));
+    }
+
+    @Test
     public void invalidRangesThrow() {
         String[] bads = { "bytes=10", "bytes=1-10,umm", "bytes=bytes" };
         for (String bad : bads) {

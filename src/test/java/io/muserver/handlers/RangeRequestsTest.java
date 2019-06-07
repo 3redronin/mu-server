@@ -74,6 +74,16 @@ public class RangeRequestsTest {
                 assertThat(prefix, resp.body().string(), is("abcdefghij"));
             }
 
+            try (Response resp = call(request(uri).header("Range", "bytes=61-61"))) {
+                assertThat(prefix, resp.code(), is(206));
+                assertThat(prefix, resp.header("Content-Type"), is("text/plain"));
+                assertThat(prefix, resp.header("Content-Length"), is("1"));
+                assertThat(prefix, resp.header("Content-Range"), is("bytes 61-61/62"));
+                assertThat(prefix, resp.header("Accept-Ranges"), is("bytes"));
+                assertThat(prefix, resp.body().string(), is("Z"));
+            }
+
+
             for (String lastTenBytes : new String[]{"bytes=-10", "bytes=52-61"}) {
                 try (Response resp = call(request(uri).header("Range", lastTenBytes))) {
                     assertThat(prefix, resp.code(), is(206));
