@@ -7,6 +7,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.TooLongFrameException;
 import io.netty.handler.codec.http.*;
+import io.netty.handler.codec.http.websocketx.*;
 import io.netty.util.AttributeKey;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,6 +23,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 class Http1Connection extends SimpleChannelInboundHandler<Object> {
     private static final Logger log = LoggerFactory.getLogger(Http1Connection.class);
     private static final AttributeKey<AsyncContext> STATE_ATTRIBUTE = AttributeKey.newInstance("state"); // todo, just store as a volatile field?
+    static final AttributeKey<MuWebSocket> WEBSOCKET_ATTRIBUTE = AttributeKey.newInstance("ws"); // todo, just store as a volatile field?
 
     private final NettyHandlerAdapter nettyHandlerAdapter;
     private final MuStatsImpl stats;
@@ -95,12 +97,13 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
                     return;
                 }
 
-                NettyRequestAdapter muRequest = new NettyRequestAdapter(ctx.channel(), request, headers, serverRef, method,
+                NettyRequestAdapter muRequest = new NettyRequestAdapter(ctx, ctx.channel(), request, headers, serverRef, method,
                     proto, relativeUri, HttpUtil.isKeepAlive(request), headers.get(HeaderNames.HOST), request.protocolVersion().text());
                 stats.onRequestStarted(muRequest);
 
+                Http1Response muResponse = new Http1Response(ctx, muRequest, new Http1Headers());
 
-                AsyncContext asyncContext = new AsyncContext(muRequest, new Http1Response(ctx, muRequest, new Http1Headers()), stats);
+                AsyncContext asyncContext = new AsyncContext(muRequest, muResponse, stats);
                 ctx.channel().attr(STATE_ATTRIBUTE).set(asyncContext);
                 nettyHandlerAdapter.onHeaders(asyncContext, asyncContext.request.headers());
             }
@@ -115,6 +118,24 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
                 NettyHandlerAdapter.passDataToHandler(byteBuf, nettyHandlerAdapter, asyncContext);
                 if (msg instanceof LastHttpContent) {
                     nettyHandlerAdapter.onRequestComplete(asyncContext);
+                }
+            }
+        } else if (msg instanceof WebSocketFrame) {
+            MuWebSocket muWebSocket = ctx.channel().attr(WEBSOCKET_ATTRIBUTE).get();
+            if (muWebSocket != null) {
+                if (msg instanceof TextWebSocketFrame) {
+                    muWebSocket.onText(((TextWebSocketFrame) msg).text());
+                } else if (msg instanceof BinaryWebSocketFrame) {
+                    muWebSocket.onBinary(((BinaryWebSocketFrame) msg).content().nioBuffer());
+                } else if (msg instanceof PingWebSocketFrame) {
+                    muWebSocket.onPing(((PingWebSocketFrame) msg).content().nioBuffer());
+                } else if (msg instanceof PongWebSocketFrame) {
+                    muWebSocket.onPong(((PongWebSocketFrame) msg).content().nioBuffer());
+                } else if (msg instanceof CloseWebSocketFrame) {
+                    CloseWebSocketFrame cwsf = (CloseWebSocketFrame) msg;
+                    muWebSocket.onClose(cwsf.statusCode(), cwsf.reasonText());
+                } else {
+                    log.info("Got " + msg);
                 }
             }
         }

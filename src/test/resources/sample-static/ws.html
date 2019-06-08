@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta charset="UTF-8">
+    <title>Sample Website</title>
+</head>
+<body>
+
+<header>
+    <h1>Sample Website</h1>
+    <nav>
+        <a href="/">Home</a>
+    </nav>
+</header>
+
+<script>
+    const socket = new WebSocket('ws://localhost:12334/blah');
+
+    socket.addEventListener('open', function (event) {
+        socket.send('Hello Server!');
+    });
+
+    socket.addEventListener('message', function (event) {
+        console.log('Message from server ', event.data);
+    });
+</script>
+
+
+</body>
+</html>

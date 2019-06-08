@@ -36,7 +36,11 @@ abstract class NettyResponseAdaptor implements MuResponse {
     protected long declaredLength = -1;
 
     protected enum OutputState {
-        NOTHING, FULL_SENT, STREAMING, STREAMING_COMPLETE, FINISHED, DISCONNECTED
+        NOTHING, FULL_SENT, STREAMING, STREAMING_COMPLETE, FINISHED, DISCONNECTED, WEBSOCKET
+    }
+
+    void setWebsocket() {
+        outputState = OutputState.WEBSOCKET;
     }
 
     void onCancelled() {

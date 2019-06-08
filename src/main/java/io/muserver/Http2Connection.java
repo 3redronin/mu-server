@@ -108,7 +108,7 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
         Http2Headers muHeaders = new Http2Headers(headers, hasRequestBody);
         String host = headers.authority().toString();
         muHeaders.set(HeaderNames.HOST, host);
-        NettyRequestAdapter muReq = new NettyRequestAdapter(ctx.channel(), nettyReq, muHeaders, serverRef, muMethod, "https", uri, true, host, "HTTP/2");
+        NettyRequestAdapter muReq = new NettyRequestAdapter(ctx, ctx.channel(), nettyReq, muHeaders, serverRef, muMethod, "https", uri, true, host, "HTTP/2");
 
         stats.onRequestStarted(muReq);
         Http2Response resp = new Http2Response(ctx, muReq, new Http2Headers(), encoder(), streamId, settings);

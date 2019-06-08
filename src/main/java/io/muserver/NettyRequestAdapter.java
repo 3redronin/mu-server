@@ -1,15 +1,20 @@
 package io.muserver;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
+import io.netty.buffer.EmptyByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.*;
 import io.netty.handler.codec.http.cookie.ServerCookieDecoder;
 import io.netty.handler.codec.http.multipart.Attribute;
 import io.netty.handler.codec.http.multipart.FileUpload;
 import io.netty.handler.codec.http.multipart.HttpPostMultipartRequestDecoder;
 import io.netty.handler.codec.http.multipart.InterfaceHttpData;
+import io.netty.handler.codec.http.websocketx.WebSocketServerHandshaker;
+import io.netty.handler.codec.http.websocketx.WebSocketServerHandshakerFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,6 +37,7 @@ import static java.util.Collections.emptySet;
 
 class NettyRequestAdapter implements MuRequest {
     private static final Logger log = LoggerFactory.getLogger(NettyRequestAdapter.class);
+    private final ChannelHandlerContext ctx;
     private final Channel channel;
     private final HttpRequest request;
     private final AtomicReference<MuServer> serverRef;
@@ -54,7 +60,8 @@ class NettyRequestAdapter implements MuRequest {
     private final boolean keepalive;
     private final String protocol;
 
-    NettyRequestAdapter(Channel channel, HttpRequest request, Headers headers, AtomicReference<MuServer> serverRef, Method method, String proto, String uri, boolean keepalive, String host, String protocol) {
+    NettyRequestAdapter(ChannelHandlerContext ctx, Channel channel, HttpRequest request, Headers headers, AtomicReference<MuServer> serverRef, Method method, String proto, String uri, boolean keepalive, String host, String protocol) {
+        this.ctx = ctx;
         this.channel = channel;
         this.request = request;
         this.serverRef = serverRef;
@@ -393,6 +400,37 @@ class NettyRequestAdapter implements MuRequest {
         }
     }
 
+    public boolean websocketUpgrade(MuWebSocket muWebSocket) {
+        if (request.headers().contains(HeaderNames.UPGRADE, HeaderValues.WEBSOCKET, true)) {
+
+            String url = "ws" + uri().toString().substring(4);
+            WebSocketServerHandshakerFactory factory = new WebSocketServerHandshakerFactory(url, null, false);
+
+
+            DefaultFullHttpRequest fullReq = new DefaultFullHttpRequest(request.protocolVersion(), request.method(), request.uri(), new EmptyByteBuf(ByteBufAllocator.DEFAULT), request.headers(), EmptyHttpHeaders.INSTANCE);
+            WebSocketServerHandshaker handshaker = factory.newHandshaker(
+                fullReq
+            );
+            if (handshaker == null) {
+                WebSocketServerHandshakerFactory.sendUnsupportedVersionResponse(ctx.channel());
+                return false;
+            }
+
+
+            ctx.channel().attr(Http1Connection.WEBSOCKET_ATTRIBUTE).set(muWebSocket);
+
+            handshaker.handshake(ctx.channel(), fullReq)
+                .addListener(future -> {
+                    muWebSocket.onConnect(new MuWebSocketSessionImpl(ctx));
+                });
+
+            return true;
+        }
+
+        return false;
+    }
+
+
     private static class AsyncHandleImpl implements AsyncHandle {
 
         private final NettyRequestAdapter request;
@@ -466,7 +504,7 @@ class NettyRequestAdapter implements MuRequest {
             if (listener != null) {
                 listener.onComplete(complete);
             }
-
         }
     }
+
 }
