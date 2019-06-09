@@ -68,7 +68,7 @@ public class WebSocketsTest {
     }
 
     @Test
-    public void largeFramesCanBeSent() {
+    public void largeFramesCanBeSent() throws IOException {
         server = ServerUtils.httpsServerForTest()
             .addHandler(webSocketHandler(request -> serverSocket))
             .start();
@@ -77,14 +77,14 @@ public class WebSocketsTest {
         MuAssert.assertNotTimedOut("Connecting", serverSocket.connectedLatch);
         String largeText = StringUtils.randomAsciiStringOfLength(60000);
         clientSocket.send(largeText);
-        clientSocket.close(1000, "Done");
-        MuAssert.assertNotTimedOut("Closing", serverSocket.closedLatch);
+        MuAssert.assertNotTimedOut("messageLatch", listener.messageLatch);
         assertThat(listener.events,
             contains("onOpen", "onMessage text: " + largeText.toUpperCase()));
-    }
+        clientSocket.close(1000, "Done");
+     }
 
     @Test
-    public void ifMaxFrameLengthExceededThenSocketIsClosed() throws InterruptedException {
+    public void ifMaxFrameLengthExceededThenSocketIsClosed() {
         server = ServerUtils.httpsServerForTest()
             .addHandler(webSocketHandler(request -> serverSocket)
                 .withPath("/routed-websocket")
@@ -402,9 +402,18 @@ public class WebSocketsTest {
 
     private static class ClientListener extends WebSocketListener {
 
-        List<String> events = new CopyOnWriteArrayList<>();
-        CountDownLatch closedLatch = new CountDownLatch(1);
-        CountDownLatch failureLatch = new CountDownLatch(1);
+        final List<String> events = new CopyOnWriteArrayList<>();
+        final CountDownLatch closedLatch = new CountDownLatch(1);
+        final CountDownLatch failureLatch = new CountDownLatch(1);
+        final CountDownLatch messageLatch;
+
+        private ClientListener() {
+            this(1);
+        }
+        private ClientListener(int expectedMessages) {
+            messageLatch = new CountDownLatch(expectedMessages);
+        }
+
 
         @Override
         public void onOpen(WebSocket webSocket, Response response) {
@@ -414,11 +423,13 @@ public class WebSocketsTest {
         @Override
         public void onMessage(WebSocket webSocket, String text) {
             events.add("onMessage text: " + text);
+            messageLatch.countDown();
         }
 
         @Override
         public void onMessage(WebSocket webSocket, ByteString bytes) {
             events.add("onMessage binary: " + bytes.string(UTF_8));
+            messageLatch.countDown();
         }
 
         @Override

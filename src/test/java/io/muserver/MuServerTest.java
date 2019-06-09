@@ -355,10 +355,8 @@ public class MuServerTest {
                 }
             })
             .start();
-        try (Response ignored = call(request(server.uri()))) {
-            Assert.fail("This should not work");
-        } catch (Exception ignored) {
-            // expected
+        try (Response resp = call(request(server.uri()))) {
+            assertThat(resp.code(), is(408));
         }
         assertThat(exceptionFromServer.get(10, TimeUnit.SECONDS), instanceOf(Exception.class));
     }

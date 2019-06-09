@@ -182,7 +182,7 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
     }
 
     @Override
-    public void userEventTriggered(ChannelHandlerContext ctx, Object evt) {
+    public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
         if (evt instanceof IdleStateEvent) {
             MuWebSocketSessionImpl session = getWebSocket(ctx);
             if (session != null) {
@@ -195,15 +195,16 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
             } else {
                 AsyncContext asyncContext = ctx.channel().attr(STATE_ATTRIBUTE).get();
                 if (asyncContext != null) {
-                    asyncContext.onCancelled(true);
-                } else {
-                    ctx.close();
+                    asyncContext.onCancelled(false);
                 }
+                ctx.writeAndFlush(new DefaultFullHttpResponse(HTTP_1_1, HttpResponseStatus.REQUEST_TIMEOUT))
+                    .addListener(ChannelFutureListener.CLOSE);
             }
         }
+        super.userEventTriggered(ctx, evt);
     }
 
-    protected MuWebSocketSessionImpl getWebSocket(ChannelHandlerContext ctx) {
+    private MuWebSocketSessionImpl getWebSocket(ChannelHandlerContext ctx) {
         return ctx.channel().attr(WEBSOCKET_ATTRIBUTE).get();
     }
 
@@ -216,7 +217,7 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
         } else if (cause instanceof CorruptedFrameException) {
             MuWebSocketSessionImpl webSocket = getWebSocket(ctx);
             if (webSocket != null) {
-                webSocket.close(1002, "Protocol Error: " + cause.getMessage());
+                webSocket.close(1002, "Protocol Error");
                 return;
             }
         } else {
