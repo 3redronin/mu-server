@@ -5,6 +5,7 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.handler.codec.CorruptedFrameException;
 import io.netty.handler.codec.TooLongFrameException;
 import io.netty.handler.codec.http.*;
 import io.netty.handler.codec.http.websocketx.*;
@@ -25,7 +26,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 class Http1Connection extends SimpleChannelInboundHandler<Object> {
     private static final Logger log = LoggerFactory.getLogger(Http1Connection.class);
     private static final AttributeKey<AsyncContext> STATE_ATTRIBUTE = AttributeKey.newInstance("state"); // todo, just store as a volatile field?
-    static final AttributeKey<MuWebSocket> WEBSOCKET_ATTRIBUTE = AttributeKey.newInstance("ws"); // todo, just store as a volatile field?
+    static final AttributeKey<MuWebSocketSessionImpl> WEBSOCKET_ATTRIBUTE = AttributeKey.newInstance("ws"); // todo, just store as a volatile field?
 
     private final NettyHandlerAdapter nettyHandlerAdapter;
     private final MuStatsImpl stats;
@@ -123,8 +124,9 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
                 }
             }
         } else if (msg instanceof WebSocketFrame) {
-            MuWebSocket muWebSocket = ctx.channel().attr(WEBSOCKET_ATTRIBUTE).get();
-            if (muWebSocket != null) {
+            MuWebSocketSessionImpl session = getWebSocket(ctx);
+            if (session != null) {
+                MuWebSocket muWebSocket = session.muWebSocket;
                 if (msg instanceof TextWebSocketFrame) {
                     muWebSocket.onText(((TextWebSocketFrame) msg).text());
                 } else if (msg instanceof BinaryWebSocketFrame) {
@@ -182,10 +184,10 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
     @Override
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) {
         if (evt instanceof IdleStateEvent) {
-            MuWebSocket muWebSocket = ctx.channel().attr(WEBSOCKET_ATTRIBUTE).get();
-            if (muWebSocket != null) {
+            MuWebSocketSessionImpl session = getWebSocket(ctx);
+            if (session != null) {
                 try {
-                    muWebSocket.onIdleTimeout();
+                    session.muWebSocket.onIdleTimeout();
                 } catch (Exception e) {
                     log.warn("Error while processing idle timeout", e);
                     ctx.close();
@@ -201,12 +203,22 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
         }
     }
 
+    protected MuWebSocketSessionImpl getWebSocket(ChannelHandlerContext ctx) {
+        return ctx.channel().attr(WEBSOCKET_ATTRIBUTE).get();
+    }
+
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         AsyncContext asyncContext = ctx.channel().attr(STATE_ATTRIBUTE).get();
         if (asyncContext != null) {
             log.debug(cause.getClass().getName() + " (" + cause.getMessage() + ") for " + ctx + " so will disconnect this client");
             asyncContext.onCancelled(true);
+        } else if (cause instanceof CorruptedFrameException) {
+            MuWebSocketSessionImpl webSocket = getWebSocket(ctx);
+            if (webSocket != null) {
+                webSocket.close(1002, "Protocol Error: " + cause.getMessage());
+                return;
+            }
         } else {
             log.debug("Exception for unknown ctx " + ctx, cause);
         }

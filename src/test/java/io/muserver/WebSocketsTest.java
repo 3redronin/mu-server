@@ -68,6 +68,43 @@ public class WebSocketsTest {
     }
 
     @Test
+    public void largeFramesCanBeSent() {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(webSocketHandler(request -> serverSocket))
+            .start();
+        ClientListener listener = new ClientListener();
+        WebSocket clientSocket = client.newWebSocket(webSocketRequest(server.uri()), listener);
+        MuAssert.assertNotTimedOut("Connecting", serverSocket.connectedLatch);
+        String largeText = StringUtils.randomAsciiStringOfLength(60000);
+        clientSocket.send(largeText);
+        clientSocket.close(1000, "Done");
+        MuAssert.assertNotTimedOut("Closing", serverSocket.closedLatch);
+        assertThat(listener.events,
+            contains("onOpen", "onMessage text: " + largeText.toUpperCase()));
+    }
+
+    @Test
+    public void ifMaxFrameLengthExceededThenSocketIsClosed() throws InterruptedException {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(webSocketHandler(request -> serverSocket)
+                .withPath("/routed-websocket")
+                .withMaxFramePayloadLength(1024)
+            )
+            .start();
+
+        ClientListener listener = new ClientListener();
+        WebSocket clientSocket = client.newWebSocket(webSocketRequest(server.uri().resolve("/routed-websocket")), listener);
+
+        MuAssert.assertNotTimedOut("Connecting", serverSocket.connectedLatch);
+
+        String largeText = StringUtils.randomStringOfLength(2000);
+        clientSocket.send(largeText);
+
+        MuAssert.assertNotTimedOut("Erroring", listener.failureLatch);
+        clientSocket.close(1000, "Finished");
+    }
+
+    @Test
     public void pathsWorkForWebsockets() {
         server = ServerUtils.httpsServerForTest()
             .addHandler(webSocketHandler(request -> serverSocket).withPath("/routed-websocket"))
@@ -357,7 +394,7 @@ public class WebSocketsTest {
         }
 
         @Override
-        public void onIdleTimeout() throws Exception {
+        public void onIdleTimeout() {
             received.add("onIdleTimeout");
             idleTimeoutLatch.countDown();
         }

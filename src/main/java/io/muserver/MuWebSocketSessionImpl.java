@@ -18,9 +18,11 @@ class MuWebSocketSessionImpl implements MuWebSocketSession {
     private volatile boolean closeSent = false;
 
     private final ChannelHandlerContext ctx;
+    final MuWebSocket muWebSocket;
 
-    MuWebSocketSessionImpl(ChannelHandlerContext ctx) {
+    MuWebSocketSessionImpl(ChannelHandlerContext ctx, MuWebSocket muWebSocket) {
         this.ctx = ctx;
+        this.muWebSocket = muWebSocket;
     }
 
     @Override

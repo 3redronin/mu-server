@@ -402,9 +402,9 @@ class NettyRequestAdapter implements MuRequest {
         }
     }
 
-    boolean websocketUpgrade(MuWebSocket muWebSocket, long idleTimeoutMills) throws IOException {
+    boolean websocketUpgrade(MuWebSocket muWebSocket, long idleTimeoutMills, int maxFramePayloadLength) throws IOException {
         String url = "ws" + uri().toString().substring(4);
-        WebSocketServerHandshakerFactory factory = new WebSocketServerHandshakerFactory(url, null, false);
+        WebSocketServerHandshakerFactory factory = new WebSocketServerHandshakerFactory(url, null, false, maxFramePayloadLength);
 
         if (inputStream().isPresent()) {
             try (InputStream is = inputStream().get()) {
@@ -423,12 +423,11 @@ class NettyRequestAdapter implements MuRequest {
         }
 
         ctx.channel().pipeline().replace("idle", "idle", new IdleStateHandler(0, 0, idleTimeoutMills, TimeUnit.MILLISECONDS));
-        ctx.channel().attr(Http1Connection.WEBSOCKET_ATTRIBUTE).set(muWebSocket);
+        MuWebSocketSessionImpl session = new MuWebSocketSessionImpl(ctx, muWebSocket);
+        ctx.channel().attr(Http1Connection.WEBSOCKET_ATTRIBUTE).set(session);
 
         handshaker.handshake(ctx.channel(), fullReq)
-            .addListener(future -> {
-                muWebSocket.onConnect(new MuWebSocketSessionImpl(ctx));
-            });
+            .addListener(future -> muWebSocket.onConnect(session));
 
         return true;
     }

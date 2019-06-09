@@ -10,6 +10,7 @@ public class WebSocketHandlerBuilder implements MuHandlerBuilder<WebSocketHandle
     private MuWebSocketFactory factory;
     private String path;
     private long idleTimeoutMills = TimeUnit.MINUTES.toMillis(5);
+    private int maxFramePayloadLength = 65536;
 
     /**
      * <p>Sets the factory that decides whether to create a websocket connection for a request.</p>
@@ -54,6 +55,19 @@ public class WebSocketHandlerBuilder implements MuHandlerBuilder<WebSocketHandle
     }
 
     /**
+     * Sets the maximum size in bytes that a frame can be. Defaults to <code>65536</code>
+     * @param maxFramePayloadLength The maximum allowed size in bytes of websocket frames.
+     * @return This builder
+     */
+    public WebSocketHandlerBuilder withMaxFramePayloadLength(int maxFramePayloadLength) {
+        if (maxFramePayloadLength < 1024) {
+            throw new IllegalArgumentException("The maxFramePayloadLength must be at least 1024 bytes");
+        }
+        this.maxFramePayloadLength = maxFramePayloadLength;
+        return this;
+    }
+
+    /**
      * Creates the websocket handler.
      * @return A websocket handler
      */
@@ -62,7 +76,7 @@ public class WebSocketHandlerBuilder implements MuHandlerBuilder<WebSocketHandle
         if (factory == null) {
             throw new IllegalStateException("A web socket factory must be specified");
         }
-        return new WebSocketHandler(factory, path, idleTimeoutMills);
+        return new WebSocketHandler(factory, path, idleTimeoutMills, maxFramePayloadLength);
     }
 
     /**
