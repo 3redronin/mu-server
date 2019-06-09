@@ -357,6 +357,8 @@ public class MuServerTest {
             .start();
         try (Response resp = call(request(server.uri()))) {
             assertThat(resp.code(), is(408));
+        } catch (Exception ignored) {
+            // this is okay too - either a 408 or an exception
         }
         assertThat(exceptionFromServer.get(10, TimeUnit.SECONDS), instanceOf(Exception.class));
     }
