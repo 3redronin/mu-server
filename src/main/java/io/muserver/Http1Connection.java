@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static io.netty.buffer.Unpooled.copiedBuffer;
@@ -126,7 +127,8 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
                 if (msg instanceof TextWebSocketFrame) {
                     muWebSocket.onText(((TextWebSocketFrame) msg).text());
                 } else if (msg instanceof BinaryWebSocketFrame) {
-                    muWebSocket.onBinary(((BinaryWebSocketFrame) msg).content().nioBuffer());
+                    ByteBuffer buffer = ((BinaryWebSocketFrame) msg).content().nioBuffer();
+                    muWebSocket.onBinary(buffer);
                 } else if (msg instanceof PingWebSocketFrame) {
                     muWebSocket.onPing(((PingWebSocketFrame) msg).content().nioBuffer());
                 } else if (msg instanceof PongWebSocketFrame) {

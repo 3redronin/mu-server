@@ -18,40 +18,46 @@ class MuWebSocketSessionImpl implements MuWebSocketSession {
 
     @Override
     public void sendText(String message) {
-        write(new TextWebSocketFrame(message));
+        writeAndSync(new TextWebSocketFrame(message));
     }
 
     @Override
     public void sendBinary(ByteBuffer message) {
         ByteBuf bb = Unpooled.wrappedBuffer(message);
-        write(new BinaryWebSocketFrame(bb));
+        writeAndSync(new BinaryWebSocketFrame(bb));
     }
 
     @Override
     public void sendPing(ByteBuffer payload) {
         ByteBuf bb = Unpooled.wrappedBuffer(payload);
-        write(new PingWebSocketFrame(bb));
+        writeAndSync(new PingWebSocketFrame(bb));
     }
 
     @Override
     public void sendPong(ByteBuffer payload) {
         ByteBuf bb = Unpooled.wrappedBuffer(payload);
-        write(new PongWebSocketFrame(bb));
+        writeAndSync(new PongWebSocketFrame(bb));
     }
 
     @Override
     public void close() {
-        write(new CloseWebSocketFrame());
+        disconnect(new CloseWebSocketFrame());
     }
 
     @Override
     public void close(int statusCode, String reason) {
-        write(new CloseWebSocketFrame(statusCode, reason));
+        if (statusCode < 1000 || statusCode >= 5000) {
+            throw new IllegalArgumentException("Web socket closure codes must be between 1000 and 4999 (inclusive)");
+        }
+        disconnect(new CloseWebSocketFrame(statusCode, reason));
     }
 
-    @Override
-    public void disconnect() {
-        ctx.close();
+    private void disconnect(CloseWebSocketFrame closeFrame) {
+        try {
+            writeAndSync(closeFrame);
+        } finally {
+            ctx.close();
+        }
     }
 
     @Override
@@ -59,7 +65,7 @@ class MuWebSocketSessionImpl implements MuWebSocketSession {
         return (InetSocketAddress) ctx.channel().remoteAddress();
     }
 
-    private void write(WebSocketFrame msg) {
-        ctx.writeAndFlush(msg);
+    private void writeAndSync(WebSocketFrame msg) {
+        ctx.writeAndFlush(msg).syncUninterruptibly();
     }
 }

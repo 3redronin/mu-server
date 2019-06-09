@@ -394,40 +394,39 @@ class NettyRequestAdapter implements MuRequest {
         }
     }
 
-    public void onCancelled(boolean complete) {
+    void onCancelled(boolean complete) {
         if (asyncHandle != null) {
             asyncHandle.onClientDisconnected(complete);
         }
     }
 
-    public boolean websocketUpgrade(MuWebSocket muWebSocket) {
-        if (request.headers().contains(HeaderNames.UPGRADE, HeaderValues.WEBSOCKET, true)) {
+    boolean websocketUpgrade(MuWebSocket muWebSocket) throws IOException {
+        String url = "ws" + uri().toString().substring(4);
+        WebSocketServerHandshakerFactory factory = new WebSocketServerHandshakerFactory(url, null, false);
 
-            String url = "ws" + uri().toString().substring(4);
-            WebSocketServerHandshakerFactory factory = new WebSocketServerHandshakerFactory(url, null, false);
-
-
-            DefaultFullHttpRequest fullReq = new DefaultFullHttpRequest(request.protocolVersion(), request.method(), request.uri(), new EmptyByteBuf(ByteBufAllocator.DEFAULT), request.headers(), EmptyHttpHeaders.INSTANCE);
-            WebSocketServerHandshaker handshaker = factory.newHandshaker(
-                fullReq
-            );
-            if (handshaker == null) {
-                WebSocketServerHandshakerFactory.sendUnsupportedVersionResponse(ctx.channel());
-                return false;
+        if (inputStream().isPresent()) {
+            try (InputStream is = inputStream().get()) {
+                byte[] buffer = new byte[8192];
+                while (is.read(buffer) > -1) {
+                    // there shouldn't be a body, but just consume and discard if there is
+                }
             }
-
-
-            ctx.channel().attr(Http1Connection.WEBSOCKET_ATTRIBUTE).set(muWebSocket);
-
-            handshaker.handshake(ctx.channel(), fullReq)
-                .addListener(future -> {
-                    muWebSocket.onConnect(new MuWebSocketSessionImpl(ctx));
-                });
-
-            return true;
         }
 
-        return false;
+        DefaultFullHttpRequest fullReq = new DefaultFullHttpRequest(request.protocolVersion(), request.method(), request.uri(), new EmptyByteBuf(ByteBufAllocator.DEFAULT), request.headers(), EmptyHttpHeaders.INSTANCE);
+        WebSocketServerHandshaker handshaker = factory.newHandshaker(fullReq);
+        if (handshaker == null) {
+            WebSocketServerHandshakerFactory.sendUnsupportedVersionResponse(ctx.channel());
+            return false;
+        }
+
+
+        ctx.channel().attr(Http1Connection.WEBSOCKET_ATTRIBUTE).set(muWebSocket);
+
+        handshaker.handshake(ctx.channel(), fullReq)
+            .addListener(future -> muWebSocket.onConnect(new MuWebSocketSessionImpl(ctx)));
+
+        return true;
     }
 
 

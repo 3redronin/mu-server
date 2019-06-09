@@ -14,9 +14,10 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URI;
 
-import static io.muserver.Http2ConfigBuilder.http2Enabled;
+import static io.muserver.Http2ConfigBuilder.http2EnabledIfAvailable;
 import static io.muserver.MuServerBuilder.muServer;
 import static io.muserver.Mutils.urlEncode;
+import static io.muserver.WebSocketHandlerBuilder.webSocketHandler;
 import static io.muserver.handlers.AsyncFileProviderTest.BIG_FILE_DIR;
 
 public class RunLocal {
@@ -26,7 +27,7 @@ public class RunLocal {
         MuServer server = muServer()
             .withHttpPort(18080)
             .withHttpsPort(18443)
-            .withHttp2Config(http2Enabled())
+            .withHttp2Config(http2EnabledIfAvailable())
             .addHandler(ResourceHandlerBuilder.fileHandler(BIG_FILE_DIR))
             .addHandler(ResourceHandlerBuilder.fileOrClasspath("src/test/resources/sample-static", "/sample-static"))
             .addHandler(Method.GET, "/api", (request, response, pathParams) -> {
@@ -59,6 +60,16 @@ public class RunLocal {
                     }
                 }
             })
+            .addHandler(webSocketHandler()
+                .withPath("/websocket-echo")
+                .withWebSocketFactory(request -> new BaseWebSocket() {
+                    public void onText(String message) {
+                        session().sendText(message);
+                        if (message.equalsIgnoreCase("close")) {
+                            session().close(1000, "Finished");
+                        }
+                    }
+                }))
             .addHandler(Method.GET, "/stream", (request, response, pathParams) -> {
                 response.contentType(ContentTypes.TEXT_PLAIN);
                 for (int i = 0; i < Integer.MAX_VALUE; i++) {
@@ -70,8 +81,6 @@ public class RunLocal {
                     Thread.sleep(10);
                 }
             })
-
-
             .addHandler(Method.GET, "/streamer", (request, response, pathParams) -> {
                 int startValue = request.headers().getInt(HeaderNames.LAST_EVENT_ID, 1);
                 log.info("Starting event stream at " + startValue);

@@ -1,18 +1,30 @@
 package io.muserver;
 
-import java.nio.ByteBuffer;
 import java.util.Map;
 
 public class WebSocketHandler implements MuHandler, RouteHandler {
 
     private final MuWebSocketFactory factory;
+    private final String path;
 
-    WebSocketHandler(MuWebSocketFactory factory) {
+    WebSocketHandler(MuWebSocketFactory factory, String path) {
         this.factory = factory;
+        this.path = path;
     }
 
     @Override
     public boolean handle(MuRequest request, MuResponse response) throws Exception {
+        if (request.method() != Method.GET) {
+            return false;
+        }
+        if (Mutils.hasValue(path) && !path.equals(request.relativePath())) {
+            return false;
+        }
+
+        boolean isUpgradeRequest = request.headers().contains(HeaderNames.UPGRADE, HeaderValues.WEBSOCKET, true);
+        if (!isUpgradeRequest) {
+            return false;
+        }
 
         MuWebSocket muWebSocket = factory.create(request);
         if (muWebSocket == null) {
@@ -21,7 +33,7 @@ public class WebSocketHandler implements MuHandler, RouteHandler {
         NettyRequestAdapter reqImpl = (NettyRequestAdapter) request;
         boolean upgraded = reqImpl.websocketUpgrade(muWebSocket);
         if (upgraded) {
-            ((NettyResponseAdaptor)response).setWebsocket();
+            ((NettyResponseAdaptor) response).setWebsocket();
         }
         return upgraded;
     }
@@ -30,20 +42,5 @@ public class WebSocketHandler implements MuHandler, RouteHandler {
     public void handle(MuRequest request, MuResponse response, Map<String, String> pathParams) throws Exception {
         handle(request, response);
     }
-}
-
-interface MuWebSocketFactory {
-
-    MuWebSocket create(MuRequest request) throws Exception;
-
-}
-
-interface MuWebSocket {
-    void onConnect(MuWebSocketSession session) throws Exception;
-    void onText(String message) throws Exception;
-    void onBinary(ByteBuffer buffer) throws Exception;
-    void onClose(int statusCode, String reason) throws Exception;
-    void onPing(ByteBuffer payload) throws Exception;
-    void onPong(ByteBuffer payload) throws Exception;
 }
 

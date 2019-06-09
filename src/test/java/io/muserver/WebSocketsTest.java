@@ -46,7 +46,8 @@ public class WebSocketsTest {
             .addHandler(Method.GET, "/not-blah", (request, response, pathParams) -> response.write("not a blah"))
             .start();
 
-        WebSocket clientSocket = ClientUtils.client.newWebSocket(webSocketRequest(server.uri().resolve("/blah")), new WebSocketListener() {});
+        ClientListener clientListener = new ClientListener();
+        WebSocket clientSocket = ClientUtils.client.newWebSocket(webSocketRequest(server.uri().resolve("/blah")), clientListener);
 
         MuAssert.assertNotTimedOut("Connecting", serverSocket.connectedLatch);
 
@@ -58,6 +59,9 @@ public class WebSocketsTest {
         assertThat(serverSocket.received, contains("connected", "onText: This is a message",
             "onBinary: This is a binary message", "onText: Another text", "onClose: 1000 Finished"));
 
+        assertThat(clientListener.toString(), clientListener.events,
+            contains("onOpen", "onMessage text: THIS IS A MESSAGE", "onMessage binary: This is a binary message", "onMessage text: ANOTHER TEXT"));
+
         try (Response resp = call(request(server.uri().resolve("/not-blah")))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.body().string(), is("not a blah"));
@@ -65,12 +69,12 @@ public class WebSocketsTest {
     }
 
     @Test
-    public void routesWorkForWebsockets() {
+    public void pathsWorkForWebsockets() {
         server = ServerUtils.httpsServerForTest()
-            .addHandler(Method.GET, "/routed-websocket", new WebSocketHandler(request -> serverSocket))
+            .addHandler(webSocketHandler(request -> serverSocket).withPath("/routed-websocket"))
             .start();
 
-        WebSocket clientSocket = ClientUtils.client.newWebSocket(webSocketRequest(server.uri().resolve("/routed-websocket")), new WebSocketListener() {});
+        WebSocket clientSocket = ClientUtils.client.newWebSocket(webSocketRequest(server.uri().resolve("/routed-websocket")), new ClientListener());
 
         MuAssert.assertNotTimedOut("Connecting", serverSocket.connectedLatch);
 
@@ -86,15 +90,47 @@ public class WebSocketsTest {
     }
 
     @Test
+    public void sendingMessagesAfterTheClientsCloseResultInExceptions() {
+        CountDownLatch connectedLatch = new CountDownLatch(1);
+        CountDownLatch closeLatch = new CountDownLatch(1);
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(webSocketHandler(request -> new BaseWebSocket() {
+                @Override
+                public void onConnect(MuWebSocketSession session) {
+                    super.onConnect(session);
+                    connectedLatch.countDown();
+                }
+
+                @Override
+                public void onClose(int statusCode, String reason) {
+                    super.onClose(statusCode, reason);
+                    try {
+                        session().sendText("This should not work");
+                    } catch (Throwable e) {
+                        e.printStackTrace();
+                    }
+                    closeLatch.countDown();
+                }
+            }).withPath("/routed-websocket"))
+            .start();
+
+        WebSocket clientSocket = ClientUtils.client.newWebSocket(webSocketRequest(server.uri().resolve("/routed-websocket")), new ClientListener());
+        MuAssert.assertNotTimedOut("Connecting", connectedLatch);
+        clientSocket.close(1000, "Done");
+        MuAssert.assertNotTimedOut("Closing", closeLatch);
+
+    }
+
+    @Test
     public void pingAndPongWork() {
         server = ServerUtils.httpsServerForTest()
-            .addHandler(Method.GET, "/ws", new WebSocketHandler(request -> serverSocket))
+            .addHandler(webSocketHandler(request -> serverSocket).withPath("/ws"))
             .start();
 
         WebSocket clientSocket = ClientUtils.client.newBuilder()
             .pingInterval(50, TimeUnit.MILLISECONDS)
             .build()
-            .newWebSocket(webSocketRequest(server.uri().resolve("/ws")), new WebSocketListener() {});
+            .newWebSocket(webSocketRequest(server.uri().resolve("/ws")), new ClientListener());
 
         MuAssert.assertNotTimedOut("Connecting", serverSocket.connectedLatch);
         MuAssert.assertNotTimedOut("Pinging", serverSocket.pingLatch);
@@ -106,35 +142,22 @@ public class WebSocketsTest {
     @Test
     public void theServerCanCloseSockets() {
         server = ServerUtils.httpsServerForTest()
-            .addHandler(Method.GET, "/ws", new WebSocketHandler(request -> serverSocket))
+            .addHandler(webSocketHandler(request -> serverSocket).withPath("/ws"))
             .start();
-        List<String> received = new CopyOnWriteArrayList<>();
-        CountDownLatch closedLatch = new CountDownLatch(1);
-        ClientUtils.client
-            .newWebSocket(webSocketRequest(server.uri().resolve("/ws")), new WebSocketListener() {
-                public void onClosing(WebSocket webSocket, int code, String reason) {
-                    received.add("Closing " + code + " " + reason);
-                    webSocket.close(code, reason);
-                }
-                public void onClosed(WebSocket webSocket, int code, String reason) {
-                    received.add("Closed " + code + " " + reason);
-                    closedLatch.countDown();
-                }
-                public void onFailure(WebSocket webSocket, Throwable t, Response response) {
-                    received.add("Exception " + t);
-                }
-            });
+        ClientListener clientListener = new ClientListener();
+        ClientUtils.client.newWebSocket(webSocketRequest(server.uri().resolve("/ws")), clientListener);
         MuAssert.assertNotTimedOut("Connecting", serverSocket.connectedLatch);
         serverSocket.session.close(1001, "Umm");
-        MuAssert.assertNotTimedOut("Closing", closedLatch);
-        assertThat(received.toString(), received, contains("Closing 1001 Umm", "Closed 1001 Umm"));
+        MuAssert.assertNotTimedOut("Closing", clientListener.closedLatch);
+        assertThat(clientListener.toString(), clientListener.events,
+            contains("onOpen", "onClosing 1001 Umm", "onClosed 1001 Umm"));
     }
 
 
     @Test
     public void ifNotMatchedThenProtocolExceptionIsReturned() throws Exception {
         server = ServerUtils.httpsServerForTest()
-            .addHandler(Method.GET, "/routed-websocket", new WebSocketHandler(request -> serverSocket))
+            .addHandler(webSocketHandler(request -> serverSocket).withPath("/routed-websocket"))
             .start();
 
         CompletableFuture<Throwable> failure = new CompletableFuture<>();
@@ -180,6 +203,9 @@ public class WebSocketsTest {
 
         @Override
         public void onBinary(ByteBuffer buffer) {
+            int initial = buffer.position();
+            session.sendBinary(buffer);
+            buffer.position(initial);
             received.add("onBinary: " + UTF_8.decode(buffer));
 
         }
@@ -200,6 +226,49 @@ public class WebSocketsTest {
         @Override
         public void onPong(ByteBuffer payload) {
             received.add("onPong: " + UTF_8.decode(payload));
+        }
+    }
+
+    private static class ClientListener extends WebSocketListener {
+
+        List<String> events = new CopyOnWriteArrayList<>();
+        CountDownLatch closedLatch = new CountDownLatch(1);
+
+        @Override
+        public void onOpen(WebSocket webSocket, Response response) {
+            events.add("onOpen");
+        }
+
+        @Override
+        public void onMessage(WebSocket webSocket, String text) {
+            events.add("onMessage text: " + text);
+        }
+
+        @Override
+        public void onMessage(WebSocket webSocket, ByteString bytes) {
+            events.add("onMessage binary: " + bytes.string(UTF_8));
+        }
+
+        @Override
+        public void onClosing(WebSocket webSocket, int code, String reason) {
+            events.add("onClosing " + code + " " + reason);
+            webSocket.close(code, reason);
+        }
+
+        @Override
+        public void onClosed(WebSocket webSocket, int code, String reason) {
+            events.add("onClosed " + code + " " + reason);
+            closedLatch.countDown();
+        }
+
+        @Override
+        public void onFailure(WebSocket webSocket, Throwable t, Response response) {
+            events.add("onFailure: " + t.getMessage());
+        }
+
+        @Override
+        public String toString() {
+            return events.toString();
         }
     }
 }
