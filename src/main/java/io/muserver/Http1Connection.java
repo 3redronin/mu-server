@@ -197,7 +197,9 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
                 if (asyncContext != null) {
                     asyncContext.onCancelled(false);
                 }
-                ctx.writeAndFlush(new DefaultFullHttpResponse(HTTP_1_1, HttpResponseStatus.REQUEST_TIMEOUT))
+                DefaultFullHttpResponse resp = new DefaultFullHttpResponse(HTTP_1_1, HttpResponseStatus.REQUEST_TIMEOUT);
+                resp.headers().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
+                ctx.writeAndFlush(resp)
                     .addListener(ChannelFutureListener.CLOSE);
             }
         }
