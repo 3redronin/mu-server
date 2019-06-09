@@ -2,13 +2,18 @@ package io.muserver;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.websocketx.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 
 class MuWebSocketSessionImpl implements MuWebSocketSession {
+    private static final Logger log = LoggerFactory.getLogger(MuWebSocketSessionImpl.class);
 
     private volatile boolean closeSent = false;
 
@@ -20,25 +25,36 @@ class MuWebSocketSessionImpl implements MuWebSocketSession {
 
     @Override
     public void sendText(String message) {
-        writeAndSync(new TextWebSocketFrame(message));
+        writeSync(new TextWebSocketFrame(message));
+    }
+
+    @Override
+    public void sendText(String message, WriteCallback writeCallback) {
+        writeAsync(new TextWebSocketFrame(message), writeCallback);
     }
 
     @Override
     public void sendBinary(ByteBuffer message) {
         ByteBuf bb = Unpooled.wrappedBuffer(message);
-        writeAndSync(new BinaryWebSocketFrame(bb));
+        writeSync(new BinaryWebSocketFrame(bb));
+    }
+
+    @Override
+    public void sendBinary(ByteBuffer message, WriteCallback writeCallback) {
+        ByteBuf bb = Unpooled.wrappedBuffer(message);
+        writeAsync(new BinaryWebSocketFrame(bb), writeCallback);
     }
 
     @Override
     public void sendPing(ByteBuffer payload) {
         ByteBuf bb = Unpooled.wrappedBuffer(payload);
-        writeAndSync(new PingWebSocketFrame(bb));
+        writeSync(new PingWebSocketFrame(bb));
     }
 
     @Override
     public void sendPong(ByteBuffer payload) {
         ByteBuf bb = Unpooled.wrappedBuffer(payload);
-        writeAndSync(new PongWebSocketFrame(bb));
+        writeSync(new PongWebSocketFrame(bb));
     }
 
     @Override
@@ -58,7 +74,7 @@ class MuWebSocketSessionImpl implements MuWebSocketSession {
         if (!closeSent) {
             closeSent = true;
             try {
-                writeAndSync(closeFrame);
+                writeSync(closeFrame);
             } finally {
                 ctx.close();
             }
@@ -70,10 +86,30 @@ class MuWebSocketSessionImpl implements MuWebSocketSession {
         return (InetSocketAddress) ctx.channel().remoteAddress();
     }
 
-    private void writeAndSync(WebSocketFrame msg) {
+    private void writeSync(WebSocketFrame msg) {
+        write(msg).syncUninterruptibly();
+    }
+
+    private void writeAsync(WebSocketFrame msg, WriteCallback writeCallback) {
+        ChannelFuture future = write(msg);
+        future.addListener((ChannelFutureListener) future1 -> {
+            try {
+                if (future1.isSuccess()) {
+                    writeCallback.onSuccess();
+                } else {
+                    writeCallback.onFailure(future1.cause());
+                }
+            } catch (Throwable e) {
+                log.warn("Unhandled exception from write callback", e);
+                close(1011, "Server error");
+            }
+        });
+    }
+
+    private ChannelFuture write(WebSocketFrame msg) {
         if (closeSent && !(msg instanceof CloseWebSocketFrame)) {
             throw new IllegalStateException("Writes are not allowed as the socket has already been closed");
         }
-        ctx.channel().writeAndFlush(msg).syncUninterruptibly();
+        return ctx.channel().writeAndFlush(msg);
     }
 }

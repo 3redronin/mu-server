@@ -18,11 +18,25 @@ public interface MuWebSocketSession {
     void sendText(String message) throws IOException;
 
     /**
+     * Sends a message to the client asynchronously
+     * @param message The message to be sent
+     * @param writeCallback The callback to call when the write succeeds or fails.
+     */
+    void sendText(String message, WriteCallback writeCallback);
+
+    /**
      * Sends a message to the client
      * @param message The message to be sent
      * @throws IOException Thrown if there is an error writing to the client, for example if the user has closed their browser.
      */
     void sendBinary(ByteBuffer message) throws IOException;
+
+    /**
+     * Sends a message to the client
+     * @param writeCallback The callback to call when the write succeeds or fails.
+     * @param message The message to be sent
+     */
+    void sendBinary(ByteBuffer message, WriteCallback writeCallback);
 
     /**
      * Sends a ping message to the client, which is used for keeping sockets alive.

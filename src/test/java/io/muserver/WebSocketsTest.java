@@ -88,6 +88,44 @@ public class WebSocketsTest {
             "onBinary: " + largeText, "onText: Another text", "onClose: 1000 Finished"));
     }
 
+
+    @Test
+    public void asyncWritesWork() throws InterruptedException, ExecutionException, TimeoutException {
+        CompletableFuture<String> result = new CompletableFuture<>();
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(webSocketHandler(request -> new BaseWebSocket() {
+                public void onText(String message) {
+                    session().sendText("This is message one", new WriteCallback() {
+                        public void onSuccess() {
+                            session().sendBinary(Mutils.toByteBuffer("Async binary"), new WriteCallback() {
+                                public void onSuccess() {
+                                    result.complete("Success");
+                                }
+
+                                public void onFailure(Throwable reason) {
+                                    result.completeExceptionally(reason);
+                                }
+                            });
+                        }
+
+                        public void onFailure(Throwable reason) {
+                            result.completeExceptionally(reason);
+                        }
+                    });
+                }
+            }).withPath("/routed-websocket"))
+            .start();
+
+        ClientListener listener = new ClientListener();
+        WebSocket clientSocket = client.newWebSocket(webSocketRequest(server.uri().resolve("/routed-websocket")), listener);
+        clientSocket.send("Hey hey");
+        clientSocket.close(1000, "Done");
+        assertThat(result.get(10, TimeUnit.SECONDS), is("Success"));
+        MuAssert.assertNotTimedOut("Client closed", listener.closedLatch);
+        assertThat(listener.toString(), listener.events, contains("onOpen", "onMessage text: This is message one",
+            "onMessage binary: Async binary", "onClosing 1000 Done", "onClosed 1000 Done"));
+    }
+
     @Test
     public void ifTheFactoryThrowsAnExceptionThenItIsReturnedToTheClient() {
         server = ServerUtils.httpsServerForTest()
@@ -149,7 +187,43 @@ public class WebSocketsTest {
         }
 
         Assert.fail("No exceptions thrown");
+    }
 
+
+    @Test
+    public void sendingMessagesAfterTheClientsCloseResultInFailureCallBacksForAsyncCalls() throws InterruptedException, ExecutionException, TimeoutException, IOException {
+        CompletableFuture<MuWebSocketSession> sessionFuture = new CompletableFuture<>();
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(webSocketHandler(request -> new BaseWebSocket() {
+                @Override
+                public void onConnect(MuWebSocketSession session) {
+                    super.onConnect(session);
+                    sessionFuture.complete(session);
+                }
+            }).withPath("/routed-websocket"))
+            .start();
+
+        WebSocket clientSocket = client.newWebSocket(webSocketRequest(server.uri().resolve("/routed-websocket")), new ClientListener());
+        MuWebSocketSession serverSession = sessionFuture.get(10, TimeUnit.SECONDS);
+        clientSocket.cancel();
+
+        for (int i = 0; i < 100; i++) {
+            CompletableFuture<String> result = new CompletableFuture<>();
+            serverSession.sendText("This shouldn't work", new WriteCallback() {
+                public void onSuccess() {
+                    result.complete("Success");
+                }
+                public void onFailure(Throwable reason) {
+                    result.completeExceptionally(reason);
+                }
+            });
+            try {
+                result.get(10, TimeUnit.SECONDS);
+            } catch (ExecutionException e) {
+                return; // as expected
+            }
+        }
+        Assert.fail("This should have failed");
     }
 
     @Test
