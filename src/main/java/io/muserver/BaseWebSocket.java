@@ -49,7 +49,7 @@ public abstract class BaseWebSocket implements MuWebSocket {
     }
 
     @Override
-    public void onIdleTimeout() throws Exception {
+    public void onIdleReadTimeout() throws Exception {
         if (!closeSent) {
             session().close(1001, "Idle Timeout");
         }

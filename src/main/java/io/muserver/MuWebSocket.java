@@ -57,8 +57,8 @@ public interface MuWebSocket {
 
     /**
      * Called when no messages have been sent or received for the time specified by
-     * {@link WebSocketHandlerBuilder#withIdleTimeout(long, TimeUnit)}
+     * {@link WebSocketHandlerBuilder#withIdleReadTimeout(long, TimeUnit)}
      * @throws Exception Any exceptions thrown will result in the connection being closed.
      */
-    void onIdleTimeout() throws Exception;
+    void onIdleReadTimeout() throws Exception;
 }

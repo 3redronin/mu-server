@@ -6,13 +6,15 @@ public class WebSocketHandler implements MuHandler, RouteHandler {
 
     private final MuWebSocketFactory factory;
     private final String path;
-    private final long idleTimeoutMills;
+    private final long idleReadTimeoutMills;
+    private final long pingAfterWriteMillis;
     private final int maxFramePayloadLength;
 
-    WebSocketHandler(MuWebSocketFactory factory, String path, long idleTimeoutMills, int maxFramePayloadLength) {
+    WebSocketHandler(MuWebSocketFactory factory, String path, long idleReadTimeoutMills, long pingAfterWriteMillis, int maxFramePayloadLength) {
         this.factory = factory;
         this.path = path;
-        this.idleTimeoutMills = idleTimeoutMills;
+        this.idleReadTimeoutMills = idleReadTimeoutMills;
+        this.pingAfterWriteMillis = pingAfterWriteMillis;
         this.maxFramePayloadLength = maxFramePayloadLength;
     }
 
@@ -35,7 +37,7 @@ public class WebSocketHandler implements MuHandler, RouteHandler {
             return false;
         }
         NettyRequestAdapter reqImpl = (NettyRequestAdapter) request;
-        boolean upgraded = reqImpl.websocketUpgrade(muWebSocket, idleTimeoutMills, maxFramePayloadLength);
+        boolean upgraded = reqImpl.websocketUpgrade(muWebSocket, idleReadTimeoutMills, pingAfterWriteMillis, maxFramePayloadLength);
         if (upgraded) {
             ((NettyResponseAdaptor) response).setWebsocket();
         }

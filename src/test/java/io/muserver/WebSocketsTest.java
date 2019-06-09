@@ -81,7 +81,7 @@ public class WebSocketsTest {
         assertThat(listener.events,
             contains("onOpen", "onMessage text: " + largeText.toUpperCase()));
         clientSocket.close(1000, "Done");
-     }
+    }
 
     @Test
     public void ifMaxFrameLengthExceededThenSocketIsClosed() {
@@ -326,11 +326,30 @@ public class WebSocketsTest {
         server = ServerUtils.httpsServerForTest()
             .addHandler(webSocketHandler(request -> serverSocket)
                 .withPath("/routed-websocket")
-                .withIdleTimeout(100, TimeUnit.MILLISECONDS)
+                .withIdleReadTimeout(100, TimeUnit.MILLISECONDS)
             )
             .start();
         client.newWebSocket(webSocketRequest(server.uri().resolve("/routed-websocket")), new ClientListener());
         MuAssert.assertNotTimedOut("idletimeout", serverSocket.idleTimeoutLatch);
+    }
+
+    @Test
+    public void ifAWriteTimeoutIsSetThenPingsAreSent() throws Exception {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(
+                webSocketHandler(request -> serverSocket)
+                    .withPingSentAfterNoWritesFor(50, TimeUnit.MILLISECONDS)
+            )
+            .start();
+        ClientListener listener = new ClientListener();
+        client.newWebSocket(webSocketRequest(server.uri()), listener);
+        MuAssert.assertNotTimedOut("Connecting", serverSocket.connectedLatch);
+        serverSocket.session.sendText("Hi");
+        Thread.sleep(200);
+        serverSocket.session.sendText("Bye");
+        serverSocket.session.close(1000, "Done");
+        MuAssert.assertNotTimedOut("Closing", listener.closedLatch);
+        assertThat(serverSocket.received, hasItem("onPong: mu"));
     }
 
     private static Request webSocketRequest(URI httpVersionOfUri) {
@@ -394,8 +413,8 @@ public class WebSocketsTest {
         }
 
         @Override
-        public void onIdleTimeout() {
-            received.add("onIdleTimeout");
+        public void onIdleReadTimeout() {
+            received.add("onIdleReadTimeout");
             idleTimeoutLatch.countDown();
         }
     }
@@ -410,6 +429,7 @@ public class WebSocketsTest {
         private ClientListener() {
             this(1);
         }
+
         private ClientListener(int expectedMessages) {
             messageLatch = new CountDownLatch(expectedMessages);
         }

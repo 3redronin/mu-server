@@ -9,7 +9,8 @@ public class WebSocketHandlerBuilder implements MuHandlerBuilder<WebSocketHandle
 
     private MuWebSocketFactory factory;
     private String path;
-    private long idleTimeoutMills = TimeUnit.MINUTES.toMillis(5);
+    private long idleReadTimeoutMills = TimeUnit.MINUTES.toMillis(5);
+    private long pingAfterWriteMillis = TimeUnit.SECONDS.toMillis(30);
     private int maxFramePayloadLength = 65536;
 
     /**
@@ -39,18 +40,34 @@ public class WebSocketHandlerBuilder implements MuHandlerBuilder<WebSocketHandle
     }
 
     /**
-     * Sets the idle timeout. If no messages are sent or received within this time then the connection is closed.
+     * Sets the idle timeout. If no messages are received within this time then the connection is closed.
      * <p>The default is 5 minutes.</p>
      * @param duration The allowed timeout duration, or 0 to disable timeouts.
      * @param unit The unit of the duration.
      * @return This builder
      */
-    public WebSocketHandlerBuilder withIdleTimeout(long duration, TimeUnit unit) {
+    public WebSocketHandlerBuilder withIdleReadTimeout(long duration, TimeUnit unit) {
         if (duration < 0) {
             throw new IllegalArgumentException("The duration must be 0 or greater");
         }
         Mutils.notNull("unit", unit);
-        this.idleTimeoutMills = unit.toMillis(duration);
+        this.idleReadTimeoutMills = unit.toMillis(duration);
+        return this;
+    }
+
+    /**
+     * Sets the amount of time to wait before sending a ping message if no messages having been sent.
+     * <p>The default is 30 seconds.</p>
+     * @param duration The allowed timeout duration, or 0 to disable timeouts.
+     * @param unit The unit of the duration.
+     * @return This builder
+     */
+    public WebSocketHandlerBuilder withPingSentAfterNoWritesFor(int duration, TimeUnit unit) {
+        if (duration < 0) {
+            throw new IllegalArgumentException("The duration must be 0 or greater");
+        }
+        Mutils.notNull("unit", unit);
+        this.pingAfterWriteMillis = unit.toMillis(duration);
         return this;
     }
 
@@ -76,7 +93,7 @@ public class WebSocketHandlerBuilder implements MuHandlerBuilder<WebSocketHandle
         if (factory == null) {
             throw new IllegalStateException("A web socket factory must be specified");
         }
-        return new WebSocketHandler(factory, path, idleTimeoutMills, maxFramePayloadLength);
+        return new WebSocketHandler(factory, path, idleReadTimeoutMills, pingAfterWriteMillis, maxFramePayloadLength);
     }
 
     /**

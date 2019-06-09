@@ -9,6 +9,7 @@ import io.netty.handler.codec.CorruptedFrameException;
 import io.netty.handler.codec.TooLongFrameException;
 import io.netty.handler.codec.http.*;
 import io.netty.handler.codec.http.websocketx.*;
+import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.util.AttributeKey;
 import org.slf4j.Logger;
@@ -184,13 +185,18 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
     @Override
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
         if (evt instanceof IdleStateEvent) {
+            IdleStateEvent ise = (IdleStateEvent) evt;
             MuWebSocketSessionImpl session = getWebSocket(ctx);
             if (session != null) {
-                try {
-                    session.muWebSocket.onIdleTimeout();
-                } catch (Exception e) {
-                    log.warn("Error while processing idle timeout", e);
-                    ctx.close();
+                if (ise.state() == IdleState.READER_IDLE) {
+                    try {
+                        session.muWebSocket.onIdleReadTimeout();
+                    } catch (Exception e) {
+                        log.warn("Error while processing idle timeout", e);
+                        ctx.close();
+                    }
+                } else if (ise.state() == IdleState.WRITER_IDLE) {
+                    session.sendPing(ByteBuffer.wrap(new byte[]{'m', 'u'}));
                 }
             } else {
                 AsyncContext asyncContext = ctx.channel().attr(STATE_ATTRIBUTE).get();
