@@ -227,21 +227,28 @@ public class WebSocketsTest {
     }
 
     @Test
-    public void pingAndPongWork() {
+    public void pingAndPongWork() throws Exception {
         server = ServerUtils.httpsServerForTest()
             .addHandler(webSocketHandler(request -> serverSocket).withPath("/ws"))
             .start();
 
+        ClientListener listener = new ClientListener();
         WebSocket clientSocket = client.newBuilder()
             .pingInterval(50, TimeUnit.MILLISECONDS)
             .build()
-            .newWebSocket(webSocketRequest(server.uri().resolve("/ws")), new ClientListener());
+            .newWebSocket(webSocketRequest(server.uri().resolve("/ws")), listener);
 
         MuAssert.assertNotTimedOut("Connecting", serverSocket.connectedLatch);
         MuAssert.assertNotTimedOut("Pinging", serverSocket.pingLatch);
+
+        assertThat(serverSocket.received, contains("connected", "onPing: "));
+
+        serverSocket.session.sendPing(Mutils.toByteBuffer("pingping"));
+        MuAssert.assertNotTimedOut("Pong wait", serverSocket.pongLatch);
+        assertThat(serverSocket.received, hasItem("onPong: pingping"));
+
         clientSocket.close(1000, "Finished");
         MuAssert.assertNotTimedOut("Closing", serverSocket.closedLatch);
-        assertThat(serverSocket.received, contains("connected", "onPing: ", "onClose: 1000 Finished"));
     }
 
     @Test
@@ -292,6 +299,7 @@ public class WebSocketsTest {
         CountDownLatch connectedLatch = new CountDownLatch(1);
         CountDownLatch closedLatch = new CountDownLatch(1);
         CountDownLatch pingLatch = new CountDownLatch(1);
+        CountDownLatch pongLatch = new CountDownLatch(1);
 
         @Override
         public void onConnect(MuWebSocketSession session) {
@@ -331,6 +339,7 @@ public class WebSocketsTest {
         @Override
         public void onPong(ByteBuffer payload) {
             received.add("onPong: " + UTF_8.decode(payload));
+            pongLatch.countDown();
         }
     }
 
