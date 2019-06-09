@@ -213,6 +213,7 @@ public class WebSocketsTest {
                 public void onSuccess() {
                     result.complete("Success");
                 }
+
                 public void onFailure(Throwable reason) {
                     result.completeExceptionally(reason);
                 }
@@ -283,6 +284,18 @@ public class WebSocketsTest {
         assertThat(actual, instanceOf(ProtocolException.class));
     }
 
+    @Test
+    public void ifNoMessagesSentOrReceivedExceedIdleTimeoutThenItDisconnects() throws Exception {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(webSocketHandler(request -> serverSocket)
+                .withPath("/routed-websocket")
+                .withIdleTimeout(100, TimeUnit.MILLISECONDS)
+            )
+            .start();
+        client.newWebSocket(webSocketRequest(server.uri().resolve("/routed-websocket")), new ClientListener());
+        MuAssert.assertNotTimedOut("idletimeout", serverSocket.idleTimeoutLatch);
+    }
+
     private static Request webSocketRequest(URI httpVersionOfUri) {
         return request().url("ws" + httpVersionOfUri.toString().substring(4)).build();
     }
@@ -300,6 +313,7 @@ public class WebSocketsTest {
         CountDownLatch closedLatch = new CountDownLatch(1);
         CountDownLatch pingLatch = new CountDownLatch(1);
         CountDownLatch pongLatch = new CountDownLatch(1);
+        CountDownLatch idleTimeoutLatch = new CountDownLatch(1);
 
         @Override
         public void onConnect(MuWebSocketSession session) {
@@ -340,6 +354,12 @@ public class WebSocketsTest {
         public void onPong(ByteBuffer payload) {
             received.add("onPong: " + UTF_8.decode(payload));
             pongLatch.countDown();
+        }
+
+        @Override
+        public void onIdleTimeout() throws Exception {
+            received.add("onIdleTimeout");
+            idleTimeoutLatch.countDown();
         }
     }
 

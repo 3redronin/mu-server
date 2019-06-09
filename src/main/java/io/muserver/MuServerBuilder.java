@@ -17,6 +17,7 @@ import io.netty.handler.codec.http.HttpResponseEncoder;
 import io.netty.handler.codec.http.HttpServerKeepAliveHandler;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
+import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.handler.traffic.GlobalTrafficShapingHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -54,6 +55,7 @@ public class MuServerBuilder {
     private String host;
     private SSLContextBuilder sslContextBuilder;
     private Http2Config http2Config;
+    private long idleTimeoutMills = TimeUnit.MINUTES.toMillis(5);
 
     /**
      * @param port The HTTP port to use. A value of 0 will have a random port assigned; a value of -1 will
@@ -228,6 +230,23 @@ public class MuServerBuilder {
     }
 
     /**
+     * Sets the idle timeout for requests and responses. If no bytes are sent or received within this time then
+     * the connection is closed.
+     * <p>The default is 5 minutes.</p>
+     * @param duration The allowed timeout duration, or 0 to disable timeouts.
+     * @param unit The unit of the duration.
+     * @return This builder
+     */
+    public MuServerBuilder withIdleTimeout(long duration, TimeUnit unit) {
+        if (duration < 0) {
+            throw new IllegalArgumentException("The duration must be 0 or greater");
+        }
+        Mutils.notNull("unit", unit);
+        this.idleTimeoutMills = unit.toMillis(duration);
+        return this;
+    }
+
+    /**
      * <p>Throws an exception. Do not use.</p>
      * @param handler Ignored
      * @deprecated For async handling, add a normal {@link MuHandler} and call {@link MuRequest#handleAsync()}
@@ -391,14 +410,13 @@ public class MuServerBuilder {
             }
         };
 
-
         try {
             GlobalTrafficShapingHandler trafficShapingHandler = new GlobalTrafficShapingHandler(workerGroup, 0, 0, 1000);
             MuStatsImpl stats = new MuStatsImpl(trafficShapingHandler.trafficCounter());
             AtomicReference<MuServer> serverRef = new AtomicReference<>();
             SslContextProvider sslContextProvider = null;
 
-            Channel httpChannel = httpPort < 0 ? null : createChannel(bossGroup, workerGroup, nettyHandlerAdapter, host, httpPort, null, trafficShapingHandler, stats, serverRef, settings, false);
+            Channel httpChannel = httpPort < 0 ? null : createChannel(bossGroup, workerGroup, nettyHandlerAdapter, host, httpPort, null, trafficShapingHandler, stats, serverRef, settings, false, idleTimeoutMills);
             Channel httpsChannel;
             boolean http2Enabled = http2Config != null && http2Config.enabled;
             if (httpsPort < 0) {
@@ -408,7 +426,7 @@ public class MuServerBuilder {
                 SslContext nettySslContext = toUse.toNettySslContext(http2Enabled);
                 log.debug("SSL Context is " + nettySslContext);
                 sslContextProvider = new SslContextProvider(nettySslContext);
-                httpsChannel = createChannel(bossGroup, workerGroup, nettyHandlerAdapter, host, httpsPort, sslContextProvider, trafficShapingHandler, stats, serverRef, settings, http2Enabled);
+                httpsChannel = createChannel(bossGroup, workerGroup, nettyHandlerAdapter, host, httpsPort, sslContextProvider, trafficShapingHandler, stats, serverRef, settings, http2Enabled, idleTimeoutMills);
             }
             URI uri = null;
             if (httpChannel != null) {
@@ -443,7 +461,7 @@ public class MuServerBuilder {
         return URI.create(protocol + "://" + host.toLowerCase() + ":" + a.getPort());
     }
 
-    private static Channel createChannel(NioEventLoopGroup bossGroup, NioEventLoopGroup workerGroup, NettyHandlerAdapter nettyHandlerAdapter, String host, int port, SslContextProvider sslContextProvider, GlobalTrafficShapingHandler trafficShapingHandler, MuStatsImpl stats, AtomicReference<MuServer> serverRef, ServerSettings settings, final boolean http2) throws InterruptedException {
+    private static Channel createChannel(NioEventLoopGroup bossGroup, NioEventLoopGroup workerGroup, NettyHandlerAdapter nettyHandlerAdapter, String host, int port, SslContextProvider sslContextProvider, GlobalTrafficShapingHandler trafficShapingHandler, MuStatsImpl stats, AtomicReference<MuServer> serverRef, ServerSettings settings, final boolean http2, long idleTimeoutMills) throws InterruptedException {
         boolean usesSsl = sslContextProvider != null;
         String proto = usesSsl ? "https" : "http";
         ServerBootstrap b = new ServerBootstrap();
@@ -453,6 +471,7 @@ public class MuServerBuilder {
 
                 protected void initChannel(SocketChannel socketChannel) {
                     ChannelPipeline p = socketChannel.pipeline();
+                    p.addLast("idle", new IdleStateHandler(0, 0, idleTimeoutMills, TimeUnit.MILLISECONDS));
                     p.addLast(trafficShapingHandler);
                     if (usesSsl) {
                         SslHandler sslHandler = sslContextProvider.get().newHandler(socketChannel.alloc());

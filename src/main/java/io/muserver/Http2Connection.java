@@ -7,6 +7,7 @@ import io.netty.handler.codec.http.HttpHeaderValues;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http2.*;
+import io.netty.handler.timeout.IdleStateEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -51,7 +52,7 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
 
     private ChannelFuture sendSimpleResponse(ChannelHandlerContext ctx, int streamId, String message, int code) {
         byte[] bytes = message.getBytes(UTF_8);
-        ByteBuf content = copiedBuffer(bytes) ;
+        ByteBuf content = copiedBuffer(bytes);
 
         io.netty.handler.codec.http2.Http2Headers headers = new DefaultHttp2Headers();
         headers.status(String.valueOf(code));
@@ -185,5 +186,11 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
                                Http2Flags flags, ByteBuf payload) {
     }
 
+    @Override
+    public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
+        if (evt instanceof IdleStateEvent) {
+            closeAllAndDisconnect(ctx);
+        }
+    }
 }
 

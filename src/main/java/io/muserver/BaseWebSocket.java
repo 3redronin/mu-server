@@ -48,6 +48,13 @@ public abstract class BaseWebSocket implements MuWebSocket {
     public void onPong(ByteBuffer payload) {
     }
 
+    @Override
+    public void onIdleTimeout() throws Exception {
+        if (!closeSent) {
+            session().close(1001, "Idle Timeout");
+        }
+    }
+
     /**
      * Gets the websocket session
      * @return A session that can be used to send message and events to the client.

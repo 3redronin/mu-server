@@ -15,6 +15,8 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 import static io.muserver.MuServerBuilder.httpServer;
 import static io.muserver.MuServerBuilder.muServer;
@@ -337,6 +339,28 @@ public class MuServerTest {
             assertThat(resp.header("Content-Type"), is("text/plain"));
             assertThat(resp.body().string(), is("Hello"));
         }
+    }
+
+    @Test
+    public void idleTimeoutCanBeConfigured() throws Exception {
+        CompletableFuture<Throwable> exceptionFromServer = new CompletableFuture<>();
+        server = ServerUtils.httpsServerForTest()
+            .withIdleTimeout(40, TimeUnit.MILLISECONDS)
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                Thread.sleep(100);
+                try {
+                    response.write("Hmmm");
+                } catch (Throwable e) {
+                    exceptionFromServer.complete(e);
+                }
+            })
+            .start();
+        try (Response ignored = call(request(server.uri()))) {
+            Assert.fail("This should not work");
+        } catch (Exception ignored) {
+            // expected
+        }
+        assertThat(exceptionFromServer.get(10, TimeUnit.SECONDS), instanceOf(Exception.class));
     }
 
     @Test

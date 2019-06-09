@@ -15,6 +15,7 @@ import io.netty.handler.codec.http.multipart.HttpPostMultipartRequestDecoder;
 import io.netty.handler.codec.http.multipart.InterfaceHttpData;
 import io.netty.handler.codec.http.websocketx.WebSocketServerHandshaker;
 import io.netty.handler.codec.http.websocketx.WebSocketServerHandshakerFactory;
+import io.netty.handler.timeout.IdleStateHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,6 +29,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.*;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.Cookie.nettyToMu;
@@ -400,7 +402,7 @@ class NettyRequestAdapter implements MuRequest {
         }
     }
 
-    boolean websocketUpgrade(MuWebSocket muWebSocket) throws IOException {
+    boolean websocketUpgrade(MuWebSocket muWebSocket, long idleTimeoutMills) throws IOException {
         String url = "ws" + uri().toString().substring(4);
         WebSocketServerHandshakerFactory factory = new WebSocketServerHandshakerFactory(url, null, false);
 
@@ -420,7 +422,7 @@ class NettyRequestAdapter implements MuRequest {
             return false;
         }
 
-
+        ctx.channel().pipeline().replace("idle", "idle", new IdleStateHandler(0, 0, idleTimeoutMills, TimeUnit.MILLISECONDS));
         ctx.channel().attr(Http1Connection.WEBSOCKET_ATTRIBUTE).set(muWebSocket);
 
         handshaker.handshake(ctx.channel(), fullReq)

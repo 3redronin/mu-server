@@ -1,6 +1,7 @@
 package io.muserver;
 
 import java.nio.ByteBuffer;
+import java.util.concurrent.TimeUnit;
 
 /**
  * <p>An interface defining the callbacks received on a websocket which is returned by {@link MuWebSocketFactory#create(MuRequest)}.</p>
@@ -53,4 +54,11 @@ public interface MuWebSocket {
      * @throws Exception Any exceptions thrown will result in the connection being closed.
      */
     void onPong(ByteBuffer payload) throws Exception;
+
+    /**
+     * Called when no messages have been sent or received for the time specified by
+     * {@link WebSocketHandlerBuilder#withIdleTimeout(long, TimeUnit)}
+     * @throws Exception Any exceptions thrown will result in the connection being closed.
+     */
+    void onIdleTimeout() throws Exception;
 }
