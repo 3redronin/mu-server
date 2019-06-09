@@ -66,6 +66,6 @@ class MuWebSocketSessionImpl implements MuWebSocketSession {
     }
 
     private void writeAndSync(WebSocketFrame msg) {
-        ctx.writeAndFlush(msg).syncUninterruptibly();
+        ctx.channel().writeAndFlush(msg).syncUninterruptibly();
     }
 }

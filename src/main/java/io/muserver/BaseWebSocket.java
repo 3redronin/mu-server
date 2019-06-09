@@ -1,5 +1,6 @@
 package io.muserver;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 
 /**
@@ -17,7 +18,7 @@ public abstract class BaseWebSocket implements MuWebSocket {
     }
 
     @Override
-    public void onText(String message) {
+    public void onText(String message) throws IOException {
     }
 
     @Override
@@ -26,11 +27,14 @@ public abstract class BaseWebSocket implements MuWebSocket {
 
     @Override
     public void onClose(int statusCode, String reason) {
-        session.close(statusCode, reason);
+        try {
+            session.close(statusCode, reason);
+        } catch (IOException ignored) {
+        }
     }
 
     @Override
-    public void onPing(ByteBuffer payload) {
+    public void onPing(ByteBuffer payload) throws IOException {
         session().sendPong(payload);
     }
 

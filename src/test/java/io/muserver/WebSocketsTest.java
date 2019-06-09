@@ -6,6 +6,7 @@ import okhttp3.WebSocket;
 import okhttp3.WebSocketListener;
 import okio.ByteString;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Test;
 import scaffolding.ClientUtils;
 import scaffolding.MuAssert;
@@ -17,10 +18,7 @@ import java.net.ProtocolException;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 import static io.muserver.WebSocketHandlerBuilder.webSocketHandler;
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -90,34 +88,31 @@ public class WebSocketsTest {
     }
 
     @Test
-    public void sendingMessagesAfterTheClientsCloseResultInExceptions() {
-        CountDownLatch connectedLatch = new CountDownLatch(1);
-        CountDownLatch closeLatch = new CountDownLatch(1);
+    public void sendingMessagesAfterTheClientsCloseResultInExceptions() throws InterruptedException, ExecutionException, TimeoutException, IOException {
+        CompletableFuture<MuWebSocketSession> sessionFuture = new CompletableFuture<>();
         server = ServerUtils.httpsServerForTest()
             .addHandler(webSocketHandler(request -> new BaseWebSocket() {
                 @Override
                 public void onConnect(MuWebSocketSession session) {
                     super.onConnect(session);
-                    connectedLatch.countDown();
-                }
-
-                @Override
-                public void onClose(int statusCode, String reason) {
-                    super.onClose(statusCode, reason);
-                    try {
-                        session().sendText("This should not work");
-                    } catch (Throwable e) {
-                        e.printStackTrace();
-                    }
-                    closeLatch.countDown();
+                    sessionFuture.complete(session);
                 }
             }).withPath("/routed-websocket"))
             .start();
 
         WebSocket clientSocket = ClientUtils.client.newWebSocket(webSocketRequest(server.uri().resolve("/routed-websocket")), new ClientListener());
-        MuAssert.assertNotTimedOut("Connecting", connectedLatch);
-        clientSocket.close(1000, "Done");
-        MuAssert.assertNotTimedOut("Closing", closeLatch);
+        MuWebSocketSession serverSession = sessionFuture.get(10, TimeUnit.SECONDS);
+        clientSocket.close(1000, "Closing");
+
+        for (int i = 0; i < 100; i++) {
+            try {
+                serverSession.sendText("This shouldn't work");
+            } catch (IOException ignored) {
+                return; // IOException, as expected. Might take a couple of attempts to get there though, hence the loop
+            }
+        }
+
+        Assert.fail("No exceptions thrown");
 
     }
 
@@ -140,7 +135,7 @@ public class WebSocketsTest {
     }
 
     @Test
-    public void theServerCanCloseSockets() {
+    public void theServerCanCloseSockets() throws IOException {
         server = ServerUtils.httpsServerForTest()
             .addHandler(webSocketHandler(request -> serverSocket).withPath("/ws"))
             .start();
@@ -196,13 +191,13 @@ public class WebSocketsTest {
         }
 
         @Override
-        public void onText(String message) {
+        public void onText(String message) throws IOException {
             received.add("onText: " + message);
             session.sendText(message.toUpperCase());
         }
 
         @Override
-        public void onBinary(ByteBuffer buffer) {
+        public void onBinary(ByteBuffer buffer) throws IOException {
             int initial = buffer.position();
             session.sendBinary(buffer);
             buffer.position(initial);
@@ -217,7 +212,7 @@ public class WebSocketsTest {
         }
 
         @Override
-        public void onPing(ByteBuffer payload) {
+        public void onPing(ByteBuffer payload) throws IOException {
             received.add("onPing: " + UTF_8.decode(payload));
             session.sendPong(payload);
             pingLatch.countDown();

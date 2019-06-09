@@ -10,6 +10,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URI;
@@ -63,7 +64,7 @@ public class RunLocal {
             .addHandler(webSocketHandler()
                 .withPath("/websocket-echo")
                 .withWebSocketFactory(request -> new BaseWebSocket() {
-                    public void onText(String message) {
+                    public void onText(String message) throws IOException {
                         session().sendText(message);
                         if (message.equalsIgnoreCase("close")) {
                             session().close(1000, "Finished");
