@@ -136,8 +136,7 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
                 } else if (msg instanceof CloseWebSocketFrame) {
                     CloseWebSocketFrame cwsf = (CloseWebSocketFrame) msg;
                     muWebSocket.onClose(cwsf.statusCode(), cwsf.reasonText());
-                } else {
-                    log.info("Got " + msg);
+                    ctx.channel().attr(WEBSOCKET_ATTRIBUTE).set(null); // so no more messages get delivered
                 }
             }
         }

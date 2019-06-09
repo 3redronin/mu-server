@@ -11,6 +11,7 @@ import java.nio.ByteBuffer;
  */
 public abstract class BaseWebSocket implements MuWebSocket {
     private MuWebSocketSession session;
+    private volatile boolean closeSent = false;
 
     @Override
     public void onConnect(MuWebSocketSession session) {
@@ -27,15 +28,20 @@ public abstract class BaseWebSocket implements MuWebSocket {
 
     @Override
     public void onClose(int statusCode, String reason) {
-        try {
-            session.close(statusCode, reason);
-        } catch (IOException ignored) {
+        if (!closeSent) {
+            closeSent = true;
+            try {
+                session.close(statusCode, reason);
+            } catch (IOException ignored) {
+            }
         }
     }
 
     @Override
     public void onPing(ByteBuffer payload) throws IOException {
-        session().sendPong(payload);
+        if (!closeSent) {
+            session().sendPong(payload);
+        }
     }
 
     @Override
@@ -50,6 +56,8 @@ public abstract class BaseWebSocket implements MuWebSocket {
     protected MuWebSocketSession session() {
         if (session == null) {
             throw new IllegalStateException("The websocket has not been connected yet");
+        } else if (closeSent) {
+            throw new IllegalStateException("The session is no longer available as the close event has been sent.");
         }
         return session;
     }

@@ -10,6 +10,8 @@ import java.nio.ByteBuffer;
 
 class MuWebSocketSessionImpl implements MuWebSocketSession {
 
+    private volatile boolean closeSent = false;
+
     private final ChannelHandlerContext ctx;
 
     MuWebSocketSessionImpl(ChannelHandlerContext ctx) {
@@ -53,10 +55,13 @@ class MuWebSocketSessionImpl implements MuWebSocketSession {
     }
 
     private void disconnect(CloseWebSocketFrame closeFrame) {
-        try {
-            writeAndSync(closeFrame);
-        } finally {
-            ctx.close();
+        if (!closeSent) {
+            closeSent = true;
+            try {
+                writeAndSync(closeFrame);
+            } finally {
+                ctx.close();
+            }
         }
     }
 
@@ -66,6 +71,9 @@ class MuWebSocketSessionImpl implements MuWebSocketSession {
     }
 
     private void writeAndSync(WebSocketFrame msg) {
+        if (closeSent && !(msg instanceof CloseWebSocketFrame)) {
+            throw new IllegalStateException("Writes are not allowed as the socket has already been closed");
+        }
         ctx.channel().writeAndFlush(msg).syncUninterruptibly();
     }
 }

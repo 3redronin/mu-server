@@ -8,11 +8,12 @@ import okio.ByteString;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
-import scaffolding.ClientUtils;
 import scaffolding.MuAssert;
+import scaffolding.RawClient;
 import scaffolding.ServerUtils;
 import scaffolding.StringUtils;
 
+import javax.ws.rs.ClientErrorException;
 import java.io.IOException;
 import java.net.ProtocolException;
 import java.net.URI;
@@ -20,12 +21,12 @@ import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.concurrent.*;
 
+import static io.muserver.MuServerBuilder.httpServer;
 import static io.muserver.WebSocketHandlerBuilder.webSocketHandler;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
-import static scaffolding.ClientUtils.call;
-import static scaffolding.ClientUtils.request;
+import static scaffolding.ClientUtils.*;
 
 public class WebSocketsTest {
 
@@ -45,7 +46,7 @@ public class WebSocketsTest {
             .start();
 
         ClientListener clientListener = new ClientListener();
-        WebSocket clientSocket = ClientUtils.client.newWebSocket(webSocketRequest(server.uri().resolve("/blah")), clientListener);
+        WebSocket clientSocket = client.newWebSocket(webSocketRequest(server.uri().resolve("/blah")), clientListener);
 
         MuAssert.assertNotTimedOut("Connecting", serverSocket.connectedLatch);
 
@@ -72,7 +73,7 @@ public class WebSocketsTest {
             .addHandler(webSocketHandler(request -> serverSocket).withPath("/routed-websocket"))
             .start();
 
-        WebSocket clientSocket = ClientUtils.client.newWebSocket(webSocketRequest(server.uri().resolve("/routed-websocket")), new ClientListener());
+        WebSocket clientSocket = client.newWebSocket(webSocketRequest(server.uri().resolve("/routed-websocket")), new ClientListener());
 
         MuAssert.assertNotTimedOut("Connecting", serverSocket.connectedLatch);
 
@@ -88,6 +89,41 @@ public class WebSocketsTest {
     }
 
     @Test
+    public void ifTheFactoryThrowsAnExceptionThenItIsReturnedToTheClient() {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(webSocketHandler(request -> {
+                throw new ClientErrorException(409);
+            }).withPath("/409"))
+            .start();
+        ClientListener listener = new ClientListener();
+        client.newWebSocket(webSocketRequest(server.uri().resolve("/409")), listener);
+        MuAssert.assertNotTimedOut("Failure", listener.failureLatch);
+        assertThat(listener.events, contains("onFailure: Expected HTTP 101 response but was '409 Conflict'"));
+    }
+
+    @Test(timeout = 30000)
+    public void ifTheVersionIsNotSupportedThenA406IsReturned() throws Exception {
+        server = httpServer()
+            .addHandler(webSocketHandler(request -> serverSocket).withPath("/ws"))
+            .start();
+        RawClient rawClient = RawClient.create(server.uri())
+            .sendStartLine("GET", "ws" + server.uri().resolve("/ws").toString().substring(4))
+            .sendHeader("host", server.uri().getAuthority())
+            .sendHeader("connection", "upgrade")
+            .sendHeader("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
+            .sendHeader("Sec-WebSocket-Version", "100")
+            .sendHeader("Upgrade", "websocket")
+            .endHeaders()
+            .flushRequest();
+
+        while (!rawClient.responseString().contains("HTTP/1.1 426 Upgrade Required")) {
+            Thread.sleep(10);
+        }
+
+        assertThat(serverSocket.received, is(empty()));
+    }
+
+    @Test
     public void sendingMessagesAfterTheClientsCloseResultInExceptions() throws InterruptedException, ExecutionException, TimeoutException, IOException {
         CompletableFuture<MuWebSocketSession> sessionFuture = new CompletableFuture<>();
         server = ServerUtils.httpsServerForTest()
@@ -100,7 +136,7 @@ public class WebSocketsTest {
             }).withPath("/routed-websocket"))
             .start();
 
-        WebSocket clientSocket = ClientUtils.client.newWebSocket(webSocketRequest(server.uri().resolve("/routed-websocket")), new ClientListener());
+        WebSocket clientSocket = client.newWebSocket(webSocketRequest(server.uri().resolve("/routed-websocket")), new ClientListener());
         MuWebSocketSession serverSession = sessionFuture.get(10, TimeUnit.SECONDS);
         clientSocket.close(1000, "Closing");
 
@@ -122,7 +158,7 @@ public class WebSocketsTest {
             .addHandler(webSocketHandler(request -> serverSocket).withPath("/ws"))
             .start();
 
-        WebSocket clientSocket = ClientUtils.client.newBuilder()
+        WebSocket clientSocket = client.newBuilder()
             .pingInterval(50, TimeUnit.MILLISECONDS)
             .build()
             .newWebSocket(webSocketRequest(server.uri().resolve("/ws")), new ClientListener());
@@ -140,7 +176,7 @@ public class WebSocketsTest {
             .addHandler(webSocketHandler(request -> serverSocket).withPath("/ws"))
             .start();
         ClientListener clientListener = new ClientListener();
-        ClientUtils.client.newWebSocket(webSocketRequest(server.uri().resolve("/ws")), clientListener);
+        client.newWebSocket(webSocketRequest(server.uri().resolve("/ws")), clientListener);
         MuAssert.assertNotTimedOut("Connecting", serverSocket.connectedLatch);
         serverSocket.session.close(1001, "Umm");
         MuAssert.assertNotTimedOut("Closing", clientListener.closedLatch);
@@ -156,7 +192,7 @@ public class WebSocketsTest {
             .start();
 
         CompletableFuture<Throwable> failure = new CompletableFuture<>();
-        ClientUtils.client.newWebSocket(webSocketRequest(server.uri().resolve("/non-existant")), new WebSocketListener() {
+        client.newWebSocket(webSocketRequest(server.uri().resolve("/non-existant")), new WebSocketListener() {
             public void onFailure(WebSocket webSocket, Throwable t, Response response) {
                 failure.complete(t);
             }
@@ -228,6 +264,7 @@ public class WebSocketsTest {
 
         List<String> events = new CopyOnWriteArrayList<>();
         CountDownLatch closedLatch = new CountDownLatch(1);
+        CountDownLatch failureLatch = new CountDownLatch(1);
 
         @Override
         public void onOpen(WebSocket webSocket, Response response) {
@@ -259,6 +296,7 @@ public class WebSocketsTest {
         @Override
         public void onFailure(WebSocket webSocket, Throwable t, Response response) {
             events.add("onFailure: " + t.getMessage());
+            failureLatch.countDown();
         }
 
         @Override
