@@ -18,6 +18,7 @@ import org.slf4j.LoggerFactory;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static io.netty.buffer.Unpooled.copiedBuffer;
@@ -26,7 +27,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 class Http1Connection extends SimpleChannelInboundHandler<Object> {
     private static final Logger log = LoggerFactory.getLogger(Http1Connection.class);
-    private static final AttributeKey<AsyncContext> STATE_ATTRIBUTE = AttributeKey.newInstance("state"); // todo, just store as a volatile field?
+    static final AttributeKey<AsyncContext> STATE_ATTRIBUTE = AttributeKey.newInstance("state"); // todo, just store as a volatile field?
     static final AttributeKey<MuWebSocketSessionImpl> WEBSOCKET_ATTRIBUTE = AttributeKey.newInstance("ws"); // todo, just store as a volatile field?
 
     private final NettyHandlerAdapter nettyHandlerAdapter;
@@ -46,6 +47,10 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
         AsyncContext asyncContext = ctx.channel().attr(STATE_ATTRIBUTE).get();
         if (asyncContext != null) {
             asyncContext.onCancelled(true);
+        }
+        MuWebSocketSessionImpl webSocket = getWebSocket(ctx);
+        if (webSocket != null) {
+            webSocket.muWebSocket.onError(new ClientDisconnectedException());
         }
         super.channelInactive(ctx);
     }
@@ -128,22 +133,36 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
             MuWebSocketSessionImpl session = getWebSocket(ctx);
             if (session != null) {
                 MuWebSocket muWebSocket = session.muWebSocket;
-                if (msg instanceof TextWebSocketFrame) {
-                    muWebSocket.onText(((TextWebSocketFrame) msg).text());
-                } else if (msg instanceof BinaryWebSocketFrame) {
-                    ByteBuffer buffer = ((BinaryWebSocketFrame) msg).content().nioBuffer();
-                    muWebSocket.onBinary(buffer);
-                } else if (msg instanceof PingWebSocketFrame) {
-                    muWebSocket.onPing(((PingWebSocketFrame) msg).content().nioBuffer());
-                } else if (msg instanceof PongWebSocketFrame) {
-                    muWebSocket.onPong(((PongWebSocketFrame) msg).content().nioBuffer());
-                } else if (msg instanceof CloseWebSocketFrame) {
-                    CloseWebSocketFrame cwsf = (CloseWebSocketFrame) msg;
-                    muWebSocket.onClose(cwsf.statusCode(), cwsf.reasonText());
-                    ctx.channel().attr(WEBSOCKET_ATTRIBUTE).set(null); // so no more messages get delivered
+                try {
+                    if (msg instanceof TextWebSocketFrame) {
+                        muWebSocket.onText(((TextWebSocketFrame) msg).text());
+                    } else if (msg instanceof BinaryWebSocketFrame) {
+                        ByteBuffer buffer = ((BinaryWebSocketFrame) msg).content().nioBuffer();
+                        muWebSocket.onBinary(buffer);
+                    } else if (msg instanceof PingWebSocketFrame) {
+                        muWebSocket.onPing(((PingWebSocketFrame) msg).content().nioBuffer());
+                    } else if (msg instanceof PongWebSocketFrame) {
+                        muWebSocket.onPong(((PongWebSocketFrame) msg).content().nioBuffer());
+                    } else if (msg instanceof CloseWebSocketFrame) {
+                        CloseWebSocketFrame cwsf = (CloseWebSocketFrame) msg;
+                        muWebSocket.onClientClosed(cwsf.statusCode(), cwsf.reasonText());
+                        clearWebSocket(ctx);
+                    }
+                } catch (Throwable e) {
+                    try {
+                        clearWebSocket(ctx);
+                        muWebSocket.onError(e);
+                    } catch (Exception ex) {
+                        log.warn("Exception thrown by " + muWebSocket.getClass() + "#onError so will close connection", ex);
+                        ctx.close();
+                    }
                 }
             }
         }
+    }
+
+    static void clearWebSocket(ChannelHandlerContext ctx) {
+        ctx.channel().attr(WEBSOCKET_ATTRIBUTE).set(null);
     }
 
     private static String getRelativeUri(HttpRequest request) throws URISyntaxException {
@@ -190,13 +209,13 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
             if (session != null) {
                 if (ise.state() == IdleState.READER_IDLE) {
                     try {
-                        session.muWebSocket.onIdleReadTimeout();
+                        session.muWebSocket.onError(new TimeoutException("No messages received on websocket"));
                     } catch (Exception e) {
                         log.warn("Error while processing idle timeout", e);
                         ctx.close();
                     }
                 } else if (ise.state() == IdleState.WRITER_IDLE) {
-                    session.sendPing(ByteBuffer.wrap(new byte[]{'m', 'u'}));
+                    session.sendPing(ByteBuffer.wrap(MuWebSocketSessionImpl.PING_BYTES));
                 }
             } else {
                 AsyncContext asyncContext = ctx.channel().attr(STATE_ATTRIBUTE).get();
@@ -220,12 +239,19 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         AsyncContext asyncContext = ctx.channel().attr(STATE_ATTRIBUTE).get();
         if (asyncContext != null) {
-            log.debug(cause.getClass().getName() + " (" + cause.getMessage() + ") for " + ctx + " so will disconnect this client");
+            if (log.isDebugEnabled()) {
+                log.debug(cause.getClass().getName() + " (" + cause.getMessage() + ") for " + ctx +
+                    " so will disconnect this client");
+            }
             asyncContext.onCancelled(true);
         } else if (cause instanceof CorruptedFrameException) {
             MuWebSocketSessionImpl webSocket = getWebSocket(ctx);
             if (webSocket != null) {
-                webSocket.close(1002, "Protocol Error");
+                try {
+                    webSocket.muWebSocket.onError(new WebSocketProtocolException(cause.getMessage(), cause));
+                } catch (Exception e) {
+                    ctx.close();
+                }
                 return;
             }
         } else {

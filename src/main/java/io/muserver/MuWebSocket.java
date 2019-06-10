@@ -15,21 +15,21 @@ public interface MuWebSocket {
     /**
      * Called when the websocket is connected.
      * @param session The websocket session, which can be used to send messages, pings, and close the connection.
-     * @throws Exception Any exceptions thrown will result in the connection being closed.
+     * @throws Exception Any exceptions thrown will result in the onError method being called with the thrown exception being used as the <code>cause</code> parameter.
      */
     void onConnect(MuWebSocketSession session) throws Exception;
 
     /**
      * Called when a message is received from the client.
      * @param message The message as a string.
-     * @throws Exception Any exceptions thrown will result in the connection being closed.
+     * @throws Exception Any exceptions thrown will result in the onError method being called with the thrown exception being used as the <code>cause</code> parameter.
      */
     void onText(String message) throws Exception;
 
     /**
      * Called when a message is received from the client.
      * @param buffer The message as a byte buffer.
-     * @throws Exception Any exceptions thrown will result in the connection being closed.
+     * @throws Exception Any exceptions thrown will result in the onError method being called with the thrown exception being used as the <code>cause</code> parameter.
      */
     void onBinary(ByteBuffer buffer) throws Exception;
 
@@ -37,28 +37,38 @@ public interface MuWebSocket {
      * Called when the client has closed the connection.
      * @param statusCode The closure code. See <a href="https://tools.ietf.org/html/rfc6455#section-7.4">https://tools.ietf.org/html/rfc6455#section-7.4</a>
      * @param reason An optional reason for the closure.
-     * @throws Exception Any exceptions thrown will result in the connection being closed.
+     * @throws Exception Any exceptions thrown will result in the onError method being called with the thrown exception being used as the <code>cause</code> parameter.
      */
-    void onClose(int statusCode, String reason) throws Exception;
+    void onClientClosed(int statusCode, String reason) throws Exception;
 
     /**
      * Called when a ping message is sent from a client.
      * @param payload The ping payload.
-     * @throws Exception Any exceptions thrown will result in the connection being closed.
+     * @throws Exception Any exceptions thrown will result in the onError method being called with the thrown exception being used as the <code>cause</code> parameter.
      */
     void onPing(ByteBuffer payload) throws Exception;
 
     /**
      * Called when a pong message is sent from the client.
      * @param payload The pong payload
-     * @throws Exception Any exceptions thrown will result in the connection being closed.
+     * @throws Exception Any exceptions thrown will result in the onError method being called with the thrown exception being used as the <code>cause</code> parameter.
      */
     void onPong(ByteBuffer payload) throws Exception;
 
     /**
-     * Called when no messages have been sent or received for the time specified by
-     * {@link WebSocketHandlerBuilder#withIdleReadTimeout(long, TimeUnit)}
+     * Called when an unexpected error occurs. Possible errors include, but are not limited to:
+     * <ul>
+     *     <li>The client shuts down non-gracefully in which case the cause will be a {@link ClientDisconnectedException}
+     *     (note that if the client initiates a graceful shutdown,
+     *     then {@link #onClientClosed(int, String)} will be called instead)</li>
+     *     <li>No messages have been received within the time specified by {@link WebSocketHandlerBuilder#withIdleReadTimeout(long, TimeUnit)},
+     *     in which case the cause will be a {@link java.util.concurrent.TimeoutException}</li>
+     *     <li>An Exception is thrown by any of the methods that implement this interface, such as
+     *     {@link #onText(String)} etc (but not onError itself).</li>
+     *     <li>The client sends an invalid frame, in which case cause will be {@link WebSocketProtocolException}</li>
+     * </ul>
+     * @param cause The cause of the error
      * @throws Exception Any exceptions thrown will result in the connection being closed.
      */
-    void onIdleReadTimeout() throws Exception;
+    void onError(Throwable cause) throws Exception;
 }

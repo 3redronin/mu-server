@@ -428,7 +428,10 @@ class NettyRequestAdapter implements MuRequest {
         ctx.channel().attr(Http1Connection.WEBSOCKET_ATTRIBUTE).set(session);
 
         handshaker.handshake(ctx.channel(), fullReq, responseHeaders, ctx.channel().newPromise())
-            .addListener(future -> muWebSocket.onConnect(session));
+            .addListener(future -> {
+                ctx.channel().attr(Http1Connection.STATE_ATTRIBUTE).set(null);
+                muWebSocket.onConnect(session);
+            });
 
         return true;
     }

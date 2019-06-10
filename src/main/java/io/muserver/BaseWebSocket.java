@@ -2,6 +2,7 @@ package io.muserver;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.concurrent.TimeoutException;
 
 /**
  * <p>A base class for server-side web sockets, that takes care of capturing the web socket session, responding
@@ -14,20 +15,20 @@ public abstract class BaseWebSocket implements MuWebSocket {
     private volatile boolean closeSent = false;
 
     @Override
-    public void onConnect(MuWebSocketSession session) {
+    public void onConnect(MuWebSocketSession session) throws Exception {
         this.session = session;
     }
 
     @Override
-    public void onText(String message) throws IOException {
+    public void onText(String message) throws Exception {
     }
 
     @Override
-    public void onBinary(ByteBuffer buffer) {
+    public void onBinary(ByteBuffer buffer) throws Exception {
     }
 
     @Override
-    public void onClose(int statusCode, String reason) {
+    public void onClientClosed(int statusCode, String reason) throws Exception {
         if (!closeSent) {
             closeSent = true;
             try {
@@ -38,20 +39,26 @@ public abstract class BaseWebSocket implements MuWebSocket {
     }
 
     @Override
-    public void onPing(ByteBuffer payload) throws IOException {
+    public void onPing(ByteBuffer payload) throws Exception {
         if (!closeSent) {
             session().sendPong(payload);
         }
     }
 
     @Override
-    public void onPong(ByteBuffer payload) {
+    public void onPong(ByteBuffer payload) throws Exception {
     }
 
     @Override
-    public void onIdleReadTimeout() throws Exception {
+    public void onError(Throwable cause) throws Exception {
         if (!closeSent) {
-            session().close(1001, "Idle Timeout");
+            if (cause instanceof TimeoutException) {
+                session().close(1001, "Idle Timeout");
+            } else if (cause instanceof WebSocketProtocolException) {
+                // do nothing as it is already closed by Netty
+            } else {
+                session().close(1011, "Server error");
+            }
         }
     }
 

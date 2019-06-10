@@ -13,6 +13,7 @@ import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 
 class MuWebSocketSessionImpl implements MuWebSocketSession {
+    static final byte[] PING_BYTES = {'m', 'u'};
     private static final Logger log = LoggerFactory.getLogger(MuWebSocketSessionImpl.class);
 
     private volatile boolean closeSent = false;
@@ -50,13 +51,13 @@ class MuWebSocketSessionImpl implements MuWebSocketSession {
     @Override
     public void sendPing(ByteBuffer payload) {
         ByteBuf bb = Unpooled.wrappedBuffer(payload);
-        writeSync(new PingWebSocketFrame(bb));
+        writeAsync(new PingWebSocketFrame(bb), WriteCallback.NoOp);
     }
 
     @Override
     public void sendPong(ByteBuffer payload) {
         ByteBuf bb = Unpooled.wrappedBuffer(payload);
-        writeSync(new PongWebSocketFrame(bb));
+        writeAsync(new PongWebSocketFrame(bb), WriteCallback.NoOp);
     }
 
     @Override
@@ -75,11 +76,16 @@ class MuWebSocketSessionImpl implements MuWebSocketSession {
     private void disconnect(CloseWebSocketFrame closeFrame) {
         if (!closeSent) {
             closeSent = true;
-            try {
-                writeSync(closeFrame);
-            } finally {
-                ctx.close();
-            }
+            writeAsync(closeFrame, new WriteCallback() {
+                public void onSuccess() {
+                    Http1Connection.clearWebSocket(ctx);
+                    ctx.close();
+                }
+                public void onFailure(Throwable reason) {
+                    Http1Connection.clearWebSocket(ctx);
+                    ctx.close();
+                }
+            });
         }
     }
 
@@ -93,7 +99,17 @@ class MuWebSocketSessionImpl implements MuWebSocketSession {
     }
 
     private void writeAsync(WebSocketFrame msg, WriteCallback writeCallback) {
-        ChannelFuture future = write(msg);
+        ChannelFuture future;
+        try {
+            future = write(msg);
+        } catch (Exception e) {
+            try {
+                writeCallback.onFailure(e);
+            } catch (Exception ignored) {
+            }
+            return;
+        }
+
         future.addListener((ChannelFutureListener) future1 -> {
             try {
                 if (future1.isSuccess()) {

@@ -59,7 +59,7 @@ public class WebSocketsTest {
         clientSocket.close(1000, "Finished");
         MuAssert.assertNotTimedOut("Closing", serverSocket.closedLatch);
         assertThat(serverSocket.received, contains("connected", "onText: This is a message",
-            "onBinary: This is a binary message", "onText: Another text", "onClose: 1000 Finished"));
+            "onBinary: This is a binary message", "onText: Another text", "onClientClosed: 1000 Finished"));
 
         assertThat(clientListener.toString(), clientListener.events,
             contains("onOpen", "onMessage text: THIS IS A MESSAGE", "onMessage binary: This is a binary message", "onMessage text: ANOTHER TEXT"));
@@ -87,7 +87,7 @@ public class WebSocketsTest {
     }
 
     @Test
-    public void ifMaxFrameLengthExceededThenSocketIsClosed() {
+    public void ifMaxFrameLengthExceededThenSocketIsClosed() throws InterruptedException {
         server = ServerUtils.httpsServerForTest()
             .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket)
                 .withPath("/routed-websocket")
@@ -125,7 +125,7 @@ public class WebSocketsTest {
         clientSocket.close(1000, "Finished");
         MuAssert.assertNotTimedOut("Closing", serverSocket.closedLatch);
         assertThat(serverSocket.received, contains("connected", "onText: " + largeText,
-            "onBinary: " + largeText, "onText: Another text", "onClose: 1000 Finished"));
+            "onBinary: " + largeText, "onText: Another text", "onClientClosed: 1000 Finished"));
     }
 
 
@@ -207,7 +207,7 @@ public class WebSocketsTest {
         server = ServerUtils.httpsServerForTest()
             .addHandler(webSocketHandler((request, responseHeaders) -> new BaseWebSocket() {
                 @Override
-                public void onConnect(MuWebSocketSession session) {
+                public void onConnect(MuWebSocketSession session) throws Exception {
                     super.onConnect(session);
                     sessionFuture.complete(session);
                 }
@@ -236,7 +236,7 @@ public class WebSocketsTest {
         server = ServerUtils.httpsServerForTest()
             .addHandler(webSocketHandler((request, responseHeaders) -> new BaseWebSocket() {
                 @Override
-                public void onConnect(MuWebSocketSession session) {
+                public void onConnect(MuWebSocketSession session) throws Exception {
                     super.onConnect(session);
                     sessionFuture.complete(session);
                 }
@@ -265,6 +265,20 @@ public class WebSocketsTest {
             }
         }
         Assert.fail("This should have failed");
+    }
+
+    @Test
+    public void clientLeavingUnexpectedlyResultsInOnErrorWithClientDisconnectedException() throws Exception {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket))
+            .start();
+
+        ClientListener listener = new ClientListener();
+        WebSocket clientSocket = client.newWebSocket(webSocketRequest(server.uri()), listener);
+        MuAssert.assertNotTimedOut("connecting", listener.connectedLatch);
+        clientSocket.cancel();
+        MuAssert.assertNotTimedOut("erroring", serverSocket.errorLatch);
+        assertThat(serverSocket.received, hasItems("onError ClientDisconnectedException"));
     }
 
     @Test
@@ -333,7 +347,25 @@ public class WebSocketsTest {
             )
             .start();
         client.newWebSocket(webSocketRequest(server.uri().resolve("/routed-websocket")), new ClientListener());
-        MuAssert.assertNotTimedOut("idletimeout", serverSocket.idleTimeoutLatch);
+        MuAssert.assertNotTimedOut("onError", serverSocket.errorLatch);
+        assertThat(serverSocket.received, contains("connected", "onError TimeoutException"));
+    }
+
+    @Test
+    public void exceptionsThrownByHandlersResultInOnErrorBeingCalled() {
+        serverSocket = new RecordingMuWebSocket() {
+            public void onText(String message) {
+                throw new MuException("Oops");
+            }
+        };
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket))
+            .start();
+        WebSocket webSocket = client.newWebSocket(webSocketRequest(server.uri()), new ClientListener());
+        MuAssert.assertNotTimedOut("Connecting", serverSocket.connectedLatch);
+        webSocket.send("Hello there");
+        MuAssert.assertNotTimedOut("onError", serverSocket.errorLatch);
+        assertThat(serverSocket.received, contains("connected", "onError MuException"));
     }
 
     @Test
@@ -365,17 +397,18 @@ public class WebSocketsTest {
         MuAssert.stopAndCheck(server);
     }
 
-    private static class RecordingMuWebSocket implements MuWebSocket {
+    private static class RecordingMuWebSocket extends BaseWebSocket {
         private MuWebSocketSession session;
         List<String> received = new CopyOnWriteArrayList<>();
         CountDownLatch connectedLatch = new CountDownLatch(1);
         CountDownLatch closedLatch = new CountDownLatch(1);
         CountDownLatch pingLatch = new CountDownLatch(1);
         CountDownLatch pongLatch = new CountDownLatch(1);
-        CountDownLatch idleTimeoutLatch = new CountDownLatch(1);
+        CountDownLatch errorLatch = new CountDownLatch(1);
 
         @Override
-        public void onConnect(MuWebSocketSession session) {
+        public void onConnect(MuWebSocketSession session) throws Exception {
+            super.onConnect(session);
             this.session = session;
             received.add("connected");
             connectedLatch.countDown();
@@ -397,8 +430,8 @@ public class WebSocketsTest {
         }
 
         @Override
-        public void onClose(int statusCode, String reason) {
-            received.add("onClose: " + statusCode + " " + reason);
+        public void onClientClosed(int statusCode, String reason) {
+            received.add("onClientClosed: " + statusCode + " " + reason);
             closedLatch.countDown();
         }
 
@@ -416,9 +449,10 @@ public class WebSocketsTest {
         }
 
         @Override
-        public void onIdleReadTimeout() {
-            received.add("onIdleReadTimeout");
-            idleTimeoutLatch.countDown();
+        public void onError(Throwable cause) throws Exception {
+            super.onError(cause);
+            received.add("onError " + cause.getClass().getSimpleName());
+            errorLatch.countDown();
         }
     }
 

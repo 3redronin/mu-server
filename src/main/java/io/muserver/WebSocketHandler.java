@@ -3,9 +3,11 @@ package io.muserver;
 import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.HttpHeaders;
 
-import java.util.Map;
-
-public class WebSocketHandler implements MuHandler, RouteHandler {
+/**
+ * A handler that can establish a web socket based on web socket upgrade requests.
+ * Create with {@link WebSocketHandlerBuilder#webSocketHandler()}
+ */
+public class WebSocketHandler implements MuHandler {
 
     private final MuWebSocketFactory factory;
     private final String path;
@@ -48,9 +50,5 @@ public class WebSocketHandler implements MuHandler, RouteHandler {
         return upgraded;
     }
 
-    @Override
-    public void handle(MuRequest request, MuResponse response, Map<String, String> pathParams) throws Exception {
-        handle(request, response);
-    }
 }
 

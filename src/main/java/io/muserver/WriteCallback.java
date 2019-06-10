@@ -18,4 +18,11 @@ public interface WriteCallback {
      */
     void onFailure(Throwable reason) throws Exception;
 
+    /**
+     * A write callback that does nothing when it receives the callbacks
+     */
+    WriteCallback NoOp = new WriteCallback() {
+        public void onSuccess() {}
+        public void onFailure(Throwable reason) {}
+    };
 }
