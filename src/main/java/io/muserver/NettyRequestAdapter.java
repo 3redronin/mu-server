@@ -402,7 +402,7 @@ class NettyRequestAdapter implements MuRequest {
         }
     }
 
-    boolean websocketUpgrade(MuWebSocket muWebSocket, long idleReadTimeoutMills, long pingAfterWriteMillis, int maxFramePayloadLength) throws IOException {
+    boolean websocketUpgrade(MuWebSocket muWebSocket, HttpHeaders responseHeaders, long idleReadTimeoutMills, long pingAfterWriteMillis, int maxFramePayloadLength) throws IOException {
         String url = "ws" + uri().toString().substring(4);
         WebSocketServerHandshakerFactory factory = new WebSocketServerHandshakerFactory(url, null, false, maxFramePayloadLength);
 
@@ -427,7 +427,7 @@ class NettyRequestAdapter implements MuRequest {
         MuWebSocketSessionImpl session = new MuWebSocketSessionImpl(ctx, muWebSocket);
         ctx.channel().attr(Http1Connection.WEBSOCKET_ATTRIBUTE).set(session);
 
-        handshaker.handshake(ctx.channel(), fullReq)
+        handshaker.handshake(ctx.channel(), fullReq, responseHeaders, ctx.channel().newPromise())
             .addListener(future -> muWebSocket.onConnect(session));
 
         return true;

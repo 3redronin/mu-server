@@ -36,10 +36,11 @@ public class WebSocketsTest {
     @Test
     public void handlersCanReturnNullWebSocketToHandleAsAWebSocket() throws IOException {
         server = ServerUtils.httpsServerForTest()
-            .addHandler(webSocketHandler().withWebSocketFactory(request -> {
+            .addHandler(webSocketHandler().withWebSocketFactory((request, responseHeaders) -> {
                 if (!request.relativePath().equals("/blah")) {
                     return null;
                 }
+                responseHeaders.set("upgrade-response-header", "hello");
                 return serverSocket;
             }))
             .addHandler(Method.GET, "/not-blah", (request, response, pathParams) -> response.write("not a blah"))
@@ -48,7 +49,9 @@ public class WebSocketsTest {
         ClientListener clientListener = new ClientListener();
         WebSocket clientSocket = client.newWebSocket(webSocketRequest(server.uri().resolve("/blah")), clientListener);
 
-        MuAssert.assertNotTimedOut("Connecting", serverSocket.connectedLatch);
+        MuAssert.assertNotTimedOut("Connecting", clientListener.connectedLatch);
+
+        assertThat(clientListener.response.header("upgrade-response-header"), equalTo("hello"));
 
         clientSocket.send("This is a message");
         clientSocket.send(ByteString.encodeUtf8("This is a binary message"));
@@ -68,9 +71,9 @@ public class WebSocketsTest {
     }
 
     @Test
-    public void largeFramesCanBeSent() throws IOException {
+    public void largeFramesCanBeSent() {
         server = ServerUtils.httpsServerForTest()
-            .addHandler(webSocketHandler(request -> serverSocket))
+            .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket))
             .start();
         ClientListener listener = new ClientListener();
         WebSocket clientSocket = client.newWebSocket(webSocketRequest(server.uri()), listener);
@@ -86,7 +89,7 @@ public class WebSocketsTest {
     @Test
     public void ifMaxFrameLengthExceededThenSocketIsClosed() {
         server = ServerUtils.httpsServerForTest()
-            .addHandler(webSocketHandler(request -> serverSocket)
+            .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket)
                 .withPath("/routed-websocket")
                 .withMaxFramePayloadLength(1024)
             )
@@ -107,7 +110,7 @@ public class WebSocketsTest {
     @Test
     public void pathsWorkForWebsockets() {
         server = ServerUtils.httpsServerForTest()
-            .addHandler(webSocketHandler(request -> serverSocket).withPath("/routed-websocket"))
+            .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket).withPath("/routed-websocket"))
             .start();
 
         WebSocket clientSocket = client.newWebSocket(webSocketRequest(server.uri().resolve("/routed-websocket")), new ClientListener());
@@ -130,7 +133,7 @@ public class WebSocketsTest {
     public void asyncWritesWork() throws InterruptedException, ExecutionException, TimeoutException {
         CompletableFuture<String> result = new CompletableFuture<>();
         server = ServerUtils.httpsServerForTest()
-            .addHandler(webSocketHandler(request -> new BaseWebSocket() {
+            .addHandler(webSocketHandler((request, responseHeaders) -> new BaseWebSocket() {
                 public void onText(String message) {
                     session().sendText("This is message one", new WriteCallback() {
                         public void onSuccess() {
@@ -166,7 +169,7 @@ public class WebSocketsTest {
     @Test
     public void ifTheFactoryThrowsAnExceptionThenItIsReturnedToTheClient() {
         server = ServerUtils.httpsServerForTest()
-            .addHandler(webSocketHandler(request -> {
+            .addHandler(webSocketHandler((request, responseHeaders) -> {
                 throw new ClientErrorException(409);
             }).withPath("/409"))
             .start();
@@ -179,7 +182,7 @@ public class WebSocketsTest {
     @Test(timeout = 30000)
     public void ifTheVersionIsNotSupportedThenA406IsReturned() throws Exception {
         server = httpServer()
-            .addHandler(webSocketHandler(request -> serverSocket).withPath("/ws"))
+            .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket).withPath("/ws"))
             .start();
         RawClient rawClient = RawClient.create(server.uri())
             .sendStartLine("GET", "ws" + server.uri().resolve("/ws").toString().substring(4))
@@ -202,7 +205,7 @@ public class WebSocketsTest {
     public void sendingMessagesAfterTheClientsCloseResultInExceptions() throws InterruptedException, ExecutionException, TimeoutException, IOException {
         CompletableFuture<MuWebSocketSession> sessionFuture = new CompletableFuture<>();
         server = ServerUtils.httpsServerForTest()
-            .addHandler(webSocketHandler(request -> new BaseWebSocket() {
+            .addHandler(webSocketHandler((request, responseHeaders) -> new BaseWebSocket() {
                 @Override
                 public void onConnect(MuWebSocketSession session) {
                     super.onConnect(session);
@@ -231,7 +234,7 @@ public class WebSocketsTest {
     public void sendingMessagesAfterTheClientsCloseResultInFailureCallBacksForAsyncCalls() throws InterruptedException, ExecutionException, TimeoutException, IOException {
         CompletableFuture<MuWebSocketSession> sessionFuture = new CompletableFuture<>();
         server = ServerUtils.httpsServerForTest()
-            .addHandler(webSocketHandler(request -> new BaseWebSocket() {
+            .addHandler(webSocketHandler((request, responseHeaders) -> new BaseWebSocket() {
                 @Override
                 public void onConnect(MuWebSocketSession session) {
                     super.onConnect(session);
@@ -267,7 +270,7 @@ public class WebSocketsTest {
     @Test
     public void pingAndPongWork() throws Exception {
         server = ServerUtils.httpsServerForTest()
-            .addHandler(webSocketHandler(request -> serverSocket).withPath("/ws"))
+            .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket).withPath("/ws"))
             .start();
 
         ClientListener listener = new ClientListener();
@@ -292,7 +295,7 @@ public class WebSocketsTest {
     @Test
     public void theServerCanCloseSockets() throws IOException {
         server = ServerUtils.httpsServerForTest()
-            .addHandler(webSocketHandler(request -> serverSocket).withPath("/ws"))
+            .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket).withPath("/ws"))
             .start();
         ClientListener clientListener = new ClientListener();
         client.newWebSocket(webSocketRequest(server.uri().resolve("/ws")), clientListener);
@@ -307,7 +310,7 @@ public class WebSocketsTest {
     @Test
     public void ifNotMatchedThenProtocolExceptionIsReturned() throws Exception {
         server = ServerUtils.httpsServerForTest()
-            .addHandler(webSocketHandler(request -> serverSocket).withPath("/routed-websocket"))
+            .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket).withPath("/routed-websocket"))
             .start();
 
         CompletableFuture<Throwable> failure = new CompletableFuture<>();
@@ -324,7 +327,7 @@ public class WebSocketsTest {
     @Test
     public void ifNoMessagesSentOrReceivedExceedIdleTimeoutThenItDisconnects() throws Exception {
         server = ServerUtils.httpsServerForTest()
-            .addHandler(webSocketHandler(request -> serverSocket)
+            .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket)
                 .withPath("/routed-websocket")
                 .withIdleReadTimeout(100, TimeUnit.MILLISECONDS)
             )
@@ -337,7 +340,7 @@ public class WebSocketsTest {
     public void ifAWriteTimeoutIsSetThenPingsAreSent() throws Exception {
         server = ServerUtils.httpsServerForTest()
             .addHandler(
-                webSocketHandler(request -> serverSocket)
+                webSocketHandler((request, responseHeaders) -> serverSocket)
                     .withPingSentAfterNoWritesFor(50, TimeUnit.MILLISECONDS)
             )
             .start();
@@ -424,7 +427,9 @@ public class WebSocketsTest {
         final List<String> events = new CopyOnWriteArrayList<>();
         final CountDownLatch closedLatch = new CountDownLatch(1);
         final CountDownLatch failureLatch = new CountDownLatch(1);
+        final CountDownLatch connectedLatch = new CountDownLatch(1);
         final CountDownLatch messageLatch;
+        Response response;
 
         private ClientListener() {
             this(1);
@@ -437,7 +442,9 @@ public class WebSocketsTest {
 
         @Override
         public void onOpen(WebSocket webSocket, Response response) {
+            this.response = response;
             events.add("onOpen");
+            connectedLatch.countDown();
         }
 
         @Override

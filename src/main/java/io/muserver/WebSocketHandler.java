@@ -1,5 +1,8 @@
 package io.muserver;
 
+import io.netty.handler.codec.http.DefaultHttpHeaders;
+import io.netty.handler.codec.http.HttpHeaders;
+
 import java.util.Map;
 
 public class WebSocketHandler implements MuHandler, RouteHandler {
@@ -31,13 +34,14 @@ public class WebSocketHandler implements MuHandler, RouteHandler {
         if (!isUpgradeRequest) {
             return false;
         }
-
-        MuWebSocket muWebSocket = factory.create(request);
+        HttpHeaders nettyHeaders = new DefaultHttpHeaders();
+        Http1Headers responseHeaders = new Http1Headers(nettyHeaders);
+        MuWebSocket muWebSocket = factory.create(request, responseHeaders);
         if (muWebSocket == null) {
             return false;
         }
         NettyRequestAdapter reqImpl = (NettyRequestAdapter) request;
-        boolean upgraded = reqImpl.websocketUpgrade(muWebSocket, idleReadTimeoutMills, pingAfterWriteMillis, maxFramePayloadLength);
+        boolean upgraded = reqImpl.websocketUpgrade(muWebSocket, nettyHeaders, idleReadTimeoutMills, pingAfterWriteMillis, maxFramePayloadLength);
         if (upgraded) {
             ((NettyResponseAdaptor) response).setWebsocket();
         }

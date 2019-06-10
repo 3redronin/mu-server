@@ -4,7 +4,7 @@ import java.nio.ByteBuffer;
 import java.util.concurrent.TimeUnit;
 
 /**
- * <p>An interface defining the callbacks received on a websocket which is returned by {@link MuWebSocketFactory#create(MuRequest)}.</p>
+ * <p>An interface defining the callbacks received on a websocket which is returned by {@link MuWebSocketFactory#create(MuRequest, Headers)}.</p>
  * <p>In order to listen to events, implement this interface and store the reference to the {@link MuWebSocketSession} when
  * {@link #onConnect(MuWebSocketSession)} is called.</p>
  * <p><strong>Note:</strong> Rather than implementing this, you may wish to extend the {@link BaseWebSocket} class which

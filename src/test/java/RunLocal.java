@@ -63,7 +63,7 @@ public class RunLocal {
             })
             .addHandler(webSocketHandler()
                 .withPath("/websocket-echo")
-                .withWebSocketFactory(request -> new BaseWebSocket() {
+                .withWebSocketFactory((request, responseHeaders) -> new BaseWebSocket() {
                     public void onText(String message) throws IOException {
                         session().sendText(message);
                         if (message.equalsIgnoreCase("close")) {
