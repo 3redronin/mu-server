@@ -221,7 +221,7 @@ public class WebSocketsTest {
         for (int i = 0; i < 100; i++) {
             try {
                 serverSession.sendText("This shouldn't work");
-            } catch (IOException ignored) {
+            } catch (IOException | IllegalStateException ignored) {
                 return; // IOException, as expected. Might take a couple of attempts to get there though, hence the loop
             }
         }
