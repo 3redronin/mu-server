@@ -15,6 +15,7 @@ import java.nio.ByteBuffer;
 class MuWebSocketSessionImpl implements MuWebSocketSession {
     static final byte[] PING_BYTES = {'m', 'u'};
     private static final Logger log = LoggerFactory.getLogger(MuWebSocketSessionImpl.class);
+    ChannelFuture connectedPromise;
 
     private volatile boolean closeSent = false;
 

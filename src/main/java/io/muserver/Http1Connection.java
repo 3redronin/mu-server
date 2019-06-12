@@ -132,31 +132,33 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
         } else if (msg instanceof WebSocketFrame) {
             MuWebSocketSessionImpl session = getWebSocket(ctx);
             if (session != null) {
-                MuWebSocket muWebSocket = session.muWebSocket;
-                try {
-                    if (msg instanceof TextWebSocketFrame) {
-                        muWebSocket.onText(((TextWebSocketFrame) msg).text());
-                    } else if (msg instanceof BinaryWebSocketFrame) {
-                        ByteBuffer buffer = ((BinaryWebSocketFrame) msg).content().nioBuffer();
-                        muWebSocket.onBinary(buffer);
-                    } else if (msg instanceof PingWebSocketFrame) {
-                        muWebSocket.onPing(((PingWebSocketFrame) msg).content().nioBuffer());
-                    } else if (msg instanceof PongWebSocketFrame) {
-                        muWebSocket.onPong(((PongWebSocketFrame) msg).content().nioBuffer());
-                    } else if (msg instanceof CloseWebSocketFrame) {
-                        CloseWebSocketFrame cwsf = (CloseWebSocketFrame) msg;
-                        muWebSocket.onClientClosed(cwsf.statusCode(), cwsf.reasonText());
-                        clearWebSocket(ctx);
-                    }
-                } catch (Throwable e) {
+                session.connectedPromise.addListener(future -> {
+                    MuWebSocket muWebSocket = session.muWebSocket;
                     try {
-                        clearWebSocket(ctx);
-                        muWebSocket.onError(e);
-                    } catch (Exception ex) {
-                        log.warn("Exception thrown by " + muWebSocket.getClass() + "#onError so will close connection", ex);
-                        ctx.close();
+                        if (msg instanceof TextWebSocketFrame) {
+                            muWebSocket.onText(((TextWebSocketFrame) msg).text());
+                        } else if (msg instanceof BinaryWebSocketFrame) {
+                            ByteBuffer buffer = ((BinaryWebSocketFrame) msg).content().nioBuffer();
+                            muWebSocket.onBinary(buffer);
+                        } else if (msg instanceof PingWebSocketFrame) {
+                            muWebSocket.onPing(((PingWebSocketFrame) msg).content().nioBuffer());
+                        } else if (msg instanceof PongWebSocketFrame) {
+                            muWebSocket.onPong(((PongWebSocketFrame) msg).content().nioBuffer());
+                        } else if (msg instanceof CloseWebSocketFrame) {
+                            CloseWebSocketFrame cwsf = (CloseWebSocketFrame) msg;
+                            muWebSocket.onClientClosed(cwsf.statusCode(), cwsf.reasonText());
+                            clearWebSocket(ctx);
+                        }
+                    } catch (Throwable e) {
+                        try {
+                            clearWebSocket(ctx);
+                            muWebSocket.onError(e);
+                        } catch (Exception ex) {
+                            log.warn("Exception thrown by " + muWebSocket.getClass() + "#onError so will close connection", ex);
+                            ctx.close();
+                        }
                     }
-                }
+                });
             }
         }
     }

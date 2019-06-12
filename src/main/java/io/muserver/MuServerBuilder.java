@@ -19,6 +19,7 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.handler.traffic.GlobalTrafficShapingHandler;
+import io.netty.util.concurrent.DefaultThreadFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -29,6 +30,8 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -56,6 +59,7 @@ public class MuServerBuilder {
     private SSLContextBuilder sslContextBuilder;
     private Http2Config http2Config;
     private long idleTimeoutMills = TimeUnit.MINUTES.toMillis(5);
+    private ExecutorService executor;
 
     /**
      * @param port The HTTP port to use. A value of 0 will have a random port assigned; a value of -1 will
@@ -201,6 +205,17 @@ public class MuServerBuilder {
      */
     public MuServerBuilder withHttp2Config(Http2ConfigBuilder http2Config) {
         return withHttp2Config(http2Config.build());
+    }
+
+    /**
+     * Sets the thread executor service to run requests on. By default {@link Executors#newCachedThreadPool()}
+     * is used.
+     * @param executor The executor service to use to handle requests
+     * @return The current Mu-Server builder
+     */
+    public MuServerBuilder withHandlerExecutor(ExecutorService executor) {
+        this.executor = executor;
+        return this;
     }
 
     /**
@@ -391,7 +406,11 @@ public class MuServerBuilder {
 
         ServerSettings settings = new ServerSettings(minimumGzipSize, maxHeadersSize, maxUrlSize, gzipEnabled, mimeTypesToGzip);
 
-        NettyHandlerAdapter nettyHandlerAdapter = new NettyHandlerAdapter(handlers);
+        ExecutorService handlerExecutor = this.executor;
+        if (handlerExecutor == null) {
+            handlerExecutor = Executors.newCachedThreadPool(new DefaultThreadFactory("muhandler"));
+        }
+        NettyHandlerAdapter nettyHandlerAdapter = new NettyHandlerAdapter(handlerExecutor, handlers);
 
         NioEventLoopGroup bossGroup = new NioEventLoopGroup(1);
         NioEventLoopGroup workerGroup = new NioEventLoopGroup();

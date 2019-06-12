@@ -2,7 +2,6 @@ package io.muserver;
 
 import io.muserver.rest.MuRuntimeDelegate;
 import io.netty.buffer.ByteBuf;
-import io.netty.util.concurrent.DefaultThreadFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -16,7 +15,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 class NettyHandlerAdapter {
 
@@ -28,9 +26,10 @@ class NettyHandlerAdapter {
 
     private static final Logger log = LoggerFactory.getLogger(NettyHandlerAdapter.class);
     private final List<MuHandler> muHandlers;
-    private static final ExecutorService executor = Executors.newCachedThreadPool(new DefaultThreadFactory("muhandler"));
+    private final ExecutorService executor;
 
-    NettyHandlerAdapter(List<MuHandler> muHandlers) {
+    NettyHandlerAdapter(ExecutorService executor, List<MuHandler> muHandlers) {
+        this.executor = executor;
         this.muHandlers = muHandlers;
     }
 
