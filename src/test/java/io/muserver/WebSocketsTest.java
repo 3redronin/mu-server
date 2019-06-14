@@ -276,6 +276,7 @@ public class WebSocketsTest {
         ClientListener listener = new ClientListener();
         WebSocket clientSocket = client.newWebSocket(webSocketRequest(server.uri()), listener);
         MuAssert.assertNotTimedOut("connecting", listener.connectedLatch);
+        MuAssert.assertNotTimedOut("connecting", serverSocket.connectedLatch);
         clientSocket.cancel();
         MuAssert.assertNotTimedOut("erroring", serverSocket.errorLatch);
         assertThat(serverSocket.received, hasItems("onError ClientDisconnectedException"));
