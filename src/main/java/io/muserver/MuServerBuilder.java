@@ -30,9 +30,7 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -408,7 +406,8 @@ public class MuServerBuilder {
 
         ExecutorService handlerExecutor = this.executor;
         if (handlerExecutor == null) {
-            handlerExecutor = Executors.newCachedThreadPool(new DefaultThreadFactory("muhandler"));
+            DefaultThreadFactory threadFactory = new DefaultThreadFactory("muhandler");
+            handlerExecutor = new ThreadPoolExecutor(8, 200, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(), threadFactory);
         }
         NettyHandlerAdapter nettyHandlerAdapter = new NettyHandlerAdapter(handlerExecutor, handlers);
 
@@ -486,6 +485,7 @@ public class MuServerBuilder {
         ServerBootstrap b = new ServerBootstrap();
         b.group(bossGroup, workerGroup)
             .channel(NioServerSocketChannel.class)
+//            .childOption(ChannelOption.AUTO_READ, false)
             .childHandler(new ChannelInitializer<SocketChannel>() {
 
                 protected void initChannel(SocketChannel socketChannel) {
