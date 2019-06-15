@@ -10,6 +10,7 @@ import java.util.concurrent.TimeoutException;
  * <p>This is an alternative to implementing the {@link MuWebSocket} interface and is recommended so that any
  * additions to the interface are non-breaking to implementors.</p>
  */
+@SuppressWarnings("RedundantThrows") // because implementing classes might throw exceptions
 public abstract class BaseWebSocket implements MuWebSocket {
     private MuWebSocketSession session;
     private volatile boolean closeSent = false;
@@ -20,11 +21,13 @@ public abstract class BaseWebSocket implements MuWebSocket {
     }
 
     @Override
-    public void onText(String message) throws Exception {
+    public void onText(String message, Runnable onComplete) throws Exception {
+        onComplete.run();
     }
 
     @Override
-    public void onBinary(ByteBuffer buffer) throws Exception {
+    public void onBinary(ByteBuffer buffer, Runnable onComplete) throws Exception {
+        onComplete.run();
     }
 
     @Override
@@ -39,14 +42,17 @@ public abstract class BaseWebSocket implements MuWebSocket {
     }
 
     @Override
-    public void onPing(ByteBuffer payload) throws Exception {
+    public void onPing(ByteBuffer payload, Runnable onComplete) throws Exception {
         if (!closeSent) {
-            session().sendPong(payload);
+            session().sendPong(payload, WriteCallback.whenComplete(onComplete));
+        } else {
+            onComplete.run();
         }
     }
 
     @Override
-    public void onPong(ByteBuffer payload) throws Exception {
+    public void onPong(ByteBuffer payload, Runnable onComplete) throws Exception {
+        onComplete.run();
     }
 
     @Override

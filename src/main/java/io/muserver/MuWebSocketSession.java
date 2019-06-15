@@ -11,46 +11,44 @@ import java.nio.ByteBuffer;
 public interface MuWebSocketSession {
 
     /**
-     * Sends a message to the client
-     * @param message The message to be sent
-     * @throws IOException Thrown if there is an error writing to the client, for example if the user has closed their browser.
-     */
-    void sendText(String message) throws IOException;
-
-    /**
      * Sends a message to the client asynchronously
      * @param message The message to be sent
-     * @param writeCallback The callback to call when the write succeeds or fails.
+     * @param writeCallback The callback to call when the write succeeds or fails. To ignore the write result, you can
+     *                      use {@link WriteCallback#NoOp}. If using a buffer received from a {@link MuWebSocket} event,
+     *                      then you need to run the callback after completion, and one way to do this is to use
+     *                      {@link WriteCallback#whenComplete(Runnable)}
      */
     void sendText(String message, WriteCallback writeCallback);
 
     /**
      * Sends a message to the client
      * @param message The message to be sent
-     * @throws IOException Thrown if there is an error writing to the client, for example if the user has closed their browser.
-     */
-    void sendBinary(ByteBuffer message) throws IOException;
-
-    /**
-     * Sends a message to the client
-     * @param writeCallback The callback to call when the write succeeds or fails.
-     * @param message The message to be sent
+     * @param writeCallback The callback to call when the write succeeds or fails. To ignore the write result, you can
+     *                      use {@link WriteCallback#NoOp}. If using a buffer received from a {@link MuWebSocket} event,
+     *                      then you need to run the callback after completion, and one way to do this is to use
+     *                      {@link WriteCallback#whenComplete(Runnable)}
      */
     void sendBinary(ByteBuffer message, WriteCallback writeCallback);
 
     /**
      * Sends a ping message to the client, which is used for keeping sockets alive.
      * @param payload The message to send.
-     * @throws IOException Thrown if there is an error writing to the client, for example if the user has closed their browser.
+     * @param writeCallback The callback to call when the write succeeds or fails. To ignore the write result, you can
+     *                      use {@link WriteCallback#NoOp}. If using a buffer received from a {@link MuWebSocket} event,
+     *                      then you need to run the callback after completion, and one way to do this is to use
+     *                      {@link WriteCallback#whenComplete(Runnable)}
      */
-    void sendPing(ByteBuffer payload) throws IOException;
+    void sendPing(ByteBuffer payload, WriteCallback writeCallback);
 
     /**
-     * Sends a pong message to the client, generally in response to receiving a ping via {@link MuWebSocket#onPing(ByteBuffer)}
+     * Sends a pong message to the client, generally in response to receiving a ping via {@link MuWebSocket#onPing(ByteBuffer, Runnable)}
      * @param payload The payload to send back to the client.
-     * @throws IOException Thrown if there is an error writing to the client, for example if the user has closed their browser.
+     * @param writeCallback The callback to call when the write succeeds or fails. To ignore the write result, you can
+     *                      use {@link WriteCallback#NoOp}. If using a buffer received from a {@link MuWebSocket} event,
+     *                      then you need to run the callback after completion, and one way to do this is to use
+     *                      {@link WriteCallback#whenComplete(Runnable)}
      */
-    void sendPong(ByteBuffer payload) throws IOException;
+    void sendPong(ByteBuffer payload, WriteCallback writeCallback);
 
     /**
      * Initiates a graceful shutdown with the client.
@@ -66,5 +64,8 @@ public interface MuWebSocketSession {
      */
     void close(int statusCode, String reason) throws IOException;
 
+    /**
+     * @return The client's address
+     */
     InetSocketAddress remoteAddress();
 }

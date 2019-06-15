@@ -2,7 +2,6 @@ package io.muserver;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
@@ -30,19 +29,8 @@ class MuWebSocketSessionImpl implements MuWebSocketSession {
     }
 
     @Override
-    public void sendText(String message) {
-        writeSync(new TextWebSocketFrame(message));
-    }
-
-    @Override
     public void sendText(String message, WriteCallback writeCallback) {
         writeAsync(new TextWebSocketFrame(message), writeCallback);
-    }
-
-    @Override
-    public void sendBinary(ByteBuffer message) {
-        ByteBuf bb = Unpooled.wrappedBuffer(message);
-        writeSync(new BinaryWebSocketFrame(bb));
     }
 
     @Override
@@ -52,15 +40,15 @@ class MuWebSocketSessionImpl implements MuWebSocketSession {
     }
 
     @Override
-    public void sendPing(ByteBuffer payload) {
+    public void sendPing(ByteBuffer payload, WriteCallback writeCallback) {
         ByteBuf bb = Unpooled.wrappedBuffer(payload);
-        writeAsync(new PingWebSocketFrame(bb), WriteCallback.NoOp);
+        writeAsync(new PingWebSocketFrame(bb), writeCallback);
     }
 
     @Override
-    public void sendPong(ByteBuffer payload) {
+    public void sendPong(ByteBuffer payload, WriteCallback writeCallback) {
         ByteBuf bb = Unpooled.wrappedBuffer(payload);
-        writeAsync(new PongWebSocketFrame(bb), WriteCallback.NoOp);
+        writeAsync(new PongWebSocketFrame(bb), writeCallback);
     }
 
     @Override
@@ -84,6 +72,7 @@ class MuWebSocketSessionImpl implements MuWebSocketSession {
                     Http1Connection.clearWebSocket(ctx);
                     ctx.close();
                 }
+
                 public void onFailure(Throwable reason) {
                     Http1Connection.clearWebSocket(ctx);
                     ctx.close();
@@ -97,40 +86,28 @@ class MuWebSocketSessionImpl implements MuWebSocketSession {
         return (InetSocketAddress) ctx.channel().remoteAddress();
     }
 
-    private void writeSync(WebSocketFrame msg) {
-        write(msg).syncUninterruptibly();
-    }
-
     private void writeAsync(WebSocketFrame msg, WriteCallback writeCallback) {
-        ChannelFuture future;
-        try {
-            future = write(msg);
-        } catch (Exception e) {
+
+        if (closeSent && !(msg instanceof CloseWebSocketFrame)) {
             try {
-                writeCallback.onFailure(e);
+                writeCallback.onFailure(new IllegalStateException("Writes are not allowed as the socket has already been closed"));
             } catch (Exception ignored) {
             }
-            return;
         }
-
-        future.addListener((ChannelFutureListener) future1 -> {
-            try {
-                if (future1.isSuccess()) {
-                    writeCallback.onSuccess();
-                } else {
-                    writeCallback.onFailure(future1.cause());
+        ctx.channel()
+            .writeAndFlush(msg)
+            .addListener((ChannelFutureListener) future1 -> {
+                try {
+                    if (future1.isSuccess()) {
+                        writeCallback.onSuccess();
+                    } else {
+                        writeCallback.onFailure(future1.cause());
+                    }
+                } catch (Throwable e) {
+                    log.warn("Unhandled exception from write callback", e);
+                    close(1011, "Server error");
                 }
-            } catch (Throwable e) {
-                log.warn("Unhandled exception from write callback", e);
-                close(1011, "Server error");
-            }
-        });
+            });
     }
 
-    private ChannelFuture write(WebSocketFrame msg) {
-        if (closeSent && !(msg instanceof CloseWebSocketFrame)) {
-            throw new IllegalStateException("Writes are not allowed as the socket has already been closed");
-        }
-        return ctx.channel().writeAndFlush(msg);
-    }
 }

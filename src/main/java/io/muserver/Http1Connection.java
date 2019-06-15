@@ -144,25 +144,30 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
         } else if (msg instanceof WebSocketFrame) {
             MuWebSocketSessionImpl session = getWebSocket(ctx);
             if (session != null) {
+                readyToRead = false;
+                Runnable onComplete = () -> ctx.channel().read();
+
                 session.connectedPromise.addListener(future -> {
                     MuWebSocket muWebSocket = session.muWebSocket;
                     try {
                         if (msg instanceof TextWebSocketFrame) {
-                            muWebSocket.onText(((TextWebSocketFrame) msg).text());
+                            muWebSocket.onText(((TextWebSocketFrame) msg).text(), onComplete);
                         } else if (msg instanceof BinaryWebSocketFrame) {
                             ByteBuffer buffer = ((BinaryWebSocketFrame) msg).content().nioBuffer();
-                            muWebSocket.onBinary(buffer);
+                            muWebSocket.onBinary(buffer, onComplete);
                         } else if (msg instanceof PingWebSocketFrame) {
-                            muWebSocket.onPing(((PingWebSocketFrame) msg).content().nioBuffer());
+                            muWebSocket.onPing(((PingWebSocketFrame) msg).content().nioBuffer(), onComplete);
                         } else if (msg instanceof PongWebSocketFrame) {
-                            muWebSocket.onPong(((PongWebSocketFrame) msg).content().nioBuffer());
+                            muWebSocket.onPong(((PongWebSocketFrame) msg).content().nioBuffer(), onComplete);
                         } else if (msg instanceof CloseWebSocketFrame) {
                             CloseWebSocketFrame cwsf = (CloseWebSocketFrame) msg;
                             muWebSocket.onClientClosed(cwsf.statusCode(), cwsf.reasonText());
                             clearWebSocket(ctx);
+                            onComplete.run();
                         }
                     } catch (Throwable e) {
                         try {
+                            onComplete.run();
                             clearWebSocket(ctx);
                             muWebSocket.onError(e);
                         } catch (Exception ex) {
@@ -230,7 +235,7 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
                         ctx.close();
                     }
                 } else if (ise.state() == IdleState.WRITER_IDLE) {
-                    session.sendPing(ByteBuffer.wrap(MuWebSocketSessionImpl.PING_BYTES));
+                    session.sendPing(ByteBuffer.wrap(MuWebSocketSessionImpl.PING_BYTES), WriteCallback.NoOp);
                 }
             } else {
                 AsyncContext asyncContext = ctx.channel().attr(STATE_ATTRIBUTE).get();
