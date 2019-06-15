@@ -56,7 +56,7 @@ public abstract class BaseWebSocket implements MuWebSocket {
                 session().close(1001, "Idle Timeout");
             } else if (cause instanceof WebSocketProtocolException) {
                 // do nothing as it is already closed by Netty
-            } else {
+            } else if (session != null) {
                 session().close(1011, "Server error");
             }
         }

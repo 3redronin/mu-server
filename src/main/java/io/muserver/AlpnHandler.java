@@ -36,4 +36,14 @@ class AlpnHandler extends ApplicationProtocolNegotiationHandler {
 
         throw new IllegalStateException("unknown protocol: " + protocol);
     }
+
+    @Override
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+        ctx.close(); // don't call super as it logs an unwanted warning
+    }
+
+    @Override
+    protected void handshakeFailure(ChannelHandlerContext ctx, Throwable cause) {
+        ctx.close(); // don't call super as it logs an unwanted warning
+    }
 }
