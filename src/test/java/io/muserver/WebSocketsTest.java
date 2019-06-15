@@ -34,7 +34,7 @@ public class WebSocketsTest {
     private RecordingMuWebSocket serverSocket = new RecordingMuWebSocket();
 
     @Test
-    public void handlersCanReturnNullWebSocketToHandleAsAWebSocket() throws IOException {
+    public void handlersCanReturnNullOrWebSocketToHandleAsAWebSocket() throws IOException {
         server = ServerUtils.httpsServerForTest()
             .addHandler(webSocketHandler().withWebSocketFactory((request, responseHeaders) -> {
                 if (!request.relativePath().equals("/blah")) {
@@ -87,7 +87,7 @@ public class WebSocketsTest {
     }
 
     @Test
-    public void ifMaxFrameLengthExceededThenSocketIsClosed() throws InterruptedException {
+    public void ifMaxFrameLengthExceededThenSocketIsClosed() {
         server = ServerUtils.httpsServerForTest()
             .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket)
                 .withPath("/routed-websocket")
@@ -204,7 +204,7 @@ public class WebSocketsTest {
     }
 
     @Test
-    public void sendingMessagesAfterTheClientsCloseResultInFailureCallBacksForAsyncCalls() throws InterruptedException, ExecutionException, TimeoutException, IOException {
+    public void sendingMessagesAfterTheClientsCloseResultInFailureCallBacksForAsyncCalls() throws Exception {
         CompletableFuture<MuWebSocketSession> sessionFuture = new CompletableFuture<>();
         server = ServerUtils.httpsServerForTest()
             .addHandler(webSocketHandler((request, responseHeaders) -> new BaseWebSocket() {
@@ -241,7 +241,7 @@ public class WebSocketsTest {
     }
 
     @Test
-    public void clientLeavingUnexpectedlyResultsInOnErrorWithClientDisconnectedException() throws Exception {
+    public void clientLeavingUnexpectedlyResultsInOnErrorWithClientDisconnectedException() {
         server = ServerUtils.httpsServerForTest()
             .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket))
             .start();
@@ -389,13 +389,13 @@ public class WebSocketsTest {
         }
 
         @Override
-        public void onText(String message, WriteCallback onComplete) throws IOException {
+        public void onText(String message, WriteCallback onComplete) {
             received.add("onText: " + message);
             session.sendText(message.toUpperCase(), onComplete);
         }
 
         @Override
-        public void onBinary(ByteBuffer buffer, WriteCallback onComplete) throws IOException {
+        public void onBinary(ByteBuffer buffer, WriteCallback onComplete) {
             int initial = buffer.position();
             received.add("onBinary: " + UTF_8.decode(buffer));
             buffer.position(initial);
@@ -409,7 +409,7 @@ public class WebSocketsTest {
         }
 
         @Override
-        public void onPing(ByteBuffer payload, WriteCallback onComplete) throws IOException {
+        public void onPing(ByteBuffer payload, WriteCallback onComplete) {
             received.add("onPing: " + UTF_8.decode(payload));
             session.sendPong(payload, onComplete);
             pingLatch.countDown();
