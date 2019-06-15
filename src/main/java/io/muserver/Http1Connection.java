@@ -145,10 +145,18 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
             MuWebSocketSessionImpl session = getWebSocket(ctx);
             if (session != null) {
                 readyToRead = false;
-                Runnable onComplete = () -> ctx.channel().read();
-
                 session.connectedPromise.addListener(future -> {
                     MuWebSocket muWebSocket = session.muWebSocket;
+                    WriteCallback onComplete = new WriteCallback() {
+                        @Override
+                        public void onSuccess() {
+                            ctx.channel().read();
+                        }
+                        @Override
+                        public void onFailure(Throwable reason) {
+                            handleWebsockError(ctx, muWebSocket, reason);
+                        }
+                    };
                     try {
                         if (msg instanceof TextWebSocketFrame) {
                             muWebSocket.onText(((TextWebSocketFrame) msg).text(), onComplete);
@@ -163,22 +171,25 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
                             CloseWebSocketFrame cwsf = (CloseWebSocketFrame) msg;
                             muWebSocket.onClientClosed(cwsf.statusCode(), cwsf.reasonText());
                             clearWebSocket(ctx);
-                            onComplete.run();
+                            onComplete.onSuccess();
                         }
                     } catch (Throwable e) {
-                        try {
-                            onComplete.run();
-                            clearWebSocket(ctx);
-                            muWebSocket.onError(e);
-                        } catch (Exception ex) {
-                            log.warn("Exception thrown by " + muWebSocket.getClass() + "#onError so will close connection", ex);
-                            ctx.close();
-                        }
+                        handleWebsockError(ctx, muWebSocket, e);
                     }
                 });
             }
         }
         return readyToRead;
+    }
+
+    private void handleWebsockError(ChannelHandlerContext ctx, MuWebSocket muWebSocket, Throwable e) {
+        try {
+            clearWebSocket(ctx);
+            muWebSocket.onError(e);
+        } catch (Exception ex) {
+            log.warn("Exception thrown by " + muWebSocket.getClass() + "#onError so will close connection", ex);
+            ctx.close();
+        }
     }
 
     static void clearWebSocket(ChannelHandlerContext ctx) {

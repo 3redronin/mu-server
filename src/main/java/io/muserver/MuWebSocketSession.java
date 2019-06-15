@@ -15,8 +15,7 @@ public interface MuWebSocketSession {
      * @param message The message to be sent
      * @param writeCallback The callback to call when the write succeeds or fails. To ignore the write result, you can
      *                      use {@link WriteCallback#NoOp}. If using a buffer received from a {@link MuWebSocket} event,
-     *                      then you need to run the callback after completion, and one way to do this is to use
-     *                      {@link WriteCallback#whenComplete(Runnable)}
+     *                      pass the <code>onComplete</code> received to this parameter.
      */
     void sendText(String message, WriteCallback writeCallback);
 
@@ -25,8 +24,7 @@ public interface MuWebSocketSession {
      * @param message The message to be sent
      * @param writeCallback The callback to call when the write succeeds or fails. To ignore the write result, you can
      *                      use {@link WriteCallback#NoOp}. If using a buffer received from a {@link MuWebSocket} event,
-     *                      then you need to run the callback after completion, and one way to do this is to use
-     *                      {@link WriteCallback#whenComplete(Runnable)}
+     *                      pass the <code>onComplete</code> received to this parameter.
      */
     void sendBinary(ByteBuffer message, WriteCallback writeCallback);
 
@@ -35,18 +33,16 @@ public interface MuWebSocketSession {
      * @param payload The message to send.
      * @param writeCallback The callback to call when the write succeeds or fails. To ignore the write result, you can
      *                      use {@link WriteCallback#NoOp}. If using a buffer received from a {@link MuWebSocket} event,
-     *                      then you need to run the callback after completion, and one way to do this is to use
-     *                      {@link WriteCallback#whenComplete(Runnable)}
+     *                      pass the <code>onComplete</code> received to this parameter.
      */
     void sendPing(ByteBuffer payload, WriteCallback writeCallback);
 
     /**
-     * Sends a pong message to the client, generally in response to receiving a ping via {@link MuWebSocket#onPing(ByteBuffer, Runnable)}
+     * Sends a pong message to the client, generally in response to receiving a ping via {@link MuWebSocket#onPing(ByteBuffer, WriteCallback)}
      * @param payload The payload to send back to the client.
      * @param writeCallback The callback to call when the write succeeds or fails. To ignore the write result, you can
      *                      use {@link WriteCallback#NoOp}. If using a buffer received from a {@link MuWebSocket} event,
-     *                      then you need to run the callback after completion, and one way to do this is to use
-     *                      {@link WriteCallback#whenComplete(Runnable)}
+     *                      pass the <code>onComplete</code> received to this parameter.
      */
     void sendPong(ByteBuffer payload, WriteCallback writeCallback);
 

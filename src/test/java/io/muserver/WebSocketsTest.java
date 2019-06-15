@@ -134,17 +134,17 @@ public class WebSocketsTest {
         CompletableFuture<String> result = new CompletableFuture<>();
         server = ServerUtils.httpsServerForTest()
             .addHandler(webSocketHandler((request, responseHeaders) -> new BaseWebSocket() {
-                public void onText(String message, Runnable onComplete) {
+                public void onText(String message, WriteCallback onComplete) {
                     session().sendText("This is message one", new WriteCallback() {
                         public void onSuccess() {
                             session().sendBinary(Mutils.toByteBuffer("Async binary"), new WriteCallback() {
-                                public void onSuccess() {
-                                    onComplete.run();
+                                public void onSuccess() throws Exception {
+                                    onComplete.onSuccess();
                                     result.complete("Success");
                                 }
 
-                                public void onFailure(Throwable reason) {
-                                    onComplete.run();
+                                public void onFailure(Throwable reason) throws Exception {
+                                    onComplete.onFailure(reason);
                                     result.completeExceptionally(reason);
                                 }
                             });
@@ -328,7 +328,7 @@ public class WebSocketsTest {
     @Test
     public void exceptionsThrownByHandlersResultInOnErrorBeingCalled() {
         serverSocket = new RecordingMuWebSocket() {
-            public void onText(String message, Runnable onComplete) {
+            public void onText(String message, WriteCallback onComplete) {
                 throw new MuException("Oops");
             }
         };
@@ -389,17 +389,17 @@ public class WebSocketsTest {
         }
 
         @Override
-        public void onText(String message, Runnable onComplete) throws IOException {
+        public void onText(String message, WriteCallback onComplete) throws IOException {
             received.add("onText: " + message);
-            session.sendText(message.toUpperCase(), WriteCallback.whenComplete(onComplete));
+            session.sendText(message.toUpperCase(), onComplete);
         }
 
         @Override
-        public void onBinary(ByteBuffer buffer, Runnable onComplete) throws IOException {
+        public void onBinary(ByteBuffer buffer, WriteCallback onComplete) throws IOException {
             int initial = buffer.position();
             received.add("onBinary: " + UTF_8.decode(buffer));
             buffer.position(initial);
-            session.sendBinary(buffer, WriteCallback.whenComplete(onComplete));
+            session.sendBinary(buffer, onComplete);
         }
 
         @Override
@@ -409,17 +409,17 @@ public class WebSocketsTest {
         }
 
         @Override
-        public void onPing(ByteBuffer payload, Runnable onComplete) throws IOException {
+        public void onPing(ByteBuffer payload, WriteCallback onComplete) throws IOException {
             received.add("onPing: " + UTF_8.decode(payload));
-            session.sendPong(payload, WriteCallback.whenComplete(onComplete));
+            session.sendPong(payload, onComplete);
             pingLatch.countDown();
         }
 
         @Override
-        public void onPong(ByteBuffer payload, Runnable onComplete) {
+        public void onPong(ByteBuffer payload, WriteCallback onComplete) throws Exception {
             received.add("onPong: " + UTF_8.decode(payload));
             pongLatch.countDown();
-            onComplete.run();
+            onComplete.onSuccess();
         }
 
         @Override

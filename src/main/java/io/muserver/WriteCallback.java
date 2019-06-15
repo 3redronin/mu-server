@@ -19,24 +19,6 @@ public interface WriteCallback {
     void onFailure(Throwable reason) throws Exception;
 
     /**
-     * Creates a WriteCallback that executes the given runnable when complete (whether it is a failure or success).
-     * @param runnable The thing to run on completion
-     * @return A new callback
-     */
-    static WriteCallback whenComplete(Runnable runnable) {
-        return new WriteCallback() {
-            @Override
-            public void onSuccess() {
-                runnable.run();
-            }
-            @Override
-            public void onFailure(Throwable reason) {
-                runnable.run();
-            }
-        };
-    }
-
-    /**
      * A write callback that does nothing when it receives the callbacks
      */
     WriteCallback NoOp = new WriteCallback() {

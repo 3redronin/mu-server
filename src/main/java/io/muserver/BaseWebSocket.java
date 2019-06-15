@@ -21,13 +21,13 @@ public abstract class BaseWebSocket implements MuWebSocket {
     }
 
     @Override
-    public void onText(String message, Runnable onComplete) throws Exception {
-        onComplete.run();
+    public void onText(String message, WriteCallback onComplete) throws Exception {
+        onComplete.onSuccess();
     }
 
     @Override
-    public void onBinary(ByteBuffer buffer, Runnable onComplete) throws Exception {
-        onComplete.run();
+    public void onBinary(ByteBuffer buffer, WriteCallback onComplete) throws Exception {
+        onComplete.onSuccess();
     }
 
     @Override
@@ -42,17 +42,13 @@ public abstract class BaseWebSocket implements MuWebSocket {
     }
 
     @Override
-    public void onPing(ByteBuffer payload, Runnable onComplete) throws Exception {
-        if (!closeSent) {
-            session().sendPong(payload, WriteCallback.whenComplete(onComplete));
-        } else {
-            onComplete.run();
-        }
+    public void onPing(ByteBuffer payload, WriteCallback onComplete) throws Exception {
+        session().sendPong(payload, onComplete);
     }
 
     @Override
-    public void onPong(ByteBuffer payload, Runnable onComplete) throws Exception {
-        onComplete.run();
+    public void onPong(ByteBuffer payload, WriteCallback onComplete) throws Exception {
+        onComplete.onSuccess();
     }
 
     @Override
@@ -70,6 +66,7 @@ public abstract class BaseWebSocket implements MuWebSocket {
 
     /**
      * Gets the websocket session
+     *
      * @return A session that can be used to send message and events to the client.
      * @throws IllegalStateException Thrown if the socket has not been connected yet.
      */
