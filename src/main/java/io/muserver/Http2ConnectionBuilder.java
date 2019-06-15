@@ -1,14 +1,12 @@
 package io.muserver;
 
 import io.netty.handler.codec.http2.*;
-import io.netty.handler.logging.LogLevel;
 
 import java.util.concurrent.atomic.AtomicReference;
 
 class Http2ConnectionBuilder
     extends AbstractHttp2ConnectionHandlerBuilder<Http2Connection, Http2ConnectionBuilder> {
 
-    private static final Http2FrameLogger logger = new Http2FrameLogger(LogLevel.DEBUG, Http2Connection.class);
     private final AtomicReference<MuServer> serverRef;
     private final NettyHandlerAdapter nettyHandlerAdapter;
     private final MuStatsImpl stats;
@@ -19,7 +17,6 @@ class Http2ConnectionBuilder
         this.nettyHandlerAdapter = nettyHandlerAdapter;
         this.stats = stats;
         this.settings = settings;
-        frameLogger(logger);
     }
 
     @Override

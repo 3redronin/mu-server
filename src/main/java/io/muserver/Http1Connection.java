@@ -43,6 +43,13 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
     }
 
     @Override
+    public void channelActive(ChannelHandlerContext ctx) throws Exception {
+        ctx.channel().config().setAutoRead(false);
+        ctx.read();
+        super.channelActive(ctx);
+    }
+
+    @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         AsyncContext asyncContext = ctx.channel().attr(STATE_ATTRIBUTE).get();
         if (asyncContext != null) {
@@ -57,20 +64,24 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
 
     protected void channelRead0(ChannelHandlerContext ctx, Object msg) {
         try {
-            onChannelRead(ctx, msg);
+            if (onChannelRead(ctx, msg)) {
+                ctx.channel().read();
+            }
         } catch (Exception e) {
             log.info("Unhandled internal error", e);
             ctx.channel().close();
         }
     }
 
-    private void onChannelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+    private boolean onChannelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+        boolean readyToRead = true;
         if (msg instanceof HttpRequest) {
             HttpRequest request = (HttpRequest) msg;
 
             if (request.decoderResult().isFailure()) {
                 stats.onInvalidRequest();
                 handleHttpRequestDecodeFailure(ctx, request.decoderResult().cause());
+                return false;
             } else {
 
                 if (HttpUtil.is100ContinueExpected(request)) {
@@ -80,13 +91,13 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
                         ctx.writeAndFlush(new DefaultFullHttpResponse(HTTP_1_1, HttpResponseStatus.CONTINUE));
                     } else {
                         sendSimpleResponse(ctx, "417 Expectation Failed", HttpResponseStatus.EXPECTATION_FAILED.code());
-                        return;
+                        return true;
                     }
                 }
 
                 if (!request.headers().contains(HttpHeaderNames.HOST)) {
                     sendSimpleResponse(ctx, "400 Bad Request", 400);
-                    return;
+                    return true;
                 }
 
                 Method method;
@@ -94,7 +105,7 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
                     method = Method.fromNetty(request.method());
                 } catch (IllegalArgumentException e) {
                     sendSimpleResponse(ctx, "405 Method Not Allowed", 405);
-                    return;
+                    return true;
                 }
                 final Http1Headers headers = new Http1Headers(request.headers());
 
@@ -103,7 +114,7 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
                     relativeUri = getRelativeUri(request);
                 } catch (Exception e) {
                     sendSimpleResponse(ctx, "400 Bad Request", 400);
-                    return;
+                    return true;
                 }
 
                 NettyRequestAdapter muRequest = new NettyRequestAdapter(ctx, ctx.channel(), request, headers, serverRef, method,
@@ -161,6 +172,7 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
                 });
             }
         }
+        return readyToRead;
     }
 
     static void clearWebSocket(ChannelHandlerContext ctx) {

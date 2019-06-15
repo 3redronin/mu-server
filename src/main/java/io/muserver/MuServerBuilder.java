@@ -485,7 +485,6 @@ public class MuServerBuilder {
         ServerBootstrap b = new ServerBootstrap();
         b.group(bossGroup, workerGroup)
             .channel(NioServerSocketChannel.class)
-//            .childOption(ChannelOption.AUTO_READ, false)
             .childHandler(new ChannelInitializer<SocketChannel>() {
 
                 protected void initChannel(SocketChannel socketChannel) {
