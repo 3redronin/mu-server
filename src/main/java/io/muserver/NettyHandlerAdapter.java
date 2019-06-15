@@ -2,6 +2,7 @@ package io.muserver;
 
 import io.muserver.rest.MuRuntimeDelegate;
 import io.netty.buffer.ByteBuf;
+import io.netty.channel.ChannelHandlerContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,24 +44,29 @@ class NettyHandlerAdapter {
         }
     }
 
-    void onHeaders(AsyncContext ctx, Headers headers) {
+    void onHeaders(ChannelHandlerContext ctx, boolean http2, AsyncContext muCtx, Headers headers) {
 
-        NettyRequestAdapter request = (NettyRequestAdapter) ctx.request;
+        NettyRequestAdapter request = (NettyRequestAdapter) muCtx.request;
         if (headers.hasBody()) {
             // There will be a request body, so set the streams
             GrowableByteBufferInputStream requestBodyStream = new GrowableByteBufferInputStream();
             request.inputStream(requestBodyStream);
-            ctx.requestBody = requestBodyStream;
+            muCtx.requestBody = requestBodyStream;
         }
-        request.nettyAsyncContext = ctx;
+        request.nettyAsyncContext = muCtx;
         executor.submit(() -> {
+
+            if (!http2) {
+                ctx.channel().read();
+            }
+
             boolean error = false;
-            MuResponse response = ctx.response;
+            MuResponse response = muCtx.response;
             try {
 
                 boolean handled = false;
                 for (MuHandler muHandler : muHandlers) {
-                    handled = muHandler.handle(ctx.request, response);
+                    handled = muHandler.handle(muCtx.request, response);
                     if (handled) {
                         break;
                     }
@@ -79,7 +85,7 @@ class NettyHandlerAdapter {
                 request.clean();
                 if (error || !request.isAsync()) {
                     try {
-                        ctx.complete(error);
+                        muCtx.complete(error);
                     } catch (Throwable e) {
                         log.info("Error while completing request", e);
                     }

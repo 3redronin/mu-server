@@ -125,7 +125,8 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
 
                 AsyncContext asyncContext = new AsyncContext(muRequest, muResponse, stats);
                 ctx.channel().attr(STATE_ATTRIBUTE).set(asyncContext);
-                nettyHandlerAdapter.onHeaders(asyncContext, asyncContext.request.headers());
+                readyToRead = false;
+                nettyHandlerAdapter.onHeaders(ctx, false, asyncContext, asyncContext.request.headers());
             }
 
         } else if (msg instanceof HttpContent) {
