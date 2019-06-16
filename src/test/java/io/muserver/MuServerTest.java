@@ -366,12 +366,17 @@ public class MuServerTest {
     }
 
     @Test(timeout = 30000)
-    public void ifRequestsCannotBeSubmittedToTheExecutorTheyAreRejectedWithA503() throws IOException {
+    public void aifRequestsCannotBeSubmittedToTheExecutorTheyAreRejectedWithA503() throws Exception {
         CountDownLatch firstRequestStartedLatch = new CountDownLatch(1);
         CountDownLatch thirdRequestFinishedLatch = new CountDownLatch(1);
         server = ServerUtils.httpsServerForTest()
             .withHandlerExecutor(new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
-                new ArrayBlockingQueue<>(1)))
+                new LinkedBlockingQueue<Runnable>() {
+                    public synchronized boolean offer(Runnable runnable) {
+                        // The first request will go to the waiting thread; only the second will be offered
+                        return false;
+                    }
+                }))
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 // wait until the third request has been made, which should fail due to 2 requests being in progress
                 String count = request.query().get("count");
@@ -381,38 +386,29 @@ public class MuServerTest {
                 response.sendChunk(" and second bit of " + count);
             })
             .start();
-
         List<String> responses = new CopyOnWriteArrayList<>();
-
         ExecutorService executor = Executors.newCachedThreadPool();
-        CountDownLatch responseFinishedLatch = new CountDownLatch(2);
-        for (int i = 0; i < 2; i++) {
-            int finalI = i;
-            executor.submit(() -> {
-                try (Response resp = call(request(server.uri().resolve("/?count=" + finalI)))) {
-                    responses.add(resp.body().string());
-                } catch (Throwable t) {
-                    t.printStackTrace();
-                    responses.add(t.getMessage());
-                }
-                responseFinishedLatch.countDown();
-            });
-        }
-
+        CountDownLatch responseFinishedLatch = new CountDownLatch(1);
+        executor.submit(() -> {
+            try (Response resp = call(request(server.uri().resolve("/?count=first")))) {
+                responses.add(resp.body().string());
+            } catch (Throwable t) {
+                responses.add(t.getMessage());
+            }
+            responseFinishedLatch.countDown();
+        });
         MuAssert.assertNotTimedOut("firstRequestStartedLatch", firstRequestStartedLatch);
         try (Response resp = call(request(server.uri().resolve("/?count=last")))) {
             assertThat(resp.code(), is(503));
             assertThat(resp.body().string(), is("503 Service Unavailable"));
         }
         thirdRequestFinishedLatch.countDown();
-
         MuAssert.assertNotTimedOut("responseLatch", responseFinishedLatch);
-        assertThat(responses, containsInAnyOrder("First bit of 0 and second bit of 0", "First bit of 1 and second bit of 1"));
-
+        assertThat(responses, containsInAnyOrder("First bit of first and second bit of first"));
         assertThat(server.stats().rejectedDueToOverload(), is(1L));
-
-        executor.shutdownNow();
+        assertThat(executor.shutdownNow(), hasSize(0));
     }
+
 
     @Test
     public void versionIsAvailable() {
