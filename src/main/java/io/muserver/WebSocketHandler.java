@@ -43,7 +43,14 @@ public class WebSocketHandler implements MuHandler {
             return false;
         }
         NettyRequestAdapter reqImpl = (NettyRequestAdapter) request;
-        boolean upgraded = reqImpl.websocketUpgrade(muWebSocket, nettyHeaders, idleReadTimeoutMills, pingAfterWriteMillis, maxFramePayloadLength);
+        boolean upgraded;
+        try {
+            upgraded = reqImpl.websocketUpgrade(muWebSocket, nettyHeaders, idleReadTimeoutMills, pingAfterWriteMillis, maxFramePayloadLength);
+        } catch (UnsupportedOperationException e) {
+            response.status(426);
+            response.headers().set(HeaderNames.SEC_WEBSOCKET_VERSION, "13");
+            return true;
+        }
         if (upgraded) {
             ((NettyResponseAdaptor) response).setWebsocket();
         }

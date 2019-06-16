@@ -418,8 +418,7 @@ class NettyRequestAdapter implements MuRequest {
         DefaultFullHttpRequest fullReq = new DefaultFullHttpRequest(request.protocolVersion(), request.method(), request.uri(), new EmptyByteBuf(ByteBufAllocator.DEFAULT), request.headers(), EmptyHttpHeaders.INSTANCE);
         WebSocketServerHandshaker handshaker = factory.newHandshaker(fullReq);
         if (handshaker == null) {
-            WebSocketServerHandshakerFactory.sendUnsupportedVersionResponse(ctx.channel());
-            return false;
+            throw new UnsupportedOperationException();
         }
 
         ctx.channel().pipeline().replace("idle", "idle",
