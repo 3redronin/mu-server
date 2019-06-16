@@ -88,12 +88,14 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
         try {
             muMethod = Method.fromNetty(nettyMeth);
         } catch (IllegalArgumentException e) {
+            stats.onInvalidRequest();
             sendSimpleResponse(ctx, streamId, "405 Method Not Allowed", 405);
             return;
         }
 
         final String uri = headers.path().toString();
         if (uri.length() > settings.maxUrlSize) {
+            stats.onInvalidRequest();
             sendSimpleResponse(ctx, streamId, "414 Request-URI Too Long", 414);
             return;
         }
@@ -119,6 +121,7 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
         DoneCallback addedToExecutorCallback = error -> {
             ctx.channel().read();
             if (error != null) {
+                stats.onRejectedDueToOverload();
                 try {
                     sendSimpleResponse(ctx, streamId, "503 Service Unavailable", 503);
                 } catch (Exception e) {

@@ -96,6 +96,7 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
                 }
 
                 if (!request.headers().contains(HttpHeaderNames.HOST)) {
+                    stats.onInvalidRequest();
                     sendSimpleResponse(ctx, "400 Bad Request", 400);
                     return true;
                 }
@@ -104,6 +105,7 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
                 try {
                     method = Method.fromNetty(request.method());
                 } catch (IllegalArgumentException e) {
+                    stats.onInvalidRequest();
                     sendSimpleResponse(ctx, "405 Method Not Allowed", 405);
                     return true;
                 }
@@ -113,6 +115,7 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
                 try {
                     relativeUri = getRelativeUri(request);
                 } catch (Exception e) {
+                    stats.onInvalidRequest();
                     sendSimpleResponse(ctx, "400 Bad Request", 400);
                     return true;
                 }
@@ -129,6 +132,7 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
                 DoneCallback addedToExecutorCallback = error -> {
                     ctx.channel().read();
                     if (error != null) {
+                        stats.onRejectedDueToOverload();
                         try {
                             sendSimpleResponse(ctx, "503 Service Unavailable", 503);
                         } catch (Exception e) {

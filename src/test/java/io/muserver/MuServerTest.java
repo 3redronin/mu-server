@@ -205,6 +205,7 @@ public class MuServerTest {
             assertThat(resp.code(), is(405));
             assertThat(resp.body().string(), containsString("405 Method Not Allowed"));
         }
+        assertThat(server.stats().invalidHttpRequests(), is(1L));
     }
 
     @Test
@@ -263,6 +264,7 @@ public class MuServerTest {
             assertThat(body, startsWith("HTTP/1.1 400 Bad Request"));
             assertThat(body, endsWith("400 Bad Request"));
         }
+        assertThat(server.stats().invalidHttpRequests(), is(1L));
     }
 
     @Test
@@ -279,6 +281,7 @@ public class MuServerTest {
             }
             assertThat(rawClient.responseString(), startsWith("HTTP/1.1 400 Bad Request"));
         }
+        assertThat(server.stats().invalidHttpRequests(), is(1L));
     }
 
     @Test
@@ -405,6 +408,8 @@ public class MuServerTest {
 
         MuAssert.assertNotTimedOut("responseLatch", responseFinishedLatch);
         assertThat(responses, containsInAnyOrder("First bit of 0 and second bit of 0", "First bit of 1 and second bit of 1"));
+
+        assertThat(server.stats().rejectedDueToOverload(), is(1L));
 
         executor.shutdownNow();
     }
