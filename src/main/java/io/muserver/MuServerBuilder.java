@@ -4,10 +4,7 @@ import io.muserver.handlers.ResourceHandler;
 import io.muserver.handlers.ResourceType;
 import io.muserver.rest.MuRuntimeDelegate;
 import io.netty.bootstrap.ServerBootstrap;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelInitializer;
-import io.netty.channel.ChannelPipeline;
+import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
@@ -519,9 +516,17 @@ public class MuServerBuilder {
                         sslHandler.engine().setSSLParameters(params);
                         p.addLast("ssl", sslHandler);
                     }
-                    if (http2 && usesSsl) {
+                    boolean addAlpn = http2 && usesSsl;
+                    if (addAlpn) {
                         p.addLast("http1or2", new AlpnHandler(nettyHandlerAdapter, stats, serverRef, proto, settings));
-                    } else {
+                    }
+                    p.addLast("conerror", new ChannelInboundHandlerAdapter() {
+                        @Override
+                        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+                            stats.onFailedToConnect();
+                        }
+                    });
+                    if (!addAlpn) {
                         setupHttp1Pipeline(p, settings, nettyHandlerAdapter, stats, serverRef, proto);
                     }
                 }

@@ -40,6 +40,11 @@ public interface MuStats {
     long rejectedDueToOverload();
 
     /**
+     * @return The number of requests that failed to connect, e.g. due to SSL protocols not matching, or handshakes failing.
+     */
+    long failedToConnect();
+
+    /**
      * @return The requests that are currently in-flight
      */
     Set<MuRequest> activeRequests();

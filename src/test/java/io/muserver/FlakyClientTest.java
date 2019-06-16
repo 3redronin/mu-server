@@ -81,6 +81,8 @@ public class FlakyClientTest {
         try (Response resp = call(request(server.uri().resolve("/chunks")))) {
             assertThat(resp.body().string(), is("Chunk oneChunk two"));
         }
+
+        System.out.println("server.stats() = " + server.stats());
     }
 
 

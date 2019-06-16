@@ -11,6 +11,7 @@ class MuStatsImpl implements MuStats {
     private final AtomicLong completedRequests = new AtomicLong(0);
     private final AtomicLong invalidHttpRequests = new AtomicLong(0);
     private final AtomicLong rejectedDueToOverload = new AtomicLong(0);
+    private final AtomicLong failedToConnect = new AtomicLong(0);
     private final Set<MuRequest> activeRequests = ConcurrentHashMap.newKeySet();
 
     MuStatsImpl(TrafficCounter trafficCounter) {
@@ -43,31 +44,47 @@ class MuStatsImpl implements MuStats {
     }
 
     @Override
-    public Set<MuRequest> activeRequests() {
-        return activeRequests;
-    }
-
-    @Override
     public long rejectedDueToOverload() {
         return rejectedDueToOverload.get();
     }
 
+    @Override
+    public long failedToConnect() {
+        return failedToConnect.get();
+    }
+
+    @Override
+    public Set<MuRequest> activeRequests() {
+        return activeRequests;
+    }
+
+
     void onRequestStarted(MuRequest request) {
         activeRequests.add(request);
     }
+
     void onRequestEnded(MuRequest request) {
         activeRequests.remove(request);
         completedRequests.incrementAndGet();
     }
+
     void onRejectedDueToOverload() {
         rejectedDueToOverload.incrementAndGet();
     }
+
     void onInvalidRequest() {
         invalidHttpRequests.incrementAndGet();
     }
 
+    void onFailedToConnect() {
+        failedToConnect.incrementAndGet();
+    }
+
     @Override
     public String toString() {
-        return "Completed requests: " + completedRequests() + "; active: " + activeConnections() + "; invalid requests: " + invalidHttpRequests() + "; bytes received: " + bytesRead() + "; bytes sent: " + bytesSent();
+        return "Completed requests: " + completedRequests() + "; active: " + activeConnections() +
+            "; invalid requests: " + invalidHttpRequests() + "; bytes received: " + bytesRead() +
+            "; bytes sent: " + bytesSent() + "; rejected: " + rejectedDueToOverload() +
+            "; connectionFailured: " + failedToConnect();
     }
 }
