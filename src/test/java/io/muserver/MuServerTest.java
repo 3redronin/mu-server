@@ -2,8 +2,8 @@ package io.muserver;
 
 import okhttp3.RequestBody;
 import okhttp3.Response;
-import org.hamcrest.Matchers;
 import org.junit.*;
+import scaffolding.MuAssert;
 import scaffolding.RawClient;
 import scaffolding.ServerUtils;
 
@@ -15,14 +15,13 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 import static io.muserver.MuServerBuilder.httpServer;
 import static io.muserver.MuServerBuilder.muServer;
 import static java.util.Arrays.asList;
-import static org.hamcrest.CoreMatchers.*;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.*;
 import static org.hamcrest.core.IsEqual.equalTo;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
@@ -316,7 +315,7 @@ public class MuServerTest {
 
         try (Response resp = call(request(server.uri()))) {
             String body = resp.body().string();
-            assertThat(body, Matchers.isOneOf("HTTP/1.1", "HTTP/2"));
+            assertThat(body, isOneOf("HTTP/1.1", "HTTP/2"));
         }
     }
 
@@ -361,6 +360,53 @@ public class MuServerTest {
             // this is okay too - either a 408 or an exception
         }
         assertThat(exceptionFromServer.get(10, TimeUnit.SECONDS), instanceOf(Exception.class));
+    }
+
+    @Test(timeout = 30000)
+    public void ifRequestsCannotBeSubmittedToTheExecutorTheyAreRejectedWithA503() throws IOException {
+        CountDownLatch firstRequestStartedLatch = new CountDownLatch(1);
+        CountDownLatch thirdRequestFinishedLatch = new CountDownLatch(1);
+        server = ServerUtils.httpsServerForTest()
+            .withHandlerExecutor(new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
+                new ArrayBlockingQueue<>(1)))
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                // wait until the third request has been made, which should fail due to 2 requests being in progress
+                String count = request.query().get("count");
+                response.sendChunk("First bit of " + count);
+                firstRequestStartedLatch.countDown();
+                thirdRequestFinishedLatch.await();
+                response.sendChunk(" and second bit of " + count);
+            })
+            .start();
+
+        List<String> responses = new CopyOnWriteArrayList<>();
+
+        ExecutorService executor = Executors.newCachedThreadPool();
+        CountDownLatch responseFinishedLatch = new CountDownLatch(2);
+        for (int i = 0; i < 2; i++) {
+            int finalI = i;
+            executor.submit(() -> {
+                try (Response resp = call(request(server.uri().resolve("/?count=" + finalI)))) {
+                    responses.add(resp.body().string());
+                } catch (Throwable t) {
+                    t.printStackTrace();
+                    responses.add(t.getMessage());
+                }
+                responseFinishedLatch.countDown();
+            });
+        }
+
+        MuAssert.assertNotTimedOut("firstRequestStartedLatch", firstRequestStartedLatch);
+        try (Response resp = call(request(server.uri().resolve("/?count=last")))) {
+            assertThat(resp.code(), is(503));
+            assertThat(resp.body().string(), is("503 Service Unavailable"));
+        }
+        thirdRequestFinishedLatch.countDown();
+
+        MuAssert.assertNotTimedOut("responseLatch", responseFinishedLatch);
+        assertThat(responses, containsInAnyOrder("First bit of 0 and second bit of 0", "First bit of 1 and second bit of 1"));
+
+        executor.shutdownNow();
     }
 
     @Test

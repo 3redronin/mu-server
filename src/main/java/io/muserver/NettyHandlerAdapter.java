@@ -2,7 +2,6 @@ package io.muserver;
 
 import io.muserver.rest.MuRuntimeDelegate;
 import io.netty.buffer.ByteBuf;
-import io.netty.channel.ChannelHandlerContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,7 +43,7 @@ class NettyHandlerAdapter {
         }
     }
 
-    void onHeaders(ChannelHandlerContext ctx, boolean http2, AsyncContext muCtx, Headers headers) {
+    void onHeaders(DoneCallback addedToExecutorCallback, AsyncContext muCtx, Headers headers) {
 
         NettyRequestAdapter request = (NettyRequestAdapter) muCtx.request;
         if (headers.hasBody()) {
@@ -54,44 +53,48 @@ class NettyHandlerAdapter {
             muCtx.requestBody = requestBodyStream;
         }
         request.nettyAsyncContext = muCtx;
-        executor.submit(() -> {
+        try {
+            executor.execute(() -> {
 
-            if (!http2) {
-                ctx.channel().read();
-            }
 
-            boolean error = false;
-            MuResponse response = muCtx.response;
+                boolean error = false;
+                MuResponse response = muCtx.response;
+                try {
+                    addedToExecutorCallback.onComplete(null);
+
+                    boolean handled = false;
+                    for (MuHandler muHandler : muHandlers) {
+                        handled = muHandler.handle(muCtx.request, response);
+                        if (handled) {
+                            break;
+                        }
+                        if (request.isAsync()) {
+                            throw new IllegalStateException(muHandler.getClass() + " returned false however this is not allowed after starting to handle a request asynchronously.");
+                        }
+                    }
+                    if (!handled) {
+                        throw new NotFoundException();
+                    }
+
+
+                } catch (Throwable ex) {
+                    error = dealWithUnhandledException(request, response, ex);
+                } finally {
+                    request.clean();
+                    if (error || !request.isAsync()) {
+                        try {
+                            muCtx.complete(error);
+                        } catch (Throwable e) {
+                            log.info("Error while completing request", e);
+                        }
+                    }
+                }
+            });
+        } catch (Exception e) {
             try {
-
-                boolean handled = false;
-                for (MuHandler muHandler : muHandlers) {
-                    handled = muHandler.handle(muCtx.request, response);
-                    if (handled) {
-                        break;
-                    }
-                    if (request.isAsync()) {
-                        throw new IllegalStateException(muHandler.getClass() + " returned false however this is not allowed after starting to handle a request asynchronously.");
-                    }
-                }
-                if (!handled) {
-                    throw new NotFoundException();
-                }
-
-
-            } catch (Throwable ex) {
-                error = dealWithUnhandledException(request, response, ex);
-            } finally {
-                request.clean();
-                if (error || !request.isAsync()) {
-                    try {
-                        muCtx.complete(error);
-                    } catch (Throwable e) {
-                        log.info("Error while completing request", e);
-                    }
-                }
-            }
-        });
+                addedToExecutorCallback.onComplete(e);
+            } catch (Exception ignored) { }
+        }
     }
 
 

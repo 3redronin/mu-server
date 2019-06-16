@@ -126,7 +126,19 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
                 AsyncContext asyncContext = new AsyncContext(muRequest, muResponse, stats);
                 ctx.channel().attr(STATE_ATTRIBUTE).set(asyncContext);
                 readyToRead = false;
-                nettyHandlerAdapter.onHeaders(ctx, false, asyncContext, asyncContext.request.headers());
+                DoneCallback addedToExecutorCallback = error -> {
+                    ctx.channel().read();
+                    if (error != null) {
+                        try {
+                            sendSimpleResponse(ctx, "503 Service Unavailable", 503);
+                        } catch (Exception e) {
+                            ctx.close();
+                        } finally {
+                            stats.onRequestEnded(muRequest);
+                        }
+                    }
+                };
+                nettyHandlerAdapter.onHeaders(addedToExecutorCallback, asyncContext, asyncContext.request.headers());
             }
 
         } else if (msg instanceof HttpContent) {
@@ -152,6 +164,7 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
                         public void onSuccess() {
                             ctx.channel().read();
                         }
+
                         @Override
                         public void onFailure(Throwable reason) {
                             handleWebsockError(ctx, muWebSocket, reason);

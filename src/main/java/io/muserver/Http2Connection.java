@@ -116,7 +116,19 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
 
         AsyncContext asyncContext = new AsyncContext(muReq, resp, stats);
         contexts.put(streamId, asyncContext);
-        nettyHandlerAdapter.onHeaders(ctx, true, asyncContext, muHeaders);
+        DoneCallback addedToExecutorCallback = error -> {
+            ctx.channel().read();
+            if (error != null) {
+                try {
+                    sendSimpleResponse(ctx, streamId, "503 Service Unavailable", 503);
+                } catch (Exception e) {
+                    ctx.close();
+                } finally {
+                    stats.onRequestEnded(muReq);
+                }
+            }
+        };
+        nettyHandlerAdapter.onHeaders(addedToExecutorCallback, asyncContext, muHeaders);
     }
 
     static CharSequence compressionToUse(Headers requestHeaders) {
