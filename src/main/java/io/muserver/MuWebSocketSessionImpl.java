@@ -29,26 +29,26 @@ class MuWebSocketSessionImpl implements MuWebSocketSession {
     }
 
     @Override
-    public void sendText(String message, WriteCallback writeCallback) {
-        writeAsync(new TextWebSocketFrame(message), writeCallback);
+    public void sendText(String message, DoneCallback doneCallback) {
+        writeAsync(new TextWebSocketFrame(message), doneCallback);
     }
 
     @Override
-    public void sendBinary(ByteBuffer message, WriteCallback writeCallback) {
+    public void sendBinary(ByteBuffer message, DoneCallback doneCallback) {
         ByteBuf bb = Unpooled.wrappedBuffer(message);
-        writeAsync(new BinaryWebSocketFrame(bb), writeCallback);
+        writeAsync(new BinaryWebSocketFrame(bb), doneCallback);
     }
 
     @Override
-    public void sendPing(ByteBuffer payload, WriteCallback writeCallback) {
+    public void sendPing(ByteBuffer payload, DoneCallback doneCallback) {
         ByteBuf bb = Unpooled.wrappedBuffer(payload);
-        writeAsync(new PingWebSocketFrame(bb), writeCallback);
+        writeAsync(new PingWebSocketFrame(bb), doneCallback);
     }
 
     @Override
-    public void sendPong(ByteBuffer payload, WriteCallback writeCallback) {
+    public void sendPong(ByteBuffer payload, DoneCallback doneCallback) {
         ByteBuf bb = Unpooled.wrappedBuffer(payload);
-        writeAsync(new PongWebSocketFrame(bb), writeCallback);
+        writeAsync(new PongWebSocketFrame(bb), doneCallback);
     }
 
     @Override
@@ -67,16 +67,9 @@ class MuWebSocketSessionImpl implements MuWebSocketSession {
     private void disconnect(CloseWebSocketFrame closeFrame) {
         if (!closeSent) {
             closeSent = true;
-            writeAsync(closeFrame, new WriteCallback() {
-                public void onSuccess() {
-                    Http1Connection.clearWebSocket(ctx);
-                    ctx.close();
-                }
-
-                public void onFailure(Throwable reason) {
-                    Http1Connection.clearWebSocket(ctx);
-                    ctx.close();
-                }
+            writeAsync(closeFrame, error -> {
+                Http1Connection.clearWebSocket(ctx);
+                ctx.close();
             });
         }
     }
@@ -86,11 +79,11 @@ class MuWebSocketSessionImpl implements MuWebSocketSession {
         return (InetSocketAddress) ctx.channel().remoteAddress();
     }
 
-    private void writeAsync(WebSocketFrame msg, WriteCallback writeCallback) {
+    private void writeAsync(WebSocketFrame msg, DoneCallback doneCallback) {
 
         if (closeSent && !(msg instanceof CloseWebSocketFrame)) {
             try {
-                writeCallback.onFailure(new IllegalStateException("Writes are not allowed as the socket has already been closed"));
+                doneCallback.onComplete(new IllegalStateException("Writes are not allowed as the socket has already been closed"));
             } catch (Exception ignored) {
             }
         }
@@ -99,9 +92,9 @@ class MuWebSocketSessionImpl implements MuWebSocketSession {
             .addListener((ChannelFutureListener) future1 -> {
                 try {
                     if (future1.isSuccess()) {
-                        writeCallback.onSuccess();
+                        doneCallback.onComplete(null);
                     } else {
-                        writeCallback.onFailure(future1.cause());
+                        doneCallback.onComplete(future1.cause());
                     }
                 } catch (Throwable e) {
                     log.warn("Unhandled exception from write callback", e);

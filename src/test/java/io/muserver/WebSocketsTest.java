@@ -134,26 +134,16 @@ public class WebSocketsTest {
         CompletableFuture<String> result = new CompletableFuture<>();
         server = ServerUtils.httpsServerForTest()
             .addHandler(webSocketHandler((request, responseHeaders) -> new BaseWebSocket() {
-                public void onText(String message, WriteCallback onComplete) {
-                    session().sendText("This is message one", new WriteCallback() {
-                        public void onSuccess() {
-                            session().sendBinary(Mutils.toByteBuffer("Async binary"), new WriteCallback() {
-                                public void onSuccess() throws Exception {
-                                    onComplete.onSuccess();
-                                    result.complete("Success");
-                                }
-
-                                public void onFailure(Throwable reason) throws Exception {
-                                    onComplete.onFailure(reason);
-                                    result.completeExceptionally(reason);
-                                }
-                            });
-                        }
-
-                        public void onFailure(Throwable reason) {
-                            result.completeExceptionally(reason);
-                        }
-                    });
+                public void onText(String message, DoneCallback onComplete) {
+                    session().sendText("This is message one", ignored ->
+                        session().sendBinary(Mutils.toByteBuffer("Async binary"), error -> {
+                            onComplete.onComplete(error);
+                            if (error == null) {
+                                result.complete("Success");
+                            } else {
+                                result.completeExceptionally(error);
+                            }
+                        }));
                 }
             }).withPath("/routed-websocket"))
             .start();
@@ -222,13 +212,11 @@ public class WebSocketsTest {
 
         for (int i = 0; i < 100; i++) {
             CompletableFuture<String> result = new CompletableFuture<>();
-            serverSession.sendText("This shouldn't work", new WriteCallback() {
-                public void onSuccess() {
+            serverSession.sendText("This shouldn't work", error -> {
+                if (error == null) {
                     result.complete("Success");
-                }
-
-                public void onFailure(Throwable reason) {
-                    result.completeExceptionally(reason);
+                } else {
+                    result.completeExceptionally(error);
                 }
             });
             try {
@@ -272,7 +260,7 @@ public class WebSocketsTest {
 
         assertThat(serverSocket.received, contains("connected", "onPing: "));
 
-        serverSocket.session.sendPing(Mutils.toByteBuffer("pingping"), WriteCallback.NoOp);
+        serverSocket.session.sendPing(Mutils.toByteBuffer("pingping"), DoneCallback.NoOp);
         MuAssert.assertNotTimedOut("Pong wait", serverSocket.pongLatch);
         assertThat(serverSocket.received, hasItem("onPong: pingping"));
 
@@ -328,7 +316,7 @@ public class WebSocketsTest {
     @Test
     public void exceptionsThrownByHandlersResultInOnErrorBeingCalled() {
         serverSocket = new RecordingMuWebSocket() {
-            public void onText(String message, WriteCallback onComplete) {
+            public void onText(String message, DoneCallback onComplete) {
                 throw new MuException("Oops");
             }
         };
@@ -353,9 +341,9 @@ public class WebSocketsTest {
         ClientListener listener = new ClientListener();
         client.newWebSocket(webSocketRequest(server.uri()), listener);
         MuAssert.assertNotTimedOut("Connecting", serverSocket.connectedLatch);
-        serverSocket.session.sendText("Hi", WriteCallback.NoOp);
+        serverSocket.session.sendText("Hi", DoneCallback.NoOp);
         Thread.sleep(200);
-        serverSocket.session.sendText("Bye", WriteCallback.NoOp);
+        serverSocket.session.sendText("Bye", DoneCallback.NoOp);
         serverSocket.session.close(1000, "Done");
         MuAssert.assertNotTimedOut("Closing", listener.closedLatch);
         assertThat(serverSocket.received, hasItem("onPong: mu"));
@@ -389,13 +377,13 @@ public class WebSocketsTest {
         }
 
         @Override
-        public void onText(String message, WriteCallback onComplete) {
+        public void onText(String message, DoneCallback onComplete) {
             received.add("onText: " + message);
             session.sendText(message.toUpperCase(), onComplete);
         }
 
         @Override
-        public void onBinary(ByteBuffer buffer, WriteCallback onComplete) {
+        public void onBinary(ByteBuffer buffer, DoneCallback onComplete) {
             int initial = buffer.position();
             received.add("onBinary: " + UTF_8.decode(buffer));
             buffer.position(initial);
@@ -409,17 +397,17 @@ public class WebSocketsTest {
         }
 
         @Override
-        public void onPing(ByteBuffer payload, WriteCallback onComplete) {
+        public void onPing(ByteBuffer payload, DoneCallback onComplete) {
             received.add("onPing: " + UTF_8.decode(payload));
             session.sendPong(payload, onComplete);
             pingLatch.countDown();
         }
 
         @Override
-        public void onPong(ByteBuffer payload, WriteCallback onComplete) throws Exception {
+        public void onPong(ByteBuffer payload, DoneCallback onComplete) throws Exception {
             received.add("onPong: " + UTF_8.decode(payload));
             pongLatch.countDown();
-            onComplete.onSuccess();
+            onComplete.onComplete(null);
         }
 
         @Override

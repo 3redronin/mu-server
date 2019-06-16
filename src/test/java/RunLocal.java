@@ -64,7 +64,7 @@ public class RunLocal {
             .addHandler(webSocketHandler()
                 .withPath("/websocket-echo")
                 .withWebSocketFactory((request, responseHeaders) -> new BaseWebSocket() {
-                    public void onText(String message, WriteCallback onComplete) throws IOException {
+                    public void onText(String message, DoneCallback onComplete) throws IOException {
                         session().sendText(message, onComplete);
                         if (message.equalsIgnoreCase("close")) {
                             session().close(1000, "Finished");

@@ -163,15 +163,11 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
                 readyToRead = false;
                 session.connectedPromise.addListener(future -> {
                     MuWebSocket muWebSocket = session.muWebSocket;
-                    WriteCallback onComplete = new WriteCallback() {
-                        @Override
-                        public void onSuccess() {
+                    DoneCallback onComplete = error -> {
+                        if (error == null) {
                             ctx.channel().read();
-                        }
-
-                        @Override
-                        public void onFailure(Throwable reason) {
-                            handleWebsockError(ctx, muWebSocket, reason);
+                        } else {
+                            handleWebsockError(ctx, muWebSocket, error);
                         }
                     };
                     try {
@@ -188,7 +184,7 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
                             CloseWebSocketFrame cwsf = (CloseWebSocketFrame) msg;
                             muWebSocket.onClientClosed(cwsf.statusCode(), cwsf.reasonText());
                             clearWebSocket(ctx);
-                            onComplete.onSuccess();
+                            onComplete.onComplete(null);
                         }
                     } catch (Throwable e) {
                         handleWebsockError(ctx, muWebSocket, e);
@@ -263,7 +259,7 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
                         ctx.close();
                     }
                 } else if (ise.state() == IdleState.WRITER_IDLE) {
-                    session.sendPing(ByteBuffer.wrap(MuWebSocketSessionImpl.PING_BYTES), WriteCallback.NoOp);
+                    session.sendPing(ByteBuffer.wrap(MuWebSocketSessionImpl.PING_BYTES), DoneCallback.NoOp);
                 }
             } else {
                 AsyncContext asyncContext = ctx.channel().attr(STATE_ATTRIBUTE).get();

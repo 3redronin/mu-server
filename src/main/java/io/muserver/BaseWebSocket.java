@@ -21,13 +21,13 @@ public abstract class BaseWebSocket implements MuWebSocket {
     }
 
     @Override
-    public void onText(String message, WriteCallback onComplete) throws Exception {
-        onComplete.onSuccess();
+    public void onText(String message, DoneCallback onComplete) throws Exception {
+        onComplete.onComplete(null);
     }
 
     @Override
-    public void onBinary(ByteBuffer buffer, WriteCallback onComplete) throws Exception {
-        onComplete.onSuccess();
+    public void onBinary(ByteBuffer buffer, DoneCallback onComplete) throws Exception {
+        onComplete.onComplete(null);
     }
 
     @Override
@@ -42,13 +42,13 @@ public abstract class BaseWebSocket implements MuWebSocket {
     }
 
     @Override
-    public void onPing(ByteBuffer payload, WriteCallback onComplete) throws Exception {
+    public void onPing(ByteBuffer payload, DoneCallback onComplete) throws Exception {
         session().sendPong(payload, onComplete);
     }
 
     @Override
-    public void onPong(ByteBuffer payload, WriteCallback onComplete) throws Exception {
-        onComplete.onSuccess();
+    public void onPong(ByteBuffer payload, DoneCallback onComplete) throws Exception {
+        onComplete.onComplete(null);
     }
 
     @Override
