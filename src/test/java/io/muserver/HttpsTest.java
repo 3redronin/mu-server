@@ -47,7 +47,7 @@ public class HttpsTest {
 
         List<X509Certificate> certificates = sslInfo.certificates();
         assertThat(certificates, hasSize(1));
-        assertThat(certificates.get(0).getNotAfter(), equalTo(new Date(4667278027000L)));
+        assertThat(certificates.get(0).getNotAfter(), equalTo(new Date(4714779311000L)));
         assertThat(certificates, equalTo(sslInfo.certificates())); // check that cached calls work
     }
 

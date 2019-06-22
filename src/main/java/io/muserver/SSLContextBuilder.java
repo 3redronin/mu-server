@@ -211,21 +211,16 @@ public class SSLContextBuilder {
     }
 
     public static SSLContext unsignedLocalhostCert() {
-        // The cert was created with the following command:
-        // keytool -genkey -storetype JKS -keyalg RSA -sigalg SHA256withRSA -alias muserverlocalhost -keystore localhost.jks -validity 36500 -keysize 2048 -storepass Very5ecure -keypass ActuallyNotSecure
-        return sslContext()
-            .withKeystoreType("JKS")
-            .withKeystorePassword("Very5ecure")
-            .withKeyPassword("ActuallyNotSecure")
-            .withKeystoreFromClasspath("/io/muserver/resources/localhost.jks")
-            .build();
+        return unsignedLocalhostCertBuilder().build();
     }
     public static SSLContextBuilder unsignedLocalhostCertBuilder() {
+        // The cert was created with the following command:
+        // keytool -genkeypair -keystore localhost.p12 -storetype PKCS12 -storepass Very5ecure -alias muserverlocalhost -keyalg RSA -sigalg SHA256withRSA -keysize 2048 -validity 36500 -dname "CN=Mu Server Test Cert, OU=Mu Server, O=Ronin" -ext san=dns:localhost,ip:127.0.0.1
         return sslContext()
-            .withKeystoreType("JKS")
+            .withKeystoreType("PKCS12")
             .withKeystorePassword("Very5ecure")
-            .withKeyPassword("ActuallyNotSecure")
-            .withKeystoreFromClasspath("/io/muserver/resources/localhost.jks");
+            .withKeyPassword("Very5ecure")
+            .withKeystoreFromClasspath("/io/muserver/resources/localhost.p12");
     }
 
 }
