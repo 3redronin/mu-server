@@ -44,41 +44,41 @@ public class SSLContextBuilderTest {
     @Test
     public void canCreateFromTheFileSystem() throws IOException {
         SSLContextBuilder sslContextBuilder = SSLContextBuilder.sslContext()
-            .withKeystoreType("JKS")
+            .withKeystoreType("PKCS12")
             .withKeystorePassword("Very5ecure")
-            .withKeyPassword("ActuallyNotSecure")
-            .withKeystore(new File("src/main/resources/io/muserver/resources/localhost.jks"));
+            .withKeyPassword("Very5ecure")
+            .withKeystore(new File("src/main/resources/io/muserver/resources/localhost.p12"));
         test(sslContextBuilder);
     }
 
     @Test
     public void canCreateFromTheClasspath() throws IOException {
         SSLContextBuilder sslContextBuilder = SSLContextBuilder.sslContext()
-            .withKeystoreType("JKS")
+            .withKeystoreType("PKCS12")
             .withKeystorePassword("Very5ecure")
-            .withKeyPassword("ActuallyNotSecure")
-            .withKeystoreFromClasspath("/io/muserver/resources/localhost.jks");
+            .withKeyPassword("Very5ecure")
+            .withKeystoreFromClasspath("/io/muserver/resources/localhost.p12");
         test(sslContextBuilder);
     }
 
     @Test
     public void canCreateFromInputStream() throws IOException {
         SSLContextBuilder sslContextBuilder = SSLContextBuilder.sslContext()
-            .withKeystoreType("JKS")
+            .withKeystoreType("PKCS12")
             .withKeystorePassword("Very5ecure")
-            .withKeyPassword("ActuallyNotSecure")
-            .withKeystore(new FileInputStream("src/main/resources/io/muserver/resources/localhost.jks"));
+            .withKeyPassword("Very5ecure")
+            .withKeystore(new FileInputStream("src/main/resources/io/muserver/resources/localhost.p12"));
         test(sslContextBuilder);
     }
 
     @Test
     public void canCreateFromKeystoreManagerFactory() throws Exception {
         KeyManagerFactory kmf;
-        try (InputStream keystoreStream = getClass().getResourceAsStream("/io/muserver/resources/localhost.jks")) {
-            KeyStore ks = KeyStore.getInstance("JKS");
+        try (InputStream keystoreStream = getClass().getResourceAsStream("/io/muserver/resources/localhost.p12")) {
+            KeyStore ks = KeyStore.getInstance("PKCS12");
             ks.load(keystoreStream, "Very5ecure".toCharArray());
             kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-            kmf.init(ks, "ActuallyNotSecure".toCharArray());
+            kmf.init(ks, "Very5ecure".toCharArray());
         }
         SSLContextBuilder sslContextBuilder = SSLContextBuilder.sslContext()
             .withKeyManagerFactory(kmf);
@@ -158,10 +158,10 @@ public class SSLContextBuilderTest {
     @Test(expected = MuException.class)
     public void throwsIfThePasswordIsWrong() {
         SSLContextBuilder.sslContext()
-            .withKeystoreType("JKS")
+            .withKeystoreType("PKCS12")
             .withKeystorePassword("Very5ecured")
-            .withKeyPassword("ActuallyNotSecure")
-            .withKeystore(new File("src/main/resources/io/muserver/resources/localhost.jks"))
+            .withKeyPassword("Very5ecured")
+            .withKeystore(new File("src/main/resources/io/muserver/resources/localhost.p12"))
             .build();
     }
 
@@ -170,7 +170,7 @@ public class SSLContextBuilderTest {
         SSLContextBuilder.sslContext()
             .withKeystoreType("JKS")
             .withKeystorePassword("Very5ecure")
-            .withKeyPassword("ActuallyNotSecure")
+            .withKeyPassword("Very5ecure")
             .withKeystore(new File("src/test/blah"));
     }
 }
