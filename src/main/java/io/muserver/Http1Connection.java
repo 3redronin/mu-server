@@ -27,7 +27,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 class Http1Connection extends SimpleChannelInboundHandler<Object> {
     private static final Logger log = LoggerFactory.getLogger(Http1Connection.class);
-    static final AttributeKey<AsyncContext> STATE_ATTRIBUTE = AttributeKey.newInstance("state"); // todo, just store as a volatile field?
+    private static final AttributeKey<AsyncContext> STATE_ATTRIBUTE = AttributeKey.newInstance("state"); // todo, just store as a volatile field?
     static final AttributeKey<MuWebSocketSessionImpl> WEBSOCKET_ATTRIBUTE = AttributeKey.newInstance("ws"); // todo, just store as a volatile field?
 
     private final NettyHandlerAdapter nettyHandlerAdapter;
@@ -42,6 +42,10 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
         this.proto = proto;
     }
 
+    static void setAsyncContext(ChannelHandlerContext ctx, AsyncContext value) {
+        ctx.channel().attr(STATE_ATTRIBUTE).set(value);
+    }
+
     @Override
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
         ctx.channel().config().setAutoRead(false);
@@ -51,7 +55,7 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-        AsyncContext asyncContext = ctx.channel().attr(STATE_ATTRIBUTE).get();
+        AsyncContext asyncContext = getAsyncContext(ctx);
         if (asyncContext != null) {
             asyncContext.onCancelled(true);
         }
@@ -127,7 +131,7 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
                 Http1Response muResponse = new Http1Response(ctx, muRequest, new Http1Headers());
 
                 AsyncContext asyncContext = new AsyncContext(muRequest, muResponse, stats);
-                ctx.channel().attr(STATE_ATTRIBUTE).set(asyncContext);
+                setAsyncContext(ctx, asyncContext);
                 readyToRead = false;
                 DoneCallback addedToExecutorCallback = error -> {
                     ctx.channel().read();
@@ -147,7 +151,7 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
 
         } else if (msg instanceof HttpContent) {
             HttpContent content = (HttpContent) msg;
-            AsyncContext asyncContext = ctx.channel().attr(STATE_ATTRIBUTE).get();
+            AsyncContext asyncContext = getAsyncContext(ctx);
             if (asyncContext == null) {
                 log.debug("Got a chunk of message for an unknown request. This can happen when a request is rejected based on headers, and then the rejected body arrives.");
             } else {
@@ -262,14 +266,23 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
                     session.sendPing(ByteBuffer.wrap(MuWebSocketSessionImpl.PING_BYTES), DoneCallback.NoOp);
                 }
             } else {
-                AsyncContext asyncContext = ctx.channel().attr(STATE_ATTRIBUTE).get();
-                if (asyncContext != null) {
-                    asyncContext.onCancelled(false);
+                AsyncContext asyncContext = getAsyncContext(ctx);
+                boolean activeRequest = asyncContext != null && !asyncContext.isComplete();
+                if (activeRequest) {
+                    if (!asyncContext.response.hasStartedSendingData()) {
+                        DefaultFullHttpResponse resp = new DefaultFullHttpResponse(HTTP_1_1, HttpResponseStatus.REQUEST_TIMEOUT);
+                        resp.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.CLOSE);
+                        ctx.writeAndFlush(resp);
+                    }
+                    asyncContext.onCancelled(true);
+                } else {
+                    // Can't send a 408 so just closing context. See: https://stackoverflow.com/q/56722103/131578
+                    ctx.channel().close();
+//                    DefaultFullHttpResponse resp = new DefaultFullHttpResponse(HTTP_1_1, HttpResponseStatus.REQUEST_TIMEOUT);
+//                    resp.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.CLOSE);
+//                    ctx.writeAndFlush(resp)
+//                        .addListener(ChannelFutureListener.CLOSE);
                 }
-                DefaultFullHttpResponse resp = new DefaultFullHttpResponse(HTTP_1_1, HttpResponseStatus.REQUEST_TIMEOUT);
-                resp.headers().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
-                ctx.writeAndFlush(resp)
-                    .addListener(ChannelFutureListener.CLOSE);
             }
         }
         super.userEventTriggered(ctx, evt);
@@ -279,9 +292,13 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
         return ctx.channel().attr(WEBSOCKET_ATTRIBUTE).get();
     }
 
+    static AsyncContext getAsyncContext(ChannelHandlerContext ctx) {
+        return ctx.channel().attr(STATE_ATTRIBUTE).get();
+    }
+
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        AsyncContext asyncContext = ctx.channel().attr(STATE_ATTRIBUTE).get();
+        AsyncContext asyncContext = getAsyncContext(ctx);
         if (asyncContext != null) {
             if (log.isDebugEnabled()) {
                 log.debug(cause.getClass().getName() + " (" + cause.getMessage() + ") for " + ctx +

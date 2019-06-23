@@ -344,12 +344,13 @@ public class MuServerTest {
     }
 
     @Test
-    public void idleTimeoutCanBeConfigured() throws Exception {
+    public void idleTimeoutCanBeConfiguredAnd408ReturnedIfResponseNotStarted() throws Exception {
+        // TODO think about this more for http2
         CompletableFuture<Throwable> exceptionFromServer = new CompletableFuture<>();
-        server = ServerUtils.httpsServerForTest()
-            .withIdleTimeout(40, TimeUnit.MILLISECONDS)
+        server = httpServer()
+            .withIdleTimeout(100, TimeUnit.MILLISECONDS)
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
-                Thread.sleep(100);
+                Thread.sleep(125);
                 try {
                     response.write("Hmmm");
                 } catch (Throwable e) {
@@ -359,11 +360,38 @@ public class MuServerTest {
             .start();
         try (Response resp = call(request(server.uri()))) {
             assertThat(resp.code(), is(408));
-        } catch (Exception ignored) {
-            // this is okay too - either a 408 or an exception
         }
         assertThat(exceptionFromServer.get(10, TimeUnit.SECONDS), instanceOf(Exception.class));
     }
+
+    @Test
+    public void idleTimeoutCanBeConfiguredAndConnectionClosedIfAlreadyStarted() throws Exception {
+        // TODO think about this more for http2
+        CompletableFuture<Throwable> exceptionFromServer = new CompletableFuture<>();
+        server = httpServer()
+            .withIdleTimeout(200, TimeUnit.MILLISECONDS)
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.sendChunk("Hi");
+                try {
+                    while (true) {
+                        Thread.sleep(210);
+                        response.sendChunk("Hi");
+                    }
+                } catch (Throwable e) {
+                    exceptionFromServer.complete(e);
+                }
+            })
+            .start();
+        try (Response resp = call(request(server.uri()))) {
+            assertThat(resp.code(), is(200));
+            resp.body().string();
+            Assert.fail("Body should not be readable");
+        } catch (IOException ex) {
+            // expected
+        }
+        assertThat(exceptionFromServer.get(10, TimeUnit.SECONDS), instanceOf(Exception.class));
+    }
+
 
     @Test(timeout = 30000)
     public void aifRequestsCannotBeSubmittedToTheExecutorTheyAreRejectedWithA503() throws Exception {

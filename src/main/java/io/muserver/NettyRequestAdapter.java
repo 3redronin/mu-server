@@ -424,7 +424,7 @@ class NettyRequestAdapter implements MuRequest {
         ctx.channel().pipeline().replace("idle", "idle",
             new IdleStateHandler(idleReadTimeoutMills, pingAfterWriteMillis, 0, TimeUnit.MILLISECONDS));
         MuWebSocketSessionImpl session = new MuWebSocketSessionImpl(ctx, muWebSocket, ctx.channel().newPromise());
-        ctx.channel().attr(Http1Connection.STATE_ATTRIBUTE).set(null);
+        Http1Connection.setAsyncContext(ctx, null);
         ctx.channel().attr(Http1Connection.WEBSOCKET_ATTRIBUTE).set(session);
         handshaker.handshake(ctx.channel(), fullReq, responseHeaders, session.connectedPromise)
             .addListener(future -> {
