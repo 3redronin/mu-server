@@ -1,6 +1,7 @@
 package io.muserver;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufHolder;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
@@ -178,12 +179,26 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
                         if (msg instanceof TextWebSocketFrame) {
                             muWebSocket.onText(((TextWebSocketFrame) msg).text(), onComplete);
                         } else if (msg instanceof BinaryWebSocketFrame) {
-                            ByteBuffer buffer = ((BinaryWebSocketFrame) msg).content().nioBuffer();
-                            muWebSocket.onBinary(buffer, onComplete);
+                            ByteBuf content = ((ByteBufHolder) msg).content();
+                            content.retain();
+                            muWebSocket.onBinary(content.nioBuffer(), error -> {
+                                content.release();
+                                onComplete.onComplete(error);
+                            });
                         } else if (msg instanceof PingWebSocketFrame) {
-                            muWebSocket.onPing(((PingWebSocketFrame) msg).content().nioBuffer(), onComplete);
+                            ByteBuf content = ((ByteBufHolder) msg).content();
+                            content.retain();
+                            muWebSocket.onPing(content.nioBuffer(), error -> {
+                                content.release();
+                                onComplete.onComplete(error);
+                            });
                         } else if (msg instanceof PongWebSocketFrame) {
-                            muWebSocket.onPong(((PongWebSocketFrame) msg).content().nioBuffer(), onComplete);
+                            ByteBuf content = ((ByteBufHolder) msg).content();
+                            content.retain();
+                            muWebSocket.onPong(content.nioBuffer(), error -> {
+                                content.release();
+                                onComplete.onComplete(error);
+                            });
                         } else if (msg instanceof CloseWebSocketFrame) {
                             CloseWebSocketFrame cwsf = (CloseWebSocketFrame) msg;
                             muWebSocket.onClientClosed(cwsf.statusCode(), cwsf.reasonText());

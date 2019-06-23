@@ -34,7 +34,7 @@ public interface MuWebSocket {
     /**
      * Called when a message is received from the client.
      * @param buffer The message as a byte buffer.
-     * @param onComplete A callback that must be run with <code>onComplete.run()</code> when the byte buffer is no longer needed.
+     * @param onComplete A callback that must be run with <code>onComplete.run()</code> when the byte buffer is no longer needed. Failure to call this will result in memory leaks.
      * @throws Exception Any exceptions thrown will result in the onError method being called with the thrown exception being used as the <code>cause</code> parameter.
      */
     void onBinary(ByteBuffer buffer, DoneCallback onComplete) throws Exception;
@@ -50,7 +50,7 @@ public interface MuWebSocket {
     /**
      * Called when a ping message is sent from a client.
      * @param payload The ping payload.
-     * @param onComplete A callback that must be run with <code>onComplete.run()</code> when the byte buffer is no longer needed.
+     * @param onComplete A callback that must be run with <code>onComplete.run()</code> when the byte buffer is no longer needed. Failure to call this will result in memory leaks.
      * @throws Exception Any exceptions thrown will result in the onError method being called with the thrown exception being used as the <code>cause</code> parameter.
      */
     void onPing(ByteBuffer payload, DoneCallback onComplete) throws Exception;
@@ -58,7 +58,7 @@ public interface MuWebSocket {
     /**
      * Called when a pong message is sent from the client.
      * @param payload The pong payload
-     * @param onComplete A callback that must be run with <code>onComplete.run()</code> when the byte buffer is no longer needed.
+     * @param onComplete A callback that must be run with <code>onComplete.run()</code> when the byte buffer is no longer needed. Failure to call this will result in memory leaks.
      * @throws Exception Any exceptions thrown will result in the onError method being called with the thrown exception being used as the <code>cause</code> parameter.
      */
     void onPong(ByteBuffer payload, DoneCallback onComplete) throws Exception;
