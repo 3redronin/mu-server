@@ -2,10 +2,7 @@ package io.muserver;
 
 import org.junit.After;
 import org.junit.Test;
-import scaffolding.ClientUtils;
-import scaffolding.ServerUtils;
-import scaffolding.SseClient;
-import scaffolding.TestSseClient;
+import scaffolding.*;
 
 import java.io.IOException;
 import java.util.concurrent.CountDownLatch;
@@ -75,6 +72,24 @@ public class SsePublisherTest {
             "closed")));
     }
 
+    @Test
+    public void largeMessagesCanBeSent() throws Exception {
+        String message1 = "<h1>" + StringUtils.randomStringOfLength(100000) + "</h1>";
+        String message2 = StringUtils.randomStringOfLength(100000);
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(Method.GET, "/streamer", (request, response, pathParams) -> {
+                SsePublisher ssePublisher = SsePublisher.start(request, response);
+                ssePublisher.send(message1, null, null);
+                ssePublisher.send(message2, null, "two");
+                ssePublisher.close();
+            })
+            .start();
+        SseClient.ServerSentEvent clientHandle = sseClient.newServerSentEvent(request().url(server.uri().resolve("/streamer").toString()).build(), listener);
+        listener.assertListenerIsClosed();
+        clientHandle.close();
+        assertThat(listener.receivedMessages, hasItem("message=" + message1 + "        event=message        id=null"));
+        assertThat(listener.receivedMessages, hasItem("message=" + message2 + "        event=message        id=two"));
+    }
 
     @Test
     public void sendThrowsAnExceptionIfTheClientDisconnects() throws InterruptedException {

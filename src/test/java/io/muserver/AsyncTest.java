@@ -6,6 +6,7 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 import scaffolding.ServerUtils;
+import scaffolding.StringUtils;
 
 import java.io.IOException;
 import java.net.SocketTimeoutException;
@@ -25,6 +26,32 @@ import static scaffolding.ClientUtils.*;
 public class AsyncTest {
     private MuServer server;
 
+    @Test
+    public void canWriteAsync() throws Exception {
+        byte[] bytes = StringUtils.randomBytes(120000);
+        StringBuffer result = new StringBuffer();
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.contentType(ContentTypes.APPLICATION_OCTET_STREAM);
+                AsyncHandle asyncHandle = request.handleAsync();
+                asyncHandle.write(ByteBuffer.wrap(bytes), new WriteCallback() {
+                    public void onSuccess() {
+                        result.append("success");
+                        asyncHandle.complete();
+                    }
+                    public void onFailure(Throwable reason) {
+                        result.append("fail ").append(reason);
+                        asyncHandle.complete();
+                    }
+                });
+            })
+            .start();
+        try (Response resp = call(request().url(server.uri().toString()))) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.body().bytes(), equalTo(bytes));
+            assertThat(result.toString(), equalTo("success"));
+        }
+    }
 
     @Test
     public void responsesCanBeAsync() throws IOException {
