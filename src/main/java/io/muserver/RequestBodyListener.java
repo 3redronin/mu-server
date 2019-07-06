@@ -10,13 +10,14 @@ import java.nio.ByteBuffer;
  *      .addHandler((request, response) -&gt; {
  *          AsyncHandle ctx = request.handleAsync();
  *          ctx.setReadListener(new RequestBodyListener() {
- *              public void onDataReceived(ByteBuffer bb) {
+ *              public void onDataReceived(ByteBuffer bb, DoneCallback doneCallback) {
  *                  byte[] b = new byte[bb.remaining()];
  *                  bb.get(b);
  *                  try {
  *                      response.outputStream().write(b);
+ *                      doneCallback.onComplete(null);
  *                  } catch (IOException e) {
- *                      errors.add(e);
+ *                      doneCallback.onComplete(e);
  *                  }
  *              }
  *
@@ -40,9 +41,13 @@ public interface RequestBodyListener {
      * <p>Called when request data is received from the client.</p>
      * <p>NOTE: this method should not block as it runs on a socket acceptor thread. If you need to do any blocking operations
      * it is recommended you process the data on another thread.</p>
-     * @param buffer A buffer holding some of the request body data
+     *
+     * @param buffer       A buffer holding some of the request body data
+     * @param doneCallback This must be called when the buffer is no longer needed
+     * @throws Exception Any thrown exceptions will cause the {@link #onError(Throwable)} method to be called with the
+     *                   thrown exception as a parameter.
      */
-    void onDataReceived(ByteBuffer buffer);
+    void onDataReceived(ByteBuffer buffer, DoneCallback doneCallback) throws Exception;
 
     /**
      * Called when the request body is fully received.
@@ -51,6 +56,7 @@ public interface RequestBodyListener {
 
     /**
      * Called if there is an error reading the body.
+     *
      * @param t The error.
      */
     void onError(Throwable t);

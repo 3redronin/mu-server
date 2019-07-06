@@ -200,12 +200,14 @@ public class AsyncTest {
                 AsyncHandle ctx = request.handleAsync();
                 ctx.setReadListener(new RequestBodyListener() {
                     @Override
-                    public void onDataReceived(ByteBuffer bb) {
+                    public void onDataReceived(ByteBuffer bb, DoneCallback doneCallback) throws Exception {
                         byte[] b = new byte[bb.remaining()];
                         bb.get(b);
                         try {
                             response.outputStream().write(b);
+                            doneCallback.onComplete(null);
                         } catch (IOException e) {
+                            doneCallback.onComplete(e);
                             errors.add(e);
                         }
                     }

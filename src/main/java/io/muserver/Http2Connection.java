@@ -70,7 +70,7 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
         if (asyncContext == null) {
             log.debug("Got a chunk of message for an unknown request. This can happen when a request is rejected based on headers, and then the rejected body arrives.");
         } else {
-            NettyHandlerAdapter.passDataToHandler(data, nettyHandlerAdapter, asyncContext);
+            NettyHandlerAdapter.passDataToHandler(data, asyncContext);
             if (endOfStream) {
                 nettyHandlerAdapter.onRequestComplete(asyncContext);
                 contexts.remove(streamId);

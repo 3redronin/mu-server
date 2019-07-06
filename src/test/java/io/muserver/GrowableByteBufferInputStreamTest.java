@@ -1,5 +1,6 @@
 package io.muserver;
 
+import io.netty.buffer.Unpooled;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -40,7 +41,7 @@ public class GrowableByteBufferInputStreamTest {
         expected.position(0);
         executor.submit(() -> {
             for (ByteBuffer byteBuffer : generated) {
-                stream.handOff(byteBuffer);
+                stream.handOff(Unpooled.wrappedBuffer(byteBuffer), DoneCallback.NoOp);
             }
             try {
                 stream.close();
@@ -79,7 +80,7 @@ public class GrowableByteBufferInputStreamTest {
                 try {
                     int count = 0;
                     for (ByteBuffer byteBuffer : sent) {
-                        gb.handOff(byteBuffer);
+                        gb.handOff(Unpooled.wrappedBuffer(byteBuffer), DoneCallback.NoOp);
                         if (count == 10) {
                             atLeastSomeReceivedBeforeSwitch.countDown();
                         }
@@ -101,8 +102,9 @@ public class GrowableByteBufferInputStreamTest {
         CountDownLatch completeLatch = new CountDownLatch(1);
         gb.switchToListener(new RequestBodyListener() {
             @Override
-            public void onDataReceived(ByteBuffer buffer) {
+            public void onDataReceived(ByteBuffer buffer, DoneCallback doneCallback) throws Exception {
                 received.add(buffer);
+                doneCallback.onComplete(null);
             }
 
             @Override

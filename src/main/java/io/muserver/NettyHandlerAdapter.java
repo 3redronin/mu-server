@@ -9,7 +9,6 @@ import javax.ws.rs.InternalServerErrorException;
 import javax.ws.rs.NotFoundException;
 import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.Response;
-import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,13 +32,15 @@ class NettyHandlerAdapter {
         this.muHandlers = muHandlers;
     }
 
-    static void passDataToHandler(ByteBuf data, NettyHandlerAdapter nettyHandlerAdapter, AsyncContext asyncContext) {
+    static void passDataToHandler(ByteBuf data, AsyncContext asyncContext) {
         if (data.capacity() > 0) {
-            ByteBuf copy = data.copy();
-            ByteBuffer byteBuffer = ByteBuffer.allocate(data.capacity());
-            copy.readBytes(byteBuffer).release();
-            byteBuffer.flip();
-            nettyHandlerAdapter.onRequestData(asyncContext, byteBuffer);
+            data.retain();
+            asyncContext.requestBody.handOff(data, error -> {
+                data.release();
+                if (error != null) {
+                    asyncContext.onCancelled(false);
+                }
+            });
         }
     }
 
@@ -134,10 +135,6 @@ class NettyHandlerAdapter {
                 Mutils.htmlEncode(message) + "</p>");
         }
         return forceDisconnect;
-    }
-
-    void onRequestData(AsyncContext ctx, ByteBuffer buffer) {
-        ctx.requestBody.handOff(buffer);
     }
 
     void onRequestComplete(AsyncContext ctx) {

@@ -157,7 +157,7 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
                 log.debug("Got a chunk of message for an unknown request. This can happen when a request is rejected based on headers, and then the rejected body arrives.");
             } else {
                 ByteBuf byteBuf = content.content();
-                NettyHandlerAdapter.passDataToHandler(byteBuf, nettyHandlerAdapter, asyncContext);
+                NettyHandlerAdapter.passDataToHandler(byteBuf, asyncContext);
                 if (msg instanceof LastHttpContent) {
                     nettyHandlerAdapter.onRequestComplete(asyncContext);
                 }
