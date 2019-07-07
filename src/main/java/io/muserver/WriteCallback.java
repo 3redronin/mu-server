@@ -2,7 +2,9 @@ package io.muserver;
 
 /**
  * A callback for asynchronous write operations.
+ * @deprecated This is being replaced with {@link DoneCallback}
  */
+@Deprecated
 public interface WriteCallback {
 
     /**

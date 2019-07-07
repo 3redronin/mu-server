@@ -138,15 +138,11 @@ class AsyncSsePublisherImpl implements AsyncSsePublisher {
 
     private CompletionStage<?> write(String text) {
         CompletableFuture<?> stage = new CompletableFuture<>();
-        asyncHandle.write(Mutils.toByteBuffer(text), new WriteCallback() {
-            @Override
-            public void onFailure(Throwable reason) {
-                stage.completeExceptionally(reason);
-            }
-
-            @Override
-            public void onSuccess() {
+        asyncHandle.write(Mutils.toByteBuffer(text), error -> {
+            if (error == null) {
                 stage.complete(null);
+            } else {
+                stage.completeExceptionally(error);
             }
         });
         return stage;

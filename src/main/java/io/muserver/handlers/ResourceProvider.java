@@ -220,20 +220,16 @@ class AsyncFileProvider implements ResourceProvider, CompletionHandler<Integer, 
                 buf.limit((int) remaining);
             }
 
-            handle.write(buf, new WriteCallback() {
-                @Override
-                public void onFailure(Throwable reason) {
-                    // client probably disconnected... no big deal
-                    closeChannelQuietly();
-                    handle.complete();
-                }
-
-                @Override
-                public void onSuccess() {
+            handle.write(buf, error -> {
+                if (error == null) {
                     buf.clear();
                     curPos += bytesRead;
                     bytesSent += bytesRead;
                     channel.read(buf, curPos, null, AsyncFileProvider.this);
+                } else {
+                    // client probably disconnected... no big deal
+                    closeChannelQuietly();
+                    handle.complete();
                 }
             });
         }

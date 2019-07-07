@@ -30,6 +30,16 @@ public interface AsyncHandle {
      */
     void complete(Throwable throwable);
 
+    /**
+     * <p>Writes data to the response asynchronously.</p>
+     * <p>Note that even in async mode it is possible to use the blocking write methods on the {@link MuResponse}</p>
+     * <p>See {@link #write(ByteBuffer)} for an alternative that returns a future.</p>
+     * @param data The data to write
+     * @param callback The callback when the write succeeds or fails
+     * @deprecated Use {@link #write(ByteBuffer, DoneCallback)} instead
+     */
+    @Deprecated
+    void write(ByteBuffer data, WriteCallback callback);
 
     /**
      * <p>Writes data to the response asynchronously.</p>
@@ -38,12 +48,12 @@ public interface AsyncHandle {
      * @param data The data to write
      * @param callback The callback when the write succeeds or fails
      */
-    void write(ByteBuffer data, WriteCallback callback);
+    void write(ByteBuffer data, DoneCallback callback);
 
     /**
      * <p>Writes data to the response asynchronously.</p>
      * <p>Note that even in async mode it is possible to use the blocking write methods on the {@link MuResponse}</p>
-     * <p>See {@link #write(ByteBuffer, WriteCallback)} for an alternative that uses a callback.</p>
+     * <p>See {@link #write(ByteBuffer, DoneCallback)} for an alternative that uses a callback.</p>
      * @param data The data to write
      * @return A future that is resolved when the write succeeds or fails.
      */

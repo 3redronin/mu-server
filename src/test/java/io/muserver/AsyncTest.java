@@ -34,13 +34,12 @@ public class AsyncTest {
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.contentType(ContentTypes.APPLICATION_OCTET_STREAM);
                 AsyncHandle asyncHandle = request.handleAsync();
-                asyncHandle.write(ByteBuffer.wrap(bytes), new WriteCallback() {
-                    public void onSuccess() {
+                asyncHandle.write(ByteBuffer.wrap(bytes), error -> {
+                    if (error == null) {
                         result.append("success");
                         asyncHandle.complete();
-                    }
-                    public void onFailure(Throwable reason) {
-                        result.append("fail ").append(reason);
+                    } else {
+                        result.append("fail ").append(error);
                         asyncHandle.complete();
                     }
                 });
@@ -115,15 +114,11 @@ public class AsyncTest {
                     public void onData(String data) {
                         try {
                             ByteBuffer text = Mutils.toByteBuffer(data + "\n");
-                            ctx.write(text, new WriteCallback() {
-                                @Override
-                                public void onFailure(Throwable reason) throws Exception {
+                            ctx.write(text, error -> {
+                                if (error != null) {
                                     changeListener.stop();
                                     ctx.complete();
                                     ctxClosedLatch.countDown();
-                                }
-                                @Override
-                                public void onSuccess() throws Exception {
                                 }
                             });
                         } catch (Throwable e) {
@@ -197,24 +192,21 @@ public class AsyncTest {
         List<Throwable> errors = new ArrayList<>();
         server = ServerUtils.httpsServerForTest()
             .addHandler((request, response) -> {
-                AsyncHandle ctx = request.handleAsync();
-                ctx.setReadListener(new RequestBodyListener() {
+                AsyncHandle handle = request.handleAsync();
+                handle.setReadListener(new RequestBodyListener() {
                     @Override
                     public void onDataReceived(ByteBuffer bb, DoneCallback doneCallback) throws Exception {
-                        byte[] b = new byte[bb.remaining()];
-                        bb.get(b);
-                        try {
-                            response.outputStream().write(b);
-                            doneCallback.onComplete(null);
-                        } catch (IOException e) {
-                            doneCallback.onComplete(e);
-                            errors.add(e);
-                        }
+                        handle.write(bb, error -> {
+                            if (error != null) {
+                                errors.add(error);
+                            }
+                            doneCallback.onComplete(error);
+                        });
                     }
 
                     @Override
                     public void onComplete() {
-                        ctx.complete();
+                        handle.complete();
                     }
 
                     @Override
