@@ -17,10 +17,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static io.netty.buffer.Unpooled.copiedBuffer;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
-/**
- * A simple handler that responds with the message "Hello World!".
- */
-public final class Http2Connection extends Http2ConnectionHandler implements Http2FrameListener {
+final class Http2Connection extends Http2ConnectionHandler implements Http2FrameListener {
     private static final Logger log = LoggerFactory.getLogger(Http2Connection.class);
 
     private final AtomicReference<MuServer> serverRef;
@@ -116,7 +113,11 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
         stats.onRequestStarted(muReq);
         Http2Response resp = new Http2Response(ctx, muReq, new Http2Headers(), encoder(), streamId, settings);
 
-        AsyncContext asyncContext = new AsyncContext(muReq, resp, stats);
+        AsyncContext asyncContext = new AsyncContext(muReq, resp, () -> {
+            stats.onRequestEnded(muReq);
+            contexts.remove(streamId);
+        });
+
         contexts.put(streamId, asyncContext);
         DoneCallback addedToExecutorCallback = error -> {
             ctx.channel().read();
@@ -160,7 +161,7 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
 
     @Override
     public void onRstStreamRead(ChannelHandlerContext ctx, int streamId, long errorCode) {
-        AsyncContext asyncContext = contexts.get(streamId);
+        AsyncContext asyncContext = contexts.remove(streamId);
         if (asyncContext != null) {
             asyncContext.onCancelled(false);
         }

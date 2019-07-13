@@ -14,15 +14,15 @@ public class AsyncContext {
     private static final Logger log = LoggerFactory.getLogger(AsyncContext.class);
     public final MuRequest request;
     public final MuResponse response;
-    private final MuStatsImpl stats;
+    private final Runnable completedCallback;
     public Object state;
     GrowableByteBufferInputStream requestBody;
     private AtomicBoolean completed = new AtomicBoolean(false);
 
-    AsyncContext(MuRequest request, MuResponse response, MuStatsImpl stats) {
+    AsyncContext(MuRequest request, MuResponse response, Runnable completedCallback) {
         this.request = request;
         this.response = response;
-        this.stats = stats;
+        this.completedCallback = completedCallback;
     }
 
     public Future<Void> complete(boolean forceDisconnect) {
@@ -33,7 +33,7 @@ public class AsyncContext {
         } else {
             Future<Void> complete = ((NettyResponseAdaptor) response)
                 .complete(forceDisconnect);
-            stats.onRequestEnded(request);
+            completedCallback.run();
             return complete;
         }
     }
