@@ -176,6 +176,7 @@ public final class Http2Connection extends Http2ConnectionHandler implements Htt
 
     @Override
     public void onPingRead(ChannelHandlerContext ctx, long data) {
+        encoder().writePing(ctx, true, data, ctx.channel().newPromise());
     }
 
     @Override
