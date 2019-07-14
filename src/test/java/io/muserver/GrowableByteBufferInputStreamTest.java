@@ -1,6 +1,7 @@
 package io.muserver;
 
 import io.netty.buffer.Unpooled;
+import org.junit.Assert;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -23,11 +24,11 @@ public class GrowableByteBufferInputStreamTest {
 
     @Test
     public void itCanHaveStuffAddedAsyncyAndClosedButReadInASyncManner() throws IOException {
-        GrowableByteBufferInputStream stream = new GrowableByteBufferInputStream();
+        GrowableByteBufferInputStream stream = new GrowableByteBufferInputStream(10000, Long.MAX_VALUE);
 
         int totalSize = 0;
         List<ByteBuffer> generated = new ArrayList<>();
-        for (int i = 0; i < 1; i++) {
+        for (int i = 0; i < 100; i++) {
             ByteBuffer buffer = randomBuffer();
             totalSize += buffer.remaining();
             generated.add(buffer);
@@ -61,10 +62,33 @@ public class GrowableByteBufferInputStreamTest {
         assertThat(actual.asCharBuffer(), equalTo(expected.asCharBuffer()));
     }
 
+    @Test
+    public void throwsMuExceptionIfMaxSizeExceeded() throws Exception {
+
+        long totalSize = 0;
+        List<ByteBuffer> generated = new ArrayList<>();
+        for (int i = 0; i < 2; i++) {
+            ByteBuffer buffer = randomBuffer();
+            totalSize += buffer.remaining();
+            generated.add(buffer);
+        }
+
+        GrowableByteBufferInputStream stream = new GrowableByteBufferInputStream(10000, totalSize - 1L);
+
+        stream.handOff(Unpooled.wrappedBuffer(generated.get(0)), DoneCallback.NoOp);
+
+        try {
+            stream.handOff(Unpooled.wrappedBuffer(generated.get(1)), DoneCallback.NoOp);
+            Assert.fail("Should have failed");
+        } catch (MuException ignored) {
+            // expected
+        }
+
+    }
 
     @Test
     public void itCanBeSwitchedToListenerMode() throws InterruptedException {
-        GrowableByteBufferInputStream gb = new GrowableByteBufferInputStream();
+        GrowableByteBufferInputStream gb = new GrowableByteBufferInputStream(10000, Long.MAX_VALUE);
         List<Throwable> errors = new ArrayList<>();
         List<ByteBuffer> sent = new ArrayList<>();
         for (int i = 0; i < 100; i++) {
@@ -74,25 +98,22 @@ public class GrowableByteBufferInputStreamTest {
         CountDownLatch atLeastSomeReceivedBeforeSwitch = new CountDownLatch(1);
         CountDownLatch atLeastSomeReceivedAfterSwitch = new CountDownLatch(1);
 
-        executor.submit(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    int count = 0;
-                    for (ByteBuffer byteBuffer : sent) {
-                        gb.handOff(Unpooled.wrappedBuffer(byteBuffer), DoneCallback.NoOp);
-                        if (count == 10) {
-                            atLeastSomeReceivedBeforeSwitch.countDown();
-                        }
-                        if (count == 80) {
-                            atLeastSomeReceivedAfterSwitch.await(30, TimeUnit.SECONDS);
-                        }
-                        count++;
+        executor.submit(() -> {
+            try {
+                int count = 0;
+                for (ByteBuffer byteBuffer : sent) {
+                    gb.handOff(Unpooled.wrappedBuffer(byteBuffer), DoneCallback.NoOp);
+                    if (count == 10) {
+                        atLeastSomeReceivedBeforeSwitch.countDown();
                     }
-                    gb.close();
-                } catch (Exception e) {
-                    errors.add(e);
+                    if (count == 80) {
+                        atLeastSomeReceivedAfterSwitch.await(30, TimeUnit.SECONDS);
+                    }
+                    count++;
                 }
+                gb.close();
+            } catch (Exception e) {
+                errors.add(e);
             }
         });
 

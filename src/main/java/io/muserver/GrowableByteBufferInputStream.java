@@ -9,15 +9,25 @@ import java.util.ArrayList;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 class GrowableByteBufferInputStream extends InputStream {
 
     private static final ByteBuffer EMPTY = ByteBuffer.allocate(0);
     private static final ByteBuffer LAST = ByteBuffer.allocate(0);
-    private final BlockingQueue<ByteBuffer> queue = new LinkedBlockingQueue<>(); // TODO add config for this which is like a request size upload limit (sort of)
+    private final BlockingQueue<ByteBuffer> queue = new LinkedBlockingQueue<>();
     private volatile ByteBuffer current = EMPTY;
     private RequestBodyListener listener;
     private final Object listenerLock = new Object();
+
+    private final long readTimeoutMillis;
+    private final long maxSize;
+    private final AtomicLong bytesRead = new AtomicLong(0);
+
+    GrowableByteBufferInputStream(long readTimeoutMillis, long maxSize) {
+        this.readTimeoutMillis = readTimeoutMillis;
+        this.maxSize = maxSize;
+    }
 
     private ByteBuffer cycleIfNeeded() throws IOException {
         if (current == LAST) {
@@ -27,7 +37,7 @@ class GrowableByteBufferInputStream extends InputStream {
             ByteBuffer cur = current;
             if (!cur.hasRemaining()) {
                 try {
-                    current = queue.poll(120, TimeUnit.SECONDS); // TODO: add config for this which is like a request stream idle timeout limit
+                    current = queue.poll(readTimeoutMillis, TimeUnit.MILLISECONDS);
                     cur = current;
                 } catch (InterruptedException e) {
                     // given the InputStream API, is this the way to handle interuptions?
@@ -79,6 +89,10 @@ class GrowableByteBufferInputStream extends InputStream {
     void handOff(ByteBuf data, DoneCallback doneCallback) {
         // This is called from the main netty accepter thread so must be non-blocking
         synchronized (listenerLock) {
+            long read = bytesRead.addAndGet(data.readableBytes());
+            if (read > maxSize) {
+                throw new MuException();
+            }
             if (listener == null) {
                 ByteBuf copy = data.copy();
                 ByteBuffer byteBuffer = ByteBuffer.allocate(data.capacity());

@@ -31,6 +31,7 @@ public class ExpectContinueTest {
             rawClient.sendStartLine("GET", "/")
                 .sendHeader("host", server.uri().getAuthority())
                 .sendHeader("expect", "100-continue")
+                .sendHeader("content-length", "1024")
                 .endHeaders()
                 .flushRequest();
 
@@ -45,7 +46,7 @@ public class ExpectContinueTest {
     }
 
     @Test
-    public void expectContinueWorksOverHttps() throws IOException {
+    public void expectContinueWorksOverHttpsWithoutContentLength() throws IOException {
         server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> response.write("Hi there"))
             .start();

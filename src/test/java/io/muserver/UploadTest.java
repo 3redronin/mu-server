@@ -117,6 +117,24 @@ public class UploadTest {
         }
     }
 
+    @Test
+    public void requestsAreRejectedIfUploadSizeTooLarge() throws Exception {
+        server = ServerUtils.httpsServerForTest()
+            .withMaxRequestSize(guangzhou.length() / 2)
+            .addHandler(Method.POST, "/upload", (request, response, pathParams) -> {
+                request.readBodyAsString();
+            }).start();
+
+        try (Response resp = call(request(server.uri().resolve("/upload"))
+            .post(new MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                .addPart(Headers.of("Content-Disposition", "form-data; name=\"image\"; filename=\"guangzhou.jpeg\""),
+                    RequestBody.create(MediaType.parse("image/jpeg"), guangzhou))
+                .build())
+        )) {
+            assertThat(resp.code(), is(413));
+        }
+    }
 
     @After
     public void stopIt() {

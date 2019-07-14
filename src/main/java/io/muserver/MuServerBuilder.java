@@ -55,11 +55,12 @@ public class MuServerBuilder {
     private Http2Config http2Config;
     private long idleTimeoutMills = TimeUnit.MINUTES.toMillis(5);
     private ExecutorService executor;
+    private long maxRequestSize = 24 * 1024 * 1024;
 
     /**
      * @param port The HTTP port to use. A value of 0 will have a random port assigned; a value of -1 will
      *             result in no HTTP connector.
-     * @return The current Mu-Server Builder
+     * @return The current Mu Server Builder
      */
     public MuServerBuilder withHttpPort(int port) {
         this.httpPort = port;
@@ -71,7 +72,7 @@ public class MuServerBuilder {
      *
      * @param host The host to bind to, for example <code>"127.0.0.1"</code> to restrict connections from localhost
      *             only, or <code>"0.0.0.0"</code> to allow connections from the local network.
-     * @return The current Mu-Server Builder
+     * @return The current Mu Server Builder
      */
     public MuServerBuilder withInterface(String host) {
         this.host = host;
@@ -80,7 +81,7 @@ public class MuServerBuilder {
 
     /**
      * @param stopServerOnShutdown If true, then a shutdown hook which stops this server will be added to the JVM Runtime
-     * @return The current Mu-Server Builder
+     * @return The current Mu Server Builder
      */
     public MuServerBuilder addShutdownHook(boolean stopServerOnShutdown) {
         this.addShutdownHook = stopServerOnShutdown;
@@ -90,7 +91,7 @@ public class MuServerBuilder {
     /**
      * @param port The HTTP port to use. A value of 0 will have a random port assigned; a value of -1 will
      *             result in no HTTP connector.
-     * @return The current Mu-Server Builder
+     * @return The current Mu Server Builder
      * @deprecated Use {@link #withHttpPort(int)} instead
      */
     @Deprecated
@@ -104,7 +105,7 @@ public class MuServerBuilder {
      * {@link ResourceType#gzip} is <code>true</code>.
      *
      * @param enabled True to enable; false to disable
-     * @return The current Mu-Server builder
+     * @return The current Mu Server builder
      * @see #withGzip(long, Set)
      */
     public MuServerBuilder withGzipEnabled(boolean enabled) {
@@ -121,7 +122,7 @@ public class MuServerBuilder {
      * @param minimumGzipSize The size in bytes before gzip is used. The default is 1400.
      * @param mimeTypesToGzip The mime-types that should be gzipped. In general, only text
      *                        files should be gzipped.
-     * @return The current Mu-Server Builder
+     * @return The current Mu Server Builder
      */
     public MuServerBuilder withGzip(long minimumGzipSize, Set<String> mimeTypesToGzip) {
         this.gzipEnabled = true;
@@ -157,7 +158,7 @@ public class MuServerBuilder {
      * Sets the HTTPS config. Defaults to {@link SSLContextBuilder#unsignedLocalhostCert()}
      *
      * @param sslContext An SSL Context.
-     * @return The current Mu-Server Builder
+     * @return The current Mu Server Builder
      * @see SSLContextBuilder
      */
     public MuServerBuilder withHttpsConfig(SSLContext sslContext) {
@@ -168,7 +169,7 @@ public class MuServerBuilder {
      * Sets the HTTPS config. Defaults to {@link SSLContextBuilder#unsignedLocalhostCert()}
      *
      * @param sslContext An SSL Context builder.
-     * @return The current Mu-Server Builder
+     * @return The current Mu Server Builder
      * @see SSLContextBuilder
      */
     public MuServerBuilder withHttpsConfig(SSLContextBuilder sslContext) {
@@ -181,7 +182,7 @@ public class MuServerBuilder {
      *
      * @param port A value of 0 will result in a random port being assigned; a value of -1 will
      *             disable HTTPS.
-     * @return The current Mu-Server builder
+     * @return The current Mu Server builder
      */
     public MuServerBuilder withHttpsPort(int port) {
         this.httpsPort = port;
@@ -192,7 +193,7 @@ public class MuServerBuilder {
      * Sets the configuration for HTTP2
      *
      * @param http2Config A config
-     * @return The current Mu-Server builder
+     * @return The current Mu Server builder
      * @see Http2ConfigBuilder
      */
     public MuServerBuilder withHttp2Config(Http2Config http2Config) {
@@ -204,7 +205,7 @@ public class MuServerBuilder {
      * Sets the configuration for HTTP2
      *
      * @param http2Config A config
-     * @return The current Mu-Server builder
+     * @return The current Mu Server builder
      * @see Http2ConfigBuilder
      */
     public MuServerBuilder withHttp2Config(Http2ConfigBuilder http2Config) {
@@ -216,7 +217,7 @@ public class MuServerBuilder {
      * is used.
      *
      * @param executor The executor service to use to handle requests
-     * @return The current Mu-Server builder
+     * @return The current Mu Server builder
      */
     public MuServerBuilder withHandlerExecutor(ExecutorService executor) {
         this.executor = executor;
@@ -232,7 +233,7 @@ public class MuServerBuilder {
      * being rejected with <code>413</code> errors.</p>
      *
      * @param size The maximum size in bytes that can be used for headers.
-     * @return The current Mu-Server builder.
+     * @return The current Mu Server builder.
      */
     public MuServerBuilder withMaxHeadersSize(int size) {
         this.maxHeadersSize = size;
@@ -244,10 +245,20 @@ public class MuServerBuilder {
      * returned to the client. The default value is 8175.
      *
      * @param size The maximum number of characters allowed in URLs sent to this server.
-     * @return The current Mu-Server builder
+     * @return The current Mu Server builder
      */
     public MuServerBuilder withMaxUrlSize(int size) {
         this.maxUrlSize = size;
+        return this;
+    }
+
+    /**
+     * The maximum allowed request body size. If exceeded, a 413 will be returned.
+     * @param maxSizeInBytes The maximum request body size allowed, in bytes. The default is 24MB.
+     * @return The current Mu Server builder
+     */
+    public MuServerBuilder withMaxRequestSize(long maxSizeInBytes) {
+        this.maxRequestSize = maxSizeInBytes;
         return this;
     }
 
@@ -288,7 +299,7 @@ public class MuServerBuilder {
      *
      * @param handler A handler builder. The <code>build()</code> method will be called on this
      *                to create the handler. If null, then no handler is added.
-     * @return The current Mu-Server Handler.
+     * @return The current Mu Server Handler.
      * @see #addHandler(Method, String, RouteHandler)
      */
     public MuServerBuilder addHandler(MuHandlerBuilder handler) {
@@ -304,7 +315,7 @@ public class MuServerBuilder {
      * handlers are executed before synchronous handlers.</p>
      *
      * @param handler The handler to add. If null, then no handler is added.
-     * @return The current Mu-Server Handler.
+     * @return The current Mu Server Handler.
      * @see #addHandler(Method, String, RouteHandler)
      */
     public MuServerBuilder addHandler(MuHandler handler) {
@@ -351,13 +362,17 @@ public class MuServerBuilder {
     static class ServerSettings {
         final long minimumGzipSize;
         final int maxHeadersSize;
+        final long requestReadTimeoutMillis;
+        final long maxRequestSize;
         final int maxUrlSize;
         final boolean gzipEnabled;
         final Set<String> mimeTypesToGzip;
 
-        ServerSettings(long minimumGzipSize, int maxHeadersSize, int maxUrlSize, boolean gzipEnabled, Set<String> mimeTypesToGzip) {
+        ServerSettings(long minimumGzipSize, int maxHeadersSize, long requestReadTimeoutMillis, long maxRequestSize, int maxUrlSize, boolean gzipEnabled, Set<String> mimeTypesToGzip) {
             this.minimumGzipSize = minimumGzipSize;
             this.maxHeadersSize = maxHeadersSize;
+            this.requestReadTimeoutMillis = requestReadTimeoutMillis;
+            this.maxRequestSize = maxRequestSize;
             this.maxUrlSize = maxUrlSize;
             this.gzipEnabled = gzipEnabled;
             this.mimeTypesToGzip = mimeTypesToGzip;
@@ -385,7 +400,7 @@ public class MuServerBuilder {
      * Creates a new server builder. Call {@link #withHttpsPort(int)} or {@link #withHttpPort(int)} to specify
      * the port to use, and call {@link #start()} to start the server.
      *
-     * @return A new Mu-Server builder
+     * @return A new Mu Server builder
      */
     public static MuServerBuilder muServer() {
         return new MuServerBuilder();
@@ -394,7 +409,7 @@ public class MuServerBuilder {
     /**
      * Creates a new server builder which will run as HTTP on a random port.
      *
-     * @return A new Mu-Server builder with the HTTP port set to 0
+     * @return A new Mu Server builder with the HTTP port set to 0
      */
     public static MuServerBuilder httpServer() {
         return muServer().withHttpPort(0);
@@ -403,7 +418,7 @@ public class MuServerBuilder {
     /**
      * Creates a new server builder which will run as HTTPS on a random port.
      *
-     * @return A new Mu-Server builder with the HTTPS port set to 0
+     * @return A new Mu Server builder with the HTTPS port set to 0
      */
     public static MuServerBuilder httpsServer() {
         return muServer().withHttpsPort(0);
@@ -420,14 +435,14 @@ public class MuServerBuilder {
             throw new IllegalArgumentException("No ports were configured. Please call MuServerBuilder.withHttpPort(int) or MuServerBuilder.withHttpsPort(int)");
         }
 
-        ServerSettings settings = new ServerSettings(minimumGzipSize, maxHeadersSize, maxUrlSize, gzipEnabled, mimeTypesToGzip);
+        ServerSettings settings = new ServerSettings(minimumGzipSize, maxHeadersSize, idleTimeoutMills, maxRequestSize, maxUrlSize, gzipEnabled, mimeTypesToGzip);
 
         ExecutorService handlerExecutor = this.executor;
         if (handlerExecutor == null) {
             DefaultThreadFactory threadFactory = new DefaultThreadFactory("muhandler");
             handlerExecutor = new ThreadPoolExecutor(8, 200, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(), threadFactory);
         }
-        NettyHandlerAdapter nettyHandlerAdapter = new NettyHandlerAdapter(handlerExecutor, handlers);
+        NettyHandlerAdapter nettyHandlerAdapter = new NettyHandlerAdapter(handlerExecutor, handlers, settings);
 
         NioEventLoopGroup bossGroup = new NioEventLoopGroup(1);
         NioEventLoopGroup workerGroup = new NioEventLoopGroup();
@@ -549,7 +564,7 @@ public class MuServerBuilder {
             p.addLast("compressor", new SelectiveHttpContentCompressor(settings));
         }
         p.addLast("keepalive", new HttpServerKeepAliveHandler());
-        p.addLast("muhandler", new Http1Connection(nettyHandlerAdapter, stats, serverRef, proto));
+        p.addLast("muhandler", new Http1Connection(nettyHandlerAdapter, stats, serverRef, proto, settings));
     }
 
 

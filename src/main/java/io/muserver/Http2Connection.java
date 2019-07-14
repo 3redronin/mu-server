@@ -90,7 +90,7 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
             return;
         }
 
-        final String uri = headers.path().toString();
+        String uri = headers.path().toString();
         if (uri.length() > settings.maxUrlSize) {
             stats.onInvalidRequest();
             sendSimpleResponse(ctx, streamId, "414 Request-URI Too Long", 414);
@@ -103,6 +103,10 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
             long bodyLen = headers.getLong(HeaderNames.CONTENT_LENGTH, -1L);
             if (bodyLen == 0) {
                 hasRequestBody = false;
+            } else if (bodyLen > settings.maxRequestSize) {
+                stats.onInvalidRequest();
+                sendSimpleResponse(ctx, streamId, "413 Payload Too Large", 413);
+                return;
             }
         }
         Http2Headers muHeaders = new Http2Headers(headers, hasRequestBody);

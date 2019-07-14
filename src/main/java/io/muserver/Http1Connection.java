@@ -35,12 +35,14 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
     private final MuStatsImpl stats;
     private final AtomicReference<MuServer> serverRef;
     private final String proto;
+    private final MuServerBuilder.ServerSettings settings;
 
-    Http1Connection(NettyHandlerAdapter nettyHandlerAdapter, MuStatsImpl stats, AtomicReference<MuServer> serverRef, String proto) {
+    Http1Connection(NettyHandlerAdapter nettyHandlerAdapter, MuStatsImpl stats, AtomicReference<MuServer> serverRef, String proto, MuServerBuilder.ServerSettings settings) {
         this.nettyHandlerAdapter = nettyHandlerAdapter;
         this.stats = stats;
         this.serverRef = serverRef;
         this.proto = proto;
+        this.settings = settings;
     }
 
     static void setAsyncContext(ChannelHandlerContext ctx, AsyncContext value) {
@@ -89,12 +91,13 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
                 return false;
             } else {
 
+                String contentLenDecl = request.headers().get("Content-Length");
                 if (HttpUtil.is100ContinueExpected(request)) {
-                    int contentBody = request.headers().getInt("Content-Length", -1);
-                    if (contentBody < Integer.MAX_VALUE) {
-                        // TODO reject if body size too large
+                    long requestBodyLen = contentLenDecl == null ? -1L : Long.parseLong(contentLenDecl, 10);
+                    if (requestBodyLen <= settings.maxRequestSize) {
                         ctx.writeAndFlush(new DefaultFullHttpResponse(HTTP_1_1, HttpResponseStatus.CONTINUE));
                     } else {
+                        stats.onInvalidRequest();
                         sendSimpleResponse(ctx, "417 Expectation Failed", HttpResponseStatus.EXPECTATION_FAILED.code());
                         return true;
                     }
@@ -114,7 +117,7 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
                     sendSimpleResponse(ctx, "405 Method Not Allowed", 405);
                     return true;
                 }
-                final Http1Headers headers = new Http1Headers(request.headers());
+                Http1Headers headers = new Http1Headers(request.headers());
 
                 String relativeUri;
                 try {
@@ -123,6 +126,15 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
                     stats.onInvalidRequest();
                     sendSimpleResponse(ctx, "400 Bad Request", 400);
                     return true;
+                }
+
+                if (contentLenDecl != null) {
+                    long cld = Long.parseLong(contentLenDecl, 10);
+                    if (cld > settings.maxRequestSize) {
+                        stats.onInvalidRequest();
+                        sendSimpleResponse(ctx, "413 Payload Too Large", 413);
+                        return true;
+                    }
                 }
 
                 NettyRequestAdapter muRequest = new NettyRequestAdapter(ctx, ctx.channel(), request, headers, serverRef, method,

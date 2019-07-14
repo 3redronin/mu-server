@@ -25,22 +25,39 @@ class NettyHandlerAdapter {
 
     private static final Logger log = LoggerFactory.getLogger(NettyHandlerAdapter.class);
     private final List<MuHandler> muHandlers;
+    private final MuServerBuilder.ServerSettings settings;
     private final ExecutorService executor;
 
-    NettyHandlerAdapter(ExecutorService executor, List<MuHandler> muHandlers) {
+    NettyHandlerAdapter(ExecutorService executor, List<MuHandler> muHandlers, MuServerBuilder.ServerSettings settings) {
         this.executor = executor;
         this.muHandlers = muHandlers;
+        this.settings = settings;
     }
 
     static void passDataToHandler(ByteBuf data, AsyncContext asyncContext) {
-        if (data.capacity() > 0) {
+        if (data.readableBytes() > 0) {
             data.retain();
-            asyncContext.requestBody.handOff(data, error -> {
+            try {
+                asyncContext.requestBody.handOff(data, error -> {
+                    data.release();
+                    if (error != null) {
+                        asyncContext.onCancelled(false);
+                    }
+                });
+            } catch (Exception e) {
                 data.release();
-                if (error != null) {
-                    asyncContext.onCancelled(false);
+                if (e instanceof MuException) {
+                    MuResponse resp = asyncContext.response;
+                    if (!resp.hasStartedSendingData()) {
+                        resp.status(413);
+                        resp.contentType(ContentTypes.TEXT_PLAIN_UTF8);
+                        resp.headers().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
+                        resp.write("413 Payload Too Large");
+                    } else {
+                        asyncContext.onCancelled(true);
+                    }
                 }
-            });
+            }
         }
     }
 
@@ -49,7 +66,7 @@ class NettyHandlerAdapter {
         NettyRequestAdapter request = (NettyRequestAdapter) muCtx.request;
         if (headers.hasBody()) {
             // There will be a request body, so set the streams
-            GrowableByteBufferInputStream requestBodyStream = new GrowableByteBufferInputStream();
+            GrowableByteBufferInputStream requestBodyStream = new GrowableByteBufferInputStream(settings.requestReadTimeoutMillis, settings.maxRequestSize);
             request.inputStream(requestBodyStream);
             muCtx.requestBody = requestBodyStream;
         }
