@@ -2,6 +2,7 @@ package io.muserver.handlers;
 
 import io.muserver.MuServer;
 import io.muserver.Mutils;
+import okhttp3.Protocol;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
@@ -289,9 +290,13 @@ public class ResourceHandlerTest {
             Map<String, List<String>> headersFromHEAD = resp.headers().toMultimap();
             headersFromHEAD.remove("Date");
             if (expectGzip) {
-                headersFromHEAD.remove("Content-Length");
+                headersFromHEAD.remove("content-length");
+                headersFromHEAD.remove("content-encoding");
                 headersFromGET.remove("transfer-encoding");
-                headersFromGET.remove("vary");
+                if (resp.protocol() != Protocol.HTTP_2) {
+                    headersFromHEAD.remove("vary");
+                    headersFromGET.remove("vary");
+                }
                 assertThat(headersFromHEAD, equalTo(headersFromGET));
             } else {
                 assertThat(headersFromHEAD, equalTo(headersFromGET));
