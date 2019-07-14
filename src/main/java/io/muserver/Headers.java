@@ -281,7 +281,7 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
     /**
      * Gets the parsed <code>Content-Type</code> header value.
      *
-     * @return The media type of the content specified by the headers.
+     * @return The media type of the content specified by the headers, or <code>null</code> if not set.
      */
     MediaType contentType();
 

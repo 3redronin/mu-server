@@ -43,7 +43,6 @@ class Http1Response extends NettyResponseAdaptor {
     }
 
     private void writeHeaders(HttpResponse response) {
-        addVaryHeader();
         HttpHeaders rh = response.headers();
         for (Map.Entry<String, String> header : this.headers) {
             rh.add(header.getKey(), header.getValue());

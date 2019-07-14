@@ -16,9 +16,9 @@ class Http2Response extends NettyResponseAdaptor {
     private final Http2Headers headers;
     private final Http2ConnectionEncoder encoder;
     private final int streamId;
-    private final MuServerBuilder.ServerSettings settings;
+    private final ServerSettings settings;
 
-    Http2Response(ChannelHandlerContext ctx, NettyRequestAdapter request, Http2Headers headers, Http2ConnectionEncoder encoder, int streamId, MuServerBuilder.ServerSettings settings) {
+    Http2Response(ChannelHandlerContext ctx, NettyRequestAdapter request, Http2Headers headers, Http2ConnectionEncoder encoder, int streamId, ServerSettings settings) {
         super(request, headers);
         this.ctx = ctx;
         this.headers = headers;
@@ -67,11 +67,11 @@ class Http2Response extends NettyResponseAdaptor {
     private void writeHeaders(boolean isEnd) {
         headers.entries.status(httpStatus().codeAsText());
 
-        addVaryHeader();
 
         CharSequence enc = Http2Connection.compressionToUse(request.headers());
         if (enc != null && !headers.entries.contains(HeaderNames.CONTENT_ENCODING)) {
             if (settings.shouldCompress(headers.get(HeaderNames.CONTENT_LENGTH), headers.get(HeaderNames.CONTENT_TYPE))) {
+                headers.set(HeaderNames.VARY, getVaryWithAE(headers.get(HeaderNames.VARY)));
                 // By setting the header value, the CompressorHttp2ConnectionEncoder added by the Http2ConnectionBuilder will encode the bytes.
                 // The mu- prefix is what indicates to the compressor that we want to compress it, and MuGzipHttp2ConnectionEncoder removes the mu- prefix.
                 headers.set(HeaderNames.CONTENT_ENCODING, "mu-" + enc);

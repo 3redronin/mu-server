@@ -35,9 +35,9 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
     private final MuStatsImpl stats;
     private final AtomicReference<MuServer> serverRef;
     private final String proto;
-    private final MuServerBuilder.ServerSettings settings;
+    private final ServerSettings settings;
 
-    Http1Connection(NettyHandlerAdapter nettyHandlerAdapter, MuStatsImpl stats, AtomicReference<MuServer> serverRef, String proto, MuServerBuilder.ServerSettings settings) {
+    Http1Connection(NettyHandlerAdapter nettyHandlerAdapter, MuStatsImpl stats, AtomicReference<MuServer> serverRef, String proto, ServerSettings settings) {
         this.nettyHandlerAdapter = nettyHandlerAdapter;
         this.stats = stats;
         this.serverRef = serverRef;

@@ -359,43 +359,6 @@ public class MuServerBuilder {
         return addHandler(Routes.route(method, uriTemplate, handler));
     }
 
-    static class ServerSettings {
-        final long minimumGzipSize;
-        final int maxHeadersSize;
-        final long requestReadTimeoutMillis;
-        final long maxRequestSize;
-        final int maxUrlSize;
-        final boolean gzipEnabled;
-        final Set<String> mimeTypesToGzip;
-
-        ServerSettings(long minimumGzipSize, int maxHeadersSize, long requestReadTimeoutMillis, long maxRequestSize, int maxUrlSize, boolean gzipEnabled, Set<String> mimeTypesToGzip) {
-            this.minimumGzipSize = minimumGzipSize;
-            this.maxHeadersSize = maxHeadersSize;
-            this.requestReadTimeoutMillis = requestReadTimeoutMillis;
-            this.maxRequestSize = maxRequestSize;
-            this.maxUrlSize = maxUrlSize;
-            this.gzipEnabled = gzipEnabled;
-            this.mimeTypesToGzip = mimeTypesToGzip;
-        }
-
-        boolean shouldCompress(String declaredLength, String contentType) {
-            if (!gzipEnabled) {
-                return false;
-            }
-            if (declaredLength != null && Long.parseLong(declaredLength) <= minimumGzipSize) {
-                return false;
-            }
-            if (contentType == null) {
-                return false;
-            }
-            int i = contentType.indexOf(";");
-            if (i > -1) {
-                contentType = contentType.substring(0, i);
-            }
-            return mimeTypesToGzip.contains(contentType.trim());
-        }
-    }
-
     /**
      * Creates a new server builder. Call {@link #withHttpsPort(int)} or {@link #withHttpPort(int)} to specify
      * the port to use, and call {@link #start()} to start the server.
@@ -492,7 +455,7 @@ public class MuServerBuilder {
             }
 
             InetSocketAddress serverAddress = (InetSocketAddress) channels.get(0).localAddress();
-            MuServer server = new MuServerImpl(uri, httpsUri, shutdown, stats, serverAddress, sslContextProvider, http2Enabled);
+            MuServer server = new MuServerImpl(uri, httpsUri, shutdown, stats, serverAddress, sslContextProvider, http2Enabled, settings);
             serverRef.set(server);
             if (addShutdownHook) {
                 Runtime.getRuntime().addShutdownHook(new Thread(server::stop));

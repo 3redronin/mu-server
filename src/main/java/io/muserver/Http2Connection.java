@@ -23,11 +23,11 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
     private final AtomicReference<MuServer> serverRef;
     private final NettyHandlerAdapter nettyHandlerAdapter;
     private final MuStatsImpl stats;
-    private final MuServerBuilder.ServerSettings settings;
+    private final ServerSettings settings;
     private final ConcurrentHashMap<Integer, AsyncContext> contexts = new ConcurrentHashMap<>();
 
     Http2Connection(Http2ConnectionDecoder decoder, Http2ConnectionEncoder encoder,
-                    Http2Settings initialSettings, AtomicReference<MuServer> serverRef, NettyHandlerAdapter nettyHandlerAdapter, MuStatsImpl stats, MuServerBuilder.ServerSettings settings) {
+                    Http2Settings initialSettings, AtomicReference<MuServer> serverRef, NettyHandlerAdapter nettyHandlerAdapter, MuStatsImpl stats, ServerSettings settings) {
         super(decoder, encoder, initialSettings);
         this.serverRef = serverRef;
         this.nettyHandlerAdapter = nettyHandlerAdapter;

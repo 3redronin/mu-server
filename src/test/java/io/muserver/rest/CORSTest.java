@@ -58,7 +58,7 @@ public class CORSTest {
             assertThat(resp.header("Access-Control-Allow-Headers"), is(nullValue()));
             assertThat(resp.header("Access-Control-Expose-Headers"), is("X-PINGOTHER, Content-Type"));
             assertThat(resp.header("Access-Control-Max-Age"), is("500"));
-            assertThat(resp.header("Vary"), is("origin, accept-encoding"));
+            assertThat(resp.header("Vary"), is("origin"));
         }
 
     }
@@ -129,7 +129,7 @@ public class CORSTest {
             assertThat(resp.header("Access-Control-Allow-Headers"), is(nullValue()));
             assertThat(resp.header("Access-Control-Expose-Headers"), is("X-EXPOSED, X-BLAH"));
             assertThat(resp.header("Access-Control-Max-Age"), is(nullValue()));
-            assertThat(resp.header("Vary"), is("origin, accept-encoding"));
+            assertThat(resp.header("Vary"), is("origin"));
         }
 
     }
@@ -162,7 +162,7 @@ public class CORSTest {
             assertThat(resp.header("Access-Control-Allow-Methods"), is(nullValue()));
             assertThat(resp.header("Access-Control-Allow-Headers"), is(nullValue()));
             assertThat(resp.header("Access-Control-Max-Age"), is(nullValue()));
-            assertThat(resp.header("Vary"), is("origin, accept-encoding"));
+            assertThat(resp.header("Vary"), is("origin"));
         }
     }
 
@@ -191,7 +191,7 @@ public class CORSTest {
             assertThat(resp.header("Access-Control-Allow-Methods"), is(nullValue()));
             assertThat(resp.header("Access-Control-Allow-Headers"), is(nullValue()));
             assertThat(resp.header("Access-Control-Max-Age"), is(nullValue()));
-            assertThat(resp.header("Vary"), is("origin, accept-encoding"));
+            assertThat(resp.header("Vary"), is("origin"));
         }
 
     }

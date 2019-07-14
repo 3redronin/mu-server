@@ -25,10 +25,10 @@ class NettyHandlerAdapter {
 
     private static final Logger log = LoggerFactory.getLogger(NettyHandlerAdapter.class);
     private final List<MuHandler> muHandlers;
-    private final MuServerBuilder.ServerSettings settings;
+    private final ServerSettings settings;
     private final ExecutorService executor;
 
-    NettyHandlerAdapter(ExecutorService executor, List<MuHandler> muHandlers, MuServerBuilder.ServerSettings settings) {
+    NettyHandlerAdapter(ExecutorService executor, List<MuHandler> muHandlers, ServerSettings settings) {
         this.executor = executor;
         this.muHandlers = muHandlers;
         this.settings = settings;

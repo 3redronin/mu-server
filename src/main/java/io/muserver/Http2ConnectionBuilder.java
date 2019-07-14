@@ -10,9 +10,9 @@ class Http2ConnectionBuilder
     private final AtomicReference<MuServer> serverRef;
     private final NettyHandlerAdapter nettyHandlerAdapter;
     private final MuStatsImpl stats;
-    private final MuServerBuilder.ServerSettings settings;
+    private final ServerSettings settings;
 
-    Http2ConnectionBuilder(AtomicReference<MuServer> serverRef, NettyHandlerAdapter nettyHandlerAdapter, MuStatsImpl stats, MuServerBuilder.ServerSettings settings) {
+    Http2ConnectionBuilder(AtomicReference<MuServer> serverRef, NettyHandlerAdapter nettyHandlerAdapter, MuStatsImpl stats, ServerSettings settings) {
         this.serverRef = serverRef;
         this.nettyHandlerAdapter = nettyHandlerAdapter;
         this.stats = stats;

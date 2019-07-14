@@ -263,7 +263,7 @@ public class ResourceHandlerTest {
             headersFromGET = resp.headers().toMultimap();
             assertThat(resp.code(), is(200));
             assertThat(resp.header("Content-Type"), is(expectedContentType));
-            assertThat(resp.header("Vary"), is("accept-encoding"));
+            assertThat(resp.header("Vary"), is(expectGzip ? equalTo("accept-encoding") : nullValue()));
             assertThat(resp.body().string(), is(readResource("/sample-static" + urlDecode(relativePath))));
 
             if (expectGzip) {
@@ -288,14 +288,14 @@ public class ResourceHandlerTest {
             assertThat(resp.code(), is(200));
             Map<String, List<String>> headersFromHEAD = resp.headers().toMultimap();
             headersFromHEAD.remove("Date");
-//            if (expectGzip) {
-//                headersFromHEAD.remove("Content-Length");
-//                headersFromGET.remove("transfer-encoding");
-//                assertThat(headersFromHEAD, equalTo(headersFromGET));
-//            } else {
-//                assertThat(headersFromHEAD, equalTo(headersFromGET));
-//            }
-            assertThat(resp.header("Vary"), is("accept-encoding"));
+            if (expectGzip) {
+                headersFromHEAD.remove("Content-Length");
+                headersFromGET.remove("transfer-encoding");
+                headersFromGET.remove("vary");
+                assertThat(headersFromHEAD, equalTo(headersFromGET));
+            } else {
+                assertThat(headersFromHEAD, equalTo(headersFromGET));
+            }
 
             if (!ClientUtils.isHttp2(resp)) {
                 // TODO: this is broken on okhttpclient until https://github.com/square/okhttp/issues/4948 is fixed

@@ -7,6 +7,7 @@ import okhttp3.internal.Util;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.ServerUtils;
+import scaffolding.StringUtils;
 
 import static io.muserver.handlers.CORSHandlerBuilder.corsHandler;
 import static org.hamcrest.Matchers.*;
@@ -26,7 +27,7 @@ public class CORSHandlerTest {
             )
             .start();
         try (Response resp = call(request(server.uri()))) {
-            assertThat(resp.headers("Vary"), contains("origin, accept-encoding"));
+            assertThat(resp.headers("Vary"), contains("origin"));
             assertThat(resp.header("Access-Control-Allow-Origin"), is(nullValue()));
             assertThat(resp.header("Access-Control-Allow-Methods"), is(nullValue()));
             assertThat(resp.header("Access-Control-Max-Age"), is(nullValue()));
@@ -42,6 +43,7 @@ public class CORSHandlerTest {
             .addHandler(corsHandler()
                 .withCORSConfig(CORSHandlerBuilder.config().withAllOriginsAllowed())
             )
+            .addHandler(Method.GET, "/", (req, resp, pp) -> resp.write(StringUtils.randomStringOfLength(10000))) // tripping gzip limit
             .start();
         try (Response resp = call(request(server.uri()).header("Origin", "http://example.org"))) {
             assertThat(resp.headers("Vary"), contains("origin, accept-encoding"));
@@ -70,7 +72,7 @@ public class CORSHandlerTest {
             )
             .start();
         try (Response resp = call(request(server.uri()).post(Util.EMPTY_REQUEST).header("Origin", "http://example.org"))) {
-            assertThat(resp.headers("Vary"), contains("origin, accept-encoding"));
+            assertThat(resp.headers("Vary"), contains("origin"));
             assertThat(resp.header("Access-Control-Allow-Origin"), is("http://example.org"));
             assertThat(resp.header("Access-Control-Allow-Methods"), is("GET, HEAD, OPTIONS, POST"));
             assertThat(resp.header("Access-Control-Max-Age"), is(nullValue()));
@@ -79,7 +81,7 @@ public class CORSHandlerTest {
             assertThat(resp.header("Access-Control-Allow-Credentials"), is("true"));
         }
         try (Response resp = call(request(server.uri()).method("OPTIONS", Util.EMPTY_REQUEST).header("Origin", "http://example.org"))) {
-            assertThat(resp.headers("Vary"), contains("origin, accept-encoding"));
+            assertThat(resp.headers("Vary"), contains("origin"));
             assertThat(resp.header("Access-Control-Allow-Origin"), is("http://example.org"));
             assertThat(resp.header("Access-Control-Allow-Methods"), is("GET, HEAD, OPTIONS, POST"));
             assertThat(resp.header("Access-Control-Max-Age"), is("600"));

@@ -11,9 +11,9 @@ class AlpnHandler extends ApplicationProtocolNegotiationHandler {
     private final MuStatsImpl stats;
     private final AtomicReference<MuServer> serverRef;
     private final String proto;
-    private final MuServerBuilder.ServerSettings settings;
+    private final ServerSettings settings;
 
-    AlpnHandler(NettyHandlerAdapter nettyHandlerAdapter, MuStatsImpl stats, AtomicReference<MuServer> serverRef, String proto, MuServerBuilder.ServerSettings settings) {
+    AlpnHandler(NettyHandlerAdapter nettyHandlerAdapter, MuStatsImpl stats, AtomicReference<MuServer> serverRef, String proto, ServerSettings settings) {
         super(ApplicationProtocolNames.HTTP_1_1);
         this.nettyHandlerAdapter = nettyHandlerAdapter;
         this.stats = stats;

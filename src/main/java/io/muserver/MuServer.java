@@ -6,6 +6,8 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.util.Properties;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 /**
  * A web server handler. Create and start a web server by using {@link MuServerBuilder#httpsServer()} or
@@ -61,6 +63,56 @@ public interface MuServer {
             return "0.x";
         }
     }
+
+    /**
+     * The size a response body must be before GZIP is enabled, if {@link #gzipEnabled()} is true and the mime type is in {@link #mimeTypesToGzip()}
+     * <p>This can only be set at point of server creation with {@link MuServerBuilder#withGzip(long, Set)}</p>
+     * @return Size in bytes.
+     */
+    long minimumGzipSize();
+
+    /**
+     * The maximum allowed size of request headers.
+     * <p>This can only be set at point of server creation with {@link MuServerBuilder#withMaxHeadersSize(int)}</p>
+     * @return Size in bytes.
+     */
+    int maxRequestHeadersSize();
+
+    /**
+     * The maximum idle timeout for reading request bodies.
+     * <p>This can only be set at point of server creation with {@link MuServerBuilder#withIdleTimeout(long, TimeUnit)}</p>
+     * @return Timeout in milliseconds.
+     */
+    long requestIdleTimeoutMillis();
+
+    /**
+     * The maximum allowed size of a request body.
+     * <p>This can only be set at point of server creation with {@link MuServerBuilder#withMaxRequestSize(long)}</p>
+     * @return Size in bytes.
+     */
+    long maxRequestSize();
+
+    /**
+     * The maximum allowed size of the URI sent in a request line.
+     * <p>This can only be set at point of server creation with {@link MuServerBuilder#withMaxUrlSize(int)}</p>
+     * @return Length of allowed URI string.
+     */
+    int maxUrlSize();
+
+    /**
+     * Specifies whether GZIP is on or not.
+     * <p>This can only be set at point of server creation with {@link MuServerBuilder#withGzipEnabled(boolean)} or
+     * {@link MuServerBuilder#withGzip(long, Set)}</p>
+     * @return True if gzip is enabled for responses that match gzip criteria; otherwise false.
+     */
+    boolean gzipEnabled();
+
+    /**
+     * Specifies the mime-types that GZIP should be applied to.
+     * <p>This can only be set at point of server creation with {@link MuServerBuilder#withGzip(long, Set)}</p>
+     * @return A set of mime-types.
+     */
+    Set<String> mimeTypesToGzip();
 
     /**
      * Changes the HTTPS certificate. This can be changed without restarting the server.

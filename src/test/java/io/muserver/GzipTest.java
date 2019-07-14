@@ -9,6 +9,7 @@ import scaffolding.StringUtils;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Collections;
 import java.util.zip.GZIPInputStream;
 
 import static io.muserver.handlers.ResourceHandlerBuilder.classpathHandler;
@@ -40,6 +41,23 @@ public class GzipTest {
             })
             .start();
         compareZippedVsNotZipped("/");
+    }
+
+    @Test
+    public void ifMimeTypesDoNotHaveResponseThenThereIsNoGzipping() throws IOException {
+        server = httpsServerForTest()
+            .withGzip(0, Collections.singleton("text/html"))
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.contentType(ContentTypes.TEXT_PLAIN_UTF8);
+                response.write(LOTS_OF_TEXT);
+            })
+            .start();
+        try (Response resp = call(request(server.uri().resolve("/")).header("Accept-Encoding", "invalid"))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.header("content-encoding"), is(nullValue()));
+            assertThat(resp.header("vary"), is(nullValue()));
+            assertThat(resp.body().string(), equalTo(LOTS_OF_TEXT));
+        }
     }
 
     @Test
