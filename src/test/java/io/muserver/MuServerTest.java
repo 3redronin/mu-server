@@ -393,6 +393,8 @@ public class MuServerTest {
         } catch (StreamResetException e) {
             // HTTP2 will result in a canceled stream
             assertThat(e.errorCode, is(ErrorCode.CANCEL));
+        } catch (IOException e) {
+            // expected on HTTP1
         }
         assertThat(exceptionFromServer.get(10, TimeUnit.SECONDS), instanceOf(Exception.class));
     }
