@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static io.netty.buffer.Unpooled.EMPTY_BUFFER;
 import static io.netty.buffer.Unpooled.copiedBuffer;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
@@ -25,6 +26,7 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
     private final MuStatsImpl stats;
     private final ServerSettings settings;
     private final ConcurrentHashMap<Integer, AsyncContext> contexts = new ConcurrentHashMap<>();
+    private volatile int lastStreamId = 0;
 
     Http2Connection(Http2ConnectionDecoder decoder, Http2ConnectionEncoder encoder,
                     Http2Settings initialSettings, AtomicReference<MuServer> serverRef, NettyHandlerAdapter nettyHandlerAdapter, MuStatsImpl stats, ServerSettings settings) {
@@ -37,10 +39,13 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        closeAllAndDisconnect(ctx);
+        closeAllAndDisconnect(ctx, Http2Error.INTERNAL_ERROR);
     }
 
-    private void closeAllAndDisconnect(ChannelHandlerContext ctx) {
+    private void closeAllAndDisconnect(ChannelHandlerContext ctx, Http2Error error) {
+        if (error != null) {
+            encoder().writeGoAway(ctx, lastStreamId, error.code(), EMPTY_BUFFER, ctx.channel().newPromise());
+        }
         for (AsyncContext asyncContext : contexts.values()) {
             asyncContext.onCancelled(true);
         }
@@ -79,6 +84,7 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
     @Override
     public void onHeadersRead(ChannelHandlerContext ctx, int streamId,
                               io.netty.handler.codec.http2.Http2Headers headers, int padding, boolean endOfStream) {
+        lastStreamId = streamId;
 
         HttpMethod nettyMeth = HttpMethod.valueOf(headers.method().toString().toUpperCase());
         Method muMethod;
@@ -194,7 +200,7 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
 
     @Override
     public void onGoAwayRead(ChannelHandlerContext ctx, int lastStreamId, long errorCode, ByteBuf debugData) {
-        closeAllAndDisconnect(ctx);
+        closeAllAndDisconnect(ctx, null);
     }
 
     @Override
@@ -209,7 +215,7 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
     @Override
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
         if (evt instanceof IdleStateEvent) {
-            closeAllAndDisconnect(ctx);
+            closeAllAndDisconnect(ctx, Http2Error.NO_ERROR);
         }
     }
 }

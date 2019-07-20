@@ -2,6 +2,8 @@ package io.muserver;
 
 import okhttp3.RequestBody;
 import okhttp3.Response;
+import okhttp3.internal.http2.ErrorCode;
+import okhttp3.internal.http2.StreamResetException;
 import org.junit.*;
 import scaffolding.MuAssert;
 import scaffolding.RawClient;
@@ -345,9 +347,8 @@ public class MuServerTest {
 
     @Test
     public void idleTimeoutCanBeConfiguredAnd408ReturnedIfResponseNotStarted() throws Exception {
-        // TODO think about this more for http2
         CompletableFuture<Throwable> exceptionFromServer = new CompletableFuture<>();
-        server = httpServer()
+        server = ServerUtils.httpsServerForTest()
             .withIdleTimeout(100, TimeUnit.MILLISECONDS)
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 Thread.sleep(125);
@@ -359,16 +360,19 @@ public class MuServerTest {
             })
             .start();
         try (Response resp = call(request(server.uri()))) {
-            assertThat(resp.code(), is(408));
+            assertThat(resp.code(), is(408)); // HTTP1
+        } catch (Exception e) {
+            // HTTP2 will result in a canceled stream
+            assertThat(e.getCause(), instanceOf(StreamResetException.class));
+            assertThat(((StreamResetException)e.getCause()).errorCode, is(ErrorCode.CANCEL));
         }
         assertThat(exceptionFromServer.get(10, TimeUnit.SECONDS), instanceOf(Exception.class));
     }
 
     @Test
     public void idleTimeoutCanBeConfiguredAndConnectionClosedIfAlreadyStarted() throws Exception {
-        // TODO think about this more for http2
         CompletableFuture<Throwable> exceptionFromServer = new CompletableFuture<>();
-        server = httpServer()
+        server = ServerUtils.httpsServerForTest()
             .withIdleTimeout(200, TimeUnit.MILLISECONDS)
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.sendChunk("Hi");
@@ -386,8 +390,9 @@ public class MuServerTest {
             assertThat(resp.code(), is(200));
             resp.body().string();
             Assert.fail("Body should not be readable");
-        } catch (IOException ex) {
-            // expected
+        } catch (StreamResetException e) {
+            // HTTP2 will result in a canceled stream
+            assertThat(e.errorCode, is(ErrorCode.CANCEL));
         }
         assertThat(exceptionFromServer.get(10, TimeUnit.SECONDS), instanceOf(Exception.class));
     }
