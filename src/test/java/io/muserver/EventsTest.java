@@ -10,7 +10,6 @@ import scaffolding.ServerUtils;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
@@ -22,10 +21,10 @@ public class EventsTest {
     private MuServer server;
 
     @Test
-    public void canBeAlertedWhenResponseCompletes() {
-        AtomicReference<ResponseInfo> received = new AtomicReference<>(null);
+    public void canBeAlertedWhenResponseCompletes() throws Exception {
+        CompletableFuture<ResponseInfo> received = new CompletableFuture<>();
         server = ServerUtils.httpsServerForTest()
-            .addResponseCompleteListener(received::set)
+            .addResponseCompleteListener(received::complete)
             .addHandler(Method.GET, "/blah", (req, resp, pp) -> {
                 resp.headers().set("Hello", "World");
                 resp.status(400);
@@ -35,7 +34,7 @@ public class EventsTest {
         try (Response resp = call(request(server.uri().resolve("/blah")))) {
             assertThat(resp.code(), is(400));
         }
-        ResponseInfo info = received.get();
+        ResponseInfo info = received.get(10, TimeUnit.SECONDS);
         assertThat(info, notNullValue());
         assertThat(info.duration(), greaterThan(-1L));
         assertThat(info.completedSuccessfully(), is(true));

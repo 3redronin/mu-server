@@ -362,14 +362,16 @@ public class MuServerBuilder {
 
     /**
      * Adds a listener that is notified when each response completes
-     * @param listener A listener
+     * @param listener A listener. If null, then nothing is added.
      * @return Returns the server builder
      */
     public MuServerBuilder addResponseCompleteListener(ResponseCompleteListener listener) {
-        if (this.responseCompleteListeners == null) {
-            this.responseCompleteListeners = new ArrayList<>();
+        if (listener != null) {
+            if (this.responseCompleteListeners == null) {
+                this.responseCompleteListeners = new ArrayList<>();
+            }
+            this.responseCompleteListeners.add(listener);
         }
-        this.responseCompleteListeners.add(listener);
         return this;
     }
 
