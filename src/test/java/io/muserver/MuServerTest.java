@@ -123,18 +123,21 @@ public class MuServerTest {
     @Test
     public void ifBoundToLocalhostThenExternalAccessIsNotPossible() {
         Assume.assumeNotNull(hostname);
+        Assume.assumeThat(hostname, not(equalTo("localhost")));
 
+        for (String host : asList("127.0.0.1", "localhost")) {
             MuServer server = ServerUtils.httpsServerForTest()
-                .withInterface("localhost")
+                .withInterface(host)
                 .addHandler(Method.GET, "/", (req, resp, pp) -> resp.write("Hello"))
                 .start();
             try (Response ignored = call(request().url("https://" + hostname + ":" + server.uri().getPort()))) {
-                Assert.fail("Should have failed to call " + hostname + " when bound to " + "localhost" + " via " + server.uri());
+                Assert.fail("Should have failed to call");
             } catch (RuntimeException rex) {
                 assertThat(rex.getCause(), instanceOf(ConnectException.class));
             } finally {
                 server.stop();
             }
+        }
     }
 
     @Test
