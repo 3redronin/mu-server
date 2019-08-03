@@ -11,7 +11,6 @@ import scaffolding.ServerUtils;
 
 import java.io.File;
 import java.io.IOException;
-import java.net.ConnectException;
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -117,26 +116,6 @@ public class MuServerTest {
             assertThat(resp.body().string(), equalTo("This is a test and this is the state: "
                 + randomText + " and this does not exist: null"));
             assertThat(handlersHit, equalTo(asList("Logger", "BlahHandler")));
-        }
-    }
-
-    @Test
-    public void ifBoundToLocalhostThenExternalAccessIsNotPossible() {
-        Assume.assumeNotNull(hostname);
-        Assume.assumeThat(hostname, not(equalTo("localhost")));
-
-        for (String host : asList("127.0.0.1", "localhost")) {
-            MuServer server = ServerUtils.httpsServerForTest()
-                .withInterface(host)
-                .addHandler(Method.GET, "/", (req, resp, pp) -> resp.write("Hello"))
-                .start();
-            try (Response ignored = call(request().url("https://" + hostname + ":" + server.uri().getPort()))) {
-                Assert.fail("Should have failed to call " + hostname + " when bound to " + host);
-            } catch (RuntimeException rex) {
-                assertThat(rex.getCause(), instanceOf(ConnectException.class));
-            } finally {
-                server.stop();
-            }
         }
     }
 
