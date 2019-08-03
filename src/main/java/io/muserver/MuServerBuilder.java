@@ -56,6 +56,7 @@ public class MuServerBuilder {
     private long idleTimeoutMills = TimeUnit.MINUTES.toMillis(5);
     private ExecutorService executor;
     private long maxRequestSize = 24 * 1024 * 1024;
+    private List<ResponseCompleteListener> responseCompleteListeners;
 
     /**
      * @param port The HTTP port to use. A value of 0 will have a random port assigned; a value of -1 will
@@ -360,6 +361,19 @@ public class MuServerBuilder {
     }
 
     /**
+     * Adds a listener that is notified when each response completes
+     * @param listener A listener
+     * @return Returns the server builder
+     */
+    public MuServerBuilder addResponseCompleteListener(ResponseCompleteListener listener) {
+        if (this.responseCompleteListeners == null) {
+            this.responseCompleteListeners = new ArrayList<>();
+        }
+        this.responseCompleteListeners.add(listener);
+        return this;
+    }
+
+    /**
      * Creates a new server builder. Call {@link #withHttpsPort(int)} or {@link #withHttpPort(int)} to specify
      * the port to use, and call {@link #start()} to start the server.
      *
@@ -405,7 +419,7 @@ public class MuServerBuilder {
             DefaultThreadFactory threadFactory = new DefaultThreadFactory("muhandler");
             handlerExecutor = new ThreadPoolExecutor(8, 200, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(), threadFactory);
         }
-        NettyHandlerAdapter nettyHandlerAdapter = new NettyHandlerAdapter(handlerExecutor, handlers, settings);
+        NettyHandlerAdapter nettyHandlerAdapter = new NettyHandlerAdapter(handlerExecutor, handlers, settings, responseCompleteListeners);
 
         NioEventLoopGroup bossGroup = new NioEventLoopGroup(1);
         NioEventLoopGroup workerGroup = new NioEventLoopGroup();
@@ -529,6 +543,5 @@ public class MuServerBuilder {
         p.addLast("keepalive", new HttpServerKeepAliveHandler());
         p.addLast("muhandler", new Http1Connection(nettyHandlerAdapter, stats, serverRef, proto, settings));
     }
-
 
 }

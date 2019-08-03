@@ -123,8 +123,8 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
         stats.onRequestStarted(muReq);
         Http2Response resp = new Http2Response(ctx, muReq, new Http2Headers(), encoder(), streamId, settings);
 
-        AsyncContext asyncContext = new AsyncContext(muReq, resp, () -> {
-            stats.onRequestEnded(muReq);
+        AsyncContext asyncContext = new AsyncContext(muReq, resp, (info) -> {
+            nettyHandlerAdapter.onResponseComplete(info, stats);
             contexts.remove(streamId);
         });
 

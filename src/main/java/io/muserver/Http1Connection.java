@@ -143,7 +143,9 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
 
                 Http1Response muResponse = new Http1Response(ctx, muRequest, new Http1Headers());
 
-                AsyncContext asyncContext = new AsyncContext(muRequest, muResponse, () -> stats.onRequestEnded(muRequest));
+                AsyncContext asyncContext = new AsyncContext(muRequest, muResponse, (info) -> {
+                    nettyHandlerAdapter.onResponseComplete(info, stats);
+                });
                 setAsyncContext(ctx, asyncContext);
                 readyToRead = false;
                 DoneCallback addedToExecutorCallback = error -> {

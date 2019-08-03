@@ -31,6 +31,11 @@ public interface MuRequest {
     String contentType();
 
     /**
+     * @return The time as epoch millis when this request object was created.
+     */
+    long startTime();
+
+    /**
      * @return The request method, e.g. GET or POST
      */
     Method method();

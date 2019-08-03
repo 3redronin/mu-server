@@ -61,6 +61,7 @@ class NettyRequestAdapter implements MuRequest {
     private volatile AsyncHandleImpl asyncHandle;
     private final boolean keepalive;
     private final String protocol;
+    private final long startTime = System.currentTimeMillis();
 
     NettyRequestAdapter(ChannelHandlerContext ctx, Channel channel, HttpRequest request, Headers headers, AtomicReference<MuServer> serverRef, Method method, String proto, String uri, boolean keepalive, String host, String protocol) {
         this.ctx = ctx;
@@ -116,6 +117,11 @@ class NettyRequestAdapter implements MuRequest {
             return c.split(";")[0];
         }
         return c;
+    }
+
+    @Override
+    public long startTime() {
+        return this.startTime;
     }
 
     public Method method() {

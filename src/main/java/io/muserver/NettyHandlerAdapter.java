@@ -27,11 +27,13 @@ class NettyHandlerAdapter {
     private final List<MuHandler> muHandlers;
     private final ServerSettings settings;
     private final ExecutorService executor;
+    private final List<ResponseCompleteListener> completeListeners;
 
-    NettyHandlerAdapter(ExecutorService executor, List<MuHandler> muHandlers, ServerSettings settings) {
+    NettyHandlerAdapter(ExecutorService executor, List<MuHandler> muHandlers, ServerSettings settings, List<ResponseCompleteListener> completeListeners) {
         this.executor = executor;
         this.muHandlers = muHandlers;
         this.settings = settings;
+        this.completeListeners = completeListeners;
     }
 
     static void passDataToHandler(ByteBuf data, AsyncContext asyncContext) {
@@ -165,4 +167,16 @@ class NettyHandlerAdapter {
         }
     }
 
+    void onResponseComplete(ResponseInfo info, MuStatsImpl stats) {
+        stats.onRequestEnded(info.request());
+        if (completeListeners != null) {
+            for (ResponseCompleteListener listener : completeListeners) {
+                try {
+                    listener.onComplete(info);
+                } catch (Exception e) {
+                    log.error("Error from completion listener", e);
+                }
+            }
+        }
+    }
 }
