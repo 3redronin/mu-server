@@ -1,8 +1,6 @@
 package io.muserver.rest;
 
-import io.muserver.AsyncHandle;
-import io.muserver.HeaderNames;
-import io.muserver.Mutils;
+import io.muserver.*;
 import io.netty.util.concurrent.DefaultThreadFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,7 +18,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
-class AsyncResponseAdapter implements AsyncResponse, AsyncHandle.ResponseCompletedListener {
+class AsyncResponseAdapter implements AsyncResponse, ResponseCompleteListener {
     private static final Logger log = LoggerFactory.getLogger(AsyncResponseAdapter.class);
 
     private static ScheduledExecutorService ses = Executors.newSingleThreadScheduledExecutor(new DefaultThreadFactory("mutimeoutwatcher"));
@@ -42,7 +40,7 @@ class AsyncResponseAdapter implements AsyncResponse, AsyncHandle.ResponseComplet
         isCancelled = false;
         isDone = false;
         this.resultConsumer = resultConsumer;
-        asyncHandle.setResponseCompletedHandler(this);
+        asyncHandle.setResponseCompleteHandler(this);
     }
 
     @Override
@@ -181,8 +179,8 @@ class AsyncResponseAdapter implements AsyncResponse, AsyncHandle.ResponseComplet
     }
 
     @Override
-    public void onComplete(boolean responseWasCompleted) {
-        if (!responseWasCompleted) {
+    public void onComplete(ResponseInfo info) {
+        if (!info.completedSuccessfully()) {
             for (ConnectionCallback connectionCallback : connectionCallbacks) {
                 try {
                     connectionCallback.onDisconnect(this);

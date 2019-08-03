@@ -50,8 +50,8 @@ public class AsyncContext implements ResponseInfo {
 
     void onCancelled(boolean forceDisconnect) {
         boolean wasCompleted = isComplete();
-        ((NettyRequestAdapter) request).onCancelled(wasCompleted);
         ((NettyResponseAdaptor) response).onCancelled();
+        ((NettyRequestAdapter) request).onCancelled();
         if (!wasCompleted) {
             complete(forceDisconnect);
         }

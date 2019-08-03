@@ -298,7 +298,7 @@ class NettyRequestAdapter implements MuRequest {
         if (isAsync()) {
             throw new IllegalStateException("handleAsync called twice for " + this);
         }
-        asyncHandle = new AsyncHandleImpl(this);
+        asyncHandle = new AsyncHandleImpl(this, nettyAsyncContext);
         return asyncHandle;
     }
 
@@ -395,16 +395,16 @@ class NettyRequestAdapter implements MuRequest {
     void clean() {
         state(null);
         if (multipartRequestDecoder != null) {
-            // need to clear the datas before destorying. See https://github.com/netty/netty/issues/7814#issuecomment-397855311
+            // need to clear the datas before destroying. See https://github.com/netty/netty/issues/7814#issuecomment-397855311
             multipartRequestDecoder.getBodyHttpDatas().clear();
             multipartRequestDecoder.destroy();
             multipartRequestDecoder = null;
         }
     }
 
-    void onCancelled(boolean complete) {
+    void onCancelled() {
         if (asyncHandle != null) {
-            asyncHandle.onClientDisconnected(complete);
+            asyncHandle.onClientDisconnected();
         }
     }
 
@@ -448,10 +448,12 @@ class NettyRequestAdapter implements MuRequest {
     private static class AsyncHandleImpl implements AsyncHandle {
 
         private final NettyRequestAdapter request;
-        private ResponseCompletedListener responseCompletedListener;
+        private final AsyncContext asyncContext;
+        private ResponseCompleteListener responseCompleteListener;
 
-        private AsyncHandleImpl(NettyRequestAdapter request) {
+        private AsyncHandleImpl(NettyRequestAdapter request, AsyncContext asyncContext) {
             this.request = request;
+            this.asyncContext = asyncContext;
         }
 
         @Override
@@ -520,14 +522,24 @@ class NettyRequestAdapter implements MuRequest {
         }
 
         @Override
-        public void setResponseCompletedHandler(ResponseCompletedListener responseCompletedListener) {
-            this.responseCompletedListener = responseCompletedListener;
+        public void setResponseCompleteHandler(ResponseCompleteListener responseCompleteListener) {
+            this.responseCompleteListener = responseCompleteListener;
+
         }
 
-        void onClientDisconnected(boolean complete) {
-            ResponseCompletedListener listener = this.responseCompletedListener;
+        @Override
+        public void setResponseCompletedHandler(ResponseCompletedListener responseCompletedListener) {
+            if (responseCompletedListener == null) {
+                this.responseCompleteListener = null;
+            } else {
+                this.responseCompleteListener = info -> responseCompletedListener.onComplete(info.completedSuccessfully());
+            }
+        }
+
+        void onClientDisconnected() {
+            ResponseCompleteListener listener = this.responseCompleteListener;
             if (listener != null) {
-                listener.onComplete(complete);
+                listener.onComplete(asyncContext);
             }
         }
     }
