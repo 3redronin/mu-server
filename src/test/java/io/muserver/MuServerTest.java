@@ -130,7 +130,7 @@ public class MuServerTest {
                 .addHandler(Method.GET, "/", (req, resp, pp) -> resp.write("Hello"))
                 .start();
             try (Response ignored = call(request().url("https://" + hostname + ":" + server.uri().getPort()))) {
-                Assert.fail("Should have failed to call " + host);
+                Assert.fail("Should have failed to call " + hostname + " when bound to " + host);
             } catch (RuntimeException rex) {
                 assertThat(rex.getCause(), instanceOf(ConnectException.class));
             } finally {
