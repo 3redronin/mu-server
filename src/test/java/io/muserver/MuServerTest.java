@@ -331,7 +331,7 @@ public class MuServerTest {
         server = ServerUtils.httpsServerForTest()
             .withIdleTimeout(100, TimeUnit.MILLISECONDS)
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
-                Thread.sleep(125);
+                Thread.sleep(200);
                 try {
                     response.write("Hmmm");
                 } catch (Throwable e) {
@@ -346,7 +346,7 @@ public class MuServerTest {
             assertThat(e.getCause(), instanceOf(StreamResetException.class));
             assertThat(((StreamResetException)e.getCause()).errorCode, is(ErrorCode.CANCEL));
         }
-        assertThat(exceptionFromServer.get(10, TimeUnit.SECONDS), instanceOf(Exception.class));
+        assertThat(exceptionFromServer.get(20, TimeUnit.SECONDS), instanceOf(Exception.class));
     }
 
     @Test
