@@ -35,12 +35,7 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
         this.nettyHandlerAdapter = nettyHandlerAdapter;
         this.stats = stats;
         this.settings = settings;
-    }
-
-    @Override
-    public void channelActive(ChannelHandlerContext ctx) throws Exception {
         stats.onConnectionOpened();
-        super.channelActive(ctx);
     }
 
     @Override
