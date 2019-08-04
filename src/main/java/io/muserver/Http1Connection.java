@@ -51,10 +51,15 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
 
     @Override
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
-        stats.onConnectionOpened();
         ctx.channel().config().setAutoRead(false);
         ctx.read();
         super.channelActive(ctx);
+    }
+
+    @Override
+    public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
+        stats.onConnectionOpened();
+        super.handlerAdded(ctx);
     }
 
     @Override

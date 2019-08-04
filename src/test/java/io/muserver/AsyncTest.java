@@ -152,7 +152,7 @@ public class AsyncTest {
         }
 
         assertThat(connectionsDuringListening.get(), is(1L));
-        assertThat(server.stats().activeConnections(), is(0L));
+        assertThat(server.stats().activeRequests().size(), is(0));
         assertThat(server.stats().completedRequests(), is(1L));
     }
 
