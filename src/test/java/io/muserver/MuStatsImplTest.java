@@ -28,11 +28,11 @@ public class MuStatsImplTest {
 
         try (Response resp = call(request(server.uri()))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.body().string(), startsWith("Completed requests: 0; active: 1; invalid requests: 0;"));
+            assertThat(resp.body().string(), startsWith("Active requests: 1; completed requests: 0; active connections: 1; completed connections: 0; invalid requests: 0;"));
         }
         try (Response resp = call(request(server.uri()))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.body().string(), startsWith("Completed requests: 1; active: 1; invalid requests: 0;"));
+            assertThat(resp.body().string(), startsWith("Active requests: 1; completed requests: 1; active connections: 1; completed connections: 0; invalid requests: 0;"));
         }
 
     }

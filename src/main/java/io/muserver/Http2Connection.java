@@ -38,6 +38,18 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
     }
 
     @Override
+    public void channelActive(ChannelHandlerContext ctx) throws Exception {
+        stats.onConnectionOpened();
+        super.channelActive(ctx);
+    }
+
+    @Override
+    public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+        stats.onConnectionClosed();
+        super.channelInactive(ctx);
+    }
+
+    @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         closeAllAndDisconnect(ctx, Http2Error.INTERNAL_ERROR);
     }

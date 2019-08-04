@@ -9,12 +9,17 @@ import java.util.concurrent.ExecutorService;
 public interface MuStats {
 
     /**
+     * @return The total number of connections that have been closed since the server started (excludes {@link #activeConnections()}
+     */
+    long completedConnections();
+
+    /**
      * @return The number of open TCP connections.
      */
     long activeConnections();
 
     /**
-     * @return The number of completed requests.
+     * @return The number of completed requests (excludes {@link #activeRequests()}
      */
     long completedRequests();
 

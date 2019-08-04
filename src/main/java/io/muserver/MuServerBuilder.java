@@ -419,7 +419,7 @@ public class MuServerBuilder {
         ExecutorService handlerExecutor = this.executor;
         if (handlerExecutor == null) {
             DefaultThreadFactory threadFactory = new DefaultThreadFactory("muhandler");
-            handlerExecutor = new ThreadPoolExecutor(8, 200, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(), threadFactory);
+            handlerExecutor = new ThreadPoolExecutor(8, 400, 60, TimeUnit.SECONDS, new SynchronousQueue<>(), threadFactory);
         }
         NettyHandlerAdapter nettyHandlerAdapter = new NettyHandlerAdapter(handlerExecutor, handlers, settings, responseCompleteListeners);
 

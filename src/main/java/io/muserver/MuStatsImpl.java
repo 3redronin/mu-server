@@ -8,6 +8,8 @@ import java.util.concurrent.atomic.AtomicLong;
 
 class MuStatsImpl implements MuStats {
     private final TrafficCounter trafficCounter;
+    private final AtomicLong activeConnections = new AtomicLong(0);
+    private final AtomicLong totalConnections = new AtomicLong(0);
     private final AtomicLong completedRequests = new AtomicLong(0);
     private final AtomicLong invalidHttpRequests = new AtomicLong(0);
     private final AtomicLong rejectedDueToOverload = new AtomicLong(0);
@@ -19,8 +21,13 @@ class MuStatsImpl implements MuStats {
     }
 
     @Override
+    public long completedConnections() {
+        return totalConnections.get();
+    }
+
+    @Override
     public long activeConnections() {
-        return activeRequests.size();
+        return activeConnections.get();
     }
 
     @Override
@@ -80,9 +87,19 @@ class MuStatsImpl implements MuStats {
         failedToConnect.incrementAndGet();
     }
 
+    void onConnectionOpened() {
+        activeConnections.incrementAndGet();
+    }
+
+    void onConnectionClosed() {
+        activeConnections.decrementAndGet();
+        totalConnections.incrementAndGet();
+    }
+
     @Override
     public String toString() {
-        return "Completed requests: " + completedRequests() + "; active: " + activeConnections() +
+        return "Active requests: " + activeRequests().size() + "; completed requests: " + completedRequests() +
+            "; active connections: " + activeConnections() + "; completed connections: " + completedConnections() +
             "; invalid requests: " + invalidHttpRequests() + "; bytes received: " + bytesRead() +
             "; bytes sent: " + bytesSent() + "; rejected: " + rejectedDueToOverload() +
             "; connectionFailured: " + failedToConnect();

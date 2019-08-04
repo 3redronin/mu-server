@@ -51,6 +51,7 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
 
     @Override
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
+        stats.onConnectionOpened();
         ctx.channel().config().setAutoRead(false);
         ctx.read();
         super.channelActive(ctx);
@@ -58,6 +59,7 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+        stats.onConnectionClosed();
         AsyncContext asyncContext = getAsyncContext(ctx);
         if (asyncContext != null) {
             asyncContext.onCancelled(true);
