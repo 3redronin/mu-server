@@ -329,7 +329,7 @@ This applies to the types allowed using `@Context` in method parameters.
 This refers to the types of objects that are injectable as method parameters via
 the `@Context` annotation.
 
-Sections below describe the types required by the spec. Mu-Servers implementation also
+Sections below describe the types required by the spec. Mu-Server's implementation also
 allows injection of `MuRequest`, `MuResponse` and `ContainerRequestContext`.
 
 #### 10.2.1 Application 
@@ -377,6 +377,6 @@ None of this section is applicable to MuServer as it does not manage your server
 
 The following are not described by the spec but are interfaces defined in the jax-rs spec API that need to be implemented.
 
-- [x] `UriBilder`
+- [x] `UriBuilder`
 - [x] `Link`
 - [ ] `VariantListBuilder`
