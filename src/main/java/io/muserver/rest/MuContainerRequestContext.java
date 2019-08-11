@@ -94,7 +94,7 @@ class MuContainerRequestContext implements ContainerRequestContext {
         return jaxRequest.getMethod();
     }
 
-    public Method getMuMethod() {
+    Method getMuMethod() {
         return Method.valueOf(getMethod());
     }
 

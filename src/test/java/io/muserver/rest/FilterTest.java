@@ -11,6 +11,7 @@ import scaffolding.ServerUtils;
 
 import javax.ws.rs.*;
 import javax.ws.rs.container.*;
+import javax.ws.rs.core.Context;
 import javax.ws.rs.core.NewCookie;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -144,6 +145,7 @@ public class FilterTest {
                 public MediaType contentType() {
                     return MediaType.parse("text/plain");
                 }
+
                 public void writeTo(BufferedSink sink) throws IOException {
                     sink.writeUtf8("Hello there");
                 }
@@ -243,6 +245,35 @@ public class FilterTest {
             assertThat(resp.code(), is(400));
             assertThat(resp.header("Content-Type"), is("text/plain;charset=utf-8"));
             assertThat(resp.body().string(), is("12"));
+        }
+    }
+
+    @Test
+    public void theContainerRequestContextCanBeAccessedFromRestMethods() throws IOException {
+        @Path("something")
+        class TheWay {
+            @GET
+            @Produces("text/plain")
+            public String itMoves(@Context ContainerRequestContext reqContext) {
+                return reqContext.getProperty("one") + " "
+                    + reqContext.getProperty("two") + " " + reqContext.getProperty("three") + " " + reqContext.getProperty("four");
+            }
+        }
+
+        MuServer server = ServerUtils.httpsServerForTest()
+            .addHandler(
+                restHandler(new TheWay())
+                    .addRequestFilter(requestContext -> {
+                        requestContext.setProperty("one", "oneandtwoprop");
+                        requestContext.setProperty("two", requestContext.getProperty("one"));
+                        requestContext.setProperty("three", "temp");
+                    })
+                    .addRequestFilter(requestContext -> {
+                        requestContext.removeProperty("three");
+                    })
+            ).start();
+        try (Response resp = call(request().url(server.uri().resolve("/something").toString()))) {
+            assertThat(resp.body().string(), is("oneandtwoprop oneandtwoprop null null"));
         }
     }
 

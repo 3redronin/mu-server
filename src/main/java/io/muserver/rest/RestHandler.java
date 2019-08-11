@@ -8,6 +8,7 @@ import javax.ws.rs.BadRequestException;
 import javax.ws.rs.NotAllowedException;
 import javax.ws.rs.ServerErrorException;
 import javax.ws.rs.WebApplicationException;
+import javax.ws.rs.container.ContainerRequestContext;
 import javax.ws.rs.core.*;
 import javax.ws.rs.ext.MessageBodyReader;
 import javax.ws.rs.ext.MessageBodyWriter;
@@ -288,6 +289,8 @@ public class RestHandler implements MuHandler {
         } else if (type.equals(SseEventSink.class)) {
             AsyncSsePublisher pub = AsyncSsePublisher.start(requestContext.muRequest, muResponse);
             return new JaxSseEventSinkImpl(pub, muResponse, providers);
+        } else if (type.equals(ContainerRequestContext.class)) {
+            return requestContext;
         } else {
             throw new ServerErrorException("MuServer does not support @Context parameters with type " + type, 500);
         }

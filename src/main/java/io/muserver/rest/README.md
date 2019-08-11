@@ -330,7 +330,7 @@ This refers to the types of objects that are injectable as method parameters via
 the `@Context` annotation.
 
 Sections below describe the types required by the spec. Mu-Servers implementation also
-allows injection of `MuRequest` and `MuResponse`.
+allows injection of `MuRequest`, `MuResponse` and `ContainerRequestContext`.
 
 #### 10.2.1 Application 
 
