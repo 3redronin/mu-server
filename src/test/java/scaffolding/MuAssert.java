@@ -1,6 +1,8 @@
 package scaffolding;
 
 import io.muserver.MuServer;
+import org.hamcrest.Matcher;
+import org.junit.Assert;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -44,5 +46,31 @@ public class MuAssert {
                 server.stats().activeRequests(), is(empty()));
             server.stop();
         }
+    }
+
+    public static <T> void assertEventually(Func<T> actual, Matcher<? super T> matcher) {
+        for (int i = 0; i < 100; i++) {
+            try {
+                T val = actual.apply();
+                if (matcher.matches(val)) {
+                    return;
+                }
+            } catch (Exception ignored) {
+            }
+            try {
+                Thread.sleep(200);
+            } catch (InterruptedException e) {
+                throw new RuntimeException("Finishing early", e);
+            }
+        }
+        try {
+            assertThat(actual.apply(), matcher);
+        } catch (Exception e) {
+            Assert.fail("Lambda threw exception: " + e);
+        }
+    }
+
+    public interface Func<V> {
+        public V apply() throws Exception;
     }
 }

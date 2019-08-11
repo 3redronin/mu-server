@@ -3,6 +3,7 @@ package io.muserver;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
+import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 
 import java.io.IOException;
@@ -30,6 +31,9 @@ public class MuStatsImplTest {
             assertThat(resp.code(), is(200));
             assertThat(resp.body().string(), startsWith("Active requests: 1; completed requests: 0; active connections: 1; completed connections: 0; invalid requests: 0;"));
         }
+
+        MuAssert.assertEventually(() -> server.stats().completedRequests(), is(1L));
+
         try (Response resp = call(request(server.uri()))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.body().string(), startsWith("Active requests: 1; completed requests: 1; active connections: 1; completed connections: 0; invalid requests: 0;"));
