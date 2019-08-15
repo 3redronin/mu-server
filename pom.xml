@@ -6,7 +6,7 @@
 
     <groupId>io.muserver</groupId>
     <artifactId>mu-server</artifactId>
-    <version>0.37-SNAPSHOT</version>
+    <version>0.38-SNAPSHOT</version>
 
     <name>mu-server</name>
     <description>A simple but powerful web server framework</description>
@@ -14,7 +14,7 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <netty.version>4.1.38.Final</netty.version>
+        <netty.version>4.1.39.Final</netty.version>
     </properties>
 
     <scm>
