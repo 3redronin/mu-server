@@ -78,7 +78,7 @@ public class ResourceType {
         Headers.http2Headers()
             .add(HeaderNames.CACHE_CONTROL, "max-age=86400")
             .add(HeaderNames.X_CONTENT_TYPE_OPTIONS, HeaderValues.NOSNIFF),
-        true, singletonList("js"));
+        true, asList("js", "mjs"));
     public static final ResourceType APPLICATION_JSON = new ResourceType(ContentTypes.APPLICATION_JSON, noCache(), true, singletonList("json"));
     public static final ResourceType WEB_APP_MANIFEST = new ResourceType(ContentTypes.WEB_APP_MANIFEST, Headers.http2Headers()
         .add(HeaderNames.CACHE_CONTROL, "max-age=300"), true, singletonList("webmanifest"));
