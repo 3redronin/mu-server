@@ -74,7 +74,17 @@ public class ResourceType {
     public static final ResourceType TEXT_CALENDAR = new ResourceType(ContentTypes.TEXT_CALENDAR, noCache(), true, singletonList("ics"));
     public static final ResourceType APPLICATION_JAVA_ARCHIVE = new ResourceType(ContentTypes.APPLICATION_JAVA_ARCHIVE, shortCache(), false, singletonList("jar"));
     public static final ResourceType IMAGE_JPEG = new ResourceType(ContentTypes.IMAGE_JPEG, shortCache(), false, asList("jpg", "jpeg"));
+
+    /**
+     * @deprecated use {@link #APPLICATION_JAVASCRIPT} instead
+     */
+    @Deprecated
     public static final ResourceType TEXT_JAVASCRIPT = new ResourceType(ContentTypes.APPLICATION_JAVASCRIPT,
+        Headers.http2Headers()
+            .add(HeaderNames.CACHE_CONTROL, "max-age=86400")
+            .add(HeaderNames.X_CONTENT_TYPE_OPTIONS, HeaderValues.NOSNIFF),
+        true, asList("js", "mjs"));
+    public static final ResourceType APPLICATION_JAVASCRIPT = new ResourceType(ContentTypes.APPLICATION_JAVASCRIPT,
         Headers.http2Headers()
             .add(HeaderNames.CACHE_CONTROL, "max-age=86400")
             .add(HeaderNames.X_CONTENT_TYPE_OPTIONS, HeaderValues.NOSNIFF),
