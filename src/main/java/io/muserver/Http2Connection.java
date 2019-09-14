@@ -132,6 +132,12 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
         muHeaders.set(HeaderNames.HOST, host);
         NettyRequestAdapter muReq = new NettyRequestAdapter(ctx, ctx.channel(), nettyReq, muHeaders, serverRef, muMethod, "https", uri, true, host, "HTTP/2");
 
+        if (settings.block(muReq)) {
+            stats.onRejectedDueToOverload();
+            sendSimpleResponse(ctx, streamId, "429 Too Many Requests", 429);
+            return;
+        }
+
         stats.onRequestStarted(muReq);
         Http2Response resp = new Http2Response(ctx, muReq, new Http2Headers(), encoder(), streamId, settings);
 

@@ -14,6 +14,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URI;
+import java.util.concurrent.TimeUnit;
 
 import static io.muserver.Http2ConfigBuilder.http2EnabledIfAvailable;
 import static io.muserver.MuServerBuilder.muServer;
@@ -29,6 +30,10 @@ public class RunLocal {
             .withHttpPort(18080)
             .withHttpsPort(18443)
             .withHttp2Config(http2EnabledIfAvailable())
+            .withRateLimiter(request -> RateLimit.builder()
+                .withBucket(request.remoteAddress())
+                .withRate(100).withWindow(1, TimeUnit.SECONDS)
+                .build())
             .addHandler(ResourceHandlerBuilder.fileHandler(BIG_FILE_DIR))
             .addHandler(ResourceHandlerBuilder.fileOrClasspath("src/test/resources/sample-static", "/sample-static"))
             .addHandler(Method.GET, "/api", (request, response, pathParams) -> {

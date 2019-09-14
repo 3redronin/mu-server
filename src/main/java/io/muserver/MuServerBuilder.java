@@ -16,6 +16,7 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.handler.traffic.GlobalTrafficShapingHandler;
+import io.netty.util.HashedWheelTimer;
 import io.netty.util.concurrent.DefaultThreadFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -57,6 +58,8 @@ public class MuServerBuilder {
     private ExecutorService executor;
     private long maxRequestSize = 24 * 1024 * 1024;
     private List<ResponseCompleteListener> responseCompleteListeners;
+    private HashedWheelTimer wheelTimer;
+    private List<RateLimiter> rateLimiters;
 
     /**
      * @param port The HTTP port to use. A value of 0 will have a random port assigned; a value of -1 will
@@ -255,6 +258,7 @@ public class MuServerBuilder {
 
     /**
      * The maximum allowed request body size. If exceeded, a 413 will be returned.
+     *
      * @param maxSizeInBytes The maximum request body size allowed, in bytes. The default is 24MB.
      * @return The current Mu Server builder
      */
@@ -362,6 +366,7 @@ public class MuServerBuilder {
 
     /**
      * Adds a listener that is notified when each response completes
+     *
      * @param listener A listener. If null, then nothing is added.
      * @return Returns the server builder
      */
@@ -372,6 +377,41 @@ public class MuServerBuilder {
             }
             this.responseCompleteListeners.add(listener);
         }
+        return this;
+    }
+
+    /**
+     * <p>Adds a rate limiter to incoming requests.</p>
+     * <p>The selector specified in this method allows you to control the limit buckets that are used. For
+     * example, to set a limit on client IP addresses the selector would return {@link MuRequest#remoteAddress()}.</p>
+     * <p>The selector also specifies the number of requests allowed for the bucket per time period, such that
+     * different buckets can have different limits.</p>
+     * <p>The following example shows how to allow 100 requests per second per IP address:</p>
+     * <pre>
+     *     {@code
+     *     MuServerBuilder.httpsServer()
+     *        .withRateLimiter(request -> RateLimit.builder()
+     *                 .withBucket(request.remoteAddress())
+     *                 .withRate(100)
+     *                 .withWindow(1, TimeUnit.SECONDS)
+     *                 .build())
+     *     }
+     * </pre>
+     * <p>Note that multiple limiters can be added which allows different limits across different dimensions.
+     * For example, you may allow 100 requests per second based on IP address and
+     * also a limit based on a cookie, request path, or other value.</p>
+     *
+     * @param selector A function that returns a string based on the request, or null to not have a limit applied
+     * @return This builder
+     */
+    public MuServerBuilder withRateLimiter(RateLimitSelector selector) {
+        if (wheelTimer == null) {
+            wheelTimer = new HashedWheelTimer(new DefaultThreadFactory("mu-limit-timer"));
+            wheelTimer.start();
+            rateLimiters = new ArrayList<>();
+        }
+        RateLimiter rateLimiter = new RateLimiter(selector, wheelTimer);
+        this.rateLimiters.add(rateLimiter);
         return this;
     }
 
@@ -414,7 +454,7 @@ public class MuServerBuilder {
             throw new IllegalArgumentException("No ports were configured. Please call MuServerBuilder.withHttpPort(int) or MuServerBuilder.withHttpsPort(int)");
         }
 
-        ServerSettings settings = new ServerSettings(minimumGzipSize, maxHeadersSize, idleTimeoutMills, maxRequestSize, maxUrlSize, gzipEnabled, mimeTypesToGzip);
+        ServerSettings settings = new ServerSettings(minimumGzipSize, maxHeadersSize, idleTimeoutMills, maxRequestSize, maxUrlSize, gzipEnabled, mimeTypesToGzip, rateLimiters);
 
         ExecutorService handlerExecutor = this.executor;
         if (handlerExecutor == null) {
@@ -427,11 +467,16 @@ public class MuServerBuilder {
         NioEventLoopGroup workerGroup = new NioEventLoopGroup();
         List<Channel> channels = new ArrayList<>();
 
+        ExecutorService finalHandlerExecutor = handlerExecutor;
         Runnable shutdown = () -> {
             try {
+                if (wheelTimer != null) {
+                    wheelTimer.stop();
+                }
                 for (Channel channel : channels) {
                     channel.close().sync();
                 }
+                finalHandlerExecutor.shutdown();
                 bossGroup.shutdownGracefully(0, 0, TimeUnit.MILLISECONDS).sync();
                 workerGroup.shutdownGracefully(0, 0, TimeUnit.MILLISECONDS).sync();
 
@@ -545,5 +590,4 @@ public class MuServerBuilder {
         p.addLast("keepalive", new HttpServerKeepAliveHandler());
         p.addLast("muhandler", new Http1Connection(nettyHandlerAdapter, stats, serverRef, proto, settings));
     }
-
 }

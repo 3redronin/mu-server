@@ -146,6 +146,14 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
 
                 NettyRequestAdapter muRequest = new NettyRequestAdapter(ctx, ctx.channel(), request, headers, serverRef, method,
                     proto, relativeUri, HttpUtil.isKeepAlive(request), headers.get(HeaderNames.HOST), request.protocolVersion().text());
+
+                if (settings.block(muRequest)) {
+                    stats.onRejectedDueToOverload();
+                    sendSimpleResponse(ctx, "429 Too Many Requests", 429);
+                    return true;
+                }
+
+
                 stats.onRequestStarted(muRequest);
 
                 Http1Response muResponse = new Http1Response(ctx, muRequest, new Http1Headers());
