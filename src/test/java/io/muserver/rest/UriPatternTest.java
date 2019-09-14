@@ -4,6 +4,7 @@ import org.junit.Test;
 
 import java.net.URI;
 
+import static io.muserver.rest.UriPattern.uriTemplateToRegex;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 
@@ -18,7 +19,7 @@ public class UriPatternTest {
         assertThat(literalCount("/fruit"), equalTo(literalCount("fruit/")));
         assertThat(literalCount("/fruit"), equalTo(literalCount("/fruit/")));
 
-        assertThat(UriPattern.uriTemplateToRegex("fruit").matcher(URI.create("fruit")).prefixMatches(), is(true));
+        assertThat(uriTemplateToRegex("fruit").matcher(URI.create("fruit")).prefixMatches(), is(true));
     }
 
     @Test
@@ -27,7 +28,7 @@ public class UriPatternTest {
     }
     @Test
     public void spacesInPathsAreOkay() {
-        assertThat(UriPattern.uriTemplateToRegex("fruit bits").matcher(URI.create("fruit%20bits")).prefixMatches(), is(true));
+        assertThat(uriTemplateToRegex("fruit bits").matcher(URI.create("fruit%20bits")).prefixMatches(), is(true));
     }
 
 
@@ -51,19 +52,19 @@ public class UriPatternTest {
 
     @Test
     public void namedGroupsAreReturnedInThePattern() {
-        UriPattern pattern = UriPattern.uriTemplateToRegex("/fruit/{version: v[12]}/{name}/eat");
+        UriPattern pattern = uriTemplateToRegex("/fruit/{version: v[12]}/{name}/eat");
         assertThat(pattern.namedGroups(), containsInAnyOrder("name", "version"));
     }
 
     @Test(expected = IllegalArgumentException.class)
     public void throwsIfRegexPatternIsInvalid() {
         // TODO: make the error message easy to understand for app developers
-        UriPattern.uriTemplateToRegex("/fruit/{version : v[12](?<blah}");
+        uriTemplateToRegex("/fruit/{version : v[12](?<blah}");
     }
 
     @Test
     public void multipleParamsCanExistWithinASingleSegment() {
-        UriPattern uriPattern = UriPattern.uriTemplateToRegex("people/{familyName}-{givenName}");
+        UriPattern uriPattern = uriTemplateToRegex("people/{familyName}-{givenName}");
         assertThat(uriPattern.namedGroups(), containsInAnyOrder("familyName", "givenName"));
         assertThat(uriPattern.numberOfLiterals, is(8));
 
@@ -71,6 +72,18 @@ public class UriPatternTest {
         assertThat(matcher.prefixMatches(), is(true));
         assertThat(matcher.params().get("givenName"), equalTo("Kennel"));
         assertThat(matcher.params().get("familyName"), equalTo("Fennel"));
+    }
+
+    @Test
+    public void parametersCanBeRepeated() {
+        UriPattern uriPattern = uriTemplateToRegex("/user/{ user}/umm/{ user }");
+        assertThat(uriPattern.namedGroups(), contains("user"));
+        assertThat(uriPattern.numberOfLiterals, is(10));
+        PathMatch matcher = uriPattern.matcher(URI.create("/user/dan/umm/dan"));
+        assertThat(matcher.prefixMatches(), is(true));
+        assertThat(matcher.params().get("user"), is("dan"));
+        matcher = uriPattern.matcher(URI.create("/user/dan/umm/notdan"));
+        assertThat(matcher.prefixMatches(), is(false));
     }
 
     @Test
@@ -82,15 +95,23 @@ public class UriPatternTest {
         assertThat(templatesEqual("/fruit/{id : [0-9]*}", "/fruit/{id : .*}"), is(false));
     }
 
+    @Test
+    public void canGetPathsWithoutRegexInfo() {
+        assertThat(uriTemplateToRegex("/fruit").path, is("/fruit"));
+        assertThat(uriTemplateToRegex("/fruit/{id}").path, is("/fruit/{id}"));
+        assertThat(uriTemplateToRegex("/fruit/{id : .*}").path, is("/fruit/{id}"));
+        assertThat(uriTemplateToRegex("/fruit/{id : [0-9]*}/b/{id2}/c/{ ha }").path, is("/fruit/{id}/b/{id2}/c/{ha}"));
+    }
+
     private static boolean templatesEqual(String one, String two) {
-        return UriPattern.uriTemplateToRegex(one).equalModuloVariableNames(UriPattern.uriTemplateToRegex(two));
+        return uriTemplateToRegex(one).equalModuloVariableNames(uriTemplateToRegex(two));
     }
 
     private static String pattern(String template) {
-        return UriPattern.uriTemplateToRegex(template).pattern();
+        return uriTemplateToRegex(template).pattern();
     }
     private static int literalCount(String template) {
-        return UriPattern.uriTemplateToRegex(template).numberOfLiterals;
+        return uriTemplateToRegex(template).numberOfLiterals;
     }
 
 

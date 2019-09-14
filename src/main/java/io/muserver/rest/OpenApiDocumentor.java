@@ -51,7 +51,9 @@ class OpenApiDocumentor implements MuHandler {
 
 
             for (ResourceMethod method : root.resourceMethods) {
-                String path = "/" + Mutils.trim(Mutils.join(root.pathTemplate, "/", method.pathTemplate), "/");
+                String path = "/" + Mutils.trim(
+                    Mutils.join(root.pathPattern == null ? null : root.pathPattern.path,
+                        "/", method.pathPattern == null ? null : method.pathPattern.path), "/");
 
                 Map<String, OperationObject> operations;
                 if (pathItems.containsKey(path)) {

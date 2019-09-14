@@ -19,11 +19,13 @@ public class UriPattern {
     private final Pattern pattern;
     private final List<String> namedGroups;
     final int numberOfLiterals;
+    final String path;
 
-    private UriPattern(Pattern pattern, List<String> namedGroups, int numberOfLiterals) {
+    private UriPattern(Pattern pattern, List<String> namedGroups, int numberOfLiterals, String path) {
         this.pattern = pattern;
         this.namedGroups = Collections.unmodifiableList(namedGroups);
         this.numberOfLiterals = numberOfLiterals;
+        this.path = path;
     }
 
     /**
@@ -92,6 +94,7 @@ public class UriPattern {
 
         // Numbered comments are direct from the spec
         List<String> groupNames = new ArrayList<>();
+        StringBuilder simplePath = new StringBuilder("/");
 
         StringBuilder regex = new StringBuilder();
         int numberOfLiterals = 0;
@@ -106,15 +109,19 @@ public class UriPattern {
                 numberOfLiterals += literal.length();
                 if (literal.equals("/")) {
                     regex.append('/');
+                    simplePath.append('/');
                 } else if (!literal.contains("/")) {
                     regex.append(escapeRegex(literal));
+                    simplePath.append(literal);
                 } else {
                     String[] segments = literal.split("/");
                     for (String segment : segments) {
                         if (!segment.isEmpty()) {
                             regex.append(escapeRegex(segment));
+                            simplePath.append(segment);
                         }
                         regex.append('/');
+                        simplePath.append('/');
                     }
                 }
                 curIndex = endIndex;
@@ -136,8 +143,11 @@ public class UriPattern {
                 }
                 if (!groupNames.contains(groupName)) {
                     groupNames.add(groupName);
+                    regex.append("(?<").append(groupName).append(">").append(groupRegex).append(')');
+                } else {
+                    regex.append("\\k<").append(groupName).append('>');
                 }
-                regex.append("(?<").append(groupName).append(">").append(groupRegex).append(")");
+                simplePath.append('{').append(groupName).append('}');
                 curIndex = endOfRegex;
             }
             if (loop > 100) {
@@ -152,7 +162,7 @@ public class UriPattern {
 
         // 5. Append '(/.*)?' to the result.
         regex.append("(/.*)?");
-        return new UriPattern(Pattern.compile(regex.toString()), groupNames, numberOfLiterals);
+        return new UriPattern(Pattern.compile(regex.toString()), groupNames, numberOfLiterals, simplePath.toString());
     }
 
     private static String escapeRegex(String literal) {

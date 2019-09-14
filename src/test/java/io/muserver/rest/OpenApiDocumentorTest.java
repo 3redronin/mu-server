@@ -37,6 +37,7 @@ public class OpenApiDocumentorTest {
     @Path("/uploads")
     static class FileUploadResource {
         @POST
+        @Path("{ id : [0-9]+ }")
         @Consumes(javax.ws.rs.core.MediaType.MULTIPART_FORM_DATA)
         public void create(@FormParam("images") List<UploadedFile> images,
                            @FormParam("oneThing") UploadedFile oneThing,
@@ -147,9 +148,8 @@ public class OpenApiDocumentorTest {
             assertThat(resp.header("Content-Type"), equalTo("application/json"));
             String responseBody = resp.body().string();
             JSONObject json = new JSONObject(responseBody);
-
             JSONObject params = json.getJSONObject("paths")
-                .getJSONObject("/uploads")
+                .getJSONObject("/uploads/{id}")
                 .getJSONObject("post")
                 .getJSONObject("requestBody")
                 .getJSONObject("content")
