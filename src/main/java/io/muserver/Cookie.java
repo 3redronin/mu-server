@@ -7,7 +7,8 @@ import java.util.stream.Collectors;
 
 
 /**
- * A cookie
+ * A cookie that is sent from the server to the client.
+ * <p>To create cookies, you can create a builder by calling {@link #builder()}.</p>
  */
 public class Cookie {
 
@@ -144,5 +145,13 @@ public class Cookie {
 
     static Set<Cookie> nettyToMu(Set<io.netty.handler.codec.http.cookie.Cookie> originals) {
         return originals.stream().map(n -> new Cookie(n.name(), n.value())).collect(Collectors.toSet());
+    }
+
+    /**
+     * Creates a new cookie builder with secure and httpOnly selected.
+     * @return A new builder
+     */
+    public static CookieBuilder builder() {
+        return CookieBuilder.newSecureCookie();
     }
 }
