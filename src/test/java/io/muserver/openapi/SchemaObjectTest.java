@@ -6,6 +6,7 @@ import org.junit.Test;
 import java.io.IOException;
 import java.io.StringWriter;
 import java.io.Writer;
+import java.time.Instant;
 import java.util.*;
 
 import static io.muserver.openapi.SchemaObjectBuilder.schemaObject;
@@ -153,6 +154,15 @@ public class SchemaObjectTest {
         SchemaObject schema = schemaObjectFrom(Byte.class).build();
         assertThat(schema.type, equalTo("string"));
         assertThat(schema.format, equalTo("byte"));
+        assertThat(schema.nullable, is(true));
+    }
+
+
+    @Test
+    public void itCanPresetInstants() {
+        SchemaObject schema = schemaObjectFrom(Instant.class).build();
+        assertThat(schema.type, equalTo("string"));
+        assertThat(schema.format, equalTo("date-time"));
         assertThat(schema.nullable, is(true));
     }
 

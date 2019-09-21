@@ -48,6 +48,7 @@ public class RunLocal {
                     .withOpenApiHtmlUrl("/api.html")
                     .withCORS(CORSConfigBuilder.corsConfig()
                         .withAllOriginsAllowed()
+                        .withAllowedHeaders("Content-Type")
                         .withExposedHeaders("Content-Type"))
             )
             .addHandler(Method.POST, "/upload", (request, response, pathParams) -> {

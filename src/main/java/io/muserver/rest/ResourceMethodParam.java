@@ -16,6 +16,7 @@ import java.lang.reflect.Parameter;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.List;
+import java.util.regex.Pattern;
 
 import static io.muserver.Mutils.urlEncode;
 import static io.muserver.openapi.ParameterObjectBuilder.parameterObject;
@@ -37,12 +38,13 @@ abstract class ResourceMethodParam {
         this.isRequired = isRequired;
     }
 
-    static ResourceMethodParam fromParameter(int index, java.lang.reflect.Parameter parameterHandle, List<ParamConverterProvider> paramConverterProviders) {
+    static ResourceMethodParam fromParameter(int index, Parameter parameterHandle, List<ParamConverterProvider> paramConverterProviders, UriPattern methodPattern) {
 
+        Pattern pattern = null;
         ValueSource source = getSource(parameterHandle);
         boolean isRequired = source == ValueSource.PATH_PARAM || hasDeclared(parameterHandle, Required.class);
         if (source == ValueSource.MESSAGE_BODY) {
-            DescriptionData descriptionData = DescriptionData.fromAnnotation(parameterHandle, "requestBody");
+            DescriptionData descriptionData = DescriptionData.fromAnnotation(parameterHandle, null);
             return new MessageBodyParam(index, source, parameterHandle, descriptionData, isRequired);
         } else if (source == ValueSource.CONTEXT) {
             return new ContextParam(index, source, parameterHandle);
@@ -65,8 +67,15 @@ abstract class ResourceMethodParam {
             if (key.length() == 0) {
                 throw new WebApplicationException("No parameter specified for the " + source + " in " + parameterHandle);
             }
+            if (source == ValueSource.PATH_PARAM && methodPattern != null) {
+                String regex = methodPattern.regexFor(key);
+                if (regex != null) {
+                    pattern = Pattern.compile(regex);
+                }
+            }
+
             DescriptionData descriptionData = DescriptionData.fromAnnotation(parameterHandle, key);
-            return new RequestBasedParam(index, source, parameterHandle, defaultValue, encodedRequested, lazyDefaultValue, converter, descriptionData, key, isDeprecated, isRequired);
+            return new RequestBasedParam(index, source, parameterHandle, defaultValue, encodedRequested, lazyDefaultValue, converter, descriptionData, key, isDeprecated, isRequired, pattern);
         }
     }
 
@@ -78,16 +87,19 @@ abstract class ResourceMethodParam {
         private final ParamConverter paramConverter;
         final String key;
         final boolean isDeprecated;
+        private final Pattern pattern;
 
         ParameterObjectBuilder createDocumentationBuilder() {
             ParameterObjectBuilder builder = parameterObject()
                 .withIn(source.openAPIIn)
                 .withRequired(isRequired)
-                .withDeprecated(isDeprecated);
+                .withDeprecated(isDeprecated)
+                .withName(key);
             ExternalDocumentationObject externalDoc = null;
             if (descriptionData != null) {
-                builder.withName(key)
-                    .withDescription(descriptionData.summaryAndDescription())
+                String desc = descriptionData.summaryAndDescription();
+                builder
+                    .withDescription(key.equals(desc) ? null : desc)
                     .withExample(descriptionData.example);
                 externalDoc = descriptionData.externalDocumentation;
             }
@@ -95,11 +107,12 @@ abstract class ResourceMethodParam {
                 schemaObjectFrom(parameterHandle.getType())
                     .withDefaultValue(source == ValueSource.PATH_PARAM ? null : defaultValue())
                     .withExternalDocs(externalDoc)
+                    .withPattern(pattern)
                     .build()
             );
         }
 
-        RequestBasedParam(int index, ValueSource source, Parameter parameterHandle, Object defaultValue, boolean encodedRequested, boolean lazyDefaultValue, ParamConverter paramConverter, DescriptionData descriptionData, String key, boolean isDeprecated, boolean isRequired) {
+        RequestBasedParam(int index, ValueSource source, Parameter parameterHandle, Object defaultValue, boolean encodedRequested, boolean lazyDefaultValue, ParamConverter paramConverter, DescriptionData descriptionData, String key, boolean isDeprecated, boolean isRequired, Pattern pattern) {
             super(index, source, parameterHandle, descriptionData, isRequired);
             this.defaultValue = defaultValue;
             this.encodedRequested = encodedRequested;
@@ -107,6 +120,7 @@ abstract class ResourceMethodParam {
             this.paramConverter = paramConverter;
             this.key = key;
             this.isDeprecated = isDeprecated;
+            this.pattern = pattern;
         }
 
         public Object defaultValue() {

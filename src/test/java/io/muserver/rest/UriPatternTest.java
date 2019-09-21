@@ -97,10 +97,10 @@ public class UriPatternTest {
 
     @Test
     public void canGetPathsWithoutRegexInfo() {
-        assertThat(uriTemplateToRegex("/fruit").path, is("/fruit"));
-        assertThat(uriTemplateToRegex("/fruit/{id}").path, is("/fruit/{id}"));
-        assertThat(uriTemplateToRegex("/fruit/{id : .*}").path, is("/fruit/{id}"));
-        assertThat(uriTemplateToRegex("/fruit/{id : [0-9]*}/b/{id2}/c/{ ha }").path, is("/fruit/{id}/b/{id2}/c/{ha}"));
+        assertThat(uriTemplateToRegex("/fruit").pathWithoutRegex, is("/fruit"));
+        assertThat(uriTemplateToRegex("/fruit/{id}").pathWithoutRegex, is("/fruit/{id}"));
+        assertThat(uriTemplateToRegex("/fruit/{id : .*}").pathWithoutRegex, is("/fruit/{id}"));
+        assertThat(uriTemplateToRegex("/fruit/{id : [0-9]*}/b/{id2}/c/{ ha }").pathWithoutRegex, is("/fruit/{id}/b/{id2}/c/{ha}"));
     }
 
     private static boolean templatesEqual(String one, String two) {

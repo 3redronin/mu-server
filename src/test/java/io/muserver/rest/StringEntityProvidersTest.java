@@ -9,7 +9,6 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
-import scaffolding.ServerUtils;
 import scaffolding.StringUtils;
 
 import javax.ws.rs.POST;
@@ -19,6 +18,7 @@ import javax.ws.rs.core.MultivaluedMap;
 import java.io.File;
 import java.io.IOException;
 import java.io.Reader;
+import java.time.Instant;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static java.util.stream.Collectors.toList;
@@ -26,8 +26,10 @@ import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.nullValue;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
+import static scaffolding.ServerUtils.httpsServerForTest;
 
 public class StringEntityProvidersTest {
     private MuServer server;
@@ -42,7 +44,7 @@ public class StringEntityProvidersTest {
                 return value;
             }
         }
-        this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Sample())).start();
+        this.server = httpsServerForTest().addHandler(restHandler(new Sample())).start();
         check(StringUtils.randomStringOfLength(64 * 1024));
         check("");
     }
@@ -60,7 +62,7 @@ public class StringEntityProvidersTest {
                 return value;
             }
         }
-        this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Sample())).start();
+        this.server = httpsServerForTest().addHandler(restHandler(new Sample())).start();
 
         try (Response resp = call(request(server.uri().resolve("/samples"))
             .post(RequestBody.create(okhttp3.MediaType.get("text/plain; charset=ISO-8859-5"), warAndPeaceInRussian))
@@ -82,9 +84,24 @@ public class StringEntityProvidersTest {
                 return value;
             }
         }
-        this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Sample())).start();
+        this.server = httpsServerForTest().addHandler(restHandler(new Sample())).start();
         check(StringUtils.randomStringOfLength(64 * 1024));
         check("");
+    }
+
+    @Test
+    public void instantObjectsCanBeUsed() throws IOException {
+        @Path("samples")
+        class Sample {
+            @POST
+            @Produces("text/plain")
+            public Instant echo(Instant value) {
+                return value;
+            }
+        }
+        this.server = httpsServerForTest().addHandler(restHandler(new Sample())).start();
+        check(Instant.now().toString());
+        check("", 204, ContentTypes.TEXT_PLAIN_UTF8.toString());
     }
 
     @Test
@@ -103,7 +120,7 @@ public class StringEntityProvidersTest {
                 return sb.toString();
             }
         }
-        this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Sample())).start();
+        this.server = httpsServerForTest().addHandler(restHandler(new Sample())).start();
         check(StringUtils.randomStringOfLength(64 * 1024));
         check("");
     }
@@ -129,7 +146,7 @@ public class StringEntityProvidersTest {
                 return form;
             }
         }
-        this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Sample())).start();
+        this.server = httpsServerForTest().addHandler(restHandler(new Sample())).start();
         try (Response resp = call(
             request()
                 .url(server.uri().resolve("/samples").toString())
@@ -161,17 +178,23 @@ public class StringEntityProvidersTest {
     }
 
     private void check(String value) throws IOException {
-        check(value, ContentTypes.TEXT_PLAIN_UTF8.toString());
+        String mimeType = ContentTypes.TEXT_PLAIN_UTF8.toString();
+        check(value, 200, mimeType);
     }
 
-    private void check(String value, String mimeType) throws IOException {
+    private void check(String value, int expectedStatus, String mimeType) throws IOException {
         try (Response resp = call(
             request(server.uri().resolve("/samples"))
                 .post(RequestBody.create(MediaType.parse(mimeType), value))
         )) {
-            assertThat(resp.code(), equalTo(200));
-            assertThat(resp.header("Content-Type"), equalTo(mimeType));
+            assertThat(resp.code(), equalTo(expectedStatus));
+            assertThat(resp.header("Content-Type"), expectedStatus == 204 ? nullValue() : equalTo(mimeType));
             assertThat(resp.body().string(), equalTo(value));
+
+            long len = Long.parseLong(resp.header("content-length", "-1"));
+            if (len > -1) {
+                assertThat((long) value.getBytes(EntityProviders.charsetFor(javax.ws.rs.core.MediaType.valueOf(mimeType))).length, is(len));
+            }
         }
     }
 

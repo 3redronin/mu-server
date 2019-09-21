@@ -160,4 +160,26 @@ public class OperationObjectBuilder {
     public static OperationObjectBuilder operationObject() {
         return new OperationObjectBuilder();
     }
+
+    /**
+     * Creates a builder from the given operation object
+     * @param operation The object to copy values from
+     * @return An operation object builder
+     */
+    public static OperationObjectBuilder builderFrom(OperationObject operation) {
+        return new OperationObjectBuilder()
+            .withTags(operation.tags)
+            .withSummary(operation.summary)
+            .withDescription(operation.description)
+            .withExternalDocs(operation.externalDocs)
+            .withOperationId(operation.operationId)
+            .withParameters(operation.parameters)
+            .withRequestBody(operation.requestBody)
+            .withResponses(operation.responses)
+            .withCallbacks(operation.callbacks)
+            .withDeprecated(operation.deprecated)
+            .withSecurity(operation.security)
+            .withServers(operation.servers)
+            ;
+    }
 }

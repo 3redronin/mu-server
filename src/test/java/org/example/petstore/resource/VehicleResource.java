@@ -27,6 +27,7 @@ import javax.ws.rs.core.Response;
 import javax.ws.rs.core.StreamingOutput;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.time.Instant;
 
 @Path("/vehicle")
 @Description(value = "/vehicle", details = "Operations about vehicles")
@@ -150,7 +151,8 @@ public class VehicleResource {
             String name,
 //   @ApiParam(value = "Updated status of the vehicle", required = false)
         @FormParam("status")
-            String status) {
+            String status,
+        @FormParam("theDate") Instant uploadDate) {
         Vehicle vehicle = vehicleData.getVehicleById(vehicleId);
         if (vehicle != null) {
             if (name != null && !"".equals(name))

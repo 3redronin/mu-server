@@ -115,13 +115,20 @@ class ResourceMethod {
             }
         }
 
+        String requestBodyMimeType = effectiveConsumes.get(0).toString();
         RequestBodyObject requestBody = params.stream()
             .filter(p -> p instanceof ResourceMethodParam.MessageBodyParam)
             .map(ResourceMethodParam.MessageBodyParam.class::cast)
             .map(messageBodyParam -> requestBodyObject()
-                .withContent(singletonMap(effectiveConsumes.get(0).toString(),
-                    mediaTypeObject().withExample(descriptionData.example).build()))
-                .withDescription(messageBodyParam.descriptionData.description)
+                .withContent(singletonMap(requestBodyMimeType,
+                    mediaTypeObject()
+                        .withSchema(schemaObject()
+                            .withTitle(messageBodyParam.descriptionData.summary)
+                            .withDescription(messageBodyParam.descriptionData.description)
+                            .withNullable(!messageBodyParam.isRequired)
+                            .build())
+                        .withExample(messageBodyParam.descriptionData.example)
+                        .build()))
                 .withRequired(messageBodyParam.isRequired)
                 .build())
             .findFirst().orElse(null);
@@ -135,7 +142,7 @@ class ResourceMethod {
             if (!formParams.isEmpty()) {
                 List<String> required = new ArrayList<>();
                 requestBody = requestBodyObject()
-                    .withContent(singletonMap(effectiveConsumes.get(0).toString(),
+                    .withContent(singletonMap(requestBodyMimeType,
                         mediaTypeObject()
                             .withSchema(
                                 schemaObject()
@@ -153,8 +160,9 @@ class ResourceMethod {
                                                         .withDeprecated(n.isDeprecated)
                                                         .withDefaultValue(n.defaultValue());
                                                     if (n.descriptionData != null) {
+                                                        String desc = n.descriptionData.summaryAndDescription();
                                                         schemaObjectBuilder.withExample(n.descriptionData.example)
-                                                            .withDescription(n.descriptionData.summaryAndDescription());
+                                                            .withDescription(n.key.equals(desc) ? null : desc);
                                                     }
                                                     return schemaObjectBuilder.build();
                                                 }))

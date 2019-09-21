@@ -8,6 +8,8 @@ import javax.ws.rs.ext.ParamConverter;
 import javax.ws.rs.ext.ParamConverterProvider;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.*;
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.*;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -72,6 +74,11 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
         if (rawType.isEnum()) {
             return new EnumConverter(rawType);
         }
+
+        if (rawType.equals(Instant.class)) {
+            return new InstantConverter();
+        }
+
         ConstructorConverter<T> cc = ConstructorConverter.tryToCreate(rawType);
         if (cc != null) {
             return cc;
@@ -294,4 +301,19 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
         }
     }
 
+    private static class InstantConverter implements ParamConverter<Instant> {
+        @Override
+        public Instant fromString(String value) {
+            try {
+                return Mutils.nullOrEmpty(value) ? null : Instant.parse(value);
+            } catch (DateTimeParseException e) {
+                throw new IllegalArgumentException("The value was not a valid Instant", e);
+            }
+        }
+
+        @Override
+        public String toString(Instant value) {
+            return value == null ? null : value.toString();
+        }
+    }
 }

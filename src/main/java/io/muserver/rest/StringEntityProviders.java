@@ -4,6 +4,7 @@ import io.muserver.Mutils;
 import io.netty.handler.codec.http.QueryStringDecoder;
 import io.netty.handler.codec.http.QueryStringEncoder;
 
+import javax.ws.rs.BadRequestException;
 import javax.ws.rs.Consumes;
 import javax.ws.rs.Produces;
 import javax.ws.rs.WebApplicationException;
@@ -17,6 +18,8 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -26,10 +29,12 @@ import static java.util.Arrays.asList;
 class StringEntityProviders {
 
     static final List<MessageBodyReader> stringEntityReaders = asList(
-        StringMessageReaderWriter.INSTANCE, new FormUrlEncodedReader(), new ReaderEntityReader(), CharArrayReaderWriter.INSTANCE
+        StringMessageReaderWriter.INSTANCE, new FormUrlEncodedReader(), new ReaderEntityReader(),
+        CharArrayReaderWriter.INSTANCE, InstantEntityReaderWriter.INSTANCE
     );
     static final List<MessageBodyWriter> stringEntityWriters = asList(
-        StringMessageReaderWriter.INSTANCE, CharArrayReaderWriter.INSTANCE, new FormUrlEncodedWriter()
+        StringMessageReaderWriter.INSTANCE, CharArrayReaderWriter.INSTANCE, new FormUrlEncodedWriter(),
+        InstantEntityReaderWriter.INSTANCE
     );
 
 
@@ -107,6 +112,51 @@ class StringEntityProviders {
             bb.get(bytes);
             entityStream.write(bytes);
             Arrays.fill(bb.array(), (byte)0); // if returning char[] arrays, it might be because it's a password etc, so blank it out
+        }
+    }
+
+    @Produces({"text/plain;charset=utf-8"})
+    @Consumes({"text/plain"})
+    static class InstantEntityReaderWriter implements MessageBodyReader<Instant>, MessageBodyWriter<Instant> {
+        static final InstantEntityReaderWriter INSTANCE = new InstantEntityReaderWriter();
+        @Override
+        public boolean isReadable(Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
+            return Instant.class.equals(type);
+        }
+
+        @Override
+        public Instant readFrom(Class<Instant> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
+            String s = new String(Mutils.toByteArray(entityStream, 2048), EntityProviders.charsetFor(mediaType));
+            if (Mutils.nullOrEmpty(s)) {
+                return null;
+            }
+            try {
+                return Instant.parse(s);
+            } catch (DateTimeParseException e) {
+                throw new BadRequestException("Invalid date format in request body", e);
+            }
+        }
+
+        @Override
+        public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
+            return Instant.class.equals(type);
+        }
+
+        @Override
+        public long getSize(Instant instant, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
+            return getBytes(instant, mediaType).length;
+        }
+
+        @Override
+        public void writeTo(Instant instant, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException, WebApplicationException {
+            entityStream.write(getBytes(instant, mediaType));
+        }
+
+        static byte[] getBytes(Instant instant, MediaType mediaType) {
+            if (instant == null) {
+                return new byte[0];
+            }
+            return instant.toString().getBytes(EntityProviders.charsetFor(mediaType));
         }
     }
 

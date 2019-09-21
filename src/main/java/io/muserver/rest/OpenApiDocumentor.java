@@ -11,6 +11,7 @@ import java.util.*;
 import static io.muserver.Mutils.notNull;
 import static io.muserver.openapi.PathItemObjectBuilder.pathItemObject;
 import static io.muserver.openapi.PathsObjectBuilder.pathsObject;
+import static io.muserver.openapi.RequestBodyObjectBuilder.requestBodyObject;
 import static io.muserver.openapi.ServerObjectBuilder.serverObject;
 import static java.util.Collections.emptySet;
 import static java.util.Collections.singletonList;
@@ -51,9 +52,7 @@ class OpenApiDocumentor implements MuHandler {
 
 
             for (ResourceMethod method : root.resourceMethods) {
-                String path = "/" + Mutils.trim(
-                    Mutils.join(root.pathPattern == null ? null : root.pathPattern.path,
-                        "/", method.pathPattern == null ? null : method.pathPattern.path), "/");
+                String path = getPathWithoutRegex(root, method);
 
                 Map<String, OperationObject> operations;
                 if (pathItems.containsKey(path)) {
@@ -71,13 +70,44 @@ class OpenApiDocumentor implements MuHandler {
                     .map(p -> p.createDocumentationBuilder().build())
                     .collect(toList());
 
-
-                operations.put(method.httpMethod.name().toLowerCase(),
-                    method.createOperationBuilder()
-                        .withOperationId(method.httpMethod.name() + "_" + Mutils.trim(Mutils.join(root.pathTemplate, "/", method.pathTemplate), "/").replace("/", "_"))
+                String opIdPath = getPathWithoutRegex(root, method).replace("{", "_").replace("}", "_");
+                String opPath = Mutils.trim(opIdPath, "/").replace("/", "_");
+                String opKey = method.httpMethod.name().toLowerCase();
+                OperationObject existing = operations.get(opKey);
+                if (existing == null) {
+                    existing = method.createOperationBuilder()
+                        .withOperationId(method.httpMethod.name() + "_" + opPath)
                         .withTags(singletonList(root.tag.name))
                         .withParameters(parameters)
-                        .build());
+                        .build();
+                } else {
+                    OperationObject curOO = method.createOperationBuilder().build();
+                    if (curOO.requestBody != null) {
+                        List<ParameterObject> combinedParams = new ArrayList<>(existing.parameters);
+                        combinedParams.addAll(parameters);
+
+                        Map<String, MediaTypeObject> mergedContent = new HashMap<>();
+                        if (existing.requestBody != null && existing.requestBody.content != null) {
+                            mergedContent.putAll(existing.requestBody.content);
+                        }
+                        mergedContent.putAll(curOO.requestBody.content);
+                        OperationObjectBuilder operationObjectBuilder = OperationObjectBuilder.builderFrom(existing)
+                            .withParameters(combinedParams)
+                            .withRequestBody(requestBodyObject()
+                                .withRequired(existing.requestBody != null && existing.requestBody.required && curOO.requestBody.required)
+                                .withContent(mergedContent)
+                                .withDescription(null)
+                                .build());
+                        if (existing.summary == null && existing.description == null) {
+                            operationObjectBuilder
+                                .withSummary(curOO.summary)
+                                .withDescription(curOO.description);
+                        }
+                        existing = operationObjectBuilder
+                            .build();
+                    }
+                }
+                operations.put(opKey, existing);
             }
         }
 
@@ -118,6 +148,12 @@ class OpenApiDocumentor implements MuHandler {
         }
 
         return true;
+    }
+
+    static String getPathWithoutRegex(ResourceClass rc, ResourceMethod rm) {
+        return "/" + Mutils.trim(
+            Mutils.join(rc.pathPattern == null ? null : rc.pathPattern.pathWithoutRegex,
+                "/", rm.pathPattern == null ? null : rm.pathPattern.pathWithoutRegex), "/");
     }
 
 }

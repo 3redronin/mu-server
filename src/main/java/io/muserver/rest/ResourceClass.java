@@ -73,7 +73,7 @@ class ResourceClass {
 
             List<Class<? extends Annotation>> methodNameBindingAnnotations = getNameBindingAnnotations(annotationSource);
 
-            UriPattern pathPattern = methodPath == null ? null : UriPattern.uriTemplateToRegex(methodPath.value());
+            UriPattern methodPattern = methodPath == null ? null : UriPattern.uriTemplateToRegex(methodPath.value());
 
             List<MediaType> methodProduces = MediaTypeDeterminer.supportedProducesTypes(annotationSource);
             List<MediaType> methodConsumes = MediaTypeDeterminer.supportedConsumesTypes(annotationSource);
@@ -81,13 +81,13 @@ class ResourceClass {
             Parameter[] parameters = annotationSource.getParameters();
             for (int i = 0; i < parameters.length; i++) {
                 Parameter p = parameters[i];
-                ResourceMethodParam resourceMethodParam = ResourceMethodParam.fromParameter(i, p, paramConverterProviders);
+                ResourceMethodParam resourceMethodParam = ResourceMethodParam.fromParameter(i, p, paramConverterProviders, methodPattern);
                 params.add(resourceMethodParam);
             }
             DescriptionData descriptionData = DescriptionData.fromAnnotation(restMethod, null);
             String pathTemplate = methodPath == null ? null : methodPath.value();
             boolean isDeprecated = annotationSource.isAnnotationPresent(Deprecated.class);
-            resourceMethods.add(new ResourceMethod(this, pathPattern, restMethod, params, httpMethod, pathTemplate, methodProduces, methodConsumes, descriptionData, isDeprecated, methodNameBindingAnnotations));
+            resourceMethods.add(new ResourceMethod(this, methodPattern, restMethod, params, httpMethod, pathTemplate, methodProduces, methodConsumes, descriptionData, isDeprecated, methodNameBindingAnnotations));
         }
         this.resourceMethods = Collections.unmodifiableSet(resourceMethods);
     }

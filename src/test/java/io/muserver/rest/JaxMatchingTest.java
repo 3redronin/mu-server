@@ -55,7 +55,7 @@ public class JaxMatchingTest {
             .addHandler(RestHandlerBuilder.restHandler(new Thing()).build())
             .start();
         try (Response resp = call(request(server.uri().resolve("/tiger/tiger/tiger/tiger")))) {
-            assertThat(resp.body().string(), is("tiger"));
+            assertThat(resp.body().string(), is("tiger")); // uppercut
         }
         try (Response resp = call(request(server.uri().resolve("/TIGER/TIGER/TIGER/TIGER")))) {
             assertThat(resp.code(), is(404));
