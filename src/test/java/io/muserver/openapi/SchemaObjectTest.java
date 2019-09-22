@@ -3,10 +3,7 @@ package io.muserver.openapi;
 import io.muserver.UploadedFile;
 import org.junit.Test;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.StringWriter;
-import java.io.Writer;
+import java.io.*;
 import java.time.Instant;
 import java.util.*;
 
@@ -212,16 +209,19 @@ public class SchemaObjectTest {
     }
 
     @Test
-    public void itCanPresetFiles() {
-        SchemaObject schema = schemaObjectFrom(File.class).build();
-        assertThat(schema.type, is("string"));
-        assertThat(schema.format, is("binary"));
-        assertThat(schema.nullable, is(true));
+    public void itCanPresetBinaryThings() {
+        Class<?>[] clazzes = {File.class, InputStream.class, byte[].class};
+        for (Class<?> clazz : clazzes) {
+            SchemaObject schema = schemaObjectFrom(clazz).build();
+            assertThat(clazz.getName(), schema.type, is("string"));
+            assertThat(clazz.getName(), schema.format, is("binary"));
+            assertThat(clazz.getName(), schema.nullable, is(true));
+        }
     }
-
 
     @SuppressWarnings("WeakerAccess")
     public List<String> listOfString = new ArrayList<>();
+
     @Test
     public void genericTypesCanBeKnown() throws NoSuchFieldException {
         SchemaObject schema = schemaObjectFrom(listOfString.getClass(), getClass().getField("listOfString").getGenericType()).build();
@@ -234,6 +234,7 @@ public class SchemaObjectTest {
 
     @SuppressWarnings("WeakerAccess")
     public List<UploadedFile> listOfUploadedFiles = new ArrayList<>();
+
     @Test
     public void genericTypesCanBeKnownForFiles() throws NoSuchFieldException {
         SchemaObject schema = schemaObjectFrom(listOfUploadedFiles.getClass(), getClass().getField("listOfUploadedFiles").getGenericType()).build();
@@ -245,19 +246,21 @@ public class SchemaObjectTest {
     }
 
 
-
     @Test(expected = IllegalArgumentException.class)
     public void defaultsMustMatchTypeForNumber() {
         schemaObject().withType("number").withDefaultValue("1").build();
     }
+
     @Test(expected = IllegalArgumentException.class)
     public void defaultsMustMatchTypeForBoolean() {
         schemaObject().withType("boolean").withDefaultValue("1").build();
     }
+
     @Test(expected = IllegalArgumentException.class)
     public void defaultsMustMatchTypeForString() {
         schemaObject().withType("string").withDefaultValue(1).build();
     }
+
     @Test(expected = IllegalArgumentException.class)
     public void defaultsMustMatchTypeForArray() {
         schemaObject().withType("array").withItems(schemaObject().build()).withDefaultValue("something").build();

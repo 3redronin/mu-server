@@ -3,6 +3,7 @@ package io.muserver.openapi;
 import io.muserver.UploadedFile;
 
 import java.io.File;
+import java.io.InputStream;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.time.Instant;
@@ -343,7 +344,7 @@ public class SchemaObjectBuilder {
     }
 
     private static String jsonType(Class<?> type) {
-        if (CharSequence.class.isAssignableFrom(type) || type.equals(byte.class) || type.equals(Byte.class) || type.isAssignableFrom(Date.class) || type.isAssignableFrom(Instant.class) || UploadedFile.class.isAssignableFrom(type) || File.class.isAssignableFrom(type)) {
+        if (CharSequence.class.isAssignableFrom(type) || type.equals(byte.class) || type.equals(Byte.class) || type.isAssignableFrom(Date.class) || type.isAssignableFrom(Instant.class) || isBinaryClass(type)) {
             return "string";
         } else if (type.equals(boolean.class) || type.equals(Boolean.class)) {
             return "boolean";
@@ -370,10 +371,15 @@ public class SchemaObjectBuilder {
             return "byte";
         } else if (type.equals(Date.class) || type.equals(Instant.class)) {
             return "date-time";
-        } else if (UploadedFile.class.isAssignableFrom(type) || File.class.isAssignableFrom(type)) {
+        } else if (isBinaryClass(type)) {
             return "binary";
         }
         return null;
+    }
+
+    private static boolean isBinaryClass(Class<?> type) {
+        return UploadedFile.class.isAssignableFrom(type) || File.class.isAssignableFrom(type)
+            || InputStream.class.isAssignableFrom(type) || (type.isArray() && type.getComponentType().equals(byte.class));
     }
 
 
