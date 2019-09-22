@@ -12,15 +12,15 @@ import static io.muserver.openapi.ParameterObject.allowedStyles;
  */
 public class HeaderObject implements JsonWriter {
 
-    private final String description;
-    private final boolean required;
-    private final boolean deprecated;
-    private final String style;
-    private final String explode;
-    private final SchemaObject schema;
-    private final Object example;
-    private final Map<String, ExampleObject> examples;
-    private final Map<String, MediaTypeObject> content;
+    final String description;
+    final boolean required;
+    final boolean deprecated;
+    final String style;
+    final String explode;
+    final SchemaObject schema;
+    final Object example;
+    final Map<String, ExampleObject> examples;
+    final Map<String, MediaTypeObject> content;
 
     HeaderObject(String description, boolean required, boolean deprecated,
                     String style, String explode, SchemaObject schema, Object example,

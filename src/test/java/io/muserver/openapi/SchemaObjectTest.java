@@ -3,6 +3,7 @@ package io.muserver.openapi;
 import io.muserver.UploadedFile;
 import org.junit.Test;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.StringWriter;
 import java.io.Writer;
@@ -208,6 +209,14 @@ public class SchemaObjectTest {
         assertThat(schema.format, is(nullValue()));
         assertThat(schema.nullable, is(true));
         assertThat(schema.items.type, equalTo("string"));
+    }
+
+    @Test
+    public void itCanPresetFiles() {
+        SchemaObject schema = schemaObjectFrom(File.class).build();
+        assertThat(schema.type, is("string"));
+        assertThat(schema.format, is("binary"));
+        assertThat(schema.nullable, is(true));
     }
 
 

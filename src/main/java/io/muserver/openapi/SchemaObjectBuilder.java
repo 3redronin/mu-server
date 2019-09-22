@@ -307,6 +307,9 @@ public class SchemaObjectBuilder {
      * @return A new builder
      */
     public static SchemaObjectBuilder schemaObjectFrom(Class<?> from, Type parameterizedType) {
+        if (from.equals(void.class) || from.equals(Void.class)) {
+            return schemaObject();
+        }
         String jsonType = jsonType(from);
         return schemaObject()
             .withType(jsonType)
@@ -340,7 +343,7 @@ public class SchemaObjectBuilder {
     }
 
     private static String jsonType(Class<?> type) {
-        if (CharSequence.class.isAssignableFrom(type) || type.equals(byte.class) || type.equals(Byte.class) || type.isAssignableFrom(Date.class) || type.isAssignableFrom(Instant.class) || UploadedFile.class.isAssignableFrom(type)) {
+        if (CharSequence.class.isAssignableFrom(type) || type.equals(byte.class) || type.equals(Byte.class) || type.isAssignableFrom(Date.class) || type.isAssignableFrom(Instant.class) || UploadedFile.class.isAssignableFrom(type) || File.class.isAssignableFrom(type)) {
             return "string";
         } else if (type.equals(boolean.class) || type.equals(Boolean.class)) {
             return "boolean";

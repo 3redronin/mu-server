@@ -1,6 +1,11 @@
 package io.muserver.openapi;
 
+import io.muserver.Mutils;
+
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * <p>A container for the expected responses of an operation. The container maps a HTTP response code to the expected response.</p>
@@ -51,4 +56,27 @@ public class ResponsesObjectBuilder {
     public static ResponsesObjectBuilder responsesObject() {
         return new ResponsesObjectBuilder();
     }
+
+    /**
+     * Creates a new build by merging two exising responses
+     * @param primary A responses object to use. This is the dominant response who's values will
+     *                 be preferred when values cannot be merged (such as {@link ResponseObject#description}
+     * @param secondary The other responses object
+     * @return A builder that is the merged value of the two given ones
+     */
+    public static ResponsesObjectBuilder mergeResponses(ResponsesObject primary, ResponsesObject secondary) {
+        Set<String> allCodes = new HashSet<>(primary.httpStatusCodes.keySet());
+        allCodes.addAll(secondary.httpStatusCodes.keySet());
+        Map<String, ResponseObject> mergedStatusCodes = new HashMap<>();
+        for (String code : allCodes) {
+            mergedStatusCodes.put(code, ResponseObjectBuilder.mergeResponses(
+                primary.httpStatusCodes.get(code), secondary.httpStatusCodes.get(code)
+            ).build());
+        }
+        return responsesObject()
+            .withHttpStatusCodes(mergedStatusCodes)
+            .withDefaultValue(Mutils.coalesce(primary.defaultValue, secondary.defaultValue));
+    }
+
+
 }

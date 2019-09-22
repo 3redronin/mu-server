@@ -25,6 +25,7 @@ import java.net.URI;
 import java.util.List;
 
 import static io.muserver.openapi.ExternalDocumentationObjectBuilder.externalDocumentationObject;
+import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
@@ -37,7 +38,7 @@ public class OpenApiDocumentorTest {
 
     private static MuServer serverWithPetStore() {
         return ServerUtils.httpsServerForTest()
-            .addHandler(RestHandlerBuilder.restHandler(
+            .addHandler(restHandler(
                 new PetResource(), new PetStoreResource(), new UserResource(), new VehicleResource()
                 ).withOpenApiDocument(OpenAPIObjectBuilder.openAPIObject()
                     .withInfo(InfoObjectBuilder.infoObject()
@@ -151,7 +152,7 @@ public class OpenApiDocumentorTest {
         }
 
         server = ServerUtils.httpsServerForTest()
-            .addHandler(RestHandlerBuilder.restHandler(new FileUploadResource()).withOpenApiJsonUrl("/openapi.json"))
+            .addHandler(restHandler(new FileUploadResource()).withOpenApiJsonUrl("/openapi.json"))
             .start();
         try (okhttp3.Response resp = call(request().url(server.uri().resolve("/openapi.json").toString()))) {
             assertThat(resp.code(), is(200));
@@ -196,7 +197,7 @@ public class OpenApiDocumentorTest {
     }
 
     @Test
-    public void messageBodiesWork() throws IOException {
+    public void messageBodiesWork() throws Exception {
 
         @Path("/bodies")
         class BodyResource {
@@ -207,22 +208,29 @@ public class OpenApiDocumentorTest {
 
             @POST
             @Consumes("text/plain")
-            public void create(String body) {
+            @Produces("text/plain;charset=utf-8")
+            @ApiResponse(code="201", message="Very Success", contentType = {"text/plain;charset=utf-8"}, example = "This is an example return value")
+            public int create(int body) {
+                return body;
             }
 
             @POST
             @Consumes("application/json")
             @Description(value = "Creates a new thing somehow", details = "The format depends on the content type")
+            @ApiResponse(code="204", message = "Success")
             public void createWithJson(@Required @Description(value = "An json in a format", example = "{ \"thing\": \"hing\" }") String json) {
             }
 
             @POST
             @Consumes("image/*")
-            public void uploadImage(@Description(value="Image", details = "Any kind of image") File image) {
+            @Produces("image/*")
+            public File uploadImage(@Description(value="Image", details = "Any kind of image") File image) {
+                return image;
             }
 
             @POST
             @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
+            @ApiResponse(code="201", message = "Very Success", contentType="application/json")
             public void uploadForm(@Description("The first") @FormParam("one") String one,
                                    @Description(value="The second", details = "And this one is required")
                                    @Required @FormParam("two") String two,
@@ -231,10 +239,13 @@ public class OpenApiDocumentorTest {
         }
 
         server = ServerUtils.httpsServerForTest()
-            .addHandler(RestHandlerBuilder.restHandler(new BodyResource()).withOpenApiJsonUrl("/openapi.json"))
+            .addHandler(restHandler(new BodyResource()).withOpenApiJsonUrl("/openapi.json"))
             .start();
+
         try (okhttp3.Response resp = call(request(server.uri().resolve("/openapi.json")))) {
             JSONObject json = new JSONObject(resp.body().string());
+//            System.out.println("json.toString(2) = " + json.toString(2));
+
             JSONObject postOp = json.getJSONObject("paths")
                 .getJSONObject("/bodies")
                 .getJSONObject("post");
@@ -254,21 +265,39 @@ public class OpenApiDocumentorTest {
             assertThat(content.keySet(), hasSize(4));
 
             JSONObject image = content.getJSONObject("image/*").getJSONObject("schema");
-            assertThat(image.keySet(), hasSize(3));
+            assertThat(image.keySet(), hasSize(5));
             assertThat(image.getBoolean("nullable"), is(true));
             assertThat(image.getString("title"), is("Image"));
             assertThat(image.getString("description"), is("Any kind of image"));
+            assertThat(image.getString("type"), is("string"));
+            assertThat(image.getString("format"), is("binary"));
 
             JSONObject appJson = content.getJSONObject("application/json").getJSONObject("schema");
-            assertThat(appJson.keySet(), hasSize(2));
+            assertThat(appJson.keySet(), hasSize(3));
             assertThat(appJson.getBoolean("nullable"), is(false));
             assertThat(appJson.getString("title"), is("An json in a format"));
+            assertThat(appJson.getString("type"), is("string"));
 
             JSONObject textPlain = content.getJSONObject("text/plain").getJSONObject("schema");
-            assertThat(textPlain.keySet(), hasSize(1));
+            assertThat(textPlain.keySet(), hasSize(3));
             assertThat(textPlain.getBoolean("nullable"), is(true));
+            assertThat(textPlain.getString("type"), is("integer"));
+            assertThat(textPlain.getString("format"), is("int32"));
 
             assertThat(content.has("application/x-www-form-urlencoded"), is(true));
+
+            JSONObject responses = postOp.getJSONObject("responses");
+            assertThat(responses.keySet(), hasSize(3));
+
+            JSONObject twoXX = responses.getJSONObject("201").getJSONObject("content").getJSONObject("text/plain;charset=utf-8");
+            assertThat(twoXX.get("example"), is("This is an example return value"));
+
+            // although the schema can be guessed occasionally, adding it bloats the UI in swagger-ui so better not to have it
+            assertThat(twoXX.has("schema"), is(false));
+
+            JSONObject twoHundred = responses.getJSONObject("200").getJSONObject("content");
+            assertThat(twoHundred
+                .getJSONObject(twoHundred.keySet().stream().findFirst().get()).has("example"), is(false));
         }
     }
 

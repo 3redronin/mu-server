@@ -104,7 +104,7 @@ abstract class ResourceMethodParam {
                 externalDoc = descriptionData.externalDocumentation;
             }
             return builder.withSchema(
-                schemaObjectFrom(parameterHandle.getType())
+                schemaObjectFrom(parameterHandle.getType(), parameterHandle.getParameterizedType())
                     .withDefaultValue(source == ValueSource.PATH_PARAM ? null : defaultValue())
                     .withExternalDocs(externalDoc)
                     .withPattern(pattern)

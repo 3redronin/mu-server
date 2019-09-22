@@ -1,6 +1,7 @@
 package io.muserver.rest;
 
 import io.muserver.Method;
+import io.muserver.Mutils;
 import io.muserver.openapi.OperationObjectBuilder;
 import io.muserver.openapi.RequestBodyObject;
 import io.muserver.openapi.ResponseObject;
@@ -37,8 +38,8 @@ class ResourceMethod {
     final List<MediaType> directlyProduces;
     final List<MediaType> effectiveProduces;
     final List<ResourceMethodParam> params;
-    final DescriptionData descriptionData;
-    final boolean isDeprecated;
+    private final DescriptionData descriptionData;
+    private final boolean isDeprecated;
     private final List<Class<? extends Annotation>> nameBindingAnnotations;
 
     ResourceMethod(ResourceClass resourceClass, UriPattern pathPattern, java.lang.reflect.Method methodHandle, List<ResourceMethodParam> params, Method httpMethod, String pathTemplate, List<MediaType> produces, List<MediaType> consumes, DescriptionData descriptionData, boolean isDeprecated, List<Class<? extends Annotation>> nameBindingAnnotations) {
@@ -79,7 +80,7 @@ class ResourceMethod {
         } catch (InvocationTargetException e) {
             Throwable cause = e.getCause();
             if (cause instanceof Exception) {
-                throw (Exception)cause;
+                throw (Exception) cause;
             }
             throw e;
         }
@@ -88,14 +89,12 @@ class ResourceMethod {
     OperationObjectBuilder createOperationBuilder() {
         List<ApiResponse> apiResponseList = getApiResponses(methodHandle);
 
-
         Map<String, ResponseObject> httpStatusCodes = new HashMap<>();
         if (apiResponseList.isEmpty()) {
             httpStatusCodes.put("200", responseObject()
                 .withDescription("Success")
                 .withContent(effectiveProduces.stream().collect(toMap(MediaType::toString,
-                    mt -> mediaTypeObject()
-                        .build()))
+                    mt -> mediaTypeObject().build()))
                 )
                 .build());
         } else {
@@ -104,6 +103,7 @@ class ResourceMethod {
                 httpStatusCodes.put(apiResponse.code(), responseObject()
                     .withContent(responseTypes.collect(toMap(MediaType::toString,
                         mt -> mediaTypeObject()
+                            .withExample(Mutils.nullOrEmpty(apiResponse.example()) ? null : apiResponse.example())
                             .build()))
                     )
                     .withDescription(apiResponse.message())
@@ -122,7 +122,7 @@ class ResourceMethod {
             .map(messageBodyParam -> requestBodyObject()
                 .withContent(singletonMap(requestBodyMimeType,
                     mediaTypeObject()
-                        .withSchema(schemaObject()
+                        .withSchema(SchemaObjectBuilder.schemaObjectFrom(messageBodyParam.parameterHandle.getType(), messageBodyParam.parameterHandle.getParameterizedType())
                             .withTitle(messageBodyParam.descriptionData.summary)
                             .withDescription(messageBodyParam.descriptionData.description)
                             .withNullable(!messageBodyParam.isRequired)

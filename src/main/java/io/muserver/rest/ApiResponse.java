@@ -43,4 +43,10 @@ public @interface ApiResponse {
      * @return A content type such as <code>text/plain</code>
      */
     String[] contentType() default {};
+
+    /**
+     * An example return value
+     * @return An example value
+     */
+    String example() default "";
 }

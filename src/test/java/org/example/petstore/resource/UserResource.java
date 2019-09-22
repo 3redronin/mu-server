@@ -17,7 +17,6 @@
 package org.example.petstore.resource;
 
 import io.muserver.rest.ApiResponse;
-import io.muserver.rest.ApiResponses;
 import io.muserver.rest.Description;
 import io.muserver.rest.Required;
 import org.example.petstore.data.UserData;
@@ -37,7 +36,7 @@ public class UserResource {
     @Description(value = "Create user", details = "This can only be done by the logged in user.")
 //    position = 1)
     public Response createUser(
-//      @ApiParam(value = "Created user object", )
+        @Description(value = "Created user object")
         @Required
             User user) {
         userData.addUser(user);

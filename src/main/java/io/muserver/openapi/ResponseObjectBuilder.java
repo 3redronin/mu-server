@@ -1,5 +1,6 @@
 package io.muserver.openapi;
 
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -66,4 +67,67 @@ public class ResponseObjectBuilder {
     public static ResponseObjectBuilder responseObject() {
         return new ResponseObjectBuilder();
     }
+
+    /**
+     * Creates a new build by merging two existing response objects
+     * @param primary A responses object to use. This is the dominant response who's values will
+     *                 be preferred when values cannot be merged (such as {@link ResponseObject#description}
+     * @param secondary The other responses object
+     * @return A builder that is the merged value of the two given ones
+     */
+    public static ResponseObjectBuilder mergeResponses(ResponseObject primary, ResponseObject secondary) {
+
+
+        Map<String, HeaderObject> mergedHeaders = new HashMap<>();
+        addHeaders(mergedHeaders, primary);
+        addHeaders(mergedHeaders, secondary);
+
+        Map<String, MediaTypeObject> mergedContent = new HashMap<>();
+        addContent(mergedContent, primary);
+        addContent(mergedContent, secondary);
+
+        Map<String, LinkObject> mergedLinks = new HashMap<>();
+        addLinks(mergedLinks, primary);
+        addLinks(mergedLinks, secondary);
+
+        return responseObject()
+            .withDescription(primary != null ? primary.description : secondary != null ? secondary.description : null)
+            .withHeaders(mergedHeaders.isEmpty() ? null : mergedHeaders)
+            .withContent(mergedContent.isEmpty() ? null : mergedContent)
+            .withLinks(mergedLinks.isEmpty() ? null : mergedLinks);
+    }
+
+    private static void addLinks(Map<String, LinkObject> dest, ResponseObject source) {
+        if (source != null && source.links != null) {
+            for (Map.Entry<String, LinkObject> entry : source.links.entrySet()) {
+                String name = entry.getKey();
+                if (!dest.containsKey(name)) {
+                    dest.put(name, entry.getValue());
+                }
+            }
+        }
+    }
+
+    private static void addContent(Map<String, MediaTypeObject> dest, ResponseObject source) {
+        if (source != null && source.content != null) {
+            for (Map.Entry<String, MediaTypeObject> entry : source.content.entrySet()) {
+                String name = entry.getKey();
+                if (!dest.containsKey(name)) {
+                    dest.put(name, entry.getValue());
+                }
+            }
+        }
+    }
+
+    private static void addHeaders(Map<String, HeaderObject> dest, ResponseObject source) {
+        if (source != null && source.headers != null) {
+            for (Map.Entry<String, HeaderObject> entry : source.headers.entrySet()) {
+                String name = entry.getKey();
+                if (!dest.containsKey(name)) {
+                    dest.put(name, entry.getValue()); // merging headers is too complicated so just add missing headers
+                }
+            }
+        }
+    }
+
 }

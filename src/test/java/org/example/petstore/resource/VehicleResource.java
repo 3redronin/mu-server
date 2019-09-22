@@ -17,7 +17,9 @@
 package org.example.petstore.resource;
 
 
+import io.muserver.rest.ApiResponse;
 import io.muserver.rest.Description;
+import io.muserver.rest.Required;
 import org.example.petstore.data.VehicleData;
 import org.example.petstore.model.Vehicle;
 
@@ -124,13 +126,13 @@ public class VehicleResource {
 
     @PUT
     @Consumes({MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML})
-//  @ApiOperation(value = "Update an existing vehicle")
-//  @ApiResponses(value = { @ApiResponse(code = 400, message = "Invalid ID supplied"),
-//      @ApiResponse(code = 404, message = "Vehicle not found"),
-//      @ApiResponse(code = 405, message = "Validation exception") })
+    @Description(value = "Update an existing vehicle")
+    @ApiResponse(code = "400", message = "Invalid ID supplied")
+    @ApiResponse(code = "404", message = "Vehicle not found")
+    @ApiResponse(code = "405", message = "Validation exception")
     public Response updateVehicle(
-//      @ApiParam(value = "Vehicle object that needs to be added to the store", required = true)
-        Vehicle vehicle) {
+        @Description(value = "Vehicle object that needs to be added to the store") @Required
+            Vehicle vehicle) {
         Vehicle updatedVehicle = vehicleData.addVehicle(vehicle);
         return Response.ok().entity(updatedVehicle).build();
     }

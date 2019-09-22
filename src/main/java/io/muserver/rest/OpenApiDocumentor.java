@@ -12,6 +12,7 @@ import static io.muserver.Mutils.notNull;
 import static io.muserver.openapi.PathItemObjectBuilder.pathItemObject;
 import static io.muserver.openapi.PathsObjectBuilder.pathsObject;
 import static io.muserver.openapi.RequestBodyObjectBuilder.requestBodyObject;
+import static io.muserver.openapi.ResponsesObjectBuilder.mergeResponses;
 import static io.muserver.openapi.ServerObjectBuilder.serverObject;
 import static java.util.Collections.emptySet;
 import static java.util.Collections.singletonList;
@@ -82,30 +83,31 @@ class OpenApiDocumentor implements MuHandler {
                         .build();
                 } else {
                     OperationObject curOO = method.createOperationBuilder().build();
-                    if (curOO.requestBody != null) {
-                        List<ParameterObject> combinedParams = new ArrayList<>(existing.parameters);
-                        combinedParams.addAll(parameters);
+                    List<ParameterObject> combinedParams = new ArrayList<>(existing.parameters);
+                    combinedParams.addAll(parameters);
 
-                        Map<String, MediaTypeObject> mergedContent = new HashMap<>();
-                        if (existing.requestBody != null && existing.requestBody.content != null) {
-                            mergedContent.putAll(existing.requestBody.content);
-                        }
-                        mergedContent.putAll(curOO.requestBody.content);
-                        OperationObjectBuilder operationObjectBuilder = OperationObjectBuilder.builderFrom(existing)
-                            .withParameters(combinedParams)
-                            .withRequestBody(requestBodyObject()
-                                .withRequired(existing.requestBody != null && existing.requestBody.required && curOO.requestBody.required)
-                                .withContent(mergedContent)
-                                .withDescription(null)
-                                .build());
-                        if (existing.summary == null && existing.description == null) {
-                            operationObjectBuilder
-                                .withSummary(curOO.summary)
-                                .withDescription(curOO.description);
-                        }
-                        existing = operationObjectBuilder
-                            .build();
+                    Map<String, MediaTypeObject> mergedContent = new HashMap<>();
+                    if (existing.requestBody != null && existing.requestBody.content != null) {
+                        mergedContent.putAll(existing.requestBody.content);
                     }
+                    if (curOO.requestBody != null) {
+                        mergedContent.putAll(curOO.requestBody.content);
+                    }
+                    OperationObjectBuilder operationObjectBuilder = OperationObjectBuilder.builderFrom(existing)
+                        .withParameters(combinedParams)
+                        .withResponses(mergeResponses(existing.responses, curOO.responses).build())
+                        .withRequestBody(requestBodyObject()
+                            .withRequired(existing.requestBody != null && existing.requestBody.required &&
+                                curOO.requestBody != null && curOO.requestBody.required)
+                            .withContent(mergedContent)
+                            .build());
+                    if (existing.summary == null && existing.description == null) {
+                        operationObjectBuilder
+                            .withSummary(curOO.summary)
+                            .withDescription(curOO.description);
+                    }
+                    existing = operationObjectBuilder
+                        .build();
                 }
                 operations.put(opKey, existing);
             }
