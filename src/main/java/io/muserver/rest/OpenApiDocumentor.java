@@ -13,6 +13,7 @@ import static io.muserver.openapi.PathItemObjectBuilder.pathItemObject;
 import static io.muserver.openapi.PathsObjectBuilder.pathsObject;
 import static io.muserver.openapi.RequestBodyObjectBuilder.requestBodyObject;
 import static io.muserver.openapi.ResponsesObjectBuilder.mergeResponses;
+import static io.muserver.openapi.ServerObjectBuilder.serverObject;
 import static java.util.Collections.emptySet;
 import static java.util.Collections.singletonList;
 import static java.util.stream.Collectors.toList;
@@ -119,6 +120,14 @@ class OpenApiDocumentor implements MuHandler {
             .withInfo(openAPIObject.info)
             .withExternalDocs(openAPIObject.externalDocs)
             .withSecurity(openAPIObject.security)
+            .withServers(openAPIObject.servers != null ? openAPIObject.servers :
+                request.contextPath().length() > 0 ?
+                    singletonList(
+                        serverObject()
+                            .withUrl(request.contextPath())
+                            .build())
+                    : null
+            )
             .withPaths(pathsObject().withPathItemObjects(pathItems).build())
             .withTags(tags);
 

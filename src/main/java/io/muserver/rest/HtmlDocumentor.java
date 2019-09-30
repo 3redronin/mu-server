@@ -1,5 +1,6 @@
 package io.muserver.rest;
 
+import io.muserver.Mutils;
 import io.muserver.openapi.*;
 
 import java.io.BufferedWriter;
@@ -9,7 +10,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static io.muserver.rest.SafeHtml.htmlEscape;
 import static java.util.Collections.singletonMap;
 
 class HtmlDocumentor {
@@ -74,6 +74,10 @@ class HtmlDocumentor {
             new El("a").open(Collections.singletonMap("href", api.info.termsOfService.toString())).content("Terms of service").close();
         }
 
+        String baseUri = "";
+        if (api.servers != null && !api.servers.isEmpty()) {
+            baseUri = api.servers.get(0).url;
+        }
 
         preamble.close();
 
@@ -81,7 +85,7 @@ class HtmlDocumentor {
         El nav = new El("ul").open(singletonMap("class", "nav"));
         for (TagObject tag : api.tags) {
             El li = new El("li").open();
-            new El("a").open(singletonMap("href", "#" + htmlEscape(tag.name))).content(tag.name).close();
+            new El("a").open(singletonMap("href", "#" + Mutils.htmlEncode(tag.name))).content(tag.name).close();
 
             El subNav = new El("ul").open(singletonMap("class", "subNav"));
             for (Map.Entry<String, PathItemObject> entry : api.paths.pathItemObjects.entrySet()) {
@@ -93,7 +97,7 @@ class HtmlDocumentor {
                     if (operation.tags.contains(tag.name)) {
 
                         El subNavLi = new El("li").open();
-                        new El("a").open(singletonMap("href", "#" + htmlEscape(operation.operationId))).content(method.toUpperCase() + " " + url).close();
+                        new El("a").open(singletonMap("href", "#" + Mutils.htmlEncode(operation.operationId))).content(method.toUpperCase() + " " + url).close();
                         subNavLi.close();
 
                     }
@@ -111,7 +115,7 @@ class HtmlDocumentor {
 
         for (TagObject tag : api.tags) {
             El tagContainer = new El("div").open(singletonMap("class", "tagContainer"));
-            new El("h2").open(singletonMap("id", htmlEscape(tag.name))).content(tag.name).close();
+            new El("h2").open(singletonMap("id", Mutils.htmlEncode(tag.name))).content(tag.name).close();
             renderIfValue("p", tag.description);
 
             for (Map.Entry<String, PathItemObject> entry : api.paths.pathItemObjects.entrySet()) {
@@ -123,11 +127,13 @@ class HtmlDocumentor {
                     if (operation.tags.contains(tag.name)) {
 
                         Map<String, String> operationAttributes = new HashMap<>();
-                        operationAttributes.put("id", htmlEscape(operation.operationId));
+                        operationAttributes.put("id", Mutils.htmlEncode(operation.operationId));
                         operationAttributes.put("class", "operation");
                         El operationDiv = new El("div").open(operationAttributes);
 
-                        new El("h3").open().content(method.toUpperCase() + " " + url).close();
+                        El h3 = new El("h3").open().content(method.toUpperCase() + " ");
+                        new El("a").open(Collections.singletonMap("href", baseUri + url)).content(url).close();
+                        h3.close();
                         renderIfValue("p", operation.summary);
                         renderIfValue("p", operation.description);
 
@@ -355,7 +361,7 @@ class HtmlDocumentor {
             writer.write("<" + tag);
             if (attributes != null) {
                 for (Map.Entry<String, String> entry : attributes.entrySet()) {
-                    writer.write(" " + htmlEscape(entry.getKey()) + "=\"" + htmlEscape(entry.getValue()) + "\"");
+                    writer.write(" " + Mutils.htmlEncode(entry.getKey()) + "=\"" + Mutils.htmlEncode(entry.getValue()) + "\"");
                 }
             }
             writer.write('>');
@@ -372,7 +378,7 @@ class HtmlDocumentor {
                 for (Object val : vals) {
                     if (val != null) {
                         String stringVal = val.toString();
-                        writer.write(htmlEscape(stringVal).replace("\n", "<br>"));
+                        writer.write(Mutils.htmlEncode(stringVal).replace("\n", "<br>"));
                     }
                 }
             }

@@ -1,6 +1,7 @@
 package io.muserver.rest;
 
 import io.muserver.MuServer;
+import io.muserver.Mutils;
 import io.muserver.UploadedFile;
 import io.muserver.openapi.InfoObjectBuilder;
 import io.muserver.openapi.LicenseObjectBuilder;
@@ -27,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static io.muserver.ContextHandlerBuilder.context;
 import static io.muserver.openapi.ExternalDocumentationObjectBuilder.externalDocumentationObject;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.CoreMatchers.is;
@@ -61,7 +63,6 @@ public class OpenApiDocumentorTest {
             .start();
     }
 
-
     @Test
     public void hasJsonEndpoint() throws IOException {
         server = serverWithPetStore();
@@ -69,6 +70,7 @@ public class OpenApiDocumentorTest {
             assertThat(resp.code(), is(200));
             assertThat(resp.header("Content-Type"), equalTo("application/json"));
             JSONObject json = new JSONObject(resp.body().string());
+            System.out.println("json = " + json.toString(2));
             JSONObject paths = json.getJSONObject("paths");
 
             JSONObject pet = paths.getJSONObject("/pet");
@@ -135,7 +137,37 @@ public class OpenApiDocumentorTest {
                 fw.write(responseBody);
             }
         }
+    }
 
+    @Test
+    public void theContextIsSetAsAServerUrl() throws IOException {
+        @Path("blah")
+        class Blah {
+            @GET
+            @Path("{id : [a-z]}/ha")
+            public void blah(@PathParam("id") String id) {
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(
+                context("ummmm")
+                    .addHandler(restHandler(new Blah())
+                        .withOpenApiJsonUrl("/openapi.json")
+                        .withOpenApiHtmlUrl("/api.html")
+                    )
+            )
+            .start();
+        try (okhttp3.Response resp = call(request().url(server.uri().resolve("/ummmm/openapi.json").toString()))) {
+            assertThat(resp.code(), is(200));
+            JSONObject json = new JSONObject(resp.body().string());
+            assertThat(json.getJSONArray("servers").getJSONObject(0).getString("url"), is("/ummmm"));
+        }
+        try (okhttp3.Response resp = call(request().url(server.uri().resolve("/ummmm/api.html").toString()))) {
+            assertThat(resp.code(), is(200));
+            String html = resp.body().string();
+            assertThat(html, containsString("<a href=\"" + Mutils.htmlEncode("/ummmm/blah/{id}/ha") + "\">"));
+        }
     }
 
     @Test
@@ -465,9 +497,9 @@ public class OpenApiDocumentorTest {
                     .map(v -> (String) v.get("name"))
                     .collect(Collectors.toList()),
                 contains("AppleResource", "Carrots", "Some bananas", "BananaResource", "BananaInterface"));
-            Map<String,Object> someBananas = (Map<String, Object>) tags.get(2);
+            Map<String, Object> someBananas = (Map<String, Object>) tags.get(2);
             assertThat(someBananas.get("description"), is("These are the bananas of our lives"));
-            assertThat(((Map<String, Object>)someBananas.get("externalDocs")).get("url"), is("https://bananas.example.org"));
+            assertThat(((Map<String, Object>) someBananas.get("externalDocs")).get("url"), is("https://bananas.example.org"));
         }
 
     }
