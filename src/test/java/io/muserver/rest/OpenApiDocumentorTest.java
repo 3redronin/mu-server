@@ -166,8 +166,6 @@ public class OpenApiDocumentorTest {
 
             assertThat(postOp.getString("operationId"), is("POST_uploads__id_"));
 
-            System.out.println("postOp = " + postOp.toString(2));
-
             JSONArray pathParams = postOp.getJSONArray("parameters");
             assertThat(pathParams.length(), is(1));
             JSONObject pathParam = pathParams.getJSONObject(0);
@@ -367,6 +365,46 @@ public class OpenApiDocumentorTest {
             }
         }
 
+    }
+
+    @Test
+    public void queryAndFormParamsWork() throws IOException {
+        @Path("sample")
+        class Blah {
+            @POST
+            @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
+            public void blah(
+                @QueryParam("id") int id,
+                @QueryParam("id2") @Required int id2,
+                @FormParam("id3") int id3,
+                @FormParam("id4") @Required int id4
+            ) {
+            }
+        }
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(RestHandlerBuilder.restHandler(new Blah()).withOpenApiJsonUrl("/openapi.json"))
+            .start();
+        try (okhttp3.Response resp = call(request(server.uri().resolve("/openapi.json")))) {
+            JSONObject json = new JSONObject(resp.body().string());
+
+            String[] paths = { "/sample" };
+            for (String path : paths) {
+                JSONObject op = json.getJSONObject("paths")
+                    .getJSONObject(path)
+                    .getJSONObject("post");
+
+                JSONObject bodySchema = op.getJSONObject("requestBody").getJSONObject("content").getJSONObject("application/x-www-form-urlencoded")
+                    .getJSONObject("schema");
+                assertThat(bodySchema.getString("type"), is("object"));
+                assertThat(bodySchema.getJSONArray("required").toString(), equalTo(new JSONArray().put("id4").toString()));
+                JSONObject id3 = bodySchema.getJSONObject("properties").getJSONObject("id3");
+                assertThat(id3.keySet(), hasSize(4));
+                assertThat(id3.getString("type"), is("integer"));
+                assertThat(id3.getString("format"), is("int32"));
+                assertThat(id3.getBoolean("nullable"), is(false));
+                assertThat(id3.getInt("default"), is(0));
+            }
+        }
     }
 
     @After

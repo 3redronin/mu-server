@@ -49,9 +49,10 @@ class DescriptionData {
 
     TagObject toTag(String tagName) {
         Mutils.notNull("tagName", tagName);
+        String description = summaryAndDescription();
         return tagObject()
             .withName(tagName)
-            .withDescription(summaryAndDescription())
+            .withDescription(tagName.equals(description) ? null : description)
             .withExternalDocs(externalDocumentation)
             .build();
     }
