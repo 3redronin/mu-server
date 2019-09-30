@@ -9,9 +9,6 @@ import javax.ws.rs.core.MediaType;
 import javax.ws.rs.ext.ParamConverterProvider;
 import java.net.URI;
 import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static java.util.Arrays.asList;
 import static java.util.Collections.emptyList;
@@ -27,7 +24,7 @@ public class RequestMatcherTest {
     private final ResourceClass resourceSomething = ResourceClass.fromObject(new ResourceSomething(), paramConverterProviders);
     private final ResourceClass resourceSomethingYeah = ResourceClass.fromObject(new ResourceSomethingYeah(), paramConverterProviders);
     private final ResourceClass resourceAnother = ResourceClass.fromObject(new ResourceAnother(), paramConverterProviders);
-    private final RequestMatcher rm = new RequestMatcher(set(resourceOne, resourceOneV2, resourceSomething, resourceAnother, resourceSomethingYeah));
+    private final RequestMatcher rm = new RequestMatcher(asList(resourceOne, resourceOneV2, resourceSomething, resourceAnother, resourceSomethingYeah));
 
     @Test(expected = NotMatchedException.class)
     public void throwsIfNoValidCandidates() throws NotMatchedException {
@@ -74,7 +71,7 @@ public class RequestMatcherTest {
 
         ResourceClass resourceSomething = ResourceClass.fromObject(new ResourceSomething(), paramConverterProviders);
         ResourceClass resourceAnother = ResourceClass.fromObject(new ResourceAnother(), paramConverterProviders);
-        RequestMatcher rm = new RequestMatcher(set(resourceSomething, resourceAnother));
+        RequestMatcher rm = new RequestMatcher(asList(resourceSomething, resourceAnother));
 
         URI uri = URI.create("api/widgets/b");
         assertThat(resourceSomething.matches(uri), is(true));
@@ -95,7 +92,7 @@ public class RequestMatcherTest {
 
         ResourceClass resourcePeopleBelts = ResourceClass.fromObject(new PeopleBelts(), paramConverterProviders);
         ResourceClass resourcePeopleBeltsInCapitals = ResourceClass.fromObject(new CapitalPeopleBelts(), paramConverterProviders);
-        RequestMatcher rm = new RequestMatcher(set(resourcePeopleBelts, resourcePeopleBeltsInCapitals));
+        RequestMatcher rm = new RequestMatcher(asList(resourcePeopleBelts, resourcePeopleBeltsInCapitals));
 
         URI uri = URI.create("api/people/dan/belts/COLBELT");
         assertThat(resourcePeopleBelts.matches(uri), is(true));
@@ -118,7 +115,7 @@ public class RequestMatcherTest {
 
         ResourceClass resourcePeopleBelts = ResourceClass.fromObject(new PeopleBelts(), paramConverterProviders);
         ResourceClass resourcePeopleBeltsInCapitals = ResourceClass.fromObject(new CapitalPeopleBelts(), paramConverterProviders);
-        RequestMatcher rm = new RequestMatcher(set(resourceOne, resourceOneV2, resourceSomething, resourceAnother, resourceSomethingYeah, resourcePeopleBelts, resourcePeopleBeltsInCapitals));
+        RequestMatcher rm = new RequestMatcher(asList(resourceOne, resourceOneV2, resourceSomething, resourceAnother, resourceSomethingYeah, resourcePeopleBelts, resourcePeopleBeltsInCapitals));
 
         URI uri = URI.create("api/people/dan/belts/COLBELT");
         assertThat(resourcePeopleBelts.matches(uri), is(true));
@@ -168,7 +165,7 @@ public class RequestMatcherTest {
         }
 
         ResourceClass resourcePeopleBelts = ResourceClass.fromObject(new Fruit(), paramConverterProviders);
-        RequestMatcher rm = new RequestMatcher(set(resourcePeopleBelts));
+        RequestMatcher rm = new RequestMatcher(asList(resourcePeopleBelts));
         ResourceMethod getAll = rm.findResourceMethod(Method.GET, "api/fruits", emptyList(), null).resourceMethod;
         assertThat(getAll.methodHandle.getName(), equalTo("getAll"));
         RequestMatcher.MatchedMethod mm = rm.findResourceMethod(Method.GET, "api/fruits/orange", emptyList(), null);
@@ -191,10 +188,10 @@ public class RequestMatcherTest {
             public String options() { return ""; }
         }
 
-        RequestMatcher rm = new RequestMatcher(set(ResourceClass.fromObject(new OptionsDefault(), paramConverterProviders)));
+        RequestMatcher rm = new RequestMatcher(asList(ResourceClass.fromObject(new OptionsDefault(), paramConverterProviders)));
         assertThat(rm.findResourceMethod(Method.OPTIONS, "foo", emptyList(), null).resourceMethod.methodHandle.getName(), equalTo("options"));
 
-        RequestMatcher rm2 = new RequestMatcher(set(ResourceClass.fromObject(new Foo(), paramConverterProviders), ResourceClass.fromObject(new OptionsDefault(), paramConverterProviders)));
+        RequestMatcher rm2 = new RequestMatcher(asList(ResourceClass.fromObject(new Foo(), paramConverterProviders), ResourceClass.fromObject(new OptionsDefault(), paramConverterProviders)));
         try {
             RequestMatcher.MatchedMethod actual = rm2.findResourceMethod(Method.OPTIONS, "foo", emptyList(), null);
             // NOTE that in this case, default OPTIONS handling should happen, but that's not supported yet so throw an exception instead
@@ -214,7 +211,7 @@ public class RequestMatcherTest {
             public String get() { return ""; }
         }
 
-        RequestMatcher rm = new RequestMatcher(set(ResourceClass.fromObject(new Fruit(), paramConverterProviders)));
+        RequestMatcher rm = new RequestMatcher(asList(ResourceClass.fromObject(new Fruit(), paramConverterProviders)));
         RequestMatcher.MatchedMethod mm = rm.findResourceMethod(Method.GET, "api/citrus/orange", emptyList(), null);
         assertThat(mm.resourceMethod.methodHandle.getName(), equalTo("get"));
         assertThat(mm.pathParams.get("fruitType"), equalTo("orange"));
@@ -234,7 +231,7 @@ public class RequestMatcherTest {
             public String get() { return ""; }
         }
 
-        RequestMatcher rm = new RequestMatcher(set(ResourceClass.fromObject(new FruitImpl(), paramConverterProviders)));
+        RequestMatcher rm = new RequestMatcher(asList(ResourceClass.fromObject(new FruitImpl(), paramConverterProviders)));
         RequestMatcher.MatchedMethod mm = rm.findResourceMethod(Method.GET, "api/citrus/orange", emptyList(), null);
         assertThat(mm.resourceMethod.methodHandle.getName(), equalTo("get"));
         assertThat(mm.pathParams.get("fruitType"), equalTo("orange"));
@@ -259,7 +256,7 @@ public class RequestMatcherTest {
             }
         }
 
-        RequestMatcher rm = new RequestMatcher(set(ResourceClass.fromObject(new PictureThat(), paramConverterProviders)));
+        RequestMatcher rm = new RequestMatcher(asList(ResourceClass.fromObject(new PictureThat(), paramConverterProviders)));
         assertThat(nameOf(rm, asList(MediaType.valueOf("image/gif")), null), equalTo("image"));
         assertThat(nameOf(rm, asList(MediaType.valueOf("image/jpeg")), null), equalTo("image"));
         assertThat(nameOf(rm, asList(MediaType.valueOf("image/png")), null), equalTo("image"));
@@ -286,7 +283,7 @@ public class RequestMatcherTest {
             }
         }
 
-        RequestMatcher rm = new RequestMatcher(set(ResourceClass.fromObject(new PictureThat(), paramConverterProviders)));
+        RequestMatcher rm = new RequestMatcher(asList(ResourceClass.fromObject(new PictureThat(), paramConverterProviders)));
         assertThat(nameOf(rm, asList(MediaType.valueOf("text/plain")), null), equalTo("text"));
         assertThat(nameOf(rm, asList(MediaType.valueOf("text/plain;q=1")), null), equalTo("text"));
         assertThat(nameOf(rm, asList(MediaType.valueOf("text/*")), null), equalTo("text"));
@@ -314,7 +311,7 @@ public class RequestMatcherTest {
             }
         }
 
-        RequestMatcher rm = new RequestMatcher(set(ResourceClass.fromObject(new PictureThat(), paramConverterProviders)));
+        RequestMatcher rm = new RequestMatcher(asList(ResourceClass.fromObject(new PictureThat(), paramConverterProviders)));
         assertThat(nameOf(rm, emptyList(), "text/plain"), equalTo("text"));
         assertThat(nameOf(rm, emptyList(), null), equalTo("json"));
 
@@ -334,11 +331,6 @@ public class RequestMatcherTest {
         } catch (Exception ex) {
             Assert.fail("Should not throw this type of exception: " + ex);
         }
-    }
-
-
-    private static Set<ResourceClass> set(ResourceClass... restResources) {
-        return Stream.of(restResources).collect(Collectors.toSet());
     }
 
 }

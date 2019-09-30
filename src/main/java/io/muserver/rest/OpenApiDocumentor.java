@@ -6,7 +6,10 @@ import io.muserver.openapi.*;
 import java.io.BufferedWriter;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import static io.muserver.Mutils.notNull;
 import static io.muserver.openapi.PathItemObjectBuilder.pathItemObject;
@@ -18,14 +21,14 @@ import static java.util.Collections.singletonList;
 import static java.util.stream.Collectors.toList;
 
 class OpenApiDocumentor implements MuHandler {
-    private final Set<ResourceClass> roots;
+    private final List<ResourceClass> roots;
     private final String openApiJsonUrl;
     private final OpenAPIObject openAPIObject;
     private final String openApiHtmlUrl;
     private final String openApiHtmlCss;
     private final CORSConfig corsConfig;
 
-    OpenApiDocumentor(Set<ResourceClass> roots, String openApiJsonUrl, String openApiHtmlUrl, OpenAPIObject openAPIObject, String openApiHtmlCss, CORSConfig corsConfig) {
+    OpenApiDocumentor(List<ResourceClass> roots, String openApiJsonUrl, String openApiHtmlUrl, OpenAPIObject openAPIObject, String openApiHtmlCss, CORSConfig corsConfig) {
         notNull("openAPIObject", openAPIObject);
         this.corsConfig = corsConfig;
         this.roots = roots;

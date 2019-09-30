@@ -232,11 +232,11 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
         List<ParamConverterProvider> paramConverterProviders = new ArrayList<>(customParamConverterProviders);
         paramConverterProviders.add(new BuiltInParamConverterProvider());
 
-        HashSet<ResourceClass> set = new HashSet<>();
+        List<ResourceClass> list = new ArrayList<>();
         for (Object restResource : resources) {
-            set.add(ResourceClass.fromObject(restResource, paramConverterProviders));
+            list.add(ResourceClass.fromObject(restResource, paramConverterProviders));
         }
-        Set<ResourceClass> roots = Collections.unmodifiableSet(set);
+        List<ResourceClass> roots = Collections.unmodifiableList(list);
 
         OpenApiDocumentor documentor = null;
         if (openApiHtmlUrl != null || openApiJsonUrl != null) {

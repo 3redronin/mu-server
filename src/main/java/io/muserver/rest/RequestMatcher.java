@@ -28,21 +28,21 @@ class RequestMatcher {
     }
 
     static final List<MediaType> WILDCARD_AS_LIST = singletonList(MediaType.WILDCARD_TYPE);
-    private final Set<ResourceClass> roots;
+    private final List<ResourceClass> roots;
 
-    RequestMatcher(Set<ResourceClass> roots) {
+    RequestMatcher(List<ResourceClass> roots) {
         if (roots == null) {
             throw new NullPointerException("roots cannot be null");
         }
         this.roots = roots;
     }
 
-    public MatchedMethod findResourceMethod(Method httpMethod, String path, List<MediaType> acceptHeaders, String requestBodyContentType) throws NotAllowedException, NotAcceptableException, NotSupportedException, NotMatchedException {
+    MatchedMethod findResourceMethod(Method httpMethod, String path, List<MediaType> acceptHeaders, String requestBodyContentType) throws NotAllowedException, NotAcceptableException, NotSupportedException, NotMatchedException {
         Set<MatchedMethod> candidateMethods = getMatchedMethodsForPath(path);
         return stepThreeIdentifyTheMethodThatWillHandleTheRequest(httpMethod, candidateMethods, requestBodyContentType, acceptHeaders);
     }
 
-    public Set<MatchedMethod> getMatchedMethodsForPath(String path) throws NotMatchedException {
+    Set<MatchedMethod> getMatchedMethodsForPath(String path) throws NotMatchedException {
         StepOneOutput stepOneOutput = stepOneIdentifyASetOfCandidateRootResourceClassesMatchingTheRequest(path);
         URI methodURI = stepOneOutput.unmatchedGroup == null ? null : URI.create(UriPattern.trimSlashes(stepOneOutput.unmatchedGroup));
         return stepTwoObtainASetOfCandidateResourceMethodsForTheRequest(methodURI, stepOneOutput.candidates);

@@ -24,6 +24,8 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.net.URI;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import static io.muserver.openapi.ExternalDocumentationObjectBuilder.externalDocumentationObject;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
@@ -308,7 +310,7 @@ public class OpenApiDocumentorTest {
             @ApiResponse(code = "204", message = "Should have no content field")
             @ApiResponse(code = "200", message = "Should have content field")
             @ApiResponse(code = "202", message = "Should have content field", response = int.class,
-                responseHeaders = @ResponseHeader(name="x-return-header", description = "A header to be returned"))
+                responseHeaders = @ResponseHeader(name = "x-return-header", description = "A header to be returned"))
             @ApiResponse(code = "201", message = "Should have content field and type", contentType = "text/plain")
             public Response doIt() {
                 return Response.ok().build();
@@ -320,7 +322,7 @@ public class OpenApiDocumentorTest {
             @ApiResponse(code = "204", message = "Should have no content field")
             @ApiResponse(code = "200", message = "Should have content field")
             @ApiResponse(code = "202", message = "Should have content field", response = int.class,
-                responseHeaders = @ResponseHeader(name="x-return-header", description = "A header to be returned"))
+                responseHeaders = @ResponseHeader(name = "x-return-header", description = "A header to be returned"))
             @ApiResponse(code = "201", message = "Should have content field and type", contentType = "text/plain")
             public Response doIt2() {
                 return Response.ok().build();
@@ -332,7 +334,7 @@ public class OpenApiDocumentorTest {
         try (okhttp3.Response resp = call(request(server.uri().resolve("/openapi.json")))) {
             JSONObject json = new JSONObject(resp.body().string());
 
-            String[] paths = { "/sample", "/sample/with-produces" };
+            String[] paths = {"/sample", "/sample/with-produces"};
             for (String path : paths) {
                 JSONObject op = json.getJSONObject("paths")
                     .getJSONObject(path)
@@ -387,7 +389,7 @@ public class OpenApiDocumentorTest {
         try (okhttp3.Response resp = call(request(server.uri().resolve("/openapi.json")))) {
             JSONObject json = new JSONObject(resp.body().string());
 
-            String[] paths = { "/sample" };
+            String[] paths = {"/sample"};
             for (String path : paths) {
                 JSONObject op = json.getJSONObject("paths")
                     .getJSONObject(path)
@@ -405,6 +407,44 @@ public class OpenApiDocumentorTest {
                 assertThat(id3.getInt("default"), is(0));
             }
         }
+    }
+
+    @Test
+    public void classesAppearInTheOrderRegistered() throws IOException {
+
+        @Path("/a")
+        class Apple {
+            @GET
+            public void blah() {
+            }
+        }
+        @Path("/b")
+        class Carrot {
+            @GET
+            public void blah() {
+            }
+        }
+        @Path("/c")
+        class Banana {
+            @GET
+            public void blah() {
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(RestHandlerBuilder.restHandler(
+                new Apple(), new Banana(), new Carrot()
+            ).withOpenApiJsonUrl("/openapi.json"))
+            .start();
+        try (okhttp3.Response resp = call(request(server.uri().resolve("/openapi.json")))) {
+            JSONObject json = new JSONObject(resp.body().string());
+            assertThat(json.getJSONArray("tags").toList().stream()
+                    .map(Map.class::cast)
+                    .map(v -> (String) v.get("name"))
+                    .collect(Collectors.toList()),
+                contains("Apple", "Banana", "Carrot"));
+        }
+
     }
 
     @After

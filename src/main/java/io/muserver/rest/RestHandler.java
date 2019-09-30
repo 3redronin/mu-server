@@ -43,7 +43,7 @@ public class RestHandler implements MuHandler {
     private final FilterManagerThing filterManagerThing;
     private final CORSConfig corsConfig;
 
-    RestHandler(EntityProviders entityProviders, Set<ResourceClass> roots, MuHandler documentor, CustomExceptionMapper customExceptionMapper, FilterManagerThing filterManagerThing, CORSConfig corsConfig) {
+    RestHandler(EntityProviders entityProviders, List<ResourceClass> roots, MuHandler documentor, CustomExceptionMapper customExceptionMapper, FilterManagerThing filterManagerThing, CORSConfig corsConfig) {
         this.requestMatcher = new RequestMatcher(roots);
         this.entityProviders = entityProviders;
         this.documentor = documentor;
