@@ -68,8 +68,7 @@ public class OpenApiDocumentorTest {
         try (okhttp3.Response resp = call(request().url(server.uri().resolve("/openapi.json").toString()))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.header("Content-Type"), equalTo("application/json"));
-            String responseBody = resp.body().string();
-            JSONObject json = new JSONObject(responseBody);
+            JSONObject json = new JSONObject(resp.body().string());
             JSONObject paths = json.getJSONObject("paths");
 
             JSONObject pet = paths.getJSONObject("/pet");
@@ -409,6 +408,70 @@ public class OpenApiDocumentorTest {
         }
     }
 
+    @Path("/e")
+    private interface BananaInterface {
+    }
+
+    @Test
+    public void tagsDefaultToClassNameUnlessSpecified() throws IOException {
+
+        @Path("/a")
+        class AppleResource {
+            @GET
+            public void blah() {
+            }
+        }
+
+        @Path("/b")
+        @Description("Carrots")
+        class CarrotResource {
+            @GET
+            public void blah() {
+            }
+        }
+        @Path("/c")
+        @Description(value = "Some bananas", details = "These are the bananas of our lives", documentationUrl = "https://bananas.example.org")
+        class BananaResource {
+            @GET
+            public void blah() {
+            }
+        }
+        class Tricky {
+            @Path("/d")
+            class BananaResource {
+                @GET
+                public void blah() {
+                }
+            }
+        }
+        class BananaResourceImpl implements BananaInterface {
+            @GET
+            public void blah() {
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(RestHandlerBuilder.restHandler(
+                new AppleResource(), new CarrotResource(), new BananaResource(), new Tricky().new BananaResource(),
+                new BananaResourceImpl()
+            ).withOpenApiJsonUrl("/openapi.json"))
+            .start();
+        try (okhttp3.Response resp = call(request(server.uri().resolve("/openapi.json")))) {
+            JSONObject json = new JSONObject(resp.body().string());
+            List<Object> tags = json.getJSONArray("tags").toList();
+            assertThat(tags.stream()
+                    .map(Map.class::cast)
+                    .map(v -> (String) v.get("name"))
+                    .collect(Collectors.toList()),
+                contains("AppleResource", "Carrots", "Some bananas", "BananaResource", "BananaInterface"));
+            Map<String,Object> someBananas = (Map<String, Object>) tags.get(2);
+            assertThat(someBananas.get("description"), is("These are the bananas of our lives"));
+            assertThat(((Map<String, Object>)someBananas.get("externalDocs")).get("url"), is("https://bananas.example.org"));
+        }
+
+    }
+
+
     @Test
     public void classesAppearInTheOrderRegistered() throws IOException {
 
@@ -430,10 +493,18 @@ public class OpenApiDocumentorTest {
             public void blah() {
             }
         }
+        class Tricky {
+            @Path("/d")
+            class Banana {
+                @GET
+                public void blah() {
+                }
+            }
+        }
 
         server = ServerUtils.httpsServerForTest()
             .addHandler(RestHandlerBuilder.restHandler(
-                new Apple(), new Banana(), new Carrot()
+                new Apple(), new Banana(), new Carrot(), new Tricky().new Banana()
             ).withOpenApiJsonUrl("/openapi.json"))
             .start();
         try (okhttp3.Response resp = call(request(server.uri().resolve("/openapi.json")))) {
@@ -445,6 +516,55 @@ public class OpenApiDocumentorTest {
                 contains("Apple", "Banana", "Carrot"));
         }
 
+    }
+
+    @Test
+    public void theOrderOfMethodsDependsOnNameLengthAndHttpMethod() throws Exception {
+        @Path("users")
+        class User {
+            @GET
+            public void all() {
+            }
+
+            @GET
+            @Deprecated
+            public void deprecatedAll() {
+            }
+
+            @DELETE
+            @Path("{id}")
+            public void singleDelete(@PathParam("id") String id) {
+            }
+
+            @GET
+            @Path("{id}/validate")
+            public void validateOne(@PathParam("id") String id) {
+            }
+
+            @GET
+            @Path("{id}")
+            public void singleGet(@PathParam("id") String id) {
+            }
+
+            @POST
+            @Path("{id}")
+            public void singlePost(@PathParam("id") String id) {
+            }
+
+        }
+
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(RestHandlerBuilder.restHandler(new User()).withOpenApiJsonUrl("/openapi.json"))
+            .start();
+        try (okhttp3.Response resp = call(request(server.uri().resolve("/openapi.json")))) {
+            JSONObject json = new JSONObject(resp.body().string());
+            System.out.println("json.toString(2) = " + json.toString(2));
+            assertThat(json.getJSONArray("tags").toList().stream()
+                    .map(Map.class::cast)
+                    .map(v -> (String) v.get("name"))
+                    .collect(Collectors.toList()),
+                contains("Apple", "Banana", "Carrot"));
+        }
     }
 
     @After

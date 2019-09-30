@@ -51,7 +51,9 @@ class OpenApiDocumentor implements MuHandler {
         Map<String, PathItemObject> pathItems = new HashMap<>();
         for (ResourceClass root : roots) {
 
-            tags.add(root.tag);
+            if (!tags.contains(root.tag)) {
+                tags.add(root.tag);
+            }
 
 
             for (ResourceMethod method : root.resourceMethods) {
