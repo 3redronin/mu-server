@@ -71,4 +71,8 @@ public class OperationObject implements JsonWriter {
         isFirst = append(writer, "servers", servers, isFirst);
         writer.write('}');
     }
+
+    public boolean isDeprecated() {
+        return deprecated != null && deprecated;
+    }
 }

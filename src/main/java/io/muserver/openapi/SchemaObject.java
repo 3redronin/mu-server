@@ -163,4 +163,8 @@ public class SchemaObject implements JsonWriter {
         isFirst = append(writer, "deprecated", deprecated, isFirst);
         writer.append('}');
     }
+
+    public boolean isDeprecated() {
+        return deprecated != null && deprecated;
+    }
 }

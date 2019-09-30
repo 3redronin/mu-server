@@ -6,10 +6,7 @@ import io.muserver.openapi.*;
 import java.io.BufferedWriter;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import static io.muserver.Mutils.notNull;
 import static io.muserver.openapi.PathItemObjectBuilder.pathItemObject;
@@ -48,13 +45,12 @@ class OpenApiDocumentor implements MuHandler {
 
         List<TagObject> tags = new ArrayList<>();
 
-        Map<String, PathItemObject> pathItems = new HashMap<>();
+        Map<String, PathItemObject> pathItems = new LinkedHashMap<>();
         for (ResourceClass root : roots) {
 
             if (!tags.contains(root.tag)) {
                 tags.add(root.tag);
             }
-
 
             for (ResourceMethod method : root.resourceMethods) {
                 String path = getPathWithoutRegex(root, method);
@@ -63,7 +59,7 @@ class OpenApiDocumentor implements MuHandler {
                 if (pathItems.containsKey(path)) {
                     operations = pathItems.get(path).operations;
                 } else {
-                    operations = new HashMap<>();
+                    operations = new LinkedHashMap<>();
                     PathItemObject pathItem = pathItemObject()
                         .withOperations(operations)
                         .build();

@@ -128,6 +128,7 @@ public class OpenApiDocumentorTest {
             assertThat(resp.code(), is(200));
             assertThat(resp.header("Content-Type"), equalTo("text/html;charset=utf-8"));
             String responseBody = resp.body().string();
+            assertThat(responseBody, containsString("</html>"));
             File outputFile = new File("target/openapi.html");
             System.out.println("Creating " + outputFile.getCanonicalPath() + " which is the sample API documentation for your viewing pleasure.");
             try (FileWriter fw = new FileWriter(outputFile)) {
@@ -516,55 +517,6 @@ public class OpenApiDocumentorTest {
                 contains("Apple", "Banana", "Carrot"));
         }
 
-    }
-
-    @Test
-    public void theOrderOfMethodsDependsOnNameLengthAndHttpMethod() throws Exception {
-        @Path("users")
-        class User {
-            @GET
-            public void all() {
-            }
-
-            @GET
-            @Deprecated
-            public void deprecatedAll() {
-            }
-
-            @DELETE
-            @Path("{id}")
-            public void singleDelete(@PathParam("id") String id) {
-            }
-
-            @GET
-            @Path("{id}/validate")
-            public void validateOne(@PathParam("id") String id) {
-            }
-
-            @GET
-            @Path("{id}")
-            public void singleGet(@PathParam("id") String id) {
-            }
-
-            @POST
-            @Path("{id}")
-            public void singlePost(@PathParam("id") String id) {
-            }
-
-        }
-
-        server = ServerUtils.httpsServerForTest()
-            .addHandler(RestHandlerBuilder.restHandler(new User()).withOpenApiJsonUrl("/openapi.json"))
-            .start();
-        try (okhttp3.Response resp = call(request(server.uri().resolve("/openapi.json")))) {
-            JSONObject json = new JSONObject(resp.body().string());
-            System.out.println("json.toString(2) = " + json.toString(2));
-            assertThat(json.getJSONArray("tags").toList().stream()
-                    .map(Map.class::cast)
-                    .map(v -> (String) v.get("name"))
-                    .collect(Collectors.toList()),
-                contains("Apple", "Banana", "Carrot"));
-        }
     }
 
     @After

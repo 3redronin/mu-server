@@ -13,7 +13,10 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.Parameter;
 import java.net.URI;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -27,7 +30,7 @@ class ResourceClass {
     final Object resourceInstance;
     final List<MediaType> produces;
     final List<MediaType> consumes;
-    Set<ResourceMethod> resourceMethods;
+    List<ResourceMethod> resourceMethods;
     final String pathTemplate;
     final TagObject tag;
     final List<Class<? extends Annotation>> nameBindingAnnotations;
@@ -60,7 +63,7 @@ class ResourceClass {
             throw new IllegalStateException("Cannot call setupMethodInfo twice");
         }
 
-        Set<ResourceMethod> resourceMethods = new HashSet<>();
+        List<ResourceMethod> resourceMethods = new ArrayList<>();
         java.lang.reflect.Method[] methods = this.resourceClass.getMethods();
         for (java.lang.reflect.Method restMethod : methods) {
             java.lang.reflect.Method annotationSource = JaxMethodLocator.getMethodThatHasJaxRSAnnotations(restMethod);
@@ -89,7 +92,7 @@ class ResourceClass {
             boolean isDeprecated = annotationSource.isAnnotationPresent(Deprecated.class);
             resourceMethods.add(new ResourceMethod(this, methodPattern, restMethod, params, httpMethod, pathTemplate, methodProduces, methodConsumes, descriptionData, isDeprecated, methodNameBindingAnnotations));
         }
-        this.resourceMethods = Collections.unmodifiableSet(resourceMethods);
+        this.resourceMethods = Collections.unmodifiableList(resourceMethods);
     }
 
     static List<Class<? extends Annotation>> getNameBindingAnnotations(AnnotatedElement annotationSource) {

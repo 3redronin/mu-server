@@ -2,9 +2,8 @@ package io.muserver.openapi;
 
 import java.io.IOException;
 import java.io.Writer;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * @see PathsObjectBuilder
@@ -33,8 +32,16 @@ public class PathsObject implements JsonWriter {
                     }
                 }
             }
+            this.pathItemObjects = new LinkedHashMap<>(pathItemObjects.size());
+            for (Map.Entry<String, PathItemObject> entry : pathItemObjects.entrySet().stream()
+                .sorted(Comparator.comparing(Map.Entry::getKey))
+                .collect(Collectors.toList())
+            ) {
+                this.pathItemObjects.put(entry.getKey(), entry.getValue());
+            }
+        } else {
+            this.pathItemObjects = null;
         }
-        this.pathItemObjects = pathItemObjects;
     }
 
     @Override

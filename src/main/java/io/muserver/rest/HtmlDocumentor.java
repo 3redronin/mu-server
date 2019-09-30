@@ -8,7 +8,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 import static io.muserver.rest.SafeHtml.htmlEscape;
 import static java.util.Collections.singletonMap;
@@ -132,7 +131,7 @@ class HtmlDocumentor {
                         renderIfValue("p", operation.summary);
                         renderIfValue("p", operation.description);
 
-                        if (operation.deprecated) {
+                        if (operation.isDeprecated()) {
                             new El("p").open(singletonMap("class", "deprecated")).content("WARNING: This operation is marked as deprecated and may not be supported in future versions of this API.").close();
                         }
 
@@ -200,7 +199,7 @@ class HtmlDocumentor {
 
                                 renderExamples(value.example, value.examples, value.schema == null ? null : value.schema.defaultValue);
 
-                                if (value.schema == null) {
+                                if (value.schema == null || value.schema.properties == null) {
                                     continue;
                                 }
 
@@ -230,7 +229,7 @@ class HtmlDocumentor {
                                     render("td", type);
 
                                     El paramDesc = new El("td").open();
-                                    if (schema.deprecated) {
+                                    if (schema.isDeprecated()) {
                                         render("strong", "DEPRECATED. ");
                                     }
                                     if (requiredParams != null && requiredParams.contains(formName)) {
@@ -241,13 +240,11 @@ class HtmlDocumentor {
 
                                     paramDesc.close();
                                     row.close();
-
                                 }
 
                                 tbody.close();
                                 table.close();
                             }
-
 
 
                         }
@@ -275,7 +272,7 @@ class HtmlDocumentor {
                                 String code = respEntry.getKey();
                                 ResponseObject resp = respEntry.getValue();
                                 render("td", code);
-                                render("td", resp.content.keySet().stream().collect(Collectors.joining("\n")));
+                                render("td", resp.content == null ? "" : String.join("\n", resp.content.keySet()));
                                 render("td", resp.description);
 
 
