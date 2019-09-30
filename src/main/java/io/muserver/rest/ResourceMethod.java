@@ -99,17 +99,24 @@ class ResourceMethod {
                 .build());
         } else {
             for (ApiResponse apiResponse : apiResponseList) {
-                Stream<MediaType> responseTypes = apiResponse.contentType().length == 0 ? effectiveProduces.stream() : Stream.of(apiResponse.contentType()).map(MediaType::valueOf);
+                Stream<MediaType> responseTypes = apiResponse.contentType().length != 0 ?
+                    Stream.of(apiResponse.contentType()).map(MediaType::valueOf)
+                    : "204".equals(apiResponse.code()) ? null : effectiveProduces.stream();
                 httpStatusCodes.put(apiResponse.code(), responseObject()
-                    .withContent(responseTypes.collect(toMap(MediaType::toString,
+                    .withContent(responseTypes == null ? null : responseTypes.collect(toMap(MediaType::toString,
                         mt -> mediaTypeObject()
+                            .withSchema(Void.class.equals(apiResponse.response()) ? null : schemaObjectFrom(apiResponse.response()).build())
                             .withExample(Mutils.nullOrEmpty(apiResponse.example()) ? null : apiResponse.example())
                             .build()))
                     )
                     .withDescription(apiResponse.message())
-                    .withHeaders(Stream.of(apiResponse.responseHeaders()).collect(
+                    .withHeaders(
+                        apiResponse.responseHeaders().length == 0 ? null :
+                        Stream.of(apiResponse.responseHeaders()).collect(
                         toMap(ResponseHeader::name,
-                            rh -> headerObject().withDescription(rh.description()).withDeprecated(rh.deprecated()).withExample(nullOrEmpty(rh.example()) ? null : rh.example()).build()
+                            rh -> headerObject().withDescription(rh.description())
+                                .withDeprecated(rh.deprecated() ? true : null)
+                                .withExample(nullOrEmpty(rh.example()) ? null : rh.example()).build()
                         )))
                     .build());
             }
@@ -125,10 +132,10 @@ class ResourceMethod {
                         .withSchema(SchemaObjectBuilder.schemaObjectFrom(messageBodyParam.parameterHandle.getType(), messageBodyParam.parameterHandle.getParameterizedType())
                             .withTitle(messageBodyParam.descriptionData.summary)
                             .withDescription(messageBodyParam.descriptionData.description)
-                            .withNullable(!messageBodyParam.isRequired)
                             .build())
                         .withExample(messageBodyParam.descriptionData.example)
                         .build()))
+                .withDescription(messageBodyParam.descriptionData.summaryAndDescription())
                 .withRequired(messageBodyParam.isRequired)
                 .build())
             .findFirst().orElse(null);
@@ -179,7 +186,7 @@ class ResourceMethod {
             .withSummary(descriptionData.summary)
             .withDescription(descriptionData.description)
             .withExternalDocs(descriptionData.externalDocumentation)
-            .withDeprecated(isDeprecated)
+            .withDeprecated(isDeprecated ? true : null)
             .withRequestBody(requestBody)
             .withResponses(
                 responsesObject()

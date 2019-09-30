@@ -16,7 +16,7 @@ public class OperationObjectBuilder {
     private RequestBodyObject requestBody;
     private ResponsesObject responses;
     private Map<String, CallbackObject> callbacks;
-    private boolean deprecated;
+    private Boolean deprecated;
     private List<SecurityRequirementObject> security;
     private List<ServerObject> servers;
 
@@ -119,7 +119,7 @@ public class OperationObjectBuilder {
      * @param deprecated Declares this operation to be deprecated. Consumers SHOULD refrain from usage of the declared operation. Default value is <code>false</code>.
      * @return The current builder
      */
-    public OperationObjectBuilder withDeprecated(boolean deprecated) {
+    public OperationObjectBuilder withDeprecated(Boolean deprecated) {
         this.deprecated = deprecated;
         return this;
     }

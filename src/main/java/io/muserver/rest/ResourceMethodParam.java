@@ -103,11 +103,12 @@ abstract class ResourceMethodParam {
                     .withExample(descriptionData.example);
                 externalDoc = descriptionData.externalDocumentation;
             }
+            Pattern patternIfNotDefault = this.pattern == null || UriPattern.DEFAULT_CAPTURING_GROUP_PATTERN.equals(this.pattern.pattern()) ? null : this.pattern;
             return builder.withSchema(
                 schemaObjectFrom(parameterHandle.getType(), parameterHandle.getParameterizedType())
                     .withDefaultValue(source == ValueSource.PATH_PARAM ? null : defaultValue())
                     .withExternalDocs(externalDoc)
-                    .withPattern(pattern)
+                    .withPattern(patternIfNotDefault)
                     .build()
             );
         }

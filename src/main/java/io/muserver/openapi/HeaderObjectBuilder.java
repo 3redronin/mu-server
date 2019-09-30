@@ -5,7 +5,7 @@ import java.util.Map;
 public class HeaderObjectBuilder {
     private String description;
     private boolean required;
-    private boolean deprecated;
+    private Boolean deprecated;
     private String style;
     private String explode;
     private SchemaObject schema;
@@ -36,7 +36,7 @@ public class HeaderObjectBuilder {
      * @param deprecated Specifies that a header is deprecated and SHOULD be transitioned out of usage.
      * @return The current builder
      */
-    public HeaderObjectBuilder withDeprecated(boolean deprecated) {
+    public HeaderObjectBuilder withDeprecated(Boolean deprecated) {
         this.deprecated = deprecated;
         return this;
     }

@@ -35,7 +35,7 @@ public class OperationObjectTest {
         StringWriter writer = new StringWriter();
         operation.writeJson(writer);
 
-        assertThat(writer.toString(), equalTo("{\"tags\":[\"pets\"],\"summary\":\"Find pets by ID\",\"description\":\"Returns pets based on ID\",\"externalDocs\":{\"description\":\"The docs on the web\",\"url\":\"http://muserver.io\"},\"operationId\":\"some.unique.id\",\"responses\":{\"200\":{\"description\":\"Success\"}},\"deprecated\":false}"));
+        assertThat(writer.toString(), equalTo("{\"tags\":[\"pets\"],\"summary\":\"Find pets by ID\",\"description\":\"Returns pets based on ID\",\"externalDocs\":{\"description\":\"The docs on the web\",\"url\":\"http://muserver.io\"},\"operationId\":\"some.unique.id\",\"responses\":{\"200\":{\"description\":\"Success\"}}}"));
     }
 
 

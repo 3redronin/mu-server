@@ -99,6 +99,7 @@ class OpenApiDocumentor implements MuHandler {
                         .withRequestBody(requestBodyObject()
                             .withRequired(existing.requestBody != null && existing.requestBody.required &&
                                 curOO.requestBody != null && curOO.requestBody.required)
+                            .withDescription(Mutils.coalesce(existing.description, curOO.description))
                             .withContent(mergedContent)
                             .build());
                     if (existing.summary == null && existing.description == null) {

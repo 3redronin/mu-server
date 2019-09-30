@@ -14,7 +14,7 @@ public class HeaderObject implements JsonWriter {
 
     final String description;
     final boolean required;
-    final boolean deprecated;
+    final Boolean deprecated;
     final String style;
     final String explode;
     final SchemaObject schema;
@@ -22,7 +22,7 @@ public class HeaderObject implements JsonWriter {
     final Map<String, ExampleObject> examples;
     final Map<String, MediaTypeObject> content;
 
-    HeaderObject(String description, boolean required, boolean deprecated,
+    HeaderObject(String description, boolean required, Boolean deprecated,
                     String style, String explode, SchemaObject schema, Object example,
                     Map<String, ExampleObject> examples, Map<String, MediaTypeObject> content) {
 

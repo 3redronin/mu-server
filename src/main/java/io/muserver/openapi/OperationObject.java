@@ -24,13 +24,13 @@ public class OperationObject implements JsonWriter {
     public final RequestBodyObject requestBody;
     public final ResponsesObject responses;
     public final Map<String, CallbackObject> callbacks;
-    public final boolean deprecated;
+    public final Boolean deprecated;
     public final List<SecurityRequirementObject> security;
     public final List<ServerObject> servers;
 
     OperationObject(List<String> tags, String summary, String description, ExternalDocumentationObject externalDocs,
                            String operationId, List<ParameterObject> parameters, RequestBodyObject requestBody, ResponsesObject responses,
-                           Map<String, CallbackObject> callbacks, boolean deprecated, List<SecurityRequirementObject> security,
+                           Map<String, CallbackObject> callbacks, Boolean deprecated, List<SecurityRequirementObject> security,
                            List<ServerObject> servers) {
         notNull("responses", responses);
         if (parameters != null) {

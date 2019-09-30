@@ -15,7 +15,7 @@ import static io.muserver.Mutils.urlDecode;
  */
 public class UriPattern {
 
-    private static final String DEFAULT_CAPTURING_GROUP_PATTERN = "[^/]+?";
+    static final String DEFAULT_CAPTURING_GROUP_PATTERN = "[^/]+?";
     private final Pattern pattern;
     private final List<String> namedGroups;
     private final List<String> namedGroupRegexes;

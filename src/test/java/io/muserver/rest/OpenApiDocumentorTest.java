@@ -18,6 +18,7 @@ import scaffolding.ServerUtils;
 
 import javax.ws.rs.*;
 import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.Response;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -73,7 +74,7 @@ public class OpenApiDocumentorTest {
             assertThat(pet.keySet(), containsInAnyOrder("put", "post"));
 
             JSONObject download = paths.getJSONObject("/pet/{petId}/download").getJSONObject("get");
-            assertThat(download.getBoolean("deprecated"), is(false));
+            assertThat(download.has("deprecated"), is(false));
             JSONArray downloadParams = download.getJSONArray("parameters");
             assertThat(downloadParams.length(), is(1));
             JSONObject downloadParam1 = downloadParams.getJSONObject(0);
@@ -209,7 +210,7 @@ public class OpenApiDocumentorTest {
             @POST
             @Consumes("text/plain")
             @Produces("text/plain;charset=utf-8")
-            @ApiResponse(code="201", message="Very Success", contentType = {"text/plain;charset=utf-8"}, example = "This is an example return value")
+            @ApiResponse(code = "201", message = "Very Success", contentType = {"text/plain;charset=utf-8"}, example = "This is an example return value")
             public int create(int body) {
                 return body;
             }
@@ -217,22 +218,22 @@ public class OpenApiDocumentorTest {
             @POST
             @Consumes("application/json")
             @Description(value = "Creates a new thing somehow", details = "The format depends on the content type")
-            @ApiResponse(code="204", message = "Success")
+            @ApiResponse(code = "204", message = "Success")
             public void createWithJson(@Required @Description(value = "An json in a format", example = "{ \"thing\": \"hing\" }") String json) {
             }
 
             @POST
             @Consumes("image/*")
             @Produces("image/*")
-            public File uploadImage(@Description(value="Image", details = "Any kind of image") File image) {
+            public File uploadImage(@Description(value = "Image", details = "Any kind of image") File image) {
                 return image;
             }
 
             @POST
             @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
-            @ApiResponse(code="201", message = "Very Success", contentType="application/json")
+            @ApiResponse(code = "201", message = "Very Success", contentType = "application/json")
             public void uploadForm(@Description("The first") @FormParam("one") String one,
-                                   @Description(value="The second", details = "And this one is required")
+                                   @Description(value = "The second", details = "And this one is required")
                                    @Required @FormParam("two") String two,
                                    @FormParam("three") int three) {
             }
@@ -257,7 +258,7 @@ public class OpenApiDocumentorTest {
             assertThat(postOp.getString("description"), is("The format depends on the content type"));
 
             JSONObject requestBody = postOp.getJSONObject("requestBody");
-            assertThat(requestBody.has("description"), is(false)); // descriptions are added on the schemas
+            assertThat(requestBody.has("description"), is(true));
             assertThat(requestBody.getBoolean("required"), is(false));
 
 
@@ -274,13 +275,13 @@ public class OpenApiDocumentorTest {
 
             JSONObject appJson = content.getJSONObject("application/json").getJSONObject("schema");
             assertThat(appJson.keySet(), hasSize(3));
-            assertThat(appJson.getBoolean("nullable"), is(false));
+            assertThat(appJson.getBoolean("nullable"), is(true));
             assertThat(appJson.getString("title"), is("An json in a format"));
             assertThat(appJson.getString("type"), is("string"));
 
             JSONObject textPlain = content.getJSONObject("text/plain").getJSONObject("schema");
             assertThat(textPlain.keySet(), hasSize(3));
-            assertThat(textPlain.getBoolean("nullable"), is(true));
+            assertThat(textPlain.getBoolean("nullable"), is(false));
             assertThat(textPlain.getString("type"), is("integer"));
             assertThat(textPlain.getString("format"), is("int32"));
 
@@ -299,6 +300,73 @@ public class OpenApiDocumentorTest {
             assertThat(twoHundred
                 .getJSONObject(twoHundred.keySet().stream().findFirst().get()).has("example"), is(false));
         }
+    }
+
+    @Test
+    public void responseContentTypesAreDoneRight() throws IOException {
+        @Path("sample")
+        class Blah {
+            @GET
+            @ApiResponse(code = "204", message = "Should have no content field")
+            @ApiResponse(code = "200", message = "Should have content field")
+            @ApiResponse(code = "202", message = "Should have content field", response = int.class,
+                responseHeaders = @ResponseHeader(name="x-return-header", description = "A header to be returned"))
+            @ApiResponse(code = "201", message = "Should have content field and type", contentType = "text/plain")
+            public Response doIt() {
+                return Response.ok().build();
+            }
+
+            @GET
+            @Path("with-produces")
+            @Produces("application/json")
+            @ApiResponse(code = "204", message = "Should have no content field")
+            @ApiResponse(code = "200", message = "Should have content field")
+            @ApiResponse(code = "202", message = "Should have content field", response = int.class,
+                responseHeaders = @ResponseHeader(name="x-return-header", description = "A header to be returned"))
+            @ApiResponse(code = "201", message = "Should have content field and type", contentType = "text/plain")
+            public Response doIt2() {
+                return Response.ok().build();
+            }
+        }
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(RestHandlerBuilder.restHandler(new Blah()).withOpenApiJsonUrl("/openapi.json"))
+            .start();
+        try (okhttp3.Response resp = call(request(server.uri().resolve("/openapi.json")))) {
+            JSONObject json = new JSONObject(resp.body().string());
+
+            String[] paths = { "/sample", "/sample/with-produces" };
+            for (String path : paths) {
+                JSONObject op = json.getJSONObject("paths")
+                    .getJSONObject(path)
+                    .getJSONObject("get")
+                    .getJSONObject("responses");
+                String defaultType = path.equals("/sample") ? "*/*" : "application/json";
+
+                assertThat(path, op.keySet(), hasSize(4));
+
+                JSONObject _200 = op.getJSONObject("200");
+                assertThat(path, _200.keySet(), hasSize(2));
+                assertThat(path, _200.getString("description"), is("Should have content field"));
+                assertThat(path, _200.getJSONObject("content").getJSONObject(defaultType).keySet(), hasSize(0));
+
+                JSONObject _201 = op.getJSONObject("201");
+                assertThat(path, _201.keySet(), hasSize(2));
+                assertThat(path, _201.getString("description"), is("Should have content field and type"));
+                assertThat(path, _201.getJSONObject("content").getJSONObject("text/plain").keySet(), hasSize(0));
+
+                JSONObject _202 = op.getJSONObject("202");
+                assertThat(path, _202.keySet(), hasSize(3));
+                assertThat(path, _202.getString("description"), is("Should have content field"));
+                assertThat(path, _202.getJSONObject("headers").getJSONObject("x-return-header").getString("description"),
+                    is("A header to be returned"));
+                assertThat(path, _202.getJSONObject("content").getJSONObject(defaultType).getJSONObject("schema").getString("type"), is("integer"));
+
+                JSONObject _204 = op.getJSONObject("204");
+                assertThat(path, _204.keySet(), hasSize(1));
+                assertThat(path, _204.getString("description"), is("Should have no content field"));
+            }
+        }
+
     }
 
     @After
