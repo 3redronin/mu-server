@@ -16,11 +16,13 @@ import java.io.OutputStream;
 import java.net.URI;
 import java.util.concurrent.TimeUnit;
 
+import static io.muserver.ContextHandlerBuilder.context;
 import static io.muserver.Http2ConfigBuilder.http2EnabledIfAvailable;
 import static io.muserver.MuServerBuilder.muServer;
 import static io.muserver.Mutils.urlEncode;
 import static io.muserver.WebSocketHandlerBuilder.webSocketHandler;
 import static io.muserver.handlers.AsyncFileProviderTest.BIG_FILE_DIR;
+import static io.muserver.handlers.ResourceHandlerBuilder.fileOrClasspath;
 
 public class RunLocal {
     private static final Logger log = LoggerFactory.getLogger(RunLocal.class);
@@ -35,7 +37,14 @@ public class RunLocal {
                 .withRate(100).withWindow(1, TimeUnit.SECONDS)
                 .build())
             .addHandler(ResourceHandlerBuilder.fileHandler(BIG_FILE_DIR))
-            .addHandler(ResourceHandlerBuilder.fileOrClasspath("src/test/resources/sample-static", "/sample-static"))
+            .addHandler(fileOrClasspath("src/test/resources/sample-static", "/sample-static"))
+            .addHandler(
+                context("files").addHandler(
+                    fileOrClasspath("non-existant-path", "/sample-static")
+                        .withDefaultFile(null)
+                        .withDirectoryListing(true)
+                )
+            )
             .addHandler(Method.GET, "/api", (request, response, pathParams) -> {
                 response.contentType(ContentTypes.APPLICATION_JSON);
                 response.write("{ \"hello\": \"world                    this is something           to be gzipped\" }");

@@ -242,7 +242,10 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
         if (openApiHtmlUrl != null || openApiJsonUrl != null) {
             if (openApiHtmlCss == null) {
                 InputStream cssStream = RestHandlerBuilder.class.getResourceAsStream("/io/muserver/resources/api.css");
-                openApiHtmlCss = new Scanner(cssStream, "UTF-8").useDelimiter("\\A").next();
+                Scanner scanner = new Scanner(cssStream, "UTF-8").useDelimiter("\\A");
+                openApiHtmlCss = scanner.next();
+                scanner.close();
+
             }
             OpenAPIObjectBuilder openAPIObjectToUse = this.openAPIObject == null ? OpenAPIObjectBuilder.openAPIObject() : this.openAPIObject;
             openAPIObjectToUse.withPaths(pathsObject().build());

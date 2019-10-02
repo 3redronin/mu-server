@@ -29,6 +29,8 @@ interface ResourceProvider {
     boolean skipIfPossible(long bytes);
 
     void sendTo(MuRequest request, MuResponse response, boolean sendBody, long maxLen) throws IOException;
+
+    Stream<Path> listFiles() throws IOException;
 }
 
 interface ResourceProviderFactory {
@@ -137,6 +139,10 @@ class ClasspathCache implements ResourceProviderFactory {
 
         public void sendTo(MuRequest request, MuResponse response, boolean sendBody, long maxLen) {
         }
+
+        public Stream<Path> listFiles() {
+            return Stream.empty();
+        }
     };
 }
 
@@ -204,6 +210,11 @@ class AsyncFileProvider implements ResourceProvider, CompletionHandler<Integer, 
             buf = ByteBuffer.allocate(8192);
             channel.read(buf, curPos, handle, this);
         }
+    }
+
+    @Override
+    public Stream<Path> listFiles() throws IOException {
+        return Files.list(localPath);
     }
 
     @Override
@@ -335,6 +346,11 @@ class ClasspathResourceProvider implements ResourceProvider {
                 }
             }
         }
+    }
+
+    @Override
+    public Stream<Path> listFiles() throws IOException {
+        return Files.list(path);
     }
 
 }

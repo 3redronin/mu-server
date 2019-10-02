@@ -142,14 +142,15 @@ public class ResourceHandlerTest {
             .addHandler(context("/file").addHandler(fileHandler("src/test/resources/sample-static")))
             .start();
 
-        try (Response resp = call(request().url(server.uri().resolve("/classpath/images").toURL()))) {
+        String encodedDir = urlEncode("a, tricky - dir Name");
+        try (Response resp = call(request(server.uri().resolve("/classpath/" + encodedDir)))) {
             assertThat(resp.code(), equalTo(302));
-            assertThat(resp.header("location"), equalTo(server.uri().resolve("/classpath/images/").toString()));
+            assertThat(resp.header("location"), equalTo(server.uri().resolve("/classpath/" + encodedDir + "/").toString()));
             assertThat(resp.body().contentLength(), equalTo(0L));
         }
-        try (Response resp = call(request().url(server.uri().resolve("/file/images").toURL()))) {
+        try (Response resp = call(request(server.uri().resolve("/file/" + encodedDir)))) {
             assertThat(resp.code(), equalTo(302));
-            assertThat(resp.header("location"), equalTo(server.uri().resolve("/file/images/").toString()));
+            assertThat(resp.header("location"), equalTo(server.uri().resolve("/file/" + encodedDir + "/").toString()));
             assertThat(resp.body().contentLength(), equalTo(0L));
         }
     }
@@ -309,6 +310,71 @@ public class ResourceHandlerTest {
 
         }
 
+    }
+
+    @Test
+    public void directoryListingIsPossible() throws IOException {
+        ResourceHandlerBuilder[] resourceHandlerBuilders = {
+            fileHandler("src/test/resources/sample-static"), classpathHandler("/sample-static")};
+        for (ResourceHandlerBuilder resourceHandlerBuilder : resourceHandlerBuilders) {
+            server = ServerUtils.httpsServerForTest()
+                .addHandler(context("umm")
+                    .addHandler(resourceHandlerBuilder
+                        .withDefaultFile(null)
+                        .withDirectoryListing(true)
+                    )
+                )
+                .start();
+            try (Response resp = call(request(server.uri().resolve("/umm")))) {
+                assertThat(resp.code(), is(302));
+            }
+            try (Response resp = call(request(server.uri().resolve("/umm/")))) {
+                assertThat(resp.code(), is(200));
+                assertThat(resp.header("content-type"), is("text/html;charset=utf-8"));
+                String html = resp.body().string();
+                assertThat(html, not(containsString("Parent directory")));
+                assertThat(html, containsString("<a href=\"alphanumerics.txt\">alphanumerics.txt</a>"));
+                assertThat(html, containsString("<a href=\"a%2C%20tricky%20-%20dir%20Name&#x2F;\">a, tricky - dir Name&#x2F;</a>"));
+            }
+            String encodedDir = urlEncode("a, tricky - dir Name");
+            try (Response resp = call(request(server.uri().resolve("/umm/" + encodedDir + "/")))) {
+                assertThat(resp.code(), is(200));
+                assertThat(resp.header("content-type"), is("text/html;charset=utf-8"));
+                String html = resp.body().string();
+                assertThat(html, containsString("<h1>Index of &#x2F;umm&#x2F;a, tricky - dir Name&#x2F;</h1>"));
+                assertThat(html, containsString("Parent directory"));
+                assertThat(html, containsString("<a href=\"a%2C%20tricket%20-%20file%20name.txt\">a, tricket - file name.txt</a>"));
+                assertThat(html, containsString("<a href=\"ooh%20ah&#x2F;\">ooh ah&#x2F;</a>"));
+            }
+        }
+    }
+
+    @Test
+    public void directoryListingIsOffByDefault() {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(context("umm")
+                .addHandler(ResourceHandlerBuilder.fileHandler("src/test/resources/sample-static"))
+            )
+            .start();
+        try (Response resp = call(request(server.uri().resolve("/umm/images/")))) {
+            assertThat(resp.code(), is(404));
+        }
+    }
+
+    @Test
+    public void defaultFileIsPreferredEvenWithDirectoryListing() throws IOException {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(context("umm")
+                .addHandler(ResourceHandlerBuilder.fileHandler("src/test/resources/sample-static")
+                    .withDirectoryListing(true)
+                    .withDefaultFile("overview.txt")
+                )
+            )
+            .start();
+        try (Response resp = call(request(server.uri().resolve("/umm/")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), containsString("<title>Mu-Server API Documentation</title>"));
+        }
     }
 
     @After

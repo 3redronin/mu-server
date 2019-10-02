@@ -1,12 +1,15 @@
 package io.muserver.handlers;
 
 import io.muserver.MuHandlerBuilder;
+import io.muserver.rest.RestHandlerBuilder;
 
 import java.io.File;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Map;
+import java.util.Scanner;
 
 import static io.muserver.handlers.ResourceType.DEFAULT_EXTENSION_MAPPINGS;
 
@@ -21,6 +24,8 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
     private String pathToServeFrom = "/";
     private String defaultFile = "index.html";
     private ResourceProviderFactory resourceProviderFactory;
+    private boolean directoryListingEnabled = false;
+    private String directoryListingCss = null;
 
     /**
      * Specify custom filename extension to mime-type mappings. By default {@link ResourceType#DEFAULT_EXTENSION_MAPPINGS}
@@ -47,7 +52,7 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
 
     /**
      * Specifies the file to use when a request such as <code>/web/</code> is made. Defaults to <code>index.html</code>
-     * @param defaultFile The default file to use when a directory is requested
+     * @param defaultFile The default file to use when a directory is requested, or <code>null</code> for no default.
      * @return The builder
      */
     public ResourceHandlerBuilder withDefaultFile(String defaultFile) {
@@ -61,6 +66,19 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
     }
 
     /**
+     * Specifies whether or not to allow directory listing. This is disabled by default.
+     * <p>Note that directory listings will not show if there is a file in the directory
+     * that matches the {@link #withDefaultFile(String)} setting. Set that to <code>null</code>
+     * if you do not want the default file (e.g. <code>index.html</code>) to display.</p>
+     * @param enabled <code>true</code> to turn it on; <code>false</code> to disable it.
+     * @return The builder
+     */
+    public ResourceHandlerBuilder withDirectoryListing(boolean enabled) {
+        this.directoryListingEnabled = enabled;
+        return this;
+    }
+
+    /**
      * Creates the handler
      * @return The built handler
      */
@@ -68,7 +86,14 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
         if (resourceProviderFactory == null) {
             throw new IllegalStateException("No resourceProviderFactory has been set");
         }
-        return new ResourceHandler(resourceProviderFactory, pathToServeFrom, defaultFile, extensionToResourceType);
+        String css = this.directoryListingCss;
+        if (directoryListingEnabled && css == null) {
+            InputStream cssStream = RestHandlerBuilder.class.getResourceAsStream("/io/muserver/resources/api.css");
+            Scanner scanner = new Scanner(cssStream, "UTF-8").useDelimiter("\\A");
+            css = scanner.next();
+            scanner.close();
+        }
+        return new ResourceHandler(resourceProviderFactory, pathToServeFrom, defaultFile, extensionToResourceType, directoryListingEnabled, css);
     }
 
 
@@ -126,5 +151,4 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
             return classpathHandler(classpathRoot);
         }
     }
-
 }

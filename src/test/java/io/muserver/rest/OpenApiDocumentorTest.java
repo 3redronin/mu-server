@@ -70,7 +70,6 @@ public class OpenApiDocumentorTest {
             assertThat(resp.code(), is(200));
             assertThat(resp.header("Content-Type"), equalTo("application/json"));
             JSONObject json = new JSONObject(resp.body().string());
-            System.out.println("json = " + json.toString(2));
             JSONObject paths = json.getJSONObject("paths");
 
             JSONObject pet = paths.getJSONObject("/pet");
