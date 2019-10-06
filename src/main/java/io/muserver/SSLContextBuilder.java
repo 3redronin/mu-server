@@ -9,7 +9,11 @@ import javax.net.ssl.SSLContext;
 import java.io.*;
 import java.security.KeyStore;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+
+import static java.util.Arrays.asList;
 
 public class SSLContextBuilder {
     private static final Logger log = LoggerFactory.getLogger(SSLContextBuilder.class);
@@ -91,6 +95,7 @@ public class SSLContextBuilder {
 
     /**
      * Sets a filter allowing you to specify which ciphers you would like to support.
+     *
      * @param cipherFilter A Filter that takes all the supported ciphers, and all the default ciphers
      *                     (normally the default will exclude insecure ciphers that technically could
      *                     be supported) and returns a list of ciphers you want to use in your preferred
@@ -114,9 +119,12 @@ public class SSLContextBuilder {
     }
 
     /**
-     * Sets the SSL/TLS protocols to use, for example "SSLv3", "TLSv1", "TLSv1.1", "TLSv1.2".
-     * The default is "TLSv1.2".
-     * @param protocols The protocols to use, or null to use the default
+     * Sets the SSL/TLS protocols to use, for example "SSLv3", "TLSv1", "TLSv1.1", "TLSv1.2", "TLSv1.3".
+     * The default is "TLSv1.2" and "TLSv1.3".
+     * <p>Note that if the current JDK does not support a requested protocol then it will be ignored.
+     * If no requested protocols are available, then an exception will be started when this is built.</p>
+     *
+     * @param protocols The protocols to use, or null to use the default.
      * @return This builder.
      */
     public SSLContextBuilder withProtocols(String... protocols) {
@@ -191,9 +199,24 @@ public class SSLContextBuilder {
         }
 
         CipherSuiteFilter cipherFilter = nettyCipherSuiteFilter != null ? nettyCipherSuiteFilter : IdentityCipherSuiteFilter.INSTANCE;
+
+        List<String> supportedProtocols = asList(SSLContext.getDefault().getSupportedSSLParameters().getProtocols());
+        List<String> protocolsToUse = new ArrayList<>();
+        for (String protocol : Mutils.coalesce(this.protocols, new String[]{"TLSv1.2", "TLSv1.3"})) {
+            if (supportedProtocols.contains(protocol)) {
+                protocolsToUse.add(protocol);
+            } else {
+                log.warn("Will not use " + protocol + " as it is not supported by the current JDK");
+            }
+        }
+        if (protocolsToUse.isEmpty()) {
+            throw new MuException("Cannot start up as none of the requested SSL protocols " + Arrays.toString(this.protocols)
+                + " are supported by the current JDK " + supportedProtocols);
+        }
+
         return builder
             .clientAuth(ClientAuth.NONE)
-            .protocols(protocols)
+            .protocols(protocolsToUse.toArray(new String[0]))
             .ciphers(null, cipherFilter)
             .build();
     }
@@ -213,6 +236,7 @@ public class SSLContextBuilder {
     public static SSLContext unsignedLocalhostCert() {
         return unsignedLocalhostCertBuilder().build();
     }
+
     public static SSLContextBuilder unsignedLocalhostCertBuilder() {
         // The cert was created with the following command:
         // keytool -genkeypair -keystore localhost.p12 -storetype PKCS12 -storepass Very5ecure -alias muserverlocalhost -keyalg RSA -sigalg SHA256withRSA -keysize 2048 -validity 36500 -dname "CN=Mu Server Test Cert, OU=Mu Server, O=Ronin" -ext san=dns:localhost,ip:127.0.0.1
