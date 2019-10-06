@@ -87,8 +87,8 @@ public class JaxRsHttpHeadersAdapterTest {
 
     @Test
     public void getCookies() {
-        cookies.add(new Cookie("Blah", "Hello"));
-        cookies.add(new Cookie("Blah2", "Hello2"));
+        cookies.add(Cookie.builder().withName("Blah").withValue("Hello").build());
+        cookies.add(Cookie.builder().withName("Blah2").withValue("Hello2").build());
         Map<String, javax.ws.rs.core.Cookie> expected = new HashMap<>();
         expected.put("Blah", new javax.ws.rs.core.Cookie("Blah", "Hello"));
         expected.put("Blah2", new javax.ws.rs.core.Cookie("Blah2", "Hello2"));
