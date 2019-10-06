@@ -3,13 +3,16 @@ package io.muserver.rest;
 import io.muserver.Mutils;
 import io.muserver.openapi.*;
 
+import javax.ws.rs.core.MediaType;
 import java.io.BufferedWriter;
 import java.io.IOException;
+import java.net.URI;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static io.muserver.Mutils.urlEncode;
 import static java.util.Collections.singletonMap;
 
 class HtmlDocumentor {
@@ -17,11 +20,13 @@ class HtmlDocumentor {
     private final BufferedWriter writer;
     private final OpenAPIObject api;
     private final String css;
+    private final URI requestUri;
 
-    HtmlDocumentor(BufferedWriter writer, OpenAPIObject api, String css) {
+    HtmlDocumentor(BufferedWriter writer, OpenAPIObject api, String css, URI requestUri) {
         this.writer = writer;
         this.api = api;
         this.css = css;
+        this.requestUri = requestUri;
     }
 
     void writeHtml() throws IOException {
@@ -124,6 +129,7 @@ class HtmlDocumentor {
                 for (Map.Entry<String, OperationObject> operationObjectEntry : item.operations.entrySet()) {
                     String method = operationObjectEntry.getKey();
                     OperationObject operation = operationObjectEntry.getValue();
+
                     if (operation.tags.contains(tag.name)) {
 
                         Map<String, String> operationAttributes = new HashMap<>();
@@ -132,7 +138,8 @@ class HtmlDocumentor {
                         El operationDiv = new El("div").open(operationAttributes);
 
                         El h3 = new El("h3").open().content(method.toUpperCase() + " ");
-                        new El("a").open(Collections.singletonMap("href", baseUri + url)).content(url).close();
+                        String urlWithContext = baseUri + url;
+                        new El("a").open(Collections.singletonMap("href", urlWithContext)).content(url).close();
                         h3.close();
                         renderIfValue("p", operation.summary);
                         renderIfValue("p", operation.description);
@@ -140,6 +147,9 @@ class HtmlDocumentor {
                         if (operation.isDeprecated()) {
                             new El("p").open(singletonMap("class", "deprecated")).content("WARNING: This operation is marked as deprecated and may not be supported in future versions of this API.").close();
                         }
+
+                        StringBuilder queryString = new StringBuilder();
+                        StringBuilder curlHeaders = new StringBuilder();
 
                         RequestBodyObject requestBody = operation.requestBody;
                         if (!operation.parameters.isEmpty()) {
@@ -161,6 +171,16 @@ class HtmlDocumentor {
                                 El row = new El("tr").open();
                                 render("td", parameter.name);
                                 String type = parameter.in;
+
+                                if ("query".equals(type)) {
+                                    queryString.append(queryString.length() == 0 ? '?' : '&');
+                                    queryString.append(urlEncode(parameter.name)).append('=')
+                                        .append(urlEncode(bashValue(parameter.example)));
+                                } else if ("header".equals(type)) {
+                                    curlHeaders.append(" -H '").append(parameter.name).append(": ")
+                                        .append(bashValue(parameter.example)).append('\'');
+                                }
+
                                 SchemaObject schema = parameter.schema;
                                 Object defaultVal = null;
                                 ExternalDocumentationObject externalDocs = null;
@@ -193,6 +213,7 @@ class HtmlDocumentor {
                             table.close();
                         }
 
+                        StringBuilder curlBody = new StringBuilder();
                         if (requestBody != null) {
                             render("h4", "Request body");
 
@@ -205,7 +226,13 @@ class HtmlDocumentor {
 
                                 renderExamples(value.example, value.examples, value.schema == null ? null : value.schema.defaultValue);
 
+                                String curlFormParam = (mediaType.equalsIgnoreCase(MediaType.MULTIPART_FORM_DATA)) ? "-F" : "-d";
+                                if (curlBody.length() == 0) {
+                                    curlBody = new StringBuilder(" -H 'content-type: " + mediaType + "'");
+                                }
+
                                 if (value.schema == null || value.schema.properties == null) {
+                                    curlBody.append(" --data '").append(bashValue(value.example)).append("'");
                                     continue;
                                 }
 
@@ -244,6 +271,9 @@ class HtmlDocumentor {
                                     paramDesc.content(schema.description);
                                     renderExamples(schema.example, null, schema.defaultValue);
 
+
+                                    curlBody.append(" ").append(curlFormParam).append(" '").append(urlEncode(formName)).append("=").append(bashValue(schema.example)).append("'");
+
                                     paramDesc.close();
                                     row.close();
                                 }
@@ -255,7 +285,7 @@ class HtmlDocumentor {
 
                         }
 
-
+                        String curlAccept = "";
                         if (!operation.responses.httpStatusCodes.isEmpty()) {
                             render("h4", "Responses");
 
@@ -278,8 +308,12 @@ class HtmlDocumentor {
                                 String code = respEntry.getKey();
                                 ResponseObject resp = respEntry.getValue();
                                 render("td", code);
-                                render("td", resp.content == null ? "" : String.join("\n", resp.content.keySet()));
+                                String contentTypes = resp.content == null ? "" : String.join("\n", resp.content.keySet());
+                                render("td", contentTypes);
                                 render("td", resp.description);
+                                if (curlAccept.isEmpty() && !contentTypes.isEmpty()) {
+                                    curlAccept = " -H 'accept: " + contentTypes.split("\n", 2)[0] + "'";
+                                }
 
 
                                 row.close();
@@ -288,6 +322,12 @@ class HtmlDocumentor {
                             tbody.close();
                             table.close();
                         }
+
+                        render("h4", "Curl");
+                        String sampleUrl = urlWithContext.replace("{", "(").replace("}", ")")
+                            + queryString;
+                        render("code", "curl -is -X " + method.toUpperCase() + curlHeaders + curlAccept +
+                            curlBody + " '" + requestUri.resolve(sampleUrl) + "'");
 
 
                         operationDiv.close();
@@ -299,6 +339,10 @@ class HtmlDocumentor {
 
         body.close();
         html.close();
+    }
+
+    private static String bashValue(Object value) {
+        return value == null || "".equals(value) ? "" : value.toString().replace("'", "'\\''");
     }
 
     private void renderExternalLinksParagraph(ExternalDocumentationObject externalDocs) throws IOException {

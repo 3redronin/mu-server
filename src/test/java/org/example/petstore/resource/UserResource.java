@@ -78,14 +78,13 @@ public class UserResource {
     @ApiResponse(code = "400", message = "Invalid user supplied")
     @ApiResponse(code = "404", message = "User not found")
     public Response updateUser(
-        @Description("name that need to be deleted")
+        @Description(value = "name that need to be updated", example = "a & b uh, ... huh")
         @Required
         @PathParam("username") String username,
-        @Description("Updated user object")
+        @Description(value = "Updated user object", example = "{ \"name\": \"bla ' & hah\" }")
         @Required
-            User user) {
-        userData.addUser(user);
-        return Response.ok().entity("").build();
+            String user) {
+        return Response.ok().entity("Added: " + user).build();
     }
 
     @DELETE

@@ -149,7 +149,7 @@ class OpenApiDocumentor implements MuHandler {
 
             try (OutputStreamWriter osw = new OutputStreamWriter(response.outputStream(), StandardCharsets.UTF_8);
                  BufferedWriter writer = new BufferedWriter(osw, 8192)) {
-                new HtmlDocumentor(writer, builtApi, openApiHtmlCss).writeHtml();
+                new HtmlDocumentor(writer, builtApi, openApiHtmlCss, request.uri()).writeHtml();
             }
         }
 
