@@ -9,17 +9,14 @@ import org.example.petstore.resource.VehicleResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.URI;
 import java.util.concurrent.TimeUnit;
 
 import static io.muserver.ContextHandlerBuilder.context;
 import static io.muserver.Http2ConfigBuilder.http2EnabledIfAvailable;
 import static io.muserver.MuServerBuilder.muServer;
-import static io.muserver.Mutils.urlEncode;
 import static io.muserver.WebSocketHandlerBuilder.webSocketHandler;
 import static io.muserver.handlers.AsyncFileProviderTest.BIG_FILE_DIR;
 import static io.muserver.handlers.ResourceHandlerBuilder.fileOrClasspath;
@@ -129,12 +126,8 @@ public class RunLocal {
 
         log.info("Started at " + server.httpUri() + " and " + server.httpsUri());
         log.info("REST docs available at " + server.httpUri().resolve("/api.html") + " and OpenAPI JSON at " + server.httpUri().resolve("/openapi.json"));
+        log.info("Download stuff at " + server.uri().resolve("/files"));
 
-        File[] files = BIG_FILE_DIR.listFiles(File::isFile);
-        for (File file : files) {
-            URI downloadUri = server.httpUri().resolve("/" + urlEncode(file.getName()));
-            log.info("Download " + file.getName() + " from " + downloadUri);
-        }
 
         Runtime.getRuntime().addShutdownHook(new Thread(server::stop));
     }

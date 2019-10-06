@@ -3,7 +3,7 @@ html {
     padding: 0;
     margin: 0;
 }
-*, *:before, *:after {
+* {
     box-sizing: inherit;
 }
 
@@ -17,13 +17,26 @@ body {
 h1 {
     margin: 0;
     padding: 20px 4px;
-    background-color: #283593;
+    background-color: #209CEE;
     color: white;
     text-align: center;
 }
 
+main {
+    margin: 0 auto;
+    padding: 20px;
+    max-width: 1000px;
+}
+
+a {
+    color: #1c77b9;
+}
+a:hover {
+    color: #21A7FF;
+}
+
 .preamble {
-    padding: 4%;
+    padding: 20px 4%;
 }
 
 .apiMetaData {
@@ -37,7 +50,7 @@ h1 {
 }
 
 h2 {
-    background-color: #3F51B5;
+    background-color: #209CEE;
     color: White;
     padding: 20px 10px;
     font-size: 17pt;
@@ -46,8 +59,8 @@ h2 {
 
 .operation {
     background-color: white;
-    margin: 4%;
-    padding: 4%;
+    margin: 20px 4%;
+    padding: 20px 4%;
     border-radius: 2px;
     box-shadow: 0 10px 20px rgba(0,0,0,0.19), 0 6px 6px rgba(0,0,0,0.23);
     max-width: 2000px;
@@ -56,47 +69,55 @@ h2 {
     color: #AAAAAA;
 }
 
-table.parameterTable, table.responseTable {
+table {
+    border-collapse: collapse;
+    border-bottom: #209CEE solid 1px;
     background: #fff;
     width: 90%;
-    border-collapse: collapse;
     text-align: left;
     margin: 20px 5%;
+}
+
+thead {
+    background-color: #21a7ff;
+    color: #FFFFFF;
+}
+
+th, td {
+    text-align: left;
+    padding: 3px;
+}
+
+tr:nth-of-type(even) {
+    background-color: #eaeffe;
+}
+
+
+table.parameterTable, table.responseTable {
     table-layout: fixed;
 }
 
-.responseTable th, .parameterTable th {
-    font-size: 14px;
-    font-weight: normal;
-    color: #1A237E;
-    border-bottom: 2px solid #3949AB;
-    padding: 10px 8px;
-}
 
 .responseTable th:nth-of-type(-n+2), .parameterTable th:nth-of-type(-n+2) {
     width: 25%;
 }
 
-.responseTable tbody tr:hover td, .parameterTable tbody tr:hover td {
-    color: #1A237E;
+tbody tr:hover td {
+    color: #209CEE;
 }
 
-.responseTable td, .parameterTable td {
-    color: #283593;
-    padding: 9px 8px 0;
+table a {
+    overflow-wrap: break-word;
 }
 
-.parameterTable a {
-    word-wrap: break-word;
-}
-
-table.dirListing th {
-    text-align: left;
-}
 table.dirListing .size {
     text-align: right;
     padding-right: 20px;
 }
 table.dirListing .dir {
     font-weight: bold;
+}
+
+p {
+    padding: 10px;
 }

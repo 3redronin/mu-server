@@ -8,6 +8,9 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Scanner;
 
@@ -20,6 +23,7 @@ import static io.muserver.handlers.ResourceType.DEFAULT_EXTENSION_MAPPINGS;
  */
 public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler> {
 
+    private DateTimeFormatter directoryListingDateFormatter;
     private Map<String, ResourceType> extensionToResourceType = DEFAULT_EXTENSION_MAPPINGS;
     private String pathToServeFrom = "/";
     private String defaultFile = "index.html";
@@ -31,7 +35,7 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
      * Specify custom filename extension to mime-type mappings. By default {@link ResourceType#DEFAULT_EXTENSION_MAPPINGS}
      * are used.
      * @param extensionToResourceType The mappings to use.
-     * @return The builder
+     * @return This builder
      */
     public ResourceHandlerBuilder withExtensionToResourceType(Map<String, ResourceType> extensionToResourceType) {
         this.extensionToResourceType = extensionToResourceType;
@@ -41,7 +45,7 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
     /**
      * Specifies the path to serve the static from.
      * @param pathToServeFrom A path that static data should be served from. Defaults to <code>/</code>
-     * @return The builder
+     * @return This builder
      * @deprecated Please use <code>ContextHandlerBuilder.context(pathToServeFrom).addHandler(resourceHandler)</code> instead.
      */
     @Deprecated
@@ -53,7 +57,7 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
     /**
      * Specifies the file to use when a request such as <code>/web/</code> is made. Defaults to <code>index.html</code>
      * @param defaultFile The default file to use when a directory is requested, or <code>null</code> for no default.
-     * @return The builder
+     * @return This builder
      */
     public ResourceHandlerBuilder withDefaultFile(String defaultFile) {
         this.defaultFile = defaultFile;
@@ -71,10 +75,30 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
      * that matches the {@link #withDefaultFile(String)} setting. Set that to <code>null</code>
      * if you do not want the default file (e.g. <code>index.html</code>) to display.</p>
      * @param enabled <code>true</code> to turn it on; <code>false</code> to disable it.
-     * @return The builder
+     * @return This builder
      */
     public ResourceHandlerBuilder withDirectoryListing(boolean enabled) {
         this.directoryListingEnabled = enabled;
+        return this;
+    }
+
+    /**
+     * Specifies a custom date format for the "Last modified" column when directory listing is enabled.
+     * @param dateTimeFormatter A format object, or null to use the default
+     * @return This builder
+     */
+    public ResourceHandlerBuilder withDirectoryListingDateFormatter(DateTimeFormatter dateTimeFormatter) {
+        this.directoryListingDateFormatter = dateTimeFormatter;
+        return this;
+    }
+
+    /**
+     * Specifies CSS to use for the HTML directory listing page, if directory listing is enabled.
+     * @param css CSS styles to use, or null for the default
+     * @return This builder
+     */
+    public ResourceHandlerBuilder withDirectoryListingCSS(String css) {
+        this.directoryListingCss = css;
         return this;
     }
 
@@ -93,7 +117,15 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
             css = scanner.next();
             scanner.close();
         }
-        return new ResourceHandler(resourceProviderFactory, pathToServeFrom, defaultFile, extensionToResourceType, directoryListingEnabled, css);
+
+        DateTimeFormatter formatterToUse = this.directoryListingDateFormatter;
+        if (directoryListingEnabled && formatterToUse == null) {
+            formatterToUse = DateTimeFormatter.ofPattern("yyyy/MM/dd hh:mm:ss")
+                .withLocale(Locale.US)
+                .withZone(ZoneId.systemDefault());
+        }
+
+        return new ResourceHandler(resourceProviderFactory, pathToServeFrom, defaultFile, extensionToResourceType, directoryListingEnabled, css, formatterToUse);
     }
 
 

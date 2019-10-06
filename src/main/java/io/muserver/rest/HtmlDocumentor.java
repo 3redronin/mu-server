@@ -42,7 +42,7 @@ class HtmlDocumentor {
 
         El preamble = new El("div").open(singletonMap("class", "preamble"));
 
-        new El("p").open().content(api.info.description).close();
+        renderIfValue("p", api.info.description);
 
         renderExternalLinksParagraph(api.externalDocs);
 
@@ -82,7 +82,7 @@ class HtmlDocumentor {
         preamble.close();
 
 
-        El nav = new El("ul").open(singletonMap("class", "nav"));
+        El nav = new El("ul").open(singletonMap("class", "nav operation"));
         for (TagObject tag : api.tags) {
             El li = new El("li").open();
             new El("a").open(singletonMap("href", "#" + Mutils.htmlEncode(tag.name))).content(tag.name).close();
