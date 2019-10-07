@@ -234,11 +234,12 @@ class NettyRequestAdapter implements MuRequest {
     @Override
     public Set<Cookie> cookies() {
         if (this.cookies == null) {
-            String encoded = headers().get(HeaderNames.COOKIE);
-            if (encoded == null) {
+            List<String> encoded = headers().getAll(HeaderNames.COOKIE);
+            if (encoded.isEmpty()) {
                 this.cookies = emptySet();
             } else {
-                this.cookies = nettyToMu(ServerCookieDecoder.STRICT.decode(encoded));
+                String joined = String.join("; ", encoded);
+                this.cookies = nettyToMu(ServerCookieDecoder.STRICT.decode(joined));
             }
         }
         return this.cookies;

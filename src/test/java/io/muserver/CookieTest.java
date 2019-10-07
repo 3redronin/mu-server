@@ -9,6 +9,7 @@ import org.junit.Before;
 import org.junit.Test;
 import scaffolding.ClientUtils;
 import scaffolding.MuAssert;
+import scaffolding.RawClient;
 import scaffolding.ServerUtils;
 
 import javax.ws.rs.CookieParam;
@@ -18,11 +19,13 @@ import javax.ws.rs.core.NewCookie;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.request;
+import static scaffolding.MuAssert.assertEventually;
 
 public class CookieTest {
 
@@ -126,7 +129,29 @@ public class CookieTest {
         assertThat(nonExistentCookieLookup.get().isPresent(), is(false));
         assertThat(sessionLookup.get().isPresent(), is(true));
         assertThat(sessionLookup.get().get(), is("SomeValue"));
+    }
 
+    @Test
+    public void ifCookiesAreSentAsSeparateHeadersItWorks() throws IOException {
+        server = MuServerBuilder.httpServer()
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.write("START; " + request.cookies().stream().map(Cookie::toString)
+                .sorted().collect(Collectors.joining("; "))
+                + "; END");
+            })
+            .start();
+
+        try (RawClient rawClient = RawClient.create(server.uri())
+            .sendStartLine("GET", "/")
+            .sendHeader("host", server.uri().getAuthority())
+            .sendHeader("cookie", "cookie1=something")
+            .sendHeader("cookie", "cookie2=somethingelse")
+            .endHeaders()
+            .flushRequest()) {
+
+            assertEventually(rawClient::responseString, endsWith("END"));
+            assertThat(rawClient.responseString(), endsWith("START; cookie1=something; cookie2=somethingelse; END"));
+        }
     }
 
     @Test
@@ -147,6 +172,20 @@ public class CookieTest {
         okhttp3.Cookie actual = cookies.get(0);
         assertThat(actual.name(), equalTo("A-thing"));
         assertThat(actual.value(), equalTo("Some%20value%20%26%20another%20thing%3Dumm"));
+    }
+
+    @Test
+    public void noCookiesReturnsEmptySet() throws IOException {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler((request, response) -> {
+                response.write(String.valueOf(request.cookies().isEmpty()));
+                return true;
+            }).start();
+
+        client.newCall(request().url(serverUrl()).build()).execute().close();
+        List<okhttp3.Cookie> cookies = getCookies();
+
+        assertThat(cookies, hasSize(0));
     }
 
     private List<okhttp3.Cookie> getCookies() {
