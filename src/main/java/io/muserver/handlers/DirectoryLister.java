@@ -5,9 +5,11 @@ import io.muserver.Mutils;
 import java.io.IOException;
 import java.io.Writer;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import static io.muserver.Mutils.urlEncode;
 import static java.util.Collections.singletonMap;
@@ -64,32 +66,33 @@ class DirectoryLister {
             parentDirRow.close();
         }
 
-        provider.listFiles()
-            .forEach(path -> {
-                try {
-                    boolean isDir = Files.isDirectory(path);
-                    El tr = new El("tr").open(singletonMap("class", isDir ? "dir" : "file"));
-                    String filename = path.getFileName().toString();
-                    El nameTd = new El("td").open();
-                    new El("a").open(singletonMap("href", urlEncode(filename) + (isDir ? "/" : "")))
-                        .content(isDir ? filename + "/" : filename).close();
-                    nameTd.close();
-                    if (isDir) {
-                        render("td", "");
-                        render("td", "");
-                    } else {
-                        new El("td").open(singletonMap("class", "size")).content(String.valueOf(Files.size(path))).close();
-                        El timeTd = new El("td").open();
-                        Instant lastMod = Files.getLastModifiedTime(path).toInstant();
-                        new El("time").open(singletonMap("datetime", lastMod.toString()))
-                            .content(dateFormatter.format(lastMod)).close();
-                        timeTd.close();
+        try (Stream<Path> files = provider.listFiles()) {
+            files.forEach(path -> {
+                    try {
+                        boolean isDir = Files.isDirectory(path);
+                        El tr = new El("tr").open(singletonMap("class", isDir ? "dir" : "file"));
+                        String filename = path.getFileName().toString();
+                        El nameTd = new El("td").open();
+                        new El("a").open(singletonMap("href", urlEncode(filename) + (isDir ? "/" : "")))
+                            .content(isDir ? filename + "/" : filename).close();
+                        nameTd.close();
+                        if (isDir) {
+                            render("td", "");
+                            render("td", "");
+                        } else {
+                            new El("td").open(singletonMap("class", "size")).content(String.valueOf(Files.size(path))).close();
+                            El timeTd = new El("td").open();
+                            Instant lastMod = Files.getLastModifiedTime(path).toInstant();
+                            new El("time").open(singletonMap("datetime", lastMod.toString()))
+                                .content(dateFormatter.format(lastMod)).close();
+                            timeTd.close();
+                        }
+                        tr.close();
+                    } catch (IOException e) {
+                        throw new RuntimeException("Error rendering file", e);
                     }
-                    tr.close();
-                } catch (IOException e) {
-                    throw new RuntimeException("Error rendering file", e);
-                }
-            });
+                });
+        }
 
         tbody.close();
         table.close();
