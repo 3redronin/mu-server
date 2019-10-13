@@ -15,13 +15,17 @@ import java.util.List;
 
 import static java.util.Arrays.asList;
 
+/**
+ * @deprecated Use {@link HttpsConfigBuilder} instead
+ */
+@Deprecated
 public class SSLContextBuilder {
     private static final Logger log = LoggerFactory.getLogger(SSLContextBuilder.class);
     private String[] protocols = null;
     private String keystoreType = "JKS";
     private char[] keystorePassword = new char[0];
     private char[] keyPassword = new char[0];
-    private InputStream keystoreStream;
+    private byte[] keystoreBytes;
     private SSLContext sslContext;
     private CipherSuiteFilter nettyCipherSuiteFilter;
     private KeyManagerFactory keyManagerFactory;
@@ -55,39 +59,76 @@ public class SSLContextBuilder {
         return this;
     }
 
-    public SSLContextBuilder withKeystore(InputStream keystoreStream) {
+    protected void setKeystoreBytes(InputStream is, boolean closeAfter) {
         sslContext = null;
         keyManagerFactory = null;
-        this.keystoreStream = keystoreStream;
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        try {
+            Mutils.copy(is, baos, 8192);
+            this.keystoreBytes = baos.toByteArray();
+        } catch (IOException e) {
+            throw new MuException("Error while loading keystore", e);
+        } finally {
+            if (closeAfter) {
+                try {
+                    is.close();
+                } catch (IOException e) {
+                    log.warn("Error while closing stream after reading SSL input stream", e);
+                }
+            }
+        }
+    }
+
+    /**
+     * Loads a keystore from the given stream.
+     * <p>Does not close the keystore afterwards.</p>
+     *
+     * @param keystoreStream A stream to a keystore
+     * @return This builder
+     */
+    public SSLContextBuilder withKeystore(InputStream keystoreStream) {
+        setKeystoreBytes(keystoreStream, false);
         return this;
     }
 
     public SSLContextBuilder withKeystore(File file) {
-        sslContext = null;
-        keyManagerFactory = null;
         if (!file.isFile()) {
             throw new IllegalArgumentException(Mutils.fullPath(file) + " does not exist");
         }
+        FileInputStream fis;
         try {
-            this.keystoreStream = new FileInputStream(file);
+            fis = new FileInputStream(file);
         } catch (FileNotFoundException e) {
             throw new IllegalArgumentException("Could not open file", e);
         }
+        setKeystoreBytes(fis, true);
         return this;
     }
 
+    /**
+     * Loads a keystore from the classpath
+     *
+     * @param classpath A path to load a keystore from, for example <code>/mycert.p12</code>
+     * @return This builder
+     */
     public SSLContextBuilder withKeystoreFromClasspath(String classpath) {
-        sslContext = null;
-        keyManagerFactory = null;
-        keystoreStream = SSLContextBuilder.class.getResourceAsStream(classpath);
+        InputStream keystoreStream = SSLContextBuilder.class.getResourceAsStream(classpath);
         if (keystoreStream == null) {
             throw new IllegalArgumentException("Could not find " + classpath);
         }
+        setKeystoreBytes(keystoreStream, true);
         return this;
     }
 
+    /**
+     * Sets the key manager factory to use for SSL.
+     * <p>Note this is an alternative to setting a keystore directory.</p>
+     *
+     * @param keyManagerFactory The key manager factory to use
+     * @return This builder
+     */
     public SSLContextBuilder withKeyManagerFactory(KeyManagerFactory keyManagerFactory) {
-        this.keystoreStream = null;
+        this.keystoreBytes = null;
         this.sslContext = null;
         this.keyManagerFactory = keyManagerFactory;
         return this;
@@ -138,9 +179,10 @@ public class SSLContextBuilder {
      */
     @Deprecated
     public SSLContext build() {
-        if (keystoreStream == null) {
+        if (keystoreBytes == null) {
             throw new MuException("No keystore has been set");
         }
+        ByteArrayInputStream keystoreStream = new ByteArrayInputStream(keystoreBytes);
         try {
             SSLContext serverContext = SSLContext.getInstance("TLS");
 
@@ -155,12 +197,10 @@ public class SSLContextBuilder {
         } catch (Exception e) {
             throw new MuException("Error while setting up SSLContext", e);
         } finally {
-            if (keystoreStream != null) {
-                try {
-                    keystoreStream.close();
-                } catch (IOException e) {
-                    log.info("Error while closing keystore stream: " + e.getMessage());
-                }
+            try {
+                keystoreStream.close();
+            } catch (IOException e) {
+                log.info("Error while closing keystore stream: " + e.getMessage());
             }
         }
     }
@@ -169,7 +209,8 @@ public class SSLContextBuilder {
         SslContextBuilder builder;
         if (sslContext != null) {
             return new JdkSslContext(sslContext, false, ClientAuth.NONE);
-        } else if (keystoreStream != null) {
+        } else if (keystoreBytes != null) {
+            ByteArrayInputStream keystoreStream = new ByteArrayInputStream(keystoreBytes);
             KeyManagerFactory kmf;
             try {
                 KeyStore ks = KeyStore.getInstance(keystoreType);
@@ -221,10 +262,17 @@ public class SSLContextBuilder {
             .build();
     }
 
+    /**
+     * Use {@link HttpsConfigBuilder#httpsConfig()} instead
+     *
+     * @return This builder
+     */
+    @Deprecated
     public static SSLContextBuilder sslContext() {
         return new SSLContextBuilder();
     }
 
+    @Deprecated
     public static SSLContext defaultSSLContext() {
         try {
             return SSLContext.getDefault();
@@ -233,18 +281,22 @@ public class SSLContextBuilder {
         }
     }
 
+    /**
+     * @deprecated  Use {@link HttpsConfigBuilder#unsignedLocalhost()} instead
+     * @return An SSLContext
+     */
+    @Deprecated
     public static SSLContext unsignedLocalhostCert() {
         return unsignedLocalhostCertBuilder().build();
     }
 
+    /**
+     * @deprecated  Use {@link HttpsConfigBuilder#unsignedLocalhost()} instead
+     * @return A builder
+     */
+    @Deprecated
     public static SSLContextBuilder unsignedLocalhostCertBuilder() {
-        // The cert was created with the following command:
-        // keytool -genkeypair -keystore localhost.p12 -storetype PKCS12 -storepass Very5ecure -alias muserverlocalhost -keyalg RSA -sigalg SHA256withRSA -keysize 2048 -validity 36500 -dname "CN=Mu Server Test Cert, OU=Mu Server, O=Ronin" -ext san=dns:localhost,ip:127.0.0.1
-        return sslContext()
-            .withKeystoreType("PKCS12")
-            .withKeystorePassword("Very5ecure")
-            .withKeyPassword("Very5ecure")
-            .withKeystoreFromClasspath("/io/muserver/resources/localhost.p12");
+        return HttpsConfigBuilder.unsignedLocalhost();
     }
 
 }

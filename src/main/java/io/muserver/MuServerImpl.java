@@ -111,6 +111,11 @@ class MuServerImpl implements MuServer {
     }
 
     @Override
+    public void changeHttpsConfig(HttpsConfigBuilder newHttpsConfig) {
+        changeSSLContext(newHttpsConfig);
+    }
+
+    @Override
     public SSLInfo sslInfo() {
         return sslContextProvider == null ? null : sslContextProvider.sslInfo();
     }

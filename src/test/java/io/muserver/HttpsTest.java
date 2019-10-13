@@ -28,7 +28,7 @@ public class HttpsTest {
     @Test
     public void canGetInfoAboutHttps() throws Exception {
         AtomicReference<SSLInfo> actualSSLInfo = new AtomicReference<>();
-        server = ServerUtils.httpsServerForTest().withHttpsConfig(SSLContextBuilder.unsignedLocalhostCert())
+        server = ServerUtils.httpsServerForTest().withHttpsConfig(HttpsConfigBuilder.unsignedLocalhost())
             .addHandler((request, response) -> {
                 actualSSLInfo.set(request.server().sslInfo());
                 response.write("This is encrypted and the URL is " + request.uri());
@@ -79,7 +79,7 @@ public class HttpsTest {
         keytool -genkeypair -keystore pkcs12-keystore.p12 -storetype PKCS12 -storepass MY_PASSWORD -keyalg RSA -keysize 2048 -validity 999999 -dname "CN=My PKCS12 Certificate, OU=Ronin, O=MuServer, L=NA, ST=NA, C=NA" -ext san=dns:localhost,ip:127.0.0.1
          */
 
-        SSLContextBuilder originalCert = SSLContextBuilder.sslContext()
+        HttpsConfigBuilder originalCert = HttpsConfigBuilder.httpsConfig()
             .withKeystoreType("JKS")
             .withKeystorePassword("MY_PASSWORD")
             .withKeyPassword("MY_PASSWORD")
@@ -98,20 +98,19 @@ public class HttpsTest {
 
         assertThat(certInformation(server.uri()), containsString("My JKS Certificate"));
 
-        SSLContextBuilder newCert = SSLContextBuilder.sslContext()
+        HttpsConfigBuilder newCert = HttpsConfigBuilder.httpsConfig()
             .withKeystoreType("PKCS12")
             .withKeystorePassword("MY_PASSWORD")
             .withKeyPassword("MY_PASSWORD")
             .withKeystoreFromClasspath("/pkcs12-keystore.p12");
 
-        server.changeSSLContext(newCert);
+        server.changeHttpsConfig(newCert);
 
         try (Response resp = call(request(server.httpsUri()))) {
             assertThat(resp.body().string(), equalTo("This is encrypted"));
         }
 
         assertThat(certInformation(server.uri()), containsString("My PKCS12 Certificate"));
-
     }
 
     private static String certInformation(URI uri) throws Exception{

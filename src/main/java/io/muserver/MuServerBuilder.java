@@ -164,22 +164,38 @@ public class MuServerBuilder {
      * @param sslContext An SSL Context.
      * @return The current Mu Server Builder
      * @see SSLContextBuilder
+     * @deprecated This won't be supported in the future. Instead, use a {@link HttpsConfigBuilder} to set up HTTPS.
      */
+    @Deprecated
     public MuServerBuilder withHttpsConfig(SSLContext sslContext) {
         return withHttpsConfig(SSLContextBuilder.sslContext().withSSLContext(sslContext));
     }
 
     /**
-     * Sets the HTTPS config. Defaults to {@link SSLContextBuilder#unsignedLocalhostCert()}
+     * Sets the HTTPS config. Defaults to {@link HttpsConfigBuilder#unsignedLocalhost()}}
      *
      * @param sslContext An SSL Context builder.
      * @return The current Mu Server Builder
      * @see SSLContextBuilder
+     * @deprecated Use {@link #withHttpsConfig(HttpsConfigBuilder)} instead
      */
+    @Deprecated
     public MuServerBuilder withHttpsConfig(SSLContextBuilder sslContext) {
         this.sslContextBuilder = sslContext;
         return this;
     }
+
+    /**
+     * Sets the HTTPS config. Defaults to {@link HttpsConfigBuilder#unsignedLocalhost()}}
+     *
+     * @param httpsConfig An HTTPS Config builder.
+     * @return The current Mu Server Builder
+     */
+    public MuServerBuilder withHttpsConfig(HttpsConfigBuilder httpsConfig) {
+        this.sslContextBuilder = httpsConfig;
+        return this;
+    }
+
 
     /**
      * Sets the HTTPS port to use. To set the SSL certificate config, see {@link #withHttpsConfig(SSLContextBuilder)}
@@ -497,7 +513,7 @@ public class MuServerBuilder {
             if (httpsPort < 0) {
                 httpsChannel = null;
             } else {
-                SSLContextBuilder toUse = this.sslContextBuilder != null ? this.sslContextBuilder : SSLContextBuilder.unsignedLocalhostCertBuilder();
+                SSLContextBuilder toUse = this.sslContextBuilder != null ? this.sslContextBuilder : HttpsConfigBuilder.unsignedLocalhost();
                 SslContext nettySslContext = toUse.toNettySslContext(http2Enabled);
                 log.debug("SSL Context is " + nettySslContext);
                 sslContextProvider = new SslContextProvider(nettySslContext);

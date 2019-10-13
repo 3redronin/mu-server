@@ -40,7 +40,7 @@ public class ContextTest {
                 return String.join("\n",
                     uri.getBaseUri().toString(), uri.getPath(), uri.getAbsolutePath().toString(), uri.getRequestUri().toString(),
                     uri.getQueryParameters(true).getFirst("hoo"), uri.getQueryParameters(false).getFirst("hoo"),
-                    uri.getMatchedResources().get(0).toString(), uri.getMatchedURIs().stream().collect(Collectors.joining(":"))
+                    uri.getMatchedResources().get(0).toString(), String.join(":", uri.getMatchedURIs())
                 );
             }
 
@@ -72,7 +72,7 @@ public class ContextTest {
                 return String.join("\n",
                     uri.getBaseUri().toString(), uri.getPath(), uri.getAbsolutePath().toString(), uri.getRequestUri().toString(),
                     uri.getQueryParameters(true).getFirst("hoo"), uri.getQueryParameters(false).getFirst("hoo"),
-                    uri.getMatchedResources().get(0).toString(), uri.getMatchedURIs().stream().collect(Collectors.joining(":"))
+                    uri.getMatchedResources().get(0).toString(), String.join(":", uri.getMatchedURIs())
                 );
             }
 
