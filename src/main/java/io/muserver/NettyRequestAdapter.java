@@ -35,7 +35,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import static io.muserver.Cookie.nettyToMu;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Collections.emptyList;
-import static java.util.Collections.emptySet;
 
 class NettyRequestAdapter implements MuRequest {
     private static final Logger log = LoggerFactory.getLogger(NettyRequestAdapter.class);
@@ -52,7 +51,7 @@ class NettyRequestAdapter implements MuRequest {
     private final RequestParameters query;
     private RequestParameters form;
     private boolean bodyRead = false;
-    private Set<Cookie> cookies;
+    private List<Cookie> cookies;
     private String contextPath = "";
     private String relativePath;
     private HttpPostMultipartRequestDecoder multipartRequestDecoder;
@@ -232,14 +231,17 @@ class NettyRequestAdapter implements MuRequest {
     }
 
     @Override
-    public Set<Cookie> cookies() {
+    public List<Cookie> cookies() {
         if (this.cookies == null) {
             List<String> encoded = headers().getAll(HeaderNames.COOKIE);
             if (encoded.isEmpty()) {
-                this.cookies = emptySet();
+                this.cookies = emptyList();
             } else {
-                String joined = String.join("; ", encoded);
-                this.cookies = nettyToMu(ServerCookieDecoder.STRICT.decode(joined));
+                List<Cookie> theList = new ArrayList<>();
+                for (String val : encoded) {
+                    theList.addAll(nettyToMu(ServerCookieDecoder.STRICT.decode(val)));
+                }
+                this.cookies = Collections.unmodifiableList(theList);
             }
         }
         return this.cookies;
@@ -247,7 +249,7 @@ class NettyRequestAdapter implements MuRequest {
 
     @Override
     public Optional<String> cookie(String name) {
-        Set<Cookie> cookies = cookies();
+        List<Cookie> cookies = cookies();
         for (Cookie cookie : cookies) {
             if (cookie.name().equals(name)) {
                 return Optional.of(cookie.value());

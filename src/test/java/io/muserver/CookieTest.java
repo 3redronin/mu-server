@@ -136,7 +136,7 @@ public class CookieTest {
         server = MuServerBuilder.httpServer()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.write("START; " + request.cookies().stream().map(Cookie::toString)
-                .sorted().collect(Collectors.joining("; "))
+                    .collect(Collectors.joining("; "))
                 + "; END");
             })
             .start();

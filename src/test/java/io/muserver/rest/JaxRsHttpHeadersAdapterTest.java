@@ -20,9 +20,8 @@ public class JaxRsHttpHeadersAdapterTest {
     }
 
     private final Headers reqHeaders = Headers.http1Headers();
-    private final Set<Cookie> cookies = new HashSet<>();
+    private final List<Cookie> cookies = new ArrayList<>();
     private final JaxRsHttpHeadersAdapter httpHeaders = new JaxRsHttpHeadersAdapter(reqHeaders, cookies);
-
 
     @Test
     public void getRequestHeader() {

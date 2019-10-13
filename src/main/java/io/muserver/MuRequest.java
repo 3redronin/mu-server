@@ -5,7 +5,6 @@ import java.io.InputStream;
 import java.net.URI;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
 /**
  * <p>An HTTP request from a client.</p>
@@ -168,9 +167,9 @@ public interface MuRequest {
     /**
      * Gets all the client-sent cookies
      *
-     * @return A set of cookie objects
+     * @return A list of cookie objects in the order the client sent them
      */
-    Set<Cookie> cookies();
+    List<Cookie> cookies();
 
     /**
      * Gets the value of the client-sent cookie with the given name

@@ -2,6 +2,7 @@ package io.muserver;
 
 import io.netty.handler.codec.http.cookie.DefaultCookie;
 
+import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -143,8 +144,8 @@ public class Cookie {
         return nettyCookie.toString();
     }
 
-    static Set<Cookie> nettyToMu(Set<io.netty.handler.codec.http.cookie.Cookie> originals) {
-        return originals.stream().map(n -> new Cookie(n.name(), n.value())).collect(Collectors.toSet());
+    static List<Cookie> nettyToMu(Set<io.netty.handler.codec.http.cookie.Cookie> originals) {
+        return originals.stream().map(n -> new Cookie(n.name(), n.value())).collect(Collectors.toList());
     }
 
     /**

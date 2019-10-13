@@ -9,17 +9,16 @@ import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.MultivaluedMap;
 import java.util.*;
 
-import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toList;
 
 class JaxRsHttpHeadersAdapter implements HttpHeaders {
     private static final List<Locale> WILDCARD_LOCALES = Collections.unmodifiableList(Collections.singletonList(new Locale("*")));
     private static final List<MediaType> WILDCARD_MEDIA_TYPES = Collections.unmodifiableList(Collections.singletonList(MediaType.WILDCARD_TYPE));
     private final Headers muHeaders;
-    private final Set<io.muserver.Cookie> muCookies;
+    private final List<io.muserver.Cookie> muCookies;
     private MultivaluedMap<String, String> copy;
 
-    JaxRsHttpHeadersAdapter(Headers headers, Set<io.muserver.Cookie> cookies) {
+    JaxRsHttpHeadersAdapter(Headers headers, List<io.muserver.Cookie> cookies) {
         muHeaders = headers;
         muCookies = cookies;
     }
@@ -36,7 +35,7 @@ class JaxRsHttpHeadersAdapter implements HttpHeaders {
         if (vals == null) {
             return null;
         }
-        return vals.stream().collect(joining(","));
+        return String.join(",", vals);
     }
 
     @Override
@@ -67,7 +66,7 @@ class JaxRsHttpHeadersAdapter implements HttpHeaders {
         if (all.isEmpty()) {
             return defaultLocales;
         }
-        return Locale.LanguageRange.parse(all.stream().collect(joining(","))).stream()
+        return Locale.LanguageRange.parse(String.join(",", all)).stream()
             .map(lr -> {
                 String[] range = lr.getRange().split("-");
                 switch (range.length) {
