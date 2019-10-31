@@ -329,22 +329,26 @@ class ClasspathResourceProvider implements ResourceProvider {
 
     @Override
     public void sendTo(MuRequest request, MuResponse response, boolean sendBody, long maxLen) throws IOException {
-        if (sendBody) {
+        try {
+            if (sendBody) {
 
-            try (OutputStream out = response.outputStream()) {
-                byte[] buffer = new byte[8192];
-                long soFar = 0;
-                int read;
-                while (soFar < maxLen && (read = inputStream.read(buffer)) > -1) {
-                    soFar += read;
-                    if (soFar > maxLen) {
-                        read -= soFar - maxLen;
-                    }
-                    if (read > 0) {
-                        out.write(buffer, 0, read);
+                try (OutputStream out = response.outputStream()) {
+                    byte[] buffer = new byte[8192];
+                    long soFar = 0;
+                    int read;
+                    while (soFar < maxLen && (read = inputStream.read(buffer)) > -1) {
+                        soFar += read;
+                        if (soFar > maxLen) {
+                            read -= soFar - maxLen;
+                        }
+                        if (read > 0) {
+                            out.write(buffer, 0, read);
+                        }
                     }
                 }
             }
+        } finally {
+            inputStream.close();
         }
     }
 
