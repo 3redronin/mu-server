@@ -57,6 +57,8 @@ interface ResourceProviderFactory {
 
 
 class ClasspathCache implements ResourceProviderFactory {
+    private static FileSystem zipFileSystem;
+
     private final String basePath;
     private final Map<String, ClasspathResourceProvider> all = new HashMap<>();
 
@@ -70,8 +72,16 @@ class ClasspathCache implements ResourceProviderFactory {
             URI uri = resource.toURI();
             Path myPath;
             if (uri.getScheme().equals("jar")) {
-                FileSystem fileSystem = FileSystems.newFileSystem(uri, Collections.emptyMap());
-                myPath = fileSystem.getPath(basePath);
+                if (zipFileSystem == null) {
+                    try {
+                        zipFileSystem = FileSystems.newFileSystem(uri, Collections.emptyMap());
+                    } catch (FileSystemAlreadyExistsException e) {
+                        if (zipFileSystem == null) {
+                            throw new MuException("Cannot create the classpath handler as the Zip File System for this jar file has already been created");
+                        }
+                    }
+                }
+                myPath = zipFileSystem.getPath(basePath);
             } else {
                 myPath = Paths.get(uri);
             }
@@ -98,6 +108,7 @@ class ClasspathCache implements ResourceProviderFactory {
                 ClasspathResourceProvider crp = new ClasspathResourceProvider(exists, directory, size, lastModified, cur, null);
                 all.put(relativePath, crp);
             }
+            walk.close();
         }
     }
 

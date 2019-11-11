@@ -96,6 +96,7 @@ public class ResourceHandlerTest {
             .withGzipEnabled(false)
             .addHandler(context("/a")
                 .addHandler(context("/b")
+                    .addHandler(classpathHandler("/sample-static"))
                     .addHandler(context("/c")
                         .addHandler(classpathHandler("/sample-static")
                             .withPathToServeFrom("/d")
@@ -117,6 +118,11 @@ public class ResourceHandlerTest {
                 // TODO: this is broken on okhttpclient until https://github.com/square/okhttp/issues/4948 is fixed
                 assertThat(resp.body().contentLength(), is(0L));
             }
+        }
+        try (Response resp = call(request(server.uri().resolve("/a/b/")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.header("Content-Type"), is("text/html"));
+            assertThat(resp.body().string(), is(readResource("/sample-static/index.html")));
         }
 
         assertNotFound("/d/index.html");
