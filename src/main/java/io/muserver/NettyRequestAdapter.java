@@ -486,11 +486,15 @@ class NettyRequestAdapter implements MuRequest {
 
         @Override
         public void complete(Throwable throwable) {
-            boolean forceDisconnect = true;
-            try {
-                forceDisconnect = NettyHandlerAdapter.dealWithUnhandledException(request, request.nettyAsyncContext.response, throwable);
-            } finally {
-                request.nettyAsyncContext.complete(forceDisconnect);
+            if (throwable == null) {
+                complete();
+            } else {
+                boolean forceDisconnect = true;
+                try {
+                    forceDisconnect = NettyHandlerAdapter.dealWithUnhandledException(request, request.nettyAsyncContext.response, throwable);
+                } finally {
+                    request.nettyAsyncContext.complete(forceDisconnect);
+                }
             }
         }
 

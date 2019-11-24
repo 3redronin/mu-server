@@ -24,9 +24,10 @@ public interface AsyncHandle {
     void complete();
 
     /**
-     * Calling this will mark the response as complete and log the error message. If possible, a 500 Internal Server Error
-     * message will be sent to the client.
-     * @param throwable an exception to log
+     * Call this to indicate that the response is complete.
+     * <p>If the <code>throwable</code> parameter is not null then the error will be logged and, if possible,
+     * a <code>500 Internal Server Error</code> message will be sent to the client.
+     * @param throwable an exception to log, or null if there was no problem
      */
     void complete(Throwable throwable);
 
