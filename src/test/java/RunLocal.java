@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.PrintWriter;
 import java.util.concurrent.TimeUnit;
 
 import static io.muserver.ContextHandlerBuilder.context;
@@ -31,10 +32,22 @@ public class RunLocal {
             .withHttp2Config(http2EnabledIfAvailable())
             .withRateLimiter(request -> RateLimit.builder()
                 .withBucket(request.remoteAddress())
-                .withRate(100).withWindow(1, TimeUnit.SECONDS)
+                .withRate(10000).withWindow(1, TimeUnit.SECONDS)
                 .build())
             .addHandler(ResourceHandlerBuilder.fileHandler(BIG_FILE_DIR))
             .addHandler(fileOrClasspath("src/test/resources/sample-static", "/sample-static"))
+            .addHandler(Method.GET, "/connections",(request, response, pathParams) -> {
+                response.contentType("text/plain;charset=utf8");
+                PrintWriter writer = response.writer();
+                for (HttpConnection connection : request.server().activeConnections()) {
+                    writer.println(connection.protocol() + " " + " " + connection.httpsProtocol() + " from " + connection.remoteAddress());
+                    for (MuRequest activeRequest : connection.activeRequests()) {
+                        writer.println(" |-- " + activeRequest);
+                    }
+                }
+                writer.println("-------------------------");
+                writer.close();
+            })
             .addHandler(
                 context("files").addHandler(
                     fileOrClasspath("non-existant-path", "/sample-static")
