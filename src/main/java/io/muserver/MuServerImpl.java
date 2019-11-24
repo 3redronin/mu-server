@@ -3,31 +3,37 @@ package io.muserver;
 import javax.net.ssl.SSLContext;
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.util.Collections;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 class MuServerImpl implements MuServer {
 
-    private final URI httpUri;
-    private final URI httpsUri;
-    private final Runnable shutdown;
-    private final MuStats stats;
-    private final InetSocketAddress address;
-    private final SslContextProvider sslContextProvider;
+    private URI httpUri;
+    private URI httpsUri;
+    private Runnable shutdown;
+    final MuStatsImpl stats;
+    private InetSocketAddress address;
+    private SslContextProvider sslContextProvider;
     private final boolean http2Enabled;
     private final ServerSettings settings;
+    private final Set<HttpConnection> connections = ConcurrentHashMap.newKeySet();
 
-    MuServerImpl(URI httpUri, URI httpsUri, Runnable shutdown, MuStats stats, InetSocketAddress address, SslContextProvider sslContextProvider, boolean http2Enabled, ServerSettings settings) {
-        this.stats = stats;
+    void onStarted(URI httpUri, URI httpsUri, Runnable shutdown, InetSocketAddress address, SslContextProvider sslContextProvider) {
         this.address = address;
         this.sslContextProvider = sslContextProvider;
-        this.http2Enabled = http2Enabled;
-        this.settings = settings;
         if (httpUri == null && httpsUri == null) {
             throw new IllegalArgumentException("One of httpUri and httpsUri must not be null");
         }
         this.httpUri = httpUri;
         this.httpsUri = httpsUri;
         this.shutdown = shutdown;
+    }
+
+    MuServerImpl(MuStatsImpl stats, boolean http2Enabled, ServerSettings settings) {
+        this.stats = stats;
+        this.http2Enabled = http2Enabled;
+        this.settings = settings;
     }
 
     @Override
@@ -53,6 +59,11 @@ class MuServerImpl implements MuServer {
     @Override
     public MuStats stats() {
         return stats;
+    }
+
+    @Override
+    public Set<HttpConnection> activeConnections() {
+        return Collections.unmodifiableSet(connections);
     }
 
     @Override
@@ -128,5 +139,17 @@ class MuServerImpl implements MuServer {
             ", stats=" + stats +
             ", address=" + address +
             '}';
+    }
+
+    void onConnectionStarted(HttpConnection connection) {
+        connections.add(connection);
+    }
+
+    void onConnectionEnded(HttpConnection connection) {
+        connections.remove(connection);
+    }
+
+    ServerSettings settings() {
+        return this.settings;
     }
 }

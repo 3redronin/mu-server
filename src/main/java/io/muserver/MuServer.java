@@ -14,6 +14,10 @@ import java.util.concurrent.TimeUnit;
  * {@link MuServerBuilder#httpServer()}
  */
 public interface MuServer {
+
+    /**
+     * Shuts down the server
+     */
     void stop();
 
     /**
@@ -35,6 +39,11 @@ public interface MuServer {
      * @return Provides stats about the server
      */
     MuStats stats();
+
+    /**
+     * @return The current HTTP connections between this server and its clients.
+     */
+    Set<HttpConnection> activeConnections();
 
     /**
      * @return The address of the server. To get the ip address, use {@link InetSocketAddress#getAddress()} and on that

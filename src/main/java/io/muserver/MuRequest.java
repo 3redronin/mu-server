@@ -31,7 +31,7 @@ public interface MuRequest {
     String contentType();
 
     /**
-     * @return The time as epoch millis when this request object was created.
+     * @return The time as epoch millis when this request was received on the server.
      */
     long startTime();
 
@@ -258,6 +258,7 @@ public interface MuRequest {
     /**
      * Gets the address that the request came from. Warning: this may not be the client's address and instead
      * may be an intermediary such as a network gateway.
+     * <p>This is a convenience method that returns <code>connection().remoteAddress().getHostString()</code></p>
      * @return The IP address of the client, or of a gateway with NAT, etc, or null if the client has already disconnected.
      */
     String remoteAddress();
@@ -275,6 +276,13 @@ public interface MuRequest {
     /**
      * The protocol for the request.
      * @return A string such as <code>HTTP/1.1</code> or <code>HTTP/2</code>
+     * @deprecated Call {@link #connection()} to get the connection and then use {@link HttpConnection#protocol()}
      */
+    @Deprecated
     String protocol();
+
+    /**
+     * @return The HTTP connection that this request is sent over.
+     */
+    HttpConnection connection();
 }

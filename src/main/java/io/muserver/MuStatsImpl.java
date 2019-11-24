@@ -2,6 +2,7 @@ package io.muserver;
 
 import io.netty.handler.traffic.TrafficCounter;
 
+import java.util.Collections;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -62,7 +63,7 @@ class MuStatsImpl implements MuStats {
 
     @Override
     public Set<MuRequest> activeRequests() {
-        return activeRequests;
+        return Collections.unmodifiableSet(activeRequests);
     }
 
 

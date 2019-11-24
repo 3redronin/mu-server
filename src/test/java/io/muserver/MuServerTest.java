@@ -293,14 +293,14 @@ public class MuServerTest {
     public void requestProtocolIsAvailable() throws IOException {
         server = ServerUtils.httpsServerForTest()
             .addHandler((req, resp) -> {
-                resp.write(req.protocol());
+                resp.write(req.connection().protocol());
                 return true;
             })
             .start();
 
         try (Response resp = call(request(server.uri()))) {
             String body = resp.body().string();
-            assertThat(body, isOneOf("HTTP/1.1", "HTTP/2"));
+            assertThat(body, is(oneOf("HTTP/1.1", "HTTP/2")));
         }
     }
 

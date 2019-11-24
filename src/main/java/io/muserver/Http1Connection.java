@@ -10,39 +10,46 @@ import io.netty.handler.codec.CorruptedFrameException;
 import io.netty.handler.codec.TooLongFrameException;
 import io.netty.handler.codec.http.*;
 import io.netty.handler.codec.http.websocketx.*;
+import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.util.AttributeKey;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.net.ssl.SSLSession;
+import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
+import java.time.Instant;
+import java.util.Collections;
+import java.util.Set;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static io.netty.buffer.Unpooled.copiedBuffer;
 import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
-class Http1Connection extends SimpleChannelInboundHandler<Object> {
+class Http1Connection extends SimpleChannelInboundHandler<Object> implements HttpConnection {
     private static final Logger log = LoggerFactory.getLogger(Http1Connection.class);
     private static final AttributeKey<AsyncContext> STATE_ATTRIBUTE = AttributeKey.newInstance("state"); // todo, just store as a volatile field?
     static final AttributeKey<MuWebSocketSessionImpl> WEBSOCKET_ATTRIBUTE = AttributeKey.newInstance("ws"); // todo, just store as a volatile field?
 
     private final NettyHandlerAdapter nettyHandlerAdapter;
-    private final MuStatsImpl stats;
-    private final AtomicReference<MuServer> serverRef;
+    private final MuStatsImpl serverStats;
+    private final MuStatsImpl connectionStats = new MuStatsImpl(null);
+    private final MuServerImpl server;
     private final String proto;
-    private final ServerSettings settings;
+    private final Instant startTime = Instant.now();
+    private ChannelHandlerContext nettyCtx;
+    private InetSocketAddress remoteAddress;
 
-    Http1Connection(NettyHandlerAdapter nettyHandlerAdapter, MuStatsImpl stats, AtomicReference<MuServer> serverRef, String proto, ServerSettings settings) {
+    Http1Connection(NettyHandlerAdapter nettyHandlerAdapter, MuServerImpl server, String proto) {
         this.nettyHandlerAdapter = nettyHandlerAdapter;
-        this.stats = stats;
-        this.serverRef = serverRef;
+        this.serverStats = server.stats;
+        this.server = server;
         this.proto = proto;
-        this.settings = settings;
     }
 
     static void setAsyncContext(ChannelHandlerContext ctx, AsyncContext value) {
@@ -51,20 +58,30 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
 
     @Override
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
+        this.nettyCtx = ctx;
+        remoteAddress = (InetSocketAddress) ctx.channel().remoteAddress();
         ctx.channel().config().setAutoRead(false);
         ctx.read();
         super.channelActive(ctx);
     }
 
+    static SSLSession getSslSession(ChannelHandlerContext ctx) {
+        SslHandler ssl = (SslHandler) ctx.channel().pipeline().get("ssl");
+        return ssl.engine().getSession();
+    }
+
     @Override
     public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
-        stats.onConnectionOpened();
+        serverStats.onConnectionOpened();
+        connectionStats.onConnectionOpened();
         super.handlerAdded(ctx);
+        server.onConnectionStarted(this);
     }
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-        stats.onConnectionClosed();
+        serverStats.onConnectionClosed();
+        server.onConnectionEnded(this);
         AsyncContext asyncContext = getAsyncContext(ctx);
         if (asyncContext != null) {
             asyncContext.onCancelled(true);
@@ -93,25 +110,29 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
             HttpRequest request = (HttpRequest) msg;
 
             if (request.decoderResult().isFailure()) {
-                stats.onInvalidRequest();
+                serverStats.onInvalidRequest();
+                connectionStats.onInvalidRequest();
                 handleHttpRequestDecodeFailure(ctx, request.decoderResult().cause());
                 return false;
             } else {
 
                 String contentLenDecl = request.headers().get("Content-Length");
+                ServerSettings settings = server.settings();
                 if (HttpUtil.is100ContinueExpected(request)) {
                     long requestBodyLen = contentLenDecl == null ? -1L : Long.parseLong(contentLenDecl, 10);
                     if (requestBodyLen <= settings.maxRequestSize) {
                         ctx.writeAndFlush(new DefaultFullHttpResponse(HTTP_1_1, HttpResponseStatus.CONTINUE));
                     } else {
-                        stats.onInvalidRequest();
+                        serverStats.onInvalidRequest();
+                        connectionStats.onInvalidRequest();
                         sendSimpleResponse(ctx, "417 Expectation Failed", HttpResponseStatus.EXPECTATION_FAILED.code());
                         return true;
                     }
                 }
 
                 if (!request.headers().contains(HttpHeaderNames.HOST)) {
-                    stats.onInvalidRequest();
+                    serverStats.onInvalidRequest();
+                    connectionStats.onInvalidRequest();
                     sendSimpleResponse(ctx, "400 Bad Request", 400);
                     return true;
                 }
@@ -120,7 +141,8 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
                 try {
                     method = Method.fromNetty(request.method());
                 } catch (IllegalArgumentException e) {
-                    stats.onInvalidRequest();
+                    serverStats.onInvalidRequest();
+                    connectionStats.onInvalidRequest();
                     sendSimpleResponse(ctx, "405 Method Not Allowed", 405);
                     return true;
                 }
@@ -130,7 +152,8 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
                 try {
                     relativeUri = getRelativeUri(request);
                 } catch (Exception e) {
-                    stats.onInvalidRequest();
+                    serverStats.onInvalidRequest();
+                    connectionStats.onInvalidRequest();
                     sendSimpleResponse(ctx, "400 Bad Request", 400);
                     return true;
                 }
@@ -138,41 +161,46 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
                 if (contentLenDecl != null) {
                     long cld = Long.parseLong(contentLenDecl, 10);
                     if (cld > settings.maxRequestSize) {
-                        stats.onInvalidRequest();
+                        serverStats.onInvalidRequest();
+                        connectionStats.onInvalidRequest();
                         sendSimpleResponse(ctx, "413 Payload Too Large", 413);
                         return true;
                     }
                 }
 
-                NettyRequestAdapter muRequest = new NettyRequestAdapter(ctx, ctx.channel(), request, headers, serverRef, method,
-                    proto, relativeUri, HttpUtil.isKeepAlive(request), headers.get(HeaderNames.HOST), request.protocolVersion().text());
+                NettyRequestAdapter muRequest = new NettyRequestAdapter(ctx, ctx.channel(), request, headers, server, method,
+                    proto, relativeUri, HttpUtil.isKeepAlive(request), headers.get(HeaderNames.HOST), request.protocolVersion().text(), this);
 
                 if (settings.block(muRequest)) {
-                    stats.onRejectedDueToOverload();
+                    serverStats.onRejectedDueToOverload();
+                    connectionStats.onRejectedDueToOverload();
                     sendSimpleResponse(ctx, "429 Too Many Requests", 429);
                     return true;
                 }
 
 
-                stats.onRequestStarted(muRequest);
+                serverStats.onRequestStarted(muRequest);
+                connectionStats.onRequestStarted(muRequest);
 
                 Http1Response muResponse = new Http1Response(ctx, muRequest, new Http1Headers());
 
                 AsyncContext asyncContext = new AsyncContext(muRequest, muResponse, (info) -> {
-                    nettyHandlerAdapter.onResponseComplete(info, stats);
+                    nettyHandlerAdapter.onResponseComplete(info, serverStats, connectionStats);
                 });
                 setAsyncContext(ctx, asyncContext);
                 readyToRead = false;
                 DoneCallback addedToExecutorCallback = error -> {
                     ctx.channel().read();
                     if (error != null) {
-                        stats.onRejectedDueToOverload();
+                        serverStats.onRejectedDueToOverload();
+                        connectionStats.onRejectedDueToOverload();
                         try {
                             sendSimpleResponse(ctx, "503 Service Unavailable", 503);
                         } catch (Exception e) {
                             ctx.close();
                         } finally {
-                            stats.onRequestEnded(muRequest);
+                            connectionStats.onRequestEnded(muRequest);
+                            serverStats.onRequestEnded(muRequest);
                         }
                     }
                 };
@@ -364,4 +392,61 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> {
         }
         ctx.close();
     }
+
+    @Override
+    public String protocol() {
+        return "HTTP/1.1";
+    }
+
+    @Override
+    public boolean isHttps() {
+        return "https".equals(proto);
+    }
+
+    @Override
+    public String httpsProtocol() {
+        return isHttps() ? getSslSession(nettyCtx).getProtocol() : null;
+    }
+
+    @Override
+    public String cipher() {
+        return isHttps() ? getSslSession(nettyCtx).getCipherSuite() : null;
+    }
+
+    @Override
+    public Instant startTime() {
+        return startTime;
+    }
+
+    @Override
+    public InetSocketAddress remoteAddress() {
+        return remoteAddress;
+    }
+
+    @Override
+    public long completedRequests() {
+        return connectionStats.completedRequests();
+    }
+
+    @Override
+    public long invalidHttpRequests() {
+        return connectionStats.invalidHttpRequests();
+    }
+
+    @Override
+    public long rejectedDueToOverload() {
+        return connectionStats.rejectedDueToOverload();
+    }
+
+    @Override
+    public Set<MuRequest> activeRequests() {
+        return connectionStats.activeRequests();
+    }
+
+    @Override
+    public Set<MuWebSocket> activeWebsockets() {
+        MuWebSocketSessionImpl webSocket = getWebSocket(nettyCtx);
+        return webSocket == null ? Collections.emptySet() : Collections.singleton(webSocket.muWebSocket);
+    }
+
 }

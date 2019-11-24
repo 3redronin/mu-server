@@ -167,8 +167,9 @@ class NettyHandlerAdapter {
         }
     }
 
-    void onResponseComplete(ResponseInfo info, MuStatsImpl stats) {
-        stats.onRequestEnded(info.request());
+    void onResponseComplete(ResponseInfo info, MuStatsImpl serverStats, MuStatsImpl connectionStats) {
+        connectionStats.onRequestEnded(info.request());
+        serverStats.onRequestEnded(info.request());
         if (completeListeners != null) {
             for (ResponseCompleteListener listener : completeListeners) {
                 try {

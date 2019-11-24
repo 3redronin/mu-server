@@ -22,15 +22,12 @@ import org.slf4j.LoggerFactory;
 import javax.ws.rs.core.MediaType;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.*;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.Cookie.nettyToMu;
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -41,7 +38,7 @@ class NettyRequestAdapter implements MuRequest {
     private final ChannelHandlerContext ctx;
     private final Channel channel;
     private final HttpRequest request;
-    private final AtomicReference<MuServer> serverRef;
+    private final MuServer server;
     private final URI serverUri;
     private final URI uri;
     private final Method method;
@@ -61,14 +58,16 @@ class NettyRequestAdapter implements MuRequest {
     private final boolean keepalive;
     private final String protocol;
     private final long startTime = System.currentTimeMillis();
+    private final HttpConnection connection;
 
-    NettyRequestAdapter(ChannelHandlerContext ctx, Channel channel, HttpRequest request, Headers headers, AtomicReference<MuServer> serverRef, Method method, String proto, String uri, boolean keepalive, String host, String protocol) {
+    NettyRequestAdapter(ChannelHandlerContext ctx, Channel channel, HttpRequest request, Headers headers, MuServer server, Method method, String proto, String uri, boolean keepalive, String host, String protocol, HttpConnection connection) {
         this.ctx = ctx;
         this.channel = channel;
         this.request = request;
-        this.serverRef = serverRef;
+        this.server = server;
         this.keepalive = keepalive;
         this.protocol = protocol;
+        this.connection = connection;
         this.serverUri = URI.create(proto + "://" + host + uri).normalize();
         this.headers = headers;
         this.uri = getUri(headers, proto, host, uri, serverUri);
@@ -84,6 +83,11 @@ class NettyRequestAdapter implements MuRequest {
     @Override
     public String protocol() {
         return protocol;
+    }
+
+    @Override
+    public HttpConnection connection() {
+        return this.connection;
     }
 
     boolean isKeepAliveRequested() {
@@ -315,17 +319,12 @@ class NettyRequestAdapter implements MuRequest {
 
     @Override
     public String remoteAddress() {
-        InetSocketAddress isa = (InetSocketAddress) channel.remoteAddress();
-        if (isa == null) {
-            return null;
-        }
-        InetAddress a = isa.getAddress();
-        return a.getHostAddress();
+        return connection().remoteAddress().getHostString();
     }
 
     @Override
     public MuServer server() {
-        return serverRef.get();
+        return server;
     }
 
     private void ensureFormDataLoaded() throws IOException {

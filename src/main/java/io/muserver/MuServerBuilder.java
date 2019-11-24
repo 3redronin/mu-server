@@ -29,7 +29,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * <p>A builder for creating a web server.</p>
@@ -504,12 +503,13 @@ public class MuServerBuilder {
         try {
             GlobalTrafficShapingHandler trafficShapingHandler = new GlobalTrafficShapingHandler(workerGroup, 0, 0, 1000);
             MuStatsImpl stats = new MuStatsImpl(trafficShapingHandler.trafficCounter());
-            AtomicReference<MuServer> serverRef = new AtomicReference<>();
             SslContextProvider sslContextProvider = null;
 
-            Channel httpChannel = httpPort < 0 ? null : createChannel(bossGroup, workerGroup, nettyHandlerAdapter, host, httpPort, null, trafficShapingHandler, stats, serverRef, settings, false, idleTimeoutMills);
-            Channel httpsChannel;
             boolean http2Enabled = http2Config != null && http2Config.enabled;
+            MuServerImpl server = new MuServerImpl(stats, http2Enabled, settings);
+
+            Channel httpChannel = httpPort < 0 ? null : createChannel(bossGroup, workerGroup, nettyHandlerAdapter, host, httpPort, null, trafficShapingHandler, server, false, idleTimeoutMills);
+            Channel httpsChannel;
             if (httpsPort < 0) {
                 httpsChannel = null;
             } else {
@@ -517,7 +517,7 @@ public class MuServerBuilder {
                 SslContext nettySslContext = toUse.toNettySslContext(http2Enabled);
                 log.debug("SSL Context is " + nettySslContext);
                 sslContextProvider = new SslContextProvider(nettySslContext);
-                httpsChannel = createChannel(bossGroup, workerGroup, nettyHandlerAdapter, host, httpsPort, sslContextProvider, trafficShapingHandler, stats, serverRef, settings, http2Enabled, idleTimeoutMills);
+                httpsChannel = createChannel(bossGroup, workerGroup, nettyHandlerAdapter, host, httpsPort, sslContextProvider, trafficShapingHandler, server, http2Enabled, idleTimeoutMills);
             }
             URI uri = null;
             if (httpChannel != null) {
@@ -532,8 +532,7 @@ public class MuServerBuilder {
             }
 
             InetSocketAddress serverAddress = (InetSocketAddress) channels.get(0).localAddress();
-            MuServer server = new MuServerImpl(uri, httpsUri, shutdown, stats, serverAddress, sslContextProvider, http2Enabled, settings);
-            serverRef.set(server);
+            server.onStarted(uri, httpsUri, shutdown, serverAddress, sslContextProvider);
             if (addShutdownHook) {
                 Runtime.getRuntime().addShutdownHook(new Thread(server::stop));
             }
@@ -552,7 +551,7 @@ public class MuServerBuilder {
         return URI.create(protocol + "://" + host.toLowerCase() + ":" + a.getPort());
     }
 
-    private static Channel createChannel(NioEventLoopGroup bossGroup, NioEventLoopGroup workerGroup, NettyHandlerAdapter nettyHandlerAdapter, String host, int port, SslContextProvider sslContextProvider, GlobalTrafficShapingHandler trafficShapingHandler, MuStatsImpl stats, AtomicReference<MuServer> serverRef, ServerSettings settings, final boolean http2, long idleTimeoutMills) throws InterruptedException {
+    private static Channel createChannel(NioEventLoopGroup bossGroup, NioEventLoopGroup workerGroup, NettyHandlerAdapter nettyHandlerAdapter, String host, int port, SslContextProvider sslContextProvider, GlobalTrafficShapingHandler trafficShapingHandler, MuServerImpl server, final boolean http2, long idleTimeoutMills) throws InterruptedException {
         boolean usesSsl = sslContextProvider != null;
         String proto = usesSsl ? "https" : "http";
         ServerBootstrap b = new ServerBootstrap();
@@ -573,16 +572,16 @@ public class MuServerBuilder {
                     }
                     boolean addAlpn = http2 && usesSsl;
                     if (addAlpn) {
-                        p.addLast("http1or2", new AlpnHandler(nettyHandlerAdapter, stats, serverRef, proto, settings));
+                        p.addLast("http1or2", new AlpnHandler(nettyHandlerAdapter, server, proto));
                     }
                     p.addLast("conerror", new ChannelInboundHandlerAdapter() {
                         @Override
                         public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-                            stats.onFailedToConnect();
+                            server.stats.onFailedToConnect();
                         }
                     });
                     if (!addAlpn) {
-                        setupHttp1Pipeline(p, settings, nettyHandlerAdapter, stats, serverRef, proto);
+                        setupHttp1Pipeline(p, nettyHandlerAdapter, server, proto);
                     }
                 }
 
@@ -592,18 +591,18 @@ public class MuServerBuilder {
         return bound.sync().channel();
     }
 
-    static void setupHttp1Pipeline(ChannelPipeline p, ServerSettings settings, NettyHandlerAdapter nettyHandlerAdapter, MuStatsImpl stats, AtomicReference<MuServer> serverRef, String proto) {
-        p.addLast("decoder", new HttpRequestDecoder(settings.maxUrlSize + LENGTH_OF_METHOD_AND_PROTOCOL, settings.maxHeadersSize, 8192));
+    static void setupHttp1Pipeline(ChannelPipeline p, NettyHandlerAdapter nettyHandlerAdapter, MuServerImpl server, String proto) {
+        p.addLast("decoder", new HttpRequestDecoder(server.settings().maxUrlSize + LENGTH_OF_METHOD_AND_PROTOCOL, server.settings().maxHeadersSize, 8192));
         p.addLast("encoder", new HttpResponseEncoder() {
             @Override
             protected boolean isContentAlwaysEmpty(HttpResponse msg) {
                 return super.isContentAlwaysEmpty(msg) || msg instanceof NettyResponseAdaptor.EmptyHttpResponse;
             }
         });
-        if (settings.gzipEnabled) {
-            p.addLast("compressor", new SelectiveHttpContentCompressor(settings));
+        if (server.settings().gzipEnabled) {
+            p.addLast("compressor", new SelectiveHttpContentCompressor(server.settings()));
         }
         p.addLast("keepalive", new HttpServerKeepAliveHandler());
-        p.addLast("muhandler", new Http1Connection(nettyHandlerAdapter, stats, serverRef, proto, settings));
+        p.addLast("muhandler", new Http1Connection(nettyHandlerAdapter, server, proto));
     }
 }

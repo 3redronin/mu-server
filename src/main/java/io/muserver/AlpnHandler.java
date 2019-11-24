@@ -4,33 +4,27 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.ssl.ApplicationProtocolNames;
 import io.netty.handler.ssl.ApplicationProtocolNegotiationHandler;
 
-import java.util.concurrent.atomic.AtomicReference;
-
 class AlpnHandler extends ApplicationProtocolNegotiationHandler {
     private final NettyHandlerAdapter nettyHandlerAdapter;
-    private final MuStatsImpl stats;
-    private final AtomicReference<MuServer> serverRef;
+    private final MuServerImpl server;
     private final String proto;
-    private final ServerSettings settings;
 
-    AlpnHandler(NettyHandlerAdapter nettyHandlerAdapter, MuStatsImpl stats, AtomicReference<MuServer> serverRef, String proto, ServerSettings settings) {
+    AlpnHandler(NettyHandlerAdapter nettyHandlerAdapter, MuServerImpl server, String proto) {
         super(ApplicationProtocolNames.HTTP_1_1);
         this.nettyHandlerAdapter = nettyHandlerAdapter;
-        this.stats = stats;
-        this.serverRef = serverRef;
+        this.server = server;
         this.proto = proto;
-        this.settings = settings;
     }
 
     @Override
     protected void configurePipeline(ChannelHandlerContext ctx, String protocol) {
         if (ApplicationProtocolNames.HTTP_2.equals(protocol)) {
-            ctx.pipeline().addLast(new Http2ConnectionBuilder(serverRef, nettyHandlerAdapter, stats, settings).build());
+            ctx.pipeline().addLast(new Http2ConnectionBuilder(server, nettyHandlerAdapter).build());
             return;
         }
 
         if (ApplicationProtocolNames.HTTP_1_1.equals(protocol)) {
-            MuServerBuilder.setupHttp1Pipeline(ctx.pipeline(), settings, nettyHandlerAdapter, stats, serverRef, proto);
+            MuServerBuilder.setupHttp1Pipeline(ctx.pipeline(), nettyHandlerAdapter, server, proto);
             return;
         }
 

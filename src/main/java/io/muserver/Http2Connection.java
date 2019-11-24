@@ -11,41 +11,49 @@ import io.netty.handler.timeout.IdleStateEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.InetSocketAddress;
+import java.time.Instant;
+import java.util.Collections;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static io.netty.buffer.Unpooled.EMPTY_BUFFER;
 import static io.netty.buffer.Unpooled.copiedBuffer;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
-final class Http2Connection extends Http2ConnectionHandler implements Http2FrameListener {
+final class Http2Connection extends Http2ConnectionHandler implements Http2FrameListener, HttpConnection {
     private static final Logger log = LoggerFactory.getLogger(Http2Connection.class);
 
-    private final AtomicReference<MuServer> serverRef;
+    private final MuServerImpl server;
     private final NettyHandlerAdapter nettyHandlerAdapter;
-    private final MuStatsImpl stats;
-    private final ServerSettings settings;
     private final ConcurrentHashMap<Integer, AsyncContext> contexts = new ConcurrentHashMap<>();
     private volatile int lastStreamId = 0;
+    private final MuStatsImpl connectionStats = new MuStatsImpl(null);
+    private InetSocketAddress remoteAddress;
+    private final Instant startTime = Instant.now();
+    private ChannelHandlerContext nettyContext;
 
     Http2Connection(Http2ConnectionDecoder decoder, Http2ConnectionEncoder encoder,
-                    Http2Settings initialSettings, AtomicReference<MuServer> serverRef, NettyHandlerAdapter nettyHandlerAdapter, MuStatsImpl stats, ServerSettings settings) {
+                    Http2Settings initialSettings, MuServerImpl server, NettyHandlerAdapter nettyHandlerAdapter) {
         super(decoder, encoder, initialSettings);
-        this.serverRef = serverRef;
+        this.server = server;
         this.nettyHandlerAdapter = nettyHandlerAdapter;
-        this.stats = stats;
-        this.settings = settings;
     }
+
 
     @Override
     public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
-        stats.onConnectionOpened();
+        server.stats.onConnectionOpened();
+        remoteAddress = (InetSocketAddress) ctx.channel().remoteAddress();
+        this.nettyContext = ctx;
         super.handlerAdded(ctx);
+        server.onConnectionStarted(this);
     }
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-        stats.onConnectionClosed();
+        server.stats.onConnectionClosed();
+        server.onConnectionEnded(this);
         super.channelInactive(ctx);
     }
 
@@ -103,14 +111,17 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
         try {
             muMethod = Method.fromNetty(nettyMeth);
         } catch (IllegalArgumentException e) {
-            stats.onInvalidRequest();
+            server.stats.onInvalidRequest();
+            connectionStats.onInvalidRequest();
             sendSimpleResponse(ctx, streamId, "405 Method Not Allowed", 405);
             return;
         }
 
         String uri = headers.path().toString();
+        ServerSettings settings = server.settings();
         if (uri.length() > settings.maxUrlSize) {
-            stats.onInvalidRequest();
+            server.stats.onInvalidRequest();
+            connectionStats.onInvalidRequest();
             sendSimpleResponse(ctx, streamId, "414 Request-URI Too Long", 414);
             return;
         }
@@ -122,7 +133,8 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
             if (bodyLen == 0) {
                 hasRequestBody = false;
             } else if (bodyLen > settings.maxRequestSize) {
-                stats.onInvalidRequest();
+                server.stats.onInvalidRequest();
+                connectionStats.onInvalidRequest();
                 sendSimpleResponse(ctx, streamId, "413 Payload Too Large", 413);
                 return;
             }
@@ -130,19 +142,21 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
         Http2Headers muHeaders = new Http2Headers(headers, hasRequestBody);
         String host = headers.authority().toString();
         muHeaders.set(HeaderNames.HOST, host);
-        NettyRequestAdapter muReq = new NettyRequestAdapter(ctx, ctx.channel(), nettyReq, muHeaders, serverRef, muMethod, "https", uri, true, host, "HTTP/2");
+        NettyRequestAdapter muReq = new NettyRequestAdapter(ctx, ctx.channel(), nettyReq, muHeaders, server, muMethod, "https", uri, true, host, "HTTP/2", this);
 
         if (settings.block(muReq)) {
-            stats.onRejectedDueToOverload();
+            server.stats.onRejectedDueToOverload();
+            connectionStats.onRejectedDueToOverload();
             sendSimpleResponse(ctx, streamId, "429 Too Many Requests", 429);
             return;
         }
 
-        stats.onRequestStarted(muReq);
+        server.stats.onRequestStarted(muReq);
+        connectionStats.onRequestStarted(muReq);
         Http2Response resp = new Http2Response(ctx, muReq, new Http2Headers(), encoder(), streamId, settings);
 
         AsyncContext asyncContext = new AsyncContext(muReq, resp, (info) -> {
-            nettyHandlerAdapter.onResponseComplete(info, stats);
+            nettyHandlerAdapter.onResponseComplete(info, server.stats, connectionStats);
             contexts.remove(streamId);
         });
 
@@ -150,13 +164,15 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
         DoneCallback addedToExecutorCallback = error -> {
             ctx.channel().read();
             if (error != null) {
-                stats.onRejectedDueToOverload();
+                server.stats.onRejectedDueToOverload();
+                connectionStats.onRejectedDueToOverload();
                 try {
                     sendSimpleResponse(ctx, streamId, "503 Service Unavailable", 503);
                 } catch (Exception e) {
                     ctx.close();
                 } finally {
-                    stats.onRequestEnded(muReq);
+                    server.stats.onRequestEnded(muReq);
+                    connectionStats.onRequestEnded(muReq);
                 }
             }
         };
@@ -231,10 +247,66 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
     }
 
     @Override
-    public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
+    public void userEventTriggered(ChannelHandlerContext ctx, Object evt) {
         if (evt instanceof IdleStateEvent) {
             closeAllAndDisconnect(ctx, Http2Error.NO_ERROR);
         }
     }
+
+    @Override
+    public String protocol() {
+        return "HTTP/2";
+    }
+
+    @Override
+    public boolean isHttps() {
+        return true;
+    }
+
+    @Override
+    public String httpsProtocol() {
+        return Http1Connection.getSslSession(nettyContext).getProtocol();
+    }
+
+    @Override
+    public String cipher() {
+        return Http1Connection.getSslSession(nettyContext).getProtocol();
+    }
+
+    @Override
+    public Instant startTime() {
+        return startTime;
+    }
+
+    @Override
+    public InetSocketAddress remoteAddress() {
+        return remoteAddress;
+    }
+
+    @Override
+    public long completedRequests() {
+        return connectionStats.completedRequests();
+    }
+
+    @Override
+    public long invalidHttpRequests() {
+        return connectionStats.invalidHttpRequests();
+    }
+
+    @Override
+    public long rejectedDueToOverload() {
+        return connectionStats.rejectedDueToOverload();
+    }
+
+    @Override
+    public Set<MuRequest> activeRequests() {
+        return connectionStats.activeRequests();
+    }
+
+    @Override
+    public Set<MuWebSocket> activeWebsockets() {
+        return Collections.emptySet();
+    }
+
 }
 
