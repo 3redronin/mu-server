@@ -17,10 +17,14 @@ import javax.ws.rs.QueryParam;
 public class DocumentationExamples {
     public static void main(String[] args) {
         @Path("/fruits")
+        @Description(value="Fruits", documentationUrl = "https://fruits.example.org", details = "The details of the request class")
         class Fruit {
             @GET
-            public void all(@QueryParam("jam") @Required @DefaultValue("strawberry") @Description(value = "The jam", example = "Mango", documentationUrl = "http://example.org/looooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong-url")
-                                String jam) {
+            @Description(value="A method", documentationUrl = "https://get.example.org", details = "The details of the method")
+            public void all(@QueryParam("jam") @Required @DefaultValue("strawberry") @Description(value = "The jam", example = "Mango", documentationUrl = "http://example.org/looooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong-url", details = "The details of the param")
+                                String jam,
+                            @Description(value="Anything", details = "The details of the request body", documentationUrl = "https://anything.example.org")
+                            String body) {
 
             }
         }

@@ -122,6 +122,7 @@ class HtmlDocumentor {
             El tagContainer = new El("div").open(singletonMap("class", "tagContainer"));
             new El("h2").open(singletonMap("id", Mutils.htmlEncode(tag.name))).content(tag.name).close();
             renderIfValue("p", tag.description);
+            renderExternalLinksParagraph(tag.externalDocs);
 
             for (Map.Entry<String, PathItemObject> entry : api.paths.pathItemObjects.entrySet()) {
                 String url = entry.getKey();
@@ -143,6 +144,7 @@ class HtmlDocumentor {
                         h3.close();
                         renderIfValue("p", operation.summary);
                         renderIfValue("p", operation.description);
+                        renderExternalLinksParagraph(operation.externalDocs);
 
                         if (operation.isDeprecated()) {
                             new El("p").open(singletonMap("class", "deprecated")).content("WARNING: This operation is marked as deprecated and may not be supported in future versions of this API.").close();
