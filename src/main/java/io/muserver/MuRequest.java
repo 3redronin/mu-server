@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -239,6 +240,13 @@ public interface MuRequest {
      * @param value Any object to store as state.
      */
     void attribute(String key, Object value);
+
+    /**
+     * <p>Returns the map containing all the attributes.</p>
+     * <p>Any changes made with {@link #attribute(String, Object)} to the map will be reflected on this returned map.</p>
+     * @return All attributes set with {@link #attribute(String, Object)}
+     */
+    Map<String, Object> attributes();
 
     /**
      * <p>Specifies that you want to handle this response asynchronously.</p>

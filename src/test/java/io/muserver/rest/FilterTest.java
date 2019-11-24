@@ -1,11 +1,13 @@
 package io.muserver.rest;
 
+import io.muserver.MuRequest;
 import io.muserver.MuServer;
 import io.muserver.Mutils;
 import okhttp3.MediaType;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import okio.BufferedSink;
+import org.junit.Assert;
 import org.junit.Test;
 import scaffolding.ServerUtils;
 
@@ -21,13 +23,13 @@ import java.lang.annotation.Annotation;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.ContextHandlerBuilder.context;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static java.util.Arrays.asList;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.contains;
-import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 
@@ -87,6 +89,58 @@ public class FilterTest {
             "REQUEST POST " + server.uri().resolve("/something") + " - a-value",
             "RESPONSE OK"
         ));
+    }
+
+    @Test
+    public void requestContextPropertiesAreSharedWithRequestAttributes() throws IOException {
+
+        @Path("/blah")
+        class Blah {
+            @GET
+            public String hi(@Context MuRequest mur, @Context ContainerRequestContext crc) {
+                MuRequest murequest = (MuRequest) mur.attribute("murequest");
+                MuRequest murequest2 = (MuRequest) crc.getProperty("murequest");
+                return "MUR: " + murequest.method() + " " + murequest.attribute("hello") + " "
+                    + murequest.attribute("hello2") + " " + murequest.attribute("hello3")
+                    + " CRC: " + murequest2.method() + " " + crc.getProperty("hello") + " "
+                    + crc.getProperty("hello2") + " " + crc.getProperty("hello3");
+            }
+        }
+
+        AtomicReference<Throwable> error = new AtomicReference<>();
+        MuServer server = ServerUtils.httpsServerForTest()
+            .addHandler((request, response) -> {
+                request.attribute("murequest", request);
+                request.attribute("hello", "world");
+                request.attribute("hello2", "world");
+                return false;
+            })
+            .addHandler(
+                restHandler()
+                    .addRequestFilter(requestContext -> {
+                        try {
+                            try {
+                                requestContext.getPropertyNames().add("shouldnothappen");
+                                Assert.fail("Should not have worked");
+                            } catch (UnsupportedOperationException e) {
+                                // expected
+                            }
+                            assertThat(requestContext.getPropertyNames(), containsInAnyOrder("murequest", "hello", "hello2"));
+                            requestContext.removeProperty("hello");
+                            requestContext.setProperty("hello2", null);
+                            requestContext.setProperty("hello3", "temp");
+                            requestContext.setProperty("hello3", "hello3");
+                        } catch (Throwable e) {
+                            error.set(e);
+                        }
+                    })
+                .addResource(new Blah())
+            ).start();
+
+        try (Response resp = call(request(server.uri().resolve("/blah")))) {
+            assertThat(resp.body().string(), is("MUR: GET null null hello3 CRC: GET null null hello3"));
+        }
+        assertThat(error.get(), is(nullValue()));
     }
 
     @Test

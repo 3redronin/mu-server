@@ -297,6 +297,14 @@ class NettyRequestAdapter implements MuRequest {
     }
 
     @Override
+    public Map<String, Object> attributes() {
+        if (attributes == null) {
+            attributes = new HashMap<>();
+        }
+        return attributes;
+    }
+
+    @Override
     public AsyncHandle handleAsync() {
         if (isAsync()) {
             throw new IllegalStateException("handleAsync called twice for " + this);

@@ -15,7 +15,6 @@ import static java.util.Collections.emptyList;
 
 class MuContainerRequestContext implements ContainerRequestContext {
 
-    private final Map<String, Object> props = new HashMap<>();
     final MuRequest muRequest;
     private InputStream inputStream;
     private final String relativePath;
@@ -44,22 +43,22 @@ class MuContainerRequestContext implements ContainerRequestContext {
 
     @Override
     public Object getProperty(String name) {
-        return props.get(name);
+        return muRequest.attribute(name);
     }
 
     @Override
     public Collection<String> getPropertyNames() {
-        return props.keySet();
+        return muRequest.attributes().keySet();
     }
 
     @Override
     public void setProperty(String name, Object object) {
-        props.put(name, object);
+        muRequest.attribute(name, object);
     }
 
     @Override
     public void removeProperty(String name) {
-        props.remove(name);
+        muRequest.attribute(name, null);
     }
 
     @Override
