@@ -406,8 +406,6 @@ class NettyRequestAdapter implements MuRequest {
     void clean() {
         state(null);
         if (multipartRequestDecoder != null) {
-            // need to clear the datas before destroying. See https://github.com/netty/netty/issues/7814#issuecomment-397855311
-            multipartRequestDecoder.getBodyHttpDatas().clear();
             multipartRequestDecoder.destroy();
             multipartRequestDecoder = null;
         }
