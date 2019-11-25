@@ -140,6 +140,16 @@ public class SchemaObjectTest {
     }
 
     @Test
+    public void itCanPresetUUIDs() {
+        SchemaObject schema = schemaObjectFrom(UUID.class).build();
+        assertThat(schema.type, equalTo("string"));
+        assertThat(schema.format, equalTo("uuid"));
+        assertThat(schema.pattern.pattern(), equalTo("[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]"));
+        assertThat(schema.nullable, is(true));
+    }
+
+
+    @Test
     public void itCanPresetbytes() {
         SchemaObject schema = schemaObjectFrom(byte.class).build();
         assertThat(schema.type, equalTo("string"));

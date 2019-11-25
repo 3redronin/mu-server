@@ -7,10 +7,7 @@ import java.io.InputStream;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.time.Instant;
-import java.util.Collection;
-import java.util.Date;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.regex.Pattern;
 
 /**
@@ -312,11 +309,16 @@ public class SchemaObjectBuilder {
             return schemaObject();
         }
         String jsonType = jsonType(from);
-        return schemaObject()
+        SchemaObjectBuilder schemaObjectBuilder = schemaObject()
             .withType(jsonType)
             .withFormat(jsonFormat(from))
             .withNullable(!from.isPrimitive())
             .withItems(itemsFor(from, parameterizedType, "array".equals(jsonType)));
+        if (from.equals(UUID.class)) {
+            schemaObjectBuilder
+                .withPattern(Pattern.compile("[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]"));
+        }
+        return schemaObjectBuilder;
     }
 
     private static SchemaObject itemsFor(Class<?> from, Type parameterizedType, boolean isJsonArray) {
@@ -344,7 +346,7 @@ public class SchemaObjectBuilder {
     }
 
     private static String jsonType(Class<?> type) {
-        if (CharSequence.class.isAssignableFrom(type) || type.equals(byte.class) || type.equals(Byte.class) || type.isAssignableFrom(Date.class) || type.isAssignableFrom(Instant.class) || isBinaryClass(type)) {
+        if (CharSequence.class.isAssignableFrom(type) || type.equals(byte.class) || type.equals(Byte.class) || type.isAssignableFrom(Date.class) || type.isAssignableFrom(Instant.class) || isBinaryClass(type) || type.isAssignableFrom(UUID.class)) {
             return "string";
         } else if (type.equals(boolean.class) || type.equals(Boolean.class)) {
             return "boolean";
@@ -373,6 +375,8 @@ public class SchemaObjectBuilder {
             return "date-time";
         } else if (isBinaryClass(type)) {
             return "binary";
+        } else if (type.equals(UUID.class)) {
+            return "uuid";
         }
         return null;
     }

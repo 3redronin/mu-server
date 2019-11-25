@@ -30,6 +30,7 @@ public class RunLocal {
             .withHttpPort(18080)
             .withHttpsPort(18443)
             .withHttp2Config(http2EnabledIfAvailable())
+            .withMaxRequestSize(Long.MAX_VALUE)
             .withRateLimiter(request -> RateLimit.builder()
                 .withBucket(request.remoteAddress())
                 .withRate(10000).withWindow(1, TimeUnit.SECONDS)

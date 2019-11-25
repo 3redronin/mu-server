@@ -9,23 +9,23 @@ import org.example.petstore.resource.PetStoreResource;
 import org.example.petstore.resource.UserResource;
 import org.example.petstore.resource.VehicleResource;
 
-import javax.ws.rs.DefaultValue;
-import javax.ws.rs.GET;
-import javax.ws.rs.Path;
-import javax.ws.rs.QueryParam;
+import javax.ws.rs.*;
+import java.util.UUID;
 
 public class DocumentationExamples {
     public static void main(String[] args) {
         @Path("/fruits")
         @Description(value="Fruits", documentationUrl = "https://fruits.example.org", details = "The details of the request class")
         class Fruit {
-            @GET
+            @POST
+            @Produces("text/plain")
             @Description(value="A method", documentationUrl = "https://get.example.org", details = "The details of the method")
-            public void all(@QueryParam("jam") @Required @DefaultValue("strawberry") @Description(value = "The jam", example = "Mango", documentationUrl = "http://example.org/looooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong-url", details = "The details of the param")
+            public String all(@QueryParam("jam") @Required @DefaultValue("strawberry") @Description(value = "The jam", example = "Mango", documentationUrl = "http://example.org/looooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong-url", details = "The details of the param")
                                 String jam,
+                            @QueryParam("uuid") UUID uuid,
                             @Description(value="Anything", details = "The details of the request body", documentationUrl = "https://anything.example.org")
                             String body) {
-
+                return "jam=" + jam + "; uuid=" + uuid + "; body=" + body;
             }
         }
 
@@ -35,7 +35,9 @@ public class DocumentationExamples {
                 RestHandlerBuilder.restHandler(new Fruit(), new PetResource(), new PetStoreResource(), new UserResource(), new VehicleResource())
                     .withOpenApiHtmlUrl("/docs.html")
                     .withOpenApiJsonUrl("/api.json")
-                    .withCORS(CORSConfigBuilder.corsConfig().withAllOriginsAllowed())
+                    .withCORS(CORSConfigBuilder.corsConfig().withAllOriginsAllowed()
+                    .withAllowedHeaders("content-type")
+                    )
             ).start();
         System.out.println("Browse documentation at " + server.uri().resolve("/docs.html")
             + " and " + server.uri().resolve("/api.json"));
