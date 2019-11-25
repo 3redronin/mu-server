@@ -56,15 +56,6 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
         ctx.channel().attr(STATE_ATTRIBUTE).set(value);
     }
 
-    @Override
-    public void channelActive(ChannelHandlerContext ctx) throws Exception {
-        this.nettyCtx = ctx;
-        remoteAddress = (InetSocketAddress) ctx.channel().remoteAddress();
-        ctx.channel().config().setAutoRead(false);
-        ctx.read();
-        super.channelActive(ctx);
-    }
-
     static SSLSession getSslSession(ChannelHandlerContext ctx) {
         SslHandler ssl = (SslHandler) ctx.channel().pipeline().get("ssl");
         return ssl.engine().getSession();
@@ -72,8 +63,12 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
 
     @Override
     public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
+        this.nettyCtx = ctx;
+        remoteAddress = (InetSocketAddress) ctx.channel().remoteAddress();
         serverStats.onConnectionOpened();
         connectionStats.onConnectionOpened();
+        ctx.channel().config().setAutoRead(false);
+        ctx.read();
         super.handlerAdded(ctx);
         server.onConnectionStarted(this);
     }
