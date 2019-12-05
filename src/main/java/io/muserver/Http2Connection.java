@@ -270,7 +270,7 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
 
     @Override
     public String cipher() {
-        return Http1Connection.getSslSession(nettyContext).getProtocol();
+        return Http1Connection.getSslSession(nettyContext).getCipherSuite();
     }
 
     @Override
