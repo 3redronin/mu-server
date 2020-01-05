@@ -4,7 +4,6 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http.websocketx.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,17 +14,15 @@ import java.nio.ByteBuffer;
 class MuWebSocketSessionImpl implements MuWebSocketSession {
     static final byte[] PING_BYTES = {'m', 'u'};
     private static final Logger log = LoggerFactory.getLogger(MuWebSocketSessionImpl.class);
-    final ChannelPromise connectedPromise;
 
     private volatile boolean closeSent = false;
 
     private final ChannelHandlerContext ctx;
     final MuWebSocket muWebSocket;
 
-    MuWebSocketSessionImpl(ChannelHandlerContext ctx, MuWebSocket muWebSocket, ChannelPromise channelPromise) {
+    MuWebSocketSessionImpl(ChannelHandlerContext ctx, MuWebSocket muWebSocket) {
         this.ctx = ctx;
         this.muWebSocket = muWebSocket;
-        this.connectedPromise = channelPromise;
     }
 
     @Override

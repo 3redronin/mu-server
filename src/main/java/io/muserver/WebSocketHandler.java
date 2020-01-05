@@ -32,7 +32,7 @@ public class WebSocketHandler implements MuHandler {
             return false;
         }
 
-        boolean isUpgradeRequest = request.headers().contains(HeaderNames.UPGRADE, HeaderValues.WEBSOCKET, true);
+        boolean isUpgradeRequest = isWebSocketUpgrade(request);
         if (!isUpgradeRequest) {
             return false;
         }
@@ -55,6 +55,10 @@ public class WebSocketHandler implements MuHandler {
             ((NettyResponseAdaptor) response).setWebsocket();
         }
         return upgraded;
+    }
+
+    static boolean isWebSocketUpgrade(MuRequest request) {
+        return request.headers().contains(HeaderNames.UPGRADE, HeaderValues.WEBSOCKET, true);
     }
 
 }
