@@ -10,18 +10,28 @@ import scaffolding.*;
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
 import javax.ws.rs.Produces;
+import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.MultivaluedMap;
+import javax.ws.rs.ext.MessageBodyWriter;
 import javax.ws.rs.sse.Sse;
 import javax.ws.rs.sse.SseBroadcaster;
 import javax.ws.rs.sse.SseEventSink;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.request;
 
 public class SseBroadcasterImplTest {
@@ -102,6 +112,103 @@ public class SseBroadcasterImplTest {
         }
     }
 
+    @Test
+    public void badSinksAreRemoved() throws Exception {
+
+        int numberOfSubscribers = 10;
+        CountDownLatch subscriptionLatch = new CountDownLatch(numberOfSubscribers);
+        List<String> errors = new CopyOnWriteArrayList<>();
+
+        class Message {
+            public final int data;
+
+            Message(int data) {
+                this.data = data;
+            }
+        }
+
+        @Path("/streamer")
+        class Streamer {
+
+            private final Sse sse = MuRuntimeDelegate.createSseFactory();
+            private final SseBroadcaster broadcaster = sse.newBroadcaster();
+
+            public Streamer() {
+                broadcaster.onError((sseEventSink, throwable) -> {
+                    errors.add(throwable.getMessage());
+                });
+            }
+
+            @GET
+            @Path("register")
+            @Produces(MediaType.SERVER_SENT_EVENTS)
+            public void eventStream(@Context SseEventSink eventSink) {
+                broadcaster.register(eventSink);
+                subscriptionLatch.countDown();
+            }
+
+            public void sendMessages(Message message) throws ExecutionException, InterruptedException {
+                broadcaster.broadcast(sse.newEventBuilder().data(message).build()).toCompletableFuture().get();
+            }
+
+            public void endBroadcast() {
+                broadcaster.close();
+            }
+        }
+
+        Streamer streamer = new Streamer();
+        server = ServerUtils.httpsServerForTest().addHandler(
+            restHandler(streamer)
+                .addCustomWriter(new MessageBodyWriter<Message>() {
+                    boolean oneSent = false;
+
+                    @Override
+                    public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
+                        return type.equals(Message.class);
+                    }
+
+                    @Override
+                    public synchronized void writeTo(Message message, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException, WebApplicationException {
+                        if (oneSent) {
+                            try (OutputStreamWriter os = new OutputStreamWriter(entityStream)) {
+                                os.append(String.valueOf(message.data));
+                            }
+                        } else {
+                            oneSent = true;
+                            throw new IOException("Simulating IO exception");
+                        }
+                    }
+                })
+        ).start();
+
+        List<TestSseClient> listeners = new ArrayList<>();
+        for (int i = 0; i < numberOfSubscribers; i++) {
+            TestSseClient listener = new TestSseClient();
+            sseClient.newServerSentEvent(request().url(server.uri().resolve("/streamer/register").toString()).build(), listener);
+            listeners.add(listener);
+        }
+
+        MuAssert.assertNotTimedOut("Timed out waiting for subscriptions", subscriptionLatch);
+
+        streamer.sendMessages(new Message(1));
+        streamer.sendMessages(new Message(2));
+        streamer.endBroadcast();
+
+        assertThat(errors, contains("Simulating IO exception"));
+
+        int numWithErrors = 0;
+        for (TestSseClient listener : listeners) {
+            listener.assertListenerIsClosed();
+
+            if (listener.receivedMessages.size() == 3) {
+                assertThat(listener.receivedMessages, contains("open", "retryError", "closed"));
+                numWithErrors++;
+            } else {
+                assertThat(listener.receivedMessages, contains("open", "message=1        event=message        id=null", "message=2        event=message        id=null", "retryError", "closed"));
+            }
+        }
+        assertThat(numWithErrors, is(1));
+    }
 
     @After
     public void stop() {

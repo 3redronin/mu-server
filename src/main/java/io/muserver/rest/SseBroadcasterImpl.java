@@ -62,11 +62,17 @@ class SseBroadcasterImpl implements SseBroadcaster {
                     sendOnCloseEvent(sink);
                     sendComplete(completableFuture, count);
                 } else {
-                    sink.send(event).whenComplete((o, throwable) -> {
+                    sink.send(event).whenCompleteAsync((o, throwable) -> {
                         if (throwable != null) {
+                            synchronized (lock) {
+                                sinks.remove(sink);
+                            }
+                            try {
+                                sink.close();
+                            } catch (Exception ignored) {
+                            }
                             for (BiConsumer<SseEventSink, Throwable> errorListener : errorListeners) {
                                 errorListener.accept(sink, throwable);
-                                sinks.remove(sink);
                             }
                         }
                         sendComplete(completableFuture, count);
