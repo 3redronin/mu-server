@@ -5,10 +5,10 @@ import io.muserver.Mutils;
 import javax.ws.rs.sse.OutboundSseEvent;
 import javax.ws.rs.sse.SseBroadcaster;
 import javax.ws.rs.sse.SseEventSink;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -16,72 +16,63 @@ import java.util.function.Consumer;
 class SseBroadcasterImpl implements SseBroadcaster {
 
     private volatile boolean isClosed = false;
-    private final Object lock = new Object();
-    private List<BiConsumer<SseEventSink, Throwable>> errorListeners = new ArrayList<>();
-    private List<Consumer<SseEventSink>> closeListeners = new ArrayList<>();
-    private List<SseEventSink> sinks = new ArrayList<>();
+    private final List<BiConsumer<SseEventSink, Throwable>> errorListeners = new CopyOnWriteArrayList<>();
+    private final List<Consumer<SseEventSink>> closeListeners = new CopyOnWriteArrayList<>();
+    private final List<SseEventSink> sinks = new CopyOnWriteArrayList<>();
 
     @Override
     public void onError(BiConsumer<SseEventSink, Throwable> onError) {
         Mutils.notNull("onError", onError);
-        synchronized (lock) {
-            throwIfClosed();
-            this.errorListeners.add(onError);
-        }
+        throwIfClosed();
+        this.errorListeners.add(onError);
     }
 
     @Override
     public void onClose(Consumer<SseEventSink> onClose) {
         Mutils.notNull("onClose", onClose);
-        synchronized (lock) {
-            throwIfClosed();
-            this.closeListeners.add(onClose);
-        }
+        throwIfClosed();
+        this.closeListeners.add(onClose);
     }
 
     @Override
     public void register(SseEventSink sseEventSink) {
         Mutils.notNull("sseEventSink", sseEventSink);
-        synchronized (lock) {
-            throwIfClosed();
-            this.sinks.add(sseEventSink);
-        }
+        throwIfClosed();
+        this.sinks.add(sseEventSink);
     }
 
     @Override
     public CompletionStage<?> broadcast(OutboundSseEvent event) {
         Mutils.notNull("event", event);
-        synchronized (lock) {
-            throwIfClosed();
+        throwIfClosed();
 
-            CompletableFuture<?> completableFuture = new CompletableFuture<>();
 
-            AtomicInteger count = new AtomicInteger(sinks.size());
-            for (SseEventSink sink : sinks) {
-                if (sink.isClosed()) {
-                    sendOnCloseEvent(sink);
-                    sendComplete(completableFuture, count);
-                } else {
-                    sink.send(event).whenCompleteAsync((o, throwable) -> {
-                        if (throwable != null) {
-                            synchronized (lock) {
-                                sinks.remove(sink);
-                            }
-                            try {
-                                sink.close();
-                            } catch (Exception ignored) {
-                            }
-                            for (BiConsumer<SseEventSink, Throwable> errorListener : errorListeners) {
-                                errorListener.accept(sink, throwable);
-                            }
+        CompletableFuture<?> completableFuture = new CompletableFuture<>();
+
+        AtomicInteger count = new AtomicInteger(sinks.size());
+        for (SseEventSink sink : sinks) {
+            if (sink.isClosed()) {
+                sinks.remove(sink);
+                sendOnCloseEvent(sink);
+                sendComplete(completableFuture, count);
+            } else {
+                sink.send(event).whenComplete((o, throwable) -> {
+                    if (throwable != null) {
+                        sinks.remove(sink);
+                        try {
+                            sink.close();
+                        } catch (Exception ignored) {
                         }
-                        sendComplete(completableFuture, count);
-                    });
-                }
+                        for (BiConsumer<SseEventSink, Throwable> errorListener : errorListeners) {
+                            errorListener.accept(sink, throwable);
+                        }
+                    }
+                    sendComplete(completableFuture, count);
+                });
             }
-
-            return completableFuture;
         }
+
+        return completableFuture;
     }
 
     private static void sendComplete(CompletableFuture<?> completableFuture, AtomicInteger count) {
@@ -93,18 +84,17 @@ class SseBroadcasterImpl implements SseBroadcaster {
 
     @Override
     public void close() {
-        synchronized (lock) {
-            if (!isClosed) {
-                for (SseEventSink sink : sinks) {
-                    try {
-                        sink.close();
-                        sendOnCloseEvent(sink);
-                    } catch (Exception e) {
-                        // ignore
-                    }
+        if (!isClosed) {
+            for (SseEventSink sink : sinks) {
+                try {
+                    sink.close();
+                    sendOnCloseEvent(sink);
+                } catch (Exception e) {
+                    // ignore
                 }
-                isClosed = true;
             }
+            sinks.clear();
+            isClosed = true;
         }
     }
 

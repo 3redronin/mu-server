@@ -180,7 +180,7 @@ class SsePublisherImpl implements SsePublisher {
         for (String line : lines) {
             raw.append("data: ").append(line).append('\n');
         }
-        raw.append("\n");
+        raw.append('\n');
         return raw.toString();
     }
 

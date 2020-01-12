@@ -27,7 +27,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -147,8 +146,8 @@ public class SseBroadcasterImplTest {
                 subscriptionLatch.countDown();
             }
 
-            public void sendMessages(Message message) throws ExecutionException, InterruptedException {
-                broadcaster.broadcast(sse.newEventBuilder().data(message).build()).toCompletableFuture().get();
+            public void sendMessages(Message message) {
+                broadcaster.broadcast(sse.newEventBuilder().data(message).build());
             }
 
             public void endBroadcast() {
@@ -204,7 +203,8 @@ public class SseBroadcasterImplTest {
                 assertThat(listener.receivedMessages, contains("open", "retryError", "closed"));
                 numWithErrors++;
             } else {
-                assertThat(listener.receivedMessages, contains("open", "message=1        event=message        id=null", "message=2        event=message        id=null", "retryError", "closed"));
+                assertThat(listener.receivedMessages,
+                    contains("open", "message=1        event=message        id=null", "message=2        event=message        id=null", "retryError", "closed"));
             }
         }
         assertThat(numWithErrors, is(1));
