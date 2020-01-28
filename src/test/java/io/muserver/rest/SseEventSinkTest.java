@@ -6,10 +6,7 @@ import org.junit.After;
 import org.junit.Test;
 import scaffolding.*;
 
-import javax.ws.rs.GET;
-import javax.ws.rs.Path;
-import javax.ws.rs.Produces;
-import javax.ws.rs.WebApplicationException;
+import javax.ws.rs.*;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.MultivaluedMap;
@@ -23,19 +20,21 @@ import java.lang.reflect.Type;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Arrays.asList;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.instanceOf;
 import static scaffolding.ClientUtils.request;
 
 public class SseEventSinkTest {
     public MuServer server;
     private final SseClient.OkSse sseClient = new SseClient.OkSse(ClientUtils.client);
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
-    private final TestSseClient listener = new TestSseClient();
+    private TestSseClient listener = new TestSseClient();
 
     @Test
     public void canPublishMessagesAndCustomDataWritersAreUsed() throws InterruptedException {
@@ -104,6 +103,68 @@ public class SseEventSinkTest {
     }
 
     @Test
+    public void errorsResultInClientDisconnection() throws InterruptedException {
+
+        class Dog {
+        }
+        @Produces("application/json")
+        class DogWriter implements MessageBodyWriter<Dog> {
+            @Override
+            public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
+                return type.equals(Dog.class);
+            }
+
+            @Override
+            public void writeTo(Dog dog, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException, WebApplicationException {
+                entityStream.write("{}".getBytes(UTF_8));
+            }
+        }
+
+        AtomicReference<Throwable> error = new AtomicReference<>();
+
+        @Path("/streamer")
+        class Streamer {
+
+            @GET
+            @Path("eventStreamWithError")
+            @Produces(MediaType.SERVER_SENT_EVENTS)
+            public void eventStreamWithError(@Context SseEventSink eventSink, @Context Sse sse) {
+                eventSink.send(sse.newEventBuilder().data(new Dog()).build())
+                    .whenComplete((o, throwable) -> {
+                        error.set(throwable);
+                        eventSink.close();
+                    });
+            }
+
+            @GET
+            @Path("eventStreamWithoutError")
+            @Produces(MediaType.SERVER_SENT_EVENTS)
+            public void eventStreamWithoutError(@Context SseEventSink eventSink, @Context Sse sse) {
+                eventSink.send(sse.newEventBuilder().data(new Dog()).mediaType(MediaType.APPLICATION_JSON_TYPE).build())
+                    .thenRun(eventSink::close);
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest().addHandler(
+            restHandler(new Streamer())
+                .addCustomWriter(new DogWriter())
+        ).start();
+
+        try (SseClient.ServerSentEvent ignored = sseClient.newServerSentEvent(request().url(server.uri().resolve("/streamer/eventStreamWithoutError").toString()).build(), listener)) {
+            listener.assertListenerIsClosed();
+        }
+        assertThat(listener.receivedMessages, equalTo(asList("open", "message={}        event=message        id=null", "retryError", "closed")));
+
+        listener = new TestSseClient();
+        try (SseClient.ServerSentEvent ignored = sseClient.newServerSentEvent(request().url(server.uri().resolve("/streamer/eventStreamWithError").toString()).build(), listener)) {
+            listener.assertListenerIsClosed();
+        }
+        assertThat(listener.receivedMessages, equalTo(asList("open", "retryError", "closed")));
+        assertThat(error.get(), instanceOf(InternalServerErrorException.class));
+    }
+
+
+    @Test
     public void theCallbacksCanBeUsedToDetectClientDisconnections() {
         CountDownLatch oneSentLatch = new CountDownLatch(1);
         CountDownLatch failureLatch = new CountDownLatch(1);
@@ -132,7 +193,6 @@ public class SseEventSinkTest {
         }
 
         server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Streamer())).start();
-
         try (SseClient.ServerSentEvent ignored = sseClient.newServerSentEvent(request(server.uri().resolve("/streamer/eventStream")).build(), listener)) {
             MuAssert.assertNotTimedOut("Waiting for one message", oneSentLatch);
         }

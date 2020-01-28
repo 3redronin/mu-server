@@ -2,7 +2,10 @@ package io.muserver.rest;
 
 import io.muserver.AsyncSsePublisher;
 import io.muserver.MuResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import javax.ws.rs.ServerErrorException;
 import javax.ws.rs.ext.MessageBodyWriter;
 import javax.ws.rs.sse.OutboundSseEvent;
 import javax.ws.rs.sse.SseEventSink;
@@ -16,6 +19,7 @@ import static io.muserver.rest.JaxRSResponse.muHeadersToJaxObj;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 class JaxSseEventSinkImpl implements SseEventSink {
+    private static final Logger log = LoggerFactory.getLogger(JaxSseEventSinkImpl.class);
 
     private final AsyncSsePublisher ssePublisher;
     private final MuResponse response;
@@ -60,6 +64,9 @@ class JaxSseEventSinkImpl implements SseEventSink {
                 throw new IllegalArgumentException("The event had nothing to send");
             }
         } catch (Throwable e) {
+            if (e instanceof ServerErrorException) {
+                log.warn("Server error while writing data to SSE stream", e);
+            }
             CompletableFuture<?> f = new CompletableFuture<>();
             f.completeExceptionally(e);
             stage = f;
