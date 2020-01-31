@@ -60,18 +60,18 @@ public class ResourceType {
             .add(HeaderNames.CACHE_CONTROL, "max-age=300")
             .add(HeaderNames.X_CONTENT_TYPE_OPTIONS, HeaderValues.NOSNIFF),
         true, singletonList("css"));
-    public static final ResourceType TEXT_PLAIN = new ResourceType(ContentTypes.TEXT_PLAIN, noCache(), true,
+    public static final ResourceType TEXT_PLAIN = new ResourceType(ContentTypes.TEXT_PLAIN_UTF8, noCache(), true,
         asList("txt", "ini", "gitignore", "gitattributes", "cfg", "log", "out", "text", "properties"));
-    public static final ResourceType TEXT_MARKDOWN = new ResourceType(ContentTypes.TEXT_MARKDOWN, shortCache(), true, singletonList("md"));
-    public static final ResourceType TEXT_CSV = new ResourceType(ContentTypes.TEXT_CSV, noCache(), true, singletonList("csv"));
+    public static final ResourceType TEXT_MARKDOWN = new ResourceType(ContentTypes.TEXT_MARKDOWN_UTF8, shortCache(), true, singletonList("md"));
+    public static final ResourceType TEXT_CSV = new ResourceType(ContentTypes.TEXT_CSV_UTF8, noCache(), true, singletonList("csv"));
     public static final ResourceType APPLICATION_MSWORD = new ResourceType(ContentTypes.APPLICATION_MSWORD, shortCache(), false, singletonList("doc"));
     public static final ResourceType APPLICATION_VND_MS_FONTOBJECT = new ResourceType(ContentTypes.APPLICATION_VND_MS_FONTOBJECT, shortCache(), false, singletonList("eot"));
     public static final ResourceType APPLICATION_EPUB_ZIP = new ResourceType(ContentTypes.APPLICATION_EPUB_ZIP, shortCache(), false, singletonList("epub"));
     public static final ResourceType APPLICATION_GZIP = new ResourceType(ContentTypes.APPLICATION_GZIP, shortCache(), false, singletonList("gz"));
     public static final ResourceType IMAGE_GIF = new ResourceType(ContentTypes.IMAGE_GIF, shortCache(), false, singletonList("gif"));
-    public static final ResourceType TEXT_HTML = new ResourceType(ContentTypes.TEXT_HTML, noCache(), true, asList("html", "htm"));
+    public static final ResourceType TEXT_HTML = new ResourceType(ContentTypes.TEXT_HTML_UTF8, noCache(), true, asList("html", "htm"));
     public static final ResourceType IMAGE_X_ICON = new ResourceType(ContentTypes.IMAGE_X_ICON, shortCache(), false, singletonList("ico"));
-    public static final ResourceType TEXT_CALENDAR = new ResourceType(ContentTypes.TEXT_CALENDAR, noCache(), true, singletonList("ics"));
+    public static final ResourceType TEXT_CALENDAR = new ResourceType(ContentTypes.TEXT_CALENDAR_UTF8, noCache(), true, singletonList("ics"));
     public static final ResourceType APPLICATION_JAVA_ARCHIVE = new ResourceType(ContentTypes.APPLICATION_JAVA_ARCHIVE, shortCache(), false, singletonList("jar"));
     public static final ResourceType IMAGE_JPEG = new ResourceType(ContentTypes.IMAGE_JPEG, shortCache(), false, asList("jpg", "jpeg"));
 
@@ -151,7 +151,14 @@ public class ResourceType {
     }
 
     public static Set<String> gzippableMimeTypes(List<ResourceType> resourceTypes) {
-        return resourceTypes.stream().filter(rt -> rt.gzip).map(rt -> rt.mimeType.toString()).collect(Collectors.toSet());
+        return resourceTypes.stream().filter(rt -> rt.gzip).map(rt -> {
+            String s = rt.mimeType.toString();
+            int i = s.indexOf(";");
+            if (i > -1) {
+                s = s.substring(0, i);
+            }
+            return s;
+        }).collect(Collectors.toSet());
     }
 
     public static List<ResourceType> getResourceTypes() {

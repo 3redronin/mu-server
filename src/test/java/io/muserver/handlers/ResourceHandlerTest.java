@@ -1,5 +1,7 @@
 package io.muserver.handlers;
 
+import io.muserver.Headers;
+import io.muserver.MuRequest;
 import io.muserver.MuServer;
 import io.muserver.Mutils;
 import okhttp3.Protocol;
@@ -41,11 +43,41 @@ public class ResourceHandlerTest {
             .addHandler(fileHandler("src/test/resources/sample-static"))
             .start();
 
-        assertContentTypeAndContent("/index.html", "text/html", false);
+        assertContentTypeAndContent("/index.html", "text/html;charset=utf-8", false);
         assertContentTypeAndContent("/images/" + urlEncode("guangzhou.jpeg"), "image/jpeg", false);
         assertContentTypeAndContent("/images/" + urlEncode("guangzhou, china.jpeg"), "image/jpeg", false);
 
         assertNotFound("/bad-path");
+    }
+
+    @Test
+    public void headersCanBeCustomised() throws Exception {
+        server = ServerUtils.httpsServerForTest()
+            .withGzipEnabled(false)
+            .addHandler(fileHandler("src/test/resources/sample-static").withResourceCustomizer(new ResourceCustomizer() {
+                @Override
+                public void beforeHeadersSent(MuRequest request, Headers responseHeaders) {
+                    responseHeaders.remove("cache-control");
+                    responseHeaders.set("something-else", "here");
+                }
+            }))
+            .start();
+
+        Map<String, List<String>> headersFromGET;
+        URL url = server.httpsUri().resolve("/index.html").toURL();
+        try (Response resp = call(request().get().url(url))) {
+            headersFromGET = resp.headers().toMultimap();
+            assertThat(resp.code(), is(200));
+            assertThat(resp.headers("cache-control"), is(empty()));
+            assertThat(resp.headers("something-else"), contains("here"));
+        }
+        headersFromGET.remove("Date");
+        try (Response resp = call(request().head().url(url))) {
+            assertThat(resp.code(), is(200));
+            Map<String, List<String>> headersFromHEAD = resp.headers().toMultimap();
+            headersFromHEAD.remove("Date");
+            assertThat(headersFromHEAD, equalTo(headersFromGET));
+        }
     }
 
     @Test
@@ -55,7 +87,7 @@ public class ResourceHandlerTest {
             .addHandler(fileOrClasspath("src/test/resources/does-not-exist", "/sample-static"))
             .start();
 
-        assertContentTypeAndContent("/index.html", "text/html", false);
+        assertContentTypeAndContent("/index.html", "text/html;charset=utf-8", false);
         assertContentTypeAndContent("/images/" + urlEncode("guangzhou.jpeg"), "image/jpeg", false);
         assertContentTypeAndContent("/images/" + urlEncode("guangzhou, china.jpeg"), "image/jpeg", false);
 
@@ -108,7 +140,7 @@ public class ResourceHandlerTest {
         try (Response resp = call(request().get().url(url))) {
             headersFromGET = resp.headers().toMultimap();
             assertThat(resp.code(), is(200));
-            assertThat(resp.header("Content-Type"), is("text/html"));
+            assertThat(resp.header("Content-Type"), is("text/html;charset=utf-8"));
             assertThat(resp.body().string(), is(readResource("/sample-static/index.html")));
         }
         try (Response resp = call(request().head().url(url))) {
@@ -121,7 +153,7 @@ public class ResourceHandlerTest {
         }
         try (Response resp = call(request(server.uri().resolve("/a/b/")))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.header("Content-Type"), is("text/html"));
+            assertThat(resp.header("Content-Type"), is("text/html;charset=utf-8"));
             assertThat(resp.body().string(), is(readResource("/sample-static/index.html")));
         }
 
@@ -228,7 +260,7 @@ public class ResourceHandlerTest {
 
         try (Response resp = call(request().url(server.httpsUri().resolve("/blah/index.html").toURL()))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.header("Content-Type"), is("text/html"));
+            assertThat(resp.header("Content-Type"), is("text/html;charset=utf-8"));
             assertThat(resp.body().string(), is(readResource("/sample-static/index.html")));
         }
     }
@@ -245,7 +277,7 @@ public class ResourceHandlerTest {
 
         try (Response resp = call(request().url(server.httpsUri().resolve("/blah/").toURL()))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.header("Content-Type"), is("text/html"));
+            assertThat(resp.header("Content-Type"), is("text/html;charset=utf-8"));
             assertThat(resp.body().string(), is(readResource("/sample-static/index.html")));
         }
     }
@@ -258,7 +290,7 @@ public class ResourceHandlerTest {
             .start();
 
 //        assertContentTypeAndContent("/index.html", "text/html", false); // not sure why it's chunked but not gzipped. Probably just too small.
-        assertContentTypeAndContent("/overview.txt", "text/plain", true);
+        assertContentTypeAndContent("/overview.txt", "text/plain;charset=utf-8", true);
         assertContentTypeAndContent("/sample.css", "text/css", true);
         assertContentTypeAndContent("/images/guangzhou.jpeg", "image/jpeg", false);
         assertContentTypeAndContent("/images/friends.jpg", "image/jpeg", false);

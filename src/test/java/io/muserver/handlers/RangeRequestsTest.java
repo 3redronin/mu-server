@@ -30,7 +30,7 @@ public class RangeRequestsTest {
         URI uri = server.uri().resolve("/fp/alphanumerics.txt");
         try (Response resp = call(request(uri))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.header("Content-Type"), is("text/plain"));
+            assertThat(resp.header("Content-Type"), is("text/plain;charset=utf-8"));
             assertThat(resp.header("Content-Length"), is("62"));
             assertThat(resp.header("Content-Range"), is(nullValue()));
             assertThat(resp.header("Accept-Ranges"), is("bytes"));
@@ -48,7 +48,7 @@ public class RangeRequestsTest {
 
             try (Response resp = call(request(uri))) {
                 assertThat(prefix, resp.code(), is(200));
-                assertThat(prefix, resp.header("Content-Type"), is("text/plain"));
+                assertThat(prefix, resp.header("Content-Type"), is("text/plain;charset=utf-8"));
                 assertThat(prefix, resp.header("Content-Length"), is("62"));
                 assertThat(prefix, resp.header("Content-Range"), is(nullValue()));
                 assertThat(prefix, resp.header("Accept-Ranges"), is("bytes"));
@@ -58,7 +58,7 @@ public class RangeRequestsTest {
 
             try (Response resp = call(request(uri).header("Range", "bytes=0-9"))) {
                 assertThat(prefix, resp.code(), is(206));
-                assertThat(prefix, resp.header("Content-Type"), is("text/plain"));
+                assertThat(prefix, resp.header("Content-Type"), is("text/plain;charset=utf-8"));
                 assertThat(prefix, resp.header("Content-Length"), is("10"));
                 assertThat(prefix, resp.header("Content-Range"), is("bytes 0-9/62"));
                 assertThat(prefix, resp.header("Accept-Ranges"), is("bytes"));
@@ -67,7 +67,7 @@ public class RangeRequestsTest {
 
             try (Response resp = call(request(uri).header("Range", "bytes=10-19"))) {
                 assertThat(prefix, resp.code(), is(206));
-                assertThat(prefix, resp.header("Content-Type"), is("text/plain"));
+                assertThat(prefix, resp.header("Content-Type"), is("text/plain;charset=utf-8"));
                 assertThat(prefix, resp.header("Content-Length"), is("10"));
                 assertThat(prefix, resp.header("Content-Range"), is("bytes 10-19/62"));
                 assertThat(prefix, resp.header("Accept-Ranges"), is("bytes"));
@@ -76,7 +76,7 @@ public class RangeRequestsTest {
 
             try (Response resp = call(request(uri).header("Range", "bytes=61-61"))) {
                 assertThat(prefix, resp.code(), is(206));
-                assertThat(prefix, resp.header("Content-Type"), is("text/plain"));
+                assertThat(prefix, resp.header("Content-Type"), is("text/plain;charset=utf-8"));
                 assertThat(prefix, resp.header("Content-Length"), is("1"));
                 assertThat(prefix, resp.header("Content-Range"), is("bytes 61-61/62"));
                 assertThat(prefix, resp.header("Accept-Ranges"), is("bytes"));
@@ -87,7 +87,7 @@ public class RangeRequestsTest {
             for (String lastTenBytes : new String[]{"bytes=-10", "bytes=52-61"}) {
                 try (Response resp = call(request(uri).header("Range", lastTenBytes))) {
                     assertThat(prefix, resp.code(), is(206));
-                    assertThat(prefix, resp.header("Content-Type"), is("text/plain"));
+                    assertThat(prefix, resp.header("Content-Type"), is("text/plain;charset=utf-8"));
                     assertThat(prefix, resp.header("Content-Length"), is("10"));
                     assertThat(prefix, resp.header("Content-Range"), is("bytes 52-61/62"));
                     assertThat(prefix, resp.header("Accept-Ranges"), is("bytes"));
@@ -98,7 +98,7 @@ public class RangeRequestsTest {
             try (Response resp = call(request(uri).header("Range", "bytes=0-9")
                 .header("If-Modified-Since", lastModified))) {
                 assertThat(prefix, resp.code(), is(304));
-                assertThat(prefix, resp.header("Content-Type"), is("text/plain"));
+                assertThat(prefix, resp.header("Content-Type"), is("text/plain;charset=utf-8"));
                 assertThat(prefix, resp.header("Content-Length"), is("62"));
                 assertThat(prefix, resp.header("Content-Range"), is(nullValue()));
                 assertThat(prefix, resp.header("Accept-Ranges"), is("bytes"));
@@ -127,7 +127,7 @@ public class RangeRequestsTest {
 
             try (Response resp = call(request(uri).header("Range", "bytes=70-79"))) {
                 assertThat(prefix, resp.code(), is(200));
-                assertThat(prefix, resp.header("Content-Type"), is("text/plain"));
+                assertThat(prefix, resp.header("Content-Type"), is("text/plain;charset=utf-8"));
                 assertThat(prefix, resp.header("Content-Length"), is("62"));
                 assertThat(prefix, resp.header("Content-Range"), is(nullValue()));
                 assertThat(prefix, resp.header("Accept-Ranges"), is("bytes"));
@@ -136,7 +136,7 @@ public class RangeRequestsTest {
 
             try (Response resp = call(request(uri).header("Range", "bytes=10-79"))) {
                 assertThat(prefix, resp.code(), is(206));
-                assertThat(prefix, resp.header("Content-Type"), is("text/plain"));
+                assertThat(prefix, resp.header("Content-Type"), is("text/plain;charset=utf-8"));
                 assertThat(prefix, resp.header("Content-Length"), is("52"));
                 assertThat(prefix, resp.header("Content-Range"), is("bytes 10-61/62"));
                 assertThat(prefix, resp.header("Accept-Ranges"), is("bytes"));

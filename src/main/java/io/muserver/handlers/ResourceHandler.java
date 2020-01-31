@@ -36,8 +36,9 @@ public class ResourceHandler implements MuHandler {
     private final ResourceProviderFactory resourceProviderFactory;
     private final String directoryListingCss;
     private final DateTimeFormatter dateFormatter;
+    private final ResourceCustomizer resourceCustomizer;
 
-    ResourceHandler(ResourceProviderFactory resourceProviderFactory, String pathToServeFrom, String defaultFile, Map<String, ResourceType> extensionToResourceType, boolean directoryListingEnabled, String directoryListingCss, DateTimeFormatter dateFormatter) {
+    ResourceHandler(ResourceProviderFactory resourceProviderFactory, String pathToServeFrom, String defaultFile, Map<String, ResourceType> extensionToResourceType, boolean directoryListingEnabled, String directoryListingCss, DateTimeFormatter dateFormatter, ResourceCustomizer resourceCustomizer) {
         this.resourceProviderFactory = resourceProviderFactory;
         this.pathToServeFrom = pathToServeFrom;
         this.extensionToResourceType = extensionToResourceType;
@@ -45,6 +46,7 @@ public class ResourceHandler implements MuHandler {
         this.directoryListingEnabled = directoryListingEnabled;
         this.directoryListingCss = directoryListingCss;
         this.dateFormatter = dateFormatter;
+        this.resourceCustomizer = resourceCustomizer;
     }
 
     @Override
@@ -81,7 +83,7 @@ public class ResourceHandler implements MuHandler {
             String filename = requestPath.substring(requestPath.lastIndexOf('/'));
             Date lastModified = provider.lastModified();
             Long totalSize = provider.fileSize();
-            addHeaders(response, filename, totalSize, lastModified);
+            addHeaders(response, filename, totalSize, lastModified, request);
             boolean sendBody = request.method() != Method.HEAD;
 
             String ims = request.headers().get(HeaderNames.IF_MODIFIED_SINCE);
@@ -139,7 +141,7 @@ public class ResourceHandler implements MuHandler {
     }
 
 
-    private void addHeaders(MuResponse response, String fileName, Long fileSize, Date lastModified) {
+    private void addHeaders(MuResponse response, String fileName, Long fileSize, Date lastModified, MuRequest request) {
         int ind = fileName.lastIndexOf('.');
         ResourceType type;
         if (ind == -1) {
@@ -158,6 +160,9 @@ public class ResourceHandler implements MuHandler {
             headers.set(HeaderNames.LAST_MODIFIED, Mutils.toHttpDate(lastModified));
         }
         headers.add(type.headers);
+        if (this.resourceCustomizer != null) {
+            this.resourceCustomizer.beforeHeadersSent(request, headers);
+        }
     }
 
     /**
@@ -239,7 +244,7 @@ public class ResourceHandler implements MuHandler {
             }
             return new ResourceHandler(resourceProviderFactory, pathToServeFrom, defaultFile, extensionToResourceType, false, null, DateTimeFormatter.ofPattern("yyyy/MM/dd hh:mm:ss")
                 .withLocale(Locale.US)
-                .withZone(ZoneId.systemDefault()));
+                .withZone(ZoneId.systemDefault()), null);
         }
     }
 

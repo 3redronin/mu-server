@@ -30,6 +30,7 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
     private ResourceProviderFactory resourceProviderFactory;
     private boolean directoryListingEnabled = false;
     private String directoryListingCss = null;
+    private ResourceCustomizer resourceCustomizer = null;
 
     /**
      * Specify custom filename extension to mime-type mappings. By default {@link ResourceType#DEFAULT_EXTENSION_MAPPINGS}
@@ -103,6 +104,16 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
     }
 
     /**
+     * Registers a hook to intercept responses, allowing things such as response header customization based on the request.
+     * @param resourceCustomizer A class to intercept responses
+     * @return This builder
+     */
+    public ResourceHandlerBuilder withResourceCustomizer(ResourceCustomizer resourceCustomizer) {
+        this.resourceCustomizer = resourceCustomizer;
+        return this;
+    }
+
+    /**
      * Creates the handler
      * @return The built handler
      */
@@ -125,7 +136,7 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
                 .withZone(ZoneId.systemDefault());
         }
 
-        return new ResourceHandler(resourceProviderFactory, pathToServeFrom, defaultFile, extensionToResourceType, directoryListingEnabled, css, formatterToUse);
+        return new ResourceHandler(resourceProviderFactory, pathToServeFrom, defaultFile, extensionToResourceType, directoryListingEnabled, css, formatterToUse, this.resourceCustomizer);
     }
 
 
