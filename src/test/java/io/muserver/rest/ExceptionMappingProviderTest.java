@@ -7,6 +7,7 @@ import org.junit.Test;
 import scaffolding.ServerUtils;
 
 import javax.ws.rs.GET;
+import javax.ws.rs.NotFoundException;
 import javax.ws.rs.Path;
 import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.MediaType;
@@ -21,16 +22,19 @@ import java.lang.reflect.Type;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 import static scaffolding.MuAssert.stopAndCheck;
 
 public class ExceptionMappingProviderTest {
     private MuServer server;
-    private static class UpdateException extends Exception {}
-    private static class ConcurrentUpdateException extends UpdateException {}
+
+    private static class UpdateException extends Exception {
+    }
+
+    private static class ConcurrentUpdateException extends UpdateException {
+    }
 
     @Test
     public void mappersCanBeUsedToMapThings() throws Exception {
@@ -80,6 +84,31 @@ public class ExceptionMappingProviderTest {
         }
     }
 
+    @Test
+    public void evenWebApplicationExceptionsCanBeMapped() throws IOException {
+        @Path("samples")
+        class Sample {
+            @GET
+            public String get() {
+                throw new NotFoundException("Was not here");
+            }
+        }
+        this.server = ServerUtils.httpsServerForTest()
+            .addHandler(
+                restHandler(new Sample())
+                    .addExceptionMapper(Throwable.class, exception -> javax.ws.rs.core.Response.status(555)
+                        .entity(exception.getMessage())
+                        .type(MediaType.TEXT_PLAIN_TYPE)
+                        .build())
+
+            ).start();
+        try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
+            assertThat(resp.code(), is(555));
+            assertThat(resp.headers("content-type"), contains("text/plain;charset=utf-8"));
+            assertThat(resp.body().string(), is("Was not here"));
+        }
+    }
+
 
     @Test
     public void customWritersCanBeUsedInExceptions() throws Exception {
@@ -106,16 +135,17 @@ public class ExceptionMappingProviderTest {
                             return javax.ws.rs.core.Response.status(400).entity(new Dog()).build();
                         }
                     })
-                .addCustomWriter(new MessageBodyWriter<Dog>() {
-                    @Override
-                    public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
-                        return type.isAssignableFrom(Dog.class);
-                    }
-                    @Override
-                    public void writeTo(Dog dog, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException, WebApplicationException {
-                        entityStream.write(dog.toDoggle().getBytes("UTF-8"));
-                    }
-                })
+                    .addCustomWriter(new MessageBodyWriter<Dog>() {
+                        @Override
+                        public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
+                            return type.isAssignableFrom(Dog.class);
+                        }
+
+                        @Override
+                        public void writeTo(Dog dog, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException, WebApplicationException {
+                            entityStream.write(dog.toDoggle().getBytes("UTF-8"));
+                        }
+                    })
             ).start();
         try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
             assertThat(resp.code(), is(400));

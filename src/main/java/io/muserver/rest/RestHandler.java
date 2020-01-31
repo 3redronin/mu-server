@@ -151,12 +151,7 @@ public class RestHandler implements MuHandler {
         } catch (NotMatchedException e) {
             return false;
         } catch (Exception ex) {
-            if (ex instanceof WebApplicationException) {
-                dealWithWebApplicationException(0, requestContext, muResponse, (WebApplicationException) ex, acceptHeaders,
-                    producesRef == null ? emptyList() : producesRef, directlyProducesRef == null ? emptyList() : directlyProducesRef);
-            } else {
-                dealWithUnhandledException(0, requestContext, muResponse, ex, acceptHeaders, producesRef, directlyProducesRef);
-            }
+            dealWithUnhandledException(0, requestContext, muResponse, ex, acceptHeaders, producesRef, directlyProducesRef);
             if (asyncHandle != null) {
                 asyncHandle.complete();
             }
@@ -166,10 +161,13 @@ public class RestHandler implements MuHandler {
 
     private void dealWithUnhandledException(int nestingLevel, MuContainerRequestContext request, MuResponse muResponse, Exception ex, List<MediaType> acceptHeaders, List<MediaType> producesRef, List<MediaType> directlyProducesRef) throws Exception {
         Response response = customExceptionMapper.toResponse(ex);
-        if (response == null) {
+        if (response == null && ex instanceof WebApplicationException) {
+            dealWithWebApplicationException(nestingLevel, request, muResponse, (WebApplicationException) ex, acceptHeaders, producesRef == null ? emptyList() : producesRef, directlyProducesRef == null ? emptyList() : directlyProducesRef);
+        } else if (response == null) {
             throw ex;
+        } else {
+            sendResponse(nestingLevel, request, muResponse, acceptHeaders, producesRef, directlyProducesRef, response);
         }
-        sendResponse(nestingLevel, request, muResponse, acceptHeaders, producesRef, directlyProducesRef, response);
     }
 
     private void sendResponse(int nestingLevel, MuContainerRequestContext requestContext, MuResponse muResponse, List<MediaType> acceptHeaders, List<MediaType> produces, List<MediaType> directlyProduces, Object result) throws Exception {
@@ -234,8 +232,6 @@ public class RestHandler implements MuHandler {
 
                 }
             }
-        } catch (WebApplicationException e) {
-            dealWithWebApplicationException(nestingLevel + 1, requestContext, muResponse, e, acceptHeaders, produces, directlyProduces);
         } catch (Exception ex) {
             dealWithUnhandledException(nestingLevel + 1, requestContext, muResponse, ex, acceptHeaders, produces, directlyProduces);
         }
