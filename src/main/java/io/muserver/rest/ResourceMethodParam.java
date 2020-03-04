@@ -105,7 +105,7 @@ abstract class ResourceMethodParam {
             }
             Pattern patternIfNotDefault = this.pattern == null || UriPattern.DEFAULT_CAPTURING_GROUP_PATTERN.equals(this.pattern.pattern()) ? null : this.pattern;
             return builder.withSchema(
-                schemaObjectFrom(parameterHandle.getType(), parameterHandle.getParameterizedType())
+                schemaObjectFrom(parameterHandle.getType(), parameterHandle.getParameterizedType(), isRequired)
                     .withDefaultValue(source == ValueSource.PATH_PARAM ? null : defaultValue())
                     .withExternalDocs(externalDoc)
                     .withPattern(patternIfNotDefault)

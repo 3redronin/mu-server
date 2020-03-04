@@ -129,7 +129,7 @@ class ResourceMethod {
             .map(messageBodyParam -> requestBodyObject()
                 .withContent(singletonMap(requestBodyMimeType,
                     mediaTypeObject()
-                        .withSchema(SchemaObjectBuilder.schemaObjectFrom(messageBodyParam.parameterHandle.getType(), messageBodyParam.parameterHandle.getParameterizedType())
+                        .withSchema(SchemaObjectBuilder.schemaObjectFrom(messageBodyParam.parameterHandle.getType(), messageBodyParam.parameterHandle.getParameterizedType(), messageBodyParam.isRequired)
                             .withTitle(messageBodyParam.descriptionData.summary)
                             .withDescription(messageBodyParam.descriptionData.description)
                             .build())
@@ -162,7 +162,7 @@ class ResourceMethod {
                                                     if (n.isRequired) {
                                                         required.add(n.key);
                                                     }
-                                                    SchemaObjectBuilder schemaObjectBuilder = schemaObjectFrom(n.parameterHandle.getType(), n.parameterHandle.getParameterizedType())
+                                                    SchemaObjectBuilder schemaObjectBuilder = schemaObjectFrom(n.parameterHandle.getType(), n.parameterHandle.getParameterizedType(), n.isRequired)
                                                         .withDeprecated(n.isDeprecated ? true : null)
                                                         .withDefaultValue(n.defaultValue());
                                                     if (n.descriptionData != null) {

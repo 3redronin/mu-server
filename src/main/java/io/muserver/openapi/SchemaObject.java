@@ -2,6 +2,7 @@ package io.muserver.openapi;
 
 import java.io.IOException;
 import java.io.Writer;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -141,7 +142,16 @@ public class SchemaObject implements JsonWriter {
         isFirst = append(writer, "maxProperties", maxProperties, isFirst);
         isFirst = append(writer, "minProperties", minProperties, isFirst);
         isFirst = append(writer, "required", required, isFirst);
-        isFirst = append(writer, "enum", enumValue, isFirst);
+        if (this.enumValue != null) {
+            List<String> enums = new ArrayList<>();
+            if (nullable) {
+                enums.add(null);
+            }
+            for (Object o : this.enumValue) {
+                enums.add(((Enum<? extends Enum<?>>) o).name());
+            }
+            isFirst = append(writer, "enum", enums, isFirst);
+        }
         isFirst = append(writer, "type", type, isFirst);
         isFirst = append(writer, "allOf", allOf, isFirst);
         isFirst = append(writer, "oneOf", oneOf, isFirst);

@@ -234,7 +234,7 @@ public class SchemaObjectTest {
 
     @Test
     public void genericTypesCanBeKnown() throws NoSuchFieldException {
-        SchemaObject schema = schemaObjectFrom(listOfString.getClass(), getClass().getField("listOfString").getGenericType()).build();
+        SchemaObject schema = schemaObjectFrom(listOfString.getClass(), getClass().getField("listOfString").getGenericType(), false).build();
         assertThat(schema.type, equalTo("array"));
         assertThat(schema.format, is(nullValue()));
         assertThat(schema.nullable, is(true));
@@ -247,7 +247,7 @@ public class SchemaObjectTest {
 
     @Test
     public void genericTypesCanBeKnownForFiles() throws NoSuchFieldException {
-        SchemaObject schema = schemaObjectFrom(listOfUploadedFiles.getClass(), getClass().getField("listOfUploadedFiles").getGenericType()).build();
+        SchemaObject schema = schemaObjectFrom(listOfUploadedFiles.getClass(), getClass().getField("listOfUploadedFiles").getGenericType(), false).build();
         assertThat(schema.type, equalTo("array"));
         assertThat(schema.format, is(nullValue()));
         assertThat(schema.nullable, is(true));

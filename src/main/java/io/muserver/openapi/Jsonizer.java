@@ -33,7 +33,9 @@ class Jsonizer {
     }
 
     private static void appendValue(Writer writer, Object value) throws IOException {
-        if (value instanceof JsonWriter) {
+        if (value == null) {
+            writer.append("null");
+        } else if (value instanceof JsonWriter) {
             ((JsonWriter) value).writeJson(writer);
         } else if (value instanceof List) {
             List list = (List)value;

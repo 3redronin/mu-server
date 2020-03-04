@@ -10,6 +10,8 @@ import java.time.Instant;
 import java.util.*;
 import java.util.regex.Pattern;
 
+import static java.util.Arrays.asList;
+
 /**
  * <p>The Schema Object allows the definition of input and output data types. These types can be objects, but also
  * primitives and arrays. This object is an extended subset of the <a href="http://json-schema.org/">JSON Schema
@@ -294,7 +296,7 @@ public class SchemaObjectBuilder {
      * @return A new builder
      */
     public static SchemaObjectBuilder schemaObjectFrom(Class<?> from) {
-        return schemaObjectFrom(from, null);
+        return schemaObjectFrom(from, null, false);
     }
 
     /**
@@ -304,7 +306,7 @@ public class SchemaObjectBuilder {
      * @param parameterizedType The generic type of the class, e.g. a String if the type is <code>List&lt;String&gt;</code>
      * @return A new builder
      */
-    public static SchemaObjectBuilder schemaObjectFrom(Class<?> from, Type parameterizedType) {
+    public static SchemaObjectBuilder schemaObjectFrom(Class<?> from, Type parameterizedType, boolean required) {
         if (from.equals(void.class) || from.equals(Void.class)) {
             return schemaObject();
         }
@@ -312,11 +314,14 @@ public class SchemaObjectBuilder {
         SchemaObjectBuilder schemaObjectBuilder = schemaObject()
             .withType(jsonType)
             .withFormat(jsonFormat(from))
-            .withNullable(!from.isPrimitive())
+            .withNullable(!from.isPrimitive() && !required)
             .withItems(itemsFor(from, parameterizedType, "array".equals(jsonType)));
         if (from.equals(UUID.class)) {
             schemaObjectBuilder
                 .withPattern(Pattern.compile("[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]"));
+        } else if (from.isEnum()) {
+            Object[] enumConstants = from.getEnumConstants();
+            schemaObjectBuilder.withEnumValue(asList(enumConstants));
         }
         return schemaObjectBuilder;
     }
@@ -332,8 +337,7 @@ public class SchemaObjectBuilder {
                         Type argType = actualTypeArguments[0];
                         if (argType instanceof Class<?>) {
                             Class<?> argClass = (Class<?>) argType;
-                            schemaObjectBuilder.withType(jsonType(argClass))
-                                .withFormat(jsonFormat(argClass));
+                            schemaObjectBuilder = schemaObjectFrom(argClass, null, true);
                         }
                     }
                 }
@@ -346,7 +350,9 @@ public class SchemaObjectBuilder {
     }
 
     private static String jsonType(Class<?> type) {
-        if (CharSequence.class.isAssignableFrom(type) || type.equals(byte.class) || type.equals(Byte.class) || type.isAssignableFrom(Date.class) || type.isAssignableFrom(Instant.class) || isBinaryClass(type) || type.isAssignableFrom(UUID.class)) {
+        if (CharSequence.class.isAssignableFrom(type) || type.equals(byte.class) || type.equals(Byte.class)
+            || type.isAssignableFrom(Date.class) || type.isAssignableFrom(Instant.class) || isBinaryClass(type)
+            || type.isAssignableFrom(UUID.class) || type.isEnum()) {
             return "string";
         } else if (type.equals(boolean.class) || type.equals(Boolean.class)) {
             return "boolean";

@@ -306,7 +306,7 @@ public class OpenApiDocumentorTest {
 
             JSONObject appJson = content.getJSONObject("application/json").getJSONObject("schema");
             assertThat(appJson.keySet(), hasSize(3));
-            assertThat(appJson.getBoolean("nullable"), is(true));
+            assertThat(appJson.getBoolean("nullable"), is(false));
             assertThat(appJson.getString("title"), is("An json in a format"));
             assertThat(appJson.getString("type"), is("string"));
 
@@ -402,6 +402,7 @@ public class OpenApiDocumentorTest {
 
     @Test
     public void queryAndFormParamsWork() throws IOException {
+
         @Path("sample")
         class Blah {
             @POST
@@ -410,7 +411,8 @@ public class OpenApiDocumentorTest {
                 @QueryParam("id") int id,
                 @QueryParam("id2") @Required int id2,
                 @FormParam("id3") int id3,
-                @FormParam("id4") @Required int id4
+                @FormParam("id4") @Required int id4pu,
+                @QueryParam("thing") Thing thing
             ) {
             }
         }
@@ -436,6 +438,79 @@ public class OpenApiDocumentorTest {
                 assertThat(id3.getString("format"), is("int32"));
                 assertThat(id3.getBoolean("nullable"), is(false));
                 assertThat(id3.getInt("default"), is(0));
+            }
+        }
+    }
+
+    enum Thing {
+
+        THING_ONE, THING_TWO;
+
+        @Override
+        public String toString() {
+            return name().toLowerCase();
+        }
+    }
+
+    @Test
+    public void enumsSupported() throws IOException {
+
+        @Path("sample")
+        class Blah {
+            @GET
+            public void blah(
+                @QueryParam("thing") @Required Thing thing,
+                @QueryParam("optThing") Thing optThing,
+                @QueryParam("things") @Required List<Thing> things,
+                @QueryParam("optThings") List<Thing> optThings
+            ) { }
+        }
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(RestHandlerBuilder.restHandler(new Blah()).withOpenApiJsonUrl("/openapi.json"))
+            .start();
+        try (okhttp3.Response resp = call(request(server.uri().resolve("/openapi.json")))) {
+            JSONObject json = new JSONObject(resp.body().string());
+
+            String[] paths = {"/sample"};
+            for (String path : paths) {
+                JSONArray params = json.getJSONObject("paths")
+                    .getJSONObject(path)
+                    .getJSONObject("get")
+                    .getJSONArray("parameters");
+
+                JSONObject thing = params.getJSONObject(0);
+                JSONObject thingSchema = thing.getJSONObject("schema");
+                assertThat(thingSchema.optBoolean("nullable", false), is(false));
+                assertThat(thingSchema.getString("type"), is("string"));
+                assertThat(thingSchema.getJSONArray("enum").toList(),
+                    equalTo(new JSONArray().put(Thing.THING_ONE.name()).put(Thing.THING_TWO.name()).toList()));
+
+                JSONObject optThing = params.getJSONObject(1);
+                JSONObject optThingSchema = optThing.getJSONObject("schema");
+                assertThat(optThingSchema.getBoolean("nullable"), is(true));
+                assertThat(optThingSchema.getString("type"), is("string"));
+                assertThat(optThingSchema.getJSONArray("enum").toList(),
+                    contains(null, Thing.THING_ONE.name(), Thing.THING_TWO.name()));
+
+                JSONObject things = params.getJSONObject(2);
+                assertThat(things.getBoolean("required"), is(true));
+                JSONObject thingsSchema = things.getJSONObject("schema");
+                assertThat(thingsSchema.getString("type"), is("array"));
+                assertThat(thingsSchema.getBoolean("nullable"), is(false));
+                JSONObject thingsItems = thingsSchema.getJSONObject("items");
+                assertThat(thingsItems.getBoolean("nullable"), is(false));
+                assertThat(thingsItems.getString("type"), is("string"));
+                assertThat(thingsItems.getJSONArray("enum").toList(), contains("THING_ONE", "THING_TWO"));
+
+                JSONObject optThings = params.getJSONObject(3);
+                assertThat(optThings.getBoolean("required"), is(false));
+                JSONObject optThingsSchema = optThings.getJSONObject("schema");
+                assertThat(optThingsSchema.getString("type"), is("array"));
+                assertThat(optThingsSchema.getBoolean("nullable"), is(true));
+                JSONObject optThingsItems = optThingsSchema.getJSONObject("items");
+                assertThat(optThingsItems.getBoolean("nullable"), is(false));
+                assertThat(optThingsItems.getString("type"), is("string"));
+                assertThat(optThingsItems.getJSONArray("enum").toList(), contains("THING_ONE", "THING_TWO"));
             }
         }
     }
