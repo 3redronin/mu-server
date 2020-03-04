@@ -304,6 +304,7 @@ public class SchemaObjectBuilder {
      * @param from Type type to build from, e.g. if the type is <code>List.class</code> then the <code>type</code> will
      *             be set as <code>array</code>.
      * @param parameterizedType The generic type of the class, e.g. a String if the type is <code>List&lt;String&gt;</code>
+     * @param required True if it's a required value
      * @return A new builder
      */
     public static SchemaObjectBuilder schemaObjectFrom(Class<?> from, Type parameterizedType, boolean required) {
