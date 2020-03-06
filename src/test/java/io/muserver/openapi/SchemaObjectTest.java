@@ -267,11 +267,6 @@ public class SchemaObjectTest {
     }
 
     @Test(expected = IllegalArgumentException.class)
-    public void defaultsMustMatchTypeForString() {
-        schemaObject().withType("string").withDefaultValue(1).build();
-    }
-
-    @Test(expected = IllegalArgumentException.class)
     public void defaultsMustMatchTypeForArray() {
         schemaObject().withType("array").withItems(schemaObject().build()).withDefaultValue("something").build();
     }

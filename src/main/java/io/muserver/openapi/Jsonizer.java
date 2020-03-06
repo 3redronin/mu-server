@@ -6,7 +6,8 @@ import java.util.List;
 import java.util.Map;
 
 class Jsonizer {
-    private Jsonizer() {}
+    private Jsonizer() {
+    }
 
     private static String jsonEncode(String value) {
         return value
@@ -38,7 +39,7 @@ class Jsonizer {
         } else if (value instanceof JsonWriter) {
             ((JsonWriter) value).writeJson(writer);
         } else if (value instanceof List) {
-            List list = (List)value;
+            List list = (List) value;
             writer.append('[');
             boolean isFirst = true;
             for (Object obj : list) {
@@ -52,9 +53,9 @@ class Jsonizer {
         } else if (value instanceof Map) {
             writer.append('{');
             @SuppressWarnings("unchecked")
-            Map<String,?> map = (Map<String,?>)value;
+            Map<String, ?> map = (Map<String, ?>) value;
             boolean isFirst = true;
-            for (Map.Entry<String,?> entry : map.entrySet()) {
+            for (Map.Entry<String, ?> entry : map.entrySet()) {
                 isFirst = append(writer, entry.getKey(), entry.getValue(), isFirst);
             }
             writer.append('}');
@@ -62,7 +63,11 @@ class Jsonizer {
             if (value instanceof Number || value instanceof Boolean) {
                 writer.append(value.toString());
             } else {
-                writer.append('"').append(jsonEncode(value.toString())).append('"');
+                // TODO: use param converters
+                String valueAsString = value.getClass().isEnum()
+                    ? ((Enum<? extends Enum<?>>) value).name()
+                    : value.toString();
+                writer.append('"').append(jsonEncode(valueAsString)).append('"');
             }
         }
     }

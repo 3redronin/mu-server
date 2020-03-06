@@ -459,7 +459,7 @@ public class OpenApiDocumentorTest {
         class Blah {
             @GET
             public void blah(
-                @QueryParam("thing") @Required Thing thing,
+                @QueryParam("thing") @Required @DefaultValue("THING_ONE") @Description(value="The thing", example="THING_TWO") Thing thing,
                 @QueryParam("optThing") Thing optThing,
                 @QueryParam("things") @Required List<Thing> things,
                 @QueryParam("optThings") List<Thing> optThings
@@ -479,7 +479,9 @@ public class OpenApiDocumentorTest {
                     .getJSONArray("parameters");
 
                 JSONObject thing = params.getJSONObject(0);
+
                 JSONObject thingSchema = thing.getJSONObject("schema");
+                assertThat(thingSchema.getString("default"), is(Thing.THING_ONE.name()));
                 assertThat(thingSchema.optBoolean("nullable", false), is(false));
                 assertThat(thingSchema.getString("type"), is("string"));
                 assertThat(thingSchema.getJSONArray("enum").toList(),

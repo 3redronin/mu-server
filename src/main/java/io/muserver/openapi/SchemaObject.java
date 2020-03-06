@@ -61,11 +61,6 @@ public class SchemaObject implements JsonWriter {
         if (defaultValue != null && type != null) {
             Class<?> defaultClass = defaultValue.getClass();
             switch (type) {
-                case "string":
-                    if (!CharSequence.class.isAssignableFrom(defaultClass)) {
-                        throw new IllegalArgumentException("The default value must be a string but was " + defaultClass);
-                    }
-                    break;
                 case "number":
                     if (!Number.class.isAssignableFrom(defaultClass)) {
                         throw new IllegalArgumentException("The default value must be a number but was " + defaultClass);
@@ -81,8 +76,6 @@ public class SchemaObject implements JsonWriter {
                         throw new IllegalArgumentException("The default value must be a boolean but was " + defaultClass);
                     }
                     break;
-
-
             }
         }
         this.title = title;

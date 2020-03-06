@@ -215,7 +215,8 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
             return value.name();
         }
         public String toString() {
-            return enumClass.getSimpleName() + " converter";
+            String validValues = Stream.of(enumClass.getEnumConstants()).map(Enum::name).collect(Collectors.joining(", "));
+            return enumClass.getSimpleName() + " converter (valid values: " + validValues + ")";
         }
     }
 
@@ -314,6 +315,11 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
         @Override
         public String toString(Instant value) {
             return value == null ? null : value.toString();
+        }
+
+        @Override
+        public String toString() {
+            return "Instant converter, expecting ISO format dates such as '2020-03-06T04:43:00.691Z'";
         }
     }
 }

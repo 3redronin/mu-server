@@ -227,12 +227,17 @@ public class ResourceMethodParamTest {
 
     @SuppressWarnings("unused")
     enum Breed {
-        CHIHUAHUA, BIG_HAIRY, YELPER
+        CHIHUAHUA, BIG_HAIRY, YELPER;
+        @Override
+        public String toString() {
+            return name().toLowerCase();
+        }
     }
 
     @Test
     public void enumsCanBeUsed() throws IOException {
         @Path("samples")
+        @Produces("text/plain")
         class Sample {
             @GET
             public String getIt(
@@ -250,19 +255,42 @@ public class ResourceMethodParamTest {
                 @DefaultValue("BIG_HAIRY") @HeaderParam("breedThree") Breed breed3) {
                 return breed1 + " / " + breed2 + " / " + breed3;
             }
+
+            @GET
+            @Path("multiple")
+            public String getMultiple(@QueryParam("breeds") List<Breed> breeds) {
+                if (breeds == null) return "null";
+                if (breeds.isEmpty()) return "empty list";
+                return breeds.stream().map(Enum::name).collect(Collectors.joining(","));
+            }
         }
         server = httpsServerForTest().addHandler(restHandler(new Sample())).start();
         try (Response resp = call(request().url(server.uri().resolve("/samples?breedOne=CHIHUAHUA").toString()))) {
-            assertThat(resp.body().string(), equalTo("CHIHUAHUA / null / BIG_HAIRY"));
+            assertThat(resp.body().string(), equalTo("chihuahua / null / big_hairy"));
         }
         try (Response resp = call(request().url(server.uri().resolve("/samples/headers").toString())
             .header("breedOne", Breed.CHIHUAHUA.name()))) {
-            assertThat(resp.body().string(), equalTo("CHIHUAHUA / null / BIG_HAIRY"));
+            assertThat(resp.body().string(), equalTo("chihuahua / null / big_hairy"));
         }
         try (Response resp = call(request().url(server.uri().resolve("/samples?breedOne=BAD_DOG").toString()))) {
             assertThat(resp.code(), is(400));
             assertThat(resp.body().string(), startsWith("<h1>400 Bad Request</h1><p>Could not convert String value &quot;BAD_DOG&quot; to a"));
         }
+
+        try (Response resp = call(request().url(server.uri().resolve("/samples/multiple?breeds=CHIHUAHUA,YELPER").toString()))) {
+            assertThat(resp.body().string(), equalTo("CHIHUAHUA,YELPER"));
+        }
+        try (Response resp = call(request().url(server.uri().resolve("/samples/multiple?breeds=").toString()))) {
+            assertThat(resp.body().string(), equalTo("empty list"));
+        }
+        try (Response resp = call(request().url(server.uri().resolve("/samples/multiple").toString()))) {
+            assertThat(resp.body().string(), equalTo("empty list"));
+        }
+        try (Response resp = call(request().url(server.uri().resolve("/samples/multiple?breeds=CHIHUAHUA,INVALID,YELPER").toString()))) {
+            assertThat(resp.code(), is(400));
+            assertThat(resp.body().string(), containsString("Could not convert"));
+        }
+
     }
 
     @SuppressWarnings("unused")
@@ -571,7 +599,10 @@ public class ResourceMethodParamTest {
         try (Response resp = call(request(server.uri().resolve("/time")))) {
             assertThat(resp.body().string(), equalTo(""));
         }
-
+        try (Response resp = call(request(server.uri().resolve("/time?value=invalid-date")))) {
+            assertThat(resp.code(), is(400));
+            assertThat(resp.body().string(), containsString("Instant converter, expecting ISO format dates such as &#x27;2020-03-06T04:43:00.691Z&#x27; on parameter"));
+        }
     }
 
     @Test
