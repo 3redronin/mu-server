@@ -7,6 +7,7 @@ import org.junit.Test;
 import scaffolding.ServerUtils;
 
 import javax.ws.rs.GET;
+import javax.ws.rs.POST;
 import javax.ws.rs.Path;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
@@ -27,7 +28,7 @@ public class CORSTest {
         @Path("/things")
         class Thing {
 
-            @GET
+            @POST
             public String get() {
                 return "Hello!";
             }
@@ -54,7 +55,7 @@ public class CORSTest {
         ) {
             assertThat(resp.code(), is(200));
             assertThat(resp.header("Access-Control-Allow-Origin"), is("http://foo.example"));
-            assertThat(resp.header("Access-Control-Allow-Methods"), is("GET, HEAD, OPTIONS"));
+            assertThat(resp.header("Access-Control-Allow-Methods"), is("OPTIONS, POST"));
             assertThat(resp.header("Access-Control-Allow-Headers"), is(nullValue()));
             assertThat(resp.header("Access-Control-Expose-Headers"), is("X-PINGOTHER, Content-Type"));
             assertThat(resp.header("Access-Control-Max-Age"), is("500"));
