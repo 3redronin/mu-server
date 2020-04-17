@@ -27,6 +27,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -208,6 +209,44 @@ public class SseBroadcasterImplTest {
             }
         }
         assertThat(numWithErrors, is(1));
+    }
+
+    @Test
+    public void disconnectedClientsAreRemovedFromBroadcasting() throws InterruptedException {
+        List<String> errors = new CopyOnWriteArrayList<>();
+        CountDownLatch subscriptionLatch = new CountDownLatch(1);
+        CountDownLatch exceptionThrownLatch = new CountDownLatch(1);
+
+        Sse sse = MuRuntimeDelegate.createSseFactory();
+        SseBroadcaster broadcaster = sse.newBroadcaster();
+        broadcaster.onError((sseEventSink, throwable) -> {
+            errors.add(throwable.getMessage());
+            exceptionThrownLatch.countDown();
+        });
+
+        @Path("/streamer")
+        class Streamer {
+            @GET
+            @Path("register")
+            @Produces(MediaType.SERVER_SENT_EVENTS)
+            public void eventStream(@Context SseEventSink eventSink) {
+                broadcaster.register(eventSink);
+                subscriptionLatch.countDown();
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(RestHandlerBuilder.restHandler(new Streamer()))
+            .start();
+
+        try (SseClient.ServerSentEvent ignored = sseClient.newServerSentEvent(request().url(server.uri().resolve("/streamer/register").toString()).build(), new TestSseClient())) {
+            assertThat("Timed out waiting for SSE publisher to start", subscriptionLatch.await(10, TimeUnit.SECONDS), is(true));
+            assertThat(MuRuntimeDelegate.connectedSinksCount(broadcaster), is(1));
+        }
+        MuAssert.assertNotTimedOut("exceptionThrownLatch", exceptionThrownLatch);
+
+        assertThat(MuRuntimeDelegate.connectedSinksCount(broadcaster), is(0));
+
     }
 
     @After

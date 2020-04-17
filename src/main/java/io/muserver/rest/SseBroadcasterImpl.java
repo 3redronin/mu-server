@@ -1,5 +1,6 @@
 package io.muserver.rest;
 
+import io.muserver.ClientDisconnectedException;
 import io.muserver.Mutils;
 
 import javax.ws.rs.sse.OutboundSseEvent;
@@ -39,6 +40,14 @@ class SseBroadcasterImpl implements SseBroadcaster {
         Mutils.notNull("sseEventSink", sseEventSink);
         throwIfClosed();
         this.sinks.add(sseEventSink);
+        if (sseEventSink instanceof JaxSseEventSinkImpl) {
+            ((JaxSseEventSinkImpl) sseEventSink).setResponseCompleteHandler(info -> {
+                if (!info.completedSuccessfully()) {
+                    // right now, only client disconnects get raised by this event, which is why it's okay to assume the exception type.
+                    onSinkErrored(sseEventSink, new ClientDisconnectedException());
+                }
+            });
+        }
     }
 
     @Override
@@ -58,14 +67,7 @@ class SseBroadcasterImpl implements SseBroadcaster {
             } else {
                 sink.send(event).whenComplete((o, throwable) -> {
                     if (throwable != null) {
-                        sinks.remove(sink);
-                        try {
-                            sink.close();
-                        } catch (Exception ignored) {
-                        }
-                        for (BiConsumer<SseEventSink, Throwable> errorListener : errorListeners) {
-                            errorListener.accept(sink, throwable);
-                        }
+                        onSinkErrored(sink, throwable);
                     }
                     sendComplete(completableFuture, count);
                 });
@@ -73,6 +75,19 @@ class SseBroadcasterImpl implements SseBroadcaster {
         }
 
         return completableFuture;
+    }
+
+    private void onSinkErrored(SseEventSink sink, Throwable throwable) {
+        boolean wasInList = sinks.remove(sink);
+        if (wasInList) {
+            try {
+                sink.close();
+            } catch (Exception ignored) {
+            }
+            for (BiConsumer<SseEventSink, Throwable> errorListener : errorListeners) {
+                errorListener.accept(sink, throwable);
+            }
+        }
     }
 
     private static void sendComplete(CompletableFuture<?> completableFuture, AtomicInteger count) {
@@ -108,5 +123,9 @@ class SseBroadcasterImpl implements SseBroadcaster {
         if (isClosed) {
             throw new IllegalStateException("This broadcaster has already been closed");
         }
+    }
+
+    public int connectedSinksCount() {
+        return sinks.size();
     }
 }

@@ -87,6 +87,14 @@ public interface AsyncSsePublisher {
     CompletionStage<?> setClientReconnectTime(long timeToWait, TimeUnit unit);
 
     /**
+     * Add a listener for when request processing is complete. One use of this is to detect early client disconnects
+     * so that expensive operations can be cancelled.
+     * <p>Check {@link ResponseInfo#completedSuccessfully()} for false for SSE streams that did not complete.</p>
+     * @param responseCompleteListener The handler to invoke when the request is complete.
+     */
+    void setResponseCompleteHandler(ResponseCompleteListener responseCompleteListener);
+
+    /**
      * <p>Creates a new Server-Sent Events publisher. This is designed by be called from within a MuHandler.</p>
      * <p>This will set the content type of the response to <code>text/event-stream</code> and disable caching.</p>
      * <p>The request will also switch to async mode, which means you can use the returned publisher in another thread.</p>
@@ -106,6 +114,7 @@ public interface AsyncSsePublisher {
 class AsyncSsePublisherImpl implements AsyncSsePublisher {
 
     private final AsyncHandle asyncHandle;
+    private volatile boolean closed = false;
 
     AsyncSsePublisherImpl(AsyncHandle asyncHandle) {
         this.asyncHandle = asyncHandle;
@@ -136,7 +145,15 @@ class AsyncSsePublisherImpl implements AsyncSsePublisher {
         return write(SsePublisherImpl.clientReconnectText(timeToWait, unit));
     }
 
+    @Override
+    public void setResponseCompleteHandler(ResponseCompleteListener responseCompleteListener) {
+        asyncHandle.setResponseCompleteHandler(responseCompleteListener);
+    }
+
     private CompletionStage<?> write(String text) {
+        if (closed) {
+            throw new IllegalStateException("The SSE stream was already closed");
+        }
         CompletableFuture<?> stage = new CompletableFuture<>();
         asyncHandle.write(Mutils.toByteBuffer(text), error -> {
             if (error == null) {
@@ -150,6 +167,11 @@ class AsyncSsePublisherImpl implements AsyncSsePublisher {
 
     @Override
     public void close() {
-        asyncHandle.complete();
+        if (!closed) {
+            closed = true;
+            asyncHandle.complete();
+        }
     }
+
+
 }

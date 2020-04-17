@@ -1,10 +1,12 @@
 package io.muserver.rest;
 
 import io.muserver.MuException;
+import io.muserver.Mutils;
 
 import javax.ws.rs.core.*;
 import javax.ws.rs.ext.RuntimeDelegate;
 import javax.ws.rs.sse.Sse;
+import javax.ws.rs.sse.SseBroadcaster;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -38,6 +40,19 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
         headerDelegates.put(Cookie.class, new CookieHeaderDelegate());
         headerDelegates.put(EntityTag.class, new EntityTagDelegate());
         headerDelegates.put(Link.class, new LinkHeaderDelegate());
+    }
+
+    /**
+     * @param broadcaster An MuServer SSE broadcaster
+     * @return the number of SSE clients currently connected to the broadcaster
+     */
+    public static int connectedSinksCount(SseBroadcaster broadcaster) {
+        Mutils.notNull("broadcaster", broadcaster);
+        if (broadcaster instanceof SseBroadcasterImpl) {
+            return ((SseBroadcasterImpl)broadcaster).connectedSinksCount();
+        } else {
+            throw new IllegalArgumentException("The given broadcaster was not created by MuServer. It was of type " + broadcaster.getClass());
+        }
     }
 
     @Override

@@ -2,6 +2,7 @@ package io.muserver.rest;
 
 import io.muserver.AsyncSsePublisher;
 import io.muserver.MuResponse;
+import io.muserver.ResponseCompleteListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,6 +33,9 @@ class JaxSseEventSinkImpl implements SseEventSink {
         this.entityProviders = entityProviders;
     }
 
+    void setResponseCompleteHandler(ResponseCompleteListener listener) {
+        ssePublisher.setResponseCompleteHandler(listener);
+    }
 
     @Override
     public boolean isClosed() {
@@ -76,7 +80,9 @@ class JaxSseEventSinkImpl implements SseEventSink {
 
     @Override
     public void close() {
-        ssePublisher.close();
-        isClosed = true;
+        if (!isClosed) {
+            isClosed = true;
+            ssePublisher.close();
+        }
     }
 }

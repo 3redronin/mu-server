@@ -126,4 +126,12 @@ class Http2Response extends NettyResponseAdaptor {
     protected void writeRedirectResponse() {
         writeHeaders(true);
     }
+
+    @Override
+    public String toString() {
+        return "Http2Response{" +
+            "outputState=" + outputState +
+            ", status=" + status +
+            "}";
+    }
 }

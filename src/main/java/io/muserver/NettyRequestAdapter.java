@@ -458,7 +458,7 @@ class NettyRequestAdapter implements MuRequest {
 
         private final NettyRequestAdapter request;
         private final AsyncContext asyncContext;
-        private ResponseCompleteListener responseCompleteListener;
+        private volatile  ResponseCompleteListener responseCompleteListener;
 
         private AsyncHandleImpl(NettyRequestAdapter request, AsyncContext asyncContext) {
             this.request = request;
@@ -480,6 +480,7 @@ class NettyRequestAdapter implements MuRequest {
         @Override
         public void complete() {
             request.nettyAsyncContext.complete(false);
+            raiseResponseComplete();
         }
 
         @Override
@@ -492,7 +493,16 @@ class NettyRequestAdapter implements MuRequest {
                     forceDisconnect = NettyHandlerAdapter.dealWithUnhandledException(request, request.nettyAsyncContext.response, throwable);
                 } finally {
                     request.nettyAsyncContext.complete(forceDisconnect);
+                    raiseResponseComplete();
                 }
+            }
+        }
+
+        void raiseResponseComplete() {
+            ResponseCompleteListener listener = this.responseCompleteListener;
+            if (listener != null) {
+                listener.onComplete(asyncContext);
+                this.responseCompleteListener = null;
             }
         }
 

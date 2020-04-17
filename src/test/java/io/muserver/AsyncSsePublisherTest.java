@@ -2,10 +2,7 @@ package io.muserver;
 
 import org.junit.After;
 import org.junit.Test;
-import scaffolding.ClientUtils;
-import scaffolding.ServerUtils;
-import scaffolding.SseClient;
-import scaffolding.TestSseClient;
+import scaffolding.*;
 
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
@@ -22,7 +19,6 @@ public class AsyncSsePublisherTest {
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final TestSseClient listener = new TestSseClient();
 
-
     @Test
     public void canCall() throws InterruptedException {
         String multilineJson = "{\n" +
@@ -30,12 +26,18 @@ public class AsyncSsePublisherTest {
             "    \"value1\": \"Something\"\n" +
             "}";
 
+        CountDownLatch responseInfoLatch = new CountDownLatch(1);
+        AtomicReference<ResponseInfo> responseInfo = new AtomicReference<>(null);
         server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/streamer", (request, response, pathParams) -> {
 
                 AsyncSsePublisher ssePublisher = AsyncSsePublisher.start(request, response);
+                ssePublisher.setResponseCompleteHandler(info -> {
+                    responseInfo.set(info);
+                    responseInfoLatch.countDown();
+                });
                 ssePublisher.sendComment("this is a comment")
-                    .thenRunAsync(() -> {
+                    .thenRun(() -> {
                         ssePublisher.send("Just a message");
                         ssePublisher.send("A message and event", "customevent");
                         ssePublisher.setClientReconnectTime(3, TimeUnit.SECONDS);
@@ -64,6 +66,9 @@ public class AsyncSsePublisherTest {
             "message=" + multilineJson + "        event=message        id=myid",
             "retryError",
             "closed")));
+
+        MuAssert.assertNotTimedOut("responseInfoLatch", responseInfoLatch);
+        assertThat(responseInfo.get().completedSuccessfully(), is(true));
     }
 
 
@@ -72,10 +77,18 @@ public class AsyncSsePublisherTest {
         AtomicReference<Throwable> thrownException = new AtomicReference<>();
         CountDownLatch somethingPublishedLatch = new CountDownLatch(1);
         CountDownLatch exceptionThrownLatch = new CountDownLatch(1);
+
+        CountDownLatch responseInfoLatch = new CountDownLatch(1);
+        AtomicReference<ResponseInfo> responseInfo = new AtomicReference<>(null);
+
         server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/streamer", (request, response, pathParams) -> {
 
                 AsyncSsePublisher ssePublisher = AsyncSsePublisher.start(request, response);
+                ssePublisher.setResponseCompleteHandler(newValue -> {
+                    responseInfo.set(newValue);
+                    responseInfoLatch.countDown();
+                });
                 executor.submit(() -> {
                     int i = 0;
                     ssePublisher.send("This is pre message") // force at least one message
@@ -108,6 +121,9 @@ public class AsyncSsePublisherTest {
         assertThat("Timed out waiting for SSE publisher to stop", exceptionThrownLatch.await(10, TimeUnit.SECONDS), is(true));
         assertThat(thrownException.get(), is(notNullValue()));
 
+
+        MuAssert.assertNotTimedOut("responseInfoLatch", responseInfoLatch);
+        assertThat(responseInfo.get().completedSuccessfully(), is(false));
     }
 
 

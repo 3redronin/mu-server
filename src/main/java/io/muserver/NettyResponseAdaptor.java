@@ -44,7 +44,9 @@ abstract class NettyResponseAdaptor implements MuResponse {
     }
 
     void onCancelled() {
-        outputState = OutputState.DISCONNECTED;
+        if (outputState != OutputState.FINISHED) {
+            outputState = OutputState.DISCONNECTED;
+        }
     }
 
     NettyResponseAdaptor(NettyRequestAdapter request, Headers headers) {

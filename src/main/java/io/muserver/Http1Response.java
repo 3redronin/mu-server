@@ -111,5 +111,11 @@ class Http1Response extends NettyResponseAdaptor {
         return ctx.channel().close();
     }
 
-
+    @Override
+    public String toString() {
+        return "Http1Response{" +
+            "outputState=" + outputState +
+            ", status=" + status +
+            "}";
+    }
 }

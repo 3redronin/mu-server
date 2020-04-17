@@ -76,4 +76,13 @@ public class AsyncContext implements ResponseInfo {
     public MuResponse response() {
         return response;
     }
+
+    @Override
+    public String toString() {
+        return "ResponseInfo{" +
+            "request=" + request +
+            ", response=" + response +
+            ", completed=" + completed +
+            '}';
+    }
 }
