@@ -83,6 +83,21 @@ public class HttpsConfigBuilder extends SSLContextBuilder {
     }
 
     /**
+     * This option may be useful for cases where multiple certificates exist in a single keystore. For clients
+     * that support it, SNI will be used to pick the correct certificate, however if the SNI is not used then
+     * by default the first cert from the keystore will be picked. To override this default behaviour, you can
+     * specify the certificate to use here when SNI is not available.
+     * <p>Note you do not need to set this if your keystore has only one certificate in it.</p>
+     * @param certAlias The alias of the cert to pick when SNI isn't available, or null to allow an arbitrary
+     *                  cert to be picked (normally the first one).
+     * @return This builder
+     */
+    @Override
+    public HttpsConfigBuilder withDefaultAlias(String certAlias) {
+        return (HttpsConfigBuilder) super.withDefaultAlias(certAlias);
+    }
+
+    /**
      * Sets a filter allowing you to specify which ciphers you would like to support.
      *
      * @param cipherFilter A Filter that takes all the supported ciphers, and all the default ciphers

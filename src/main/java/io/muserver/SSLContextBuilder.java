@@ -4,13 +4,16 @@ import io.netty.handler.ssl.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.net.ssl.KeyManager;
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.X509ExtendedKeyManager;
 import java.io.*;
 import java.security.KeyStore;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Enumeration;
 import java.util.List;
 
 import static java.util.Arrays.asList;
@@ -29,6 +32,7 @@ public class SSLContextBuilder {
     private SSLContext sslContext;
     private CipherSuiteFilter nettyCipherSuiteFilter;
     private KeyManagerFactory keyManagerFactory;
+    private String defaultAlias;
 
     public SSLContextBuilder withKeystoreType(String keystoreType) {
         this.keystoreType = keystoreType;
@@ -173,6 +177,11 @@ public class SSLContextBuilder {
         return this;
     }
 
+    public SSLContextBuilder withDefaultAlias(String certAlias) {
+        this.defaultAlias = certAlias;
+        return this;
+    }
+
     /**
      * @return Creates an SSLContext
      * @deprecated Pass this builder itself to the HttpsConfig rather than building an SSLContext
@@ -212,9 +221,16 @@ public class SSLContextBuilder {
         } else if (keystoreBytes != null) {
             ByteArrayInputStream keystoreStream = new ByteArrayInputStream(keystoreBytes);
             KeyManagerFactory kmf;
+            String defaultAliasToUse = this.defaultAlias;
             try {
                 KeyStore ks = KeyStore.getInstance(keystoreType);
                 ks.load(keystoreStream, keystorePassword);
+                if (defaultAliasToUse == null) {
+                    Enumeration<String> aliases = ks.aliases();
+                    if (aliases.hasMoreElements()) {
+                        defaultAliasToUse = aliases.nextElement();
+                    }
+                }
                 kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
                 kmf.init(ks, keyPassword);
             } finally {
@@ -224,7 +240,17 @@ public class SSLContextBuilder {
                     log.info("Error while closing keystore stream: " + e.getMessage());
                 }
             }
-            builder = SslContextBuilder.forServer(kmf);
+
+            X509ExtendedKeyManager x509KeyManager = null;
+            for (KeyManager keyManager : kmf.getKeyManagers()) {
+                if (keyManager instanceof X509ExtendedKeyManager) {
+                    x509KeyManager = (X509ExtendedKeyManager) keyManager;
+                }
+            }
+            if (x509KeyManager == null)
+                throw new Exception("KeyManagerFactory did not create an X509ExtendedKeyManager");
+            SniKeyManager sniKeyManager = new SniKeyManager(x509KeyManager, defaultAliasToUse);
+            builder = SslContextBuilder.forServer(sniKeyManager);
         } else if (keyManagerFactory != null) {
             builder = SslContextBuilder.forServer(keyManagerFactory);
         } else {
