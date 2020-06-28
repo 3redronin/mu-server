@@ -5,5 +5,12 @@ jdk:
   - oraclejdk11
   - openjdk11
   - openjdk12
+  - openjdk14
+
+cache:
+  directories:
+    - .autoconf
+    - $HOME/.m2
+    
 before_install:
    - "export M2_HOME=/usr/local/maven"
