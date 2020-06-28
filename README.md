@@ -1,3 +1,6 @@
+[![Build Status](https://travis-ci.org/3redronin/mu-server.svg?branch=master)](https://travis-ci.org/3redronin/mu-server)
+ ![GitHub](https://img.shields.io/github/license/3redronin/mu-server)
+
 # mu-server
 
 A modern Java web server, based on Netty. Currently in beta.
