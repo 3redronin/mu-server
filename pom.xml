@@ -115,7 +115,7 @@
         <dependency>
             <groupId>com.squareup.okio</groupId>
             <artifactId>okio</artifactId>
-            <version>1.17.5</version>
+            <version>1.17.2</version>
             <scope>test</scope>
         </dependency>
         <dependency>
