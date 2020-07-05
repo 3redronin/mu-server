@@ -163,8 +163,10 @@ class ResourceMethod {
                                                         required.add(n.key);
                                                     }
                                                     SchemaObjectBuilder schemaObjectBuilder = schemaObjectFrom(n.parameterHandle.getType(), n.parameterHandle.getParameterizedType(), n.isRequired)
-                                                        .withDeprecated(n.isDeprecated ? true : null)
-                                                        .withDefaultValue(n.defaultValue());
+                                                        .withDeprecated(n.isDeprecated ? true : null);
+                                                    if (n.hasExplicitDefault()) {
+                                                        schemaObjectBuilder.withDefaultValue(n.defaultValue());
+                                                    }
                                                     if (n.descriptionData != null) {
                                                         String desc = n.descriptionData.summaryAndDescription();
                                                         schemaObjectBuilder.withExample(n.descriptionData.example)

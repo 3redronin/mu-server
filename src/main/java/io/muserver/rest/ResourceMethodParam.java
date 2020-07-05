@@ -55,7 +55,10 @@ abstract class ResourceMethodParam {
             boolean isDeprecated = hasDeclared(parameterHandle, Deprecated.class);
             ParamConverter<?> converter = getParamConverter(parameterHandle, paramConverterProviders);
             boolean lazyDefaultValue = converter.getClass().getDeclaredAnnotation(ParamConverter.Lazy.class) != null;
+            boolean explicitDefault = hasDeclared(parameterHandle, DefaultValue.class);
             Object defaultValue = getDefaultValue(parameterHandle, converter, lazyDefaultValue);
+
+            isRequired |= (!explicitDefault && parameterHandle.getType().isPrimitive());
 
             String key = source == ValueSource.COOKIE_PARAM ? parameterHandle.getDeclaredAnnotation(CookieParam.class).value()
                 : source == ValueSource.HEADER_PARAM ? parameterHandle.getDeclaredAnnotation(HeaderParam.class).value()
@@ -75,7 +78,7 @@ abstract class ResourceMethodParam {
             }
 
             DescriptionData descriptionData = DescriptionData.fromAnnotation(parameterHandle, key);
-            return new RequestBasedParam(index, source, parameterHandle, defaultValue, encodedRequested, lazyDefaultValue, converter, descriptionData, key, isDeprecated, isRequired, pattern);
+            return new RequestBasedParam(index, source, parameterHandle, defaultValue, encodedRequested, lazyDefaultValue, converter, descriptionData, key, isDeprecated, isRequired, pattern, explicitDefault);
         }
     }
 
@@ -88,6 +91,7 @@ abstract class ResourceMethodParam {
         final String key;
         final boolean isDeprecated;
         private final Pattern pattern;
+        private final boolean explicitDefault;
 
         ParameterObjectBuilder createDocumentationBuilder() {
             ParameterObjectBuilder builder = parameterObject()
@@ -106,14 +110,14 @@ abstract class ResourceMethodParam {
             Pattern patternIfNotDefault = this.pattern == null || UriPattern.DEFAULT_CAPTURING_GROUP_PATTERN.equals(this.pattern.pattern()) ? null : this.pattern;
             return builder.withSchema(
                 schemaObjectFrom(parameterHandle.getType(), parameterHandle.getParameterizedType(), isRequired)
-                    .withDefaultValue(source == ValueSource.PATH_PARAM ? null : defaultValue())
+                    .withDefaultValue(source == ValueSource.PATH_PARAM || !hasExplicitDefault() ? null : defaultValue())
                     .withExternalDocs(externalDoc)
                     .withPattern(patternIfNotDefault)
                     .build()
             );
         }
 
-        RequestBasedParam(int index, ValueSource source, Parameter parameterHandle, Object defaultValue, boolean encodedRequested, boolean lazyDefaultValue, ParamConverter paramConverter, DescriptionData descriptionData, String key, boolean isDeprecated, boolean isRequired, Pattern pattern) {
+        RequestBasedParam(int index, ValueSource source, Parameter parameterHandle, Object defaultValue, boolean encodedRequested, boolean lazyDefaultValue, ParamConverter paramConverter, DescriptionData descriptionData, String key, boolean isDeprecated, boolean isRequired, Pattern pattern, boolean explicitDefault) {
             super(index, source, parameterHandle, descriptionData, isRequired);
             this.defaultValue = defaultValue;
             this.encodedRequested = encodedRequested;
@@ -122,7 +126,17 @@ abstract class ResourceMethodParam {
             this.key = key;
             this.isDeprecated = isDeprecated;
             this.pattern = pattern;
+            this.explicitDefault = explicitDefault;
         }
+
+        /**
+         * @return True if the API author has explicity set a default value for the param
+         * using the {@link DefaultValue} annotation.
+         */
+        public boolean hasExplicitDefault() {
+            return explicitDefault;
+        }
+
 
         public Object defaultValue() {
             boolean skipConverter = defaultValue != null && !lazyDefaultValue;

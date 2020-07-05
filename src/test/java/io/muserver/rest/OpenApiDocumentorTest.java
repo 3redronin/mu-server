@@ -15,7 +15,6 @@ import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.MuAssert;
-import scaffolding.ServerUtils;
 
 import javax.ws.rs.*;
 import javax.ws.rs.core.MediaType;
@@ -24,6 +23,7 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.net.URI;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -36,13 +36,14 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
+import static scaffolding.ServerUtils.httpsServerForTest;
 
 public class OpenApiDocumentorTest {
 
     private MuServer server;
 
     private static MuServer serverWithPetStore() {
-        return ServerUtils.httpsServerForTest()
+        return httpsServerForTest()
             .addHandler(restHandler(
                 new PetResource(), new PetStoreResource(), new UserResource(), new VehicleResource()
                 ).withOpenApiDocument(OpenAPIObjectBuilder.openAPIObject()
@@ -148,7 +149,7 @@ public class OpenApiDocumentorTest {
             }
         }
 
-        server = ServerUtils.httpsServerForTest()
+        server = httpsServerForTest()
             .addHandler(
                 context("ummmm")
                     .addHandler(restHandler(new Blah())
@@ -185,10 +186,10 @@ public class OpenApiDocumentorTest {
             }
         }
 
-        server = ServerUtils.httpsServerForTest()
+        server = httpsServerForTest()
             .addHandler(restHandler(new FileUploadResource()).withOpenApiJsonUrl("/openapi.json"))
             .start();
-        try (okhttp3.Response resp = call(request().url(server.uri().resolve("/openapi.json").toString()))) {
+        try (okhttp3.Response resp = call(request(server.uri().resolve("/openapi.json")))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.header("Content-Type"), equalTo("application/json"));
             String responseBody = resp.body().string();
@@ -225,6 +226,122 @@ public class OpenApiDocumentorTest {
             JSONObject items = images.getJSONObject("items");
             assertThat(items.getString("type"), is("string"));
             assertThat(items.getString("format"), is("binary"));
+        }
+    }
+
+    @Test
+    public void defaultsAreOnlyReportedIfExplicitlySpecified() throws Exception {
+
+        @Path("/blah")
+        class Blah {
+            @GET
+            public void query(
+                @QueryParam("intNoDefault") int i,
+                @QueryParam("intWithDefault") @DefaultValue("2") int i2,
+                @QueryParam("IntegerNoDefault") Integer i3,
+                @QueryParam("IntegerWithDefault") @DefaultValue("4") Integer i4,
+                @QueryParam("List") List<String> list
+            ) {
+            }
+
+            @POST
+            public void header(
+                @HeaderParam("intNoDefault") int i,
+                @HeaderParam("intWithDefault") @DefaultValue("2") int i2,
+                @HeaderParam("IntegerNoDefault") Integer i3,
+                @HeaderParam("IntegerWithDefault") @DefaultValue("4") Integer i4,
+                @HeaderParam("List") List<String> list
+            ) {
+            }
+        }
+        server = httpsServerForTest()
+            .addHandler(restHandler(new Blah()).withOpenApiJsonUrl("/openapi.json"))
+            .start();
+        try (okhttp3.Response resp = call(request(server.uri().resolve("/openapi.json")))) {
+            JSONObject json = new JSONObject(resp.body().string());
+
+            for (String method : new String[]{"get", "post"}) {
+
+                JSONArray params = json.getJSONObject("paths")
+                    .getJSONObject("/blah")
+                    .getJSONObject(method)
+                    .getJSONArray("parameters");
+
+                JSONObject intNoDefault = params.getJSONObject(0);
+                assertThat(intNoDefault.getString("name"), is("intNoDefault"));
+                assertThat(intNoDefault.getJSONObject("schema").has("default"), is(false));
+                assertThat(intNoDefault.getBoolean("required"), is(true));
+
+                JSONObject intWithDefault = params.getJSONObject(1);
+                assertThat(intWithDefault.getString("name"), is("intWithDefault"));
+                assertThat(intWithDefault.getBoolean("required"), is(false));
+                assertThat(intWithDefault.getJSONObject("schema").get("default"), is(2));
+
+                JSONObject integerNoDefault = params.getJSONObject(2);
+                assertThat(integerNoDefault.getString("name"), is("IntegerNoDefault"));
+                assertThat(integerNoDefault.getJSONObject("schema").has("default"), is(false));
+                assertThat(integerNoDefault.getBoolean("required"), is(false));
+
+                JSONObject integerWithDefault = params.getJSONObject(3);
+                assertThat(integerWithDefault.getString("name"), is("IntegerWithDefault"));
+                assertThat(integerWithDefault.getBoolean("required"), is(false));
+                assertThat(integerWithDefault.getJSONObject("schema").get("default"), is(4));
+
+                JSONObject list = params.getJSONObject(4);
+                assertThat(list.getString("name"), is("List"));
+                assertThat(list.getBoolean("required"), is(false));
+                assertThat(list.getJSONObject("schema").has("default"), is(false));
+            }
+        }
+    }
+
+    @Test
+    public void defaultsAreOnlyReportedIfExplicitlySpecifiedForFormParams() throws Exception {
+
+        @Path("/blah")
+        class Blah {
+            @POST
+            public void header(
+                @FormParam("intNoDefault") int i,
+                @FormParam("intWithDefault") @DefaultValue("2") int i2,
+                @FormParam("IntegerNoDefault") Integer i3,
+                @FormParam("IntegerWithDefault") @DefaultValue("4") Integer i4,
+                @FormParam("List") List<String> list
+            ) {
+            }
+        }
+        server = httpsServerForTest()
+            .addHandler(restHandler(new Blah()).withOpenApiJsonUrl("/openapi.json"))
+            .start();
+        try (okhttp3.Response resp = call(request(server.uri().resolve("/openapi.json")))) {
+            JSONObject json = new JSONObject(resp.body().string());
+
+            JSONObject schema = json.getJSONObject("paths")
+                .getJSONObject("/blah")
+                .getJSONObject("post")
+                .getJSONObject("requestBody")
+                .getJSONObject("content")
+                .getJSONObject("*/*")
+                .getJSONObject("schema");
+            JSONObject params = schema
+                .getJSONObject("properties");
+
+            assertThat(schema.getJSONArray("required").toList(), equalTo(Collections.singletonList("intNoDefault")));
+
+            JSONObject intNoDefault = params.getJSONObject("intNoDefault");
+            assertThat(intNoDefault.has("default"), is(false));
+
+            JSONObject intWithDefault = params.getJSONObject("intWithDefault");
+            assertThat(intWithDefault.get("default"), is(2));
+
+            JSONObject integerNoDefault = params.getJSONObject("IntegerNoDefault");
+            assertThat(integerNoDefault.has("default"), is(false));
+
+            JSONObject integerWithDefault = params.getJSONObject("IntegerWithDefault");
+            assertThat(integerWithDefault.get("default"), is(4));
+
+            JSONObject list = params.getJSONObject("List");
+            assertThat(list.has("default"), is(false));
         }
     }
 
@@ -270,7 +387,7 @@ public class OpenApiDocumentorTest {
             }
         }
 
-        server = ServerUtils.httpsServerForTest()
+        server = httpsServerForTest()
             .addHandler(restHandler(new BodyResource()).withOpenApiJsonUrl("/openapi.json"))
             .start();
 
@@ -359,7 +476,7 @@ public class OpenApiDocumentorTest {
                 return Response.ok().build();
             }
         }
-        server = ServerUtils.httpsServerForTest()
+        server = httpsServerForTest()
             .addHandler(RestHandlerBuilder.restHandler(new Blah()).withOpenApiJsonUrl("/openapi.json"))
             .start();
         try (okhttp3.Response resp = call(request(server.uri().resolve("/openapi.json")))) {
@@ -408,15 +525,15 @@ public class OpenApiDocumentorTest {
             @POST
             @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
             public void blah(
-                @QueryParam("id") int id,
+                @QueryParam("id") Integer id,
                 @QueryParam("id2") @Required int id2,
-                @FormParam("id3") int id3,
+                @FormParam("id3") Integer id3,
                 @FormParam("id4") @Required int id4pu,
                 @QueryParam("thing") Thing thing
             ) {
             }
         }
-        server = ServerUtils.httpsServerForTest()
+        server = httpsServerForTest()
             .addHandler(RestHandlerBuilder.restHandler(new Blah()).withOpenApiJsonUrl("/openapi.json"))
             .start();
         try (okhttp3.Response resp = call(request(server.uri().resolve("/openapi.json")))) {
@@ -433,11 +550,10 @@ public class OpenApiDocumentorTest {
                 assertThat(bodySchema.getString("type"), is("object"));
                 assertThat(bodySchema.getJSONArray("required").toString(), equalTo(new JSONArray().put("id4").toString()));
                 JSONObject id3 = bodySchema.getJSONObject("properties").getJSONObject("id3");
-                assertThat(id3.keySet(), hasSize(4));
+                assertThat(id3.keySet(), hasSize(3));
                 assertThat(id3.getString("type"), is("integer"));
                 assertThat(id3.getString("format"), is("int32"));
-                assertThat(id3.getBoolean("nullable"), is(false));
-                assertThat(id3.getInt("default"), is(0));
+                assertThat(id3.getBoolean("nullable"), is(true));
             }
         }
     }
@@ -459,13 +575,14 @@ public class OpenApiDocumentorTest {
         class Blah {
             @GET
             public void blah(
-                @QueryParam("thing") @Required @DefaultValue("THING_ONE") @Description(value="The thing", example="THING_TWO") Thing thing,
+                @QueryParam("thing") @Required @DefaultValue("THING_ONE") @Description(value = "The thing", example = "THING_TWO") Thing thing,
                 @QueryParam("optThing") Thing optThing,
                 @QueryParam("things") @Required List<Thing> things,
                 @QueryParam("optThings") List<Thing> optThings
-            ) { }
+            ) {
+            }
         }
-        server = ServerUtils.httpsServerForTest()
+        server = httpsServerForTest()
             .addHandler(RestHandlerBuilder.restHandler(new Blah()).withOpenApiJsonUrl("/openapi.json"))
             .start();
         try (okhttp3.Response resp = call(request(server.uri().resolve("/openapi.json")))) {
@@ -559,7 +676,7 @@ public class OpenApiDocumentorTest {
             }
         }
 
-        server = ServerUtils.httpsServerForTest()
+        server = httpsServerForTest()
             .addHandler(RestHandlerBuilder.restHandler(
                 new AppleResource(), new CarrotResource(), new BananaResource(), new Tricky().new BananaResource(),
                 new BananaResourceImpl()
@@ -611,7 +728,7 @@ public class OpenApiDocumentorTest {
             }
         }
 
-        server = ServerUtils.httpsServerForTest()
+        server = httpsServerForTest()
             .addHandler(RestHandlerBuilder.restHandler(
                 new Apple(), new Banana(), new Carrot(), new Tricky().new Banana()
             ).withOpenApiJsonUrl("/openapi.json"))
