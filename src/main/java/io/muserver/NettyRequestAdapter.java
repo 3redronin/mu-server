@@ -26,6 +26,7 @@ import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.*;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
@@ -454,15 +455,18 @@ class NettyRequestAdapter implements MuRequest {
     }
 
 
-    private static class AsyncHandleImpl implements AsyncHandle {
+    private static class AsyncHandleImpl implements AsyncHandle, ConnectionState.Listener {
 
         private final NettyRequestAdapter request;
         private final AsyncContext asyncContext;
         private volatile  ResponseCompleteListener responseCompleteListener;
+        private ConcurrentLinkedQueue<DoneCallback> doneCallbackList;
 
         private AsyncHandleImpl(NettyRequestAdapter request, AsyncContext asyncContext) {
             this.request = request;
             this.asyncContext = asyncContext;
+            this.doneCallbackList = new ConcurrentLinkedQueue<>();
+            ((ConnectionState)request.connection).registerConnectionStateListener(this);
         }
 
         @Override
@@ -475,6 +479,40 @@ class NettyRequestAdapter implements MuRequest {
                     request.inputStream.switchToListener(readListener);
                 }
             }
+        }
+
+        private void clearDoneCallbackList() {
+            DoneCallback task;
+            while ((task = doneCallbackList.poll()) != null) {
+                try {
+                    task.onComplete(new ClientDisconnectedException());
+                } catch (Throwable throwable) {
+                    log.debug("Exception clearing done callback", throwable);
+                }
+            }
+        }
+
+        @Override
+        public void onWriteable() throws Exception {
+            DoneCallback task;
+
+            if (!request.channel.isActive()) {
+                clearDoneCallbackList();
+                return;
+            }
+
+            while (request.channel.isWritable() && (task = doneCallbackList.poll()) != null) {
+                try {
+                    task.onComplete(null);
+                } catch (Throwable throwable) {
+                    log.debug("Exception on completing task", throwable);
+                }
+            }
+        }
+
+        @Override
+        public void onConnectionClose() throws Exception {
+            this.clearDoneCallbackList();
         }
 
         @Override
