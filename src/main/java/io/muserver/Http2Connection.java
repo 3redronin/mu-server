@@ -307,6 +307,5 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
     public Set<MuWebSocket> activeWebsockets() {
         return Collections.emptySet();
     }
-
 }
 

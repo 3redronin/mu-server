@@ -31,7 +31,7 @@ import static io.netty.buffer.Unpooled.copiedBuffer;
 import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
-class Http1Connection extends SimpleChannelInboundHandler<Object> implements HttpConnection {
+class Http1Connection extends SimpleChannelInboundHandler<Object> implements HttpConnection, ConnectionState {
     private static final Logger log = LoggerFactory.getLogger(Http1Connection.class);
     private static final AttributeKey<AsyncContext> STATE_ATTRIBUTE = AttributeKey.newInstance("state"); // todo, just store as a volatile field?
     static final AttributeKey<MuWebSocketSessionImpl> WEBSOCKET_ATTRIBUTE = AttributeKey.newInstance("ws"); // todo, just store as a volatile field?
@@ -44,6 +44,7 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
     private final Instant startTime = Instant.now();
     private ChannelHandlerContext nettyCtx;
     private InetSocketAddress remoteAddress;
+    private ConnectionState.Listener connectionStateListener;
 
     Http1Connection(NettyHandlerAdapter nettyHandlerAdapter, MuServerImpl server, String proto) {
         this.nettyHandlerAdapter = nettyHandlerAdapter;
@@ -77,6 +78,10 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         serverStats.onConnectionClosed();
         server.onConnectionEnded(this);
+        if (connectionStateListener != null) {
+            connectionStateListener.onConnectionClose();
+            connectionStateListener = null;
+        }
         AsyncContext asyncContext = getAsyncContext(ctx);
         if (asyncContext != null) {
             asyncContext.onCancelled(true);
@@ -266,6 +271,18 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
         return readyToRead;
     }
 
+    @Override
+    public void channelWritabilityChanged(ChannelHandlerContext ctx) throws Exception {
+        if (connectionStateListener != null) {
+            if (ctx.channel().isWritable()) {
+                connectionStateListener.onWriteable();
+            } else {
+                connectionStateListener.onUnWriteable();
+            }
+        }
+        super.channelWritabilityChanged(ctx);
+    }
+
     private void handleWebsockError(ChannelHandlerContext ctx, MuWebSocket muWebSocket, Throwable e) {
         try {
             clearWebSocket(ctx);
@@ -444,4 +461,8 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
         return webSocket == null ? Collections.emptySet() : Collections.singleton(webSocket.muWebSocket);
     }
 
+    @Override
+    public void registerConnectionStateListener(ConnectionState.Listener listener) {
+        this.connectionStateListener = listener;
+    }
 }
