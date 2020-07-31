@@ -479,7 +479,9 @@ public class MuServerBuilder {
         NettyHandlerAdapter nettyHandlerAdapter = new NettyHandlerAdapter(handlerExecutor, handlers, settings, responseCompleteListeners);
 
         NioEventLoopGroup bossGroup = new NioEventLoopGroup(1);
-        NioEventLoopGroup workerGroup = new NioEventLoopGroup();
+        int workerThreads = Math.min(16, (2 * Runtime.getRuntime().availableProcessors()));
+
+        NioEventLoopGroup workerGroup = new NioEventLoopGroup(workerThreads);
         List<Channel> channels = new ArrayList<>();
 
         ExecutorService finalHandlerExecutor = handlerExecutor;
