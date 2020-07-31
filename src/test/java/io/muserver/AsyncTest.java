@@ -58,8 +58,6 @@ public class AsyncTest {
     @Test
     public void canWriteAsyncAndDoneCallbackWillDelayWhenNotWritable() throws Exception {
 
-
-
         AtomicInteger sendDoneCallbackCount = new AtomicInteger(0);
         AtomicInteger receivedCount = new AtomicInteger(0);
 
@@ -86,7 +84,8 @@ public class AsyncTest {
 
             byte[] readBytes = new byte[1024];
 
-            // read the first 1024 byte and then sleep
+            // http client read the first 1024 byte and then sleep,
+            // verify server done callback not invoked
             resp.body().byteStream().read(readBytes);
             receivedCount.incrementAndGet();
 
@@ -96,7 +95,7 @@ public class AsyncTest {
             Thread.sleep(1000L);
             assertThat(sendDoneCallbackCount.get(), is(0));
 
-            // read the rest bytes and verify all the data received
+            // http client read the rest bytes, verify all data received
             while (resp.body().byteStream().read(readBytes) != -1) {
                 receivedCount.incrementAndGet();
             }

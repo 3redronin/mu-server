@@ -26,7 +26,6 @@ import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.*;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
@@ -460,12 +459,12 @@ class NettyRequestAdapter implements MuRequest {
         private final NettyRequestAdapter request;
         private final AsyncContext asyncContext;
         private volatile ResponseCompleteListener responseCompleteListener;
-        private ConcurrentLinkedQueue<DoneCallback> doneCallbackList;
+        private LinkedList<DoneCallback> doneCallbackList;
 
         private AsyncHandleImpl(NettyRequestAdapter request, AsyncContext asyncContext) {
             this.request = request;
             this.asyncContext = asyncContext;
-            this.doneCallbackList = new ConcurrentLinkedQueue<>();
+            this.doneCallbackList = new LinkedList<>();
             ((ConnectionState) request.connection).registerConnectionStateListener(this);
         }
 
@@ -548,6 +547,20 @@ class NettyRequestAdapter implements MuRequest {
         public void write(ByteBuffer data, DoneCallback callback) {
             ChannelFuture writeFuture = (ChannelFuture) write(data);
             writeFuture.addListener(future -> {
+                /**
+                 * The DoneCallback are commonly used to trigger writing more data into the target channel,
+                 * so we delay the done callback invocation till the target netty channel become writable,
+                 * in this way we prevent OOM for fast producer / slow consumer scenario.
+                 *
+                 * We use a doneCallbackList here to make sure the done callback being invoked in the same
+                 * order as it come in. the doneCallbackList operation are all within same netty event loop thread,
+                 * so we LinkedList rather than ConcurrentQueue for it.
+                 *
+                 * Threading related:
+                 * 1. (ChannelFuture) write(data) run in mu-server thread.
+                 * 2. callback in "writeFuture.addListener(callback)" run the netty event loop thread.
+                 *
+                 */
                 try {
                     if (!future.isSuccess()) {
                         callback.onComplete(future.cause());
