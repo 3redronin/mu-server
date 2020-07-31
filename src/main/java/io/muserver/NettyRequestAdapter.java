@@ -459,14 +459,14 @@ class NettyRequestAdapter implements MuRequest {
 
         private final NettyRequestAdapter request;
         private final AsyncContext asyncContext;
-        private volatile  ResponseCompleteListener responseCompleteListener;
+        private volatile ResponseCompleteListener responseCompleteListener;
         private ConcurrentLinkedQueue<DoneCallback> doneCallbackList;
 
         private AsyncHandleImpl(NettyRequestAdapter request, AsyncContext asyncContext) {
             this.request = request;
             this.asyncContext = asyncContext;
             this.doneCallbackList = new ConcurrentLinkedQueue<>();
-            ((ConnectionState)request.connection).registerConnectionStateListener(this);
+            ((ConnectionState) request.connection).registerConnectionStateListener(this);
         }
 
         @Override
@@ -549,10 +549,12 @@ class NettyRequestAdapter implements MuRequest {
             ChannelFuture writeFuture = (ChannelFuture) write(data);
             writeFuture.addListener(future -> {
                 try {
-                    if (future.isSuccess()) {
+                    if (!future.isSuccess()) {
+                        callback.onComplete(future.cause());
+                    } else if (request.channel.isWritable() && doneCallbackList.size() == 0) {
                         callback.onComplete(null);
                     } else {
-                        callback.onComplete(future.cause());
+                        doneCallbackList.add(callback);
                     }
                 } catch (Throwable e) {
                     log.warn("Unhandled exception from write callback", e);

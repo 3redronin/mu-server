@@ -5,6 +5,7 @@ import okio.BufferedSink;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
+import scaffolding.AsyncUtils;
 import scaffolding.ServerUtils;
 import scaffolding.StringUtils;
 
@@ -17,8 +18,10 @@ import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static io.muserver.MuServerBuilder.httpsServer;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.*;
@@ -49,6 +52,56 @@ public class AsyncTest {
             assertThat(resp.code(), equalTo(200));
             assertThat(resp.body().bytes(), equalTo(bytes));
             assertThat(result.toString(), equalTo("success"));
+        }
+    }
+
+    @Test
+    public void canWriteAsyncAndDoneCallbackWillDelayWhenNotWritable() throws Exception {
+
+
+
+        AtomicInteger sendDoneCallbackCount = new AtomicInteger(0);
+        AtomicInteger receivedCount = new AtomicInteger(0);
+
+        int totalCount = 1000;
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Config()) // test http 1 only
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.contentType(ContentTypes.APPLICATION_OCTET_STREAM);
+                byte[] sendByte = StringUtils.randomBytes(1024);
+                AsyncHandle asyncHandle = request.handleAsync();
+                for (int i = 0; i < totalCount; i++) {
+                    asyncHandle.write(ByteBuffer.wrap(sendByte), error -> {
+                        sendDoneCallbackCount.incrementAndGet();
+                    });
+                }
+
+                AsyncUtils.waitUtil(() -> sendDoneCallbackCount.get() == totalCount, 10 * 1000L);
+                asyncHandle.complete();
+            })
+            .start();
+
+        try (Response resp = call(request().url(server.uri().toString()))) {
+            assertThat(resp.code(), equalTo(200));
+
+            byte[] readBytes = new byte[1024];
+
+            // read the first 1024 byte and then sleep
+            resp.body().byteStream().read(readBytes);
+            receivedCount.incrementAndGet();
+
+            Thread.sleep(1000L);
+            assertThat(sendDoneCallbackCount.get(), is(0));
+
+            Thread.sleep(1000L);
+            assertThat(sendDoneCallbackCount.get(), is(0));
+
+            // read the rest bytes and verify all the data received
+            while (resp.body().byteStream().read(readBytes) != -1) {
+                receivedCount.incrementAndGet();
+            }
+            assertThat(sendDoneCallbackCount.get(), is(totalCount));
+            assertThat(receivedCount.get(), is(totalCount));
         }
     }
 
@@ -125,6 +178,7 @@ public class AsyncTest {
                             writeErrors.add(e);
                         }
                     }
+
                     public void onClose() {
                     }
                 });
@@ -169,6 +223,7 @@ public class AsyncTest {
                     public void onData(String data) {
                         response.writer().write(data + "\n");
                     }
+
                     public void onClose() {
                         ctx.complete();
                     }
@@ -238,8 +293,7 @@ public class AsyncTest {
                         }
                     }
                 }
-            })
-            ;
+            });
 
         try (Response resp = call(request)) {
             assertThat(errors, is(empty()));
