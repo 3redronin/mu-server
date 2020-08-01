@@ -21,7 +21,7 @@ import static io.netty.buffer.Unpooled.EMPTY_BUFFER;
 import static io.netty.buffer.Unpooled.copiedBuffer;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
-final class Http2Connection extends Http2ConnectionHandler implements Http2FrameListener, HttpConnection, ConnectionState {
+final class Http2Connection extends Http2ConnectionHandler implements Http2FrameListener, HttpConnection {
     private static final Logger log = LoggerFactory.getLogger(Http2Connection.class);
 
     private final MuServerImpl server;
@@ -306,11 +306,6 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
     @Override
     public Set<MuWebSocket> activeWebsockets() {
         return Collections.emptySet();
-    }
-
-    @Override
-    public void registerConnectionStateListener(Listener listener) {
-        // do nothing
     }
 }
 

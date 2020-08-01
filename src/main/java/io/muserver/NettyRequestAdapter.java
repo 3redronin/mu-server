@@ -456,6 +456,7 @@ class NettyRequestAdapter implements MuRequest {
 
     private static class AsyncHandleImpl implements AsyncHandle, ConnectionState.Listener {
 
+        private final boolean isConnectionStateSupported;
         private final NettyRequestAdapter request;
         private final AsyncContext asyncContext;
         private volatile ResponseCompleteListener responseCompleteListener;
@@ -465,7 +466,10 @@ class NettyRequestAdapter implements MuRequest {
             this.request = request;
             this.asyncContext = asyncContext;
             this.doneCallbackList = new LinkedList<>();
-            ((ConnectionState) request.connection).registerConnectionStateListener(this);
+            this.isConnectionStateSupported = request.connection instanceof ConnectionState;
+            if (isConnectionStateSupported) {
+                ((ConnectionState) request.connection).registerConnectionStateListener(this);
+            }
         }
 
         @Override
@@ -564,7 +568,7 @@ class NettyRequestAdapter implements MuRequest {
                 try {
                     if (!future.isSuccess()) {
                         callback.onComplete(future.cause());
-                    } else if ("HTTP/2".equals(request.connection.protocol())) {
+                    } else if (!isConnectionStateSupported) {
                         // http 2 not support DoneCallback delay at the moment
                         callback.onComplete(null);
                     } else if (request.channel.isWritable() && doneCallbackList.size() == 0) {
