@@ -6,6 +6,9 @@ import org.junit.Test;
 import scaffolding.ServerUtils;
 
 import javax.ws.rs.NotFoundException;
+import javax.ws.rs.RedirectionException;
+import java.net.URI;
+import java.util.Collections;
 
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -65,6 +68,22 @@ public class ExceptionsTest {
             String body = resp.body().string();
             assertThat(body, containsString("404 Not Found"));
             assertThat(body, containsString("This page is not available. Sorry about that."));
+        }
+    }
+
+    @Test
+    public void redirectExceptionsReallyRedirect() throws Exception {
+        this.server = ServerUtils.httpsServerForTest()
+            .addHandler(Method.GET, "/secured", (request, response, pathParams) -> {
+                throw new RedirectionException("Not logged in!", 302, URI.create("/target"));
+            })
+            .addHandler(Method.GET, "/target", (request, response, pathParams) -> {
+                response.write("You were redirected");
+            })
+            .start();
+        try (Response resp = call(request(server.uri().resolve("/secured")))) {
+            assertThat(resp.code(), is(302));
+            assertThat(resp.headers("location"), is(Collections.singletonList(server.uri().resolve("/target").toString())));
         }
     }
 

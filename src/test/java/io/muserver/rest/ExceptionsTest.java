@@ -7,8 +7,13 @@ import org.junit.Test;
 import scaffolding.ServerUtils;
 
 import javax.ws.rs.*;
+import javax.ws.rs.core.Context;
+import javax.ws.rs.core.Response.Status;
+import javax.ws.rs.core.UriInfo;
+import java.net.URI;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
+import static java.util.Collections.singletonList;
 import static org.hamcrest.CoreMatchers.allOf;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -49,6 +54,44 @@ public class ExceptionsTest {
                 containsString("<p>HTTP 404 Not Found</p>")));
         }
     }
+
+    @Test
+    public void redirectExceptionsWork() throws Exception {
+        @Path("redirects")
+        class Redirector {
+            @GET
+            @Path("/relative")
+            public void relative() {
+                throw new RedirectionException(Status.FOUND, URI.create("/see-other"));
+            }
+
+            @GET
+            @Path("/absolute")
+            public String absolute(@Context UriInfo uri) {
+                throw new RedirectionException(Status.TEMPORARY_REDIRECT, uri.getRequestUri().resolve("/see-other"));
+            }
+
+            @GET
+            @Path("/other-site")
+            public void other() {
+                throw new RedirectionException(Status.SEE_OTHER, URI.create("http://example.org/see-other"));
+            }
+        }
+        this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Redirector())).start();
+        try (Response resp = call(request(server.uri().resolve("/redirects/relative")))) {
+            assertThat(resp.code(), is(302));
+            assertThat(resp.headers("location"), is(singletonList(server.uri().resolve("/see-other").toString())));
+        }
+        try (Response resp = call(request(server.uri().resolve("/redirects/absolute")))) {
+            assertThat(resp.code(), is(307));
+            assertThat(resp.headers("location"), is(singletonList(server.uri().resolve("/see-other").toString())));
+        }
+        try (Response resp = call(request(server.uri().resolve("/redirects/other-site")))) {
+            assertThat(resp.code(), is(303));
+            assertThat(resp.headers("location"), is(singletonList("http://example.org/see-other")));
+        }
+    }
+
 
     @Test
     public void ifNoSuitableMethodThen405Returned() throws Exception {
