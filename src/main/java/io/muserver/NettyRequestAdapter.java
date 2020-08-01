@@ -564,6 +564,9 @@ class NettyRequestAdapter implements MuRequest {
                 try {
                     if (!future.isSuccess()) {
                         callback.onComplete(future.cause());
+                    } else if ("HTTP/2".equals(request.connection.protocol())) {
+                        // http 2 not support DoneCallback delay at the moment
+                        callback.onComplete(null);
                     } else if (request.channel.isWritable() && doneCallbackList.size() == 0) {
                         callback.onComplete(null);
                     } else {
