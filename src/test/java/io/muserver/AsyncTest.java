@@ -5,7 +5,7 @@ import okio.BufferedSink;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
-import scaffolding.AsyncUtils;
+import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 import scaffolding.StringUtils;
 
@@ -74,7 +74,7 @@ public class AsyncTest {
                     });
                 }
 
-                AsyncUtils.waitUtil(() -> sendDoneCallbackCount.get() == totalCount, 10 * 1000L);
+                MuAssert.assertEventually(sendDoneCallbackCount::get, is(totalCount));
                 asyncHandle.complete();
             })
             .start();
@@ -89,11 +89,11 @@ public class AsyncTest {
             resp.body().byteStream().read(readBytes);
             receivedCount.incrementAndGet();
 
-            Thread.sleep(1000L);
-            assertThat(sendDoneCallbackCount.get(), is(0));
+            Thread.sleep(100L);
+            assertThat(sendDoneCallbackCount.get(), lessThan(64));
 
-            Thread.sleep(1000L);
-            assertThat(sendDoneCallbackCount.get(), is(0));
+            Thread.sleep(100L);
+            assertThat(sendDoneCallbackCount.get(), lessThan(64));
 
             // http client read the rest bytes, verify all data received
             while (resp.body().byteStream().read(readBytes) != -1) {
