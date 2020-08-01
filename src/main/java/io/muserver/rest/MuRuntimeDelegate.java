@@ -1,13 +1,18 @@
 package io.muserver.rest;
 
+import io.muserver.HeaderNames;
 import io.muserver.MuException;
+import io.muserver.MuResponse;
 import io.muserver.Mutils;
 
+import javax.ws.rs.ServerErrorException;
 import javax.ws.rs.core.*;
 import javax.ws.rs.ext.RuntimeDelegate;
 import javax.ws.rs.sse.Sse;
 import javax.ws.rs.sse.SseBroadcaster;
+import java.net.URI;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -43,7 +48,7 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
     }
 
     /**
-     * @param broadcaster An MuServer SSE broadcaster
+     * @param broadcaster A MuServer SSE broadcaster
      * @return the number of SSE clients currently connected to the broadcaster
      */
     public static int connectedSinksCount(SseBroadcaster broadcaster) {
@@ -52,6 +57,34 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
             return ((SseBroadcasterImpl)broadcaster).connectedSinksCount();
         } else {
             throw new IllegalArgumentException("The given broadcaster was not created by MuServer. It was of type " + broadcaster.getClass());
+        }
+    }
+
+    /**
+     * Writes headers from a JAX-RS response to a MuResponse
+     */
+    public static void writeResponseHeaders(URI requestUri, Response from, MuResponse to) {
+        for (Map.Entry<String, List<String>> entry : from.getStringHeaders().entrySet()) {
+            String key = entry.getKey();
+            List<String> values = entry.getValue();
+            if (key.equalsIgnoreCase("location")) {
+                if (values.size() != 1) {
+                    throw new ServerErrorException("A location response header must have only one value. Received " + String.join(", ", values), 500);
+                }
+
+                URI location;
+                try {
+                    location = URI.create(values.get(0));
+                } catch (IllegalArgumentException e) {
+                    throw new ServerErrorException("Invalid redirect location: " + values.get(0) + " - " + e.getMessage(), 500);
+                }
+                to.headers().add(key, requestUri.resolve(location).toString());
+            } else {
+                to.headers().add(key, values);
+            }
+        }
+        for (NewCookie cookie : from.getCookies().values()) {
+            to.headers().add(HeaderNames.SET_COOKIE, cookie.toString());
         }
     }
 
@@ -78,7 +111,7 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
     @Override
     @SuppressWarnings("unchecked")
     public <T> HeaderDelegate<T> createHeaderDelegate(Class<T> type) throws IllegalArgumentException {
-        HeaderDelegate headerDelegate = headerDelegates.get(type);
+        HeaderDelegate<T> headerDelegate = headerDelegates.get(type);
         if (headerDelegate != null) {
             return (HeaderDelegate<T>) headerDelegate;
         }
@@ -98,4 +131,6 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
     public static Sse createSseFactory() {
         return new JaxSseImpl();
     }
+
+
 }
