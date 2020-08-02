@@ -469,6 +469,7 @@ class NettyRequestAdapter implements MuRequest {
             this.isConnectionStateSupported = request.connection instanceof ConnectionState;
             if (isConnectionStateSupported) {
                 ((ConnectionState) request.connection).registerConnectionStateListener(this);
+                log.warn("J:registerConnectionStateListener");
             }
         }
 
@@ -549,8 +550,15 @@ class NettyRequestAdapter implements MuRequest {
 
         @Override
         public void write(ByteBuffer data, DoneCallback callback) {
+            log.info("write: isWritable={}, listSize={}, byteBeforeWritable={}",
+                request.channel.isWritable(), doneCallbackList.size(), request.channel.bytesBeforeWritable());
+
             ChannelFuture writeFuture = (ChannelFuture) write(data);
             writeFuture.addListener(future -> {
+
+                log.info("callback: isSuccess={}, isWritable={}, listSize={}, byteBeforeWritable={}",
+                    future.isSuccess(), request.channel.isWritable(), doneCallbackList.size(), request.channel.bytesBeforeWritable());
+
                 /**
                  * The DoneCallback are commonly used to trigger writing more data into the target channel,
                  * so we delay the done callback invocation till the target netty channel become writable,

@@ -85,7 +85,8 @@ public class AsyncTest {
             byte[] readBytes = new byte[1024];
 
             // http client read the first 1024 byte and then sleep,
-            // verify server done callback not invoked
+            // verify server done callback not exceeding 64 time, as
+            // it can't write out given the netty highWaterMark set to 64k
             resp.body().byteStream().read(readBytes);
             receivedCount.incrementAndGet();
 
