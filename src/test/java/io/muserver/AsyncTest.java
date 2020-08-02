@@ -5,6 +5,8 @@ import okio.BufferedSink;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 import scaffolding.StringUtils;
@@ -27,6 +29,9 @@ import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.*;
 
 public class AsyncTest {
+
+    private static final Logger log = LoggerFactory.getLogger(AsyncTest.class);
+
     private MuServer server;
 
     @Test
@@ -67,7 +72,11 @@ public class AsyncTest {
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.contentType(ContentTypes.APPLICATION_OCTET_STREAM);
                 byte[] sendByte = StringUtils.randomBytes(1024);
-                AsyncHandle asyncHandle = request.handleAsync();
+                NettyRequestAdapter.AsyncHandleImpl asyncHandle = (NettyRequestAdapter.AsyncHandleImpl)request.handleAsync();
+                asyncHandle.setLogging(true);
+
+                log.warn("J:asyncHandle.isConnectionStateSupported={}", asyncHandle.isConnectionStateSupported);
+
                 for (int i = 0; i < totalCount; i++) {
                     asyncHandle.write(ByteBuffer.wrap(sendByte), error -> {
                         sendDoneCallbackCount.incrementAndGet();
@@ -90,10 +99,10 @@ public class AsyncTest {
             resp.body().byteStream().read(readBytes);
             receivedCount.incrementAndGet();
 
-            Thread.sleep(100L);
+            Thread.sleep(3000L);
             assertThat(sendDoneCallbackCount.get(), lessThan(64));
 
-            Thread.sleep(100L);
+            Thread.sleep(3000L);
             assertThat(sendDoneCallbackCount.get(), lessThan(64));
 
             // http client read the rest bytes, verify all data received
