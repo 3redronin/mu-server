@@ -62,6 +62,9 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
 
     /**
      * Writes headers from a JAX-RS response to a MuResponse
+     * @param requestUri The URI of the current request
+     * @param from The JAX-RS response containing headers
+     * @param to The response to write the headers to
      */
     public static void writeResponseHeaders(URI requestUri, Response from, MuResponse to) {
         for (Map.Entry<String, List<String>> entry : from.getStringHeaders().entrySet()) {
