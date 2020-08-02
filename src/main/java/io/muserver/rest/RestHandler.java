@@ -195,13 +195,7 @@ public class RestHandler implements MuHandler {
                 filterManagerThing.onBeforeSendResponse(requestContext, responseContext);
                 int status = responseContext.getStatus();
                 muResponse.status(status);
-                for (Map.Entry<String, List<String>> entry : responseContext.getStringHeaders().entrySet()) {
-                    muResponse.headers().add(entry.getKey(), entry.getValue());
-                }
-
-                for (NewCookie cookie : jaxRSResponse.getCookies().values()) {
-                    muResponse.headers().add(HeaderNames.SET_COOKIE, cookie.toString());
-                }
+                MuRuntimeDelegate.writeResponseHeaders(requestContext.muRequest.uri(), jaxRSResponse, muResponse);
 
                 Object entity = responseContext.getEntity();
                 if (entity == null) {

@@ -144,6 +144,9 @@ class NettyHandlerAdapter {
             }
 
             response.status(exResp.getStatus());
+
+            MuRuntimeDelegate.writeResponseHeaders(request.uri(), exResp, response);
+
             if (forceDisconnect) {
                 response.headers().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
             }
