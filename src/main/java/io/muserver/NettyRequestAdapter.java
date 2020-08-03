@@ -502,6 +502,12 @@ class NettyRequestAdapter implements MuRequest {
 
         @Override
         public void onWriteable() throws Exception {
+
+            if (isLogging) {
+                log.info("onWriteable:isWritable={}, doneCallbackList.size={}, bytesBeforeWritable={}, bytesBeforeUnwritable={}",
+                    request.channel.isWritable(), doneCallbackList.size(), request.channel.bytesBeforeWritable(), request.channel.bytesBeforeUnwritable());
+            }
+
             DoneCallback task;
 
             if (!request.channel.isActive()) {
@@ -521,6 +527,9 @@ class NettyRequestAdapter implements MuRequest {
         @Override
         public void onConnectionClose() throws Exception {
             this.clearDoneCallbackList();
+            if (isLogging) {
+                log.info("onConnectionClose:doneCallbackList.size={}", doneCallbackList.size());
+            }
         }
 
         @Override

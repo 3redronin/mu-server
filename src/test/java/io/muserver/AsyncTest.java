@@ -96,7 +96,9 @@ public class AsyncTest {
             // http client read the first 1024 byte and then sleep,
             // verify server done callback not exceeding 64 time, as
             // it can't write out given the netty highWaterMark set to 64k
+            log.info("J:start to receive first bytes - start");
             resp.body().byteStream().read(readBytes);
+            log.info("J:start to receive first bytes - done");
             receivedCount.incrementAndGet();
 
             Thread.sleep(3000L);
@@ -106,6 +108,7 @@ public class AsyncTest {
             assertThat(sendDoneCallbackCount.get(), lessThan(64));
 
             // http client read the rest bytes, verify all data received
+            log.info("J:start to receive more bytes");
             while (resp.body().byteStream().read(readBytes) != -1) {
                 receivedCount.incrementAndGet();
             }
