@@ -1,5 +1,6 @@
 package io.muserver;
 
+import io.netty.channel.Channel;
 import okhttp3.*;
 import okio.BufferedSink;
 import org.junit.After;
@@ -12,12 +13,15 @@ import scaffolding.ServerUtils;
 import scaffolding.StringUtils;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -26,6 +30,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import static io.muserver.MuServerBuilder.httpsServer;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
+import static org.junit.Assert.assertTrue;
 import static scaffolding.ClientUtils.*;
 
 public class AsyncTest {
@@ -65,6 +70,10 @@ public class AsyncTest {
 
         AtomicInteger sendDoneCallbackCount = new AtomicInteger(0);
         AtomicInteger receivedCount = new AtomicInteger(0);
+        AtomicInteger failureCount = new AtomicInteger(0);
+        CountDownLatch requestUnWrtiable = new CountDownLatch(1);
+        CountDownLatch testDone = new CountDownLatch(1);
+        AtomicBoolean isDoneCallBackCountLessThan64 = new AtomicBoolean(false);
 
         int totalCount = 1000;
         server = httpsServer()
@@ -73,17 +82,36 @@ public class AsyncTest {
                 response.contentType(ContentTypes.APPLICATION_OCTET_STREAM);
                 byte[] sendByte = StringUtils.randomBytes(1024);
                 NettyRequestAdapter.AsyncHandleImpl asyncHandle = (NettyRequestAdapter.AsyncHandleImpl)request.handleAsync();
-                asyncHandle.setLogging(true);
-
-                log.warn("J:asyncHandle.isConnectionStateSupported={}", asyncHandle.isConnectionStateSupported);
+                ExecutorService executorService = Executors.newFixedThreadPool(1);
 
                 for (int i = 0; i < totalCount; i++) {
                     asyncHandle.write(ByteBuffer.wrap(sendByte), error -> {
                         sendDoneCallbackCount.incrementAndGet();
                     });
                 }
+                
+                Field requestField = asyncHandle.getClass().getDeclaredField("request");
+                requestField.setAccessible(true);
+                NettyRequestAdapter requestAdapter = (NettyRequestAdapter) requestField.get(asyncHandle);
+                Field channelField = requestAdapter.getClass().getDeclaredField("channel");
+                channelField.setAccessible(true);
+                Channel channel = (Channel) channelField.get(requestAdapter);
+                
+                executorService.submit(()->{
+                    while (true){
+                        if (!channel.isWritable()){
+                            requestUnWrtiable.countDown();
+                            break;
+                        }
+                        try {
+                            Thread.sleep(1);
+                        } catch (InterruptedException e){
+                            //fail to sleep do nothing.
+                        }
+                    }});
 
                 MuAssert.assertEventually(sendDoneCallbackCount::get, is(totalCount));
+                executorService.shutdown();
                 asyncHandle.complete();
             })
             .start();
@@ -96,22 +124,32 @@ public class AsyncTest {
             // http client read the first 1024 byte and then sleep,
             // verify server done callback not exceeding 64 time, as
             // it can't write out given the netty highWaterMark set to 64k
-            log.info("J:start to receive first bytes - start");
             resp.body().byteStream().read(readBytes);
-            log.info("J:start to receive first bytes - done");
             receivedCount.incrementAndGet();
+            
+            ExecutorService executorService = Executors.newFixedThreadPool(1);
+            executorService.submit(()->{
+                try {
+                    requestUnWrtiable.await();
+                    if (sendDoneCallbackCount.get() < 64) {
+                        isDoneCallBackCountLessThan64.getAndSet(true);
+                        testDone.countDown();
+                    }
+                } catch (InterruptedException e) {
+                    failureCount.getAndIncrement();
+                }
+            });
 
-            Thread.sleep(3000L);
-            assertThat(sendDoneCallbackCount.get(), lessThan(64));
-
-            Thread.sleep(3000L);
-            assertThat(sendDoneCallbackCount.get(), lessThan(64));
+            testDone.await();
+            assertTrue(isDoneCallBackCountLessThan64.get());
+            assertThat(failureCount.get(), is(0));
+            executorService.shutdown();
 
             // http client read the rest bytes, verify all data received
-            log.info("J:start to receive more bytes");
             while (resp.body().byteStream().read(readBytes) != -1) {
                 receivedCount.incrementAndGet();
             }
+            
             assertThat(sendDoneCallbackCount.get(), is(totalCount));
             assertThat(receivedCount.get(), is(totalCount));
         }
