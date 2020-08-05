@@ -460,13 +460,13 @@ class NettyRequestAdapter implements MuRequest {
         private final NettyRequestAdapter request;
         private final AsyncContext asyncContext;
         private volatile ResponseCompleteListener responseCompleteListener;
-        private LinkedList<DoneCallback> doneCallbackList;
+        private ConcurrentLinkedQueue<DoneCallback> doneCallbackList;
         private boolean isLogging;
 
         private AsyncHandleImpl(NettyRequestAdapter request, AsyncContext asyncContext) {
             this.request = request;
             this.asyncContext = asyncContext;
-            this.doneCallbackList = new LinkedList<>();
+            this.doneCallbackList = new ConcurrentLinkedQueue<>();
             this.isConnectionStateSupported = request.connection instanceof ConnectionState;
             if (isConnectionStateSupported) {
                 ((ConnectionState) request.connection).registerConnectionStateListener(this);
