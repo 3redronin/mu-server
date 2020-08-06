@@ -106,6 +106,7 @@ public class AsyncTest {
             while (resp.body().byteStream().read(readBytes) != -1) {
                 receivedCount.incrementAndGet();
             }
+            
             assertThat(sendDoneCallbackCount.get(), is(totalCount));
             assertThat(receivedCount.get(), is(totalCount));
         }
