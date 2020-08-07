@@ -57,11 +57,11 @@ public class WebSocketsTest {
         clientSocket.send(ByteString.encodeUtf8("This is a binary message"));
         clientSocket.send("Another text");
         clientSocket.close(1000, "Finished");
-        MuAssert.assertNotTimedOut("Closing", serverSocket.closedLatch);
+        MuAssert.assertNotTimedOut("Closing server socket", serverSocket.closedLatch);
         assertThat(serverSocket.received, contains("connected", "onText: This is a message",
             "onBinary: This is a binary message", "onText: Another text", "onClientClosed: 1000 Finished"));
 
-        assertThat(clientListener.toString(), clientListener.events,
+        MuAssert.assertEventually(() -> clientListener.events,
             contains("onOpen", "onMessage text: THIS IS A MESSAGE", "onMessage binary: This is a binary message", "onMessage text: ANOTHER TEXT"));
 
         try (Response resp = call(request(server.uri().resolve("/not-blah")))) {
