@@ -1,5 +1,6 @@
 package io.muserver;
 
+import io.netty.util.concurrent.DefaultThreadFactory;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import okhttp3.internal.http2.ErrorCode;
@@ -11,12 +12,17 @@ import scaffolding.ServerUtils;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadInfo;
+import java.lang.management.ThreadMXBean;
+import java.lang.reflect.Field;
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static io.muserver.MuServerBuilder.httpServer;
 import static io.muserver.MuServerBuilder.muServer;
@@ -424,6 +430,69 @@ public class MuServerTest {
         assertThat(executor.shutdownNow(), hasSize(0));
     }
 
+    @Test(timeout = 10000)
+    public void nioThreadsCanBeSetToASpecificValue() throws Exception {
+        int expectWorkerPoolSize = 10;
+        nioThreadsPoolVerification(true, expectWorkerPoolSize);
+    }
+
+    @Test(timeout = 10000)
+    public void nioThreadsDefaultIs2TimesOfProcessNumberButNotMoreThan16() throws Exception {
+        final int processors = Runtime.getRuntime().availableProcessors();
+        int expectPoolSize;
+        if (processors > 8) {
+            expectPoolSize = 16;
+        } else {
+            expectPoolSize = Runtime.getRuntime().availableProcessors() * 2;
+        }
+        nioThreadsPoolVerification(false, expectPoolSize);
+    }
+
+    private void nioThreadsPoolVerification(boolean needToSet, int expectNioThreadsPoolSize) throws IOException {
+        final MuServerBuilder muServerBuilder = httpServer();
+        if (needToSet) {
+            muServerBuilder.withNioThreads(expectNioThreadsPoolSize);
+        }
+        server = muServerBuilder
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> TimeUnit.SECONDS.sleep(1))
+            .addHandler(Method.GET, "/threads", (request, response, pathParams) -> {
+                // Get the last pool ID
+                final Field poolId = DefaultThreadFactory.class.getDeclaredField("poolId");
+                poolId.setAccessible(true);
+                final int lastPoolId = ((AtomicInteger) poolId.get(null)).get();
+
+                ThreadMXBean threads = ManagementFactory.getThreadMXBean();
+                final List<String> collect = Stream.of(threads.dumpAllThreads(true, true))
+                    .map(ThreadInfo::getThreadName)
+                    .filter(n -> n.contains("nioEventLoopGroup-" + lastPoolId + "-"))
+                    .collect(Collectors.toList());
+                response.sendChunk("" + collect.size());
+            })
+            .start();
+
+        // Try to request and let the pool full
+        final int taskCount = 50;
+        Deque<Future> taskStack = new ArrayDeque<>(taskCount);
+        final ExecutorService executorService = Executors.newCachedThreadPool();
+        for (int i = 0; i < taskCount; i++) {
+            taskStack.push(executorService.submit(() -> {
+                call(request(server.uri()));
+            }));
+        }
+
+        // wait all tasks done
+        while (!taskStack.isEmpty()) {
+            if (taskStack.peek().isDone()) {
+                taskStack.pop();
+            }
+        }
+
+        executorService.shutdown();
+        try (Response resp = call(request(server.uri().resolve("/threads")))) {
+            assertThat(resp.code(), is(200));
+            assertThat("Worker thread pool size is not expected", resp.body().string(), is(String.valueOf(expectNioThreadsPoolSize)));
+        }
+    }
 
     @Test
     public void versionIsAvailable() {
