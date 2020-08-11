@@ -66,7 +66,7 @@ public class AsyncTest {
         AtomicInteger sendDoneCallbackCount = new AtomicInteger(0);
         AtomicInteger receivedCount = new AtomicInteger(0);
 
-        int totalCount = 10000;
+        int totalCount = 1000;
         server = httpsServer()
             .withHttp2Config(Http2ConfigBuilder.http2Config()) // test http 1 only
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
@@ -96,10 +96,10 @@ public class AsyncTest {
             resp.body().byteStream().read(readBytes);
             receivedCount.incrementAndGet();
 
-            Thread.sleep(400L);
+            Thread.sleep(4000L);
             assertThat(sendDoneCallbackCount.get(), lessThan(64));
 
-            Thread.sleep(400L);
+            Thread.sleep(4000L);
             assertThat(sendDoneCallbackCount.get(), lessThan(64));
 
             // http client read the rest bytes, verify all data received
