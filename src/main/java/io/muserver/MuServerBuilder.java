@@ -246,9 +246,13 @@ public class MuServerBuilder {
     }
 
     /**
-     * The number of nio threads to handle requests. By default is 2 * processor's count but not more than 16
+     * <p>The number of nio threads to handle requests.</p>
+     * <p>Generally only a small number is required as NIO threads are only used for non-blocking
+     * reads and writes of data. Request handlers are executed on a separate thread pool which
+     * can be specified with {@link #withHandlerExecutor(ExecutorService)}.</p>
+     * <p>Note that websocket callbacks are handled on these NIO threads.</p>
      *
-     * @param nioThreads The nio threads
+     * @param nioThreads The nio threads. Default is 2 * processor's count but not more than 16
      * @return The current Mu Server builder
      */
     public MuServerBuilder withNioThreads(int nioThreads) {
