@@ -41,11 +41,13 @@ public class MuServerBuilder {
 
     private static final Logger log = LoggerFactory.getLogger(MuServerBuilder.class);
     private static final int LENGTH_OF_METHOD_AND_PROTOCOL = 17; // e.g. "OPTIONS HTTP/1.1 "
+    private static final int DEFAULT_NIO_THREADS = Math.min(16, Runtime.getRuntime().availableProcessors() * 2);
     private long minimumGzipSize = 1400;
     private int httpPort = -1;
     private int httpsPort = -1;
     private int maxHeadersSize = 8192;
     private int maxUrlSize = 8192 - LENGTH_OF_METHOD_AND_PROTOCOL;
+    private int nioThreads = DEFAULT_NIO_THREADS;
     private List<MuHandler> handlers = new ArrayList<>();
     private boolean gzipEnabled = true;
     private Set<String> mimeTypesToGzip = ResourceType.gzippableMimeTypes(ResourceType.getResourceTypes());
@@ -240,6 +242,17 @@ public class MuServerBuilder {
      */
     public MuServerBuilder withHandlerExecutor(ExecutorService executor) {
         this.executor = executor;
+        return this;
+    }
+
+    /**
+     * The number of nio threads to handle requests. By default is 2 * processor's count but not more than 16
+     *
+     * @param nioThreads The nio threads
+     * @return The current Mu Server builder
+     */
+    public MuServerBuilder withNioThreads(int nioThreads) {
+        this.nioThreads = nioThreads;
         return this;
     }
 
@@ -479,9 +492,7 @@ public class MuServerBuilder {
         NettyHandlerAdapter nettyHandlerAdapter = new NettyHandlerAdapter(handlerExecutor, handlers, settings, responseCompleteListeners);
 
         NioEventLoopGroup bossGroup = new NioEventLoopGroup(1);
-        int workerThreads = Math.min(16, (2 * Runtime.getRuntime().availableProcessors()));
-
-        NioEventLoopGroup workerGroup = new NioEventLoopGroup(workerThreads);
+        NioEventLoopGroup workerGroup = new NioEventLoopGroup(this.nioThreads);
         List<Channel> channels = new ArrayList<>();
 
         ExecutorService finalHandlerExecutor = handlerExecutor;
