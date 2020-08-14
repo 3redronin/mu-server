@@ -553,13 +553,18 @@ class NettyRequestAdapter implements MuRequest {
          * in this way, it prevent OOM for fast producer / slow consumer scenario. </p>
          *
          * <p>On Mac/Windows, the tcp send buffer size are default fixed.
-         * But Linux enable TCP window scaling by default. To make this work well, SO_SNDBUF on netty need to be configured:
+         * But Linux enable TCP window scaling for better throughput by default.
+         *
+         * If the System buffer is huge and being written successfully, Netty will treat it send success though data
+         * not reach to the receiver yet, and the pendingSentByte in Netty will goes down, isWritable become true again.
+         *
+         * To make this work well and prevent off-heap OOM, SO_SNDBUF on netty may need to be configured:
          * <pre>
          *      serverBootstrap.childOption(NioChannelOption.SO_SNDBUF, 64 * 1024)
          * </pre>
          * </p>
          *
-         * <p>MuServerBuilder have an interface to let you customized:
+         * <p>MuServerBuilder have an interface to let you customized the buffer:
          * <pre>
          *      MuServerBuilder builder = ...
          *      builder.withNettyServerBootstrapConfig(netty -> netty.childOption(NioChannelOption.SO_SNDBUF, 64 * 1024))

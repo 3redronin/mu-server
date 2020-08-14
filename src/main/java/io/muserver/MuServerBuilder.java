@@ -443,7 +443,7 @@ public class MuServerBuilder {
      * @param serverBootstrapConfigurator a function to config NettyBootstrap
      * @return
      */
-    public MuServerBuilder withNettyServerBootstrapConfig(Consumer<ServerBootstrap> serverBootstrapConfigurator) {
+    protected MuServerBuilder withNettyServerBootstrapConfig(Consumer<ServerBootstrap> serverBootstrapConfigurator) {
         this.serverBootstrapConfigurator = serverBootstrapConfigurator;
         return this;
     }
