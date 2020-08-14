@@ -102,9 +102,11 @@ public class AsyncTest {
             receivedCount.incrementAndGet();
 
             Thread.sleep(3000L);
+            log.info("sendDoneCallbackCount.get()={}", sendDoneCallbackCount.get());
             assertThat(sendDoneCallbackCount.get(), lessThan(64));
 
             Thread.sleep(3000L);
+            log.info("sendDoneCallbackCount.get()={}", sendDoneCallbackCount.get());
             assertThat(sendDoneCallbackCount.get(), lessThan(64));
 
             // http client read the rest bytes, verify all data received
