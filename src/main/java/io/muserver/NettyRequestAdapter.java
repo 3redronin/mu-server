@@ -585,11 +585,11 @@ class NettyRequestAdapter implements MuRequest {
                         callback.onComplete(null);
                     } else {
                         /**
-                         * We use a doneCallbackList here to make sure the done callback being invoked in the same
+                         * Use doneCallbackList here to make sure the done callback being invoked in the same
                          * order as it come in.
                          *
-                         * The doneCallbackList operation are all within same netty event loop thread,
-                         * so using LinkedList rather than ConcurrentQueue would be fine.
+                         * The doneCallbackList operation are all within same netty event loop thread and
+                         * there should be no concurrent problem, that's why using LinkedList.
                          */
                         doneCallbackList.add(callback);
                     }
