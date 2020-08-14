@@ -63,20 +63,6 @@ public class MuServerBuilder {
     private Consumer<ServerBootstrap> serverBootstrapConfigurator;
 
     /**
-     * Use this to customized netty options, e.g.
-     *
-     * MuServerBuilder builder = ...
-     * builder.withNettyServerBootstrapConfig(netty -> netty.childOption(NioChannelOption.SO_SNDBUF, 64 * 1024))
-     *
-     * @param serverBootstrapConfigurator a function to config NettyBootstrap
-     * @return
-     */
-    public MuServerBuilder withNettyServerBootstrapConfig(Consumer<ServerBootstrap> serverBootstrapConfigurator) {
-        this.serverBootstrapConfigurator = serverBootstrapConfigurator;
-        return this;
-    }
-
-    /**
      * @param port The HTTP port to use. A value of 0 will have a random port assigned; a value of -1 will
      *             result in no HTTP connector.
      * @return The current Mu Server Builder
@@ -443,6 +429,22 @@ public class MuServerBuilder {
         }
         RateLimiter rateLimiter = new RateLimiter(selector, wheelTimer);
         this.rateLimiters.add(rateLimiter);
+        return this;
+    }
+
+    /**
+     * <p>Use this to customized netty ServerBootstrap options, e.g.</p>
+     *
+     * <pre>
+     *     MuServerBuilder builder = ...
+     *     builder.withNettyServerBootstrapConfig(netty -> netty.childOption(NioChannelOption.SO_SNDBUF, 64 * 1024))
+     * </pre>
+     *
+     * @param serverBootstrapConfigurator a function to config NettyBootstrap
+     * @return
+     */
+    public MuServerBuilder withNettyServerBootstrapConfig(Consumer<ServerBootstrap> serverBootstrapConfigurator) {
+        this.serverBootstrapConfigurator = serverBootstrapConfigurator;
         return this;
     }
 

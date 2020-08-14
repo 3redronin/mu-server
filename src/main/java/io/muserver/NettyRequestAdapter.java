@@ -547,33 +547,50 @@ class NettyRequestAdapter implements MuRequest {
             }
         }
 
+        /**
+         * <p>The DoneCallback are commonly used to trigger writing more data into the target channel,
+         * so we delay the done callback invocation till the target netty channel become writable,
+         * in this way, it prevent OOM for fast producer / slow consumer scenario. </p>
+         *
+         * <p>On Mac/Windows, the tcp send buffer size are default fixed.
+         * But Linux enable TCP window scaling by default. To make this work well, SO_SNDBUF on netty need to be configured:
+         * <pre>
+         *      serverBootstrap.childOption(NioChannelOption.SO_SNDBUF, 64 * 1024)
+         * </pre>
+         * </p>
+         *
+         * <p>MuServerBuilder have an interface to let you customized:
+         * <pre>
+         *      MuServerBuilder builder = ...
+         *      builder.withNettyServerBootstrapConfig(netty -> netty.childOption(NioChannelOption.SO_SNDBUF, 64 * 1024))
+         * </pre>
+         * <p/>
+         *
+         *
+         * @param data     The data to write
+         * @param callback The callback when the write succeeds or fails
+         */
         @Override
         public void write(ByteBuffer data, DoneCallback callback) {
+            // running in mu-server thread.
             ChannelFuture writeFuture = (ChannelFuture) write(data);
             writeFuture.addListener(future -> {
-                /**
-                 * The DoneCallback are commonly used to trigger writing more data into the target channel,
-                 * so we delay the done callback invocation till the target netty channel become writable,
-                 * in this way we prevent OOM for fast producer / slow consumer scenario.
-                 *
-                 * We use a doneCallbackList here to make sure the done callback being invoked in the same
-                 * order as it come in. the doneCallbackList operation are all within same netty event loop thread,
-                 * so we LinkedList rather than ConcurrentQueue for it.
-                 *
-                 * Threading related:
-                 * 1. (ChannelFuture) write(data) run in mu-server thread.
-                 * 2. callback in "writeFuture.addListener(callback)" run the netty event loop thread.
-                 *
-                 */
+                // running the netty event loop thread.
                 try {
                     if (!future.isSuccess()) {
                         callback.onComplete(future.cause());
                     } else if (!isConnectionStateSupported) {
-                        // http 2 not support DoneCallback delay at the moment
                         callback.onComplete(null);
                     } else if (request.channel.isWritable() && doneCallbackList.size() == 0) {
                         callback.onComplete(null);
                     } else {
+                        /**
+                         * We use a doneCallbackList here to make sure the done callback being invoked in the same
+                         * order as it come in.
+                         *
+                         * The doneCallbackList operation are all within same netty event loop thread,
+                         * so using LinkedList rather than ConcurrentQueue would be fine.
+                         */
                         doneCallbackList.add(callback);
                     }
                 } catch (Throwable e) {
