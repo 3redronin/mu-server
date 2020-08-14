@@ -75,16 +75,11 @@ public class AsyncTest {
                 response.contentType(ContentTypes.APPLICATION_OCTET_STREAM);
                 byte[] sendByte = StringUtils.randomBytes(1024);
                 NettyRequestAdapter.AsyncHandleImpl asyncHandle = (NettyRequestAdapter.AsyncHandleImpl)request.handleAsync();
-                asyncHandle.setLogging(true);
-
-                log.warn("J:asyncHandle.isConnectionStateSupported={}", asyncHandle.isConnectionStateSupported);
-
                 for (int i = 0; i < totalCount; i++) {
                     asyncHandle.write(ByteBuffer.wrap(sendByte), error -> {
                         sendDoneCallbackCount.incrementAndGet();
                     });
                 }
-
                 MuAssert.assertEventually(sendDoneCallbackCount::get, is(totalCount));
                 asyncHandle.complete();
             })
@@ -98,21 +93,18 @@ public class AsyncTest {
             // http client read the first 1024 byte and then sleep,
             // verify server done callback not exceeding 64 time, as
             // it can't write out given the netty highWaterMark set to 64k
-            log.info("J:start to receive first bytes - start");
             resp.body().byteStream().read(readBytes);
-            log.info("J:start to receive first bytes - done");
             receivedCount.incrementAndGet();
 
-            Thread.sleep(3000L);
-            log.info("sendDoneCallbackCount.get()={}", sendDoneCallbackCount.get());
+            Thread.sleep(300L);
+            log.info("after sleep, sendDoneCallbackCount={}", sendDoneCallbackCount.get());
             assertThat(sendDoneCallbackCount.get(), lessThan(64));
 
-            Thread.sleep(3000L);
-            log.info("sendDoneCallbackCount.get()={}", sendDoneCallbackCount.get());
+            Thread.sleep(300L);
+            log.info("after sleep, sendDoneCallbackCount={}", sendDoneCallbackCount.get());
             assertThat(sendDoneCallbackCount.get(), lessThan(64));
 
             // http client read the rest bytes, verify all data received
-            log.info("J:start to receive more bytes");
             while (resp.body().byteStream().read(readBytes) != -1) {
                 receivedCount.incrementAndGet();
             }

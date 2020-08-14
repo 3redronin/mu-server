@@ -461,7 +461,6 @@ class NettyRequestAdapter implements MuRequest {
         private final AsyncContext asyncContext;
         private volatile ResponseCompleteListener responseCompleteListener;
         private LinkedList<DoneCallback> doneCallbackList;
-        private boolean isLogging;
 
         private AsyncHandleImpl(NettyRequestAdapter request, AsyncContext asyncContext) {
             this.request = request;
@@ -471,10 +470,6 @@ class NettyRequestAdapter implements MuRequest {
             if (isConnectionStateSupported) {
                 ((ConnectionState) request.connection).registerConnectionStateListener(this);
             }
-        }
-
-        public void setLogging(boolean logging) {
-            isLogging = logging;
         }
 
         @Override
@@ -502,12 +497,6 @@ class NettyRequestAdapter implements MuRequest {
 
         @Override
         public void onWriteable() throws Exception {
-
-            if (isLogging) {
-                log.info("onWriteable:isWritable={}, doneCallbackList.size={}, bytesBeforeWritable={}, bytesBeforeUnwritable={}",
-                    request.channel.isWritable(), doneCallbackList.size(), request.channel.bytesBeforeWritable(), request.channel.bytesBeforeUnwritable());
-            }
-
             DoneCallback task;
 
             if (!request.channel.isActive()) {
@@ -527,9 +516,6 @@ class NettyRequestAdapter implements MuRequest {
         @Override
         public void onConnectionClose() throws Exception {
             this.clearDoneCallbackList();
-            if (isLogging) {
-                log.info("onConnectionClose:doneCallbackList.size={}", doneCallbackList.size());
-            }
         }
 
         @Override
@@ -563,17 +549,8 @@ class NettyRequestAdapter implements MuRequest {
 
         @Override
         public void write(ByteBuffer data, DoneCallback callback) {
-            if (isLogging) {
-                log.info("write: isWritable={}, listSize={}, byteBeforeWritable={}",
-                    request.channel.isWritable(), doneCallbackList.size(), request.channel.bytesBeforeWritable());
-            }
-
             ChannelFuture writeFuture = (ChannelFuture) write(data);
             writeFuture.addListener(future -> {
-                if (isLogging) {
-                    log.info("callback: isSuccess={}, isWritable={}, listSize={}, byteBeforeWritable={}",
-                        future.isSuccess(), request.channel.isWritable(), doneCallbackList.size(), request.channel.bytesBeforeWritable());
-                }
                 /**
                  * The DoneCallback are commonly used to trigger writing more data into the target channel,
                  * so we delay the done callback invocation till the target netty channel become writable,
