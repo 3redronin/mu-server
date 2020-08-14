@@ -1,5 +1,6 @@
 package io.muserver;
 
+import io.netty.channel.socket.nio.NioChannelOption;
 import okhttp3.*;
 import okio.BufferedSink;
 import org.junit.After;
@@ -69,6 +70,7 @@ public class AsyncTest {
         int totalCount = 1000;
         server = httpsServer()
             .withHttp2Config(Http2ConfigBuilder.http2Config()) // test http 1 only
+            .withNettyServerBootstrapConfig(serverBootstrap -> serverBootstrap.childOption(NioChannelOption.SO_SNDBUF, 64 * 1024))
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.contentType(ContentTypes.APPLICATION_OCTET_STREAM);
                 byte[] sendByte = StringUtils.randomBytes(1024);

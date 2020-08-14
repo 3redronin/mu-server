@@ -7,7 +7,6 @@ import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
-import io.netty.channel.socket.nio.NioChannelOption;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.http.HttpRequestDecoder;
 import io.netty.handler.codec.http.HttpResponse;
@@ -30,6 +29,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.*;
+import java.util.function.Consumer;
 
 /**
  * <p>A builder for creating a web server.</p>
@@ -60,6 +60,21 @@ public class MuServerBuilder {
     private List<ResponseCompleteListener> responseCompleteListeners;
     private HashedWheelTimer wheelTimer;
     private List<RateLimiter> rateLimiters;
+    private Consumer<ServerBootstrap> serverBootstrapConfigurator;
+
+    /**
+     * Use this to customized netty options, e.g.
+     *
+     * MuServerBuilder builder = ...
+     * builder.withNettyServerBootstrapConfig(netty -> netty.childOption(NioChannelOption.SO_SNDBUF, 64 * 1024))
+     *
+     * @param serverBootstrapConfigurator a function to config NettyBootstrap
+     * @return
+     */
+    public MuServerBuilder withNettyServerBootstrapConfig(Consumer<ServerBootstrap> serverBootstrapConfigurator) {
+        this.serverBootstrapConfigurator = serverBootstrapConfigurator;
+        return this;
+    }
 
     /**
      * @param port The HTTP port to use. A value of 0 will have a random port assigned; a value of -1 will
@@ -511,7 +526,7 @@ public class MuServerBuilder {
             boolean http2Enabled = http2Config != null && http2Config.enabled;
             MuServerImpl server = new MuServerImpl(stats, http2Enabled, settings);
 
-            Channel httpChannel = httpPort < 0 ? null : createChannel(bossGroup, workerGroup, nettyHandlerAdapter, host, httpPort, null, trafficShapingHandler, server, false, idleTimeoutMills);
+            Channel httpChannel = httpPort < 0 ? null : createChannel(bossGroup, workerGroup, nettyHandlerAdapter, serverBootstrapConfigurator, host, httpPort, null, trafficShapingHandler, server, false, idleTimeoutMills);
             Channel httpsChannel;
             if (httpsPort < 0) {
                 httpsChannel = null;
@@ -520,7 +535,7 @@ public class MuServerBuilder {
                 SslContext nettySslContext = toUse.toNettySslContext(http2Enabled);
                 log.debug("SSL Context is " + nettySslContext);
                 sslContextProvider = new SslContextProvider(nettySslContext);
-                httpsChannel = createChannel(bossGroup, workerGroup, nettyHandlerAdapter, host, httpsPort, sslContextProvider, trafficShapingHandler, server, http2Enabled, idleTimeoutMills);
+                httpsChannel = createChannel(bossGroup, workerGroup, nettyHandlerAdapter, serverBootstrapConfigurator, host, httpsPort, sslContextProvider, trafficShapingHandler, server, http2Enabled, idleTimeoutMills);
             }
             URI uri = null;
             if (httpChannel != null) {
@@ -554,13 +569,16 @@ public class MuServerBuilder {
         return URI.create(protocol + "://" + host.toLowerCase() + ":" + a.getPort());
     }
 
-    private static Channel createChannel(NioEventLoopGroup bossGroup, NioEventLoopGroup workerGroup, NettyHandlerAdapter nettyHandlerAdapter, String host, int port, SslContextProvider sslContextProvider, GlobalTrafficShapingHandler trafficShapingHandler, MuServerImpl server, final boolean http2, long idleTimeoutMills) throws InterruptedException {
+    private static Channel createChannel(NioEventLoopGroup bossGroup, NioEventLoopGroup workerGroup,
+                                         NettyHandlerAdapter nettyHandlerAdapter, Consumer<ServerBootstrap> serverBootstrapConfigurator,
+                                         String host, int port, SslContextProvider sslContextProvider,
+                                         GlobalTrafficShapingHandler trafficShapingHandler, MuServerImpl server,
+                                         final boolean http2, long idleTimeoutMills) throws InterruptedException {
         boolean usesSsl = sslContextProvider != null;
         String proto = usesSsl ? "https" : "http";
         ServerBootstrap b = new ServerBootstrap();
         b.group(bossGroup, workerGroup)
             .channel(NioServerSocketChannel.class)
-            .childOption(NioChannelOption.SO_SNDBUF, 64 * 1024)
             .childHandler(new ChannelInitializer<SocketChannel>() {
 
                 protected void initChannel(SocketChannel socketChannel) {
@@ -588,9 +606,11 @@ public class MuServerBuilder {
                         setupHttp1Pipeline(p, nettyHandlerAdapter, server, proto);
                     }
                 }
-
-
             });
+
+        if (serverBootstrapConfigurator != null) {
+            serverBootstrapConfigurator.accept(b);
+        }
         ChannelFuture bound = host == null ? b.bind(port) : b.bind(host, port);
         return bound.sync().channel();
     }
