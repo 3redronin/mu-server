@@ -105,7 +105,7 @@ public class AsyncTest {
                         } catch (InterruptedException e){
                             e.printStackTrace();
                         }
-                    }})
+                    }});
 
                 MuAssert.assertEventually(sendDoneCallbackCount::get, is(totalCount));
                 executorService.shutdown();
@@ -134,10 +134,11 @@ public class AsyncTest {
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
-            })
+            });
 
             Thread.sleep(4000L);
             assertTrue(isDoneCallBackCountLessThan64.get());
+            executorService.shutdown();
 
             // http client read the rest bytes, verify all data received
             while (resp.body().byteStream().read(readBytes) != -1) {
