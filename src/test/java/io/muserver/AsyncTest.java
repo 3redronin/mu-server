@@ -70,7 +70,9 @@ public class AsyncTest {
 
         AtomicInteger sendDoneCallbackCount = new AtomicInteger(0);
         AtomicInteger receivedCount = new AtomicInteger(0);
+        AtomicInteger failureCount = new AtomicInteger(0);
         CountDownLatch requestUnWrtiable = new CountDownLatch(1);
+        CountDownLatch testDone = new CountDownLatch(1);
         AtomicBoolean isDoneCallBackCountLessThan64 = new AtomicBoolean(false);
 
         int totalCount = 1000;
@@ -104,7 +106,7 @@ public class AsyncTest {
                         try {
                             Thread.sleep(1);
                         } catch (InterruptedException e){
-                            e.printStackTrace();
+                            //fail to sleep do nothing.
                         }
                     }});
 
@@ -131,14 +133,16 @@ public class AsyncTest {
                     requestUnWrtiable.await();
                     if (sendDoneCallbackCount.get() < 64) {
                         isDoneCallBackCountLessThan64.getAndSet(true);
+                        testDone.countDown();
                     }
                 } catch (InterruptedException e) {
-                    e.printStackTrace();
+                    failureCount.getAndIncrement();
                 }
             });
 
-            Thread.sleep(4000L);
+            testDone.await();
             assertTrue(isDoneCallBackCountLessThan64.get());
+            assertThat(failureCount.get(), is(0));
             executorService.shutdown();
 
             // http client read the rest bytes, verify all data received
