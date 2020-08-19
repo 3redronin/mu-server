@@ -94,6 +94,7 @@ public class AsyncTest {
                 Field channelField = requestAdapter.getClass().getDeclaredField("channel");
                 channelField.setAccessible(true);
                 Channel channel = (Channel) channelField.get(requestAdapter);
+                
                 executorService.submit(()->{
                     while (true){
                         if (!channel.isWritable()){
