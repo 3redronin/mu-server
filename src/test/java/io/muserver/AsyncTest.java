@@ -91,7 +91,7 @@ public class AsyncTest {
                 Field requestField = asyncHandle.getClass().getDeclaredField("request");
                 requestField.setAccessible(true);
                 NettyRequestAdapter requestAdapter = (NettyRequestAdapter) requestField.get(asyncHandle);
-                Field ChannelField = requestAdapter.getClass().getDeclaredField("channel");
+                Field channelField = requestAdapter.getClass().getDeclaredField("channel");
                 channelField.setAccessible(true);
                 Channel channel = (Channel) channelField.get(requestAdapter);
                 executorService.submit(()->{
