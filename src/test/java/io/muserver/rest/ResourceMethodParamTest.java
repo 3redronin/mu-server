@@ -1,9 +1,11 @@
 package io.muserver.rest;
 
+import io.muserver.MuException;
 import io.muserver.MuServer;
 import okhttp3.FormBody;
 import okhttp3.Response;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Test;
 
 import javax.ws.rs.*;
@@ -231,6 +233,46 @@ public class ResourceMethodParamTest {
         @Override
         public String toString() {
             return name().toLowerCase();
+        }
+    }
+
+    @Test
+    public void errorMessagesAreNiceForNormalTypes() {
+        class Something {}
+        try {
+            @Path("samples") class Sample {
+                @GET public void getIt(@QueryParam("something") Something something) { }
+            }
+            restHandler(new Sample()).build();
+            Assert.fail("Should have thrown");
+        } catch (MuException e) {
+            assertThat(e.getMessage(), startsWith("Could not find a suitable ParamConverter for class " + Something.class.getName()));
+        }
+    }
+
+    @Test
+    public void errorMessagesAreNiceForGenericTypes() {
+        class Something {}
+        try {
+            @Path("samples") class Sample {
+                @GET public void getIt(@QueryParam("something") List<Something> something) { }
+            }
+            restHandler(new Sample()).build();
+            Assert.fail("Should have thrown");
+        } catch (MuException e) {
+            assertThat(e.getMessage(), startsWith("Could not find a suitable ParamConverter for java.util.List<" + Something.class.getName() + ">"));
+        }
+    }
+    @Test
+    public void errorMessagesAreNiceForUnboundTypes() {
+        try {
+            @Path("samples") class Sample {
+                @GET public void getIt(@QueryParam("something") List<?> something) { }
+            }
+            restHandler(new Sample()).build();
+            Assert.fail("Should have thrown");
+        } catch (MuException e) {
+            assertThat(e.getMessage(), startsWith("Could not find a suitable ParamConverter for java.util.List<?>"));
         }
     }
 
