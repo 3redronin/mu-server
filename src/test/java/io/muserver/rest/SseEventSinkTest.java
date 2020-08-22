@@ -150,13 +150,13 @@ public class SseEventSinkTest {
                 .addCustomWriter(new DogWriter())
         ).start();
 
-        try (SseClient.ServerSentEvent ignored = sseClient.newServerSentEvent(request().url(server.uri().resolve("/streamer/eventStreamWithoutError").toString()).build(), listener)) {
+        try (SseClient.ServerSentEvent ignored = sseClient.newServerSentEvent(request(server.uri().resolve("/streamer/eventStreamWithoutError")).build(), listener)) {
             listener.assertListenerIsClosed();
         }
         assertThat(listener.receivedMessages, equalTo(asList("open", "message={}        event=message        id=null", "retryError", "closed")));
 
         listener = new TestSseClient();
-        try (SseClient.ServerSentEvent ignored = sseClient.newServerSentEvent(request().url(server.uri().resolve("/streamer/eventStreamWithError").toString()).build(), listener)) {
+        try (SseClient.ServerSentEvent ignored = sseClient.newServerSentEvent(request(server.uri().resolve("/streamer/eventStreamWithError")).build(), listener)) {
             listener.assertListenerIsClosed();
         }
         assertThat(listener.receivedMessages, equalTo(asList("open", "retryError", "closed")));

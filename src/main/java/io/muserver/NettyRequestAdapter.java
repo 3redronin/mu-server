@@ -26,7 +26,6 @@ import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.*;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
@@ -455,27 +454,21 @@ class NettyRequestAdapter implements MuRequest {
     }
 
 
-    public static class AsyncHandleImpl implements AsyncHandle, ConnectionState.Listener {
+    static class AsyncHandleImpl implements AsyncHandle, ConnectionState.Listener {
 
         public final boolean isConnectionStateSupported;
         private final NettyRequestAdapter request;
         private final AsyncContext asyncContext;
         private volatile ResponseCompleteListener responseCompleteListener;
-        private ConcurrentLinkedQueue<DoneCallback> doneCallbackList;
-        private boolean isLogging;
+        private LinkedList<DoneCallback> doneCallbackList;
 
         private AsyncHandleImpl(NettyRequestAdapter request, AsyncContext asyncContext) {
             this.request = request;
             this.asyncContext = asyncContext;
-            this.doneCallbackList = new ConcurrentLinkedQueue<>();
             this.isConnectionStateSupported = request.connection instanceof ConnectionState;
             if (isConnectionStateSupported) {
                 ((ConnectionState) request.connection).registerConnectionStateListener(this);
             }
-        }
-
-        public void setLogging(boolean logging) {
-            isLogging = logging;
         }
 
         @Override
@@ -491,32 +484,27 @@ class NettyRequestAdapter implements MuRequest {
         }
 
         private void clearDoneCallbackList() {
-            DoneCallback task;
-            while ((task = doneCallbackList.poll()) != null) {
-                try {
-                    task.onComplete(new ClientDisconnectedException());
-                } catch (Throwable throwable) {
-                    log.debug("Exception clearing done callback", throwable);
+            if (doneCallbackList != null) {
+                DoneCallback task;
+                while ((task = doneCallbackList.poll()) != null) {
+                    try {
+                        task.onComplete(new ClientDisconnectedException());
+                    } catch (Throwable throwable) {
+                        log.debug("Exception clearing done callback", throwable);
+                    }
                 }
             }
         }
 
         @Override
         public void onWriteable() throws Exception {
-
-            if (isLogging) {
-                log.info("onWriteable:isWritable={}, doneCallbackList.size={}, bytesBeforeWritable={}, bytesBeforeUnwritable={}",
-                    request.channel.isWritable(), doneCallbackList.size(), request.channel.bytesBeforeWritable(), request.channel.bytesBeforeUnwritable());
-            }
-
             DoneCallback task;
-
             if (!request.channel.isActive()) {
                 clearDoneCallbackList();
                 return;
             }
 
-            while (request.channel.isWritable() && (task = doneCallbackList.poll()) != null) {
+            while (request.channel.isWritable() && doneCallbackList != null && (task = doneCallbackList.poll()) != null) {
                 try {
                     task.onComplete(null);
                 } catch (Throwable throwable) {
@@ -528,9 +516,6 @@ class NettyRequestAdapter implements MuRequest {
         @Override
         public void onConnectionClose() throws Exception {
             this.clearDoneCallbackList();
-            if (isLogging) {
-                log.info("onConnectionClose:doneCallbackList.size={}", doneCallbackList.size());
-            }
         }
 
         @Override
@@ -564,18 +549,10 @@ class NettyRequestAdapter implements MuRequest {
 
         @Override
         public void write(ByteBuffer data, DoneCallback callback) {
-            if (isLogging) {
-                log.info("write: isWritable={}, listSize={}, byteBeforeWritable={}",
-                    request.channel.isWritable(), doneCallbackList.size(), request.channel.bytesBeforeWritable());
-            }
 
             ChannelFuture writeFuture = (ChannelFuture) write(data);
             writeFuture.addListener(future -> {
-                if (isLogging) {
-                    log.info("callback: isSuccess={}, isWritable={}, listSize={}, byteBeforeWritable={}",
-                        future.isSuccess(), request.channel.isWritable(), doneCallbackList.size(), request.channel.bytesBeforeWritable());
-                }
-                /**
+                /*
                  * The DoneCallback are commonly used to trigger writing more data into the target channel,
                  * so we delay the done callback invocation till the target netty channel become writable,
                  * in this way we prevent OOM for fast producer / slow consumer scenario.
@@ -595,9 +572,12 @@ class NettyRequestAdapter implements MuRequest {
                     } else if (!isConnectionStateSupported) {
                         // http 2 not support DoneCallback delay at the moment
                         callback.onComplete(null);
-                    } else if (request.channel.isWritable() && doneCallbackList.size() == 0) {
+                    } else if (request.channel.isWritable() && (doneCallbackList == null || doneCallbackList.isEmpty())) {
                         callback.onComplete(null);
                     } else {
+                        if (doneCallbackList == null) {
+                            doneCallbackList = new LinkedList<>();
+                        }
                         doneCallbackList.add(callback);
                     }
                 } catch (Throwable e) {
