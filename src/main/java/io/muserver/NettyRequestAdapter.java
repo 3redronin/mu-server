@@ -454,15 +454,21 @@ class NettyRequestAdapter implements MuRequest {
     }
 
 
-    private static class AsyncHandleImpl implements AsyncHandle {
+    static class AsyncHandleImpl implements AsyncHandle, ConnectionState.Listener {
 
+        public final boolean isConnectionStateSupported;
         private final NettyRequestAdapter request;
         private final AsyncContext asyncContext;
-        private volatile  ResponseCompleteListener responseCompleteListener;
+        private volatile ResponseCompleteListener responseCompleteListener;
+        private LinkedList<DoneCallback> doneCallbackList;
 
         private AsyncHandleImpl(NettyRequestAdapter request, AsyncContext asyncContext) {
             this.request = request;
             this.asyncContext = asyncContext;
+            this.isConnectionStateSupported = request.connection instanceof ConnectionState;
+            if (isConnectionStateSupported) {
+                ((ConnectionState) request.connection).registerConnectionStateListener(this);
+            }
         }
 
         @Override
@@ -475,6 +481,41 @@ class NettyRequestAdapter implements MuRequest {
                     request.inputStream.switchToListener(readListener);
                 }
             }
+        }
+
+        private void clearDoneCallbackList() {
+            if (doneCallbackList != null) {
+                DoneCallback task;
+                while ((task = doneCallbackList.poll()) != null) {
+                    try {
+                        task.onComplete(new ClientDisconnectedException());
+                    } catch (Throwable throwable) {
+                        log.debug("Exception clearing done callback", throwable);
+                    }
+                }
+            }
+        }
+
+        @Override
+        public void onWriteable() throws Exception {
+            DoneCallback task;
+            if (!request.channel.isActive()) {
+                clearDoneCallbackList();
+                return;
+            }
+
+            while (request.channel.isWritable() && doneCallbackList != null && (task = doneCallbackList.poll()) != null) {
+                try {
+                    task.onComplete(null);
+                } catch (Throwable throwable) {
+                    log.debug("Exception on completing task", throwable);
+                }
+            }
+        }
+
+        @Override
+        public void onConnectionClose() throws Exception {
+            this.clearDoneCallbackList();
         }
 
         @Override
@@ -508,13 +549,36 @@ class NettyRequestAdapter implements MuRequest {
 
         @Override
         public void write(ByteBuffer data, DoneCallback callback) {
+
             ChannelFuture writeFuture = (ChannelFuture) write(data);
             writeFuture.addListener(future -> {
+                /*
+                 * The DoneCallback are commonly used to trigger writing more data into the target channel,
+                 * so we delay the done callback invocation till the target netty channel become writable,
+                 * in this way we prevent OOM for fast producer / slow consumer scenario.
+                 *
+                 * We use a doneCallbackList here to make sure the done callback being invoked in the same
+                 * order as it come in. the doneCallbackList operation are all within same netty event loop thread,
+                 * so we LinkedList rather than ConcurrentQueue for it.
+                 *
+                 * Threading related:
+                 * 1. (ChannelFuture) write(data) run in mu-server thread.
+                 * 2. callback in "writeFuture.addListener(callback)" run the netty event loop thread.
+                 *
+                 */
                 try {
-                    if (future.isSuccess()) {
+                    if (!future.isSuccess()) {
+                        callback.onComplete(future.cause());
+                    } else if (!isConnectionStateSupported) {
+                        // http 2 not support DoneCallback delay at the moment
+                        callback.onComplete(null);
+                    } else if (request.channel.isWritable() && (doneCallbackList == null || doneCallbackList.isEmpty())) {
                         callback.onComplete(null);
                     } else {
-                        callback.onComplete(future.cause());
+                        if (doneCallbackList == null) {
+                            doneCallbackList = new LinkedList<>();
+                        }
+                        doneCallbackList.add(callback);
                     }
                 } catch (Throwable e) {
                     log.warn("Unhandled exception from write callback", e);
