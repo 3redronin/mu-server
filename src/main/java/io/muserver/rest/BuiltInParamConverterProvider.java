@@ -54,7 +54,6 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
     @Override
     public <T> ParamConverter getConverter(Class<T> rawType, Type genericType, Annotation[] annotations) {
 
-
         if (String.class.isAssignableFrom(rawType)) {
             return stringParamConverter;
         }
@@ -276,9 +275,9 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
 
         static <T> StaticMethodConverter<T> tryToCreate(Class clazz) {
             Method[] declaredMethods = clazz.getDeclaredMethods();
-            Method staticMethod = getPublicStaticMethodNamed(clazz, declaredMethods, "valueOf");
+            Method staticMethod = getSingleParamPublicStaticMethodNamed(clazz, declaredMethods, "valueOf");
             if (staticMethod == null) {
-                staticMethod = getPublicStaticMethodNamed(clazz, declaredMethods, "fromString");
+                staticMethod = getSingleParamPublicStaticMethodNamed(clazz, declaredMethods, "fromString");
             }
             if (staticMethod == null) {
                 return null;
@@ -287,12 +286,12 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
             return new StaticMethodConverter<>(staticMethod);
         }
 
-        private static Method getPublicStaticMethodNamed(Class clazz, Method[] declaredMethods, String name) {
+        private static Method getSingleParamPublicStaticMethodNamed(Class clazz, Method[] declaredMethods, String name) {
             Method staticMethod = null;
             for (Method method : declaredMethods) {
                 int modifiers = method.getModifiers();
                 if (Modifier.isStatic(modifiers) && Modifier.isPublic(modifiers) && method.getReturnType().equals(clazz)) {
-                    if (method.getName().equals(name)) {
+                    if (method.getName().equals(name) && method.getParameterCount() == 1 && CharSequence.class.isAssignableFrom(method.getParameterTypes()[0])) {
                         staticMethod = method;
                         break;
                     }

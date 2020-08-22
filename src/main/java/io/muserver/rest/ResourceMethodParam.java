@@ -1,5 +1,6 @@
 package io.muserver.rest;
 
+import io.muserver.MuException;
 import io.muserver.MuRequest;
 import io.muserver.UploadedFile;
 import io.muserver.openapi.ExternalDocumentationObject;
@@ -15,6 +16,7 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
+import java.lang.reflect.WildcardType;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -215,6 +217,10 @@ abstract class ResourceMethodParam {
     private static ParamConverter<?> getParamConverter(Parameter parameterHandle, List<ParamConverterProvider> paramConverterProviders) {
         Class<?> paramType = parameterHandle.getType();
         Type parameterizedType = parameterHandle.getParameterizedType();
+        if (parameterizedType instanceof WildcardType) {
+            // In Kotlin, enums come through as wildcard types
+            parameterizedType = ((WildcardType) parameterizedType).getUpperBounds()[0];
+        }
         Annotation[] declaredAnnotations = parameterHandle.getDeclaredAnnotations();
         for (ParamConverterProvider paramConverterProvider : paramConverterProviders) {
             ParamConverter<?> converter = paramConverterProvider.getConverter(paramType, parameterizedType, declaredAnnotations);
@@ -222,7 +228,7 @@ abstract class ResourceMethodParam {
                 return converter;
             }
         }
-        throw new WebApplicationException("Could not find a suitable ParamConverter for " + paramType);
+        throw new MuException("Could not find a suitable ParamConverter for " + parameterizedType + " at " + parameterHandle.getDeclaringExecutable());
     }
 
     private static Object getDefaultValue(Parameter parameterHandle, ParamConverter<?> converter, boolean lazyDefaultValue) {

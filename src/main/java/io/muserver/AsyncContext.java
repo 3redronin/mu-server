@@ -23,7 +23,7 @@ public class AsyncContext implements ResponseInfo {
     public Object state;
 
     GrowableByteBufferInputStream requestBody;
-    private AtomicBoolean completed = new AtomicBoolean(false);
+    private final AtomicBoolean completed = new AtomicBoolean(false);
 
     AsyncContext(MuRequest request, MuResponse response, ResponseCompleteListener completedCallback) {
         this.request = request;
