@@ -89,6 +89,9 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
 
         if (Collection.class.isAssignableFrom(rawType) && genericType instanceof ParameterizedType) {
             Type type = ((ParameterizedType) genericType).getActualTypeArguments()[0];
+            if (type instanceof WildcardType) {
+                type = ((WildcardType)type).getUpperBounds()[0];
+            }
             if (type instanceof Class) {
                 Class genericClass = (Class) type;
                 ParamConverter genericTypeConverter = getConverter(genericClass, type, annotations);

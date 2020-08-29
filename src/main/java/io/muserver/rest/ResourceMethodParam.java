@@ -16,7 +16,6 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
-import java.lang.reflect.WildcardType;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -217,10 +216,6 @@ abstract class ResourceMethodParam {
     private static ParamConverter<?> getParamConverter(Parameter parameterHandle, List<ParamConverterProvider> paramConverterProviders) {
         Class<?> paramType = parameterHandle.getType();
         Type parameterizedType = parameterHandle.getParameterizedType();
-        if (parameterizedType instanceof WildcardType) {
-            // In Kotlin, enums come through as wildcard types
-            parameterizedType = ((WildcardType) parameterizedType).getUpperBounds()[0];
-        }
         Annotation[] declaredAnnotations = parameterHandle.getDeclaredAnnotations();
         for (ParamConverterProvider paramConverterProvider : paramConverterProviders) {
             ParamConverter<?> converter = paramConverterProvider.getConverter(paramType, parameterizedType, declaredAnnotations);

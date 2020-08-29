@@ -335,6 +335,24 @@ public class ResourceMethodParamTest {
 
     }
 
+    @Test
+    public void wildcardEnumsCanBeUsed() throws IOException {
+        @Path("samples")
+        @Produces("text/plain")
+        class Sample {
+            @GET
+            public String getIt(
+                @QueryParam("breeds") List<? extends Breed> breeds) {
+                return breeds.stream().map(b -> b.name()).collect(Collectors.joining(", "));
+            }
+        }
+        server = httpsServerForTest().addHandler(restHandler(new Sample())).start();
+        try (Response resp = call(request().url(server.uri().resolve("/samples?breeds=CHIHUAHUA,YELPER").toString()))) {
+            assertThat(resp.body().string(), equalTo("CHIHUAHUA, YELPER"));
+        }
+    }
+
+
     @SuppressWarnings("unused")
     public static class DogWithValueOf {
         final String name;
