@@ -4,6 +4,7 @@ import io.muserver.MuException;
 import io.muserver.MuServer;
 import okhttp3.FormBody;
 import okhttp3.Response;
+import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
@@ -343,12 +344,21 @@ public class ResourceMethodParamTest {
             @GET
             public String getIt(
                 @QueryParam("breeds") List<? extends Breed> breeds) {
-                return breeds.stream().map(b -> b.name()).collect(Collectors.joining(", "));
+                return breeds.stream().map(Enum::name).collect(Collectors.joining(", "));
             }
         }
-        server = httpsServerForTest().addHandler(restHandler(new Sample())).start();
-        try (Response resp = call(request().url(server.uri().resolve("/samples?breeds=CHIHUAHUA,YELPER").toString()))) {
+        server = httpsServerForTest().addHandler(restHandler(new Sample()).withOpenApiJsonUrl("/openapi.json")).start();
+        try (Response resp = call(request(server.uri().resolve("/samples?breeds=CHIHUAHUA,YELPER")))) {
             assertThat(resp.body().string(), equalTo("CHIHUAHUA, YELPER"));
+        }
+        try (Response resp = call(request(server.uri().resolve("/openapi.json")))) {
+            JSONObject api = new JSONObject(resp.body().string());
+            JSONObject param = (JSONObject) api.query("/paths/~1samples/get/parameters/0/schema");
+            assertThat(param.getString("type"), is("array"));
+            JSONObject items = param.getJSONObject("items");
+            assertThat(items.getBoolean("nullable"), is(false));
+            assertThat(items.getString("type"), is("string"));
+            assertThat(items.getJSONArray("enum"), containsInAnyOrder(Stream.of(Breed.values()).map(Breed::name).toArray()));
         }
     }
 

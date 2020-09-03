@@ -6,6 +6,7 @@ import java.io.File;
 import java.io.InputStream;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
+import java.lang.reflect.WildcardType;
 import java.time.Instant;
 import java.util.*;
 import java.util.regex.Pattern;
@@ -311,6 +312,7 @@ public class SchemaObjectBuilder {
         if (from.equals(void.class) || from.equals(Void.class)) {
             return schemaObject();
         }
+        parameterizedType = getUpperBound(parameterizedType);
         String jsonType = jsonType(from);
         SchemaObjectBuilder schemaObjectBuilder = schemaObject()
             .withType(jsonType)
@@ -327,6 +329,13 @@ public class SchemaObjectBuilder {
         return schemaObjectBuilder;
     }
 
+    private static Type getUpperBound(Type parameterizedType) {
+        if (parameterizedType instanceof WildcardType && ((WildcardType)parameterizedType).getUpperBounds().length > 0) {
+            parameterizedType = ((WildcardType)parameterizedType).getUpperBounds()[0];
+        }
+        return parameterizedType;
+    }
+
     private static SchemaObject itemsFor(Class<?> from, Type parameterizedType, boolean isJsonArray) {
         Class<?> componentType = from.getComponentType();
         if (componentType == null) {
@@ -335,7 +344,7 @@ public class SchemaObjectBuilder {
                 if (parameterizedType instanceof ParameterizedType) {
                     Type[] actualTypeArguments = ((ParameterizedType) parameterizedType).getActualTypeArguments();
                     if (actualTypeArguments.length == 1) {
-                        Type argType = actualTypeArguments[0];
+                        Type argType = getUpperBound(actualTypeArguments[0]);
                         if (argType instanceof Class<?>) {
                             Class<?> argClass = (Class<?>) argType;
                             schemaObjectBuilder = schemaObjectFrom(argClass, null, true);
