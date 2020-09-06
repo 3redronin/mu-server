@@ -5,6 +5,7 @@ import io.muserver.openapi.*;
 
 import java.io.BufferedWriter;
 import java.io.OutputStreamWriter;
+import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
@@ -25,8 +26,10 @@ class OpenApiDocumentor implements MuHandler {
     private final String openApiHtmlUrl;
     private final String openApiHtmlCss;
     private final CORSConfig corsConfig;
+    private final List<SchemaReference> customSchemas;
 
-    OpenApiDocumentor(List<ResourceClass> roots, String openApiJsonUrl, String openApiHtmlUrl, OpenAPIObject openAPIObject, String openApiHtmlCss, CORSConfig corsConfig) {
+    OpenApiDocumentor(List<ResourceClass> roots, String openApiJsonUrl, String openApiHtmlUrl, OpenAPIObject openAPIObject, String openApiHtmlCss, CORSConfig corsConfig, List<SchemaReference> customSchemas) {
+        this.customSchemas = customSchemas;
         notNull("openAPIObject", openAPIObject);
         this.corsConfig = corsConfig;
         this.roots = roots;
@@ -77,13 +80,13 @@ class OpenApiDocumentor implements MuHandler {
                 String opKey = method.httpMethod.name().toLowerCase();
                 OperationObject existing = operations.get(opKey);
                 if (existing == null) {
-                    existing = method.createOperationBuilder()
+                    existing = method.createOperationBuilder(customSchemas)
                         .withOperationId(method.httpMethod.name() + "_" + opPath)
                         .withTags(singletonList(root.tag.name))
                         .withParameters(parameters)
                         .build();
                 } else {
-                    OperationObject curOO = method.createOperationBuilder().build();
+                    OperationObject curOO = method.createOperationBuilder(customSchemas).build();
                     List<ParameterObject> combinedParams = new ArrayList<>(existing.parameters);
                     combinedParams.addAll(parameters);
 
@@ -163,4 +166,27 @@ class OpenApiDocumentor implements MuHandler {
                 "/", rm.pathPattern == null ? null : rm.pathPattern.pathWithoutRegex), "/");
     }
 
+}
+
+class SchemaReference {
+    final String id;
+    final Class<?> type;
+    final Type genericType;
+    final SchemaObject schema;
+
+    SchemaReference(String id, Class<?> type, Type genericType, SchemaObject schema) {
+        this.id = id;
+        this.type = type;
+        this.genericType = genericType;
+        this.schema = schema;
+    }
+
+    static SchemaReference find(List<SchemaReference> references, Class<?> type, Type genericType) {
+        for (SchemaReference reference : references) {
+            if (reference.type.equals(type)) {
+                return reference;
+            }
+        }
+        return null;
+    }
 }

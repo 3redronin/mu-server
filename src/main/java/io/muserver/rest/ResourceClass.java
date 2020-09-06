@@ -34,8 +34,9 @@ class ResourceClass {
     final String pathTemplate;
     final TagObject tag;
     final List<Class<? extends Annotation>> nameBindingAnnotations;
+    private final SchemaObjectCustomizer schemaObjectCustomizer;
 
-    private ResourceClass(UriPattern pathPattern, String pathTemplate, Object resourceInstance, List<MediaType> consumes, List<MediaType> produces, TagObject tag, List<Class<? extends Annotation>> nameBindingAnnotations) {
+    private ResourceClass(UriPattern pathPattern, String pathTemplate, Object resourceInstance, List<MediaType> consumes, List<MediaType> produces, TagObject tag, List<Class<? extends Annotation>> nameBindingAnnotations, SchemaObjectCustomizer schemaObjectCustomizer) {
         this.pathPattern = pathPattern;
         this.pathTemplate = pathTemplate;
         this.resourceClass = resourceInstance.getClass();
@@ -44,6 +45,7 @@ class ResourceClass {
         this.produces = produces;
         this.tag = tag;
         this.nameBindingAnnotations = nameBindingAnnotations;
+        this.schemaObjectCustomizer = schemaObjectCustomizer;
     }
 
     public boolean matches(URI uri) {
@@ -90,7 +92,7 @@ class ResourceClass {
             DescriptionData descriptionData = DescriptionData.fromAnnotation(restMethod, null);
             String pathTemplate = methodPath == null ? null : methodPath.value();
             boolean isDeprecated = annotationSource.isAnnotationPresent(Deprecated.class);
-            resourceMethods.add(new ResourceMethod(this, methodPattern, restMethod, params, httpMethod, pathTemplate, methodProduces, methodConsumes, descriptionData, isDeprecated, methodNameBindingAnnotations));
+            resourceMethods.add(new ResourceMethod(this, methodPattern, restMethod, params, httpMethod, pathTemplate, methodProduces, methodConsumes, schemaObjectCustomizer, descriptionData, isDeprecated, methodNameBindingAnnotations));
         }
         this.resourceMethods = Collections.unmodifiableList(resourceMethods);
     }
@@ -102,7 +104,7 @@ class ResourceClass {
             .collect(toList());
     }
 
-    static ResourceClass fromObject(Object restResource, List<ParamConverterProvider> paramConverterProviders) {
+    static ResourceClass fromObject(Object restResource, List<ParamConverterProvider> paramConverterProviders, SchemaObjectCustomizer schemaObjectCustomizer) {
         Class<?> annotationSource = JaxClassLocator.getClassWithJaxRSAnnotations(restResource.getClass());
         if (annotationSource == null) {
             throw new IllegalArgumentException("The restResource class " + restResource.getClass().getName() + " must have a " + Path.class.getName() + " annotation to be eligible as a REST resource.");
@@ -131,7 +133,7 @@ class ResourceClass {
         List<Class<? extends Annotation>> classLevelNameBindingAnnotations = getNameBindingAnnotations(annotationSource);
 
         TagObject tag = DescriptionData.fromAnnotation(annotationSource, annotationSource.getSimpleName()).toTag();
-        ResourceClass resourceClass = new ResourceClass(pathPattern, path.value(), restResource, consumesList, producesList, tag, classLevelNameBindingAnnotations);
+        ResourceClass resourceClass = new ResourceClass(pathPattern, path.value(), restResource, consumesList, producesList, tag, classLevelNameBindingAnnotations, schemaObjectCustomizer);
         resourceClass.setupMethodInfo(paramConverterProviders);
         return resourceClass;
     }

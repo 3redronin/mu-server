@@ -170,4 +170,85 @@ public class SchemaObject implements JsonWriter {
     public boolean isDeprecated() {
         return deprecated != null && deprecated;
     }
+
+    @Override
+    public String toString() {
+        return "SchemaObject{" +
+            "title='" + title + '\'' +
+            ", multipleOf=" + multipleOf +
+            ", maximum=" + maximum +
+            ", exclusiveMaximum=" + exclusiveMaximum +
+            ", minimum=" + minimum +
+            ", exclusiveMinimum=" + exclusiveMinimum +
+            ", maxLength=" + maxLength +
+            ", minLength=" + minLength +
+            ", pattern=" + pattern +
+            ", maxItems=" + maxItems +
+            ", minItems=" + minItems +
+            ", uniqueItems=" + uniqueItems +
+            ", maxProperties=" + maxProperties +
+            ", minProperties=" + minProperties +
+            ", required=" + required +
+            ", enumValue=" + enumValue +
+            ", type='" + type + '\'' +
+            ", allOf=" + allOf +
+            ", oneOf=" + oneOf +
+            ", anyOf=" + anyOf +
+            ", not=" + not +
+            ", items=" + items +
+            ", properties=" + properties +
+            ", additionalProperties=" + additionalProperties +
+            ", description='" + description + '\'' +
+            ", format='" + format + '\'' +
+            ", defaultValue=" + defaultValue +
+            ", nullable=" + nullable +
+            ", discriminator=" + discriminator +
+            ", readOnly=" + readOnly +
+            ", writeOnly=" + writeOnly +
+            ", xml=" + xml +
+            ", externalDocs=" + externalDocs +
+            ", example=" + example +
+            ", deprecated=" + deprecated +
+            '}';
+    }
+
+    public SchemaObjectBuilder toBuilder() {
+        return new SchemaObjectBuilder()
+            .withTitle(title)
+            .withMultipleOf(multipleOf)
+            .withMaximum(maximum)
+            .withExclusiveMaximum(exclusiveMaximum)
+            .withMinimum(minimum)
+            .withExclusiveMinimum(exclusiveMinimum)
+            .withMaxLength(maxLength)
+            .withMinLength(minLength)
+            .withPattern(pattern)
+            .withMaxItems(maxItems)
+            .withMinItems(minItems)
+            .withUniqueItems(uniqueItems)
+            .withMaxProperties(maxProperties)
+            .withMinProperties(minProperties)
+            .withRequired(required)
+            .withEnumValue(enumValue)
+            .withType(type)
+            .withAllOf(allOf)
+            .withOneOf(oneOf)
+            .withAnyOf(anyOf)
+            .withNot(not)
+            .withItems(items)
+            .withProperties(properties)
+            .withAdditionalProperties(additionalProperties)
+            .withDescription(description)
+            .withFormat(format)
+            .withDefaultValue(defaultValue)
+            .withNullable(nullable)
+            .withDiscriminator(discriminator)
+            .withReadOnly(readOnly)
+            .withWriteOnly(writeOnly)
+            .withXml(xml)
+            .withExternalDocs(externalDocs)
+            .withExample(example)
+            .withDeprecated(deprecated);
+    }
+
 }

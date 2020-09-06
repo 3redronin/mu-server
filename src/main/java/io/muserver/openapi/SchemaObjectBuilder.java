@@ -58,6 +58,146 @@ public class SchemaObjectBuilder {
     private Object example;
     private Boolean deprecated;
 
+    public String title() {
+        return title;
+    }
+
+    public Double multipleOf() {
+        return multipleOf;
+    }
+
+    public Double maximum() {
+        return maximum;
+    }
+
+    public Boolean exclusiveMaximum() {
+        return exclusiveMaximum;
+    }
+
+    public Double minimum() {
+        return minimum;
+    }
+
+    public Boolean exclusiveMinimum() {
+        return exclusiveMinimum;
+    }
+
+    public Integer maxLength() {
+        return maxLength;
+    }
+
+    public Integer minLength() {
+        return minLength;
+    }
+
+    public Pattern pattern() {
+        return pattern;
+    }
+
+    public Integer maxItems() {
+        return maxItems;
+    }
+
+    public Integer minItems() {
+        return minItems;
+    }
+
+    public Boolean uniqueItems() {
+        return uniqueItems;
+    }
+
+    public Integer maxProperties() {
+        return maxProperties;
+    }
+
+    public Integer minProperties() {
+        return minProperties;
+    }
+
+    public List<String> required() {
+        return required;
+    }
+
+    public List<Object> enumValue() {
+        return enumValue;
+    }
+
+    public String type() {
+        return type;
+    }
+
+    public List<SchemaObject> allOf() {
+        return allOf;
+    }
+
+    public List<SchemaObject> oneOf() {
+        return oneOf;
+    }
+
+    public List<SchemaObject> anyOf() {
+        return anyOf;
+    }
+
+    public List<SchemaObject> not() {
+        return not;
+    }
+
+    public SchemaObject items() {
+        return items;
+    }
+
+    public Map<String, SchemaObject> properties() {
+        return properties;
+    }
+
+    public Object additionalProperties() {
+        return additionalProperties;
+    }
+
+    public String description() {
+        return description;
+    }
+
+    public String format() {
+        return format;
+    }
+
+    public Object defaultValue() {
+        return defaultValue;
+    }
+
+    public Boolean nullable() {
+        return nullable;
+    }
+
+    public DiscriminatorObject discriminator() {
+        return discriminator;
+    }
+
+    public Boolean readOnly() {
+        return readOnly;
+    }
+
+    public Boolean writeOnly() {
+        return writeOnly;
+    }
+
+    public XmlObject xml() {
+        return xml;
+    }
+
+    public ExternalDocumentationObject externalDocs() {
+        return externalDocs;
+    }
+
+    public Object example() {
+        return example;
+    }
+
+    public Boolean deprecated() {
+        return deprecated;
+    }
+
     public SchemaObjectBuilder withTitle(String title) {
         this.title = title;
         return this;
@@ -309,6 +449,7 @@ public class SchemaObjectBuilder {
      * @return A new builder
      */
     public static SchemaObjectBuilder schemaObjectFrom(Class<?> from, Type parameterizedType, boolean required) {
+        Objects.requireNonNull(from, "from");
         if (from.equals(void.class) || from.equals(Void.class)) {
             return schemaObject();
         }
@@ -402,5 +543,44 @@ public class SchemaObjectBuilder {
             || InputStream.class.isAssignableFrom(type) || (type.isArray() && type.getComponentType().equals(byte.class));
     }
 
-
+    @Override
+    public String toString() {
+        return "SchemaObjectBuilder{" +
+            "title='" + title + '\'' +
+            ", multipleOf=" + multipleOf +
+            ", maximum=" + maximum +
+            ", exclusiveMaximum=" + exclusiveMaximum +
+            ", minimum=" + minimum +
+            ", exclusiveMinimum=" + exclusiveMinimum +
+            ", maxLength=" + maxLength +
+            ", minLength=" + minLength +
+            ", pattern=" + pattern +
+            ", maxItems=" + maxItems +
+            ", minItems=" + minItems +
+            ", uniqueItems=" + uniqueItems +
+            ", maxProperties=" + maxProperties +
+            ", minProperties=" + minProperties +
+            ", required=" + required +
+            ", enumValue=" + enumValue +
+            ", type='" + type + '\'' +
+            ", allOf=" + allOf +
+            ", oneOf=" + oneOf +
+            ", anyOf=" + anyOf +
+            ", not=" + not +
+            ", items=" + items +
+            ", properties=" + properties +
+            ", additionalProperties=" + additionalProperties +
+            ", description='" + description + '\'' +
+            ", format='" + format + '\'' +
+            ", defaultValue=" + defaultValue +
+            ", nullable=" + nullable +
+            ", discriminator=" + discriminator +
+            ", readOnly=" + readOnly +
+            ", writeOnly=" + writeOnly +
+            ", xml=" + xml +
+            ", externalDocs=" + externalDocs +
+            ", example=" + example +
+            ", deprecated=" + deprecated +
+            '}';
+    }
 }

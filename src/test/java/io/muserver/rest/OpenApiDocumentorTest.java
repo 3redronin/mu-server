@@ -390,7 +390,6 @@ public class OpenApiDocumentorTest {
         server = httpsServerForTest()
             .addHandler(restHandler(new BodyResource()).withOpenApiJsonUrl("/openapi.json"))
             .start();
-
         try (okhttp3.Response resp = call(request(server.uri().resolve("/openapi.json")))) {
             JSONObject json = new JSONObject(resp.body().string());
 //            System.out.println("json.toString(2) = " + json.toString(2));
@@ -441,12 +440,14 @@ public class OpenApiDocumentorTest {
             JSONObject twoXX = responses.getJSONObject("201").getJSONObject("content").getJSONObject("text/plain;charset=utf-8");
             assertThat(twoXX.get("example"), is("This is an example return value"));
 
-            // although the schema can be guessed occasionally, adding it bloats the UI in swagger-ui so better not to have it
-            assertThat(twoXX.has("schema"), is(false));
+            assertThat(twoXX.query("/schema/format"), is("int32"));
+            assertThat(twoXX.optQuery("/schema/title"), is(nullValue()));
 
             JSONObject twoHundred = responses.getJSONObject("200").getJSONObject("content");
             assertThat(twoHundred
                 .getJSONObject(twoHundred.keySet().stream().findFirst().get()).has("example"), is(false));
+
+
         }
     }
 
@@ -495,12 +496,12 @@ public class OpenApiDocumentorTest {
                 JSONObject _200 = op.getJSONObject("200");
                 assertThat(path, _200.keySet(), hasSize(2));
                 assertThat(path, _200.getString("description"), is("Should have content field"));
-                assertThat(path, _200.getJSONObject("content").getJSONObject(defaultType).keySet(), hasSize(0));
+                assertThat(path, _200.getJSONObject("content").getJSONObject(defaultType).keySet(), contains("schema"));
 
                 JSONObject _201 = op.getJSONObject("201");
                 assertThat(path, _201.keySet(), hasSize(2));
                 assertThat(path, _201.getString("description"), is("Should have content field and type"));
-                assertThat(path, _201.getJSONObject("content").getJSONObject("text/plain").keySet(), hasSize(0));
+                assertThat(path, _201.getJSONObject("content").getJSONObject("text/plain").keySet(), contains("schema"));
 
                 JSONObject _202 = op.getJSONObject("202");
                 assertThat(path, _202.keySet(), hasSize(3));
