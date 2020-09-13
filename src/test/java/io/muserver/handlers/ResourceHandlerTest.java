@@ -146,10 +146,7 @@ public class ResourceHandlerTest {
         try (Response resp = call(request().head().url(url))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.headers().toMultimap(), equalTo(headersFromGET));
-            if (!ClientUtils.isHttp2(resp)) {
-                // TODO: this is broken on okhttpclient until https://github.com/square/okhttp/issues/4948 is fixed
-                assertThat(resp.body().contentLength(), is(0L));
-            }
+            assertThat(resp.body().contentLength(), is(0L));
         }
         try (Response resp = call(request(server.uri().resolve("/a/b/")))) {
             assertThat(resp.code(), is(200));
