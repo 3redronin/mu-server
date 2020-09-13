@@ -104,7 +104,6 @@ class Http2Response extends NettyResponseAdaptor {
 
     @Override
     protected ChannelFuture closeConnection() {
-
         return ctx.channel().close();
     }
 

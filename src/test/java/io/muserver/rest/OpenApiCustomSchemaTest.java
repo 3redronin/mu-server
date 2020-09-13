@@ -81,7 +81,6 @@ public class OpenApiCustomSchemaTest {
             .start();
         try (okhttp3.Response resp = call(request(server.uri().resolve("/openapi.json")))) {
             JSONObject json = new JSONObject(resp.body().string());
-            System.out.println("json.toString(2) = " + json.toString(2));
             assertThat(json.query("/paths/~1blah/get/responses/200/content/application~1json/schema/properties/name/type"), is("string"));
             assertThat(json.query("/paths/~1blah/get/responses/200/content/application~1json/schema").toString(), equalTo(json.query("/paths/~1blah/get/requestBody/content/application~1json/schema").toString()));
         }
