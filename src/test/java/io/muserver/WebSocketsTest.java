@@ -135,15 +135,20 @@ public class WebSocketsTest {
         server = ServerUtils.httpsServerForTest()
             .addHandler(webSocketHandler((request, responseHeaders) -> new BaseWebSocket() {
                 public void onText(String message, DoneCallback onComplete) {
-                    session().sendText("This is message one", ignored ->
-                        session().sendBinary(Mutils.toByteBuffer("Async binary"), error -> {
-                            onComplete.onComplete(error);
-                            if (error == null) {
-                                result.complete("Success");
-                            } else {
-                                result.completeExceptionally(error);
-                            }
-                        }));
+                    session().sendText("This is message one", error1 -> {
+                        if (error1 != null) {
+                            result.completeExceptionally(error1);
+                        } else {
+                            session().sendBinary(Mutils.toByteBuffer("Async binary"), error -> {
+                                onComplete.onComplete(error);
+                                if (error == null) {
+                                    result.complete("Success");
+                                } else {
+                                    result.completeExceptionally(error);
+                                }
+                            });
+                        }
+                    });
                 }
             }).withPath("/routed-websocket"))
             .start();
@@ -154,7 +159,8 @@ public class WebSocketsTest {
         clientSocket.close(1000, "Done");
         assertThat(result.get(10, TimeUnit.SECONDS), is("Success"));
         MuAssert.assertNotTimedOut("Client closed", listener.closedLatch);
-        assertThat(listener.toString(), listener.events, contains("onOpen", "onMessage text: This is message one",
+        assertThat(listener.toString(), listener.events, contains(
+            "onOpen", "onMessage text: This is message one",
             "onMessage binary: Async binary", "onClosing 1000 Done", "onClosed 1000 Done"));
     }
 
