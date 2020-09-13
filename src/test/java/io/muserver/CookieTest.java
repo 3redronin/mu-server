@@ -135,6 +135,7 @@ public class CookieTest {
     public void ifCookiesAreSentAsSeparateHeadersItWorks() throws IOException {
         server = MuServerBuilder.httpServer()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.addCookie(CookieBuilder.newSecureCookie().withName("hi").withValue("bal").build());
                 response.write("START; " + request.cookies().stream().map(Cookie::toString)
                     .collect(Collectors.joining("; "))
                 + "; END");
@@ -148,8 +149,8 @@ public class CookieTest {
             .sendHeader("cookie", "cookie2=somethingelse")
             .endHeaders()
             .flushRequest()) {
-
             assertEventually(rawClient::responseString, endsWith("END"));
+            assertThat(rawClient.responseString(), containsString("set-cookie: hi=bal; Secure; HTTPOnly; SameSite=Strict"));
             assertThat(rawClient.responseString(), endsWith("START; cookie1=something; cookie2=somethingelse; END"));
         }
     }

@@ -92,6 +92,13 @@ public class Cookie {
     }
 
     /**
+     * @return The SameSite value of the cookie, for example "Strict", "Lax", or "None"
+     */
+    public String sameSite() {
+        return nettyCookie.sameSite().name();
+    }
+
+    /**
      *
      * @param maxAgeInSeconds max
      * @deprecated Please create cookies with the {@link CookieBuilder}
@@ -149,7 +156,7 @@ public class Cookie {
     }
 
     /**
-     * Creates a new cookie builder with secure and httpOnly selected.
+     * Creates a new cookie builder with secure, Strict SameSite and httpOnly selected.
      * @return A new builder
      */
     public static CookieBuilder builder() {
