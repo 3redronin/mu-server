@@ -537,6 +537,13 @@ public class ResourceMethodParamTest {
                 if (cats.isEmpty()) return "(empty)";
                 return cats.stream().map(d -> d.name).collect(Collectors.joining(", "));
             }
+
+            @GET
+            @Path("collection")
+            public String getCollection(@QueryParam("cats") Collection<Cat> cats) {
+                if (cats.isEmpty()) return "(empty)";
+                return cats.stream().map(d -> d.name).sorted().collect(Collectors.joining(", "));
+            }
         }
         server = httpsServerForTest().addHandler(restHandler(new Cats())).start();
         try (Response resp = call(request().url(server.uri().resolve("/cats/list?cats=Little&cats=Twinkle").toString()))) {
@@ -546,6 +553,9 @@ public class ResourceMethodParamTest {
             assertThat(resp.body().string(), equalTo("Little, Twinkle"));
         }
         try (Response resp = call(request().url(server.uri().resolve("/cats/sortedSet?cats=Twinkle&cats=Little").toString()))) {
+            assertThat(resp.body().string(), equalTo("Little, Twinkle"));
+        }
+        try (Response resp = call(request().url(server.uri().resolve("/cats/collection?cats=Twinkle&cats=Little").toString()))) {
             assertThat(resp.body().string(), equalTo("Little, Twinkle"));
         }
 
@@ -558,6 +568,10 @@ public class ResourceMethodParamTest {
         try (Response resp = call(request().url(server.uri().resolve("/cats/sortedSet").toString()))) {
             assertThat(resp.body().string(), equalTo("(empty)"));
         }
+        try (Response resp = call(request().url(server.uri().resolve("/cats/collection").toString()))) {
+            assertThat(resp.body().string(), equalTo("(empty)"));
+        }
+
     }
 
     @Test

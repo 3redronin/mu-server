@@ -148,6 +148,8 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
                 supplier = HashSet::new;
             } else if (List.class.equals(collectionType)) {
                 supplier = ArrayList::new;
+            } else if (Collection.class.equals(collectionType)) {
+                supplier = ArrayList::new;
             } else {
                 return null;
             }
