@@ -1,11 +1,16 @@
 package io.muserver;
 
+import io.muserver.rest.RestHandlerBuilder;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.MuAssert;
 import scaffolding.StringUtils;
 
+import javax.ws.rs.GET;
+import javax.ws.rs.Path;
+import javax.ws.rs.Produces;
+import javax.ws.rs.core.StreamingOutput;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -105,12 +110,37 @@ public class GzipTest {
         compareZippedVsNotZipped("/");
     }
 
+    @Test
+    public void jaxRSResponsesAreGZipped() throws IOException {
+        String someText = StringUtils.randomAsciiStringOfLength(8192);
+        @Path("/strings")
+        @Produces("application/json")
+        class StringResource {
+            @GET
+            public String get() {
+                return someText;
+            }
+
+            @GET
+            @Path("streamed")
+            public StreamingOutput streamed() {
+                return output -> output.write(someText.getBytes(UTF_8));
+            }
+
+        }
+        server = httpsServerForTest()
+            .addHandler(RestHandlerBuilder.restHandler(new StringResource()))
+            .start();
+        compareZippedVsNotZipped("/strings");
+        compareZippedVsNotZipped("/strings/streamed");
+    }
+
     private void compareZippedVsNotZipped(String path) throws IOException {
         String unzipped;
         try (Response resp = call(request(server.uri().resolve(path)).header("Accept-Encoding", "hmm, gzip, deflate"))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.headers("content-encoding"), contains("gzip"));
-            assertThat(resp.headers("vary"), contains("accept-encoding"));
+            assertThat(resp.headers("vary"), contains(containsString("accept-encoding")));
             try (ByteArrayOutputStream boas = new ByteArrayOutputStream();
                  InputStream is = new GZIPInputStream(resp.body().byteStream())) {
                 Mutils.copy(is, boas, 8192);
@@ -121,7 +151,7 @@ public class GzipTest {
         try (Response resp = call(request(server.uri().resolve(path)).header("Accept-Encoding", "invalid"))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.header("content-encoding"), is(nullValue()));
-            assertThat(resp.headers("vary"), contains("accept-encoding"));
+            assertThat(resp.headers("vary"), contains(containsString("accept-encoding")));
             assertThat(resp.body().string(), equalTo(unzipped));
         }
     }

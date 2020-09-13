@@ -559,6 +559,19 @@ public class ResourceMethodParamTest {
             assertThat(resp.body().string(), equalTo("Little, Twinkle"));
         }
 
+        try (Response resp = call(request().url(server.uri().resolve("/cats/list?cats=").toString()))) {
+            assertThat(resp.body().string(), equalTo("(empty)"));
+        }
+        try (Response resp = call(request().url(server.uri().resolve("/cats/set?cats=").toString()))) {
+            assertThat(resp.body().string(), equalTo("(empty)"));
+        }
+        try (Response resp = call(request().url(server.uri().resolve("/cats/sortedSet?cats=").toString()))) {
+            assertThat(resp.body().string(), equalTo("(empty)"));
+        }
+        try (Response resp = call(request().url(server.uri().resolve("/cats/collection?cats=").toString()))) {
+            assertThat(resp.body().string(), equalTo("(empty)"));
+        }
+
         try (Response resp = call(request().url(server.uri().resolve("/cats/list").toString()))) {
             assertThat(resp.body().string(), equalTo("(empty)"));
         }
@@ -571,6 +584,7 @@ public class ResourceMethodParamTest {
         try (Response resp = call(request().url(server.uri().resolve("/cats/collection").toString()))) {
             assertThat(resp.body().string(), equalTo("(empty)"));
         }
+
 
     }
 
