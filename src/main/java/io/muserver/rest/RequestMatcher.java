@@ -95,7 +95,7 @@ class RequestMatcher {
             for (MatchedClass mc : candidateClasses) {
                 for (ResourceMethod resourceMethod : mc.resourceClass.resourceMethods) {
                     if (!resourceMethod.isSubResource() && !resourceMethod.isSubResourceLocator()) {
-                        MatchedMethod matchedMethod = new MatchedMethod(mc, resourceMethod, true, mc.pathMatch.params(), mc.pathMatch);
+                        MatchedMethod matchedMethod = new MatchedMethod(mc, resourceMethod, mc.pathMatch.params(), mc.pathMatch);
                         candidates.add(matchedMethod);
                     }
                 }
@@ -105,16 +105,17 @@ class RequestMatcher {
             }
         }
 
+        // (b)  SetE={}
         List<MatchedMethod> candidates = new ArrayList<>();
         for (MatchedClass candidateClass : candidateClasses) {
             for (ResourceMethod resourceMethod : candidateClass.resourceClass.resourceMethods) {
                 if (resourceMethod.isSubResource() || resourceMethod.isSubResourceLocator()) {
                     if (relativeUri != null) {
                         PathMatch matcher = resourceMethod.pathPattern.matcher(relativeUri);
-                        if (matcher.prefixMatches()) {
+                        if (matcher.fullyMatches() || (resourceMethod.isSubResourceLocator() && matcher.prefixMatches())) {
                             Map<String, String> combinedParams = new HashMap<>(candidateClass.pathMatch.params());
                             combinedParams.putAll(matcher.params());
-                            candidates.add(new MatchedMethod(candidateClass, resourceMethod, true, combinedParams, matcher));
+                            candidates.add(new MatchedMethod(candidateClass, resourceMethod, combinedParams, matcher));
                         }
                     }
                 }
@@ -167,14 +168,12 @@ class RequestMatcher {
     static class MatchedMethod {
         final MatchedClass matchedClass;
         final ResourceMethod resourceMethod;
-        final boolean isMatch;
         final Map<String, String> pathParams;
         final PathMatch pathMatch;
 
-        MatchedMethod(MatchedClass matchedClass, ResourceMethod resourceMethod, boolean isMatch, Map<String,String> pathParams, PathMatch pathMatch) {
+        MatchedMethod(MatchedClass matchedClass, ResourceMethod resourceMethod, Map<String,String> pathParams, PathMatch pathMatch) {
             this.matchedClass = matchedClass;
             this.resourceMethod = resourceMethod;
-            this.isMatch = isMatch;
             this.pathParams = pathParams;
             this.pathMatch = pathMatch;
         }
@@ -183,7 +182,6 @@ class RequestMatcher {
         public String toString() {
             return "MatchedMethod{" +
                 "resourceMethod=" + resourceMethod +
-                ", isMatch=" + isMatch +
                 ", pathParams=" + pathParams +
                 '}';
         }

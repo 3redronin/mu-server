@@ -105,6 +105,22 @@ public class JaxMatchingTest {
         }
     }
 
+    @Test
+    public void partialMatchesAreNotIncluded() {
+        @Path("/runners")
+        class Runners {
+            @GET
+            @Path("/{id}")
+            public void id() {}
+        }
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(RestHandlerBuilder.restHandler(new Runners()))
+            .start();
+        try (Response resp = call(request(server.uri().resolve("/runners/myrunner/system")))) {
+            assertThat(resp.code(), is(404));
+        }
+    }
+
     @After
     public void stopIt() {
         MuAssert.stopAndCheck(server);
