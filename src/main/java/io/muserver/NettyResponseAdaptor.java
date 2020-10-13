@@ -219,7 +219,7 @@ abstract class NettyResponseAdaptor implements MuResponse {
             if (badFixedLength) {
                 shouldDisconnect = onBadRequestSent();
             }
-            if (!shouldDisconnect) {
+            if (!forceDisconnect) {
                 lastAction = writeLastContentMarker();
             }
         }

@@ -1,6 +1,9 @@
 package io.muserver;
 
 import okhttp3.Response;
+import org.eclipse.jetty.client.HttpClient;
+import org.eclipse.jetty.client.api.ContentResponse;
+import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.MuAssert;
@@ -14,6 +17,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 
+import static io.muserver.MuServerBuilder.httpsServer;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Arrays.asList;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -175,6 +179,29 @@ public class StreamingTest {
 		assertThat(actual, equalTo(asList("Not Present", "Request body: ")));
 	}
 
+	@Test public void chunkingWorksWithNoKeepalive() throws Exception {
+	    server = httpsServer()
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.contentType("text/plain");
+                response.sendChunk("This ");
+                response.sendChunk("is ");
+                response.sendChunk("a ");
+                response.sendChunk("call");
+            })
+            .start();
+        // This test passes in OkHttpClient 4.9 as it doesn't seem to care about a truncated chunked response
+        SslContextFactory.Client sslContextFactory = new SslContextFactory.Client(true);
+        sslContextFactory.setEndpointIdentificationAlgorithm("https");
+        HttpClient client = new HttpClient(sslContextFactory);
+        client.start();
+        try {
+            ContentResponse get = client.newRequest(server.uri()).header("Connection", "close").send();
+            assertThat(get.getStatus(), is(200));
+            assertThat(get.getContentAsString(), is("This is a call"));
+        } finally {
+            client.stop();
+        }
+    }
 
 	@After public void stopIt() {
         MuAssert.stopAndCheck(server);
