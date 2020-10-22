@@ -168,10 +168,11 @@ class RequestMatcher {
 
             MatchedClass mc = new MatchedClass(subResourceLocator.apply(mm), mm.pathMatch);
 
+            String remainingUrl = mm.pathMatch.lastGroup();
             //Set U to be the value of the final capturing group of R(TL) when matched against U, and set C0 to be the
             //singleton set containing only the class that defines L.
             return stepTwoObtainASetOfCandidateResourceMethodsForTheRequest(
-                relativeUri, Collections.singletonList(mc), subResourceLocator
+                remainingUrl == null ? null : URI.create(remainingUrl), Collections.singletonList(mc), subResourceLocator
             );
         }
 

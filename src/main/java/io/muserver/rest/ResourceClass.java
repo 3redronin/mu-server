@@ -123,6 +123,7 @@ class ResourceClass {
             throw new IllegalArgumentException("The class " + annotationSource.getName() + " must specify a " + Path.class.getName()
                 + " annotation because it has other JAX RS annotations declared. (Note that @Path cannot be inherited if there are other JAX RS annotations declared on this class.)");
         }
+
         UriPattern pathPattern = UriPattern.uriTemplateToRegex(path.value());
 
         Produces produces = annotationSource.getAnnotation(Produces.class);
@@ -139,6 +140,11 @@ class ResourceClass {
         return resourceClass;
     }
 
+    static ResourceClass forSubResourceLocator(ResourceMethod rm, Object instance, SchemaObjectCustomizer schemaObjectCustomizer, List<ParamConverterProvider> paramConverterProviders) {
+        ResourceClass resourceClass = new ResourceClass(rm.pathPattern, rm.pathTemplate, instance, rm.effectiveConsumes, rm.effectiveProduces, rm.resourceClass.tag, rm.resourceClass.nameBindingAnnotations, schemaObjectCustomizer);
+        resourceClass.setupMethodInfo(paramConverterProviders);
+        return resourceClass;
+    }
 
     @Override
     public String toString() {
