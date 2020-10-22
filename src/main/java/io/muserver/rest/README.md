@@ -38,7 +38,7 @@ N/A Not applicable as only singletons supported
 ### 3.3 Resource Methods 
 
 - [x] Resource methods implemented with GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD support
-- [ ] Sub-resource Locators not implemented
+- [x] Sub-resource Locators (only supports returning of instantiated objects rather than classes, as MuServer does not instantiate classes for the API user)
 - [ ] Custom HTTP methods not supported.
 
 #### 3.3.1 Visibility 
@@ -84,7 +84,7 @@ N/A Not applicable as only singletons supported
 #### 3.4.1 Sub Resources 
 
 - [x] Sub Resources supported
-- [ ] Sub-resource locators not yet implemented.
+- [x] Sub-resource locators
 
 ### 3.5 Declaring Media Type Capabilities 
 

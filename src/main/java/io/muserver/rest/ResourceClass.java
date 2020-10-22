@@ -70,15 +70,16 @@ class ResourceClass {
         for (java.lang.reflect.Method restMethod : methods) {
             java.lang.reflect.Method annotationSource = JaxMethodLocator.getMethodThatHasJaxRSAnnotations(restMethod);
             Method httpMethod = ResourceMethod.getMuMethod(annotationSource);
-            if (httpMethod == null) {
-                continue;
-            }
             restMethod.setAccessible(true);
             Path methodPath = annotationSource.getAnnotation(Path.class);
+            if (methodPath == null && httpMethod == null) {
+                continue; // after this, only methods that are (sub)resource-methods or resource locators are processed
+            }
 
             List<Class<? extends Annotation>> methodNameBindingAnnotations = getNameBindingAnnotations(annotationSource);
 
             UriPattern methodPattern = methodPath == null ? null : UriPattern.uriTemplateToRegex(methodPath.value());
+
 
             List<MediaType> methodProduces = MediaTypeDeterminer.supportedProducesTypes(annotationSource);
             List<MediaType> methodConsumes = MediaTypeDeterminer.supportedConsumesTypes(annotationSource);

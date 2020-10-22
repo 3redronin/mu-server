@@ -1,14 +1,24 @@
 package io.muserver.rest;
 
+import io.muserver.Cookie;
+import io.muserver.Headers;
+import io.muserver.HeadersFactory;
 import io.muserver.Method;
+import io.netty.handler.codec.http.HttpHeaderNames;
 import org.junit.Assert;
 import org.junit.Test;
+import scaffolding.NotImplementedMuRequest;
 
 import javax.ws.rs.*;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.ext.ParamConverterProvider;
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static java.util.Arrays.asList;
 import static java.util.Collections.emptyList;
@@ -167,9 +177,9 @@ public class RequestMatcherTest {
 
         ResourceClass resourcePeopleBelts = ResourceClass.fromObject(new Fruit(), paramConverterProviders, customizer);
         RequestMatcher rm = new RequestMatcher(singletonList(resourcePeopleBelts));
-        ResourceMethod getAll = rm.findResourceMethod(Method.GET, "api/fruits", emptyList(), null).resourceMethod;
+        ResourceMethod getAll = findResourceMethod(rm, Method.GET, "api/fruits", emptyList(), null).resourceMethod;
         assertThat(getAll.methodHandle.getName(), equalTo("getAll"));
-        RequestMatcher.MatchedMethod mm = rm.findResourceMethod(Method.GET, "api/fruits/orange", emptyList(), null);
+        RequestMatcher.MatchedMethod mm = findResourceMethod(rm, Method.GET, "api/fruits/orange", emptyList(), null);
         assertThat(mm.resourceMethod.methodHandle.getName(), equalTo("get"));
         assertThat(mm.pathParams.get("name"), equalTo("orange"));
     }
@@ -181,20 +191,24 @@ public class RequestMatcherTest {
         @Path("/foo")
         class Foo {
             @GET
-            public String get() { return ""; }
+            public String get() {
+                return "";
+            }
         }
         @Path("/{s:.*}")
         class OptionsDefault {
             @OPTIONS
-            public String options() { return ""; }
+            public String options() {
+                return "";
+            }
         }
 
         RequestMatcher rm = new RequestMatcher(singletonList(ResourceClass.fromObject(new OptionsDefault(), paramConverterProviders, customizer)));
-        assertThat(rm.findResourceMethod(Method.OPTIONS, "foo", emptyList(), null).resourceMethod.methodHandle.getName(), equalTo("options"));
+        assertThat(findResourceMethod(rm, Method.OPTIONS, "foo", emptyList(), null).resourceMethod.methodHandle.getName(), equalTo("options"));
 
         RequestMatcher rm2 = new RequestMatcher(asList(ResourceClass.fromObject(new Foo(), paramConverterProviders, customizer), ResourceClass.fromObject(new OptionsDefault(), paramConverterProviders, customizer)));
         try {
-            RequestMatcher.MatchedMethod actual = rm2.findResourceMethod(Method.OPTIONS, "foo", emptyList(), null);
+            RequestMatcher.MatchedMethod actual = findResourceMethod(rm2, Method.OPTIONS, "foo", emptyList(), null);
             // NOTE that in this case, default OPTIONS handling should happen, but that's not supported yet so throw an exception instead
             Assert.fail("Should not have gotten a value, but got " + actual);
         } catch (NotAllowedException e) {
@@ -209,11 +223,13 @@ public class RequestMatcherTest {
         class Fruit {
             @GET
             @Path("{fruitType}")
-            public String get() { return ""; }
+            public String get() {
+                return "";
+            }
         }
 
         RequestMatcher rm = new RequestMatcher(singletonList(ResourceClass.fromObject(new Fruit(), paramConverterProviders, customizer)));
-        RequestMatcher.MatchedMethod mm = rm.findResourceMethod(Method.GET, "api/citrus/orange", emptyList(), null);
+        RequestMatcher.MatchedMethod mm = findResourceMethod(rm, Method.GET, "api/citrus/orange", emptyList(), null);
         assertThat(mm.resourceMethod.methodHandle.getName(), equalTo("get"));
         assertThat(mm.pathParams.get("fruitType"), equalTo("orange"));
         assertThat(mm.pathParams.get("fruitFamily"), equalTo("citrus"));
@@ -222,18 +238,22 @@ public class RequestMatcherTest {
 
     @Path("api/{fruitFamily}")
     interface FruitInterface {
+
         @GET
         @Path("{fruitType}")
         String get();
     }
+
     @Test
     public void paramsCanBeDefinedOnTheInterface() throws NotMatchedException {
         class FruitImpl implements FruitInterface {
-            public String get() { return ""; }
+            public String get() {
+                return "";
+            }
         }
 
         RequestMatcher rm = new RequestMatcher(singletonList(ResourceClass.fromObject(new FruitImpl(), paramConverterProviders, customizer)));
-        RequestMatcher.MatchedMethod mm = rm.findResourceMethod(Method.GET, "api/citrus/orange", emptyList(), null);
+        RequestMatcher.MatchedMethod mm = findResourceMethod(rm, Method.GET, "api/citrus/orange", emptyList(), null);
         assertThat(mm.resourceMethod.methodHandle.getName(), equalTo("get"));
         assertThat(mm.pathParams.get("fruitType"), equalTo("orange"));
         assertThat(mm.pathParams.get("fruitFamily"), equalTo("citrus"));
@@ -320,12 +340,12 @@ public class RequestMatcherTest {
     }
 
     private static String nameOf(RequestMatcher rm, List<MediaType> acceptHeaders, String requestBodyContentType) throws NotMatchedException {
-        return rm.findResourceMethod(Method.GET, "pictures", acceptHeaders, requestBodyContentType).resourceMethod.methodHandle.getName();
+        return findResourceMethod(rm, Method.GET, "pictures", acceptHeaders, requestBodyContentType).resourceMethod.methodHandle.getName();
     }
 
     private static void assertNotAcceptable(RequestMatcher rm, List<MediaType> acceptHeaders, String requestBodyContentType) {
         try {
-            RequestMatcher.MatchedMethod found = rm.findResourceMethod(Method.GET, "pictures", acceptHeaders, requestBodyContentType);
+            RequestMatcher.MatchedMethod found = findResourceMethod(rm, Method.GET, "pictures", acceptHeaders, requestBodyContentType);
             Assert.fail("Should have thrown exception but instead got " + found);
         } catch (NotAcceptableException e) {
             assertThat(e.getMessage(), equalTo("HTTP 406 Not Acceptable"));
@@ -333,5 +353,42 @@ public class RequestMatcherTest {
             Assert.fail("Should not throw this type of exception: " + ex);
         }
     }
+
+    private static RequestMatcher.MatchedMethod findResourceMethod(RequestMatcher rm, Method method, String path, List<MediaType> acceptHeaders, String contentBodyType) throws NotMatchedException {
+        NotImplementedMuRequest request = new NotImplementedMuRequest() {
+            @Override
+            public URI uri() {
+                return URI.create("http://localhost/").resolve(path);
+            }
+
+            @Override
+            public Method method() {
+                return method;
+            }
+
+            @Override
+            public String contextPath() {
+                return "/";
+            }
+
+            @Override
+            public Headers headers() {
+                Map<String, Object> entries = new HashMap<>();
+                if (contentBodyType != null) {
+                    entries.put(HttpHeaderNames.CONTENT_TYPE.toString(), contentBodyType);
+                }
+                return HeadersFactory.create(entries);
+            }
+
+            @Override
+            public List<Cookie> cookies() {
+                return emptyList();
+            }
+        };
+        InputStream inputStream = contentBodyType == null ? null : new ByteArrayInputStream("Hello".getBytes(StandardCharsets.US_ASCII));
+        MuContainerRequestContext rc = new MuContainerRequestContext(request, inputStream, request.uri().getPath(), null);
+        return rm.findResourceMethod(rc, method, acceptHeaders, null);
+    }
+
 
 }

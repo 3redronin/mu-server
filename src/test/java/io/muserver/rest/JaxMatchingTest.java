@@ -77,27 +77,27 @@ public class JaxMatchingTest {
         class Thing {
             @GET
             @Path("/{id : \\d+}")
-            public int get(@PathParam("id") int id) {
-                return id;
+            public String get(@PathParam("id") int id) {
+                return "got " + id;
             }
             @DELETE
             @Path("{id}")
             public String delete(@PathParam("id") String id) {
-                return id;
+                return "deleted " + id;
             }
         }
         server = ServerUtils.httpsServerForTest()
             .addHandler(RestHandlerBuilder.restHandler(new Thing()).build())
             .start();
         try (Response resp = call(request(server.uri().resolve("/api/123")))) {
-            assertThat(resp.body().string(), is("123"));
+            assertThat(resp.body().string(), is("got 123"));
         }
         try (Response resp = call(request(server.uri().resolve("/api/hello")))) {
             assertThat(resp.code(), is(405)); // because DELETE is matched
         }
 
         try (Response resp = call(request(server.uri().resolve("/api/hmmm")).delete())) {
-            assertThat(resp.body().string(), is("hmmm"));
+            assertThat(resp.body().string(), is("deleted hmmm"));
         }
         try (Response resp = call(request(server.uri().resolve("/api/123")).delete())) {
             // TODO is this actually expected?

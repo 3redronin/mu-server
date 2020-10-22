@@ -29,7 +29,11 @@ class MuContainerRequestContext implements ContainerRequestContext {
         this.inputStream = inputStream;
         this.relativePath = relativePath;
         this.securityContext = securityContext;
-        this.uriInfo = RestHandler.createUriInfo(relativePath, null, muRequest.uri().resolve(muRequest.contextPath() + "/"), muRequest.uri());
+        String basePath = muRequest.contextPath();
+        if (!basePath.endsWith("/")) {
+            basePath += "/";
+        }
+        this.uriInfo = RestHandler.createUriInfo(relativePath, null, muRequest.uri().resolve(basePath), muRequest.uri());
         this.jaxRequest = new JaxRequest(muRequest);
         this.jaxHeaders = new JaxRsHttpHeadersAdapter(muRequest.headers(), muRequest.cookies());
     }
@@ -189,4 +193,9 @@ class MuContainerRequestContext implements ContainerRequestContext {
     public String toString() {
         return getMethod() + " " + uriInfo;
     }
+
+    String relativePath() {
+        return getUriInfo().getPath(false);
+    }
+
 }

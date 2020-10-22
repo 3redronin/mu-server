@@ -251,7 +251,8 @@ public interface MuRequest {
     /**
      * <p>Specifies that you want to handle this response asynchronously.</p>
      * <p>When finished, call {@link AsyncHandle#complete()}</p>
-     * @return AsyncHandle An object that you can use to mark the response as complete.
+     * <p>If called more than once, then the async handle created from the first call is returned.</p>
+     * @return An object that you can use to mark the response as complete.
      */
     AsyncHandle handleAsync();
 

@@ -279,7 +279,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
 
         FilterManagerThing filterManagerThing = new FilterManagerThing(preMatchRequestFilters, requestFilters, responseFilters);
 
-        return new RestHandler(entityProviders, roots, documentor, customExceptionMapper, filterManagerThing, corsConfig);
+        return new RestHandler(entityProviders, roots, documentor, customExceptionMapper, filterManagerThing, corsConfig, paramConverterProviders, schemaObjectCustomizer);
     }
 
     /**

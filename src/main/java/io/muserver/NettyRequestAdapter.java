@@ -311,7 +311,7 @@ class NettyRequestAdapter implements MuRequest {
     @Override
     public AsyncHandle handleAsync() {
         if (isAsync()) {
-            throw new IllegalStateException("handleAsync called twice for " + this);
+            return asyncHandle;
         }
         asyncHandle = new AsyncHandleImpl(this, nettyAsyncContext);
         return asyncHandle;
