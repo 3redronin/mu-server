@@ -3,6 +3,7 @@ package io.muserver.rest;
 import io.muserver.*;
 import io.muserver.openapi.*;
 
+import javax.ws.rs.ext.ParamConverterProvider;
 import java.io.BufferedWriter;
 import java.io.OutputStreamWriter;
 import java.lang.reflect.Type;
@@ -27,9 +28,13 @@ class OpenApiDocumentor implements MuHandler {
     private final String openApiHtmlCss;
     private final CORSConfig corsConfig;
     private final List<SchemaReference> customSchemas;
+    private final SchemaObjectCustomizer schemaObjectCustomizer;
+    private final List<ParamConverterProvider> paramConverterProviders;
 
-    OpenApiDocumentor(List<ResourceClass> roots, String openApiJsonUrl, String openApiHtmlUrl, OpenAPIObject openAPIObject, String openApiHtmlCss, CORSConfig corsConfig, List<SchemaReference> customSchemas) {
+    OpenApiDocumentor(List<ResourceClass> roots, String openApiJsonUrl, String openApiHtmlUrl, OpenAPIObject openAPIObject, String openApiHtmlCss, CORSConfig corsConfig, List<SchemaReference> customSchemas, SchemaObjectCustomizer schemaObjectCustomizer, List<ParamConverterProvider> paramConverterProviders) {
         this.customSchemas = customSchemas;
+        this.schemaObjectCustomizer = schemaObjectCustomizer;
+        this.paramConverterProviders = paramConverterProviders;
         notNull("openAPIObject", openAPIObject);
         this.corsConfig = corsConfig;
         this.roots = roots;
@@ -51,71 +56,7 @@ class OpenApiDocumentor implements MuHandler {
 
         Map<String, PathItemObject> pathItems = new LinkedHashMap<>();
         for (ResourceClass root : roots) {
-
-            if (!tags.contains(root.tag)) {
-                tags.add(root.tag);
-            }
-
-            for (ResourceMethod method : root.resourceMethods) {
-                String path = getPathWithoutRegex(root, method);
-
-                Map<String, OperationObject> operations;
-                if (pathItems.containsKey(path)) {
-                    operations = pathItems.get(path).operations;
-                } else {
-                    operations = new LinkedHashMap<>();
-                    PathItemObject pathItem = pathItemObject()
-                        .withOperations(operations)
-                        .build();
-                    pathItems.put(path, pathItem);
-                }
-                List<ParameterObject> parameters = method.params.stream()
-                    .filter(p -> p.source.openAPIIn != null && p instanceof ResourceMethodParam.RequestBasedParam)
-                    .map(ResourceMethodParam.RequestBasedParam.class::cast)
-                    .map(p -> p.createDocumentationBuilder().build())
-                    .collect(toList());
-
-                String opIdPath = getPathWithoutRegex(root, method).replace("{", "_").replace("}", "_");
-                String opPath = Mutils.trim(opIdPath, "/").replace("/", "_");
-                String opKey = method.httpMethod.name().toLowerCase();
-                OperationObject existing = operations.get(opKey);
-                if (existing == null) {
-                    existing = method.createOperationBuilder(customSchemas)
-                        .withOperationId(method.httpMethod.name() + "_" + opPath)
-                        .withTags(singletonList(root.tag.name))
-                        .withParameters(parameters)
-                        .build();
-                } else {
-                    OperationObject curOO = method.createOperationBuilder(customSchemas).build();
-                    List<ParameterObject> combinedParams = new ArrayList<>(existing.parameters);
-                    combinedParams.addAll(parameters);
-
-                    Map<String, MediaTypeObject> mergedContent = new HashMap<>();
-                    if (existing.requestBody != null && existing.requestBody.content != null) {
-                        mergedContent.putAll(existing.requestBody.content);
-                    }
-                    if (curOO.requestBody != null) {
-                        mergedContent.putAll(curOO.requestBody.content);
-                    }
-                    OperationObjectBuilder operationObjectBuilder = OperationObjectBuilder.builderFrom(existing)
-                        .withParameters(combinedParams)
-                        .withResponses(mergeResponses(existing.responses, curOO.responses).build())
-                        .withRequestBody(requestBodyObject()
-                            .withRequired(existing.requestBody != null && existing.requestBody.required &&
-                                curOO.requestBody != null && curOO.requestBody.required)
-                            .withDescription(Mutils.coalesce(existing.description, curOO.description))
-                            .withContent(mergedContent)
-                            .build());
-                    if (existing.summary == null && existing.description == null) {
-                        operationObjectBuilder
-                            .withSummary(curOO.summary)
-                            .withDescription(curOO.description);
-                    }
-                    existing = operationObjectBuilder
-                        .build();
-                }
-                operations.put(opKey, existing);
-            }
+            addResourceClass(0, "", tags, pathItems, root);
         }
 
 
@@ -160,10 +101,86 @@ class OpenApiDocumentor implements MuHandler {
         return true;
     }
 
-    static String getPathWithoutRegex(ResourceClass rc, ResourceMethod rm) {
-        return "/" + Mutils.trim(
+    private void addResourceClass(int recursiveLevel, String parentResourcePath, List<TagObject> tags, Map<String, PathItemObject> pathItems, ResourceClass root) {
+        if (recursiveLevel == 5) {
+            return;
+        }
+        if (!tags.contains(root.tag)) {
+            tags.add(root.tag);
+        }
+
+        for (ResourceMethod method : root.resourceMethods) {
+            if (method.isSubResourceLocator()) {
+                ResourceClass rc = ResourceClass.forSubResourceLocator(method, method.methodHandle.getReturnType(), null, schemaObjectCustomizer, paramConverterProviders);
+                String newParentResourcePath = Mutils.join(parentResourcePath, "/", method.resourceClass.pathPattern.pathWithoutRegex);
+                addResourceClass(recursiveLevel + 1, newParentResourcePath, tags, pathItems, rc);
+                continue;
+            }
+
+            String path = getPathWithoutRegex(root, method, parentResourcePath);
+
+            Map<String, OperationObject> operations;
+            if (pathItems.containsKey(path)) {
+                operations = pathItems.get(path).operations;
+            } else {
+                operations = new LinkedHashMap<>();
+                PathItemObject pathItem = pathItemObject()
+                    .withOperations(operations)
+                    .build();
+                pathItems.put(path, pathItem);
+            }
+            List<ParameterObject> parameters = method.params.stream()
+                .filter(p -> p.source.openAPIIn != null && p instanceof ResourceMethodParam.RequestBasedParam)
+                .map(ResourceMethodParam.RequestBasedParam.class::cast)
+                .map(p -> p.createDocumentationBuilder().build())
+                .collect(toList());
+
+            String opIdPath = getPathWithoutRegex(root, method, parentResourcePath).replace("{", "_").replace("}", "_");
+            String opPath = Mutils.trim(opIdPath, "/").replace("/", "_");
+            String opKey = method.httpMethod.name().toLowerCase();
+            OperationObject existing = operations.get(opKey);
+            if (existing == null) {
+                existing = method.createOperationBuilder(customSchemas)
+                    .withOperationId(method.httpMethod.name() + "_" + opPath)
+                    .withTags(singletonList(root.tag.name))
+                    .withParameters(parameters)
+                    .build();
+            } else {
+                OperationObject curOO = method.createOperationBuilder(customSchemas).build();
+                List<ParameterObject> combinedParams = new ArrayList<>(existing.parameters);
+                combinedParams.addAll(parameters);
+
+                Map<String, MediaTypeObject> mergedContent = new HashMap<>();
+                if (existing.requestBody != null && existing.requestBody.content != null) {
+                    mergedContent.putAll(existing.requestBody.content);
+                }
+                if (curOO.requestBody != null) {
+                    mergedContent.putAll(curOO.requestBody.content);
+                }
+                OperationObjectBuilder operationObjectBuilder = OperationObjectBuilder.builderFrom(existing)
+                    .withParameters(combinedParams)
+                    .withResponses(mergeResponses(existing.responses, curOO.responses).build())
+                    .withRequestBody(requestBodyObject()
+                        .withRequired(existing.requestBody != null && existing.requestBody.required &&
+                            curOO.requestBody != null && curOO.requestBody.required)
+                        .withDescription(Mutils.coalesce(existing.description, curOO.description))
+                        .withContent(mergedContent)
+                        .build());
+                if (existing.summary == null && existing.description == null) {
+                    operationObjectBuilder
+                        .withSummary(curOO.summary)
+                        .withDescription(curOO.description);
+                }
+                existing = operationObjectBuilder.build();
+            }
+            operations.put(opKey, existing);
+        }
+    }
+
+    static String getPathWithoutRegex(ResourceClass rc, ResourceMethod rm, String parentResourcePath) {
+        return "/" + Mutils.trim(Mutils.join(parentResourcePath, "/",
             Mutils.join(rc.pathPattern == null ? null : rc.pathPattern.pathWithoutRegex,
-                "/", rm.pathPattern == null ? null : rm.pathPattern.pathWithoutRegex), "/");
+                "/", rm.pathPattern == null ? null : rm.pathPattern.pathWithoutRegex)), "/");
     }
 
 }

@@ -272,7 +272,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
             }
             OpenAPIObjectBuilder openAPIObjectToUse = this.openAPIObject == null ? OpenAPIObjectBuilder.openAPIObject() : this.openAPIObject;
             openAPIObjectToUse.withPaths(pathsObject().build());
-            documentor = new OpenApiDocumentor(roots, openApiJsonUrl, openApiHtmlUrl, openAPIObjectToUse.build(), openApiHtmlCss, corsConfig, new ArrayList<>(customSchemas));
+            documentor = new OpenApiDocumentor(roots, openApiJsonUrl, openApiHtmlUrl, openAPIObjectToUse.build(), openApiHtmlCss, corsConfig, new ArrayList<>(customSchemas), schemaObjectCustomizer, paramConverterProviders);
         }
 
         CustomExceptionMapper customExceptionMapper = new CustomExceptionMapper(exceptionMappers);

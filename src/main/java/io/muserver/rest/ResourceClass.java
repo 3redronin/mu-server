@@ -36,10 +36,10 @@ class ResourceClass {
     final List<Class<? extends Annotation>> nameBindingAnnotations;
     private final SchemaObjectCustomizer schemaObjectCustomizer;
 
-    private ResourceClass(UriPattern pathPattern, String pathTemplate, Object resourceInstance, List<MediaType> consumes, List<MediaType> produces, TagObject tag, List<Class<? extends Annotation>> nameBindingAnnotations, SchemaObjectCustomizer schemaObjectCustomizer) {
+    private ResourceClass(UriPattern pathPattern, String pathTemplate, Class<?> resourceClass, Object resourceInstance, List<MediaType> consumes, List<MediaType> produces, TagObject tag, List<Class<? extends Annotation>> nameBindingAnnotations, SchemaObjectCustomizer schemaObjectCustomizer) {
         this.pathPattern = pathPattern;
         this.pathTemplate = pathTemplate;
-        this.resourceClass = resourceInstance.getClass();
+        this.resourceClass = resourceClass;
         this.resourceInstance = resourceInstance;
         this.consumes = consumes;
         this.produces = produces;
@@ -135,13 +135,13 @@ class ResourceClass {
         List<Class<? extends Annotation>> classLevelNameBindingAnnotations = getNameBindingAnnotations(annotationSource);
 
         TagObject tag = DescriptionData.fromAnnotation(annotationSource, annotationSource.getSimpleName()).toTag();
-        ResourceClass resourceClass = new ResourceClass(pathPattern, path.value(), restResource, consumesList, producesList, tag, classLevelNameBindingAnnotations, schemaObjectCustomizer);
+        ResourceClass resourceClass = new ResourceClass(pathPattern, path.value(), restResource.getClass(), restResource, consumesList, producesList, tag, classLevelNameBindingAnnotations, schemaObjectCustomizer);
         resourceClass.setupMethodInfo(paramConverterProviders);
         return resourceClass;
     }
 
-    static ResourceClass forSubResourceLocator(ResourceMethod rm, Object instance, SchemaObjectCustomizer schemaObjectCustomizer, List<ParamConverterProvider> paramConverterProviders) {
-        ResourceClass resourceClass = new ResourceClass(rm.pathPattern, rm.pathTemplate, instance, rm.effectiveConsumes, rm.effectiveProduces, rm.resourceClass.tag, rm.resourceClass.nameBindingAnnotations, schemaObjectCustomizer);
+    static ResourceClass forSubResourceLocator(ResourceMethod rm, Class<?> instanceClass, Object instance, SchemaObjectCustomizer schemaObjectCustomizer, List<ParamConverterProvider> paramConverterProviders) {
+        ResourceClass resourceClass = new ResourceClass(rm.pathPattern, rm.pathTemplate, instanceClass, instance, rm.effectiveConsumes, rm.effectiveProduces, rm.resourceClass.tag, rm.resourceClass.nameBindingAnnotations, schemaObjectCustomizer);
         resourceClass.setupMethodInfo(paramConverterProviders);
         return resourceClass;
     }

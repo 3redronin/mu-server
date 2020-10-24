@@ -26,7 +26,7 @@ public class SchemaObjectCustomizerContext {
         this.target = requireNonNull(target, "target");
         this.type = requireNonNull(type, "type");
         this.parameterizedType = parameterizedType;
-        this.resource = requireNonNull(resource, "resource");
+        this.resource = resource;
         this.method = method;
         this.parameter = parameter;
         this.mediaType = requireNonNull(mediaType, "mediaType");
@@ -40,6 +40,8 @@ public class SchemaObjectCustomizerContext {
     }
 
     /**
+     * For normal resources, this is the instance passed to the {@link RestHandlerBuilder}. Note that for sub-resources
+     * returned by a sub-resource-locator, this will be null.
      * @return The rest resource that creates or consumes the object being described
      */
     public Object resource() {

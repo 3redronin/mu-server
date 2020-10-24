@@ -35,10 +35,10 @@ public class SubResourceLocatorTest {
             }
         }
 
-        @Path("widgets")
+        @Path("the widgets")
         class WidgetsResource {
             @GET
-            @Path("offers")
+            @Path("the offers")
             public String getDiscounted() {
                 return "discounted";
             }
@@ -52,11 +52,11 @@ public class SubResourceLocatorTest {
             .addHandler(restHandler(new WidgetsResource()))
             .start();
 
-        try (Response resp = call(request(server.uri().resolve("/widgets/xxx")))) {
+        try (Response resp = call(request(server.uri().resolve("/the%20widgets/xxx")))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.body().string(), is("Widget xxx"));
         }
-        try (Response resp = call(request(server.uri().resolve("/widgets/offers")))) {
+        try (Response resp = call(request(server.uri().resolve("/the%20widgets/the%20offers")))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.body().string(), is("discounted"));
         }
@@ -71,14 +71,55 @@ public class SubResourceLocatorTest {
             }
 
             @GET
-            @Path("category/{cat}")
+            @Path("sub category/{cat}")
             public String getDetails(@PathParam("cat") String cat) {
                 return "Widget " + id + " in cat " + cat;
             }
         }
 
-        @Path("widgets")
+        @Path("the widgets")
         @Produces("text/strange")
+        class WidgetsResource {
+            @Path("sub widgets/{id}")
+            public Object findWidget(@PathParam("id") String id) {
+                return new WidgetResource(id);
+            }
+        }
+
+        server = httpsServerForTest()
+            .addHandler(restHandler(new WidgetsResource()))
+            .start();
+
+        try (Response resp = call(request(server.uri().resolve("/the%20widgets/sub%20widgets/xxx/sub%20category/sheep")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.header("content-type"), is("text/strange;charset=utf-8"));
+            assertThat(resp.body().string(), is("Widget xxx in cat sheep"));
+        }
+    }
+
+    @Test
+    public void nestedSubResourcesWork() throws Exception {
+        class WidgetResource {
+            private final String id;
+            public WidgetResource(String id) {
+                this.id = id;
+            }
+
+            @GET
+            @Path("{cat}")
+            public String getDetails(@PathParam("cat") String cat) {
+                return "Widget " + id + " in cat " + cat;
+            }
+
+            @Path("sub/{id}")
+            public Object findWidget(@PathParam("id") String id) {
+                return new WidgetResource(id);
+            }
+
+        }
+
+        @Path("widgets")
+        @Produces("text/plain")
         class WidgetsResource {
             @Path("{id}")
             public Object findWidget(@PathParam("id") String id) {
@@ -90,11 +131,19 @@ public class SubResourceLocatorTest {
             .addHandler(restHandler(new WidgetsResource()))
             .start();
 
-        try (Response resp = call(request(server.uri().resolve("/widgets/xxx/category/sheep")))) {
+        try (Response resp = call(request(server.uri().resolve("/widgets/xxx/sheep")))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.header("content-type"), is("text/strange;charset=utf-8"));
             assertThat(resp.body().string(), is("Widget xxx in cat sheep"));
         }
+        try (Response resp = call(request(server.uri().resolve("/widgets/xxx/sub/abc/sheep")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), is("Widget abc in cat sheep"));
+        }
+        try (Response resp = call(request(server.uri().resolve("/widgets/xxx/sub/abc/sub/def/sheep")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), is("Widget def in cat sheep"));
+        }
+
     }
 
 

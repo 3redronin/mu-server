@@ -745,6 +745,144 @@ public class OpenApiDocumentorTest {
 
     }
 
+    @Test
+    public void subResourceClassesUseTheDeclaredReturnType() throws Exception {
+
+        class DeepestResource {
+            private final String parentId;
+            public DeepestResource(String parentId) {
+                this.parentId = parentId;
+            }
+            @GET
+            @Path("{id}")
+            public String deep(@PathParam("id") String deepId) {
+                return "deep " + parentId + ":" + deepId;
+            }
+
+        }
+
+        class WidgetResource {
+            private final String id;
+
+            public WidgetResource(String id) {
+                this.id = id;
+            }
+
+            @GET
+            @Path("category/{cat}")
+            public String getDetails(@PathParam("cat") String cat) {
+                return "Widget " + id + " in cat " + cat;
+            }
+
+            @Path("deeper/{id}")
+            public DeepestResource recurse(@PathParam("id") String id) {
+                return new DeepestResource(id);
+            }
+        }
+
+        @Path("widgets")
+        @Produces("text/strange")
+        class WidgetsResource {
+            @Path("{id}")
+            public WidgetResource findWidget(@PathParam("id") String id) {
+                return new WidgetResource(id);
+            }
+
+            @GET
+            @Path("/another")
+            public void getIt() {}
+
+        }
+
+        server = httpsServerForTest()
+            .addHandler(context("/context")
+                .addHandler(restHandler(new WidgetsResource()).withOpenApiJsonUrl("/openapi.json"))
+            )
+            .start();
+
+        try (okhttp3.Response resp = call(request(server.uri().resolve("/context/openapi.json")))) {
+            JSONObject doc = new JSONObject(resp.body().string());
+            JSONObject another = (JSONObject)doc.query("/paths/~1widgets~1another/get");
+            assertThat(another.query("/tags/0"), equalTo("WidgetsResource"));
+
+            JSONObject cat = (JSONObject)doc.query("/paths/~1widgets~1{id}~1category~1{cat}/get");
+            assertThat(cat.query("/tags/0"), equalTo("WidgetsResource"));
+
+            JSONObject deep = (JSONObject)doc.query("/paths/~1widgets~1{id}~1deeper~1{id}~1{id}/get");
+            assertThat(deep.query("/tags/0"), equalTo("WidgetsResource"));
+        }
+    }
+
+    @Test
+    public void ifNoJaxRsTypeKnownThenMethodsAreNotAdded() throws Exception {
+        class SubResource {
+            @GET
+            @Path("something")
+            public void inTheWay() { }
+        }
+        @Path("widgets")
+        @Produces("text/strange")
+        class WidgetsResource {
+            @Path("/object")
+            public Object findWidget() {
+                return new SubResource();
+            }
+        }
+        server = httpsServerForTest()
+            .addHandler(restHandler(new WidgetsResource()).withOpenApiJsonUrl("/openapi.json"))
+            .start();
+        try (okhttp3.Response resp = call(request(server.uri().resolve("/openapi.json")))) {
+            JSONObject doc = new JSONObject(resp.body().string());
+            assertThat(doc.optQuery("/paths/~1widgets~1object~1something/get"), is(nullValue()));
+        }
+    }
+
+
+    @Test
+    public void recursiveSubResourcesWork() throws Exception {
+        class WidgetResource {
+            private final String id;
+
+            public WidgetResource(String id) {
+                this.id = id;
+            }
+
+            @GET
+            @Path("category/{cat}")
+            public String getDetails(@PathParam("cat") String cat) {
+                return "Widget " + id + " in cat " + cat;
+            }
+
+            @Path("recursive/{anotherId}")
+            public WidgetResource recurse(@PathParam("anotherId") String id) {
+                return new WidgetResource(id);
+            }
+        }
+
+        @Path("widgets")
+        @Produces("text/strange")
+        class WidgetsResource {
+            @Path("{id}")
+            public WidgetResource findWidget(@PathParam("id") String id) {
+                return new WidgetResource(id);
+            }
+        }
+
+        server = httpsServerForTest()
+            .addHandler(context("/context")
+                .addHandler(restHandler(new WidgetsResource()).withOpenApiJsonUrl("/openapi.json"))
+            )
+            .start();
+
+        try (okhttp3.Response resp = call(request(server.uri().resolve("/context/openapi.json")))) {
+            JSONObject doc = new JSONObject(resp.body().string());
+            assertThat(doc.query("/paths/~1widgets~1{id}~1category~1{cat}/get/tags/0"), equalTo("WidgetsResource"));
+            assertThat(doc.query("/paths/~1widgets~1{id}~1recursive~1{anotherId}~1category~1{cat}/get/tags/0"), equalTo("WidgetsResource"));
+            assertThat(doc.query("/paths/~1widgets~1{id}~1recursive~1{anotherId}~1recursive~1{anotherId}~1category~1{cat}/get/tags/0"), equalTo("WidgetsResource"));
+        }
+    }
+
+
     @After
     public void cleanup() {
         MuAssert.stopAndCheck(server);
