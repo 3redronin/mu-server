@@ -1,23 +1,21 @@
 package io.muserver.rest;
 
 import io.muserver.MuServer;
+import io.muserver.Mutils;
 import okhttp3.MediaType;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.example.MyStringReaderWriter;
 import org.junit.After;
 import org.junit.Test;
-import scaffolding.ClientUtils;
-import scaffolding.ServerUtils;
 
-import javax.ws.rs.GET;
-import javax.ws.rs.POST;
-import javax.ws.rs.Path;
-import javax.ws.rs.WebApplicationException;
+import javax.ws.rs.*;
 import javax.ws.rs.core.GenericEntity;
 import javax.ws.rs.core.MultivaluedMap;
+import javax.ws.rs.ext.MessageBodyReader;
 import javax.ws.rs.ext.MessageBodyWriter;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintStream;
 import java.lang.annotation.Annotation;
@@ -26,10 +24,13 @@ import java.lang.reflect.Type;
 import java.util.List;
 
 import static io.muserver.Mutils.NEWLINE;
+import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static java.util.Arrays.asList;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static scaffolding.ClientUtils.call;
+import static scaffolding.ClientUtils.request;
+import static scaffolding.ServerUtils.httpsServerForTest;
 import static scaffolding.StringUtils.randomStringOfLength;
 
 public class EntityProvidersTest {
@@ -59,12 +60,12 @@ public class EntityProvidersTest {
             }
         }
 
-        this.server = ServerUtils.httpsServerForTest().addHandler(
-            RestHandlerBuilder.restHandler(new Sample())
+        this.server = httpsServerForTest().addHandler(
+            restHandler(new Sample())
                 .addCustomReader(new MyStringReaderWriter())
                 .addCustomWriter(new MyStringReaderWriter())
                 .build()).start();
-        try (Response resp = call(ClientUtils.request()
+        try (Response resp = call(request()
             .post(RequestBody.create(MediaType.parse("text/plain"), "hello world"))
             .url(server.uri().resolve("/samples").toString())
         )) {
@@ -125,25 +126,25 @@ public class EntityProvidersTest {
             }
         }
 
-        this.server = ServerUtils.httpsServerForTest().addHandler(
-            RestHandlerBuilder.restHandler(new Sample())
+        this.server = httpsServerForTest().addHandler(
+            restHandler(new Sample())
                 .addCustomWriter(new DogWriter())
                 .addCustomWriter(new DogListWriter())
                 .build()).start();
-        try (Response resp = call(ClientUtils.request()
+        try (Response resp = call(request()
             .post(RequestBody.create(MediaType.parse("text/plain"), "Little"))
             .url(server.uri().resolve("/dogs").toString())
         )) {
             assertThat(resp.body().string(), equalTo("Dog: Little (Unknown)"));
         }
 
-        try (Response resp = call(ClientUtils.request().url(server.uri().resolve("/dogs/all").toString()))) {
+        try (Response resp = call(request().url(server.uri().resolve("/dogs/all").toString()))) {
             assertThat(resp.body().string(), equalTo("Little (Chihuahua)" + NEWLINE + "Mangle (Mongrel)" + NEWLINE));
         }
     }
 
     private void stringCheck(String requestBodyType, String content, String expectedResponseType, String requestPath) throws IOException {
-        try (Response resp = call(ClientUtils.request()
+        try (Response resp = call(request()
             .post(RequestBody.create(MediaType.parse(requestBodyType), content))
             .url(server.uri().resolve(requestPath).toString())
         )) {
@@ -153,8 +154,65 @@ public class EntityProvidersTest {
         }
     }
 
+    @Test
+    public void customConvertersCanBeUsedInSubResources() throws Exception {
+        class Dog {
+            public final String breed;
+            Dog(String breed) {
+                this.breed = breed;
+            }
+        }
+        class Dogs {
+            @POST
+            public Dog get(Dog input) {
+                return new Dog("Papillon");
+            }
+        }
+        @Path("api")
+        class DogFather {
+            @Path("dogs")
+            public Dogs dogs() {
+                return new Dogs();
+            }
+        }
+        @Produces("text/plain")
+        class DogWriter implements MessageBodyWriter<Dog> {
+            public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, javax.ws.rs.core.MediaType mediaType) {
+                return type.equals(Dog.class);
+            }
+            public void writeTo(Dog dog, Class<?> type, Type genericType, Annotation[] annotations, javax.ws.rs.core.MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException, WebApplicationException {
+                try (PrintStream stream = new PrintStream(entityStream)) {
+                    stream.print("Dog: " + dog.breed);
+                }
+            }
+        }
+        @Consumes("text/plain")
+        class DogReader implements MessageBodyReader<Dog> {
+            @Override
+            public boolean isReadable(Class<?> type, Type genericType, Annotation[] annotations, javax.ws.rs.core.MediaType mediaType) {
+                return type.equals(Dog.class);
+            }
+            @Override
+            public Dog readFrom(Class<Dog> type, Type genericType, Annotation[] annotations, javax.ws.rs.core.MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
+                return new Dog(new String(Mutils.toByteArray(entityStream, 2048), EntityProviders.charsetFor(mediaType)));
+            }
+        }
+
+        this.server = httpsServerForTest().addHandler(
+            restHandler(new DogFather())
+                .addCustomWriter(new DogWriter())
+                .addCustomReader(new DogReader())
+                .build()).start();
+        try (Response resp = call(request()
+            .post(RequestBody.create("Yaptal", MediaType.parse("text/plain")))
+            .url(server.uri().resolve("/api/dogs").toString())
+        )) {
+            assertThat(resp.body().string(), equalTo("Dog: Papillon"));
+        }
+    }
+
     private void startServer(Object restResource) {
-        this.server = ServerUtils.httpsServerForTest().addHandler(RestHandlerBuilder.restHandler(restResource).build()).start();
+        this.server = httpsServerForTest().addHandler(restHandler(restResource).build()).start();
     }
 
     @After

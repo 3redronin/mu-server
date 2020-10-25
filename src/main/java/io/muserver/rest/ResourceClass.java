@@ -126,12 +126,8 @@ class ResourceClass {
 
         UriPattern pathPattern = UriPattern.uriTemplateToRegex(path.value());
 
-        Produces produces = annotationSource.getAnnotation(Produces.class);
-        List<MediaType> producesList = MediaTypeHeaderDelegate.fromStrings(produces == null ? null : asList(produces.value()));
-
-        Consumes consumes = annotationSource.getAnnotation(Consumes.class);
-        List<MediaType> consumesList = MediaTypeHeaderDelegate.fromStrings(consumes == null ? null : asList(consumes.value()));
-
+        List<MediaType> producesList = getProduces(null, annotationSource);
+        List<MediaType> consumesList = getConsumes(null, annotationSource);
         List<Class<? extends Annotation>> classLevelNameBindingAnnotations = getNameBindingAnnotations(annotationSource);
 
         TagObject tag = DescriptionData.fromAnnotation(annotationSource, annotationSource.getSimpleName()).toTag();
@@ -140,11 +136,34 @@ class ResourceClass {
         return resourceClass;
     }
 
+    private static List<MediaType> getProduces(List<MediaType> existing, Class<?> annotationSource) {
+        Produces produces = annotationSource.getAnnotation(Produces.class);
+        List<MediaType> producesList = new ArrayList<>(MediaTypeHeaderDelegate.fromStrings(produces == null ? null : asList(produces.value())));
+        if (existing != null) {
+            producesList.addAll(existing);
+        }
+        return producesList;
+    }
+
+    private static List<MediaType> getConsumes(List<MediaType> existing, Class<?> annotationSource) {
+        Consumes consumes = annotationSource.getAnnotation(Consumes.class);
+        List<MediaType> consumesList = new ArrayList<>(MediaTypeHeaderDelegate.fromStrings(consumes == null ? null : asList(consumes.value())));
+        if (existing != null) {
+            consumesList.addAll(existing);
+        }
+        return consumesList;
+    }
+
     static ResourceClass forSubResourceLocator(ResourceMethod rm, Class<?> instanceClass, Object instance, SchemaObjectCustomizer schemaObjectCustomizer, List<ParamConverterProvider> paramConverterProviders) {
-        ResourceClass resourceClass = new ResourceClass(rm.pathPattern, rm.pathTemplate, instanceClass, instance, rm.effectiveConsumes, rm.effectiveProduces, rm.resourceClass.tag, rm.resourceClass.nameBindingAnnotations, schemaObjectCustomizer);
+        List<MediaType> existingConsumes = rm.effectiveConsumes.isEmpty() || (rm.directlyConsumes.isEmpty() && rm.effectiveConsumes.size() == 1 && rm.effectiveConsumes.get(0) == MediaType.WILDCARD_TYPE) ? null : rm.effectiveConsumes;
+        List<MediaType> consumes = getConsumes(existingConsumes, instanceClass);
+        List<MediaType> existingProduces = rm.effectiveProduces.isEmpty() || (rm.directlyProduces.isEmpty() && rm.effectiveProduces.size() == 1 && rm.effectiveProduces.get(0) == MediaType.WILDCARD_TYPE) ? null : rm.effectiveProduces;
+        List<MediaType> produces = getProduces(existingProduces, instanceClass);
+        ResourceClass resourceClass = new ResourceClass(rm.pathPattern, rm.pathTemplate, instanceClass, instance, consumes, produces, rm.resourceClass.tag, rm.resourceClass.nameBindingAnnotations, schemaObjectCustomizer);
         resourceClass.setupMethodInfo(paramConverterProviders);
         return resourceClass;
     }
+
 
     @Override
     public String toString() {

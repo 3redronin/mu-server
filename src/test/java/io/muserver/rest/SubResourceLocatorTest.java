@@ -13,6 +13,7 @@ import javax.ws.rs.Produces;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
@@ -146,6 +147,29 @@ public class SubResourceLocatorTest {
 
     }
 
+    @Test
+    public void producesCanBeSpecifiedOnTheSubResourceClass() throws Exception {
+        @Produces("text/dog")
+        class Dogs {
+            @GET
+            public String get() {
+                return "Oh, hi doggy";
+            }
+        }
+        @Path("api")
+        class DogFather {
+            @Path("dogs")
+            public Dogs dogs() {
+                return new Dogs();
+            }
+        }
+        this.server = httpsServerForTest().addHandler(restHandler(new DogFather()).build()).start();
+        try (Response resp = call(request(server.uri().resolve("/api/dogs")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.header("content-type"), is("text/dog;charset=utf-8"));
+            assertThat(resp.body().string(), equalTo("Oh, hi doggy"));
+        }
+    }
 
     @After
     public void stop() {

@@ -157,6 +157,36 @@ public class ExceptionsTest {
         }
     }
 
+    @Test
+    public void customExceptionsFromSubResourcesWork() throws Exception {
+
+        class CustomException extends RuntimeException {}
+
+        class SubResource {
+            @GET
+            public void yo() {
+                throw new CustomException();
+            }
+        }
+
+        @Path("samples")
+        class Sample {
+            @Path("/sub")
+            public SubResource getYo() {
+                return new SubResource();
+            }
+        }
+        this.server = ServerUtils.httpsServerForTest()
+            .addHandler(
+                restHandler(new Sample())
+                .addExceptionMapper(CustomException.class, exception -> javax.ws.rs.core.Response.status(414).entity("Custom exception").build())
+            )
+            .start();
+        try (Response resp = call(request(server.uri().resolve("/samples/sub")))) {
+            assertThat(resp.code(), is(414));
+            assertThat(resp.body().string(), containsString("Custom exception"));
+        }
+    }
 
     @After
     public void stop() {

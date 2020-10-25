@@ -32,6 +32,7 @@ class ResourceMethod {
     final Method httpMethod;
     final String pathTemplate;
     final List<MediaType> effectiveConsumes;
+    final List<MediaType> directlyConsumes;
     final List<MediaType> directlyProduces;
     final List<MediaType> effectiveProduces;
     final List<ResourceMethodParam> params;
@@ -48,6 +49,7 @@ class ResourceMethod {
         this.httpMethod = httpMethod;
         this.pathTemplate = pathTemplate;
         this.directlyProduces = produces;
+        this.directlyConsumes = consumes;
         this.schemaObjectCustomizer = schemaObjectCustomizer;
         this.descriptionData = descriptionData;
         this.isDeprecated = isDeprecated;
