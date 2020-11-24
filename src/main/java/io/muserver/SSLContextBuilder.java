@@ -10,11 +10,13 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.X509ExtendedKeyManager;
 import java.io.*;
 import java.security.KeyStore;
+import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Enumeration;
-import java.util.List;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateParsingException;
+import java.security.cert.X509Certificate;
+import java.util.*;
+import java.util.stream.Collectors;
 
 import static java.util.Arrays.asList;
 
@@ -214,6 +216,39 @@ public class SSLContextBuilder {
         }
     }
 
+    static Map<String, String> buildSanToAliasMap(KeyStore keyStore) throws KeyStoreException {
+        Map<String, String> sanToAliasMap = new HashMap<>();
+        Enumeration<String> aliases = keyStore.aliases();
+        while (aliases.hasMoreElements()) {
+            String alias = aliases.nextElement();
+            Certificate certificate = keyStore.getCertificate(alias);
+            if (certificate instanceof X509Certificate) {
+                List<String> sans = getDNSSubjectAlternativeNames((X509Certificate) certificate);
+                for (String san : sans) {
+                    sanToAliasMap.put(san, alias);
+                }
+            }
+        }
+        log.info("keystore san to alias mapping: {}", sanToAliasMap);
+        return sanToAliasMap;
+    }
+
+    static List<String> getDNSSubjectAlternativeNames(X509Certificate cert) {
+        try {
+            return cert.getSubjectAlternativeNames()
+                .stream()
+                .filter(objects -> (objects.size() == 2)
+                    && (objects.get(0) instanceof Integer)
+                    && (objects.get(1) instanceof String)
+                    && objects.get(0).equals(2)) // If type is 2, then we've got a dnsName
+                .map(objects -> (String) objects.get(1))
+                .collect(Collectors.toList());
+        } catch (CertificateParsingException e) {
+            log.warn("can't get subject alternative names from cert {}", cert.toString());
+            return Collections.emptyList();
+        }
+    }
+
     SslContext toNettySslContext(boolean http2) throws Exception {
         SslContextBuilder builder;
         if (sslContext != null) {
@@ -222,6 +257,7 @@ public class SSLContextBuilder {
             ByteArrayInputStream keystoreStream = new ByteArrayInputStream(keystoreBytes);
             KeyManagerFactory kmf;
             String defaultAliasToUse = this.defaultAlias;
+            Map<String, String> sanToAliasMap = new HashMap<>();
             try {
                 KeyStore ks = KeyStore.getInstance(keystoreType);
                 ks.load(keystoreStream, keystorePassword);
@@ -233,6 +269,7 @@ public class SSLContextBuilder {
                 }
                 kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
                 kmf.init(ks, keyPassword);
+                sanToAliasMap.putAll(buildSanToAliasMap(ks));
             } finally {
                 try {
                     keystoreStream.close();
@@ -249,7 +286,7 @@ public class SSLContextBuilder {
             }
             if (x509KeyManager == null)
                 throw new Exception("KeyManagerFactory did not create an X509ExtendedKeyManager");
-            SniKeyManager sniKeyManager = new SniKeyManager(x509KeyManager, defaultAliasToUse);
+            SniKeyManager sniKeyManager = new SniKeyManager(x509KeyManager, defaultAliasToUse, sanToAliasMap);
             builder = SslContextBuilder.forServer(sniKeyManager);
         } else if (keyManagerFactory != null) {
             builder = SslContextBuilder.forServer(keyManagerFactory);
