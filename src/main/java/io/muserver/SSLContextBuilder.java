@@ -229,7 +229,6 @@ public class SSLContextBuilder {
                 }
             }
         }
-        log.info("keystore san to alias mapping: {}", sanToAliasMap);
         return sanToAliasMap;
     }
 
@@ -270,6 +269,7 @@ public class SSLContextBuilder {
                 kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
                 kmf.init(ks, keyPassword);
                 sanToAliasMap.putAll(buildSanToAliasMap(ks));
+                log.info("keystore san to alias mapping: {}", sanToAliasMap);
             } finally {
                 try {
                     keystoreStream.close();
