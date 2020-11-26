@@ -32,6 +32,7 @@ public class DocumentationExamples {
             @GET
             @Path("/dates")
             public LocalDate dates(
+                @QueryParam("uuid") UUID uuid,
                 @QueryParam("instant") Instant instant,
                 @QueryParam("localDate") LocalDate localDate,
                 @QueryParam("localTime") LocalTime localTime,
@@ -44,7 +45,6 @@ public class DocumentationExamples {
             ) {
                 return localDate;
             }
-
         }
 
         MuServer server = MuServerBuilder.muServer()

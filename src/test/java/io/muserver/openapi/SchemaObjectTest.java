@@ -291,4 +291,15 @@ public class SchemaObjectTest {
         schemaObject().withType("array").withItems(schemaObject().build()).withDefaultValue("something").build();
     }
 
+    @Test
+    public void enumsSupported() {
+        SchemaObject enumObj = schemaObjectFrom(MyEnum.class).build();
+        assertThat(enumObj.type, equalTo("string"));
+        assertThat(enumObj.format, nullValue());
+        assertThat(enumObj.enumValue, contains(MyEnum.One, MyEnum.Two));
+    }
+
+    private enum MyEnum {
+        One, Two;
+    }
 }
