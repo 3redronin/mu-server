@@ -2,7 +2,10 @@ package io.muserver.rest;
 
 import io.muserver.MuException;
 import io.muserver.MuServer;
+import io.muserver.Mutils;
 import okhttp3.FormBody;
+import okhttp3.MediaType;
+import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.json.JSONObject;
 import org.junit.After;
@@ -14,6 +17,7 @@ import javax.ws.rs.ext.ParamConverter;
 import javax.ws.rs.ext.ParamConverterProvider;
 import java.io.IOException;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -683,23 +687,63 @@ public class ResourceMethodParamTest {
         @Path("/time")
         class TimeResource {
             @GET
-            @Produces("text/plain")
             public Instant get(@QueryParam("value") Instant value) {
                 return value;
             }
-        }
+            @POST
+            public Instant post(Instant value) {
+                return value;
+            }
 
+        }
         server = httpsServerForTest().addHandler(restHandler(new TimeResource())).start();
         Instant now = Instant.now();
         try (Response resp = call(request(server.uri().resolve("/time?value=" + now)))) {
             assertThat(resp.body().string(), equalTo(now.toString()));
+            assertThat(resp.header("content-type"), equalTo("text/plain;charset=utf-8"));
+        }
+        try (Response resp = call(request(server.uri().resolve("/time")).post(RequestBody.create(now.toString(), MediaType.get("text/plain"))))) {
+            assertThat(resp.body().string(), equalTo(now.toString()));
+            assertThat(resp.header("content-type"), equalTo("text/plain;charset=utf-8"));
+        }
+
+        try (Response resp = call(request(server.uri().resolve("/time")))) {
+            assertThat(resp.body().string(), equalTo(""));
+        }
+        try (Response resp = call(request(server.uri().resolve("/time?value=invalid-date")))) {
+            assertThat(resp.code(), is(400));
+            assertThat(resp.body().string(), containsString(Mutils.htmlEncode("Could not convert String value \"invalid-date\" to a class java.time.Instant using public static java.time.Instant java.time.Instant.parse(java.lang.CharSequence)")));
+        }
+    }
+
+    @Test
+    public void localDateParamsAllowed() throws IOException {
+        @Path("/time")
+        class TimeResource {
+            @GET
+            public LocalDate get(@QueryParam("value") LocalDate value) {
+                return value;
+            }
+            @POST
+            public LocalDate post(LocalDate value) {
+                return value;
+            }
+        }
+        server = httpsServerForTest().addHandler(restHandler(new TimeResource())).start();
+        LocalDate today = LocalDate.now();
+        try (Response resp = call(request(server.uri().resolve("/time?value=" + today)))) {
+            assertThat(resp.body().string(), equalTo(today.toString()));
+        }
+        try (Response resp = call(request(server.uri().resolve("/time")).post(RequestBody.create(today.toString(), MediaType.get("text/plain"))))) {
+            assertThat(resp.body().string(), equalTo(today.toString()));
+            assertThat(resp.header("content-type"), equalTo("text/plain;charset=utf-8"));
         }
         try (Response resp = call(request(server.uri().resolve("/time")))) {
             assertThat(resp.body().string(), equalTo(""));
         }
         try (Response resp = call(request(server.uri().resolve("/time?value=invalid-date")))) {
             assertThat(resp.code(), is(400));
-            assertThat(resp.body().string(), containsString("Instant converter, expecting ISO format dates such as &#x27;2020-03-06T04:43:00.691Z&#x27; on parameter"));
+            assertThat(resp.body().string(), containsString(Mutils.htmlEncode("Could not convert String value \"invalid-date\" to a class java.time.LocalDate using public static java.time.LocalDate java.time.LocalDate.parse(java.lang.CharSequence)")));
         }
     }
 
