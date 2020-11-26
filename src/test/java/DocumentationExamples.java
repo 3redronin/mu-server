@@ -10,23 +10,41 @@ import org.example.petstore.resource.UserResource;
 import org.example.petstore.resource.VehicleResource;
 
 import javax.ws.rs.*;
+import java.time.*;
 import java.util.UUID;
 
 public class DocumentationExamples {
     public static void main(String[] args) {
         @Path("/fruits")
-        @Description(value="Fruits", documentationUrl = "https://fruits.example.org", details = "The details of the request class")
+        @Description(value = "Fruits", documentationUrl = "https://fruits.example.org", details = "The details of the request class")
         class Fruit {
             @POST
             @Produces("text/plain")
-            @Description(value="A method", documentationUrl = "https://get.example.org", details = "The details of the method")
+            @Description(value = "A method", documentationUrl = "https://get.example.org", details = "The details of the method")
             public String all(@QueryParam("jam") @Required @DefaultValue("strawberry") @Description(value = "The jam", example = "Mango", documentationUrl = "http://example.org/looooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong-url", details = "The details of the param")
-                                String jam,
-                            @QueryParam("uuid") UUID uuid,
-                            @Description(value="Anything", details = "The details of the request body", documentationUrl = "https://anything.example.org")
-                            String body) {
+                                  String jam,
+                              @QueryParam("uuid") UUID uuid,
+                              @Description(value = "Anything", details = "The details of the request body", documentationUrl = "https://anything.example.org")
+                                  String body) {
                 return "jam=" + jam + "; uuid=" + uuid + "; body=" + body;
             }
+
+            @GET
+            @Path("/dates")
+            public LocalDate dates(
+                @QueryParam("instant") Instant instant,
+                @QueryParam("localDate") LocalDate localDate,
+                @QueryParam("localTime") LocalTime localTime,
+                @QueryParam("localDateTime") LocalDateTime localDateTime,
+                @QueryParam("offsetTime") OffsetTime offsetTime,
+                @QueryParam("offsetDateTime") OffsetDateTime offsetDateTime,
+                @QueryParam("zonedDateTime") ZonedDateTime zonedDateTime,
+                @QueryParam("year") Year year,
+                @QueryParam("yearMonth") YearMonth yearMonth
+            ) {
+                return localDate;
+            }
+
         }
 
         MuServer server = MuServerBuilder.muServer()
@@ -36,7 +54,7 @@ public class DocumentationExamples {
                     .withOpenApiHtmlUrl("/docs.html")
                     .withOpenApiJsonUrl("/api.json")
                     .withCORS(CORSConfigBuilder.corsConfig().withAllOriginsAllowed()
-                    .withAllowedHeaders("content-type")
+                        .withAllowedHeaders("content-type")
                     )
             ).start();
         System.out.println("Browse documentation at " + server.uri().resolve("/docs.html")

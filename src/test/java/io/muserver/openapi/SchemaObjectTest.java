@@ -5,6 +5,8 @@ import org.junit.Test;
 
 import java.io.*;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.*;
 
 import static io.muserver.openapi.SchemaObjectBuilder.schemaObject;
@@ -146,8 +148,8 @@ public class SchemaObjectTest {
         assertThat(schema.format, equalTo("uuid"));
         assertThat(schema.pattern.pattern(), equalTo("[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]"));
         assertThat(schema.nullable, is(true));
+        assertThat(schema.example, instanceOf(UUID.class));
     }
-
 
     @Test
     public void itCanPresetbytes() {
@@ -172,6 +174,24 @@ public class SchemaObjectTest {
         assertThat(schema.type, equalTo("string"));
         assertThat(schema.format, equalTo("date-time"));
         assertThat(schema.nullable, is(true));
+        assertThat(schema.example, instanceOf(Instant.class));
+    }
+
+    @Test
+    public void itCanPresetLocalDates() {
+        SchemaObject schema = schemaObjectFrom(LocalDate.class).build();
+        assertThat(schema.type, equalTo("string"));
+        assertThat(schema.format, equalTo("date"));
+        assertThat(schema.nullable, is(true));
+        assertThat(schema.example, instanceOf(LocalDate.class));
+    }
+    @Test
+    public void itCanPresetYearMonth() {
+        SchemaObject schema = schemaObjectFrom(YearMonth.class).build();
+        assertThat(schema.type, equalTo("string"));
+        assertThat(schema.format, nullValue());
+        assertThat(schema.nullable, is(true));
+        assertThat(schema.example, instanceOf(YearMonth.class));
     }
 
     @Test

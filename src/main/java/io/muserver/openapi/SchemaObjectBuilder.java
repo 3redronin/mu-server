@@ -8,6 +8,8 @@ import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.lang.reflect.WildcardType;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.temporal.Temporal;
 import java.util.*;
 import java.util.regex.Pattern;
 
@@ -458,6 +460,7 @@ public class SchemaObjectBuilder {
         SchemaObjectBuilder schemaObjectBuilder = schemaObject()
             .withType(jsonType)
             .withFormat(jsonFormat(from))
+            .withExample(example(from))
             .withNullable(!from.isPrimitive() && !required)
             .withItems(itemsFor(from, parameterizedType, "array".equals(jsonType)));
         if (from.equals(UUID.class)) {
@@ -468,6 +471,17 @@ public class SchemaObjectBuilder {
             schemaObjectBuilder.withEnumValue(asList(enumConstants));
         }
         return schemaObjectBuilder;
+    }
+
+    private static Object example(Class<?> clazz) {
+        if (clazz.equals(UUID.class)) {
+            return UUID.randomUUID();
+        } else if (Temporal.class.isAssignableFrom(clazz)) {
+            try {
+                return clazz.getDeclaredMethod("now").invoke(null);
+            } catch (Exception ignored) { }
+        }
+        return null;
     }
 
     private static Type getUpperBound(Type parameterizedType) {
@@ -502,7 +516,7 @@ public class SchemaObjectBuilder {
 
     private static String jsonType(Class<?> type) {
         if (CharSequence.class.isAssignableFrom(type) || type.equals(byte.class) || type.equals(Byte.class)
-            || type.isAssignableFrom(Date.class) || type.isAssignableFrom(Instant.class) || isBinaryClass(type)
+            || type.isAssignableFrom(Date.class) || Temporal.class.isAssignableFrom(type) || isBinaryClass(type)
             || type.isAssignableFrom(UUID.class) || type.isEnum()) {
             return "string";
         } else if (type.equals(boolean.class) || type.equals(Boolean.class)) {
@@ -530,6 +544,8 @@ public class SchemaObjectBuilder {
             return "byte";
         } else if (type.equals(Date.class) || type.equals(Instant.class)) {
             return "date-time";
+        } else if (type.equals(LocalDate.class)) {
+            return "date";
         } else if (isBinaryClass(type)) {
             return "binary";
         } else if (type.equals(UUID.class)) {
