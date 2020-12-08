@@ -234,7 +234,11 @@ public class SSLContextBuilder {
 
     static List<String> getDNSSubjectAlternativeNames(X509Certificate cert) {
         try {
-            return cert.getSubjectAlternativeNames()
+            Collection<List<?>> subjectAlternativeNames = cert.getSubjectAlternativeNames();
+            if (subjectAlternativeNames == null) {
+                return Collections.emptyList();
+            }
+            return subjectAlternativeNames
                 .stream()
                 .filter(objects -> (objects.size() == 2)
                     && (objects.get(0) instanceof Integer)
