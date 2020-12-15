@@ -7,7 +7,6 @@ import okhttp3.Response;
 import okhttp3.internal.http2.ErrorCode;
 import okhttp3.internal.http2.StreamResetException;
 import okio.BufferedSink;
-import org.jetbrains.annotations.NotNull;
 import org.junit.*;
 import scaffolding.ClientUtils;
 import scaffolding.MuAssert;
@@ -351,7 +350,7 @@ public class MuServerTest {
             }
 
             @Override
-            public void writeTo(@NotNull BufferedSink bufferedSink) throws IOException {
+            public void writeTo(BufferedSink bufferedSink) throws IOException {
                 bufferedSink.writeUtf8("Hello");
                 bufferedSink.flush();
                 try {
