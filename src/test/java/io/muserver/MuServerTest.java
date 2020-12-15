@@ -1,11 +1,15 @@
 package io.muserver;
 
 import io.netty.util.concurrent.DefaultThreadFactory;
+import okhttp3.MediaType;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import okhttp3.internal.http2.ErrorCode;
 import okhttp3.internal.http2.StreamResetException;
+import okio.BufferedSink;
+import org.jetbrains.annotations.NotNull;
 import org.junit.*;
+import scaffolding.ClientUtils;
 import scaffolding.MuAssert;
 import scaffolding.RawClient;
 import scaffolding.ServerUtils;
@@ -332,7 +336,44 @@ public class MuServerTest {
     }
 
     @Test
-    public void idleTimeoutCanBeConfiguredAnd408ReturnedIfResponseNotStarted() throws Exception {
+    public void idleTimeoutCanBeConfiguredAnd408ReturnedIfRequestUploadIsSlow() throws Exception {
+        server = ServerUtils.httpsServerForTest()
+            .withRequestTimeout(50, TimeUnit.MILLISECONDS)
+            .addHandler(Method.POST, "/", (request, response, pathParams) -> {
+                String text = request.readBodyAsString();
+                response.sendChunk(text);
+            })
+            .start();
+        try (Response resp = call(request(server.uri()).post(new RequestBody() {
+            @Override
+            public MediaType contentType() {
+                return MediaType.get("text/plain");
+            }
+
+            @Override
+            public void writeTo(@NotNull BufferedSink bufferedSink) throws IOException {
+                bufferedSink.writeUtf8("Hello");
+                bufferedSink.flush();
+                try {
+                    Thread.sleep(200);
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        }))) {
+            assertThat(resp.code(), is(408)); // HTTP1
+            assertThat(resp.body().string(), containsString("Timed out reading request body"));
+            if (!ClientUtils.isHttp2(resp)) {
+                assertThat(resp.header("connection"), equalTo("close"));
+            }
+        } catch (RuntimeException re) {
+            // HTTP 1 will have killed connections
+            assertThat(re.getCause(), instanceOf(IOException.class));
+        }
+    }
+
+    @Test
+    public void idleTimeoutCanBeConfiguredAndConnectionClosedEvenIfNotAlreadyStarted() throws Exception {
         CompletableFuture<Throwable> exceptionFromServer = new CompletableFuture<>();
         server = ServerUtils.httpsServerForTest()
             .withIdleTimeout(100, TimeUnit.MILLISECONDS)
@@ -346,13 +387,34 @@ public class MuServerTest {
             })
             .start();
         try (Response resp = call(request(server.uri()))) {
-            assertThat(resp.code(), is(408)); // HTTP1
-        } catch (Exception e) {
-            // HTTP2 will result in a canceled stream
-            assertThat(e.getCause(), instanceOf(StreamResetException.class));
-            assertThat(((StreamResetException)e.getCause()).errorCode, is(ErrorCode.CANCEL));
+            Assert.fail("Should not succeed but got " + resp.code());
+        } catch (RuntimeException re) {
+            if (re.getCause() instanceof StreamResetException) {
+                // HTTP2 will result in a canceled stream
+                assertThat(((StreamResetException) re.getCause()).errorCode, is(ErrorCode.CANCEL));
+            } else {
+                // expected on HTTP1
+                assertThat(re.getCause(), instanceOf(IOException.class));
+            }
         }
         assertThat(exceptionFromServer.get(20, TimeUnit.SECONDS), instanceOf(Exception.class));
+    }
+
+
+    @Test
+    public void idleTimeoutCanBeConfiguredAndTimeoutHappensWhenItDoes() throws Exception {
+        server = MuServerBuilder.httpServer()
+            .withIdleTimeout(200, TimeUnit.MILLISECONDS)
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.write("Hi");
+            })
+            .start();
+        RawClient client = RawClient.create(server.uri())
+            .sendStartLine("GET", "/")
+            .sendHeader("host", server.uri().getAuthority())
+            .endHeaders().flushRequest();
+
+        MuAssert.assertEventually(client::isConnected, equalTo(false));
     }
 
     @Test

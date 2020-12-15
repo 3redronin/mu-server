@@ -7,7 +7,6 @@ import java.net.Socket;
 import java.net.URI;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -19,7 +18,6 @@ public class RawClient implements Closeable {
     private BufferedOutputStream request;
     private Socket socket;
     private InputStream response;
-    private final AtomicBoolean isConnected = new AtomicBoolean(false);
     private final AtomicReference<Exception> exception = new AtomicReference<>();
 
     public static RawClient create(URI uri) throws IOException {
@@ -32,7 +30,6 @@ public class RawClient implements Closeable {
         this.socket = new Socket(uri.getHost(), uri.getPort());
         this.request = new BufferedOutputStream(socket.getOutputStream(), 2048);
         this.response = socket.getInputStream();
-        isConnected.set(true);
 
         executorService.submit(() -> {
             byte[] buffer = new byte[8192];
@@ -45,11 +42,13 @@ public class RawClient implements Closeable {
                     }
                 }
             } catch (IOException e) {
-//                System.out.println("Got exception " + e);
                 exception.set(e);
-                isConnected.set(false);
+            } finally {
+                try {
+                    response.close();
+                } catch (IOException ignored) {
+                }
             }
-
         });
     }
 
@@ -69,7 +68,7 @@ public class RawClient implements Closeable {
     }
 
     public boolean isConnected() {
-        return isConnected.get();
+        return !socket.isClosed();
     }
 
     public RawClient sendStartLine(String method, String target) throws IOException {
@@ -122,7 +121,6 @@ public class RawClient implements Closeable {
         close(request);
         close(response);
         close(socket);
-        isConnected.set(false);
     }
 
     private static void close(Closeable closeable) {

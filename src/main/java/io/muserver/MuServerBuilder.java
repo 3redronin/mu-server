@@ -55,6 +55,7 @@ public class MuServerBuilder {
     private String host;
     private SSLContextBuilder sslContextBuilder;
     private Http2Config http2Config;
+    private long requestTimeoutMills = TimeUnit.MINUTES.toMillis(2);
     private long idleTimeoutMills = TimeUnit.MINUTES.toMillis(5);
     private ExecutorService executor;
     private long maxRequestSize = 24 * 1024 * 1024;
@@ -300,13 +301,14 @@ public class MuServerBuilder {
     }
 
     /**
-     * Sets the idle timeout for requests and responses. If no bytes are sent or received within this time then
+     * Sets the idle timeout for connections. If no bytes are sent or received within this time then
      * the connection is closed.
      * <p>The default is 5 minutes.</p>
      *
      * @param duration The allowed timeout duration, or 0 to disable timeouts.
      * @param unit     The unit of the duration.
      * @return This builder
+     * @see #withRequestTimeout(long, TimeUnit)
      */
     public MuServerBuilder withIdleTimeout(long duration, TimeUnit unit) {
         if (duration < 0) {
@@ -314,6 +316,26 @@ public class MuServerBuilder {
         }
         Mutils.notNull("unit", unit);
         this.idleTimeoutMills = unit.toMillis(duration);
+        return this;
+    }
+
+    /**
+     * Sets the idle timeout for reading request bodies. If a slow client that is uploading a request body pauses
+     * for this amount of time, the request will be closed (if the response has not started, the client will receive
+     * a 408 error).
+     * <p>The default is 2 minutes.</p>
+     *
+     * @param duration The allowed timeout duration, or 0 to disable timeouts.
+     * @param unit     The unit of the duration.
+     * @return This builder
+     * @see #withIdleTimeout(long, TimeUnit)
+     */
+    public MuServerBuilder withRequestTimeout(long duration, TimeUnit unit) {
+        if (duration < 0) {
+            throw new IllegalArgumentException("The duration must be 0 or greater");
+        }
+        Mutils.notNull("unit", unit);
+        this.requestTimeoutMills = unit.toMillis(duration);
         return this;
     }
 
@@ -486,7 +508,7 @@ public class MuServerBuilder {
             throw new IllegalArgumentException("No ports were configured. Please call MuServerBuilder.withHttpPort(int) or MuServerBuilder.withHttpsPort(int)");
         }
 
-        ServerSettings settings = new ServerSettings(minimumGzipSize, maxHeadersSize, idleTimeoutMills, maxRequestSize, maxUrlSize, gzipEnabled, mimeTypesToGzip, rateLimiters);
+        ServerSettings settings = new ServerSettings(minimumGzipSize, maxHeadersSize, requestTimeoutMills, maxRequestSize, maxUrlSize, gzipEnabled, mimeTypesToGzip, rateLimiters);
 
         ExecutorService handlerExecutor = this.executor;
         if (handlerExecutor == null) {

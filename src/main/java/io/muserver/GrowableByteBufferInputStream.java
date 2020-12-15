@@ -2,6 +2,8 @@ package io.muserver;
 
 import io.netty.buffer.ByteBuf;
 
+import javax.ws.rs.ClientErrorException;
+import javax.ws.rs.core.Response;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -39,6 +41,7 @@ class GrowableByteBufferInputStream extends InputStream {
                 try {
                     current = queue.poll(readTimeoutMillis, TimeUnit.MILLISECONDS);
                     cur = current;
+                    if (cur == null) throw new ClientErrorException("Timed out reading request body", Response.status(408).header(HeaderNames.CONNECTION.toString(), HeaderValues.CLOSE.toString()).build());
                 } catch (InterruptedException e) {
                     // given the InputStream API, is this the way to handle interuptions?
                     throw new IOException("Thread was interrupted");
