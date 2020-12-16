@@ -352,11 +352,11 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
             } else {
                 AsyncContext asyncContext = getAsyncContext(ctx);
                 boolean activeRequest = asyncContext != null && !asyncContext.isComplete();
-
-                ctx.channel().close();
                 if (activeRequest) {
+                    asyncContext.onCancelled(true);
                     log.info("Closed " + asyncContext.request + " (from " + asyncContext.request.remoteAddress() + ") because the idle timeout specified in MuServerBuilder#withIdleTimeout is exceeded.");
                 } else {
+                    ctx.channel().close();
                     // Can't send a 408 so just closing context. See: https://stackoverflow.com/q/56722103/131578
                     log.info("Closed idle connection to " + (asyncContext == null ? "unknown remote" : asyncContext.request.remoteAddress()));
                 }
