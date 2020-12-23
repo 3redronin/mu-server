@@ -82,6 +82,8 @@ public class RestHandler implements MuHandler {
                 try {
                     Object instance = invokeResourceMethod(requestContext, muResponse, matchedMethod, onSuspended, entityProviders);
                     return ResourceClass.forSubResourceLocator(rm, instance.getClass(), instance, schemaObjectCustomizer, paramConverterProviders);
+                } catch (WebApplicationException wae) {
+                    throw wae;
                 } catch (Exception e) {
                     throw new MuException("Error creating instance returned by sub-resource-locator " + rm.methodHandle, e);
                 }

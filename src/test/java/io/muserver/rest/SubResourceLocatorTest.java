@@ -6,15 +6,11 @@ import org.junit.After;
 import org.junit.Test;
 import scaffolding.MuAssert;
 
-import javax.ws.rs.GET;
-import javax.ws.rs.Path;
-import javax.ws.rs.PathParam;
-import javax.ws.rs.Produces;
+import javax.ws.rs.*;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 import static scaffolding.ServerUtils.httpsServerForTest;
@@ -168,6 +164,22 @@ public class SubResourceLocatorTest {
             assertThat(resp.code(), is(200));
             assertThat(resp.header("content-type"), is("text/dog;charset=utf-8"));
             assertThat(resp.body().string(), equalTo("Oh, hi doggy"));
+        }
+    }
+
+    @Test
+    public void ifTheSubLocatorThrowsAWebApplicationExceptionThenThatIsReturnedToTheClient() throws Exception {
+        @Path("api")
+        class DogFather {
+            @Path("dogs/{id}")
+            public void dogs(@PathParam("id") int id) {
+                throw new NotFoundException("No dog with ID " + id);
+            }
+        }
+        this.server = httpsServerForTest().addHandler(restHandler(new DogFather()).build()).start();
+        try (Response resp = call(request(server.uri().resolve("/api/dogs/6")))) {
+            assertThat(resp.code(), is(404));
+            assertThat(resp.body().string(), containsString("No dog with ID 6"));
         }
     }
 
