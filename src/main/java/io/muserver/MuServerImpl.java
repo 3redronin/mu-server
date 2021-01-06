@@ -4,8 +4,10 @@ import javax.net.ssl.SSLContext;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.util.Collections;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 class MuServerImpl implements MuServer {
 
@@ -129,6 +131,11 @@ class MuServerImpl implements MuServer {
     @Override
     public SSLInfo sslInfo() {
         return sslContextProvider == null ? null : sslContextProvider.sslInfo();
+    }
+
+    @Override
+    public List<RateLimiter> rateLimiters() {
+        return settings.rateLimiters.stream().map(RateLimiter.class::cast).collect(Collectors.toList());
     }
 
     @Override

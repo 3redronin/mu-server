@@ -61,7 +61,7 @@ public class MuServerBuilder {
     private long maxRequestSize = 24 * 1024 * 1024;
     private List<ResponseCompleteListener> responseCompleteListeners;
     private HashedWheelTimer wheelTimer;
-    private List<RateLimiter> rateLimiters;
+    private List<RateLimiterImpl> rateLimiters;
 
     /**
      * @param port The HTTP port to use. A value of 0 will have a random port assigned; a value of -1 will
@@ -464,7 +464,7 @@ public class MuServerBuilder {
             wheelTimer.start();
             rateLimiters = new ArrayList<>();
         }
-        RateLimiter rateLimiter = new RateLimiter(selector, wheelTimer);
+        RateLimiterImpl rateLimiter = new RateLimiterImpl(selector, wheelTimer);
         this.rateLimiters.add(rateLimiter);
         return this;
     }
