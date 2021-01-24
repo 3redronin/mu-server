@@ -114,7 +114,7 @@ class Http1Response extends NettyResponseAdaptor {
     @Override
     public String toString() {
         return "Http1Response{" +
-            "outputState=" + outputState +
+            "outputState=" + outputState() +
             ", status=" + status +
             "}";
     }

@@ -72,8 +72,9 @@ class MuStatsImpl implements MuStats {
     }
 
     void onRequestEnded(MuRequest request) {
-        activeRequests.remove(request);
-        completedRequests.incrementAndGet();
+        if (activeRequests.remove(request)) {
+            completedRequests.incrementAndGet();
+        }
     }
 
     void onRejectedDueToOverload() {

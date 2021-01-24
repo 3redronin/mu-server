@@ -54,7 +54,7 @@ public class UploadTest {
                 .addFormDataPart("Hello", "World")
                 .addFormDataPart("The name", "the value / with / stuff")
                 .addPart(Headers.of("Content-Disposition", "form-data; name=\"image\"; filename=\"guangzhou.jpeg\""),
-                    RequestBody.create(MediaType.parse("image/jpeg"), guangzhou))
+                    RequestBody.create(guangzhou, MediaType.parse("image/jpeg")))
                 .build())
         )) {
             assertThat(resp.code(), is(200));
@@ -129,7 +129,7 @@ public class UploadTest {
             .post(new MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
                 .addPart(Headers.of("Content-Disposition", "form-data; name=\"image\"; filename=\"guangzhou.jpeg\""),
-                    RequestBody.create(MediaType.parse("image/jpeg"), guangzhou))
+                    RequestBody.create(guangzhou, MediaType.parse("image/jpeg")))
                 .build())
         )) {
             assertThat(resp.code(), is(413));

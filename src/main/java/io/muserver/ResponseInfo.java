@@ -13,7 +13,9 @@ public interface ResponseInfo {
 
     /**
      * Indicates whether or not a response completed successfully. Non-successful completion may be due to events
-     * such as the client disconnecting early, or an unhandled exception being called.
+     * such as the client disconnecting early, or a response timing out.
+     * <p>Note: even server errors such as a 500 are considered &quot;successful&quot; if the full response
+     * was sent to the client.</p>
      * @return Returns true if the request was fully read and the response was fully sent to the client.
      */
     boolean completedSuccessfully();

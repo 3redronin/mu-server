@@ -1,17 +1,22 @@
 package io.muserver;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufHolder;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.handler.codec.CorruptedFrameException;
 import io.netty.handler.codec.http.websocketx.*;
+import io.netty.handler.timeout.IdleState;
+import io.netty.handler.timeout.IdleStateEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
+import java.util.concurrent.TimeoutException;
 
-class MuWebSocketSessionImpl implements MuWebSocketSession {
+class MuWebSocketSessionImpl implements MuWebSocketSession, Exchange {
     static final byte[] PING_BYTES = {'m', 'u'};
     private static final Logger log = LoggerFactory.getLogger(MuWebSocketSessionImpl.class);
 
@@ -19,10 +24,12 @@ class MuWebSocketSessionImpl implements MuWebSocketSession {
 
     private final ChannelHandlerContext ctx;
     final MuWebSocket muWebSocket;
+    private final HttpConnection connection;
 
-    MuWebSocketSessionImpl(ChannelHandlerContext ctx, MuWebSocket muWebSocket) {
+    MuWebSocketSessionImpl(ChannelHandlerContext ctx, MuWebSocket muWebSocket, HttpConnection connection) {
         this.ctx = ctx;
         this.muWebSocket = muWebSocket;
+        this.connection = connection;
     }
 
     @Override
@@ -65,7 +72,6 @@ class MuWebSocketSessionImpl implements MuWebSocketSession {
         if (!closeSent) {
             closeSent = true;
             writeAsync(closeFrame, error -> {
-                Http1Connection.clearWebSocket(ctx);
                 ctx.close();
             });
         }
@@ -100,4 +106,103 @@ class MuWebSocketSessionImpl implements MuWebSocketSession {
             });
     }
 
+    @Override
+    public void onMessage(ChannelHandlerContext ctx, Object msg) throws UnexpectedMessageException {
+        if (!(msg instanceof WebSocketFrame)) {
+            throw new UnexpectedMessageException(this, msg);
+        }
+        MuWebSocket muWebSocket = this.muWebSocket;
+        DoneCallback onComplete = error -> {
+            if (error == null) {
+                ctx.channel().read();
+            } else {
+                handleWebsockError(ctx, muWebSocket, error);
+            }
+        };
+        ByteBuf retained = null;
+        try {
+            if (msg instanceof TextWebSocketFrame) {
+                muWebSocket.onText(((TextWebSocketFrame) msg).text(), onComplete);
+            } else if (msg instanceof BinaryWebSocketFrame) {
+                ByteBuf content = ((ByteBufHolder) msg).content();
+                retained = content.retain();
+                muWebSocket.onBinary(content.nioBuffer(), error -> {
+                    content.release();
+                    onComplete.onComplete(error);
+                });
+            } else if (msg instanceof PingWebSocketFrame) {
+                ByteBuf content = ((ByteBufHolder) msg).content();
+                retained = content.retain();
+                muWebSocket.onPing(content.nioBuffer(), error -> {
+                    content.release();
+                    onComplete.onComplete(error);
+                });
+            } else if (msg instanceof PongWebSocketFrame) {
+                ByteBuf content = ((ByteBufHolder) msg).content();
+                retained = content.retain();
+                muWebSocket.onPong(content.nioBuffer(), error -> {
+                    content.release();
+                    onComplete.onComplete(error);
+                });
+            } else if (msg instanceof CloseWebSocketFrame) {
+                CloseWebSocketFrame cwsf = (CloseWebSocketFrame) msg;
+                muWebSocket.onClientClosed(cwsf.statusCode(), cwsf.reasonText());
+                onComplete.onComplete(null);
+            }
+        } catch (Throwable e) {
+            if (retained != null) {
+                retained.release();
+            }
+            handleWebsockError(ctx, muWebSocket, e);
+        }
+    }
+
+    @Override
+    public void onIdleTimeout(ChannelHandlerContext ctx, IdleStateEvent ise) {
+        if (ise.state() == IdleState.READER_IDLE) {
+            try {
+                muWebSocket.onError(new TimeoutException("No messages received on websocket"));
+            } catch (Exception e) {
+                log.warn("Error while processing idle timeout", e);
+                ctx.close();
+            }
+        } else if (ise.state() == IdleState.WRITER_IDLE) {
+            sendPing(ByteBuffer.wrap(MuWebSocketSessionImpl.PING_BYTES), DoneCallback.NoOp);
+        }
+
+    }
+
+    @Override
+    public void onException(ChannelHandlerContext ctx, Throwable cause) {
+        if (cause instanceof CorruptedFrameException) {
+            try {
+                muWebSocket.onError(new WebSocketProtocolException(cause.getMessage(), cause));
+            } catch (Exception e) {
+                ctx.channel().close();
+            }
+        }
+    }
+
+    @Override
+    public void onConnectionEnded(ChannelHandlerContext ctx) {
+        try {
+            muWebSocket.onError(new ClientDisconnectedException());
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void handleWebsockError(ChannelHandlerContext ctx, MuWebSocket muWebSocket, Throwable e) {
+        try {
+            muWebSocket.onError(e);
+        } catch (Exception ex) {
+            log.warn("Exception thrown by " + muWebSocket.getClass() + "#onError so will close connection", ex);
+            ctx.close();
+        }
+    }
+
+
+    @Override
+    public HttpConnection connection() {
+        return connection;
+    }
 }

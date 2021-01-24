@@ -26,7 +26,7 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
 
     private final MuServerImpl server;
     private final NettyHandlerAdapter nettyHandlerAdapter;
-    private final ConcurrentHashMap<Integer, AsyncContext> contexts = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<Integer, HttpExchange> contexts = new ConcurrentHashMap<>();
     private volatile int lastStreamId = 0;
     private final MuStatsImpl connectionStats = new MuStatsImpl(null);
     private InetSocketAddress remoteAddress;
@@ -66,8 +66,8 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
         if (error != null) {
             encoder().writeGoAway(ctx, lastStreamId, error.code(), EMPTY_BUFFER, ctx.channel().newPromise());
         }
-        for (AsyncContext asyncContext : contexts.values()) {
-            asyncContext.onCancelled(true);
+        for (HttpExchange httpExchange : contexts.values()) {
+            httpExchange.onCancelled();
         }
         ctx.close();
     }
@@ -88,13 +88,13 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
     public int onDataRead(ChannelHandlerContext ctx, int streamId, ByteBuf data, int padding, boolean endOfStream) {
         int processed = data.readableBytes() + padding;
 
-        AsyncContext asyncContext = contexts.get(streamId);
-        if (asyncContext == null) {
+        HttpExchange httpExchange = contexts.get(streamId);
+        if (httpExchange == null) {
             log.debug("Got a chunk of message for an unknown request. This can happen when a request is rejected based on headers, and then the rejected body arrives.");
         } else {
-            NettyHandlerAdapter.passDataToHandler(data, asyncContext);
+            NettyHandlerAdapter.passDataToHandler(data, httpExchange, DoneCallback.NoOp);
             if (endOfStream) {
-                nettyHandlerAdapter.onRequestComplete(asyncContext);
+                nettyHandlerAdapter.onRequestComplete(httpExchange);
                 contexts.remove(streamId);
             }
         }
@@ -142,7 +142,7 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
         Http2Headers muHeaders = new Http2Headers(headers, hasRequestBody);
         String host = headers.authority().toString();
         muHeaders.set(HeaderNames.HOST, host);
-        NettyRequestAdapter muReq = new NettyRequestAdapter(ctx, ctx.channel(), nettyReq, muHeaders, server, muMethod, "https", uri, true, host, "HTTP/2", this);
+        NettyRequestAdapter muReq = new NettyRequestAdapter(ctx, ctx.channel(), nettyReq, muHeaders, server, muMethod, "https", uri, true, host, "HTTP/2");
 
         if (settings.block(muReq)) {
             server.stats.onRejectedDueToOverload();
@@ -155,12 +155,13 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
         connectionStats.onRequestStarted(muReq);
         Http2Response resp = new Http2Response(ctx, muReq, new Http2Headers(), encoder(), streamId, settings);
 
-        AsyncContext asyncContext = new AsyncContext(muReq, resp, (info) -> {
-            nettyHandlerAdapter.onResponseComplete(info, server.stats, connectionStats);
+        HttpExchange httpExchange = new HttpExchange(this, nettyHandlerAdapter, muReq, resp);
+        resp.setChangeListener((exchange, newState) -> {
+            nettyHandlerAdapter.onResponseComplete(exchange, server.stats, connectionStats);
             contexts.remove(streamId);
         });
-
-        contexts.put(streamId, asyncContext);
+        muReq.setExchange(httpExchange);
+        contexts.put(streamId, httpExchange);
         DoneCallback addedToExecutorCallback = error -> {
             ctx.channel().read();
             if (error != null) {
@@ -176,7 +177,7 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
                 }
             }
         };
-        nettyHandlerAdapter.onHeaders(addedToExecutorCallback, asyncContext, muHeaders);
+        nettyHandlerAdapter.onHeaders(addedToExecutorCallback, httpExchange, muHeaders);
     }
 
     static CharSequence compressionToUse(Headers requestHeaders) {
@@ -205,9 +206,9 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
 
     @Override
     public void onRstStreamRead(ChannelHandlerContext ctx, int streamId, long errorCode) {
-        AsyncContext asyncContext = contexts.remove(streamId);
-        if (asyncContext != null) {
-            asyncContext.onCancelled(false);
+        HttpExchange httpExchange = contexts.remove(streamId);
+        if (httpExchange != null) {
+            httpExchange.onCancelled();
         }
     }
 

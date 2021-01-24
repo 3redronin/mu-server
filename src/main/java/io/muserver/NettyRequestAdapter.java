@@ -30,11 +30,13 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import static io.muserver.Cookie.nettyToMu;
+import static io.muserver.HttpExchange.dealWithUnhandledException;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Collections.emptyList;
 
 class NettyRequestAdapter implements MuRequest {
     private static final Logger log = LoggerFactory.getLogger(NettyRequestAdapter.class);
+    private RequestState status = RequestState.RECEIVING;
     private final ChannelHandlerContext ctx;
     private final Channel channel;
     private final HttpRequest request;
@@ -43,7 +45,7 @@ class NettyRequestAdapter implements MuRequest {
     private final URI uri;
     private final Method method;
     private final Headers headers;
-    AsyncContext nettyAsyncContext;
+    HttpExchange nettyHttpExchange;
     private GrowableByteBufferInputStream inputStream;
     private final RequestParameters query;
     private RequestParameters form;
@@ -57,17 +59,16 @@ class NettyRequestAdapter implements MuRequest {
     private volatile AsyncHandleImpl asyncHandle;
     private final boolean keepalive;
     private final String protocol;
+    private HttpExchange httpExchange;
     private final long startTime = System.currentTimeMillis();
-    private final HttpConnection connection;
 
-    NettyRequestAdapter(ChannelHandlerContext ctx, Channel channel, HttpRequest request, Headers headers, MuServer server, Method method, String proto, String uri, boolean keepalive, String host, String protocol, HttpConnection connection) {
+    NettyRequestAdapter(ChannelHandlerContext ctx, Channel channel, HttpRequest request, Headers headers, MuServer server, Method method, String proto, String uri, boolean keepalive, String host, String protocol) {
         this.ctx = ctx;
         this.channel = channel;
         this.request = request;
         this.server = server;
         this.keepalive = keepalive;
         this.protocol = protocol;
-        this.connection = connection;
         this.serverUri = URI.create(proto + "://" + host + uri).normalize();
         this.headers = headers;
         this.uri = getUri(headers, proto, host, uri, serverUri);
@@ -87,7 +88,7 @@ class NettyRequestAdapter implements MuRequest {
 
     @Override
     public HttpConnection connection() {
-        return this.connection;
+        return this.httpExchange.connection();
     }
 
     boolean isKeepAliveRequested() {
@@ -159,7 +160,7 @@ class NettyRequestAdapter implements MuRequest {
     private byte[] readBodyAsBytes() throws IOException {
         if (inputStream != null) {
             claimingBodyRead();
-            return Mutils.toByteArray(inputStream, 2048);
+            return Mutils.toByteArray(inputStream, 4096);
         } else {
             return new byte[0];
         }
@@ -313,7 +314,7 @@ class NettyRequestAdapter implements MuRequest {
         if (isAsync()) {
             return asyncHandle;
         }
-        asyncHandle = new AsyncHandleImpl(this, nettyAsyncContext);
+        asyncHandle = new AsyncHandleImpl(this, nettyHttpExchange);
         return asyncHandle;
     }
 
@@ -420,14 +421,14 @@ class NettyRequestAdapter implements MuRequest {
         String url = "ws" + uri().toString().substring(4);
         WebSocketServerHandshakerFactory factory = new WebSocketServerHandshakerFactory(url, null, false, maxFramePayloadLength);
 
-        if (inputStream().isPresent()) {
-            try (InputStream is = inputStream().get()) {
-                byte[] buffer = new byte[8192];
-                while (is.read(buffer) > -1) {
-                    // there shouldn't be a body, but just consume and discard if there is
-                }
-            }
-        }
+//        if (inputStream().isPresent()) {
+//            try (InputStream is = inputStream().get()) {
+//                byte[] buffer = new byte[8192];
+//                while (is.read(buffer) > -1) {
+//                    // there shouldn't be a body, but just consume and discard if there is
+//                }
+//            }
+//        }
 
         DefaultFullHttpRequest fullReq = new DefaultFullHttpRequest(request.protocolVersion(), request.method(), request.uri(), new EmptyByteBuf(ByteBufAllocator.DEFAULT), request.headers(), EmptyHttpHeaders.INSTANCE);
         WebSocketServerHandshaker handshaker = factory.newHandshaker(fullReq);
@@ -437,9 +438,7 @@ class NettyRequestAdapter implements MuRequest {
 
         ctx.channel().pipeline().replace("idle", "idle",
             new IdleStateHandler(idleReadTimeoutMills, pingAfterWriteMillis, 0, TimeUnit.MILLISECONDS));
-        MuWebSocketSessionImpl session = new MuWebSocketSessionImpl(ctx, muWebSocket);
-        Http1Connection.setAsyncContext(ctx, null);
-        ctx.channel().attr(Http1Connection.WEBSOCKET_ATTRIBUTE).set(session);
+        MuWebSocketSessionImpl session = new MuWebSocketSessionImpl(ctx, muWebSocket,connection());
         handshaker.handshake(ctx.channel(), fullReq, responseHeaders, ctx.channel().newPromise())
             .addListener(future -> {
                 if (future.isSuccess()) {
@@ -453,21 +452,32 @@ class NettyRequestAdapter implements MuRequest {
         return true;
     }
 
+    public void setExchange(HttpExchange httpExchange) {
+        this.httpExchange = httpExchange;
+    }
+
+    public void setStatus(RequestState status) {
+        this.status = status;
+    }
+    public RequestState status() {
+        return status;
+    }
+
 
     static class AsyncHandleImpl implements AsyncHandle, ConnectionState.Listener {
 
         public final boolean isConnectionStateSupported;
         private final NettyRequestAdapter request;
-        private final AsyncContext asyncContext;
+        private final HttpExchange httpExchange;
         private volatile ResponseCompleteListener responseCompleteListener;
         private LinkedList<DoneCallback> doneCallbackList;
 
-        private AsyncHandleImpl(NettyRequestAdapter request, AsyncContext asyncContext) {
+        private AsyncHandleImpl(NettyRequestAdapter request, HttpExchange httpExchange) {
             this.request = request;
-            this.asyncContext = asyncContext;
-            this.isConnectionStateSupported = request.connection instanceof ConnectionState;
+            this.httpExchange = httpExchange;
+            this.isConnectionStateSupported = request.connection() instanceof ConnectionState;
             if (isConnectionStateSupported) {
-                ((ConnectionState) request.connection).registerConnectionStateListener(this);
+                ((ConnectionState) request.connection()).registerConnectionStateListener(this);
             }
         }
 
@@ -520,7 +530,7 @@ class NettyRequestAdapter implements MuRequest {
 
         @Override
         public void complete() {
-            request.nettyAsyncContext.complete(false);
+            request.nettyHttpExchange.complete(false);
             raiseResponseComplete();
         }
 
@@ -531,9 +541,9 @@ class NettyRequestAdapter implements MuRequest {
             } else {
                 boolean forceDisconnect = true;
                 try {
-                    forceDisconnect = NettyHandlerAdapter.dealWithUnhandledException(request, request.nettyAsyncContext.response, throwable);
+                    forceDisconnect = dealWithUnhandledException(request, request.nettyHttpExchange.response, throwable);
                 } finally {
-                    request.nettyAsyncContext.complete(forceDisconnect);
+                    request.nettyHttpExchange.complete(forceDisconnect);
                     raiseResponseComplete();
                 }
             }
@@ -542,7 +552,7 @@ class NettyRequestAdapter implements MuRequest {
         void raiseResponseComplete() {
             ResponseCompleteListener listener = this.responseCompleteListener;
             if (listener != null) {
-                listener.onComplete(asyncContext);
+                listener.onComplete(httpExchange);
                 this.responseCompleteListener = null;
             }
         }
@@ -600,7 +610,7 @@ class NettyRequestAdapter implements MuRequest {
 
         @Override
         public Future<Void> write(ByteBuffer data) {
-            NettyResponseAdaptor response = (NettyResponseAdaptor) request.nettyAsyncContext.response;
+            NettyResponseAdaptor response = (NettyResponseAdaptor) request.nettyHttpExchange.response;
             try {
                 return response.write(data);
             } catch (Throwable e) {
@@ -626,9 +636,19 @@ class NettyRequestAdapter implements MuRequest {
         void onClientDisconnected() {
             ResponseCompleteListener listener = this.responseCompleteListener;
             if (listener != null) {
-                listener.onComplete(asyncContext);
+                listener.onComplete(httpExchange);
             }
         }
     }
 
 }
+
+enum RequestState {
+    RECEIVING(false), COMPLETE(true), ERROR(true);
+    final boolean endState;
+
+    RequestState(boolean endState) {
+        this.endState = endState;
+    }
+}
+

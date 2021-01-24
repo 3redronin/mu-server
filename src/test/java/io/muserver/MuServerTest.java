@@ -35,6 +35,7 @@ import static org.hamcrest.Matchers.*;
 import static org.hamcrest.core.IsEqual.equalTo;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
+import static scaffolding.MuAssert.assertEventually;
 
 public class MuServerTest {
 
@@ -69,6 +70,23 @@ public class MuServerTest {
             assertThat(resp.code(), is(500));
         }
     }
+
+    @Test
+    public void multipleWritesWorkRight() throws Exception {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.write("Hello");
+            })
+            .start();
+        for (int i = 0; i < 5000; i++) {
+            try (Response resp = call(request(server.uri()))) {
+                assertThat(resp.body().string(), is("Hello"));
+            }
+        }
+        assertThat(server.stats().completedRequests(), equalTo(5000L));
+        assertThat(server.stats().completedConnections(), lessThan(1000L)); // just make sure it's not one connection per request
+    }
+
 
     @Test
     public void unhandledExceptionsAreJustLoggedIfResponsesAreAlreadyStarted() {
@@ -413,7 +431,7 @@ public class MuServerTest {
             .sendHeader("host", server.uri().getAuthority())
             .endHeaders().flushRequest();
 
-        MuAssert.assertEventually(client::isConnected, equalTo(false));
+        assertEventually(client::isConnected, equalTo(false));
     }
 
     @Test
@@ -482,12 +500,13 @@ public class MuServerTest {
         MuAssert.assertNotTimedOut("firstRequestStartedLatch", firstRequestStartedLatch);
         try (Response resp = call(request(server.uri().resolve("/?count=last")))) {
             assertThat(resp.code(), is(503));
-            assertThat(resp.body().string(), is("503 Service Unavailable"));
+            assertThat(resp.body().string(), containsString("503 Service Unavailable"));
         }
         thirdRequestFinishedLatch.countDown();
         MuAssert.assertNotTimedOut("responseLatch", responseFinishedLatch);
         assertThat(responses, containsInAnyOrder("First bit of first and second bit of first"));
         assertThat(server.stats().rejectedDueToOverload(), is(1L));
+        assertThat(server.stats().completedRequests(), is(1L));
         assertThat(executor.shutdownNow(), hasSize(0));
     }
 

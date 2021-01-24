@@ -18,3 +18,20 @@ public class MuException extends RuntimeException {
 		super(cause);
 	}
 }
+
+class InvalidHttpRequestException extends Exception {
+    final int code;
+    InvalidHttpRequestException(int code, String clientMessage) {
+        super(clientMessage);
+        this.code = code;
+    }
+}
+
+class UnexpectedMessageException extends Exception {
+    final Exchange exchange;
+    final Object unexpectedMessage;
+    UnexpectedMessageException(Exchange exchange, Object unexpectedMessage) {
+        this.exchange = exchange;
+        this.unexpectedMessage = unexpectedMessage;
+    }
+}

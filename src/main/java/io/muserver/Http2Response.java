@@ -129,7 +129,7 @@ class Http2Response extends NettyResponseAdaptor {
     @Override
     public String toString() {
         return "Http2Response{" +
-            "outputState=" + outputState +
+            "outputState=" + outputState() +
             ", status=" + status +
             "}";
     }

@@ -4,6 +4,7 @@ import okhttp3.Call;
 import okhttp3.Callback;
 import okhttp3.OkHttpClient;
 import okhttp3.Response;
+import org.jetbrains.annotations.NotNull;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.ClientUtils;
@@ -60,17 +61,16 @@ public class FlakyClientTest {
         CountDownLatch latch = new CountDownLatch(calls * 2);
         for (int i = 0; i < calls; i++) {
             Callback responseCallback = new Callback() {
-                public void onFailure(Call call, IOException e) {
+                public void onFailure(@NotNull Call call, @NotNull IOException e) {
                     latch.countDown();
                 }
-                public void onResponse(Call call, Response response) {
+                public void onResponse(@NotNull Call call, Response response) {
                     latch.countDown();
                     response.close();
-
                 }
             };
-            shortReader.newCall(request(server.uri().resolve("/full")).build()).enqueue(responseCallback);
-            shortReader.newCall(request(server.uri().resolve("/chunks")).build()).enqueue(responseCallback);
+            shortReader.newCall(request(server.uri().resolve("/full?i=" + i)).build()).enqueue(responseCallback);
+            shortReader.newCall(request(server.uri().resolve("/chunks?i=" + i)).build()).enqueue(responseCallback);
         }
 
         assertThat(latch.await(2, TimeUnit.MINUTES), is(true));
