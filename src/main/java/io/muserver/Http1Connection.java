@@ -64,10 +64,6 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         serverStats.onConnectionClosed();
         server.onConnectionEnded(this);
-        if (connectionStateListener != null) {
-            connectionStateListener.onConnectionClose();
-            connectionStateListener = null;
-        }
         if (currentExchange != null) {
             currentExchange.onConnectionEnded(ctx);
         }

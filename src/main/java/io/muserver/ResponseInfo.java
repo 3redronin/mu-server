@@ -7,7 +7,8 @@ package io.muserver;
 public interface ResponseInfo {
 
     /**
-     * @return Returns the number of milliseconds from the start of the request until the end of the response.
+     * The duration in millis of a completed response, or the duration so far of an in-progress request.
+     * @return the number of milliseconds from the start of the request until the end of the response.
      */
     long duration();
 

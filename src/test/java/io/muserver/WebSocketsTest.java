@@ -7,6 +7,7 @@ import okhttp3.WebSocketListener;
 import okio.ByteString;
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 import scaffolding.MuAssert;
 import scaffolding.RawClient;
@@ -28,6 +29,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.*;
 
+@Ignore
 public class WebSocketsTest {
 
     private MuServer server;

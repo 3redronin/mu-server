@@ -413,7 +413,7 @@ class NettyRequestAdapter implements MuRequest {
 
     void onCancelled() {
         if (asyncHandle != null) {
-            asyncHandle.onClientDisconnected();
+            asyncHandle.onCancelled();
         }
     }
 
@@ -509,11 +509,6 @@ class NettyRequestAdapter implements MuRequest {
         @Override
         public void onWriteable() throws Exception {
             DoneCallback task;
-            if (!request.channel.isActive()) {
-                clearDoneCallbackList();
-                return;
-            }
-
             while (request.channel.isWritable() && doneCallbackList != null && (task = doneCallbackList.poll()) != null) {
                 try {
                     task.onComplete(null);
@@ -524,14 +519,15 @@ class NettyRequestAdapter implements MuRequest {
         }
 
         @Override
-        public void onConnectionClose() throws Exception {
-            this.clearDoneCallbackList();
+        public void complete() {
+            completeAndRaise(false);
         }
 
-        @Override
-        public void complete() {
-            request.nettyHttpExchange.complete(false);
-            raiseResponseComplete();
+        private void completeAndRaise(boolean forceDisconnect) {
+            if (!httpExchange.response.outputState().endState) {
+                httpExchange.complete(forceDisconnect);
+                raiseResponseComplete();
+            }
         }
 
         @Override
@@ -543,8 +539,7 @@ class NettyRequestAdapter implements MuRequest {
                 try {
                     forceDisconnect = dealWithUnhandledException(request, request.nettyHttpExchange.response, throwable);
                 } finally {
-                    request.nettyHttpExchange.complete(forceDisconnect);
-                    raiseResponseComplete();
+                    completeAndRaise(forceDisconnect);
                 }
             }
         }
@@ -610,7 +605,7 @@ class NettyRequestAdapter implements MuRequest {
 
         @Override
         public Future<Void> write(ByteBuffer data) {
-            NettyResponseAdaptor response = (NettyResponseAdaptor) request.nettyHttpExchange.response;
+            NettyResponseAdaptor response = request.nettyHttpExchange.response;
             try {
                 return response.write(data);
             } catch (Throwable e) {
@@ -633,11 +628,9 @@ class NettyRequestAdapter implements MuRequest {
             }
         }
 
-        void onClientDisconnected() {
-            ResponseCompleteListener listener = this.responseCompleteListener;
-            if (listener != null) {
-                listener.onComplete(httpExchange);
-            }
+        void onCancelled() {
+            this.clearDoneCallbackList();
+            raiseResponseComplete();
         }
     }
 

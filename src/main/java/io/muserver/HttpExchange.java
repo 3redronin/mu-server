@@ -49,7 +49,7 @@ class HttpExchange implements ResponseInfo, Exchange {
 
     public Future<Void> complete(boolean forceDisconnect) {
         if (response.outputState().endState) {
-            log.warn("AsyncContext.complete called twice for " + request, new MuException("WHat"));
+            log.warn("AsyncContext.complete called twice for " + request + " where state was " + response.outputState(), new MuException("WHat"));
             return null;
         } else {
             return response.complete(forceDisconnect);
@@ -67,7 +67,9 @@ class HttpExchange implements ResponseInfo, Exchange {
 
     @Override
     public long duration() {
-        return System.currentTimeMillis() - request.startTime();
+        long end = response.endTime;
+        if (end == 0) end = System.currentTimeMillis();
+        return end - request.startTime();
     }
 
     @Override
