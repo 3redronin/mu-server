@@ -21,6 +21,8 @@ import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Future;
 
 import static io.muserver.ContentTypes.TEXT_PLAIN_UTF8;
@@ -36,7 +38,7 @@ abstract class NettyResponseAdaptor implements MuResponse {
     private OutputStream outputStream;
     protected long bytesStreamed = 0;
     protected long declaredLength = -1;
-    private volatile StateChangeListener listener;
+    private final List<StateChangeListener> listeners = new CopyOnWriteArrayList<>();
     private HttpExchange httpExchange;
     public long endTime;
 
@@ -49,11 +51,8 @@ abstract class NettyResponseAdaptor implements MuResponse {
             endTime = System.currentTimeMillis();
         }
         this.state = state;
-        StateChangeListener listener = this.listener;
-        if (listener != null) {
+        for (StateChangeListener listener : listeners) {
             listener.onStateChange(httpExchange, state);
-        } else {
-            log.warn("listener was null for " + httpExchange.request);
         }
     }
 
@@ -65,8 +64,8 @@ abstract class NettyResponseAdaptor implements MuResponse {
     interface StateChangeListener {
         void onStateChange(HttpExchange exchange, ResponseState newState);
     }
-    void setChangeListener(StateChangeListener stateChangeListener) {
-        this.listener = stateChangeListener;
+    void addChangeListener(StateChangeListener stateChangeListener) {
+        this.listeners.add(stateChangeListener);
     }
 
     void setWebsocket() {

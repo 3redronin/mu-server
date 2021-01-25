@@ -156,7 +156,7 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
         Http2Response resp = new Http2Response(ctx, muReq, new Http2Headers(), encoder(), streamId, settings);
 
         HttpExchange httpExchange = new HttpExchange(this, nettyHandlerAdapter, muReq, resp);
-        resp.setChangeListener((exchange, newState) -> {
+        resp.addChangeListener((exchange, newState) -> {
             nettyHandlerAdapter.onResponseComplete(exchange, server.stats, connectionStats);
             contexts.remove(streamId);
         });

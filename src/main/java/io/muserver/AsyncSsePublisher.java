@@ -147,7 +147,7 @@ class AsyncSsePublisherImpl implements AsyncSsePublisher {
 
     @Override
     public void setResponseCompleteHandler(ResponseCompleteListener responseCompleteListener) {
-        asyncHandle.setResponseCompleteHandler(responseCompleteListener);
+        asyncHandle.addResponseCompleteHandler(responseCompleteListener);
     }
 
     private CompletionStage<?> write(String text) {

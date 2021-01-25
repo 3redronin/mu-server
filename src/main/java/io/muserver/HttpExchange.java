@@ -153,7 +153,7 @@ class HttpExchange implements ResponseInfo, Exchange {
             throw new InvalidHttpRequestException(429, "429 Too Many Requests");
         }
 
-        muResponse.setChangeListener(stateChangeListener);
+        muResponse.addChangeListener(stateChangeListener);
         DoneCallback addedToExecutorCallback = error -> {
             if (!WebSocketHandler.isWebSocketUpgrade(muRequest)) {
                 ctx.channel().read();

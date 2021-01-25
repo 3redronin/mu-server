@@ -469,7 +469,6 @@ class NettyRequestAdapter implements MuRequest {
         public final boolean isConnectionStateSupported;
         private final NettyRequestAdapter request;
         private final HttpExchange httpExchange;
-        private volatile ResponseCompleteListener responseCompleteListener;
         private LinkedList<DoneCallback> doneCallbackList;
 
         private AsyncHandleImpl(NettyRequestAdapter request, HttpExchange httpExchange) {
@@ -520,14 +519,7 @@ class NettyRequestAdapter implements MuRequest {
 
         @Override
         public void complete() {
-            completeAndRaise(false);
-        }
-
-        private void completeAndRaise(boolean forceDisconnect) {
-            if (!httpExchange.response.outputState().endState) {
-                httpExchange.complete(forceDisconnect);
-                raiseResponseComplete();
-            }
+            httpExchange.complete(false);
         }
 
         @Override
@@ -539,16 +531,8 @@ class NettyRequestAdapter implements MuRequest {
                 try {
                     forceDisconnect = dealWithUnhandledException(request, request.nettyHttpExchange.response, throwable);
                 } finally {
-                    completeAndRaise(forceDisconnect);
+                    httpExchange.complete(forceDisconnect);
                 }
-            }
-        }
-
-        void raiseResponseComplete() {
-            ResponseCompleteListener listener = this.responseCompleteListener;
-            if (listener != null) {
-                listener.onComplete(httpExchange);
-                this.responseCompleteListener = null;
             }
         }
 
@@ -615,22 +599,28 @@ class NettyRequestAdapter implements MuRequest {
 
         @Override
         public void setResponseCompleteHandler(ResponseCompleteListener responseCompleteListener) {
-            this.responseCompleteListener = responseCompleteListener;
-
+            if (responseCompleteListener != null) {
+                addResponseCompleteHandler(responseCompleteListener);
+            }
+        }
+        @Override
+        public void addResponseCompleteHandler(ResponseCompleteListener responseCompleteListener) {
+            this.httpExchange.response.addChangeListener((exchange, newState) -> {
+                if (newState.endState) {
+                    responseCompleteListener.onComplete(exchange);
+                }
+            });
         }
 
         @Override
         public void setResponseCompletedHandler(ResponseCompletedListener responseCompletedListener) {
-            if (responseCompletedListener == null) {
-                this.responseCompleteListener = null;
-            } else {
-                this.responseCompleteListener = info -> responseCompletedListener.onComplete(info.completedSuccessfully());
+            if (responseCompletedListener != null) {
+                addResponseCompleteHandler(info -> responseCompletedListener.onComplete(info.completedSuccessfully()));
             }
         }
 
         void onCancelled() {
             this.clearDoneCallbackList();
-            raiseResponseComplete();
         }
     }
 
