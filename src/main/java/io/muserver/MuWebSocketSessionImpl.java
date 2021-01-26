@@ -72,16 +72,20 @@ class MuWebSocketSessionImpl implements MuWebSocketSession, Exchange {
             endState = WebsocketSessionState.CLIENT_CLOSED;
         } else {
             setState(WebsocketSessionState.SERVER_CLOSING);
-            endState = WebsocketSessionState.SERVER_CLOSED;
+            if (statusCode == 1001 && WebsocketSessionState.TIMED_OUT.name().equals(reason)) {
+                endState = WebsocketSessionState.TIMED_OUT;
+            } else if (statusCode > 1000 && WebsocketSessionState.ERRORED.name().equals(reason)) {
+                endState = WebsocketSessionState.ERRORED;
+            } else {
+                endState = WebsocketSessionState.SERVER_CLOSED;
+            }
         }
+
         CloseWebSocketFrame closeFrame = new CloseWebSocketFrame(statusCode, reason);
         writeAsync(closeFrame, error -> ctx.close().addListener(future -> setState(future.isSuccess() ? endState : WebsocketSessionState.ERRORED)));
     }
 
     void setState(WebsocketSessionState newState) {
-        if (newState == WebsocketSessionState.ERRORED) {
-            System.out.println("newState = " + newState);
-        }
         this.state = newState;
     }
 
@@ -206,8 +210,7 @@ class MuWebSocketSessionImpl implements MuWebSocketSession, Exchange {
                 try {
                     muWebSocket.onError(new WebSocketProtocolException(cause.getMessage(), cause));
                 } catch (Exception e) {
-                    ctx.channel().close();
-                    setState(WebsocketSessionState.ERRORED);
+                    ctx.channel().close().addListener(future -> setState(WebsocketSessionState.ERRORED));
                 }
             } else {
                 ctx.channel().close();

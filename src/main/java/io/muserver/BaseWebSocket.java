@@ -59,11 +59,11 @@ public abstract class BaseWebSocket implements MuWebSocket {
     public void onError(Throwable cause) throws Exception {
         if (!state().endState()) {
             if (cause instanceof TimeoutException) {
-                session().close(1001, "Idle Timeout");
+                session().close(1001, WebsocketSessionState.TIMED_OUT.name());
             } else if (cause instanceof WebSocketProtocolException) {
-                // do nothing as it is already closed by Netty
+                session().close(1008, WebsocketSessionState.ERRORED.name());
             } else if (session != null) {
-                session().close(1011, "Server error");
+                session().close(1011, WebsocketSessionState.ERRORED.name());
             }
         }
     }

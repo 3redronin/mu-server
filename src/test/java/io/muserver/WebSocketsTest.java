@@ -26,6 +26,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.*;
+import static scaffolding.MuAssert.assertEventually;
 
 public class WebSocketsTest {
 
@@ -49,6 +50,7 @@ public class WebSocketsTest {
         WebSocket clientSocket = client.newWebSocket(webSocketRequest(server.uri().resolve("/blah")), clientListener);
 
         MuAssert.assertNotTimedOut("Connecting", clientListener.connectedLatch);
+        assertEventually(() -> serverSocket.state(), equalTo(WebsocketSessionState.OPEN));
 
         assertThat(clientListener.response.header("upgrade-response-header"), equalTo("hello"));
 
@@ -57,11 +59,11 @@ public class WebSocketsTest {
         clientSocket.send("Another text");
         clientSocket.close(1000, "Finished");
         MuAssert.assertNotTimedOut("Closing server socket", serverSocket.closedLatch);
-        MuAssert.assertEventually(() -> serverSocket.state(), equalTo(WebsocketSessionState.CLIENT_CLOSED));
+        assertEventually(() -> serverSocket.state(), equalTo(WebsocketSessionState.CLIENT_CLOSED));
         assertThat(serverSocket.received, contains("connected", "onText: This is a message",
             "onBinary: This is a binary message", "onText: Another text", "onClientClosed: 1000 Finished"));
 
-        MuAssert.assertEventually(() -> clientListener.events,
+        assertEventually(() -> clientListener.events,
             contains("onOpen", "onMessage text: THIS IS A MESSAGE", "onMessage binary: This is a binary message", "onMessage text: ANOTHER TEXT", "onClosing 1000 Finished", "onClosed 1000 Finished"));
 
         try (Response resp = call(request(server.uri().resolve("/not-blah")))) {
@@ -81,13 +83,12 @@ public class WebSocketsTest {
         String largeText = StringUtils.randomAsciiStringOfLength(60000);
         clientSocket.send(largeText);
         MuAssert.assertNotTimedOut("messageLatch", listener.messageLatch);
-        assertThat(listener.events,
-            contains("onOpen", "onMessage text: " + largeText.toUpperCase()));
+        assertThat(listener.events, contains("onOpen", "onMessage text: " + largeText.toUpperCase()));
         clientSocket.close(1000, "Done");
     }
 
     @Test
-    public void ifMaxFrameLengthExceededThenSocketIsClosed() {
+    public void ifMaxFrameLengthExceededThenSocketIsClosed() throws Exception {
         server = ServerUtils.httpsServerForTest()
             .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket)
                 .withPath("/routed-websocket")
@@ -104,6 +105,8 @@ public class WebSocketsTest {
         clientSocket.send(largeText);
 
         MuAssert.assertNotTimedOut("Erroring", listener.failureLatch);
+        assertEventually(() -> serverSocket.state(), equalTo(WebsocketSessionState.ERRORED));
+
         clientSocket.close(1000, "Finished");
     }
 
@@ -282,14 +285,13 @@ public class WebSocketsTest {
         ClientListener clientListener = new ClientListener();
         client.newWebSocket(webSocketRequest(server.uri().resolve("/ws")), clientListener);
         MuAssert.assertNotTimedOut("Connecting", serverSocket.connectedLatch);
-        assertThat(serverSocket.state(), equalTo(WebsocketSessionState.OPEN));
+        assertEventually(() -> serverSocket.state(), equalTo(WebsocketSessionState.OPEN));
         serverSocket.session.close(1001, "Umm");
         MuAssert.assertNotTimedOut("Closing", clientListener.closedLatch);
         assertThat(clientListener.toString(), clientListener.events,
             contains("onOpen", "onClosing 1001 Umm", "onClosed 1001 Umm"));
-        assertThat(serverSocket.state(), equalTo(WebsocketSessionState.SERVER_CLOSED));
+        assertEventually(() -> serverSocket.state(), equalTo(WebsocketSessionState.SERVER_CLOSED));
     }
-
 
     @Test
     public void ifNotMatchedThenProtocolExceptionIsReturned() throws Exception {
@@ -319,6 +321,7 @@ public class WebSocketsTest {
         client.newWebSocket(webSocketRequest(server.uri().resolve("/routed-websocket")), new ClientListener());
         MuAssert.assertNotTimedOut("onError", serverSocket.errorLatch);
         assertThat(serverSocket.received, contains("connected", "onError TimeoutException"));
+        assertEventually(() -> serverSocket.state(), equalTo(WebsocketSessionState.TIMED_OUT));
     }
 
     @Test
@@ -336,6 +339,7 @@ public class WebSocketsTest {
         webSocket.send("Hello there");
         MuAssert.assertNotTimedOut("onError", serverSocket.errorLatch);
         assertThat(serverSocket.received, contains("connected", "onError MuException"));
+        assertEventually(() -> serverSocket.state(), equalTo(WebsocketSessionState.ERRORED));
     }
 
     @Test
