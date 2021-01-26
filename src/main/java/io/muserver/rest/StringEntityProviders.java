@@ -1,6 +1,7 @@
 package io.muserver.rest;
 
 import io.muserver.Mutils;
+import io.netty.buffer.ByteBufUtil;
 import io.netty.handler.codec.http.QueryStringDecoder;
 import io.netty.handler.codec.http.QueryStringEncoder;
 
@@ -18,6 +19,8 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.time.*;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.Temporal;
@@ -55,7 +58,12 @@ class StringEntityProviders {
             if (s.length() > 100000) {
                 return -1;
             }
-            return s.getBytes(EntityProviders.charsetFor(mediaType)).length;
+
+            Charset charset = EntityProviders.charsetFor(mediaType);
+            if (charset.equals(StandardCharsets.UTF_8)) {
+                return ByteBufUtil.utf8Bytes(s);
+            }
+            return s.getBytes(charset).length;
         }
 
         public void writeTo(String s, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException, WebApplicationException {

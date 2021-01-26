@@ -65,7 +65,7 @@ public class StringEntityProvidersTest {
         this.server = httpsServerForTest().addHandler(restHandler(new Sample())).start();
 
         try (Response resp = call(request(server.uri().resolve("/samples"))
-            .post(RequestBody.create(okhttp3.MediaType.get("text/plain; charset=ISO-8859-5"), warAndPeaceInRussian))
+            .post(RequestBody.create(warAndPeaceInRussian, okhttp3.MediaType.get("text/plain; charset=ISO-8859-5")))
         )) {
             assertThat(resp.code(), is(200));
             assertThat(resp.header("Content-Type"), is("text/plain;charset=ISO-8859-5"));
@@ -185,7 +185,7 @@ public class StringEntityProvidersTest {
     private void check(String value, int expectedStatus, String mimeType) throws IOException {
         try (Response resp = call(
             request(server.uri().resolve("/samples"))
-                .post(RequestBody.create(MediaType.parse(mimeType), value))
+                .post(RequestBody.create(value, MediaType.parse(mimeType)))
         )) {
             assertThat(resp.code(), equalTo(expectedStatus));
             assertThat(resp.header("Content-Type"), expectedStatus == 204 ? nullValue() : equalTo(mimeType));

@@ -119,7 +119,7 @@ abstract class NettyResponseAdaptor implements MuResponse {
     }
 
     private void throwIfFinished() {
-        if (state.endState() || state == ResponseState.FINISHING || state == ResponseState.FULL_SENT) {
+        if (state.endState()) {
             throw new IllegalStateException("Cannot write data as response has already completed");
         }
     }
