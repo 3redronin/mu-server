@@ -115,4 +115,9 @@ public interface MuResponse {
      * @return Returns <code>true</code> if any data has been sent to the client; otherwise <code>false</code>.
      */
     boolean hasStartedSendingData();
+
+    /**
+     * @return The current state of this response
+     */
+    ResponseState responseState();
 }

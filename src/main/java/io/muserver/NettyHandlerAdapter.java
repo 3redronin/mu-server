@@ -44,7 +44,7 @@ class NettyHandlerAdapter {
                         resp.headers().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
                         resp.write("413 Payload Too Large");
                     } else {
-                        httpExchange.onCancelled();
+                        httpExchange.onCancelled(ResponseState.ERRORED);
                     }
                 }
             }
@@ -96,7 +96,7 @@ class NettyHandlerAdapter {
                     error = dealWithUnhandledException(request, response, ex);
                 } finally {
                     request.clean();
-                    if ((error || !request.isAsync()) && !response.outputState().endState) {
+                    if ((error || !request.isAsync()) && !response.outputState().endState()) {
                         try {
                             muCtx.complete(error);
                         } catch (Throwable e) {

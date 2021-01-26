@@ -41,6 +41,7 @@ public interface MuWebSocket {
 
     /**
      * Called when the client has closed the connection.
+     * <p>The connection should be closed on the server side when this is received. If overriding {@link BaseWebSocket} this occurs automatically.</p>
      * @param statusCode The closure code. See <a href="https://tools.ietf.org/html/rfc6455#section-7.4">https://tools.ietf.org/html/rfc6455#section-7.4</a>
      * @param reason An optional reason for the closure.
      * @throws Exception Any exceptions thrown will result in the onError method being called with the thrown exception being used as the <code>cause</code> parameter.
@@ -49,6 +50,7 @@ public interface MuWebSocket {
 
     /**
      * Called when a ping message is sent from a client.
+     * <p>When received, a websocket should send the data back in a <code>pong</code> message. If overriding {@link BaseWebSocket} this occurs automatically.</p>
      * @param payload The ping payload.
      * @param onComplete A callback that must be run with <code>onComplete.run()</code> when the byte buffer is no longer needed. Failure to call this will result in memory leaks.
      * @throws Exception Any exceptions thrown will result in the onError method being called with the thrown exception being used as the <code>cause</code> parameter.

@@ -7,7 +7,6 @@ import okhttp3.WebSocketListener;
 import okio.ByteString;
 import org.junit.After;
 import org.junit.Assert;
-import org.junit.Ignore;
 import org.junit.Test;
 import scaffolding.MuAssert;
 import scaffolding.RawClient;
@@ -15,7 +14,6 @@ import scaffolding.ServerUtils;
 import scaffolding.StringUtils;
 
 import javax.ws.rs.ClientErrorException;
-import java.io.IOException;
 import java.net.ProtocolException;
 import java.net.URI;
 import java.nio.ByteBuffer;
@@ -29,14 +27,13 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.*;
 
-@Ignore
 public class WebSocketsTest {
 
     private MuServer server;
     private RecordingMuWebSocket serverSocket = new RecordingMuWebSocket();
 
     @Test
-    public void handlersCanReturnNullOrWebSocketToHandleAsAWebSocket() throws IOException {
+    public void handlersCanReturnNullOrWebSocketToHandleAsAWebSocket() throws Exception {
         server = ServerUtils.httpsServerForTest()
             .addHandler(webSocketHandler().withWebSocketFactory((request, responseHeaders) -> {
                 if (!request.relativePath().equals("/blah")) {
@@ -60,11 +57,12 @@ public class WebSocketsTest {
         clientSocket.send("Another text");
         clientSocket.close(1000, "Finished");
         MuAssert.assertNotTimedOut("Closing server socket", serverSocket.closedLatch);
+        MuAssert.assertEventually(() -> serverSocket.state(), equalTo(WebsocketSessionState.CLIENT_CLOSED));
         assertThat(serverSocket.received, contains("connected", "onText: This is a message",
             "onBinary: This is a binary message", "onText: Another text", "onClientClosed: 1000 Finished"));
 
         MuAssert.assertEventually(() -> clientListener.events,
-            contains("onOpen", "onMessage text: THIS IS A MESSAGE", "onMessage binary: This is a binary message", "onMessage text: ANOTHER TEXT"));
+            contains("onOpen", "onMessage text: THIS IS A MESSAGE", "onMessage binary: This is a binary message", "onMessage text: ANOTHER TEXT", "onClosing 1000 Finished", "onClosed 1000 Finished"));
 
         try (Response resp = call(request(server.uri().resolve("/not-blah")))) {
             assertThat(resp.code(), is(200));
@@ -277,17 +275,19 @@ public class WebSocketsTest {
     }
 
     @Test
-    public void theServerCanCloseSockets() throws IOException {
+    public void theServerCanCloseSockets() throws Exception {
         server = ServerUtils.httpsServerForTest()
             .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket).withPath("/ws"))
             .start();
         ClientListener clientListener = new ClientListener();
         client.newWebSocket(webSocketRequest(server.uri().resolve("/ws")), clientListener);
         MuAssert.assertNotTimedOut("Connecting", serverSocket.connectedLatch);
+        assertThat(serverSocket.state(), equalTo(WebsocketSessionState.OPEN));
         serverSocket.session.close(1001, "Umm");
         MuAssert.assertNotTimedOut("Closing", clientListener.closedLatch);
         assertThat(clientListener.toString(), clientListener.events,
             contains("onOpen", "onClosing 1001 Umm", "onClosed 1001 Umm"));
+        assertThat(serverSocket.state(), equalTo(WebsocketSessionState.SERVER_CLOSED));
     }
 
 
@@ -399,8 +399,9 @@ public class WebSocketsTest {
         }
 
         @Override
-        public void onClientClosed(int statusCode, String reason) {
+        public void onClientClosed(int statusCode, String reason) throws Exception {
             received.add("onClientClosed: " + statusCode + " " + reason);
+            super.onClientClosed(statusCode, reason);
             closedLatch.countDown();
         }
 

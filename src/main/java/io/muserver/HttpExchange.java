@@ -48,18 +48,16 @@ class HttpExchange implements ResponseInfo, Exchange {
     }
 
     public Future<Void> complete(boolean forceDisconnect) {
-        if (response.outputState().endState) {
-            log.warn("AsyncContext.complete called twice for " + request + " where state was " + response.outputState(), new MuException("WHat"));
-            return null;
-        } else {
+        if (!response.outputState().endState()) {
             return response.complete(forceDisconnect);
         }
+        return response.lastAction;
     }
 
-    void onCancelled() {
-        if (!response.outputState().endState) {
-            response.onCancelled();
-            request.onCancelled();
+    void onCancelled(ResponseState reason) {
+        if (!response.outputState().endState()) {
+            response.onCancelled(reason);
+            request.onCancelled(reason);
         } else {
             log.warn("Cancelled called after end state was " + response.outputState());
         }
@@ -74,7 +72,7 @@ class HttpExchange implements ResponseInfo, Exchange {
 
     @Override
     public boolean completedSuccessfully() {
-        return response.outputState().fullResponseSent;
+        return response.outputState().completedSuccessfully();
     }
 
     @Override
@@ -117,7 +115,7 @@ class HttpExchange implements ResponseInfo, Exchange {
 
     @Override
     public void onIdleTimeout(ChannelHandlerContext ctx, IdleStateEvent ise) {
-        onCancelled();
+        onCancelled(ResponseState.TIMED_OUT);
         log.info("Closed " + request + " (from " + request.remoteAddress() + ") because the idle timeout specified in MuServerBuilder#withIdleTimeout is exceeded.");
     }
 
@@ -245,8 +243,8 @@ class HttpExchange implements ResponseInfo, Exchange {
 
     @Override
     public void onConnectionEnded(ChannelHandlerContext ctx) {
-        if (!response.outputState().endState) {
-            onCancelled();
+        if (!response.outputState().endState()) {
+            onCancelled(ResponseState.CLIENT_DISCONNECTED);
         }
     }
 
@@ -255,7 +253,7 @@ class HttpExchange implements ResponseInfo, Exchange {
         boolean forceDisconnect = response instanceof Http1Response;
 
         if (response.hasStartedSendingData()) {
-            if (((NettyResponseAdaptor)response).clientDisconnected()) {
+            if (response.responseState() == ResponseState.CLIENT_DISCONNECTED) {
                 log.debug("Client disconnected before " + request + " was complete");
             } else {
                 log.info("Unhandled error from handler for " + request + " (note that a " + response.status() +

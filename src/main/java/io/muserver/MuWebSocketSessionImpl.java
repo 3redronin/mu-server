@@ -19,12 +19,10 @@ import java.util.concurrent.TimeoutException;
 class MuWebSocketSessionImpl implements MuWebSocketSession, Exchange {
     static final byte[] PING_BYTES = {'m', 'u'};
     private static final Logger log = LoggerFactory.getLogger(MuWebSocketSessionImpl.class);
-
-    private volatile boolean closeSent = false;
-
     private final ChannelHandlerContext ctx;
     final MuWebSocket muWebSocket;
     private final HttpConnection connection;
+    private volatile WebsocketSessionState state = WebsocketSessionState.NOT_STARTED;
 
     MuWebSocketSessionImpl(ChannelHandlerContext ctx, MuWebSocket muWebSocket, HttpConnection connection) {
         this.ctx = ctx;
@@ -57,24 +55,34 @@ class MuWebSocketSessionImpl implements MuWebSocketSession, Exchange {
 
     @Override
     public void close() {
-        disconnect(new CloseWebSocketFrame());
+        close(1000, "Server");
     }
 
     @Override
     public void close(int statusCode, String reason) {
+        if (state.endState()) {
+            throw new IllegalArgumentException("Cannot close a websocket when the state is " + state);
+        }
         if (statusCode < 1000 || statusCode >= 5000) {
             throw new IllegalArgumentException("Web socket closure codes must be between 1000 and 4999 (inclusive)");
         }
-        disconnect(new CloseWebSocketFrame(statusCode, reason));
+
+        WebsocketSessionState endState;
+        if (state == WebsocketSessionState.CLIENT_CLOSING) {
+            endState = WebsocketSessionState.CLIENT_CLOSED;
+        } else {
+            setState(WebsocketSessionState.SERVER_CLOSING);
+            endState = WebsocketSessionState.SERVER_CLOSED;
+        }
+        CloseWebSocketFrame closeFrame = new CloseWebSocketFrame(statusCode, reason);
+        writeAsync(closeFrame, error -> ctx.close().addListener(future -> setState(future.isSuccess() ? endState : WebsocketSessionState.ERRORED)));
     }
 
-    private void disconnect(CloseWebSocketFrame closeFrame) {
-        if (!closeSent) {
-            closeSent = true;
-            writeAsync(closeFrame, error -> {
-                ctx.close();
-            });
+    void setState(WebsocketSessionState newState) {
+        if (newState == WebsocketSessionState.ERRORED) {
+            System.out.println("newState = " + newState);
         }
+        this.state = newState;
     }
 
     @Override
@@ -82,11 +90,17 @@ class MuWebSocketSessionImpl implements MuWebSocketSession, Exchange {
         return (InetSocketAddress) ctx.channel().remoteAddress();
     }
 
+    @Override
+    public WebsocketSessionState state() {
+        return state;
+    }
+
     private void writeAsync(WebSocketFrame msg, DoneCallback doneCallback) {
 
-        if (closeSent && !(msg instanceof CloseWebSocketFrame)) {
+        if (state.endState() || (state.closing() && !(msg instanceof CloseWebSocketFrame))) {
             try {
                 doneCallback.onComplete(new IllegalStateException("Writes are not allowed as the socket has already been closed"));
+                return;
             } catch (Exception ignored) {
             }
         }
@@ -111,12 +125,20 @@ class MuWebSocketSessionImpl implements MuWebSocketSession, Exchange {
         if (!(msg instanceof WebSocketFrame)) {
             throw new UnexpectedMessageException(this, msg);
         }
+        if (state.endState() || state.closing()) {
+            // https://tools.ietf.org/html/rfc6455#section-1.4
+            // After sending a control frame indicating the connection should be
+            // closed, a peer does not send any further data; after receiving a
+            // control frame indicating the connection should be closed, a peer
+            // discards any further data received.
+            return;
+        }
         MuWebSocket muWebSocket = this.muWebSocket;
         DoneCallback onComplete = error -> {
             if (error == null) {
                 ctx.channel().read();
             } else {
-                handleWebsockError(ctx, muWebSocket, error);
+                handleWebsocketError(ctx, muWebSocket, error);
             }
         };
         ByteBuf retained = null;
@@ -146,14 +168,19 @@ class MuWebSocketSessionImpl implements MuWebSocketSession, Exchange {
                 });
             } else if (msg instanceof CloseWebSocketFrame) {
                 CloseWebSocketFrame cwsf = (CloseWebSocketFrame) msg;
-                muWebSocket.onClientClosed(cwsf.statusCode(), cwsf.reasonText());
+                if (state == WebsocketSessionState.SERVER_CLOSING) {
+                    ctx.close().addListener(future -> setState(WebsocketSessionState.SERVER_CLOSED));
+                } else {
+                    setState(WebsocketSessionState.CLIENT_CLOSING);
+                    muWebSocket.onClientClosed(cwsf.statusCode(), cwsf.reasonText());
+                }
                 onComplete.onComplete(null);
             }
         } catch (Throwable e) {
             if (retained != null) {
                 retained.release();
             }
-            handleWebsockError(ctx, muWebSocket, e);
+            handleWebsocketError(ctx, muWebSocket, e);
         }
     }
 
@@ -174,29 +201,40 @@ class MuWebSocketSessionImpl implements MuWebSocketSession, Exchange {
 
     @Override
     public void onException(ChannelHandlerContext ctx, Throwable cause) {
-        if (cause instanceof CorruptedFrameException) {
-            try {
-                muWebSocket.onError(new WebSocketProtocolException(cause.getMessage(), cause));
-            } catch (Exception e) {
+        if (!state.endState()) {
+            if (cause instanceof CorruptedFrameException) {
+                try {
+                    muWebSocket.onError(new WebSocketProtocolException(cause.getMessage(), cause));
+                } catch (Exception e) {
+                    ctx.channel().close();
+                    setState(WebsocketSessionState.ERRORED);
+                }
+            } else {
                 ctx.channel().close();
+                setState(WebsocketSessionState.ERRORED);
             }
         }
     }
 
     @Override
     public void onConnectionEnded(ChannelHandlerContext ctx) {
-        try {
-            muWebSocket.onError(new ClientDisconnectedException());
-        } catch (Exception ignored) {
+        if (!state.endState()) {
+            setState(WebsocketSessionState.DISCONNECTED);
+            try {
+                muWebSocket.onError(new ClientDisconnectedException());
+            } catch (Exception ignored) {
+            }
         }
     }
 
-    private void handleWebsockError(ChannelHandlerContext ctx, MuWebSocket muWebSocket, Throwable e) {
-        try {
-            muWebSocket.onError(e);
-        } catch (Exception ex) {
-            log.warn("Exception thrown by " + muWebSocket.getClass() + "#onError so will close connection", ex);
-            ctx.close();
+    private void handleWebsocketError(ChannelHandlerContext ctx, MuWebSocket muWebSocket, Throwable e) {
+        if (!state.endState()) {
+            try {
+                muWebSocket.onError(e);
+            } catch (Exception ex) {
+                log.warn("Exception thrown by " + muWebSocket.getClass() + "#onError so will close connection", ex);
+                ctx.close();
+            }
         }
     }
 
@@ -205,4 +243,10 @@ class MuWebSocketSessionImpl implements MuWebSocketSession, Exchange {
     public HttpConnection connection() {
         return connection;
     }
+
+    public void onConnect() throws Exception {
+        setState(WebsocketSessionState.OPEN);
+        muWebSocket.onConnect(this);
+    }
 }
+

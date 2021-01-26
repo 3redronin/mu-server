@@ -1,6 +1,7 @@
 package io.muserver.rest;
 
 import io.muserver.ClientDisconnectedException;
+import io.muserver.MuException;
 import io.muserver.Mutils;
 
 import javax.ws.rs.sse.OutboundSseEvent;
@@ -10,6 +11,7 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -43,8 +45,19 @@ class SseBroadcasterImpl implements SseBroadcaster {
         if (sseEventSink instanceof JaxSseEventSinkImpl) {
             ((JaxSseEventSinkImpl) sseEventSink).setResponseCompleteHandler(info -> {
                 if (!info.completedSuccessfully()) {
-                    // right now, only client disconnects get raised by this event, which is why it's okay to assume the exception type.
-                    onSinkErrored(sseEventSink, new ClientDisconnectedException());
+                    Exception ex;
+                    switch (info.response().responseState()) {
+                        case CLIENT_DISCONNECTED:
+                            ex = new ClientDisconnectedException();
+                            break;
+                        case TIMED_OUT:
+                            ex = new TimeoutException();
+                            break;
+                        default:
+                        case ERRORED:
+                            ex = new MuException();
+                    }
+                    onSinkErrored(sseEventSink, ex);
                 }
             });
         }

@@ -59,15 +59,15 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        closeAllAndDisconnect(ctx, Http2Error.INTERNAL_ERROR);
+        closeAllAndDisconnect(ctx, Http2Error.INTERNAL_ERROR, ResponseState.ERRORED);
     }
 
-    private void closeAllAndDisconnect(ChannelHandlerContext ctx, Http2Error error) {
+    private void closeAllAndDisconnect(ChannelHandlerContext ctx, Http2Error error, ResponseState reason) {
         if (error != null) {
             encoder().writeGoAway(ctx, lastStreamId, error.code(), EMPTY_BUFFER, ctx.channel().newPromise());
         }
         for (HttpExchange httpExchange : contexts.values()) {
-            httpExchange.onCancelled();
+            httpExchange.onCancelled(reason);
         }
         ctx.close();
     }
@@ -208,7 +208,7 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
     public void onRstStreamRead(ChannelHandlerContext ctx, int streamId, long errorCode) {
         HttpExchange httpExchange = contexts.remove(streamId);
         if (httpExchange != null) {
-            httpExchange.onCancelled();
+            httpExchange.onCancelled(ResponseState.ERRORED);
         }
     }
 
@@ -235,7 +235,7 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
 
     @Override
     public void onGoAwayRead(ChannelHandlerContext ctx, int lastStreamId, long errorCode, ByteBuf debugData) {
-        closeAllAndDisconnect(ctx, null);
+        closeAllAndDisconnect(ctx, null, ResponseState.CLIENT_DISCONNECTED);
     }
 
     @Override
@@ -250,7 +250,7 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
     @Override
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) {
         if (evt instanceof IdleStateEvent) {
-            closeAllAndDisconnect(ctx, Http2Error.NO_ERROR);
+            closeAllAndDisconnect(ctx, Http2Error.NO_ERROR, ResponseState.TIMED_OUT);
         }
     }
 

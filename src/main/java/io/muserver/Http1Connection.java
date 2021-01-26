@@ -86,7 +86,7 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
                     nettyHandlerAdapter, connectionStats, (exchange, newState) -> {
                         nettyHandlerAdapter.onResponseComplete(exchange, serverStats, connectionStats);
                         ctx.channel().eventLoop().execute(() -> {
-                            if (currentExchange == exchange && newState.endState) {
+                            if (currentExchange == exchange && newState.endState()) {
                                 currentExchange = null;
                             }
                             if (exchange.response.headers().containsValue(HeaderNames.CONNECTION, HeaderValues.CLOSE, true)) {
@@ -136,14 +136,22 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
 
     @Override
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
+        Exchange exchange = this.currentExchange;
         if (evt instanceof IdleStateEvent) {
-            Exchange exchange = this.currentExchange;
             if (exchange != null) {
                 exchange.onIdleTimeout(ctx, (IdleStateEvent) evt);
             } else {
                 ctx.channel().close();
                 // Can't send a 408 so just closing context. See: https://stackoverflow.com/q/56722103/131578
                 log.info("Closed idle connection to " + remoteAddress);
+            }
+        } else if (evt instanceof ExchangeUpgradeEvent) {
+            ExchangeUpgradeEvent eue = (ExchangeUpgradeEvent) evt;
+            if (eue.success()) {
+                this.currentExchange = eue.newExchange;
+                ctx.channel().read();
+            } else {
+                ctx.channel().close();
             }
         }
         super.userEventTriggered(ctx, evt);

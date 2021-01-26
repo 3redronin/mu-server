@@ -1,9 +1,11 @@
 package io.muserver;
 
+import java.util.concurrent.TimeUnit;
+
 /**
  * The state of a response
  */
-enum ResponseState {
+public enum ResponseState {
     /**
      * Nothing has started yet
      */
@@ -28,9 +30,20 @@ enum ResponseState {
     FINISHED(true, true),
 
     /**
-     * An error (such as a disconnection from the client or an idle timeout) ocurred before the exchange was completed.
+     * An error (such as an unhandled exception in a callback) occurred before the exchange was completed.
      */
     ERRORED(true, false),
+
+    /**
+     * The idle timeout (as specified in {@link MuServerBuilder#withIdleTimeout(long, TimeUnit)} occurred and so the
+     * response was cancelled early.
+     */
+    TIMED_OUT(true, false),
+
+    /**
+     * The client disconnected before the full request and response was completed.
+     */
+    CLIENT_DISCONNECTED(true, false),
 
     /**
      * Upgraded successfully to a websocket
@@ -38,8 +51,22 @@ enum ResponseState {
     UPGRADED(true, true);
 
 
-    final boolean endState;
-    final boolean fullResponseSent;
+    private final boolean endState;
+    private final boolean fullResponseSent;
+
+    /**
+     * @return True if the request and response has finished, either successfully or not.
+     */
+    public boolean endState() {
+        return endState;
+    }
+
+    /**
+     * @return True if the full response was sent to the client with no unexpected errors.
+     */
+    public boolean completedSuccessfully() {
+        return fullResponseSent;
+    }
 
     ResponseState(boolean endState, boolean fullResponseSent) {
         this.endState = endState;

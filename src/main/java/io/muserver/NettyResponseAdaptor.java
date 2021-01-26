@@ -47,7 +47,7 @@ abstract class NettyResponseAdaptor implements MuResponse {
     }
 
     protected void outputState(ResponseState state) {
-        if (state.endState) {
+        if (state.endState()) {
             endTime = System.currentTimeMillis();
         }
         this.state = state;
@@ -72,9 +72,9 @@ abstract class NettyResponseAdaptor implements MuResponse {
         outputState(ResponseState.UPGRADED);
     }
 
-    void onCancelled() {
-        if (!state.endState) {
-            outputState(ResponseState.ERRORED);
+    void onCancelled(ResponseState reason) {
+        if (!state.endState()) {
+            outputState(reason);
         }
     }
 
@@ -119,7 +119,7 @@ abstract class NettyResponseAdaptor implements MuResponse {
     }
 
     private void throwIfFinished() {
-        if (state.endState) {
+        if (state.endState() || state == ResponseState.FINISHING || state == ResponseState.FULL_SENT) {
             throw new IllegalStateException("Cannot write data as response has already completed");
         }
     }
@@ -225,13 +225,14 @@ abstract class NettyResponseAdaptor implements MuResponse {
         return state != ResponseState.NOTHING;
     }
 
-    boolean clientDisconnected() {
-        return state == ResponseState.ERRORED;
+    @Override
+    public ResponseState responseState() {
+        return state;
     }
 
     ChannelFuture complete(boolean forceDisconnect) {
         ResponseState state = this.state;
-        if (state.endState) {
+        if (state.endState()) {
             return lastAction;
         }
         outputState(ResponseState.FINISHING);

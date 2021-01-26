@@ -22,3 +22,14 @@ interface Exchange {
     HttpConnection connection();
 
 }
+
+class ExchangeUpgradeEvent {
+    final Exchange newExchange;
+
+    ExchangeUpgradeEvent(Exchange newExchange) {
+        this.newExchange = newExchange;
+    }
+    boolean success() {
+        return newExchange != null;
+    }
+}

@@ -411,24 +411,15 @@ class NettyRequestAdapter implements MuRequest {
         }
     }
 
-    void onCancelled() {
+    void onCancelled(ResponseState reason) {
         if (asyncHandle != null) {
-            asyncHandle.onCancelled();
+            asyncHandle.onCancelled(reason);
         }
     }
 
     boolean websocketUpgrade(MuWebSocket muWebSocket, HttpHeaders responseHeaders, long idleReadTimeoutMills, long pingAfterWriteMillis, int maxFramePayloadLength) throws IOException {
         String url = "ws" + uri().toString().substring(4);
         WebSocketServerHandshakerFactory factory = new WebSocketServerHandshakerFactory(url, null, false, maxFramePayloadLength);
-
-//        if (inputStream().isPresent()) {
-//            try (InputStream is = inputStream().get()) {
-//                byte[] buffer = new byte[8192];
-//                while (is.read(buffer) > -1) {
-//                    // there shouldn't be a body, but just consume and discard if there is
-//                }
-//            }
-//        }
 
         DefaultFullHttpRequest fullReq = new DefaultFullHttpRequest(request.protocolVersion(), request.method(), request.uri(), new EmptyByteBuf(ByteBufAllocator.DEFAULT), request.headers(), EmptyHttpHeaders.INSTANCE);
         WebSocketServerHandshaker handshaker = factory.newHandshaker(fullReq);
@@ -438,14 +429,14 @@ class NettyRequestAdapter implements MuRequest {
 
         ctx.channel().pipeline().replace("idle", "idle",
             new IdleStateHandler(idleReadTimeoutMills, pingAfterWriteMillis, 0, TimeUnit.MILLISECONDS));
-        MuWebSocketSessionImpl session = new MuWebSocketSessionImpl(ctx, muWebSocket,connection());
+        MuWebSocketSessionImpl session = new MuWebSocketSessionImpl(ctx, muWebSocket, connection());
         handshaker.handshake(ctx.channel(), fullReq, responseHeaders, ctx.channel().newPromise())
             .addListener(future -> {
                 if (future.isSuccess()) {
-                    muWebSocket.onConnect(session);
-                    ctx.channel().read();
+                    session.onConnect();
+                    ctx.pipeline().fireUserEventTriggered(new ExchangeUpgradeEvent(session));
                 } else {
-                    ctx.channel().close();
+                    ctx.pipeline().fireUserEventTriggered(new ExchangeUpgradeEvent(null));
                 }
             });
 
@@ -606,7 +597,7 @@ class NettyRequestAdapter implements MuRequest {
         @Override
         public void addResponseCompleteHandler(ResponseCompleteListener responseCompleteListener) {
             this.httpExchange.response.addChangeListener((exchange, newState) -> {
-                if (newState.endState) {
+                if (newState.endState()) {
                     responseCompleteListener.onComplete(exchange);
                 }
             });
@@ -619,7 +610,7 @@ class NettyRequestAdapter implements MuRequest {
             }
         }
 
-        void onCancelled() {
+        void onCancelled(ResponseState reason) {
             this.clearDoneCallbackList();
         }
     }
