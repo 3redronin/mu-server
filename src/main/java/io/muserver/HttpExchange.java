@@ -49,7 +49,9 @@ class HttpExchange implements ResponseInfo, Exchange {
 
     public Future<Void> complete(boolean forceDisconnect) {
         if (response.outputState().endState()) {
-            log.warn("AsyncContext.complete called twice for " + request + " where state was " + response.outputState(), new MuException("WHat"));
+            if (log.isDebugEnabled()) {
+                log.debug("AsyncContext.complete called twice for " + request + " where state was " + response.outputState(), new MuException(""));
+            }
             return null;
         } else {
             return response.complete(forceDisconnect);
