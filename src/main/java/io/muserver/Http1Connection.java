@@ -82,19 +82,20 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
     private void onChannelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
         if (msg instanceof HttpRequest) {
             try {
-                HttpExchange httpExchange = HttpExchange.create(server, proto, ctx, this, (HttpRequest) msg,
+                this.currentExchange = HttpExchange.create(server, proto, ctx, this, (HttpRequest) msg,
                     nettyHandlerAdapter, connectionStats, (exchange, newState) -> {
-                        nettyHandlerAdapter.onResponseComplete(exchange, serverStats, connectionStats);
-                        ctx.channel().eventLoop().execute(() -> {
-                            if (currentExchange == exchange && newState.endState()) {
-                                currentExchange = null;
-                            }
-                            if (exchange.response.headers().containsValue(HeaderNames.CONNECTION, HeaderValues.CLOSE, true)) {
-                                ctx.channel().close();
-                            }
-                        });
+                        if (newState.endState()) {
+                            nettyHandlerAdapter.onResponseComplete(exchange, serverStats, connectionStats);
+                            ctx.channel().eventLoop().execute(() -> {
+                                if (currentExchange == exchange) {
+                                    currentExchange = null;
+                                }
+                                if (exchange.response.headers().containsValue(HeaderNames.CONNECTION, HeaderValues.CLOSE, true)) {
+                                    ctx.channel().close();
+                                }
+                            });
+                        }
                     });
-                this.currentExchange = httpExchange;
             } catch (InvalidHttpRequestException ihr) {
                 if (ihr.code == 429) {
                     connectionStats.onRejectedDueToOverload();

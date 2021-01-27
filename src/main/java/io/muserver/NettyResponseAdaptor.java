@@ -8,8 +8,6 @@ import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http.cookie.ServerCookieEncoder;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import javax.ws.rs.core.MediaType;
 import java.io.BufferedOutputStream;
@@ -56,7 +54,6 @@ abstract class NettyResponseAdaptor implements MuResponse {
         }
     }
 
-    private static final Logger log = LoggerFactory.getLogger(NettyResponseAdaptor.class);
     protected ResponseState outputState() {
         return state;
     }
