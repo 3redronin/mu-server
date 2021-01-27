@@ -47,12 +47,12 @@ public class FixedLengthTest {
                 return true;
             }).start();
 
-        boolean http2 = false;
+        boolean http2;
         try (Response resp = call(request(server.uri().resolve("/blah")))) {
             http2 = isHttp2(resp);
             String body = resp.body().string();
             if (http2) {
-                assertThat(body, is("01234 and this will push the response over 20 bytes in size"));
+                assertThat(body, is("01234"));
             } else {
                 Assert.fail("Should have failed due to invalid HTTP response");
             }
@@ -61,14 +61,9 @@ public class FixedLengthTest {
         }
 
         MuAssert.assertNotTimedOut("exception", errorSetLatch);
-
-        if (http2) {
-            assertThat(errors.toString(), equalTo("Cannot write data as response has already completed"));
-        } else {
-            assertThat(errors.toString(), equalTo("The declared content length for GET " + server.uri().resolve("/blah") + " was 20 bytes. " +
-                "The current write is being aborted and the connection is being closed because it would have resulted in " +
-                "59 bytes being sent."));
-        }
+        assertThat(errors.toString(), equalTo("The declared content length for GET " + server.uri().resolve("/blah") + " was 20 bytes. " +
+            "The current write is being aborted and the connection is being closed because it would have resulted in " +
+            "59 bytes being sent."));
     }
 
     @Test

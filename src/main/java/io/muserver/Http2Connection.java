@@ -26,7 +26,7 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
 
     private final MuServerImpl server;
     private final NettyHandlerAdapter nettyHandlerAdapter;
-    private final ConcurrentHashMap<Integer, HttpExchange> contexts = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<Integer, HttpExchange> exchanges = new ConcurrentHashMap<>();
     private volatile int lastStreamId = 0;
     private final MuStatsImpl connectionStats = new MuStatsImpl(null);
     private InetSocketAddress remoteAddress;
@@ -40,14 +40,13 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
         this.nettyHandlerAdapter = nettyHandlerAdapter;
     }
 
-
     @Override
     public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
         server.stats.onConnectionOpened();
         remoteAddress = (InetSocketAddress) ctx.channel().remoteAddress();
         this.nettyContext = ctx;
-        super.handlerAdded(ctx);
         server.onConnectionStarted(this);
+        super.handlerAdded(ctx);
     }
 
     @Override
@@ -56,6 +55,7 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
         server.onConnectionEnded(this);
         super.channelInactive(ctx);
     }
+
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
@@ -66,7 +66,7 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
         if (error != null) {
             encoder().writeGoAway(ctx, lastStreamId, error.code(), EMPTY_BUFFER, ctx.channel().newPromise());
         }
-        for (HttpExchange httpExchange : contexts.values()) {
+        for (HttpExchange httpExchange : exchanges.values()) {
             httpExchange.onCancelled(reason);
         }
         ctx.close();
@@ -88,14 +88,14 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
     public int onDataRead(ChannelHandlerContext ctx, int streamId, ByteBuf data, int padding, boolean endOfStream) {
         int processed = data.readableBytes() + padding;
 
-        HttpExchange httpExchange = contexts.get(streamId);
+        HttpExchange httpExchange = exchanges.get(streamId);
         if (httpExchange == null) {
             log.debug("Got a chunk of message for an unknown request. This can happen when a request is rejected based on headers, and then the rejected body arrives.");
         } else {
             NettyHandlerAdapter.passDataToHandler(data, httpExchange, DoneCallback.NoOp);
             if (endOfStream) {
                 nettyHandlerAdapter.onRequestComplete(httpExchange);
-                contexts.remove(streamId);
+                exchanges.remove(streamId);
             }
         }
         return processed;
@@ -106,78 +106,76 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
                               io.netty.handler.codec.http2.Http2Headers headers, int padding, boolean endOfStream) {
         lastStreamId = streamId;
 
-        HttpMethod nettyMeth = HttpMethod.valueOf(headers.method().toString().toUpperCase());
-        Method muMethod;
         try {
-            muMethod = Method.fromNetty(nettyMeth);
-        } catch (IllegalArgumentException e) {
-            server.stats.onInvalidRequest();
-            connectionStats.onInvalidRequest();
-            sendSimpleResponse(ctx, streamId, "405 Method Not Allowed", 405);
-            return;
-        }
+            HttpMethod nettyMeth = HttpMethod.valueOf(headers.method().toString().toUpperCase());
+            Method muMethod = HttpExchange.getMethod(nettyMeth);
 
-        String uri = headers.path().toString();
-        ServerSettings settings = server.settings();
-        if (uri.length() > settings.maxUrlSize) {
-            server.stats.onInvalidRequest();
-            connectionStats.onInvalidRequest();
-            sendSimpleResponse(ctx, streamId, "414 Request-URI Too Long", 414);
-            return;
-        }
-
-        HttpRequest nettyReq = new Http2To1RequestAdapter(streamId, nettyMeth, uri, headers);
-        boolean hasRequestBody = !endOfStream;
-        if (hasRequestBody) {
-            long bodyLen = headers.getLong(HeaderNames.CONTENT_LENGTH, -1L);
-            if (bodyLen == 0) {
-                hasRequestBody = false;
-            } else if (bodyLen > settings.maxRequestSize) {
-                server.stats.onInvalidRequest();
-                connectionStats.onInvalidRequest();
-                sendSimpleResponse(ctx, streamId, "413 Payload Too Large", 413);
-                return;
+            String uri = HttpExchange.getRelativeUrl(headers.path().toString());
+            ServerSettings settings = server.settings();
+            if (uri.length() > settings.maxUrlSize) {
+                throw new InvalidHttpRequestException(414, "414 Request-URI Too Long");
             }
-        }
-        Http2Headers muHeaders = new Http2Headers(headers, hasRequestBody);
-        String host = headers.authority().toString();
-        muHeaders.set(HeaderNames.HOST, host);
-        NettyRequestAdapter muReq = new NettyRequestAdapter(ctx, ctx.channel(), nettyReq, muHeaders, server, muMethod, "https", uri, true, host, "HTTP/2");
 
-        if (settings.block(muReq)) {
-            server.stats.onRejectedDueToOverload();
-            connectionStats.onRejectedDueToOverload();
-            sendSimpleResponse(ctx, streamId, "429 Too Many Requests", 429);
-            return;
-        }
-
-        server.stats.onRequestStarted(muReq);
-        connectionStats.onRequestStarted(muReq);
-        Http2Response resp = new Http2Response(ctx, muReq, new Http2Headers(), encoder(), streamId, settings);
-
-        HttpExchange httpExchange = new HttpExchange(this, nettyHandlerAdapter, muReq, resp);
-        resp.addChangeListener((exchange, newState) -> {
-            nettyHandlerAdapter.onResponseComplete(exchange, server.stats, connectionStats);
-            contexts.remove(streamId);
-        });
-        muReq.setExchange(httpExchange);
-        contexts.put(streamId, httpExchange);
-        DoneCallback addedToExecutorCallback = error -> {
-            ctx.channel().read();
-            if (error != null) {
-                server.stats.onRejectedDueToOverload();
-                connectionStats.onRejectedDueToOverload();
-                try {
-                    sendSimpleResponse(ctx, streamId, "503 Service Unavailable", 503);
-                } catch (Exception e) {
-                    ctx.close();
-                } finally {
-                    server.stats.onRequestEnded(muReq);
-                    connectionStats.onRequestEnded(muReq);
+            HttpRequest nettyReq = new Http2To1RequestAdapter(streamId, nettyMeth, uri, headers);
+            boolean hasRequestBody = !endOfStream;
+            if (hasRequestBody) {
+                long bodyLen = headers.getLong(HeaderNames.CONTENT_LENGTH, -1L);
+                if (bodyLen == 0) {
+                    hasRequestBody = false;
+                } else if (bodyLen > settings.maxRequestSize) {
+                    throw new InvalidHttpRequestException(413, "413 Payload Too Large");
                 }
             }
-        };
-        nettyHandlerAdapter.onHeaders(addedToExecutorCallback, httpExchange, muHeaders);
+            Http2Headers muHeaders = new Http2Headers(headers, hasRequestBody);
+            String host = headers.authority().toString();
+            muHeaders.set(HeaderNames.HOST, host);
+            NettyRequestAdapter muReq = new NettyRequestAdapter(ctx, ctx.channel(), nettyReq, muHeaders, server, muMethod, "https", uri, true, host, "HTTP/2");
+
+            Http2Response resp = new Http2Response(ctx, muReq, new Http2Headers(), encoder(), streamId, settings);
+            HttpExchange httpExchange = new HttpExchange(this, nettyHandlerAdapter, muReq, resp);
+            resp.setExchange(httpExchange);
+            muReq.setExchange(httpExchange);
+
+            if (settings.block(muReq)) {
+                throw new InvalidHttpRequestException(429, "429 Too Many Requests");
+            }
+
+
+
+            resp.addChangeListener((exchange, newState) -> {
+                if (newState.endState()) {
+                    nettyHandlerAdapter.onResponseComplete(exchange, server.stats, connectionStats);
+                    exchanges.remove(streamId);
+                }
+            });
+            exchanges.put(streamId, httpExchange);
+            DoneCallback addedToExecutorCallback = error -> {
+                ctx.channel().read();
+                if (error == null) {
+                    server.stats.onRequestStarted(muReq);
+                    connectionStats.onRequestStarted(muReq);
+                } else {
+                    server.stats.onRejectedDueToOverload();
+                    connectionStats.onRejectedDueToOverload();
+                    try {
+                        sendSimpleResponse(ctx, streamId, "503 Service Unavailable", 503);
+                    } catch (Exception e) {
+                        ctx.close();
+                    }
+                }
+            };
+            nettyHandlerAdapter.onHeaders(addedToExecutorCallback, httpExchange, muHeaders);
+        } catch (InvalidHttpRequestException ihr) {
+            if (ihr.code == 429) {
+                connectionStats.onRejectedDueToOverload();
+                server.stats.onRejectedDueToOverload();
+            } else {
+                connectionStats.onInvalidRequest();
+                server.stats.onInvalidRequest();
+            }
+            sendSimpleResponse(ctx, streamId, ihr.getMessage(), ihr.code);
+            ctx.channel().read();
+        }
     }
 
     static CharSequence compressionToUse(Headers requestHeaders) {
@@ -206,7 +204,7 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
 
     @Override
     public void onRstStreamRead(ChannelHandlerContext ctx, int streamId, long errorCode) {
-        HttpExchange httpExchange = contexts.remove(streamId);
+        HttpExchange httpExchange = exchanges.remove(streamId);
         if (httpExchange != null) {
             httpExchange.onCancelled(ResponseState.ERRORED);
         }

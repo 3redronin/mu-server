@@ -135,10 +135,10 @@ class HttpExchange implements ResponseInfo, Exchange {
         ServerSettings settings = server.settings();
         throwIfInvalid(settings, ctx, nettyRequest);
 
-        Method method = getMethod(nettyRequest);
+        Method method = getMethod(nettyRequest.method());
         Http1Headers headers = new Http1Headers(nettyRequest.headers());
 
-        String relativeUri = getRelativeUrl(nettyRequest);
+        String relativeUri = getRelativeUrl(nettyRequest.uri());
 
         NettyRequestAdapter muRequest = new NettyRequestAdapter(ctx, ctx.channel(), nettyRequest, headers, server, method,
             proto, relativeUri, HttpUtil.isKeepAlive(nettyRequest), headers.get(HeaderNames.HOST), nettyRequest.protocolVersion().text());
@@ -177,9 +177,9 @@ class HttpExchange implements ResponseInfo, Exchange {
         return httpExchange;
     }
 
-    private static String getRelativeUrl(HttpRequest nettyRequest) throws InvalidHttpRequestException {
+    static String getRelativeUrl(String nettyUri) throws InvalidHttpRequestException {
         try {
-            URI requestUri = new URI(nettyRequest.uri()).normalize();
+            URI requestUri = new URI(nettyUri).normalize();
             String s = requestUri.getRawPath();
             if (Mutils.nullOrEmpty(s)) {
                 s = "/";
@@ -190,15 +190,15 @@ class HttpExchange implements ResponseInfo, Exchange {
             }
             return s;
         } catch (Exception e) {
-            if (log.isDebugEnabled()) log.debug("Invalid request URL " + nettyRequest.uri());
+            if (log.isDebugEnabled()) log.debug("Invalid request URL " + nettyUri);
             throw new InvalidHttpRequestException(400, "400 Bad Request");
         }
     }
 
-    private static Method getMethod(HttpRequest nettyRequest) throws InvalidHttpRequestException {
+    static Method getMethod(HttpMethod nettyMethod) throws InvalidHttpRequestException {
         Method method;
         try {
-            method = Method.fromNetty(nettyRequest.method());
+            method = Method.fromNetty(nettyMethod);
         } catch (IllegalArgumentException e) {
             throw new InvalidHttpRequestException(405, "405 Method Not Allowed");
         }
@@ -257,7 +257,7 @@ class HttpExchange implements ResponseInfo, Exchange {
         boolean forceDisconnect = response instanceof Http1Response;
 
         if (response.hasStartedSendingData()) {
-            if (response.responseState() == ResponseState.CLIENT_DISCONNECTED) {
+            if (response.responseState() == ResponseState.CLIENT_DISCONNECTED || (ex instanceof IllegalArgumentException && ex.getMessage() != null && ex.getMessage().contains("Stream no longer exists"))) {
                 log.debug("Client disconnected before " + request + " was complete");
             } else {
                 log.info("Unhandled error from handler for " + request + " (note that a " + response.status() +

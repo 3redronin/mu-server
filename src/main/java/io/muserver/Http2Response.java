@@ -43,6 +43,7 @@ class Http2Response extends NettyResponseAdaptor {
     }
 
     private static void writeToChannelForReal(ChannelHandlerContext ctx, Http2ConnectionEncoder encoder, int streamId, ByteBuf content, boolean isLast, ChannelPromise channelPromise) {
+
         encoder.writeData(ctx, streamId, content, 0, isLast, channelPromise);
         ctx.channel().flush();
     }
@@ -60,8 +61,9 @@ class Http2Response extends NettyResponseAdaptor {
 
     @Override
     protected void onContentLengthMismatch() {
-        // don't really care for http2
-        log.info("The declared content length for " + request + " was " + declaredLength + " bytes however " + bytesStreamed + " bytes being sent.");
+        throw new IllegalStateException("The declared content length for " + request + " was " + declaredLength + " bytes. " +
+            "The current write is being aborted and the connection is being closed because it would have resulted in " +
+            bytesStreamed + " bytes being sent.");
     }
 
     private void writeHeaders(boolean isEnd) {
