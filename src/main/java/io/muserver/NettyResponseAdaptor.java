@@ -121,6 +121,7 @@ abstract class NettyResponseAdaptor implements MuResponse {
         }
     }
 
+    @Deprecated
     public Future<Void> writeAsync(String text) {
         return write(textToBuffer(text), false);
     }

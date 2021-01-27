@@ -190,7 +190,7 @@ public class PrimitiveEntityProviderTest {
     private void check(Object value) throws IOException {
         String content = String.valueOf(value);
         try (Response resp = call(request()
-            .post(RequestBody.create(MediaType.parse("text/plain;charset=utf-8"), content))
+            .post(RequestBody.create(content, MediaType.parse("text/plain;charset=utf-8")))
             .url(server.uri().resolve("/samples").toString())
         )) {
             assertThat(resp.code(), equalTo(200));
@@ -201,7 +201,7 @@ public class PrimitiveEntityProviderTest {
     }
     private void checkNoBody() throws IOException {
         try (Response resp = call(request()
-            .post(RequestBody.create(MediaType.parse("text/plain"), ""))
+            .post(RequestBody.create("", MediaType.parse("text/plain")))
             .url(server.uri().resolve("/samples").toString())
         )) {
             assertThat(resp.code(), equalTo(400));

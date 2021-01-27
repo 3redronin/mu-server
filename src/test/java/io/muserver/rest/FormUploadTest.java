@@ -151,9 +151,9 @@ public class FormUploadTest {
             .post(new MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
                 .addPart(Headers.of("Content-Disposition", "form-data; name=\"image\"; filename=\"guangzhou, china.jpeg\""),
-                    RequestBody.create(MediaType.parse("image/jpeg"), guangzhouChina))
+                    RequestBody.create(guangzhouChina, MediaType.parse("image/jpeg")))
                 .addPart(Headers.of("Content-Disposition", "form-data; name=\"image\"; filename=\"friends.jpg\""),
-                    RequestBody.create(MediaType.parse("image/jpeg"), friends))
+                    RequestBody.create(friends, MediaType.parse("image/jpeg")))
                 .build())
         )) {
             assertThat(resp.code(), is(200));

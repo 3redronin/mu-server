@@ -66,7 +66,7 @@ public class EntityProvidersTest {
                 .addCustomWriter(new MyStringReaderWriter())
                 .build()).start();
         try (Response resp = call(request()
-            .post(RequestBody.create(MediaType.parse("text/plain"), "hello world"))
+            .post(RequestBody.create("hello world", MediaType.parse("text/plain")))
             .url(server.uri().resolve("/samples").toString())
         )) {
             assertThat(resp.code(), equalTo(200));
@@ -132,7 +132,7 @@ public class EntityProvidersTest {
                 .addCustomWriter(new DogListWriter())
                 .build()).start();
         try (Response resp = call(request()
-            .post(RequestBody.create(MediaType.parse("text/plain"), "Little"))
+            .post(RequestBody.create("Little", MediaType.parse("text/plain")))
             .url(server.uri().resolve("/dogs").toString())
         )) {
             assertThat(resp.body().string(), equalTo("Dog: Little (Unknown)"));
@@ -145,7 +145,7 @@ public class EntityProvidersTest {
 
     private void stringCheck(String requestBodyType, String content, String expectedResponseType, String requestPath) throws IOException {
         try (Response resp = call(request()
-            .post(RequestBody.create(MediaType.parse(requestBodyType), content))
+            .post(RequestBody.create(content, MediaType.parse(requestBodyType)))
             .url(server.uri().resolve(requestPath).toString())
         )) {
             assertThat(resp.code(), equalTo(200));

@@ -251,7 +251,7 @@ public class AsynchronousProcessingTest {
         }
         this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Sample())).start();
         try (Response resp = call(request()
-            .post(RequestBody.create(MediaType.parse("text/plain"), ""))
+            .post(RequestBody.create("", MediaType.parse("text/plain")))
             .url(server.uri().resolve("/samples").toString())
         )) {
             assertThat(resp.code(), equalTo(400));

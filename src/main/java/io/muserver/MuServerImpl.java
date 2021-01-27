@@ -109,11 +109,13 @@ class MuServerImpl implements MuServer {
     }
 
     @Override
+    @Deprecated
     public void changeSSLContext(SSLContext newSSLContext) {
         changeSSLContext(SSLContextBuilder.sslContext().withSSLContext(newSSLContext));
     }
 
     @Override
+    @Deprecated
     public void changeSSLContext(SSLContextBuilder newSSLContext) {
         Mutils.notNull("newSSLContext", newSSLContext);
         try {

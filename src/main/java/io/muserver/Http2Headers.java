@@ -319,16 +319,19 @@ class Http2Headers implements Headers {
     }
 
     @Override
+    @Deprecated
     public String getAsString(CharSequence name) {
         return get(name);
     }
 
     @Override
+    @Deprecated
     public List<String> getAllAsString(CharSequence name) {
         return getAll(name);
     }
 
     @Override
+    @Deprecated
     public Iterator<Map.Entry<String, String>> iteratorAsString() {
         return iterator();
     }

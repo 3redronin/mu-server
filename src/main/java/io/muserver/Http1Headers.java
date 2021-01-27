@@ -298,16 +298,19 @@ class Http1Headers implements Headers {
     }
 
     @Override
+    @Deprecated
     public String getAsString(CharSequence name) {
         return entries.getAsString(name);
     }
 
     @Override
+    @Deprecated
     public List<String> getAllAsString(CharSequence name) {
         return entries.getAllAsString(name);
     }
 
     @Override
+    @Deprecated
     public Iterator<Map.Entry<String, String>> iteratorAsString() {
         return entries.iteratorAsString();
     }

@@ -82,6 +82,7 @@ class NettyRequestAdapter implements MuRequest {
     }
 
     @Override
+    @Deprecated
     public String protocol() {
         return protocol;
     }
@@ -207,6 +208,7 @@ class NettyRequestAdapter implements MuRequest {
         uploads.get(name).add(file);
     }
 
+    @Deprecated
     public String parameter(String name) {
         return query().get(name);
     }
@@ -222,15 +224,17 @@ class NettyRequestAdapter implements MuRequest {
         return form;
     }
 
+    @Deprecated
     public List<String> parameters(String name) {
         return query.getAll(name);
     }
 
+    @Deprecated
     public String formValue(String name) throws IOException {
         return form().get(name);
     }
 
-
+    @Deprecated
     public List<String> formValues(String name) throws IOException {
         return form().getAll(name);
     }
@@ -274,11 +278,13 @@ class NettyRequestAdapter implements MuRequest {
     }
 
     @Override
+    @Deprecated
     public Object state() {
         return attribute("_value_");
     }
 
     @Override
+    @Deprecated
     public void state(Object value) {
         attribute("_value_", value);
     }
@@ -568,6 +574,7 @@ class NettyRequestAdapter implements MuRequest {
         }
 
         @Override
+        @Deprecated
         public void write(ByteBuffer data, WriteCallback callback) {
             write(data, error -> {
                 if (error == null) {
@@ -589,6 +596,7 @@ class NettyRequestAdapter implements MuRequest {
         }
 
         @Override
+        @Deprecated
         public void setResponseCompleteHandler(ResponseCompleteListener responseCompleteListener) {
             if (responseCompleteListener != null) {
                 addResponseCompleteHandler(responseCompleteListener);
@@ -604,6 +612,7 @@ class NettyRequestAdapter implements MuRequest {
         }
 
         @Override
+        @Deprecated
         public void setResponseCompletedHandler(ResponseCompletedListener responseCompletedListener) {
             if (responseCompletedListener != null) {
                 addResponseCompleteHandler(info -> responseCompletedListener.onComplete(info.completedSuccessfully()));

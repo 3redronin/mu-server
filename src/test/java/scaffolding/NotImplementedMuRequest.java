@@ -76,21 +76,25 @@ public class NotImplementedMuRequest implements MuRequest {
     }
 
     @Override
+    @Deprecated
     public String parameter(String name) {
         return throwIt();
     }
 
     @Override
+    @Deprecated
     public List<String> parameters(String name) {
         return throwIt();
     }
 
     @Override
+    @Deprecated
     public String formValue(String name) throws IOException {
         return throwIt();
     }
 
     @Override
+    @Deprecated
     public List<String> formValues(String name) throws IOException {
         return throwIt();
     }
@@ -116,11 +120,13 @@ public class NotImplementedMuRequest implements MuRequest {
     }
 
     @Override
+    @Deprecated
     public Object state() {
         return throwIt();
     }
 
     @Override
+    @Deprecated
     public void state(Object value) {
         throwIt();
     }
@@ -161,6 +167,7 @@ public class NotImplementedMuRequest implements MuRequest {
     }
 
     @Override
+    @Deprecated
     public String protocol() {
         return throwIt();
     }

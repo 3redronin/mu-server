@@ -5,8 +5,8 @@ import org.junit.Test;
 import javax.ws.rs.core.EntityTag;
 import javax.ws.rs.ext.RuntimeDelegate;
 
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
-import static org.junit.Assert.assertThat;
 
 public class EntityTagDelegateTest {
 

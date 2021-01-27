@@ -308,7 +308,7 @@ public class MuServerTest {
             .start();
 
         try (Response resp = call(request(server.uri())
-            .post(RequestBody.create(okhttp3.MediaType.get("text/plain; charset=ISO-8859-5"), warAndPeaceInRussian))
+            .post(RequestBody.create(warAndPeaceInRussian, okhttp3.MediaType.get("text/plain; charset=ISO-8859-5")))
         )) {
             assertThat(resp.header("Content-Type"), is("text/plain;charset=ISO-8859-5"));
             String body = resp.body().string();

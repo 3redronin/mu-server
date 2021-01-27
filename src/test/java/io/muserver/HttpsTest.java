@@ -7,12 +7,17 @@ import scaffolding.MuAssert;
 import scaffolding.SSLSocketFactoryWrapper;
 import scaffolding.ServerUtils;
 
-import javax.net.ssl.*;
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SNIHostName;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLParameters;
 import java.io.IOException;
 import java.net.URI;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
-import java.util.*;
+import java.util.Collections;
+import java.util.Date;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.MuServerBuilder.httpServer;
@@ -40,7 +45,7 @@ public class HttpsTest {
                 + server.httpsUri().getPort() + "/"));
         }
         SSLInfo sslInfo = actualSSLInfo.get();
-        assertThat(sslInfo.providerName(), isOneOf("JDK", "OpenSSL"));
+        assertThat(sslInfo.providerName(), oneOf("JDK", "OpenSSL"));
         assertThat(sslInfo.protocols(), hasItem("TLSv1.2"));
         assertThat(sslInfo.ciphers().size(), greaterThan(0));
 
