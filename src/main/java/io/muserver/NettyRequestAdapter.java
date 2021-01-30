@@ -36,7 +36,7 @@ import static java.util.Collections.emptyList;
 
 class NettyRequestAdapter implements MuRequest {
     private static final Logger log = LoggerFactory.getLogger(NettyRequestAdapter.class);
-    private RequestState status = RequestState.RECEIVING;
+    private RequestState status = RequestState.RECEIVING_BODY;
     private final ChannelHandlerContext ctx;
     private final Channel channel;
     private final HttpRequest request;
@@ -624,14 +624,5 @@ class NettyRequestAdapter implements MuRequest {
         }
     }
 
-}
-
-enum RequestState {
-    RECEIVING(false), COMPLETE(true), ERROR(true);
-    final boolean endState;
-
-    RequestState(boolean endState) {
-        this.endState = endState;
-    }
 }
 
