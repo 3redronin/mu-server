@@ -277,9 +277,7 @@ public interface MuRequest {
     /**
      * The protocol for the request.
      * @return A string such as <code>HTTP/1.1</code> or <code>HTTP/2</code>
-     * @deprecated Call {@link #connection()} to get the connection and then use {@link HttpConnection#protocol()}
      */
-    @Deprecated
     String protocol();
 
     /**

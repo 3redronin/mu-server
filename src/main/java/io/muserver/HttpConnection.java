@@ -70,4 +70,9 @@ public interface HttpConnection {
      * @return A readonly set of active websockets being used on this connection
      */
     Set<MuWebSocket> activeWebsockets();
+
+    /**
+     * @return The server that this connection belongs to
+     */
+    MuServer server();
 }

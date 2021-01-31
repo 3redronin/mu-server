@@ -14,7 +14,7 @@ import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 class Http1Response extends NettyResponseAdaptor {
     private static final Logger log = LoggerFactory.getLogger(Http1Response.class);
 
-    private final ChannelHandlerContext ctx;
+    final ChannelHandlerContext ctx;
     private final Http1Headers headers;
 
     Http1Response(ChannelHandlerContext ctx, NettyRequestAdapter request, Http1Headers headers) {
@@ -67,12 +67,13 @@ class Http1Response extends NettyResponseAdaptor {
 
 
     @Override
-    protected void writeFullResponse(ByteBuf body) {
+    protected ChannelFuture writeFullResponse(ByteBuf body) {
         FullHttpResponse resp = isHead ?
             new EmptyHttpResponse(httpStatus())
             : new DefaultFullHttpResponse(HTTP_1_1, httpStatus(), body, false);
         writeHeaders(resp);
-        lastAction = ctx.writeAndFlush(resp).syncUninterruptibly();
+        lastAction = ctx.writeAndFlush(resp);
+        return lastAction;
     }
 
 

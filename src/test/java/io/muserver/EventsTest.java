@@ -3,7 +3,10 @@ package io.muserver;
 import okhttp3.OkHttpClient;
 import okhttp3.Response;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import scaffolding.ClientUtils;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
@@ -43,19 +46,23 @@ public class EventsTest {
         assertThat(info.request().uri(), equalTo(server.uri().resolve("/blah")));
     }
 
+    private static final Logger log = LoggerFactory.getLogger(EventsTest.class);
     @Test
     public void canBeAlertedWhenResponseCompletesWithFailure() throws Exception {
         CompletableFuture<ResponseInfo> received = new CompletableFuture<>();
         server = ServerUtils.httpsServerForTest()
             .addResponseCompleteListener(received::complete)
             .addHandler(Method.GET, "/blah", (req, resp, pp) -> {
-                Thread.sleep(1000);
+                Thread.sleep(500);
             })
             .start();
-        OkHttpClient client = ClientUtils.client.newBuilder().readTimeout(100, TimeUnit.MILLISECONDS).build();
-        try (Response ignored = client.newCall(request(server.uri().resolve("/blah")).build()).execute()) {
+        OkHttpClient client = ClientUtils.client.newBuilder().readTimeout(250, TimeUnit.MILLISECONDS).build();
+        try (Response resp = client.newCall(request(server.uri().resolve("/blah")).build()).execute()) {
+            resp.body().bytes();
+            Assert.fail("Why");
         } catch (Exception ex) {
             // expected due to timeout
+            log.info("Got ex as expected: " + ex.getMessage());
         }
 
         ResponseInfo info = received.get(10, TimeUnit.SECONDS);

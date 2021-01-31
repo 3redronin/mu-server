@@ -36,20 +36,20 @@ abstract class NettyResponseAdaptor implements MuResponse {
     private OutputStream outputStream;
     protected long bytesStreamed = 0;
     protected long declaredLength = -1;
-    private final List<StateChangeListener> listeners = new CopyOnWriteArrayList<>();
+    private final List<ResponseStateChangeListener> listeners = new CopyOnWriteArrayList<>();
     private HttpExchange httpExchange;
-    public long endTime;
 
     public void setExchange(HttpExchange httpExchange) {
         this.httpExchange = httpExchange;
     }
 
     protected void outputState(ResponseState state) {
-        if (state.endState()) {
-            endTime = System.currentTimeMillis();
+        ResponseState oldStatus = this.state;
+        if (oldStatus.endState()) {
+            throw new IllegalStateException("Didn't expect to get a status update to " + state + " when the current status is " + oldStatus);
         }
         this.state = state;
-        for (StateChangeListener listener : listeners) {
+        for (ResponseStateChangeListener listener : listeners) {
             listener.onStateChange(httpExchange, state);
         }
     }
@@ -58,11 +58,8 @@ abstract class NettyResponseAdaptor implements MuResponse {
         return state;
     }
 
-    interface StateChangeListener {
-        void onStateChange(HttpExchange exchange, ResponseState newState);
-    }
-    void addChangeListener(StateChangeListener stateChangeListener) {
-        this.listeners.add(stateChangeListener);
+    void addChangeListener(ResponseStateChangeListener responseStateChangeListener) {
+        this.listeners.add(responseStateChangeListener);
     }
 
     void setWebsocket() {
@@ -202,13 +199,21 @@ abstract class NettyResponseAdaptor implements MuResponse {
         headers.add(HeaderNames.SET_COOKIE, ServerCookieEncoder.LAX.encode(cookie.nettyCookie));
     }
 
+    @Override
     public OutputStream outputStream() {
+        return outputStream(4096);
+    }
+
+    @Override
+    public OutputStream outputStream(int bufferSize) {
         if (this.outputStream == null) {
             startStreaming();
-            this.outputStream = new BufferedOutputStream(new ChunkedHttpOutputStream(this), 4096);
+            ChunkedHttpOutputStream nonBuffered = new ChunkedHttpOutputStream(this);
+            this.outputStream = bufferSize > 0 ? new BufferedOutputStream(nonBuffered, bufferSize) : nonBuffered;
         }
         return this.outputStream;
     }
+
 
     public PrintWriter writer() {
         if (this.writer == null) {
@@ -285,12 +290,11 @@ abstract class NettyResponseAdaptor implements MuResponse {
             headers.set(HeaderNames.CONTENT_TYPE, TEXT_PLAIN_UTF8);
         }
         headers.set(HeaderNames.CONTENT_LENGTH, bodyLength);
-
-        writeFullResponse(body);
+        writeFullResponse(body).syncUninterruptibly();
         outputState(ResponseState.FULL_SENT);
     }
 
-    protected abstract void writeFullResponse(ByteBuf body);
+    protected abstract ChannelFuture writeFullResponse(ByteBuf body);
 
     protected abstract ChannelFuture closeConnection();
 

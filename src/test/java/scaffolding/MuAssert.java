@@ -44,6 +44,7 @@ public class MuAssert {
             }
             assertThat("Expected no requests to still be in flight when stopping server",
                 server.stats().activeRequests(), is(empty()));
+//            assertEventually(() -> server.stats().activeRequests(), is(empty()));
             server.stop();
         }
     }

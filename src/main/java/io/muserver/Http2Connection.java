@@ -129,18 +129,16 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
             Http2Headers muHeaders = new Http2Headers(headers, hasRequestBody);
             String host = headers.authority().toString();
             muHeaders.set(HeaderNames.HOST, host);
-            NettyRequestAdapter muReq = new NettyRequestAdapter(ctx, ctx.channel(), nettyReq, muHeaders, server, muMethod, "https", uri, true, host, "HTTP/2");
+            NettyRequestAdapter muReq = new NettyRequestAdapter(ctx, nettyReq, muHeaders, muMethod, "https", uri, true, host);
 
             Http2Response resp = new Http2Response(ctx, muReq, new Http2Headers(), encoder(), streamId, settings);
-            HttpExchange httpExchange = new HttpExchange(this, nettyHandlerAdapter, muReq, resp);
+            HttpExchange httpExchange = new HttpExchange(this, muReq, resp);
             resp.setExchange(httpExchange);
             muReq.setExchange(httpExchange);
 
             if (settings.block(muReq)) {
                 throw new InvalidHttpRequestException(429, "429 Too Many Requests");
             }
-
-
 
             resp.addChangeListener((exchange, newState) -> {
                 if (newState.endState()) {
@@ -164,7 +162,7 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
                     }
                 }
             };
-            nettyHandlerAdapter.onHeaders(addedToExecutorCallback, httpExchange, muHeaders);
+            nettyHandlerAdapter.onHeaders(addedToExecutorCallback, httpExchange);
         } catch (InvalidHttpRequestException ihr) {
             if (ihr.code == 429) {
                 connectionStats.onRejectedDueToOverload();
@@ -305,6 +303,11 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
     @Override
     public Set<MuWebSocket> activeWebsockets() {
         return Collections.emptySet();
+    }
+
+    @Override
+    public MuServer server() {
+        return server;
     }
 
 }

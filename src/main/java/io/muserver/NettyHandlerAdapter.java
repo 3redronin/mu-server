@@ -27,51 +27,40 @@ class NettyHandlerAdapter {
     }
 
     static void passDataToHandler(ByteBuf data, HttpExchange httpExchange, DoneCallback dataQueuedCallback) {
-        if (data.readableBytes() > 0) {
-            data.retain();
-            try {
-                httpExchange.requestBody.handOff(data, error -> {
-                    data.release();
-                    dataQueuedCallback.onComplete(error);
-                });
-            } catch (Exception e) {
-                data.release();
-                if (e instanceof MuException) {
-                    MuResponse resp = httpExchange.response;
-                    if (!resp.hasStartedSendingData()) {
-                        resp.status(413);
-                        resp.contentType(ContentTypes.TEXT_PLAIN_UTF8);
-                        resp.headers().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
-                        resp.write("413 Payload Too Large");
-                    } else {
-                        httpExchange.onCancelled(ResponseState.ERRORED);
-                    }
-                }
-            }
-        } else {
-            try {
-                dataQueuedCallback.onComplete(null);
-            } catch (Exception ignored) {
-            }
-        }
+//        if (data.readableBytes() > 0) {
+//            data.retain();
+//            try {
+//                httpExchange.requestBody.handOff(data, error -> {
+//                    data.release();
+//                    dataQueuedCallback.onComplete(error);
+//                });
+//            } catch (Exception e) {
+//                data.release();
+//                if (e instanceof MuException) {
+//                    MuResponse resp = httpExchange.response;
+//                    if (!resp.hasStartedSendingData()) {
+//                        resp.status(413);
+//                        resp.contentType(ContentTypes.TEXT_PLAIN_UTF8);
+//                        resp.headers().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
+//                        resp.write("413 Payload Too Large");
+//                    } else {
+//                        httpExchange.onCancelled(ResponseState.ERRORED);
+//                    }
+//                }
+//            }
+//        } else {
+//            try {
+//                dataQueuedCallback.onComplete(null);
+//            } catch (Exception ignored) {
+//            }
+//        }
     }
 
-    void onHeaders(DoneCallback addedToExecutorCallback, HttpExchange muCtx, Headers headers) {
+    void onHeaders(DoneCallback addedToExecutorCallback, HttpExchange muCtx) {
 
-        NettyRequestAdapter request = (NettyRequestAdapter) muCtx.request;
-        if (headers.hasBody()) {
-            // There will be a request body, so set the streams
-            GrowableByteBufferInputStream requestBodyStream = new GrowableByteBufferInputStream(settings.requestReadTimeoutMillis, settings.maxRequestSize);
-            request.inputStream(requestBodyStream);
-            muCtx.requestBody = requestBodyStream;
-        } else {
-            request.setStatus(RequestState.COMPLETE);
-        }
-        request.nettyHttpExchange = muCtx;
+        NettyRequestAdapter request = muCtx.request;
         try {
             executor.execute(() -> {
-
-
                 boolean error = false;
                 NettyResponseAdaptor response = muCtx.response;
                 try {
@@ -113,15 +102,15 @@ class NettyHandlerAdapter {
     }
 
     void onRequestComplete(HttpExchange ctx) {
-        try {
-            GrowableByteBufferInputStream inputBuffer = ctx.requestBody;
-            if (inputBuffer != null) {
-                inputBuffer.close();
-            }
-            ctx.request.setStatus(RequestState.COMPLETE);
-        } catch (Exception e) {
-            log.info("Error while cleaning up request. It may mean the client did not receive the full response for " + ctx.request, e);
-        }
+//        try {
+//            GrowableByteBufferInputStream inputBuffer = ctx.requestBody;
+//            if (inputBuffer != null) {
+//                inputBuffer.close();
+//            }
+//            ctx.request.setStatus(RequestState.COMPLETE);
+//        } catch (Exception e) {
+//            log.info("Error while cleaning up request. It may mean the client did not receive the full response for " + ctx.request, e);
+//        }
     }
 
     void onResponseComplete(ResponseInfo info, MuStatsImpl serverStats, MuStatsImpl connectionStats) {

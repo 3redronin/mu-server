@@ -94,9 +94,9 @@ class Http2Response extends NettyResponseAdaptor {
     }
 
     @Override
-    protected void writeFullResponse(ByteBuf body) {
+    protected ChannelFuture writeFullResponse(ByteBuf body) {
         writeHeaders(false);
-        writeToChannel(true, body);
+        return writeToChannel(true, body);
     }
 
     @Override

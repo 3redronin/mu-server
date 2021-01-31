@@ -12,6 +12,7 @@ import io.netty.handler.codec.http.HttpRequestDecoder;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseEncoder;
 import io.netty.handler.codec.http.HttpServerKeepAliveHandler;
+import io.netty.handler.flow.FlowControlHandler;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.timeout.IdleStateHandler;
@@ -55,7 +56,7 @@ public class MuServerBuilder {
     private String host;
     private SSLContextBuilder sslContextBuilder;
     private Http2Config http2Config;
-    private long requestTimeoutMills = TimeUnit.MINUTES.toMillis(2);
+    private long requestTimeoutMillis = TimeUnit.MINUTES.toMillis(2);
     private long idleTimeoutMills = TimeUnit.MINUTES.toMillis(5);
     private ExecutorService executor;
     private long maxRequestSize = 24 * 1024 * 1024;
@@ -335,7 +336,7 @@ public class MuServerBuilder {
             throw new IllegalArgumentException("The duration must be 0 or greater");
         }
         Mutils.notNull("unit", unit);
-        this.requestTimeoutMills = unit.toMillis(duration);
+        this.requestTimeoutMillis = unit.toMillis(duration);
         return this;
     }
 
@@ -508,7 +509,7 @@ public class MuServerBuilder {
             throw new IllegalArgumentException("No ports were configured. Please call MuServerBuilder.withHttpPort(int) or MuServerBuilder.withHttpsPort(int)");
         }
 
-        ServerSettings settings = new ServerSettings(minimumGzipSize, maxHeadersSize, requestTimeoutMills, maxRequestSize, maxUrlSize, gzipEnabled, mimeTypesToGzip, rateLimiters);
+        ServerSettings settings = new ServerSettings(minimumGzipSize, maxHeadersSize, requestTimeoutMillis, maxRequestSize, maxUrlSize, gzipEnabled, mimeTypesToGzip, rateLimiters);
 
         ExecutorService handlerExecutor = this.executor;
         if (handlerExecutor == null) {
@@ -600,7 +601,7 @@ public class MuServerBuilder {
 
                 protected void initChannel(SocketChannel socketChannel) {
                     ChannelPipeline p = socketChannel.pipeline();
-                    p.addLast("idle", new IdleStateHandler(0, 0, idleTimeoutMills, TimeUnit.MILLISECONDS));
+                    p.addLast("idle", new IdleStateHandler(server.settings().requestReadTimeoutMillis, 0, idleTimeoutMills, TimeUnit.MILLISECONDS));
                     p.addLast(trafficShapingHandler);
                     if (usesSsl) {
                         SslHandler sslHandler = sslContextProvider.get().newHandler(socketChannel.alloc());
@@ -641,7 +642,8 @@ public class MuServerBuilder {
         if (server.settings().gzipEnabled) {
             p.addLast("compressor", new SelectiveHttpContentCompressor(server.settings()));
         }
-        p.addLast("keepalive", new HttpServerKeepAliveHandler());
+        p.addLast("keepalive", new HttpServerKeepAliveHandler()); // TODO: is this still useful?
+        p.addLast("flowControl", new FlowControlHandler());
         p.addLast("muhandler", new Http1Connection(nettyHandlerAdapter, server, proto));
     }
 }

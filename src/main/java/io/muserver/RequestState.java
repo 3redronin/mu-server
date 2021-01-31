@@ -35,3 +35,7 @@ enum RequestState {
         return endState;
     }
 }
+
+interface RequestStateChangeListener {
+    void onChange(HttpExchange exchange, RequestState newState);
+}

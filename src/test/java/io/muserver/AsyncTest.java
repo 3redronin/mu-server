@@ -13,7 +13,6 @@ import scaffolding.ServerUtils;
 import scaffolding.StringUtils;
 
 import java.io.IOException;
-import java.lang.reflect.Field;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -89,14 +88,7 @@ public class AsyncTest {
                         sendDoneCallbackCount.incrementAndGet();
                     });
                 }
-                
-                Field requestField = asyncHandle.getClass().getDeclaredField("request");
-                requestField.setAccessible(true);
-                NettyRequestAdapter requestAdapter = (NettyRequestAdapter) requestField.get(asyncHandle);
-                Field channelField = requestAdapter.getClass().getDeclaredField("channel");
-                channelField.setAccessible(true);
-                Channel channel = (Channel) channelField.get(requestAdapter);
-                
+                Channel channel = ((NettyRequestAdapter)request).ctx.channel();
                 executorService.submit(()->{
                     while (true){
                         if (!channel.isWritable()){

@@ -60,7 +60,9 @@ public class Mutils {
         byte[] buffer = new byte[bufferSize];
         int read;
         while ((read = from.read(buffer)) > -1) {
-            to.write(buffer, 0, read);
+            if (read > 0) {
+                to.write(buffer, 0, read);
+            }
         }
     }
 

@@ -93,13 +93,15 @@ public interface MuResponse {
     void addCookie(io.muserver.Cookie cookie);
 
     /**
-     * <p>Gets an output stream that sends an HTTP chunk each time the <code>write</code>
+     * <p>Gets a buffered output stream that sends an HTTP chunk each time the <code>write</code>
      * method is called.</p>
-     * <p>You may consider wrapping it in a {@link java.io.BufferedOutputStream} if you want to buffer the chunks before sending to the client.</p>
+     * <p>To set the size of the buffer, use @{link {@link #outputStream(int)}} instead.</p>
      * <p>If you are writing text, you may prefer the {@link #writer()} or {@link #sendChunk(String)} methods.</p>
      * @return An output stream to send data to the client.
      */
     OutputStream outputStream();
+
+    OutputStream outputStream(int bufferSize);
 
     /**
      * <p>A print writer that can be used to send text to the client. It is a convenience method, wrapping {@link #outputStream()}

@@ -16,8 +16,10 @@ import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.Response;
 import java.net.URI;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Future;
 
 import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
@@ -28,23 +30,55 @@ import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 class HttpExchange implements ResponseInfo, Exchange {
 
     private static final Map<String, String> exceptionMessageMap = new HashMap<>();
+
     static {
         MuRuntimeDelegate.ensureSet();
         exceptionMessageMap.put(new NotFoundException().getMessage(), "This page is not available. Sorry about that.");
     }
 
     private static final Logger log = LoggerFactory.getLogger(HttpExchange.class);
-    private final NettyHandlerAdapter nettyHandlerAdapter;
     final NettyRequestAdapter request;
     final NettyResponseAdaptor response;
-    GrowableByteBufferInputStream requestBody;
     private final HttpConnection connection;
+    private final long startTime = System.currentTimeMillis();
+    private volatile long endTime;
+    private volatile HttpExchangeState state = HttpExchangeState.IN_PROGRESS;
+    private final List<HttpExchangeStateChangeListener> listeners = new CopyOnWriteArrayList<>();
 
-    HttpExchange(HttpConnection connection, NettyHandlerAdapter nettyHandlerAdapter, NettyRequestAdapter request, NettyResponseAdaptor response) {
+    HttpExchange(HttpConnection connection, NettyRequestAdapter request, NettyResponseAdaptor response) {
         this.connection = connection;
-        this.nettyHandlerAdapter = nettyHandlerAdapter;
         this.request = request;
         this.response = response;
+        request.addChangeListener((exchange, newState) -> onReqOrRespStateChange(newState, null));
+        response.addChangeListener((exchange, newState) -> onReqOrRespStateChange(null, newState));
+    }
+
+    void addChangeListener(HttpExchangeStateChangeListener listener) {
+        this.listeners.add(listener);
+    }
+
+    private void onReqOrRespStateChange(RequestState requestChanged, ResponseState responseChanged) {
+        log.info("HE state change. request=" + requestChanged + " ; resp=" + responseChanged);
+        RequestState reqState = request.requestState();
+        ResponseState respState = response.responseState();
+        if (reqState == RequestState.ERROR || (respState.endState() && !respState.completedSuccessfully())) {
+            onEnded(HttpExchangeState.ERRORED);
+        } else if (reqState.endState() && respState.endState()) {
+            onEnded(HttpExchangeState.COMPLETE);
+        } else if (responseChanged != null && responseChanged.endState()) {
+            request.discardInputStreamIfNotConsumed();
+        }
+    }
+
+    private void onEnded(HttpExchangeState endState) {
+        if (this.state.endState()) {
+            throw new IllegalStateException("Cannot end an exchange that was already ended. Previous state=" + this.state + "; new state=" + endState);
+        }
+        this.state = endState;
+        this.endTime = System.currentTimeMillis();
+        for (HttpExchangeStateChangeListener listener : listeners) {
+            listener.onStateChange(this, endState);
+        }
     }
 
     public Future<Void> complete(boolean forceDisconnect) {
@@ -69,7 +103,7 @@ class HttpExchange implements ResponseInfo, Exchange {
 
     @Override
     public long duration() {
-        long end = response.endTime;
+        long end = endTime;
         if (end == 0) end = System.currentTimeMillis();
         return end - request.startTime();
     }
@@ -103,17 +137,29 @@ class HttpExchange implements ResponseInfo, Exchange {
             throw new UnexpectedMessageException(this, msg);
         }
         HttpContent content = (HttpContent) msg;
-        ByteBuf byteBuf = content.content();
-
-        NettyHandlerAdapter.passDataToHandler(byteBuf, this, error -> {
+        ByteBuf byteBuf = content.content().retain();
+        boolean last = msg instanceof LastHttpContent;
+        DoneCallback doneCallback = error -> {
             if (error == null) {
-                ctx.channel().read();
+                if (last) {
+                    request.setState(RequestState.COMPLETE);
+                } else {
+                    ctx.channel().read();
+                }
             } else {
+                request.setState(RequestState.ERROR);
                 onException(ctx, error);
             }
-        });
-        if (msg instanceof LastHttpContent) {
-            nettyHandlerAdapter.onRequestComplete(this);
+            byteBuf.release();
+        };
+        try {
+            request.onRequestBodyRead(byteBuf, last, doneCallback);
+        } catch (Exception e) {
+            try {
+                doneCallback.onComplete(e);
+            } catch (Exception exception) {
+                log.error("Unhandled callback error", exception);
+            }
         }
     }
 
@@ -129,9 +175,13 @@ class HttpExchange implements ResponseInfo, Exchange {
         return connection;
     }
 
+    public HttpExchangeState state() {
+        return state;
+    }
+
     static HttpExchange create(MuServerImpl server, String proto, ChannelHandlerContext ctx, Http1Connection connection,
                                HttpRequest nettyRequest, NettyHandlerAdapter nettyHandlerAdapter, MuStatsImpl connectionStats,
-                               NettyResponseAdaptor.StateChangeListener stateChangeListener) throws InvalidHttpRequestException {
+                               HttpExchangeStateChangeListener stateChangeListener) throws InvalidHttpRequestException {
         ServerSettings settings = server.settings();
         throwIfInvalid(settings, ctx, nettyRequest);
 
@@ -140,26 +190,22 @@ class HttpExchange implements ResponseInfo, Exchange {
 
         String relativeUri = getRelativeUrl(nettyRequest.uri());
 
-        NettyRequestAdapter muRequest = new NettyRequestAdapter(ctx, ctx.channel(), nettyRequest, headers, server, method,
-            proto, relativeUri, HttpUtil.isKeepAlive(nettyRequest), headers.get(HeaderNames.HOST), nettyRequest.protocolVersion().text());
-
+        NettyRequestAdapter muRequest = new NettyRequestAdapter(ctx, nettyRequest, headers, method,
+            proto, relativeUri, HttpUtil.isKeepAlive(nettyRequest), headers.get(HeaderNames.HOST));
 
         MuStatsImpl serverStats = server.stats;
         Http1Response muResponse = new Http1Response(ctx, muRequest, new Http1Headers());
 
-        HttpExchange httpExchange = new HttpExchange(connection, nettyHandlerAdapter, muRequest, muResponse);
+        HttpExchange httpExchange = new HttpExchange(connection, muRequest, muResponse);
         muRequest.setExchange(httpExchange);
         muResponse.setExchange(httpExchange);
+        httpExchange.addChangeListener(stateChangeListener);
 
         if (settings.block(muRequest)) {
             throw new InvalidHttpRequestException(429, "429 Too Many Requests");
         }
 
-        muResponse.addChangeListener(stateChangeListener);
         DoneCallback addedToExecutorCallback = error -> {
-            if (!WebSocketHandler.isWebSocketUpgrade(muRequest)) {
-                ctx.channel().read();
-            }
             if (error == null) {
                 serverStats.onRequestStarted(httpExchange.request);
                 connectionStats.onRequestStarted(httpExchange.request);
@@ -173,7 +219,7 @@ class HttpExchange implements ResponseInfo, Exchange {
                 }
             }
         };
-        nettyHandlerAdapter.onHeaders(addedToExecutorCallback, httpExchange, httpExchange.request.headers());
+        nettyHandlerAdapter.onHeaders(addedToExecutorCallback, httpExchange);
         return httpExchange;
     }
 
@@ -294,4 +340,24 @@ class HttpExchange implements ResponseInfo, Exchange {
         return forceDisconnect;
     }
 
+    public long startTime() {
+        return startTime;
+    }
+}
+
+enum HttpExchangeState {
+    IN_PROGRESS(false), COMPLETE(true), ERRORED(true);
+    private final boolean endState;
+
+    HttpExchangeState(boolean endState) {
+        this.endState = endState;
+    }
+
+    public boolean endState() {
+        return endState;
+    }
+}
+
+interface HttpExchangeStateChangeListener {
+    void onStateChange(HttpExchange exchange, HttpExchangeState newState);
 }

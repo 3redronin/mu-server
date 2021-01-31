@@ -12,9 +12,9 @@ public enum ResponseState {
     NOTHING(false, false),
 
     /**
-     * A non-chunked response has been successfully sent to the client, however the server-side processing has not completed yet
+     * A non-chunked response has been successfully sent to the client
      */
-    FULL_SENT(false, false),
+    FULL_SENT(true, true),
 
     /**
      * Response body has started streaming, but is not complete
@@ -72,4 +72,8 @@ public enum ResponseState {
         this.endState = endState;
         this.fullResponseSent = fullResponseSent;
     }
+}
+
+interface ResponseStateChangeListener {
+    void onStateChange(HttpExchange exchange, ResponseState newState);
 }

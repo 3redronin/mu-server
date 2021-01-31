@@ -72,6 +72,27 @@ public class MuServerTest {
     }
 
     @Test
+    public void statsAreAvailableAfterResponseFinished() throws Exception {
+        server = ServerUtils.httpsServerForTest()
+            .addResponseCompleteListener(info -> {
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    throw new RuntimeException("Hmm");
+                }
+            })
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.write("X");
+            })
+            .start();
+        try (Response resp = call(request(server.uri()))) {
+            assertThat(resp.body().string(), is("X"));
+        }
+        assertThat(server.stats().activeRequests(), empty());
+        assertThat(server.stats().completedRequests(), equalTo(1L));
+    }
+
+    @Test
     public void multipleWritesWorkRight() throws Exception {
         server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
@@ -79,11 +100,12 @@ public class MuServerTest {
             })
             .start();
         for (int i = 0; i < 5000; i++) {
-            try (Response resp = call(request(server.uri()))) {
-                assertThat(resp.body().string(), is("Hello"));
+            try (Response resp = call(request(server.uri().resolve("/?i=" + i)))) {
+                assertThat("Error on i=" + i, resp.body().string(), is("Hello"));
             }
         }
-        assertThat(server.stats().completedRequests(), equalTo(5000L));
+        assertEventually(() -> server.stats().completedRequests(), equalTo(5000L));
+//        assertThat(server.stats().completedRequests(), equalTo(5000L));
         assertThat(server.stats().completedConnections(), lessThan(1000L)); // just make sure it's not one connection per request
     }
 

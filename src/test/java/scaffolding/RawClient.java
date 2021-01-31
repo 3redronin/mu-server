@@ -1,10 +1,13 @@
 package scaffolding;
 
 import io.netty.util.concurrent.DefaultThreadFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.*;
 import java.net.Socket;
 import java.net.URI;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
@@ -12,6 +15,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 public class RawClient implements Closeable {
+    private static final Logger log = LoggerFactory.getLogger(RawClient.class);
     private static final ExecutorService executorService = Executors.newCachedThreadPool(new DefaultThreadFactory("raw-client"));
 
     private final ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -19,11 +23,16 @@ public class RawClient implements Closeable {
     private Socket socket;
     private InputStream response;
     private final AtomicReference<Exception> exception = new AtomicReference<>();
+    private final CountDownLatch responseCompleteLatch = new CountDownLatch(1);
 
     public static RawClient create(URI uri) throws IOException {
         RawClient rawClient = new RawClient();
         rawClient.start(uri);
         return rawClient;
+    }
+
+    public void waitForFullResponse() {
+        MuAssert.assertNotTimedOut("Raw client response waiter", responseCompleteLatch);
     }
 
     private void start(URI uri) throws IOException {
@@ -36,7 +45,7 @@ public class RawClient implements Closeable {
             int read;
             try {
                 while ((read = response.read(buffer)) > -1) {
-//                    System.out.println("Got " + read + " bytes: " + new String(buffer, 0, read, UTF_8));
+//                    log.info("Got " + read + " bytes: " + new String(buffer, 0, read, UTF_8));
                     if (read > 0) {
                         baos.write(buffer, 0, read);
                     }
@@ -46,6 +55,7 @@ public class RawClient implements Closeable {
             } finally {
                 try {
                     response.close();
+                    responseCompleteLatch.countDown();
                 } catch (IOException ignored) {
                 }
             }
@@ -118,8 +128,8 @@ public class RawClient implements Closeable {
 
     @Override
     public void close() {
-        close(request);
         close(response);
+        close(request);
         close(socket);
     }
 

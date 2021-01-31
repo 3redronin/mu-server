@@ -3,6 +3,8 @@ package scaffolding;
 import io.netty.util.ResourceLeakDetector;
 import okhttp3.*;
 import okio.BufferedSink;
+import org.eclipse.jetty.client.HttpClient;
+import org.eclipse.jetty.util.ssl.SslContextFactory;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
@@ -18,6 +20,7 @@ public class ClientUtils {
 
     public static final OkHttpClient client;
     private static X509TrustManager veryTrustingTrustManager = veryTrustingTrustManager();
+    private static volatile HttpClient jettyClient;
 
     static {
         Logger.getLogger(OkHttpClient.class.getName()).setLevel(Level.FINE);
@@ -30,7 +33,6 @@ public class ClientUtils {
             .hostnameVerifier((hostname, session) -> true)
             .readTimeout(isDebug ? 180 : 20, TimeUnit.SECONDS)
             .sslSocketFactory(sslContextForTesting(veryTrustingTrustManager).getSocketFactory(), veryTrustingTrustManager).build();
-
         ResourceLeakDetector.setLevel(ResourceLeakDetector.Level.PARANOID);
     }
 
@@ -58,6 +60,7 @@ public class ClientUtils {
     public static Request.Builder request() {
         return new Request.Builder();
     }
+
     public static Request.Builder request(URI uri) {
         return request().url(uri.toString());
     }
@@ -97,5 +100,17 @@ public class ClientUtils {
 
     public static boolean isHttp2(Response response) {
         return response.protocol().name().equalsIgnoreCase("HTTP_2");
+    }
+
+    public static synchronized HttpClient jettyClient() {
+        if (jettyClient == null) {
+            try {
+                jettyClient = new HttpClient(new SslContextFactory.Client(true));
+                jettyClient.start();
+            } catch (Exception e) {
+                throw new RuntimeException("Couldn't start jetty client", e);
+            }
+        }
+        return jettyClient;
     }
 }
