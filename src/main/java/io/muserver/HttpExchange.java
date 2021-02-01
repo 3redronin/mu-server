@@ -63,6 +63,8 @@ class HttpExchange implements ResponseInfo, Exchange {
         ResponseState respState = response.responseState();
         if (reqState == RequestState.ERROR || (respState.endState() && !respState.completedSuccessfully())) {
             onEnded(HttpExchangeState.ERRORED);
+        } else if (reqState.endState() && respState == ResponseState.UPGRADED) {
+            onEnded(HttpExchangeState.UPGRADED);
         } else if (reqState.endState() && respState.endState()) {
             onEnded(HttpExchangeState.COMPLETE);
         } else if (responseChanged != null && responseChanged.endState()) {
@@ -346,7 +348,7 @@ class HttpExchange implements ResponseInfo, Exchange {
 }
 
 enum HttpExchangeState {
-    IN_PROGRESS(false), COMPLETE(true), ERRORED(true);
+    IN_PROGRESS(false), COMPLETE(true), ERRORED(true), UPGRADED(true);
     private final boolean endState;
 
     HttpExchangeState(boolean endState) {

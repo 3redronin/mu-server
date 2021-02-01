@@ -89,17 +89,19 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
                     log.info("Content state change: " + newState);
                         if (newState.endState()) {
                             nettyHandlerAdapter.onResponseComplete(exchange, serverStats, connectionStats);
-                            ctx.channel().eventLoop().execute(() -> {
-                                if (currentExchange != exchange) {
-                                    throw new IllegalStateException("Expected current exchange to be " + exchange);
-                                }
-                                currentExchange = null;
-                                if (exchange.response.headers().containsValue(HeaderNames.CONNECTION, HeaderValues.CLOSE, true)) {
-                                    ctx.channel().close();
-                                } else {
-                                    ctx.channel().read();
-                                }
-                            });
+                            if (exchange.state() != HttpExchangeState.UPGRADED) {
+                                ctx.channel().eventLoop().execute(() -> {
+                                    if (currentExchange != exchange) {
+                                        throw new IllegalStateException("Expected current exchange to be " + exchange + " but was " + currentExchange);
+                                    }
+                                    currentExchange = null;
+                                    if (exchange.response.headers().containsValue(HeaderNames.CONNECTION, HeaderValues.CLOSE, true)) {
+                                        ctx.channel().close();
+                                    } else {
+                                        ctx.channel().read();
+                                    }
+                                });
+                            }
                         }
                     });
             } catch (InvalidHttpRequestException ihr) {
@@ -156,8 +158,17 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
         } else if (evt instanceof ExchangeUpgradeEvent) {
             ExchangeUpgradeEvent eue = (ExchangeUpgradeEvent) evt;
             if (eue.success()) {
-                this.currentExchange = eue.newExchange;
-                ctx.channel().read();
+                if (this.currentExchange instanceof HttpExchange) {
+                    ((HttpExchange) this.currentExchange).addChangeListener((upgradeExchange, newState) -> {
+                        if (newState.endState()) {
+                            this.currentExchange = eue.newExchange;
+                            ctx.channel().read();
+                        }
+                    });
+                } else {
+                    this.currentExchange = eue.newExchange;
+                    ctx.channel().read();
+                }
             } else {
                 ctx.channel().close();
             }

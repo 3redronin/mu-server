@@ -1,8 +1,6 @@
 package io.muserver;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufAllocator;
-import io.netty.buffer.EmptyByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
@@ -429,7 +427,7 @@ class NettyRequestAdapter implements MuRequest {
         String url = "ws" + uri().toString().substring(4);
         WebSocketServerHandshakerFactory factory = new WebSocketServerHandshakerFactory(url, null, false, maxFramePayloadLength);
 
-        DefaultFullHttpRequest fullReq = new DefaultFullHttpRequest(nettyRequest.protocolVersion(), nettyRequest.method(), nettyRequest.uri(), new EmptyByteBuf(ByteBufAllocator.DEFAULT), nettyRequest.headers(), EmptyHttpHeaders.INSTANCE);
+        DefaultFullHttpRequest fullReq = new DefaultFullHttpRequest(nettyRequest.protocolVersion(), nettyRequest.method(), nettyRequest.uri(), Unpooled.EMPTY_BUFFER, nettyRequest.headers(), EmptyHttpHeaders.INSTANCE);
         WebSocketServerHandshaker handshaker = factory.newHandshaker(fullReq);
         if (handshaker == null) {
             throw new UnsupportedOperationException();

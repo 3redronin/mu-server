@@ -6,6 +6,7 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.CorruptedFrameException;
+import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.websocketx.*;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
@@ -127,6 +128,7 @@ class MuWebSocketSessionImpl implements MuWebSocketSession, Exchange {
     @Override
     public void onMessage(ChannelHandlerContext ctx, Object msg) throws UnexpectedMessageException {
         if (!(msg instanceof WebSocketFrame)) {
+            if (msg instanceof HttpContent) return; // upgrade requests always send a LastHttpComplete message that can be ignored. Any request body can be discarded too.
             throw new UnexpectedMessageException(this, msg);
         }
         if (state.endState() || state.closing()) {
