@@ -5,6 +5,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.TooLongFrameException;
 import io.netty.handler.codec.http.*;
+import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,6 +22,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeoutException;
 
 import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 
@@ -97,7 +99,7 @@ class HttpExchange implements ResponseInfo, Exchange {
     void onCancelled(ResponseState reason) {
         if (!response.outputState().endState()) {
             response.onCancelled(reason);
-            request.onCancelled(reason);
+            request.onCancelled(reason, new MuException("Cancell: " + reason.name()));
         } else {
             log.warn("Cancelled called after end state was " + response.outputState());
         }
@@ -141,6 +143,10 @@ class HttpExchange implements ResponseInfo, Exchange {
         HttpContent content = (HttpContent) msg;
         ByteBuf byteBuf = content.content().retain();
         boolean last = msg instanceof LastHttpContent;
+        System.out.println("last = " + last);
+        if (last) {
+            System.out.println();
+        }
         DoneCallback doneCallback = error -> {
             if (error == null) {
                 if (last) {
@@ -167,8 +173,12 @@ class HttpExchange implements ResponseInfo, Exchange {
 
     @Override
     public void onIdleTimeout(ChannelHandlerContext ctx, IdleStateEvent ise) {
-        onCancelled(ResponseState.TIMED_OUT);
-        log.info("Closed " + request + " (from " + request.remoteAddress() + ") because the idle timeout specified in MuServerBuilder#withIdleTimeout is exceeded.");
+        if (ise.state() == IdleState.WRITER_IDLE) {
+            onCancelled(ResponseState.TIMED_OUT);
+            log.info("Closed " + request + " (from " + request.remoteAddress() + ") because the idle timeout specified in MuServerBuilder#withIdleTimeout is exceeded.");
+        } else if (ise.state() == IdleState.READER_IDLE && !request.requestState().endState()) {
+            request.onReadTimeout();
+        }
     }
 
 
@@ -290,26 +300,32 @@ class HttpExchange implements ResponseInfo, Exchange {
 
     @Override
     public void onException(ChannelHandlerContext ctx, Throwable cause) {
+        log.info("onException " + cause.getMessage());
         dealWithUnhandledException(request, response, cause);
     }
 
     @Override
     public void onConnectionEnded(ChannelHandlerContext ctx) {
+        log.info("onConnectionEnded");
         if (!response.outputState().endState()) {
             onCancelled(ResponseState.CLIENT_DISCONNECTED);
+        }
+        if (!request.requestState().endState()) {
+            request.onCancelled(ResponseState.CLIENT_DISCONNECTED, new ClientDisconnectedException());
         }
     }
 
 
-    static boolean dealWithUnhandledException(MuRequest request, MuResponse response, Throwable ex) {
+    static boolean dealWithUnhandledException(NettyRequestAdapter request, NettyResponseAdaptor response, Throwable ex) {
+
         boolean forceDisconnect = response instanceof Http1Response;
 
         if (response.hasStartedSendingData()) {
-            if (response.responseState() == ResponseState.CLIENT_DISCONNECTED || (ex instanceof IllegalArgumentException && ex.getMessage() != null && ex.getMessage().contains("Stream no longer exists"))) {
-                log.debug("Client disconnected before " + request + " was complete");
-            } else {
-                log.info("Unhandled error from handler for " + request + " (note that a " + response.status() +
-                    " was already sent to the client before the error occurred and so the client may receive an incomplete response)", ex);
+            if (!response.responseState().endState()) {
+                response.onCancelled(ResponseState.ERRORED);
+            }
+            if (!request.requestState().endState()) {
+                request.onCancelled(ResponseState.ERRORED, ex);
             }
         } else {
             WebApplicationException wae;

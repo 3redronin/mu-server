@@ -119,7 +119,7 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
             currentExchange.onMessage(ctx, msg);
         } else {
             log.warn("Got a chunk of message for an unknown request. This can happen when a request is rejected based on headers, and then the rejected body arrives.");
-            ctx.channel().close();
+//            ctx.channel().close();
         }
     }
 

@@ -84,7 +84,6 @@ class NettyHandlerAdapter {
                 } catch (Throwable ex) {
                     error = dealWithUnhandledException(request, response, ex);
                 } finally {
-                    request.clean();
                     if ((error || !request.isAsync()) && !response.outputState().endState()) {
                         try {
                             muCtx.complete(error);

@@ -6,26 +6,24 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.*;
 import io.netty.handler.codec.http.cookie.ServerCookieDecoder;
-import io.netty.handler.codec.http.multipart.Attribute;
-import io.netty.handler.codec.http.multipart.FileUpload;
-import io.netty.handler.codec.http.multipart.HttpPostMultipartRequestDecoder;
-import io.netty.handler.codec.http.multipart.InterfaceHttpData;
 import io.netty.handler.codec.http.websocketx.WebSocketServerHandshaker;
 import io.netty.handler.codec.http.websocketx.WebSocketServerHandshakerFactory;
 import io.netty.handler.timeout.IdleStateHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.ws.rs.ClientErrorException;
+import javax.ws.rs.ServerErrorException;
 import javax.ws.rs.core.MediaType;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InterruptedIOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.*;
-import java.util.concurrent.*;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import static io.muserver.Cookie.nettyToMu;
 import static io.muserver.HttpExchange.dealWithUnhandledException;
@@ -43,12 +41,10 @@ class NettyRequestAdapter implements MuRequest {
     private final Headers headers;
     private volatile RequestBodyReader requestBodyReader;
     private final RequestParameters query;
-    private RequestParameters form;
+
     private List<Cookie> cookies;
     private String contextPath = "";
     private String relativePath;
-    private HttpPostMultipartRequestDecoder multipartRequestDecoder;
-    private HashMap<String, List<UploadedFile>> uploads;
     private Map<String, Object> attributes;
     private volatile AsyncHandleImpl asyncHandle;
     private final boolean keepalive;
@@ -144,18 +140,25 @@ class NettyRequestAdapter implements MuRequest {
             return Optional.empty();
         }
         if (rbr == null) {
-            RequestBodyReaderInputStreamAdapter inputStream = new RequestBodyReaderInputStreamAdapter();
-            claimingBodyRead(inputStream);
-            return Optional.of(inputStream);
+            RequestBodyReaderInputStreamAdapter inputStreamReader = new RequestBodyReaderInputStreamAdapter();
+            claimingBodyRead(inputStreamReader);
+            return Optional.of(inputStreamReader.inputStream());
         } else if (rbr instanceof RequestBodyReaderInputStreamAdapter) {
-            return Optional.of((InputStream) rbr);
+            return Optional.of(((RequestBodyReaderInputStreamAdapter) rbr).inputStream());
         } else {
             throw new IllegalStateException("Cannot read the body as an input stream when the body is already being read with a " + rbr.getClass());
         }
     }
 
     public String readBodyAsString() throws IOException {
-        MediaType mediaType = headers().contentType();
+        RequestBodyReader.StringRequestBodyReader reader = createStringRequestBodyReader(headers());
+        claimingBodyRead(reader);
+        reader.blockUntilFullyRead();
+        return reader.body();
+    }
+
+    static RequestBodyReader.StringRequestBodyReader createStringRequestBodyReader(Headers headers) {
+        MediaType mediaType = headers.contentType();
         Charset bodyCharset = UTF_8;
         if (mediaType != null) {
             String charset = mediaType.getParameters().get("charset");
@@ -163,20 +166,8 @@ class NettyRequestAdapter implements MuRequest {
                 bodyCharset = Charset.forName(charset);
             }
         }
-        int len = headers().getInt("content-length", -1);
-        if (len == 0) {
-            claimingBodyRead(new RequestBodyReader.DiscardingReader());
-            return "";
-        }
-        StringRequestBodyReader reader = new StringRequestBodyReader(bodyCharset, len);
-        claimingBodyRead(reader);
-        try {
-            return reader.future().get();
-        } catch (InterruptedException e) {
-            throw new InterruptedIOException();
-        } catch (ExecutionException e) {
-            throw new IOException("Error reading request body", e.getCause() == null ? e : e.getCause());
-        }
+        int len = headers.getInt("content-length", -1);
+        return new RequestBodyReader.StringRequestBodyReader(bodyCharset, len);
     }
 
     private void claimingBodyRead(RequestBodyReader reader) {
@@ -197,8 +188,7 @@ class NettyRequestAdapter implements MuRequest {
     @Override
     public List<UploadedFile> uploadedFiles(String name) throws IOException {
         ensureFormDataLoaded();
-        List<UploadedFile> list = uploads.get(name);
-        return list == null ? emptyList() : list;
+        return ((RequestBodyReader.MultipartFormReader)requestBodyReader).uploads(name);
     }
 
     @Override
@@ -207,12 +197,6 @@ class NettyRequestAdapter implements MuRequest {
         return uploadedFiles.isEmpty() ? null : uploadedFiles.get(0);
     }
 
-    private void addFile(String name, UploadedFile file) {
-        if (!uploads.containsKey(name)) {
-            uploads.put(name, new ArrayList<>());
-        }
-        uploads.get(name).add(file);
-    }
 
     @Deprecated
     public String parameter(String name) {
@@ -227,7 +211,7 @@ class NettyRequestAdapter implements MuRequest {
     @Override
     public RequestParameters form() throws IOException {
         ensureFormDataLoaded();
-        return form;
+        return ((FormRequestBodyReader)requestBodyReader).params();
     }
 
     @Deprecated
@@ -341,46 +325,18 @@ class NettyRequestAdapter implements MuRequest {
     }
 
     private void ensureFormDataLoaded() throws IOException {
-        if (form == null) {
-            if (contentType().startsWith("multipart/")) {
-                if (multipartRequestDecoder == null) throw new RuntimeException("TODO: switch to dedicated form reader");
-                multipartRequestDecoder = new HttpPostMultipartRequestDecoder(nettyRequest);
-                InputStream inputStream = inputStream().orElseThrow(() -> new ClientErrorException("A request with a content-type of " + contentType() + " was made with no request body", 400));
-                byte[] buffer = new byte[16 * 1024];
-                int read;
-                while ((read = inputStream.read(buffer)) > -1) {
-                    if (read > 0) {
-                        ByteBuf content = Unpooled.copiedBuffer(buffer, 0, read);
-                        multipartRequestDecoder.offer(new DefaultHttpContent(content));
-                    }
-                }
-                multipartRequestDecoder.offer(new DefaultLastHttpContent());
-                uploads = new HashMap<>();
-
-                List<InterfaceHttpData> bodyHttpDatas = multipartRequestDecoder.getBodyHttpDatas();
-                QueryStringEncoder qse = new QueryStringEncoder("/");
-
-                for (InterfaceHttpData bodyHttpData : bodyHttpDatas) {
-                    if (bodyHttpData instanceof FileUpload) {
-                        FileUpload fileUpload = (FileUpload) bodyHttpData;
-                        if (fileUpload.length() == 0 && Mutils.nullOrEmpty(fileUpload.getFilename())) {
-                            // nothing uploaded
-                        } else {
-                            UploadedFile uploadedFile = new MuUploadedFile(fileUpload);
-                            addFile(fileUpload.getName(), uploadedFile);
-                        }
-                    } else if (bodyHttpData instanceof Attribute) {
-                        Attribute a = (Attribute) bodyHttpData;
-                        qse.addParam(a.getName(), a.getValue());
-                    } else {
-                        log.warn("Unrecognised body part: " + bodyHttpData.getClass() + " from " + this + " - this may mean some of the request data is lost.");
-                    }
-                }
-                form = new NettyRequestParameters(new QueryStringDecoder(qse.toString(), UTF_8, true, 1000000));
+        if (requestBodyReader == null) {
+            String ct = contentType();
+            if (ct.startsWith("multipart/")) {
+                claimingBodyRead(new RequestBodyReader.MultipartFormReader(nettyRequest));
+            } else if (ct.equals("application/x-www-form-urlencoded")) {
+                claimingBodyRead(new RequestBodyReader.UrlEncodedBodyReader(createStringRequestBodyReader(headers())));
             } else {
-                String body = readBodyAsString();
-                form = new NettyRequestParameters(new QueryStringDecoder(body, UTF_8, false, 1000000));
+                throw new ServerErrorException("", 500);
             }
+            requestBodyReader.blockUntilFullyRead();
+        } else if (!(requestBodyReader instanceof FormRequestBodyReader)) {
+            throw new IllegalStateException("Cannot load form data when the body is being read with a " + requestBodyReader);
         }
     }
 
@@ -409,17 +365,15 @@ class NettyRequestAdapter implements MuRequest {
         return contextToAdd;
     }
 
-    void clean() {
-        state(null);
-        if (multipartRequestDecoder != null) {
-            multipartRequestDecoder.destroy();
-            multipartRequestDecoder = null;
-        }
-    }
-
-    void onCancelled(ResponseState reason) {
-        if (asyncHandle != null) {
-            asyncHandle.onCancelled(reason);
+    void onCancelled(ResponseState reason, Throwable ex) {
+        if (!state.endState()) {
+            if (requestBodyReader != null && !requestBodyReader.completed()) {
+                requestBodyReader.onCancelled(ex);
+            }
+            if (asyncHandle != null) {
+                asyncHandle.onCancelled(reason);
+            }
+            setState(RequestState.ERROR);
         }
     }
 
@@ -482,6 +436,12 @@ class NettyRequestAdapter implements MuRequest {
             throw new IllegalStateException("Got content before a request body reader was set");
         } else {
             rbr.onRequestBodyRead(content, last, callback);
+        }
+    }
+
+    void onReadTimeout() {
+        if (requestBodyReader != null) {
+            requestBodyReader.onCancelled(new TimeoutException());
         }
     }
 
@@ -642,42 +602,6 @@ class NettyRequestAdapter implements MuRequest {
             this.clearDoneCallbackList();
         }
 
-    }
-
-    private static class StringRequestBodyReader implements RequestBodyReader {
-        private final Charset bodyCharset;
-        private final StringBuilder sb;
-        private final CompletableFuture<String> future = new CompletableFuture<>();
-
-        public StringRequestBodyReader(Charset bodyCharset, int sizeInBytes) {
-            this.bodyCharset = bodyCharset;
-            if (sizeInBytes > 0) {
-                sb = new StringBuilder(sizeInBytes); // not necessarily the size in characters, but a good enough estimate
-            } else {
-                sb = new StringBuilder();
-            }
-        }
-
-        @Override
-        public void onRequestBodyRead(ByteBuf content, boolean last, DoneCallback callback) {
-            try {
-                String toAdd = content.toString(bodyCharset);
-                sb.append(toAdd);
-                if (last) {
-                    future.complete(sb.toString());
-                }
-                callback.onComplete(null);
-            } catch (Exception e) {
-                try {
-                    callback.onComplete(e);
-                } catch (Exception ignored) {
-                }
-            }
-        }
-
-        public CompletableFuture<String> future() {
-            return future;
-        }
     }
 
 }

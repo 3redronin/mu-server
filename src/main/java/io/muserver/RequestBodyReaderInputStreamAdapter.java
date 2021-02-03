@@ -2,19 +2,105 @@ package io.muserver;
 
 import io.netty.buffer.ByteBuf;
 
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InterruptedIOException;
 
-class RequestBodyReaderInputStreamAdapter extends InputStream implements RequestBodyReader {
+class RequestBodyReaderInputStreamAdapter extends RequestBodyReader {
     private boolean receivedLast = false;
     private boolean finished = false;
     private ByteBuf currentBuf;
     private DoneCallback currentCallback;
     private boolean userClosed = false;
 
+    private final InputStream stream = new InputStream() {
+        @Override
+        public int read() throws IOException {
+            synchronized (this) {
+                if (finished) {
+                    return -1;
+                }
+                while (currentBuf == null || (currentBuf.readableBytes() == 0 && !receivedLast)) {
+                    waitForData();
+                }
+                if (currentBuf.readableBytes() == 0) {
+                    afterConsumed();
+                    return -1;
+                }
+                byte b = currentBuf.readByte();
+                afterConsumed();
+                return b;
+            }
+        }
+
+        @Override
+        public int read(byte[] b) throws IOException {
+            return read(b, 0, b.length);
+        }
+
+        @Override
+        public int read(byte[] b, int off, int len) throws IOException {
+            if (b == null) {
+                throw new NullPointerException();
+            } else if (off < 0 || len < 0 || len > b.length - off) {
+                throw new IndexOutOfBoundsException();
+            } else if (len == 0) {
+                return 0;
+            }
+
+            synchronized (this) {
+                if (userClosed) {
+                    throw new IOException("Cannot call read after the stream is closed");
+                }
+                if (finished) {
+                    return -1;
+                }
+                while (currentBuf == null) {
+                    waitForData();
+                }
+                int actual = Math.min(len, currentBuf.readableBytes());
+                if (actual > 0) {
+                    currentBuf.readBytes(b, off, actual);
+                }
+                afterConsumed();
+                return actual;
+            }
+        }
+
+        @Override
+        public long skip(long n) throws IOException {
+            synchronized (this) {
+                waitForData();
+                int toSkip = Math.min((int) n, currentBuf.readableBytes());
+                currentBuf.skipBytes(toSkip);
+                afterConsumed();
+                return toSkip;
+            }
+        }
+
+        @Override
+        public int available() {
+            synchronized (this) {
+                return currentBuf == null ? 0 : currentBuf.readableBytes();
+            }
+        }
+
+        @Override
+        public void close() {
+            synchronized (this) {
+                userClosed = true;
+            }
+        }
+
+    };
+
+    public InputStream inputStream() {
+        return stream;
+    }
+
     @Override
-    public void onRequestBodyRead(ByteBuf content, boolean last, DoneCallback callback) {
+    public void onRequestBodyRead0(ByteBuf content, boolean last, DoneCallback callback) {
         synchronized (this) {
             if (currentBuf != null) {
                 throw new IllegalStateException("Got content before the previous was completed");
@@ -34,69 +120,6 @@ class RequestBodyReaderInputStreamAdapter extends InputStream implements Request
         }
     }
 
-    @Override
-    public int read() throws IOException {
-        synchronized (this) {
-            if (finished) {
-                return -1;
-            }
-            while (currentBuf == null || (currentBuf.readableBytes() == 0 && !receivedLast)) {
-                waitForData();
-            }
-            if (currentBuf.readableBytes() == 0) {
-                afterConsumed();
-                return -1;
-            }
-            byte b = currentBuf.readByte();
-            afterConsumed();
-            return b;
-        }
-    }
-
-    @Override
-    public int read(byte[] b) throws IOException {
-        return read(b, 0, b.length);
-    }
-
-    @Override
-    public int read(byte[] b, int off, int len) throws IOException {
-        if (b == null) {
-            throw new NullPointerException();
-        } else if (off < 0 || len < 0 || len > b.length - off) {
-            throw new IndexOutOfBoundsException();
-        } else if (len == 0) {
-            return 0;
-        }
-
-        synchronized (this) {
-            if (userClosed) {
-                throw new IOException("Cannot call read after the stream is closed");
-            }
-            if (finished) {
-                return -1;
-            }
-            while (currentBuf == null) {
-                waitForData();
-            }
-            int actual = Math.min(len, currentBuf.readableBytes());
-            if (actual > 0) {
-                currentBuf.readBytes(b, off, actual);
-            }
-            afterConsumed();
-            return actual;
-        }
-    }
-
-    @Override
-    public long skip(long n) throws IOException {
-        synchronized (this) {
-            waitForData();
-            int toSkip = Math.min((int) n, currentBuf.readableBytes());
-            currentBuf.skipBytes(toSkip);
-            afterConsumed();
-            return toSkip;
-        }
-    }
 
     private void afterConsumed() throws IOException {
         if (currentBuf.readableBytes() == 0) {
@@ -114,7 +137,10 @@ class RequestBodyReaderInputStreamAdapter extends InputStream implements Request
         }
     }
 
-    private void waitForData() throws InterruptedIOException {
+    private void waitForData() throws InterruptedIOException, EOFException {
+        if (currentError() != null) {
+            throw new EOFException("Error while reading request body: " + currentError().getMessage());
+        }
         if (currentBuf != null) {
             return;
         }
@@ -131,17 +157,4 @@ class RequestBodyReaderInputStreamAdapter extends InputStream implements Request
         }
     }
 
-    @Override
-    public int available() throws IOException {
-        synchronized (this) {
-            return currentBuf == null ? 0 : currentBuf.readableBytes();
-        }
-    }
-
-    @Override
-    public void close() {
-        synchronized (this) {
-            userClosed = true;
-        }
-    }
 }

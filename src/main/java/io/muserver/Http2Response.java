@@ -10,7 +10,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 class Http2Response extends NettyResponseAdaptor {
-    private static final Logger log = LoggerFactory.getLogger(Http2Response.class);
 
     private final ChannelHandlerContext ctx;
     private final Http2Headers headers;

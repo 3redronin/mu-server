@@ -49,14 +49,14 @@ public class MuServerBuilder {
     private int maxHeadersSize = 8192;
     private int maxUrlSize = 8192 - LENGTH_OF_METHOD_AND_PROTOCOL;
     private int nioThreads = DEFAULT_NIO_THREADS;
-    private List<MuHandler> handlers = new ArrayList<>();
+    private final List<MuHandler> handlers = new ArrayList<>();
     private boolean gzipEnabled = true;
     private Set<String> mimeTypesToGzip = ResourceType.gzippableMimeTypes(ResourceType.getResourceTypes());
     private boolean addShutdownHook = false;
     private String host;
     private SSLContextBuilder sslContextBuilder;
     private Http2Config http2Config;
-    private long requestTimeoutMillis = TimeUnit.MINUTES.toMillis(2);
+    private long requestReadTimeoutMillis = TimeUnit.MINUTES.toMillis(2);
     private long idleTimeoutMills = TimeUnit.MINUTES.toMillis(5);
     private ExecutorService executor;
     private long maxRequestSize = 24 * 1024 * 1024;
@@ -336,7 +336,7 @@ public class MuServerBuilder {
             throw new IllegalArgumentException("The duration must be 0 or greater");
         }
         Mutils.notNull("unit", unit);
-        this.requestTimeoutMillis = unit.toMillis(duration);
+        this.requestReadTimeoutMillis = unit.toMillis(duration);
         return this;
     }
 
@@ -509,7 +509,7 @@ public class MuServerBuilder {
             throw new IllegalArgumentException("No ports were configured. Please call MuServerBuilder.withHttpPort(int) or MuServerBuilder.withHttpsPort(int)");
         }
 
-        ServerSettings settings = new ServerSettings(minimumGzipSize, maxHeadersSize, requestTimeoutMillis, maxRequestSize, maxUrlSize, gzipEnabled, mimeTypesToGzip, rateLimiters);
+        ServerSettings settings = new ServerSettings(minimumGzipSize, maxHeadersSize, requestReadTimeoutMillis, maxRequestSize, maxUrlSize, gzipEnabled, mimeTypesToGzip, rateLimiters);
 
         ExecutorService handlerExecutor = this.executor;
         if (handlerExecutor == null) {
