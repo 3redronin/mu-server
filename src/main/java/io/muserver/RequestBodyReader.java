@@ -1,7 +1,10 @@
 package io.muserver;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.handler.codec.http.*;
+import io.netty.handler.codec.http.DefaultHttpContent;
+import io.netty.handler.codec.http.DefaultLastHttpContent;
+import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.http.QueryStringDecoder;
 import io.netty.handler.codec.http.multipart.Attribute;
 import io.netty.handler.codec.http.multipart.FileUpload;
 import io.netty.handler.codec.http.multipart.HttpPostMultipartRequestDecoder;
@@ -17,7 +20,10 @@ import java.io.InterruptedIOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.Charset;
 import java.util.*;
-import java.util.concurrent.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -59,7 +65,7 @@ abstract class RequestBodyReader {
         try {
             long soFar = bytes.addAndGet(content.readableBytes());
             if (soFar > maxSize) {
-                callback.onComplete(new ClientErrorException(closingResponse(413, "The request body was too large")));
+                throw new ClientErrorException(closingResponse(413, "The request body was too large"));
             } else {
                 onRequestBodyRead0(content, last, error -> {
                     if (error != null) {
@@ -71,9 +77,9 @@ abstract class RequestBodyReader {
                 });
             }
         } catch (Exception e) {
-            future.complete(e);
             try {
                 callback.onComplete(e);
+                future.complete(e);
             } catch (Exception ignored) {
             }
         }
@@ -116,10 +122,12 @@ abstract class RequestBodyReader {
 
     static class ListenerAdapter extends RequestBodyReader {
         private static final Logger log = LoggerFactory.getLogger(ListenerAdapter.class);
+        private final NettyRequestAdapter.AsyncHandleImpl asyncHandle;
         private final RequestBodyListener readListener;
 
-        public ListenerAdapter(long maxSize, RequestBodyListener readListener) {
+        public ListenerAdapter(NettyRequestAdapter.AsyncHandleImpl asyncHandle, long maxSize, RequestBodyListener readListener) {
             super(maxSize);
+            this.asyncHandle = asyncHandle;
             this.readListener = readListener;
         }
 
@@ -155,6 +163,7 @@ abstract class RequestBodyReader {
         void onCancelled(Throwable cause) {
             super.onCancelled(cause);
             readListener.onError(cause);
+            asyncHandle.complete(cause);
         }
     }
 

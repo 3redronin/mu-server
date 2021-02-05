@@ -7,11 +7,7 @@ import okhttp3.Response;
 import okio.BufferedSink;
 import org.eclipse.jetty.client.api.Result;
 import org.eclipse.jetty.client.util.InputStreamContentProvider;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 import org.junit.After;
-import org.junit.Assert;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,6 +16,7 @@ import scaffolding.ServerUtils;
 import scaffolding.SlowBodySender;
 import scaffolding.StringUtils;
 
+import javax.ws.rs.ClientErrorException;
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -40,9 +37,9 @@ public class RequestBodyReaderInputStreamAdapterTest {
     @Test
     public void hugeBodiesCanBeStreamed() throws IOException {
         int chunkSize = 10000;
-        int loops = 64000;
+        int loops = 6400;
 
-        System.out.println("Sending " + ((chunkSize * (long) loops) / 1_000_000L) + "mb");
+        log.info("Sending " + ((chunkSize * (long) loops) / 1_000_000L) + "mb");
 
         server = ServerUtils.httpsServerForTest()
             .withMaxRequestSize(loops * (long) chunkSize)
@@ -204,7 +201,7 @@ public class RequestBodyReaderInputStreamAdapterTest {
     }
 
     @Test
-    public void closingTheStreamEarlyCancelsRequest() throws IOException {
+    public void closingTheStreamEarlyCancelsRequest() throws Exception {
         byte[] chunkPayload = StringUtils.randomBytes(2);
         server = ServerUtils.httpsServerForTest()
             .addHandler((request, response) -> {
@@ -235,11 +232,7 @@ public class RequestBodyReaderInputStreamAdapterTest {
             Thread.sleep(1000);
             assertThat(resp.code(), equalTo(500)); // server error or closed connection is fine
         } catch (Exception ex) {
-            if (ex instanceof UncheckedIOException) {
-                assertThat(ex.getCause(), instanceOf(IOException.class));
-            } else {
-                assertThat(ex, instanceOf(IOException.class));
-            }
+            MuAssert.assertIOException(ex);
         }
     }
 
@@ -267,11 +260,7 @@ public class RequestBodyReaderInputStreamAdapterTest {
             }
 
             public void writeTo(BufferedSink bufferedSink) throws IOException {
-
                 bufferedSink.write(msg1.getBytes(StandardCharsets.US_ASCII));
-                bufferedSink.flush();
-
-                bufferedSink.write("And message two".getBytes(StandardCharsets.US_ASCII));
                 bufferedSink.flush();
             }
         }))) {
@@ -302,9 +291,40 @@ public class RequestBodyReaderInputStreamAdapterTest {
         }
     }
 
+    @Test
+    public void exceedingUploadSizeResultsIn413OrKilledConnectionForChunkedRequestWhereResponseNotStarted() throws Exception {
+        AtomicReference<Throwable> exception = new AtomicReference<>();
+        server = ServerUtils.httpsServerForTest()
+            .withMaxRequestSize(1000)
+            .addHandler((request, response) -> {
+                try (InputStream is = request.inputStream().get()) {
+                    while (is.read() > -1) { }
+                } catch (Throwable e) {
+                    exception.set(e);
+                    throw e;
+                }
+                return true;
+            })
+            .start();
+
+        Request.Builder request = request()
+            .url(server.uri().toString())
+            .post(new SlowBodySender(1000, 0));
+
+        try (Response resp = call(request)) {
+            assertThat(resp.code(), equalTo(413));
+            assertThat(resp.body().string(), containsString("413 Request Entity Too Large"));
+        } catch (Exception e) {
+            // The HttpServerKeepAliveHandler will probably close the connection before the full request body is read, which is probably a good thing in this case.
+            // So allow a valid 413 response or an error
+            MuAssert.assertIOException(e);
+        }
+        assertThat(exception.get(), instanceOf(ClientErrorException.class));
+        assertThat(((ClientErrorException)exception.get()).getResponse().getStatus(), equalTo(413));
+    }
 
     @After
-    public void destroy() {
+    public void destroy() throws Exception {
         MuAssert.stopAndCheck(server);
     }
 

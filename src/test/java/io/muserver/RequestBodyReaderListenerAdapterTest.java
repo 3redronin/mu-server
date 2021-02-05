@@ -5,14 +5,17 @@ import okhttp3.Response;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
+import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 import scaffolding.SlowBodySender;
 
+import javax.ws.rs.ClientErrorException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
@@ -47,11 +50,24 @@ public class RequestBodyReaderListenerAdapterTest {
 
     @Test
     public void emptyBodiesAreOkay() {
-        Assert.fail();
+        server = ServerUtils.httpsServerForTest()
+            .withRequestTimeout(100, TimeUnit.MILLISECONDS)
+            .addHandler((request, response) -> {
+                AsyncHandle handle = request.handleAsync();
+                readListener = new RecordingRequestBodyListener(handle);
+                handle.setReadListener(readListener);
+                return true;
+            })
+            .start();
+
+        try (Response resp = call(request(server.uri()))) {
+            assertThat(resp.code(), equalTo(200));
+        }
+        assertThat("All: " + readListener.events.toString(), readListener.events, hasItems("onComplete"));
     }
 
     @Test
-    public void ifTheRequestBodyIsTooSlowAnErrorIsReturned() throws IOException {
+    public void ifTheRequestBodyIsTooSlowAnErrorIsReturnedOrConnectionIsKilled() throws IOException {
         server = ServerUtils.httpsServerForTest()
             .withRequestTimeout(100, TimeUnit.MILLISECONDS)
             .addHandler((request, response) -> {
@@ -64,15 +80,62 @@ public class RequestBodyReaderListenerAdapterTest {
 
         Request.Builder request = request()
             .url(server.uri().toString())
-            .post(new SlowBodySender(2, 150));
+            .post(new SlowBodySender(2, 200));
 
         try (Response resp = call(request)) {
-            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.code(), equalTo(408));
+        } catch (Exception ex) {
+            MuAssert.assertIOException(ex);
         }
-        assertThat("All: " + readListener.events.toString(), readListener.events, hasItems("data received: 7 bytes", "onError"));
+
+        assertThat(readListener.events.toString(), readListener.events, contains(
+            "data received: 7 bytes", "data written", "Error for onError: TimeoutException"
+        ));
     }
 
+    @Test
+    public void exceedingUploadSizeResultsIn413OrKilledConnectionForChunkedRequestWhereResponseNotStarted() throws Exception {
+        AtomicReference<Throwable> exception = new AtomicReference<>();
+        server = ServerUtils.httpsServerForTest()
+            .withMaxRequestSize(1000)
+            .addHandler((request, response) -> {
+                AsyncHandle handle = request.handleAsync();
+                handle.setReadListener(new RequestBodyListener() {
+                    @Override
+                    public void onDataReceived(ByteBuffer buffer, DoneCallback doneCallback) throws Exception {
+                        doneCallback.onComplete(null);
+                    }
 
+                    @Override
+                    public void onComplete() {
+                        handle.complete();
+                    }
+
+                    @Override
+                    public void onError(Throwable t) {
+                        exception.set(t);
+                        handle.complete(t);
+                    }
+                });
+                return true;
+            })
+            .start();
+
+        Request.Builder request = request()
+            .url(server.uri().toString())
+            .post(new SlowBodySender(1000, 0));
+
+        try (Response resp = call(request)) {
+            assertThat(resp.code(), equalTo(413));
+            assertThat(resp.body().string(), containsString("413 Request Entity Too Large"));
+        } catch (Exception e) {
+            // The HttpServerKeepAliveHandler will probably close the connection before the full request body is read, which is probably a good thing in this case.
+            // So allow a valid 413 response or an error
+            MuAssert.assertIOException(e);
+        }
+        assertThat(exception.get(), instanceOf(ClientErrorException.class));
+        assertThat(((ClientErrorException)exception.get()).getResponse().getStatus(), equalTo(413));
+    }
 
     @Test
     public void ifRequestBodyNotConsumedItIsJustDiscarded() throws IOException {
@@ -90,6 +153,28 @@ public class RequestBodyReaderListenerAdapterTest {
         try (Response resp = call(request)) {
             assertThat(resp.code(), equalTo(200));
             assertThat(resp.body().string(), equalTo("Hello there"));
+        }
+    }
+
+    @Test
+    public void ifRequestBodyNotConsumedButItIsOverSizeThenConnectionIsClosed() throws IOException {
+        server = ServerUtils.httpsServerForTest()
+            .withMaxRequestSize(1000)
+            .addHandler((request, response) -> {
+                response.write("Hello there");
+                return true;
+            })
+            .start();
+
+        Request.Builder request = request()
+            .url(server.uri().toString())
+            .post(new SlowBodySender(1000, 10));
+
+        try (Response resp = call(request)) {
+            resp.body().string();
+            Assert.fail("Should not be able to read body");
+        } catch (Exception ex) {
+            MuAssert.assertIOException(ex);
         }
     }
 
@@ -113,7 +198,7 @@ public class RequestBodyReaderListenerAdapterTest {
             if (err == null) {
                 events.add(message);
             } else {
-                events.add("Error for " + message +": " + err.getMessage());
+                events.add("Error for " + message +": " + Mutils.coalesce(err.getMessage(), err.getClass().getSimpleName()));
             }
         }
 

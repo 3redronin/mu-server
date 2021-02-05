@@ -7,9 +7,9 @@ import okhttp3.Response;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
+import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 import scaffolding.SlowBodySender;
-import scaffolding.StringUtils;
 
 import javax.ws.rs.ClientErrorException;
 import java.io.IOException;
@@ -200,7 +200,7 @@ public class RequestBodyReaderStringTest {
         } catch (Exception e) {
             // The HttpServerKeepAliveHandler will probably close the connection before the full request body is read, which is probably a good thing in this case.
             // So allow a valid 413 response or an error
-            assertThat(e.getCause(), instanceOf(IOException.class));
+            MuAssert.assertIOException(e);
         }
         assertThat(exception.get(), instanceOf(ClientErrorException.class));
         assertThat(((ClientErrorException)exception.get()).getResponse().getStatus(), equalTo(413));

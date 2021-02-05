@@ -2,11 +2,10 @@ package io.muserver;
 
 import io.netty.buffer.ByteBuf;
 
+import javax.ws.rs.WebApplicationException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InterruptedIOException;
-import java.util.concurrent.Phaser;
-import java.util.concurrent.locks.ReentrantLock;
 
 class RequestBodyReaderInputStreamAdapter extends RequestBodyReader {
     private boolean receivedLast = false;
@@ -103,8 +102,22 @@ class RequestBodyReaderInputStreamAdapter extends RequestBodyReader {
 
     private void throwIfErrored() throws IOException {
         Throwable cur = currentError();
+        if (cur instanceof WebApplicationException) {
+            throw (WebApplicationException)cur;
+        }
         if (cur != null) {
             throw new IOException("Error while reading request body", cur);
+        }
+    }
+
+    @Override
+    public void cleanup() {
+        if (currentCallback != null) {
+            try {
+                currentCallback.onComplete(new MuException("Request did not complete"));
+            } catch (Exception ignored) {
+            }
+            currentCallback = null;
         }
     }
 
@@ -114,6 +127,14 @@ class RequestBodyReaderInputStreamAdapter extends RequestBodyReader {
 
     public InputStream inputStream() {
         return stream;
+    }
+
+    @Override
+    void onCancelled(Throwable cause) {
+        super.onCancelled(cause);
+        synchronized (lock) {
+            lock.notify();
+        }
     }
 
     @Override

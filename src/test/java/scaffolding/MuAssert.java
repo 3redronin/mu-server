@@ -4,12 +4,13 @@ import io.muserver.MuServer;
 import org.hamcrest.Matcher;
 import org.junit.Assert;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.empty;
-import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.*;
 
 public class MuAssert {
 
@@ -46,6 +47,14 @@ public class MuAssert {
                 server.stats().activeRequests(), is(empty()));
 //            assertEventually(() -> server.stats().activeRequests(), is(empty()));
             server.stop();
+        }
+    }
+
+    public static void assertIOException(Throwable t) {
+        if (t instanceof UncheckedIOException) {
+            assertThat(t.getCause(), instanceOf(IOException.class));
+        } else {
+            assertThat(t, instanceOf(IOException.class));
         }
     }
 
