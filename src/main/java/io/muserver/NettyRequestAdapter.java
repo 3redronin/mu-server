@@ -59,7 +59,7 @@ class NettyRequestAdapter implements MuRequest {
         this.headers = headers;
         this.uri = getUri(headers, proto, host, uri, serverUri);
         this.relativePath = this.uri.getRawPath();
-        this.query = new NettyRequestParameters(new QueryStringDecoder(uri, true));
+        this.query = new NettyRequestParameters(new QueryStringDecoder(uri, true).parameters());
         this.method = method;
     }
 
@@ -133,6 +133,9 @@ class NettyRequestAdapter implements MuRequest {
         return headers;
     }
 
+    public long maxRequestBytes() {
+        return server().maxRequestSize();
+    }
 
     public Optional<InputStream> inputStream() {
         RequestBodyReader rbr = this.requestBodyReader;
@@ -140,7 +143,7 @@ class NettyRequestAdapter implements MuRequest {
             return Optional.empty();
         }
         if (rbr == null) {
-            RequestBodyReaderInputStreamAdapter inputStreamReader = new RequestBodyReaderInputStreamAdapter();
+            RequestBodyReaderInputStreamAdapter inputStreamReader = new RequestBodyReaderInputStreamAdapter(maxRequestBytes());
             claimingBodyRead(inputStreamReader);
             return Optional.of(inputStreamReader.inputStream());
         } else if (rbr instanceof RequestBodyReaderInputStreamAdapter) {
@@ -151,13 +154,13 @@ class NettyRequestAdapter implements MuRequest {
     }
 
     public String readBodyAsString() throws IOException {
-        RequestBodyReader.StringRequestBodyReader reader = createStringRequestBodyReader(headers());
+        RequestBodyReader.StringRequestBodyReader reader = createStringRequestBodyReader(maxRequestBytes(), headers());
         claimingBodyRead(reader);
         reader.blockUntilFullyRead();
         return reader.body();
     }
 
-    static RequestBodyReader.StringRequestBodyReader createStringRequestBodyReader(Headers headers) {
+    static RequestBodyReader.StringRequestBodyReader createStringRequestBodyReader(long maxSize, Headers headers) {
         MediaType mediaType = headers.contentType();
         Charset bodyCharset = UTF_8;
         if (mediaType != null) {
@@ -167,7 +170,7 @@ class NettyRequestAdapter implements MuRequest {
             }
         }
         int len = headers.getInt("content-length", -1);
-        return new RequestBodyReader.StringRequestBodyReader(bodyCharset, len);
+        return new RequestBodyReader.StringRequestBodyReader(maxSize, bodyCharset, len);
     }
 
     private void claimingBodyRead(RequestBodyReader reader) {
@@ -181,7 +184,7 @@ class NettyRequestAdapter implements MuRequest {
 
     void discardInputStreamIfNotConsumed() {
         if (requestBodyReader == null) {
-            claimingBodyRead(new RequestBodyReader.DiscardingReader());
+            claimingBodyRead(new RequestBodyReader.DiscardingReader(maxRequestBytes()));
         }
     }
 
@@ -328,9 +331,9 @@ class NettyRequestAdapter implements MuRequest {
         if (requestBodyReader == null) {
             String ct = contentType();
             if (ct.startsWith("multipart/")) {
-                claimingBodyRead(new RequestBodyReader.MultipartFormReader(nettyRequest));
+                claimingBodyRead(new RequestBodyReader.MultipartFormReader(maxRequestBytes(), nettyRequest));
             } else if (ct.equals("application/x-www-form-urlencoded")) {
-                claimingBodyRead(new RequestBodyReader.UrlEncodedBodyReader(createStringRequestBodyReader(headers())));
+                claimingBodyRead(new RequestBodyReader.UrlEncodedBodyReader(createStringRequestBodyReader(maxRequestBytes(), headers())));
             } else {
                 throw new ServerErrorException("", 500);
             }
@@ -426,6 +429,12 @@ class NettyRequestAdapter implements MuRequest {
         }
     }
 
+    void cleanup() {
+        if (requestBodyReader != null) {
+            requestBodyReader.cleanup();
+        }
+    }
+
     public RequestState requestState() {
         return state;
     }
@@ -464,7 +473,7 @@ class NettyRequestAdapter implements MuRequest {
         @Override
         public void setReadListener(RequestBodyListener readListener) {
             log.info("Setting read listener " + readListener);
-            request.claimingBodyRead(new RequestBodyReader.ListenerAdapter(readListener));
+            request.claimingBodyRead(new RequestBodyReader.ListenerAdapter(request.maxRequestBytes(), readListener));
         }
 
         private void clearDoneCallbackList() {

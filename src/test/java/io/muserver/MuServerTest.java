@@ -456,11 +456,13 @@ public class MuServerTest {
         assertEventually(client::isConnected, equalTo(false));
     }
 
-    @Test
+    @Test(timeout = 30000)
     public void idleTimeoutCanBeConfiguredAndConnectionClosedIfAlreadyStarted() throws Exception {
         CompletableFuture<Throwable> exceptionFromServer = new CompletableFuture<>();
+        CompletableFuture<ResponseInfo> received = new CompletableFuture<>();
         server = ServerUtils.httpsServerForTest()
             .withIdleTimeout(200, TimeUnit.MILLISECONDS)
+            .addResponseCompleteListener(received::complete)
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.sendChunk("Hi");
                 try {
@@ -484,6 +486,11 @@ public class MuServerTest {
             // expected on HTTP1
         }
         assertThat(exceptionFromServer.get(10, TimeUnit.SECONDS), instanceOf(Exception.class));
+        ResponseInfo info = received.get(10, TimeUnit.SECONDS);
+        assertThat(info, notNullValue());
+        assertThat(info.completedSuccessfully(), is(false));
+        assertThat(info.duration(), greaterThan(-1L));
+
     }
 
 

@@ -98,6 +98,8 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
                 exchanges.remove(streamId);
             }
         }
+        // TODO: return only the amount actually processed and report back full processed amount when actually processed
+        // so that per-stream back-pressure can be applied
         return processed;
     }
 

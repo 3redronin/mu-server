@@ -63,12 +63,11 @@ class HttpExchange implements ResponseInfo, Exchange {
         log.info("HE state change. request=" + requestChanged + " ; resp=" + responseChanged);
         RequestState reqState = request.requestState();
         ResponseState respState = response.responseState();
-        if (reqState == RequestState.ERROR || (respState.endState() && !respState.completedSuccessfully())) {
-            onEnded(HttpExchangeState.ERRORED);
-        } else if (reqState.endState() && respState == ResponseState.UPGRADED) {
+        if (reqState.endState() && respState == ResponseState.UPGRADED) {
             onEnded(HttpExchangeState.UPGRADED);
         } else if (reqState.endState() && respState.endState()) {
-            onEnded(HttpExchangeState.COMPLETE);
+            HttpExchangeState newState = reqState == RequestState.ERROR || !respState.completedSuccessfully() ? HttpExchangeState.ERRORED : HttpExchangeState.COMPLETE;
+            onEnded(newState);
         } else if (responseChanged != null && responseChanged.endState()) {
             request.discardInputStreamIfNotConsumed();
         }
@@ -143,10 +142,6 @@ class HttpExchange implements ResponseInfo, Exchange {
         HttpContent content = (HttpContent) msg;
         ByteBuf byteBuf = content.content().retain();
         boolean last = msg instanceof LastHttpContent;
-        System.out.println("last = " + last);
-        if (last) {
-            System.out.println();
-        }
         DoneCallback doneCallback = error -> {
             if (error == null) {
                 if (last) {
@@ -155,8 +150,7 @@ class HttpExchange implements ResponseInfo, Exchange {
                     ctx.channel().read();
                 }
             } else {
-                request.setState(RequestState.ERROR);
-                onException(ctx, error);
+                request.onCancelled(ResponseState.ERRORED, error);
             }
             byteBuf.release();
         };
@@ -173,7 +167,7 @@ class HttpExchange implements ResponseInfo, Exchange {
 
     @Override
     public void onIdleTimeout(ChannelHandlerContext ctx, IdleStateEvent ise) {
-        if (ise.state() == IdleState.WRITER_IDLE) {
+        if (ise.state() == IdleState.ALL_IDLE) {
             onCancelled(ResponseState.TIMED_OUT);
             log.info("Closed " + request + " (from " + request.remoteAddress() + ") because the idle timeout specified in MuServerBuilder#withIdleTimeout is exceeded.");
         } else if (ise.state() == IdleState.READER_IDLE && !request.requestState().endState()) {
@@ -211,11 +205,11 @@ class HttpExchange implements ResponseInfo, Exchange {
         HttpExchange httpExchange = new HttpExchange(connection, muRequest, muResponse);
         muRequest.setExchange(httpExchange);
         muResponse.setExchange(httpExchange);
-        httpExchange.addChangeListener(stateChangeListener);
 
         if (settings.block(muRequest)) {
             throw new InvalidHttpRequestException(429, "429 Too Many Requests");
         }
+        httpExchange.addChangeListener(stateChangeListener);
 
         DoneCallback addedToExecutorCallback = error -> {
             if (error == null) {
@@ -322,10 +316,10 @@ class HttpExchange implements ResponseInfo, Exchange {
 
         if (response.hasStartedSendingData()) {
             if (!response.responseState().endState()) {
-                response.onCancelled(ResponseState.ERRORED);
+//                response.onCancelled(ResponseState.ERRORED);
             }
             if (!request.requestState().endState()) {
-                request.onCancelled(ResponseState.ERRORED, ex);
+//                request.onCancelled(ResponseState.ERRORED, ex);
             }
         } else {
             WebApplicationException wae;

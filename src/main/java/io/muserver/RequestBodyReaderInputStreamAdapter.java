@@ -2,10 +2,11 @@ package io.muserver;
 
 import io.netty.buffer.ByteBuf;
 
-import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InterruptedIOException;
+import java.util.concurrent.Phaser;
+import java.util.concurrent.locks.ReentrantLock;
 
 class RequestBodyReaderInputStreamAdapter extends RequestBodyReader {
     private boolean receivedLast = false;
@@ -13,11 +14,13 @@ class RequestBodyReaderInputStreamAdapter extends RequestBodyReader {
     private ByteBuf currentBuf;
     private DoneCallback currentCallback;
     private boolean userClosed = false;
+    private final Object lock = new Object();
 
     private final InputStream stream = new InputStream() {
         @Override
         public int read() throws IOException {
-            synchronized (this) {
+
+            synchronized (lock) {
                 if (finished) {
                     return -1;
                 }
@@ -49,7 +52,7 @@ class RequestBodyReaderInputStreamAdapter extends RequestBodyReader {
                 return 0;
             }
 
-            synchronized (this) {
+            synchronized (lock) {
                 if (userClosed) {
                     throw new IOException("Cannot call read after the stream is closed");
                 }
@@ -70,7 +73,7 @@ class RequestBodyReaderInputStreamAdapter extends RequestBodyReader {
 
         @Override
         public long skip(long n) throws IOException {
-            synchronized (this) {
+            synchronized (lock) {
                 waitForData();
                 int toSkip = Math.min((int) n, currentBuf.readableBytes());
                 currentBuf.skipBytes(toSkip);
@@ -81,19 +84,33 @@ class RequestBodyReaderInputStreamAdapter extends RequestBodyReader {
 
         @Override
         public int available() {
-            synchronized (this) {
+            synchronized (lock) {
                 return currentBuf == null ? 0 : currentBuf.readableBytes();
             }
         }
 
         @Override
-        public void close() {
-            synchronized (this) {
+        public void close() throws IOException {
+            synchronized (lock) {
+                if (currentCallback != null) {
+                    throw new IOException("The request body input stream was not fully read before closing");
+                }
                 userClosed = true;
             }
         }
 
     };
+
+    private void throwIfErrored() throws IOException {
+        Throwable cur = currentError();
+        if (cur != null) {
+            throw new IOException("Error while reading request body", cur);
+        }
+    }
+
+    RequestBodyReaderInputStreamAdapter(long maxSize) {
+        super(maxSize);
+    }
 
     public InputStream inputStream() {
         return stream;
@@ -101,7 +118,7 @@ class RequestBodyReaderInputStreamAdapter extends RequestBodyReader {
 
     @Override
     public void onRequestBodyRead0(ByteBuf content, boolean last, DoneCallback callback) {
-        synchronized (this) {
+        synchronized (lock) {
             if (currentBuf != null) {
                 throw new IllegalStateException("Got content before the previous was completed");
             }
@@ -116,7 +133,7 @@ class RequestBodyReaderInputStreamAdapter extends RequestBodyReader {
             if (last) {
                 receivedLast = true;
             }
-            notify();
+            lock.notify();
         }
     }
 
@@ -137,15 +154,15 @@ class RequestBodyReaderInputStreamAdapter extends RequestBodyReader {
         }
     }
 
-    private void waitForData() throws InterruptedIOException, EOFException {
-        if (currentError() != null) {
-            throw new EOFException("Error while reading request body: " + currentError().getMessage());
-        }
+    private void waitForData() throws IOException {
+
+        throwIfErrored();
         if (currentBuf != null) {
             return;
         }
         try {
-            wait();
+            lock.wait();
+            throwIfErrored();
         } catch (InterruptedException e) {
             DoneCallback cb = this.currentCallback;
             if (cb != null) {

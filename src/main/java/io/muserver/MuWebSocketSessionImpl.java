@@ -199,7 +199,7 @@ class MuWebSocketSessionImpl implements MuWebSocketSession, Exchange {
                 log.warn("Error while processing idle timeout", e);
                 ctx.close();
             }
-        } else if (ise.state() == IdleState.WRITER_IDLE) {
+        } else {
             sendPing(ByteBuffer.wrap(MuWebSocketSessionImpl.PING_BYTES), DoneCallback.NoOp);
         }
 

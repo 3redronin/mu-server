@@ -7,6 +7,8 @@ import okhttp3.Response;
 import okio.BufferedSink;
 import org.eclipse.jetty.client.api.Result;
 import org.eclipse.jetty.client.util.InputStreamContentProvider;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Ignore;
@@ -16,9 +18,11 @@ import org.slf4j.LoggerFactory;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 import scaffolding.SlowBodySender;
+import scaffolding.StringUtils;
 
 import java.io.*;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicLong;
@@ -34,13 +38,14 @@ public class RequestBodyReaderInputStreamAdapterTest {
     private MuServer server;
 
     @Test
-    @Ignore("Why fail")
     public void hugeBodiesCanBeStreamed() throws IOException {
-        int chunkSize = 64000;
-        int loops = 100000;
+        int chunkSize = 10000;
+        int loops = 64000;
+
+        System.out.println("Sending " + ((chunkSize * (long) loops) / 1_000_000L) + "mb");
 
         server = ServerUtils.httpsServerForTest()
-            .withMaxRequestSize(loops * (long)chunkSize)
+            .withMaxRequestSize(loops * (long) chunkSize)
             .addHandler((request, response) -> {
                 response.contentType("application/octet-stream");
                 try (InputStream is = request.inputStream().orElseThrow(() -> new MuException("No input stream"))) {
@@ -77,18 +82,18 @@ public class RequestBodyReaderInputStreamAdapterTest {
 
         try (Response resp = call(request)) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.body().string(), equalTo("Got " + (chunkSize * loops) + " bytes"));
+            assertThat(resp.body().string(), equalTo("Got " + ((long) chunkSize * (long) loops) + " bytes"));
         }
     }
 
-    @Test
+    @Test(timeout = 30000)
     public void hugeBodiesCanBeStreamedWithJetty() throws Exception {
 
         long loops = 1000;
         int chunkSize = 64000;
 
         server = ServerUtils.httpsServerForTest()
-            .withMaxRequestSize(loops * (long)chunkSize)
+            .withMaxRequestSize(loops * (long) chunkSize)
             .addHandler((request, response) -> {
                 log.info("Got " + request + " with " + request.headers());
                 response.contentType("application/octet-stream");
@@ -146,14 +151,11 @@ public class RequestBodyReaderInputStreamAdapterTest {
             }
             uploadOutStream.close();
             assertNotTimedOut("Response complete", latch);
-            assertThat(bytesReceived.get(), equalTo(loops * (long)chunkSize));
+            assertThat(bytesReceived.get(), equalTo(loops * (long) chunkSize));
             assertThat(clientResult.get().getFailure(), nullValue());
             assertThat(clientResult.get().getResponse().getStatus(), is(200));
         }
-
-
     }
-
 
     @Test
     public void requestBodiesCanBeReadAsInputStreams() throws IOException {
@@ -203,10 +205,10 @@ public class RequestBodyReaderInputStreamAdapterTest {
 
     @Test
     public void closingTheStreamEarlyCancelsRequest() throws IOException {
+        byte[] chunkPayload = StringUtils.randomBytes(2);
         server = ServerUtils.httpsServerForTest()
             .addHandler((request, response) -> {
                 try (InputStream is = request.inputStream().orElseThrow(() -> new MuException("No input stream"))) {
-                    is.read();
                     is.read();
                 }
                 return true;
@@ -217,9 +219,64 @@ public class RequestBodyReaderInputStreamAdapterTest {
             .url(server.uri().toString())
             .post(new SlowBodySender(10));
 
-        try (Response resp = call(request)) {
+        try (Response resp = call(request.post(new RequestBody() {
+            public MediaType contentType() {
+                return MediaType.parse("text/plain");
+            }
+
+            public void writeTo(BufferedSink bufferedSink) throws IOException {
+                bufferedSink.write(chunkPayload);
+                bufferedSink.flush();
+                bufferedSink.write(chunkPayload);
+                bufferedSink.flush();
+            }
+        }))) {
             resp.body().bytes();
-            Assert.fail("What's supposed to happen?");
+            Thread.sleep(1000);
+            assertThat(resp.code(), equalTo(500)); // server error or closed connection is fine
+        } catch (Exception ex) {
+            if (ex instanceof UncheckedIOException) {
+                assertThat(ex.getCause(), instanceOf(IOException.class));
+            } else {
+                assertThat(ex, instanceOf(IOException.class));
+            }
+        }
+    }
+
+    @Test
+    public void skipAndAvailableWork() throws IOException {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler((request, response) -> {
+                try (InputStream is = request.inputStream().orElseThrow(() -> new MuException("No input stream"))) {
+                    response.sendChunk("available " + is.available() + " / read " + ((char) is.read()) + " / available " + is.available() + " / skip " + is.skip(6) + " / available " + is.available() + " / read " + ((char) is.read()) + " / available " + is.available() + "\n");
+                    while (is.read() > -1) {
+                    }
+                }
+                return true;
+            })
+            .start();
+
+        Request.Builder request = request()
+            .url(server.uri().toString())
+            .post(new SlowBodySender(10));
+
+        String msg1 = "Hello from message one";
+        try (Response resp = call(request.post(new RequestBody() {
+            public MediaType contentType() {
+                return MediaType.parse("text/plain");
+            }
+
+            public void writeTo(BufferedSink bufferedSink) throws IOException {
+
+                bufferedSink.write(msg1.getBytes(StandardCharsets.US_ASCII));
+                bufferedSink.flush();
+
+                bufferedSink.write("And message two".getBytes(StandardCharsets.US_ASCII));
+                bufferedSink.flush();
+            }
+        }))) {
+            assertThat(resp.body().string(), equalTo("available 0 / read " + msg1.charAt(0) + " / available "
+                + (msg1.length() - 1) + " / skip 6 / available " + (msg1.length() - 7) + " / read " + msg1.charAt(7) + " / available " + (msg1.length() - 8) + "\n"));
         }
     }
 

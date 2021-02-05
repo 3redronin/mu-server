@@ -8,6 +8,7 @@ import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.ssl.SslHandler;
+import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -81,7 +82,6 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
     }
 
     private void onChannelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-        log.info("onChannelRead " + msg);
         if (msg instanceof HttpRequest) {
             try {
                 this.currentExchange = HttpExchange.create(server, proto, ctx, this, (HttpRequest) msg,
@@ -91,14 +91,16 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
                             nettyHandlerAdapter.onResponseComplete(exchange, serverStats, connectionStats);
                             if (exchange.state() != HttpExchangeState.UPGRADED) {
                                 ctx.channel().eventLoop().execute(() -> {
+                                    log.info("Setting current exchange null");
                                     if (currentExchange != exchange) {
                                         throw new IllegalStateException("Expected current exchange to be " + exchange + " but was " + currentExchange);
                                     }
                                     currentExchange = null;
-                                    if (exchange.response.headers().containsValue(HeaderNames.CONNECTION, HeaderValues.CLOSE, true)) {
+                                    exchange.request.cleanup();
+                                    if (exchange.request.requestState() == RequestState.ERROR) {
                                         ctx.channel().close();
                                     } else {
-                                        ctx.channel().read();
+                                        ctx.channel().read(); // would moving this to request-complete mean disconnects happen earlier?
                                     }
                                 });
                             }
@@ -119,7 +121,7 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
             currentExchange.onMessage(ctx, msg);
         } else {
             log.warn("Got a chunk of message for an unknown request. This can happen when a request is rejected based on headers, and then the rejected body arrives.");
-//            ctx.channel().close();
+            ctx.channel().read();
         }
     }
 
@@ -148,9 +150,10 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
         Exchange exchange = this.currentExchange;
         if (evt instanceof IdleStateEvent) {
             log.info("IdleEvent " + evt);
+            IdleStateEvent ise = (IdleStateEvent) evt;
             if (exchange != null) {
-                exchange.onIdleTimeout(ctx, (IdleStateEvent) evt);
-            } else {
+                exchange.onIdleTimeout(ctx, ise);
+            } else if (ise.state() == IdleState.ALL_IDLE) {
                 ctx.channel().close();
                 // Can't send a 408 so just closing context. See: https://stackoverflow.com/q/56722103/131578
                 log.info("Closed idle connection to " + remoteAddress);

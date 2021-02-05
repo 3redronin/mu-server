@@ -10,6 +10,7 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.lang.management.ManagementFactory;
 import java.net.URI;
 import java.util.concurrent.TimeUnit;
@@ -70,7 +71,7 @@ public class ClientUtils {
         try {
             return client.newCall(req).execute();
         } catch (IOException e) {
-            throw new RuntimeException("Error while calling " + req, e);
+            throw new UncheckedIOException("Error while calling " + req, e);
         }
     }
 

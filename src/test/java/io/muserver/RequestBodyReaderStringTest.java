@@ -5,6 +5,7 @@ import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Test;
 import scaffolding.ServerUtils;
 import scaffolding.SlowBodySender;
@@ -12,6 +13,7 @@ import scaffolding.StringUtils;
 
 import javax.ws.rs.ClientErrorException;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.charset.Charset;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -108,7 +110,7 @@ public class RequestBodyReaderStringTest {
     }
 
     @Test
-    public void aSlowReadResultsInACompleted408IfResponseNotStarted() {
+    public void aSlowReadResultsInACompleted408OrKilledConnectionIfResponseNotStarted() {
         AtomicReference<Throwable> exception = new AtomicReference<>();
         server = ServerUtils.httpsServerForTest()
             .withRequestTimeout(100, TimeUnit.MILLISECONDS)
@@ -140,7 +142,40 @@ public class RequestBodyReaderStringTest {
     }
 
     @Test
-    public void exceedingUploadSizeResultsIn413ForChunkedRequest() throws Exception {
+    public void aSlowReadResultsInAKilledConnectionIfResponseStarted() {
+        AtomicReference<Throwable> exception = new AtomicReference<>();
+        server = ServerUtils.httpsServerForTest()
+            .withRequestTimeout(100, TimeUnit.MILLISECONDS)
+            .addHandler((request, response) -> {
+                response.sendChunk("starting");
+                try {
+                    request.readBodyAsString();
+                } catch (Throwable e) {
+                    exception.set(e);
+                    throw e;
+                }
+                return true;
+            })
+            .start();
+
+        Request.Builder request = request()
+            .url(server.uri().toString())
+            .post(new SlowBodySender(2, 200));
+
+        try (Response resp = call(request)) {
+            resp.body().string();
+            Assert.fail("Should not complete successfully");
+        } catch (Exception e) {
+            // The HttpServerKeepAliveHandler will probably close the connection before the full request body is read, which is probably a good thing in this case.
+            // So allow a valid 408 response or an error
+            assertThat(e.getCause(), instanceOf(IOException.class));
+        }
+        assertThat(exception.get(), instanceOf(ClientErrorException.class));
+        assertThat(((ClientErrorException)exception.get()).getResponse().getStatus(), equalTo(408));
+    }
+
+    @Test
+    public void exceedingUploadSizeResultsIn413OrKilledConnectionForChunkedRequestWhereResponseNotStarted() throws Exception {
         AtomicReference<Throwable> exception = new AtomicReference<>();
         server = ServerUtils.httpsServerForTest()
             .withMaxRequestSize(1000)
@@ -161,13 +196,52 @@ public class RequestBodyReaderStringTest {
 
         try (Response resp = call(request)) {
             assertThat(resp.code(), equalTo(413));
-            assertThat(resp.body().string(), containsString("413 Payload Too Large"));
+            assertThat(resp.body().string(), containsString("413 Request Entity Too Large"));
+        } catch (Exception e) {
+            // The HttpServerKeepAliveHandler will probably close the connection before the full request body is read, which is probably a good thing in this case.
+            // So allow a valid 413 response or an error
+            assertThat(e.getCause(), instanceOf(IOException.class));
         }
         assertThat(exception.get(), instanceOf(ClientErrorException.class));
-        assertThat(((ClientErrorException)exception.get()).getResponse().getStatus(), equalTo(408));
+        assertThat(((ClientErrorException)exception.get()).getResponse().getStatus(), equalTo(413));
     }
 
+    @Test
+    public void exceedingUploadSizeResultsInKilledConnectionForChunkedRequestWhereResponseStarted() throws Exception {
+        AtomicReference<Throwable> exception = new AtomicReference<>();
+        server = ServerUtils.httpsServerForTest()
+            .withMaxRequestSize(100)
+            .addHandler((request, response) -> {
+                response.sendChunk("starting");
+                try {
+                    request.readBodyAsString();
+                } catch (Throwable e) {
+                    exception.set(e);
+                    throw e;
+                }
+                return true;
+            })
+            .start();
 
+        Request.Builder request = request()
+            .url(server.uri().toString())
+            .post(new SlowBodySender(1000, 0));
+
+        try (Response resp = call(request)) {
+            resp.body().string();
+            Assert.fail("Should not succeed but got " + resp);
+        } catch (Exception e) {
+            // The HttpServerKeepAliveHandler will probably close the connection before the full request body is read, which is probably a good thing in this case.
+            // So allow a valid 413 response or an error
+            if (e instanceof UncheckedIOException) {
+                assertThat(e.getCause(), instanceOf(IOException.class));
+            } else {
+                assertThat(e, instanceOf(IOException.class));
+            }
+        }
+        assertThat(exception.get(), instanceOf(ClientErrorException.class));
+        assertThat(((ClientErrorException)exception.get()).getResponse().getStatus(), equalTo(413));
+    }
 
     @After
     public void destroy() {

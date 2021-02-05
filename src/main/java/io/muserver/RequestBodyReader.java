@@ -10,15 +10,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.ws.rs.ClientErrorException;
+import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.Response;
 import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.Charset;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Collections.emptyList;
@@ -32,6 +32,16 @@ interface FormRequestBodyReader {
 abstract class RequestBodyReader {
 
     private final CompletableFuture<Throwable> future = new CompletableFuture<>();
+    private final AtomicLong bytes = new AtomicLong();
+    final long maxSize;
+
+    long receivedBytes() {
+        return bytes.get();
+    }
+
+    protected RequestBodyReader(long maxSize) {
+        this.maxSize = maxSize;
+    }
 
     boolean completed() {
         return future.isDone();
@@ -47,14 +57,19 @@ abstract class RequestBodyReader {
 
     final void onRequestBodyRead(ByteBuf content, boolean last, DoneCallback callback) {
         try {
-            onRequestBodyRead0(content, last, error -> {
-                if (error != null) {
-                    future.complete(error);
-                } else if (last) {
-                    future.complete(null);
-                }
-                callback.onComplete(error);
-            });
+            long soFar = bytes.addAndGet(content.readableBytes());
+            if (soFar > maxSize) {
+                callback.onComplete(new ClientErrorException(closingResponse(413, "The request body was too large")));
+            } else {
+                onRequestBodyRead0(content, last, error -> {
+                    if (error != null) {
+                        future.complete(error);
+                    } else if (last) {
+                        future.complete(null);
+                    }
+                    callback.onComplete(error);
+                });
+            }
         } catch (Exception e) {
             future.complete(e);
             try {
@@ -74,10 +89,9 @@ abstract class RequestBodyReader {
         try {
             throwable = future.get(1, TimeUnit.HOURS); // TODO: configure this. Note max-upload-size + read-idle timeouts are applying too.
             if (throwable instanceof TimeoutException) {
-                throw new ClientErrorException(
-                    Response.status(408).entity("Idle time out reading request body")
-                        .header(HeaderNames.CONNECTION.toString(), HeaderValues.CLOSE)
-                        .build());
+                throw new ClientErrorException(closingResponse(408, "Idle time out reading request body"));
+            } else if (throwable instanceof WebApplicationException) {
+                throw (WebApplicationException) throwable;
             }
         } catch (ExecutionException e) {
             throwable = Mutils.coalesce(e.getCause(), e);
@@ -92,11 +106,20 @@ abstract class RequestBodyReader {
         }
     }
 
+    private static Response closingResponse(int status, String message) {
+        return Response.status(status).entity(message)
+            .header(HeaderNames.CONNECTION.toString(), HeaderValues.CLOSE)
+            .build();
+    }
+
+    public void cleanup() {};
+
     static class ListenerAdapter extends RequestBodyReader {
         private static final Logger log = LoggerFactory.getLogger(ListenerAdapter.class);
         private final RequestBodyListener readListener;
 
-        public ListenerAdapter(RequestBodyListener readListener) {
+        public ListenerAdapter(long maxSize, RequestBodyListener readListener) {
+            super(maxSize);
             this.readListener = readListener;
         }
 
@@ -136,6 +159,10 @@ abstract class RequestBodyReader {
     }
 
     static class DiscardingReader extends RequestBodyReader {
+        DiscardingReader(long maxSize) {
+            super(maxSize);
+        }
+
         @Override
         public void onRequestBodyRead0(ByteBuf content, boolean last, DoneCallback callback) {
             try {
@@ -150,6 +177,7 @@ abstract class RequestBodyReader {
         private RequestParameters form;
 
         public UrlEncodedBodyReader(StringRequestBodyReader stringReader) {
+            super(stringReader.maxSize);
             this.stringReader = stringReader;
         }
 
@@ -168,7 +196,8 @@ abstract class RequestBodyReader {
         public void onRequestBodyRead0(ByteBuf content, boolean last, DoneCallback callback) {
             stringReader.onRequestBodyRead(content, last, error -> {
                 if (error == null && last) {
-                    form = new NettyRequestParameters(new QueryStringDecoder(stringReader.body(), UTF_8, false, 1000000));
+                    QueryStringDecoder decoder = new QueryStringDecoder(stringReader.body(), UTF_8, false, 1000000);
+                    form = new NettyRequestParameters(decoder.parameters());
                 }
                 callback.onComplete(error);
             });
@@ -188,7 +217,8 @@ abstract class RequestBodyReader {
             return form;
         }
 
-        public MultipartFormReader(HttpRequest nettyRequest) {
+        public MultipartFormReader(long maxSize, HttpRequest nettyRequest) {
+            super(maxSize);
             multipartRequestDecoder = new HttpPostMultipartRequestDecoder(nettyRequest);
         }
 
@@ -196,37 +226,44 @@ abstract class RequestBodyReader {
         public void onRequestBodyRead0(ByteBuf content, boolean last, DoneCallback callback) {
             multipartRequestDecoder.offer(new DefaultHttpContent(content));
             if (last) {
-                try {
-                    multipartRequestDecoder.offer(new DefaultLastHttpContent());
+                multipartRequestDecoder.offer(new DefaultLastHttpContent());
 
-                    List<InterfaceHttpData> bodyHttpDatas = multipartRequestDecoder.getBodyHttpDatas();
-                    QueryStringEncoder qse = new QueryStringEncoder("/");
+                List<InterfaceHttpData> bodyHttpDatas = multipartRequestDecoder.getBodyHttpDatas();
+                Map<String, List<String>> parameters = new HashMap<>();
 
-                    for (InterfaceHttpData bodyHttpData : bodyHttpDatas) {
-                        if (bodyHttpData instanceof FileUpload) {
-                            FileUpload fileUpload = (FileUpload) bodyHttpData;
-                            if (fileUpload.length() == 0 && Mutils.nullOrEmpty(fileUpload.getFilename())) {
-                                // nothing uploaded
-                            } else {
-                                UploadedFile uploadedFile = new MuUploadedFile(fileUpload);
-                                addFile(fileUpload.getName(), uploadedFile);
-                            }
-                        } else if (bodyHttpData instanceof Attribute) {
-                            Attribute a = (Attribute) bodyHttpData;
-                            try {
-                                qse.addParam(a.getName(), a.getValue());
-                            } catch (IOException e) {
-                                throw new UncheckedIOException("Error reading form parameter", e);
-                            }
+                for (InterfaceHttpData bodyHttpData : bodyHttpDatas) {
+                    if (bodyHttpData instanceof FileUpload) {
+                        FileUpload fileUpload = (FileUpload) bodyHttpData;
+                        if (fileUpload.length() == 0 && Mutils.nullOrEmpty(fileUpload.getFilename())) {
+                            // nothing uploaded
                         } else {
-                            log.warn("Unrecognised body part: " + bodyHttpData.getClass() + " from " + this + " - this may mean some of the request data is lost.");
+                            UploadedFile uploadedFile = new MuUploadedFile(fileUpload);
+                            addFile(fileUpload.getName(), uploadedFile);
                         }
+                    } else if (bodyHttpData instanceof Attribute) {
+                        Attribute a = (Attribute) bodyHttpData;
+                        try {
+                            String name = a.getName();
+                            List<String> values = parameters.computeIfAbsent(name, k -> new LinkedList<>());
+                            values.add(a.getValue());
+                        } catch (IOException e) {
+                            throw new UncheckedIOException("Error reading form parameter", e);
+                        }
+                    } else {
+                        log.warn("Unrecognised body part: " + bodyHttpData.getClass() + " from " + this + " - this may mean some of the request data is lost.");
                     }
-                    form = new NettyRequestParameters(new QueryStringDecoder(qse.toString(), UTF_8, true, 1000000));
-                } finally {
-                    multipartRequestDecoder.destroy();
                 }
+                form = new NettyRequestParameters(parameters);
             }
+            try {
+                callback.onComplete(null);
+            } catch (Exception ignored) {
+            }
+        }
+
+        @Override
+        public void cleanup() {
+            multipartRequestDecoder.destroy();
         }
 
         private void addFile(String name, UploadedFile file) {
@@ -248,7 +285,8 @@ abstract class RequestBodyReader {
         private final Charset bodyCharset;
         private final StringBuilder sb;
 
-        public StringRequestBodyReader(Charset bodyCharset, int sizeInBytes) {
+        public StringRequestBodyReader(long maxSize, Charset bodyCharset, int sizeInBytes) {
+            super(maxSize);
             this.bodyCharset = bodyCharset;
             if (sizeInBytes > 0) {
                 sb = new StringBuilder(sizeInBytes); // not necessarily the size in characters, but a good enough estimate
