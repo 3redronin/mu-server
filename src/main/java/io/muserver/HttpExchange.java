@@ -59,7 +59,6 @@ class HttpExchange implements ResponseInfo, Exchange {
     }
 
     private void onReqOrRespStateChange(RequestState requestChanged, ResponseState responseChanged) {
-        log.info("HE state change. request=" + requestChanged + " ; resp=" + responseChanged);
         RequestState reqState = request.requestState();
         ResponseState respState = response.responseState();
         if (reqState.endState() && respState == ResponseState.UPGRADED) {
@@ -85,9 +84,6 @@ class HttpExchange implements ResponseInfo, Exchange {
 
     public Future<Void> complete(boolean forceDisconnect) {
         if (response.outputState().endState()) {
-            if (log.isDebugEnabled()) {
-                log.debug("AsyncContext.complete called twice for " + request + " where state was " + response.outputState(), new MuException(""));
-            }
             return null;
         } else {
             return response.complete(forceDisconnect);
@@ -293,13 +289,11 @@ class HttpExchange implements ResponseInfo, Exchange {
 
     @Override
     public void onException(ChannelHandlerContext ctx, Throwable cause) {
-        log.info("onException " + cause.getMessage());
         dealWithUnhandledException(request, response, cause);
     }
 
     @Override
     public void onConnectionEnded(ChannelHandlerContext ctx) {
-        log.info("onConnectionEnded");
         if (!response.outputState().endState()) {
             onCancelled(ResponseState.CLIENT_DISCONNECTED);
         }

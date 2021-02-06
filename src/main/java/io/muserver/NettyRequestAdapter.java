@@ -177,7 +177,6 @@ class NettyRequestAdapter implements MuRequest {
         if (requestBodyReader != null) {
             throw new IllegalStateException("The body of the request message cannot be read twice. This can happen when calling any 2 of inputStream(), readBodyAsString(), or form() methods.");
         }
-        log.info("Setting request body reader " + reader);
         requestBodyReader = reader;
         ctx.channel().read();
     }
@@ -410,7 +409,6 @@ class NettyRequestAdapter implements MuRequest {
         if (httpExchange == null) {
             throw new IllegalStateException("Exchange was already set");
         }
-        log.info("Setting exchange for type " + httpExchange);
         this.httpExchange = httpExchange;
     }
 
@@ -472,7 +470,6 @@ class NettyRequestAdapter implements MuRequest {
 
         @Override
         public void setReadListener(RequestBodyListener readListener) {
-            log.info("Setting read listener " + readListener);
             request.claimingBodyRead(new RequestBodyReader.ListenerAdapter(this, request.maxRequestBytes(), readListener));
         }
 

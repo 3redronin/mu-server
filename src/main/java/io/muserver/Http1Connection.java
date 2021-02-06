@@ -62,7 +62,6 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-        log.info("Channel is inactive");
         serverStats.onConnectionClosed();
         server.onConnectionEnded(this);
         if (currentExchange != null) {
@@ -85,12 +84,10 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
             try {
                 this.currentExchange = HttpExchange.create(server, proto, ctx, this, (HttpRequest) msg,
                     nettyHandlerAdapter, connectionStats, (exchange, newState) -> {
-                    log.info("Content state change: " + newState);
                         if (newState.endState()) {
                             nettyHandlerAdapter.onResponseComplete(exchange, serverStats, connectionStats);
                             if (exchange.state() != HttpExchangeState.UPGRADED) {
                                 ctx.channel().eventLoop().execute(() -> {
-                                    log.info("Setting current exchange null");
                                     if (currentExchange != exchange) {
                                         throw new IllegalStateException("Expected current exchange to be " + exchange + " but was " + currentExchange);
                                     }
@@ -119,7 +116,7 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
         } else if (currentExchange != null) {
             currentExchange.onMessage(ctx, msg);
         } else {
-            log.warn("Got a chunk of message for an unknown request. This can happen when a request is rejected based on headers, and then the rejected body arrives.");
+            log.debug("Got a chunk of message for an unknown request. This can happen when a request is rejected based on headers, and then the rejected body arrives.");
             ctx.channel().read();
         }
     }
@@ -148,7 +145,6 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
         Exchange exchange = this.currentExchange;
         if (evt instanceof IdleStateEvent) {
-            log.info("IdleEvent " + evt);
             IdleStateEvent ise = (IdleStateEvent) evt;
             if (exchange != null) {
                 exchange.onIdleTimeout(ctx, ise);
@@ -180,7 +176,6 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        log.info("Exception! " + cause.getMessage());
         Exchange exchange = this.currentExchange;
         if (exchange != null) {
             exchange.onException(ctx, cause);

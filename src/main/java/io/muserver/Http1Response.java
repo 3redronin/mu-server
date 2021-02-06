@@ -5,7 +5,6 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http.*;
-import io.netty.util.ReferenceCountUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -85,14 +84,11 @@ class Http1Response extends NettyResponseAdaptor {
         }
 
         if (ctx.channel().isActive()) {
-            log.info("Writing to the channel: " + ReferenceCountUtil.refCnt(body));
             FullHttpResponse resp = isHead ?
                 new EmptyHttpResponse(httpStatus())
                 : new DefaultFullHttpResponse(HTTP_1_1, httpStatus(), body, false);
             writeHeaders(resp);
             lastAction = ctx.writeAndFlush(resp);
-        } else {
-            log.info("Skipping the write. " + ReferenceCountUtil.refCnt(body));
         }
         return lastAction;
     }

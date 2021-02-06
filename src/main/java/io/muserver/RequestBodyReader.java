@@ -121,7 +121,6 @@ abstract class RequestBodyReader {
     public void cleanup() {};
 
     static class ListenerAdapter extends RequestBodyReader {
-        private static final Logger log = LoggerFactory.getLogger(ListenerAdapter.class);
         private final NettyRequestAdapter.AsyncHandleImpl asyncHandle;
         private final RequestBodyListener readListener;
 
@@ -145,7 +144,6 @@ abstract class RequestBodyReader {
                     };
                     readListener.onDataReceived(content.nioBuffer(), successCalled);
                 } else if (last) {
-                    log.info("Got empty last message");
                     readListener.onComplete();
                     callback.onComplete(null);
                 }
