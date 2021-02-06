@@ -3,8 +3,6 @@ package io.muserver;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.util.ReferenceCountUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * This pre-emptively reads a message from the channel before the HTTP handler has actually asked for it.
@@ -54,18 +52,12 @@ class PreReader extends ChannelDuplexHandler {
 
     @Override
     public void channelUnregistered(ChannelHandlerContext ctx) throws Exception {
-        log.info("Cleaning up");
-        cleanUp();
+        if (pendingMsg != null) {
+            ReferenceCountUtil.release(pendingMsg);
+            ctx.fireChannelRead(pendingMsg); // without this, a reference is leaked
+            pendingMsg = null;
+        }
         super.channelUnregistered(ctx);
     }
 
-    private static final Logger log = LoggerFactory.getLogger(PreReader.class);
-
-
-    private void cleanUp() {
-        if (pendingMsg != null) {
-            ReferenceCountUtil.release(pendingMsg);
-            pendingMsg = null;
-        }
-    }
 }

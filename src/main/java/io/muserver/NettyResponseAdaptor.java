@@ -4,7 +4,6 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
-import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
@@ -235,6 +234,9 @@ abstract class NettyResponseAdaptor implements MuResponse {
     }
 
     ChannelFuture complete(boolean forceDisconnect) {
+        Mutils.closeSilently(writer);
+        Mutils.closeSilently(outputStream);
+
         ResponseState state = this.state;
         if (state.endState()) {
             return lastAction;
@@ -246,10 +248,6 @@ abstract class NettyResponseAdaptor implements MuResponse {
             boolean addContentLengthHeader = ((!isHead || !isFixedLength) && status != 204 && status != 205 && status != 304);
             sendEmptyResponse(addContentLengthHeader);
         } else if (state == ResponseState.STREAMING) {
-            if (!isHead) {
-                Mutils.closeSilently(writer);
-                Mutils.closeSilently(outputStream);
-            }
             boolean badFixedLength = !isHead && isFixedLength && declaredLength != bytesStreamed && status != 304;
             if (badFixedLength) {
                 shouldDisconnect = onBadRequestSent();

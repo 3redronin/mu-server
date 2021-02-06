@@ -22,7 +22,6 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeoutException;
 
 import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 
@@ -98,7 +97,7 @@ class HttpExchange implements ResponseInfo, Exchange {
     void onCancelled(ResponseState reason) {
         if (!response.outputState().endState()) {
             response.onCancelled(reason);
-            request.onCancelled(reason, new MuException("Cancell: " + reason.name()));
+            request.onCancelled(reason, new MuException("Cancelled: " + reason.name()));
         } else {
             log.warn("Cancelled called after end state was " + response.outputState());
         }
@@ -314,14 +313,7 @@ class HttpExchange implements ResponseInfo, Exchange {
 
         boolean forceDisconnect = response instanceof Http1Response;
 
-        if (response.hasStartedSendingData()) {
-            if (!response.responseState().endState()) {
-//                response.onCancelled(ResponseState.ERRORED);
-            }
-            if (!request.requestState().endState()) {
-//                request.onCancelled(ResponseState.ERRORED, ex);
-            }
-        } else {
+        if (!response.hasStartedSendingData()) {
             WebApplicationException wae;
             if (ex instanceof WebApplicationException) {
                 forceDisconnect = false;

@@ -93,14 +93,19 @@ public interface MuResponse {
     void addCookie(io.muserver.Cookie cookie);
 
     /**
-     * <p>Gets a buffered output stream that sends an HTTP chunk each time the <code>write</code>
-     * method is called.</p>
+     * <p>Gets a buffered output stream that can send data to the client.</p>
      * <p>To set the size of the buffer, use @{link {@link #outputStream(int)}} instead.</p>
      * <p>If you are writing text, you may prefer the {@link #writer()} or {@link #sendChunk(String)} methods.</p>
      * @return An output stream to send data to the client.
      */
     OutputStream outputStream();
 
+    /**
+     * <p>Gets a buffered output stream that can send data to the client.</p>
+     * <p>If you are writing text, you may prefer the {@link #writer()} or {@link #sendChunk(String)} methods.</p>
+     * @param bufferSize The size of the output buffer, e.g. 8192, or 0 if you do not want to buffer the response bytes.
+     * @return An output stream to send data to the client.
+     */
     OutputStream outputStream(int bufferSize);
 
     /**

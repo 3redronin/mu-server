@@ -295,7 +295,6 @@ public class RequestBodyReaderInputStreamAdapterTest {
     public void exceedingUploadSizeResultsIn413OrKilledConnectionForChunkedRequestWhereResponseNotStarted() throws Exception {
         AtomicReference<Throwable> exception = new AtomicReference<>();
         server = ServerUtils.httpsServerForTest()
-//        server = MuServerBuilder.httpServer()
             .withMaxRequestSize(1000)
             .addHandler((request, response) -> {
                 if (request.inputStream().isPresent()) {
@@ -325,11 +324,6 @@ public class RequestBodyReaderInputStreamAdapterTest {
         }
         assertThat(exception.get(), instanceOf(ClientErrorException.class));
         assertThat(((ClientErrorException)exception.get()).getResponse().getStatus(), equalTo(413));
-
-        try (Response resp = call(request(server.uri()))) {
-            resp.body().string();
-        }
-        Thread.sleep(5000);
     }
 
     @After

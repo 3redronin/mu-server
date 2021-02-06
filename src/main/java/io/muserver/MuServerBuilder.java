@@ -516,7 +516,7 @@ public class MuServerBuilder {
             DefaultThreadFactory threadFactory = new DefaultThreadFactory("muhandler");
             handlerExecutor = new ThreadPoolExecutor(8, 400, 60, TimeUnit.SECONDS, new SynchronousQueue<>(), threadFactory);
         }
-        NettyHandlerAdapter nettyHandlerAdapter = new NettyHandlerAdapter(handlerExecutor, handlers, settings, responseCompleteListeners);
+        NettyHandlerAdapter nettyHandlerAdapter = new NettyHandlerAdapter(handlerExecutor, handlers, responseCompleteListeners);
 
         NioEventLoopGroup bossGroup = new NioEventLoopGroup(1);
         NioEventLoopGroup workerGroup = new NioEventLoopGroup(this.nioThreads);

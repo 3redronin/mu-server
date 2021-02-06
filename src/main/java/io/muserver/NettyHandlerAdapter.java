@@ -15,14 +15,12 @@ class NettyHandlerAdapter {
 
     private static final Logger log = LoggerFactory.getLogger(NettyHandlerAdapter.class);
     private final List<MuHandler> muHandlers;
-    private final ServerSettings settings;
     private final ExecutorService executor;
     private final List<ResponseCompleteListener> completeListeners;
 
-    NettyHandlerAdapter(ExecutorService executor, List<MuHandler> muHandlers, ServerSettings settings, List<ResponseCompleteListener> completeListeners) {
+    NettyHandlerAdapter(ExecutorService executor, List<MuHandler> muHandlers, List<ResponseCompleteListener> completeListeners) {
         this.executor = executor;
         this.muHandlers = muHandlers;
-        this.settings = settings;
         this.completeListeners = completeListeners;
     }
 
@@ -80,7 +78,6 @@ class NettyHandlerAdapter {
                         throw new NotFoundException();
                     }
 
-
                 } catch (Throwable ex) {
                     error = dealWithUnhandledException(request, response, ex);
                 } finally {
@@ -88,7 +85,7 @@ class NettyHandlerAdapter {
                         try {
                             muCtx.complete(error);
                         } catch (Throwable e) {
-                            log.info("Error while completing request", e);
+                            log.warn("Error while completing request", e);
                         }
                     }
                 }
@@ -98,18 +95,6 @@ class NettyHandlerAdapter {
                 addedToExecutorCallback.onComplete(e);
             } catch (Exception ignored) { }
         }
-    }
-
-    void onRequestComplete(HttpExchange ctx) {
-//        try {
-//            GrowableByteBufferInputStream inputBuffer = ctx.requestBody;
-//            if (inputBuffer != null) {
-//                inputBuffer.close();
-//            }
-//            ctx.request.setStatus(RequestState.COMPLETE);
-//        } catch (Exception e) {
-//            log.info("Error while cleaning up request. It may mean the client did not receive the full response for " + ctx.request, e);
-//        }
     }
 
     void onResponseComplete(ResponseInfo info, MuStatsImpl serverStats, MuStatsImpl connectionStats) {

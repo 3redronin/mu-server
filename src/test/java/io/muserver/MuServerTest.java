@@ -21,6 +21,7 @@ import java.lang.management.ThreadMXBean;
 import java.lang.reflect.Field;
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -401,7 +402,7 @@ public class MuServerTest {
             }
         }))) {
             assertThat(resp.code(), is(408)); // HTTP1
-            assertThat(resp.body().string(), containsString("Timed out reading request body"));
+            assertThat(resp.body().string(), containsString("408 Request Timeout"));
             if (!ClientUtils.isHttp2(resp)) {
                 assertThat(resp.header("connection"), equalTo("close"));
             }
@@ -454,6 +455,42 @@ public class MuServerTest {
             .endHeaders().flushRequest();
 
         assertEventually(client::isConnected, equalTo(false));
+    }
+
+    @Test
+    public void unclosedOutputStreamsGetFlushed() throws IOException {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.contentType("text/plain;charset=utf-8");
+                response.headers().set(HeaderNames.CONTENT_LENGTH, 5);
+                response.outputStream(8192).write("Hello".getBytes(StandardCharsets.UTF_8));
+            })
+            .start();
+        try (Response resp = call(request(server.uri()))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), equalTo("Hello"));
+            assertThat(resp.header("content-type"), is("text/plain;charset=utf-8"));
+            assertThat(resp.header("transfer-encoding"), is(nullValue()));
+            assertThat(resp.header("content-length"), is("5"));
+        }
+    }
+
+    @Test
+    public void unclosedWriterGetFlushed() throws IOException {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.contentType("text/plain;charset=utf-8");
+                response.headers().set(HeaderNames.CONTENT_LENGTH, 5);
+                response.writer().write("Hello");
+            })
+            .start();
+        try (Response resp = call(request(server.uri()))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), equalTo("Hello"));
+            assertThat(resp.header("content-type"), is("text/plain;charset=utf-8"));
+            assertThat(resp.header("transfer-encoding"), is(nullValue()));
+            assertThat(resp.header("content-length"), is("5"));
+        }
     }
 
     @Test(timeout = 30000)

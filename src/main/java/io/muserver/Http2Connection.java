@@ -94,7 +94,7 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
         } else {
             NettyHandlerAdapter.passDataToHandler(data, httpExchange, DoneCallback.NoOp);
             if (endOfStream) {
-                nettyHandlerAdapter.onRequestComplete(httpExchange);
+//                nettyHandlerAdapter.onRequestComplete(httpExchange);
                 exchanges.remove(streamId);
             }
         }
