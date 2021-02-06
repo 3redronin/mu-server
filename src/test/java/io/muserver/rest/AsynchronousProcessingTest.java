@@ -227,7 +227,9 @@ public class AsynchronousProcessingTest {
             }
         }
         this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Sample())).start();
-        OkHttpClient impatientClient = ClientUtils.client.newBuilder().readTimeout(200, TimeUnit.MILLISECONDS).build();
+        OkHttpClient impatientClient = ClientUtils.client.newBuilder()
+            .readTimeout(200, TimeUnit.MILLISECONDS)
+            .build();
         try (Response ignored = impatientClient.newCall(request().url(server.uri().resolve("/samples").toString()).build()).execute()) {
             Assert.fail("This test expected a client timeout");
         } catch (SocketTimeoutException te) {

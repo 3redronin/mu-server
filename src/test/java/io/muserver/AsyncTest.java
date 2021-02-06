@@ -25,6 +25,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.MuServerBuilder.httpsServer;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -145,6 +146,26 @@ public class AsyncTest {
             assertThat(sendDoneCallbackCount.get(), is(totalCount));
             assertThat(receivedCount.get(), is(totalCount));
         }
+    }
+
+    @Test
+    public void errorCallbackInvokedWhenTimeoutOccurs() {
+        AtomicReference<ResponseInfo> infoRef = new AtomicReference<>();
+        server = ServerUtils.httpsServerForTest()
+            .withIdleTimeout(50, TimeUnit.MILLISECONDS)
+            .addHandler((request, response) -> {
+                AsyncHandle handle = request.handleAsync();
+                handle.addResponseCompleteHandler(infoRef::set);
+                return true;
+            })
+            .start();
+        try (Response resp = call(request(server.uri()))) {
+            resp.body().string();
+            Assert.fail("Should not succeed");
+        } catch (Exception ex) {
+            MuAssert.assertIOException(ex);
+        }
+        assertThat(infoRef.get().completedSuccessfully(), is(false));
     }
 
     @Test
