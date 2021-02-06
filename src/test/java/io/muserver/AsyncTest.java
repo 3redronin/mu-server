@@ -50,11 +50,10 @@ public class AsyncTest {
                 asyncHandle.write(ByteBuffer.wrap(bytes), error -> {
                     if (error == null) {
                         result.append("success");
-                        asyncHandle.complete();
                     } else {
                         result.append("fail ").append(error);
-                        asyncHandle.complete();
                     }
+                    asyncHandle.complete();
                 });
             })
             .start();

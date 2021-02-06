@@ -8,6 +8,7 @@ import org.example.petstore.resource.UserResource;
 import org.example.petstore.resource.VehicleResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import scaffolding.StringUtils;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -63,6 +64,13 @@ public class RunLocal {
             .addHandler(Method.GET, "/api", (request, response, pathParams) -> {
                 response.contentType(ContentTypes.APPLICATION_JSON);
                 response.write("{ \"hello\": \"world                    this is something           to be gzipped\" }");
+            })
+            .addHandler(Method.GET, "/lotsa-chunks", (request, response, pathParams) -> {
+                response.contentType("text/plain;charset=utf-8");
+                String thing = StringUtils.randomAsciiStringOfLength(1000) + "\n\n";
+                for (int i = 0; i < 1000000; i++) {
+                    response.sendChunk(thing);
+                }
             })
             .addHandler(
                 RestHandlerBuilder.restHandler(

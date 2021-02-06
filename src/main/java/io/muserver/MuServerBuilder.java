@@ -595,6 +595,7 @@ public class MuServerBuilder {
         boolean usesSsl = sslContextProvider != null;
         String proto = usesSsl ? "https" : "http";
         ServerBootstrap b = new ServerBootstrap();
+        b.childOption(ChannelOption.WRITE_BUFFER_WATER_MARK, WriteBufferWaterMark.DEFAULT);
         b.group(bossGroup, workerGroup)
             .channel(NioServerSocketChannel.class)
             .childHandler(new ChannelInitializer<SocketChannel>() {
@@ -612,6 +613,7 @@ public class MuServerBuilder {
                     }
                     boolean addAlpn = http2 && usesSsl;
                     if (addAlpn) {
+                        p.addLast("pressure", new BackPressureHandler());
                         p.addLast("http1or2", new AlpnHandler(nettyHandlerAdapter, server, proto));
                     }
                     p.addLast("conerror", new ChannelInboundHandlerAdapter() {
@@ -644,6 +646,7 @@ public class MuServerBuilder {
         }
         p.addLast("keepalive", new HttpServerKeepAliveHandler());
         p.addLast("flowControl", new FlowControlHandler());
+        p.addLast("pressure", new BackPressureHandler());
         p.addLast("preread", new PreReader());
         p.addLast("muhandler", new Http1Connection(nettyHandlerAdapter, server, proto));
     }
