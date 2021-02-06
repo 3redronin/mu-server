@@ -372,9 +372,6 @@ class NettyRequestAdapter implements MuRequest {
             if (requestBodyReader != null && !requestBodyReader.completed()) {
                 requestBodyReader.onCancelled(ex);
             }
-            if (asyncHandle != null) {
-                asyncHandle.onCancelled(reason);
-            }
             setState(RequestState.ERROR);
         }
     }
@@ -457,7 +454,6 @@ class NettyRequestAdapter implements MuRequest {
         public final boolean isConnectionStateSupported;
         private final NettyRequestAdapter request;
         private final HttpExchange httpExchange;
-        private LinkedList<DoneCallback> doneCallbackList;
 
         private AsyncHandleImpl(NettyRequestAdapter request, HttpExchange httpExchange) {
             this.request = request;
@@ -471,31 +467,6 @@ class NettyRequestAdapter implements MuRequest {
         @Override
         public void setReadListener(RequestBodyListener readListener) {
             request.claimingBodyRead(new RequestBodyReader.ListenerAdapter(this, request.maxRequestBytes(), readListener));
-        }
-
-        private void clearDoneCallbackList() {
-            if (doneCallbackList != null) {
-                DoneCallback task;
-                while ((task = doneCallbackList.poll()) != null) {
-                    try {
-                        task.onComplete(new ClientDisconnectedException());
-                    } catch (Throwable throwable) {
-                        log.debug("Exception clearing done callback", throwable);
-                    }
-                }
-            }
-        }
-
-        @Override
-        public void onWriteable() {
-            DoneCallback task;
-            while (request.ctx.channel().isWritable() && doneCallbackList != null && (task = doneCallbackList.poll()) != null) {
-                try {
-                    task.onComplete(null);
-                } catch (Throwable throwable) {
-                    log.debug("Exception on completing task", throwable);
-                }
-            }
         }
 
         @Override
@@ -522,33 +493,11 @@ class NettyRequestAdapter implements MuRequest {
 
             ChannelFuture writeFuture = (ChannelFuture) write(data);
             writeFuture.addListener(future -> {
-                /*
-                 * The DoneCallback are commonly used to trigger writing more data into the target channel,
-                 * so we delay the done callback invocation till the target netty channel become writable,
-                 * in this way we prevent OOM for fast producer / slow consumer scenario.
-                 *
-                 * We use a doneCallbackList here to make sure the done callback being invoked in the same
-                 * order as it come in. the doneCallbackList operation are all within same netty event loop thread,
-                 * so we LinkedList rather than ConcurrentQueue for it.
-                 *
-                 * Threading related:
-                 * 1. (ChannelFuture) write(data) run in mu-server thread.
-                 * 2. callback in "writeFuture.addListener(callback)" run the netty event loop thread.
-                 *
-                 */
                 try {
-                    if (!future.isSuccess()) {
-                        callback.onComplete(future.cause());
-                    } else if (!isConnectionStateSupported) {
-                        // http 2 not support DoneCallback delay at the moment
-                        callback.onComplete(null);
-                    } else if (request.ctx.channel().isWritable() && (doneCallbackList == null || doneCallbackList.isEmpty())) {
+                    if (future.isSuccess()) {
                         callback.onComplete(null);
                     } else {
-                        if (doneCallbackList == null) {
-                            doneCallbackList = new LinkedList<>();
-                        }
-                        doneCallbackList.add(callback);
+                        callback.onComplete(future.cause());
                     }
                 } catch (Throwable e) {
                     log.warn("Unhandled exception from write callback", e);
@@ -602,10 +551,6 @@ class NettyRequestAdapter implements MuRequest {
             if (responseCompletedListener != null) {
                 addResponseCompleteHandler(info -> responseCompletedListener.onComplete(info.completedSuccessfully()));
             }
-        }
-
-        void onCancelled(ResponseState reason) {
-            this.clearDoneCallbackList();
         }
 
     }
