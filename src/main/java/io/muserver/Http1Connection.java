@@ -55,10 +55,9 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
         remoteAddress = (InetSocketAddress) ctx.channel().remoteAddress();
         serverStats.onConnectionOpened();
         connectionStats.onConnectionOpened();
-        ctx.channel().config().setAutoRead(false);
-        ctx.read();
         super.handlerAdded(ctx);
         server.onConnectionStarted(this);
+        ctx.channel().read();
     }
 
     @Override
@@ -100,7 +99,7 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
                                     if (exchange.request.requestState() == RequestState.ERROR) {
                                         ctx.channel().close();
                                     } else {
-                                        ctx.channel().read(); // would moving this to request-complete mean disconnects happen earlier?
+                                        ctx.channel().read();
                                     }
                                 });
                             }

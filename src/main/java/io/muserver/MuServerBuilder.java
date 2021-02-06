@@ -642,8 +642,9 @@ public class MuServerBuilder {
         if (server.settings().gzipEnabled) {
             p.addLast("compressor", new SelectiveHttpContentCompressor(server.settings()));
         }
-        p.addLast("keepalive", new HttpServerKeepAliveHandler()); // TODO: is this still useful?
+        p.addLast("keepalive", new HttpServerKeepAliveHandler());
         p.addLast("flowControl", new FlowControlHandler());
+        p.addLast("preread", new PreReader());
         p.addLast("muhandler", new Http1Connection(nettyHandlerAdapter, server, proto));
     }
 }

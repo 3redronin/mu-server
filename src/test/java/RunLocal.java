@@ -13,6 +13,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 import static io.muserver.ContextHandlerBuilder.context;
@@ -24,8 +26,10 @@ import static io.muserver.handlers.ResourceHandlerBuilder.fileOrClasspath;
 
 public class RunLocal {
     private static final Logger log = LoggerFactory.getLogger(RunLocal.class);
+    private static final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
 
     public static void main(String[] args) {
+
         MuServer server = muServer()
             .withHttpPort(18080)
             .withHttpsPort(18443)
@@ -37,7 +41,7 @@ public class RunLocal {
                 .build())
             .addHandler(ResourceHandlerBuilder.fileHandler(BIG_FILE_DIR))
             .addHandler(fileOrClasspath("src/test/resources/sample-static", "/sample-static"))
-            .addHandler(Method.GET, "/connections",(request, response, pathParams) -> {
+            .addHandler(Method.GET, "/connections", (request, response, pathParams) -> {
                 response.contentType("text/plain;charset=utf8");
                 PrintWriter writer = response.writer();
                 for (HttpConnection connection : request.server().activeConnections()) {
@@ -134,6 +138,12 @@ public class RunLocal {
                 for (MuRequest muRequest : stats.activeRequests()) {
                     response.sendChunk(muRequest + "\r\n");
                 }
+            })
+            .addHandler(Method.GET, "/sleep", (req, resp, pp) -> {
+                AsyncHandle asyncHandle = req.handleAsync();
+                executor.schedule((Runnable) asyncHandle::complete,
+                    req.query().getLong("millis", 5000), TimeUnit.MILLISECONDS);
+                asyncHandle.addResponseCompleteHandler(info -> log.info("Woke up: " + info));
             })
             .start();
 

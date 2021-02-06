@@ -241,7 +241,7 @@ public class RequestBodyReaderInputStreamAdapterTest {
         server = ServerUtils.httpsServerForTest()
             .addHandler((request, response) -> {
                 try (InputStream is = request.inputStream().orElseThrow(() -> new MuException("No input stream"))) {
-                    response.sendChunk("available " + is.available() + " / read " + ((char) is.read()) + " / available " + is.available() + " / skip " + is.skip(6) + " / available " + is.available() + " / read " + ((char) is.read()) + " / available " + is.available() + "\n");
+                    response.sendChunk("read " + ((char) is.read()) + " / available " + is.available() + " / skip " + is.skip(6) + " / available " + is.available() + " / read " + ((char) is.read()) + " / available " + is.available() + "\n");
                     while (is.read() > -1) {
                     }
                 }
@@ -264,7 +264,7 @@ public class RequestBodyReaderInputStreamAdapterTest {
                 bufferedSink.flush();
             }
         }))) {
-            assertThat(resp.body().string(), equalTo("available 0 / read " + msg1.charAt(0) + " / available "
+            assertThat(resp.body().string(), equalTo("read " + msg1.charAt(0) + " / available "
                 + (msg1.length() - 1) + " / skip 6 / available " + (msg1.length() - 7) + " / read " + msg1.charAt(7) + " / available " + (msg1.length() - 8) + "\n"));
         }
     }
@@ -295,13 +295,17 @@ public class RequestBodyReaderInputStreamAdapterTest {
     public void exceedingUploadSizeResultsIn413OrKilledConnectionForChunkedRequestWhereResponseNotStarted() throws Exception {
         AtomicReference<Throwable> exception = new AtomicReference<>();
         server = ServerUtils.httpsServerForTest()
+//        server = MuServerBuilder.httpServer()
             .withMaxRequestSize(1000)
             .addHandler((request, response) -> {
-                try (InputStream is = request.inputStream().get()) {
-                    while (is.read() > -1) { }
-                } catch (Throwable e) {
-                    exception.set(e);
-                    throw e;
+                if (request.inputStream().isPresent()) {
+                    try (InputStream is = request.inputStream().get()) {
+                        while (is.read() > -1) {
+                        }
+                    } catch (Throwable e) {
+                        exception.set(e);
+                        throw e;
+                    }
                 }
                 return true;
             })
@@ -321,6 +325,11 @@ public class RequestBodyReaderInputStreamAdapterTest {
         }
         assertThat(exception.get(), instanceOf(ClientErrorException.class));
         assertThat(((ClientErrorException)exception.get()).getResponse().getStatus(), equalTo(413));
+
+        try (Response resp = call(request(server.uri()))) {
+            resp.body().string();
+        }
+        Thread.sleep(5000);
     }
 
     @After
