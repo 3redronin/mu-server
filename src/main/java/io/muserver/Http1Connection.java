@@ -149,9 +149,12 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
                     log.info("Upgrade success. Current exchange is " + this.currentExchange);
                     ((HttpExchange) this.currentExchange).addChangeListener((upgradeExchange, newState) -> {
                         log.info("Upgrading.... http exchange state change: " + newState);
-                        if (newState.endState()) {
+                        if (newState == HttpExchangeState.UPGRADED) {
                             this.currentExchange = eue.newExchange;
+                            this.currentExchange.onUpgradeComplete(ctx);
                             ctx.channel().read();
+                        } else if (newState == HttpExchangeState.ERRORED) {
+                            eue.newExchange.onConnectionEnded(ctx);
                         }
                     });
                 } else {

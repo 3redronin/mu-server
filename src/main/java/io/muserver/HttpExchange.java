@@ -170,10 +170,14 @@ class HttpExchange implements ResponseInfo, Exchange {
         }
     }
 
-
     @Override
     public HttpConnection connection() {
         return connection;
+    }
+
+    @Override
+    public void onUpgradeComplete(ChannelHandlerContext ctx) {
+        throw new UnsupportedOperationException("Cannot upgrade to an HttpExchange");
     }
 
     public HttpExchangeState state() {

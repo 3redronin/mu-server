@@ -5,7 +5,6 @@ import io.netty.buffer.ByteBufHolder;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.handler.codec.CorruptedFrameException;
 import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.websocketx.*;
 import io.netty.handler.timeout.IdleState;
@@ -208,15 +207,10 @@ class MuWebSocketSessionImpl implements MuWebSocketSession, Exchange {
     @Override
     public void onException(ChannelHandlerContext ctx, Throwable cause) {
         if (!state.endState()) {
-            if (cause instanceof CorruptedFrameException) {
-                try {
-                    muWebSocket.onError(new WebSocketProtocolException(cause.getMessage(), cause));
-                } catch (Exception e) {
-                    ctx.channel().close().addListener(future -> setState(WebsocketSessionState.ERRORED));
-                }
-            } else {
-                ctx.channel().close();
-                setState(WebsocketSessionState.ERRORED);
+            try {
+                muWebSocket.onError(cause);;
+            } catch (Exception e) {
+                ctx.channel().close().addListener(future -> setState(WebsocketSessionState.ERRORED));
             }
         }
     }
@@ -249,9 +243,15 @@ class MuWebSocketSessionImpl implements MuWebSocketSession, Exchange {
         return connection;
     }
 
-    public void onConnect() throws Exception {
+    @Override
+    public void onUpgradeComplete(ChannelHandlerContext ctx) {
         setState(WebsocketSessionState.OPEN);
-        muWebSocket.onConnect(this);
+        try {
+            muWebSocket.onConnect(this);
+        } catch (Exception e) {
+            log.warn("Error thrown by websocket onComplete handler", e);
+            onException(ctx, e);
+        }
     }
 }
 

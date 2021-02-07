@@ -21,6 +21,10 @@ interface Exchange {
      */
     HttpConnection connection();
 
+    /**
+     * Called when this exchange is the upgraded exchange, ready to be used
+     */
+    void onUpgradeComplete(ChannelHandlerContext ctx);
 }
 
 class ExchangeUpgradeEvent {

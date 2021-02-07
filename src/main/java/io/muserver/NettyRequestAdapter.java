@@ -392,7 +392,6 @@ class NettyRequestAdapter implements MuRequest {
         handshaker.handshake(ctx.channel(), fullReq, responseHeaders, ctx.channel().newPromise())
             .addListener(future -> {
                 if (future.isSuccess()) {
-                    session.onConnect();
                     ctx.pipeline().fireUserEventTriggered(new ExchangeUpgradeEvent(session));
                 } else {
                     ctx.pipeline().fireUserEventTriggered(new ExchangeUpgradeEvent(null));

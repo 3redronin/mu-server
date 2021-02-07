@@ -1,5 +1,7 @@
 package io.muserver;
 
+import io.netty.handler.codec.CorruptedFrameException;
+
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.concurrent.TimeoutException;
@@ -60,7 +62,7 @@ public abstract class BaseWebSocket implements MuWebSocket {
         if (!state().endState()) {
             if (cause instanceof TimeoutException) {
                 session().close(1001, WebsocketSessionState.TIMED_OUT.name());
-            } else if (cause instanceof WebSocketProtocolException) {
+            } else if (cause instanceof CorruptedFrameException) {
                 session().close(1008, WebsocketSessionState.ERRORED.name());
             } else if (session != null) {
                 session().close(1011, WebsocketSessionState.ERRORED.name());
