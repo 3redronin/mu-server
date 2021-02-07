@@ -16,6 +16,7 @@ import java.time.Instant;
 import java.util.Collections;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.RejectedExecutionException;
 
 import static io.netty.buffer.Unpooled.EMPTY_BUFFER;
 import static io.netty.buffer.Unpooled.copiedBuffer;
@@ -149,24 +150,14 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
                 }
             });
             exchanges.put(streamId, httpExchange);
-            DoneCallback addedToExecutorCallback = error -> {
-                ctx.channel().read();
-                if (error == null) {
-                    server.stats.onRequestStarted(muReq);
-                    connectionStats.onRequestStarted(muReq);
-                } else {
-                    server.stats.onRejectedDueToOverload();
-                    connectionStats.onRejectedDueToOverload();
-                    try {
-                        sendSimpleResponse(ctx, streamId, "503 Service Unavailable", 503);
-                    } catch (Exception e) {
-                        ctx.close();
-                    }
-                }
-            };
-            nettyHandlerAdapter.onHeaders(addedToExecutorCallback, httpExchange);
+            try {
+                nettyHandlerAdapter.onHeaders(httpExchange, server.stats, connectionStats);
+            } catch (RejectedExecutionException e) {
+                log.warn("Could not service " + httpExchange.request + " because the thread pool is full so sending a 503");
+                throw new InvalidHttpRequestException(503, "Service Unavailable");
+            }
         } catch (InvalidHttpRequestException ihr) {
-            if (ihr.code == 429) {
+            if (ihr.code == 429 || ihr.code == 503) {
                 connectionStats.onRejectedDueToOverload();
                 server.stats.onRejectedDueToOverload();
             } else {

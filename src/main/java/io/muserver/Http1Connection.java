@@ -83,7 +83,6 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
             try {
                 this.currentExchange = HttpExchange.create(server, proto, ctx, this, (HttpRequest) msg,
                     nettyHandlerAdapter, connectionStats, (exchange, newState) -> {
-                    log.info("HE state change: "+ newState);
                         if (newState.endState()) {
                             nettyHandlerAdapter.onResponseComplete(exchange, serverStats, connectionStats);
                             ctx.channel().eventLoop().execute(() -> {
@@ -104,7 +103,7 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
                         }
                     });
             } catch (InvalidHttpRequestException ihr) {
-                if (ihr.code == 429) {
+                if (ihr.code == 429 || ihr.code == 503) {
                     connectionStats.onRejectedDueToOverload();
                     serverStats.onRejectedDueToOverload();
                 } else {
@@ -146,9 +145,7 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
             ExchangeUpgradeEvent eue = (ExchangeUpgradeEvent) evt;
             if (eue.success()) {
                 if (this.currentExchange instanceof HttpExchange) {
-                    log.info("Upgrade success. Current exchange is " + this.currentExchange);
                     ((HttpExchange) this.currentExchange).addChangeListener((upgradeExchange, newState) -> {
-                        log.info("Upgrading.... http exchange state change: " + newState);
                         if (newState == HttpExchangeState.UPGRADED) {
                             this.currentExchange = eue.newExchange;
                             this.currentExchange.onUpgradeComplete(ctx);
@@ -158,7 +155,6 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
                         }
                     });
                 } else {
-                    log.info("Upgrading. Current exchange null so just setting " + eue.newExchange);
                     this.currentExchange = eue.newExchange;
                     ctx.channel().read();
                 }

@@ -12,7 +12,6 @@ import org.slf4j.LoggerFactory;
 
 import javax.ws.rs.InternalServerErrorException;
 import javax.ws.rs.NotFoundException;
-import javax.ws.rs.ServiceUnavailableException;
 import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.Response;
 import java.net.URI;
@@ -22,6 +21,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
 
 import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 
@@ -210,21 +210,12 @@ class HttpExchange implements ResponseInfo, Exchange {
         }
         httpExchange.addChangeListener(stateChangeListener);
 
-        DoneCallback addedToExecutorCallback = error -> {
-            if (error == null) {
-                serverStats.onRequestStarted(httpExchange.request);
-                connectionStats.onRequestStarted(httpExchange.request);
-            } else {
-                serverStats.onRejectedDueToOverload();
-                connectionStats.onRejectedDueToOverload();
-                try {
-                    dealWithUnhandledException(muRequest, muResponse, new ServiceUnavailableException());
-                } catch (Exception e) {
-                    ctx.close();
-                }
-            }
-        };
-        nettyHandlerAdapter.onHeaders(addedToExecutorCallback, httpExchange);
+        try {
+            nettyHandlerAdapter.onHeaders(httpExchange, serverStats, connectionStats);
+        } catch (RejectedExecutionException e) {
+            log.warn("Could not service " + muRequest + " because the thread pool is full so sending a 503");
+            throw new InvalidHttpRequestException(503, "503 Service Unavailable");
+        }
         return httpExchange;
     }
 
