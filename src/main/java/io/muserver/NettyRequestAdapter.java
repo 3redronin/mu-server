@@ -449,6 +449,10 @@ class NettyRequestAdapter implements MuRequest {
         }
     }
 
+    public HttpExchange exchange() {
+        return httpExchange;
+    }
+
     static class AsyncHandleImpl implements AsyncHandle, ConnectionState.Listener {
 
         public final boolean isConnectionStateSupported;

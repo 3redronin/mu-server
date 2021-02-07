@@ -1,11 +1,16 @@
 package scaffolding;
 
+import io.muserver.MuRequest;
 import io.muserver.MuServer;
+import io.muserver.StatusLogger;
 import org.hamcrest.Matcher;
 import org.junit.Assert;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -36,6 +41,7 @@ public class MuAssert {
         }
     }
 
+    private static final Logger log = LoggerFactory.getLogger(MuAssert.class);
     public static void stopAndCheck(MuServer server) {
         if (server != null) {
             int count = 0;
@@ -43,8 +49,10 @@ public class MuAssert {
                 sleep(50);
                 count++;
             }
+            Set<MuRequest> active = server.stats().activeRequests();
+            StatusLogger.logRequests(active);
             assertThat("Expected no requests to still be in flight when stopping server",
-                server.stats().activeRequests(), is(empty()));
+                active, is(empty()));
 //            assertEventually(() -> server.stats().activeRequests(), is(empty()));
             server.stop();
         }
