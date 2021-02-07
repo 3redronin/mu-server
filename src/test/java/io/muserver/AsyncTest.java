@@ -6,8 +6,6 @@ import okio.BufferedSink;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 import scaffolding.StringUtils;
@@ -30,12 +28,9 @@ import java.util.concurrent.atomic.AtomicReference;
 import static io.muserver.MuServerBuilder.httpsServer;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
-import static org.junit.Assert.assertTrue;
 import static scaffolding.ClientUtils.*;
 
 public class AsyncTest {
-
-    private static final Logger log = LoggerFactory.getLogger(AsyncTest.class);
 
     private MuServer server;
 
@@ -71,11 +66,10 @@ public class AsyncTest {
         AtomicInteger receivedCount = new AtomicInteger(0);
         AtomicInteger failureCount = new AtomicInteger(0);
         CountDownLatch requestUnWrtiable = new CountDownLatch(1);
-        CountDownLatch testDone = new CountDownLatch(1);
-        AtomicBoolean isDoneCallBackCountLessThan64 = new AtomicBoolean(false);
 
         int totalCount = 1000;
         server = httpsServer()
+            .withWriteBufferWaterMark(1, 1000)
             .withHttp2Config(Http2ConfigBuilder.http2Config()) // test http 1 only
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.contentType(ContentTypes.APPLICATION_OCTET_STREAM);
@@ -119,23 +113,9 @@ public class AsyncTest {
             resp.body().byteStream().read(readBytes);
             receivedCount.incrementAndGet();
             
-            ExecutorService executorService = Executors.newFixedThreadPool(1);
-            executorService.submit(()->{
-                try {
-                    requestUnWrtiable.await();
-                    if (sendDoneCallbackCount.get() < 64) {
-                        isDoneCallBackCountLessThan64.getAndSet(true);
-                        testDone.countDown();
-                    }
-                } catch (InterruptedException e) {
-                    failureCount.getAndIncrement();
-                }
-            });
-
-            testDone.await();
-            assertTrue(isDoneCallBackCountLessThan64.get());
+            requestUnWrtiable.await();
+            assertThat(sendDoneCallbackCount.get(), lessThan(64));
             assertThat(failureCount.get(), is(0));
-            executorService.shutdown();
 
             // http client read the rest bytes, verify all data received
             while (resp.body().byteStream().read(readBytes) != -1) {

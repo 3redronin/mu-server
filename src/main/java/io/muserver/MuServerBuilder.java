@@ -63,6 +63,7 @@ public class MuServerBuilder {
     private List<ResponseCompleteListener> responseCompleteListeners;
     private HashedWheelTimer wheelTimer;
     private List<RateLimiterImpl> rateLimiters;
+    private WriteBufferWaterMark writeBufferWaterMark = WriteBufferWaterMark.DEFAULT;
 
     /**
      * @param port The HTTP port to use. A value of 0 will have a random port assigned; a value of -1 will
@@ -435,6 +436,11 @@ public class MuServerBuilder {
         return this;
     }
 
+    MuServerBuilder withWriteBufferWaterMark(int low, int high) {
+        this.writeBufferWaterMark = new WriteBufferWaterMark(low, high);
+        return this;
+    }
+
     /**
      * <p>Adds a rate limiter to incoming requests.</p>
      * <p>The selector specified in this method allows you to control the limit buckets that are used. For
@@ -548,7 +554,7 @@ public class MuServerBuilder {
             boolean http2Enabled = http2Config != null && http2Config.enabled;
             MuServerImpl server = new MuServerImpl(stats, http2Enabled, settings);
 
-            Channel httpChannel = httpPort < 0 ? null : createChannel(bossGroup, workerGroup, nettyHandlerAdapter, host, httpPort, null, trafficShapingHandler, server, false, idleTimeoutMills);
+            Channel httpChannel = httpPort < 0 ? null : createChannel(bossGroup, workerGroup, nettyHandlerAdapter, host, httpPort, null, trafficShapingHandler, server, false, idleTimeoutMills, writeBufferWaterMark);
             Channel httpsChannel;
             if (httpsPort < 0) {
                 httpsChannel = null;
@@ -557,7 +563,7 @@ public class MuServerBuilder {
                 SslContext nettySslContext = toUse.toNettySslContext(http2Enabled);
                 log.debug("SSL Context is " + nettySslContext);
                 sslContextProvider = new SslContextProvider(nettySslContext);
-                httpsChannel = createChannel(bossGroup, workerGroup, nettyHandlerAdapter, host, httpsPort, sslContextProvider, trafficShapingHandler, server, http2Enabled, idleTimeoutMills);
+                httpsChannel = createChannel(bossGroup, workerGroup, nettyHandlerAdapter, host, httpsPort, sslContextProvider, trafficShapingHandler, server, http2Enabled, idleTimeoutMills, writeBufferWaterMark);
             }
             URI uri = null;
             if (httpChannel != null) {
@@ -591,11 +597,11 @@ public class MuServerBuilder {
         return URI.create(protocol + "://" + host.toLowerCase() + ":" + a.getPort());
     }
 
-    private static Channel createChannel(NioEventLoopGroup bossGroup, NioEventLoopGroup workerGroup, NettyHandlerAdapter nettyHandlerAdapter, String host, int port, SslContextProvider sslContextProvider, GlobalTrafficShapingHandler trafficShapingHandler, MuServerImpl server, final boolean http2, long idleTimeoutMills) throws InterruptedException {
+    private static Channel createChannel(NioEventLoopGroup bossGroup, NioEventLoopGroup workerGroup, NettyHandlerAdapter nettyHandlerAdapter, String host, int port, SslContextProvider sslContextProvider, GlobalTrafficShapingHandler trafficShapingHandler, MuServerImpl server, final boolean http2, long idleTimeoutMills, WriteBufferWaterMark writeBufferWaterMark) throws InterruptedException {
         boolean usesSsl = sslContextProvider != null;
         String proto = usesSsl ? "https" : "http";
         ServerBootstrap b = new ServerBootstrap();
-        b.childOption(ChannelOption.WRITE_BUFFER_WATER_MARK, WriteBufferWaterMark.DEFAULT);
+        b.childOption(ChannelOption.WRITE_BUFFER_WATER_MARK, writeBufferWaterMark);
         b.group(bossGroup, workerGroup)
             .channel(NioServerSocketChannel.class)
             .childHandler(new ChannelInitializer<SocketChannel>() {
