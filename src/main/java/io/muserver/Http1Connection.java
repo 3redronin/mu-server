@@ -84,9 +84,11 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
             try {
                 this.currentExchange = HttpExchange.create(server, proto, ctx, this, (HttpRequest) msg,
                     nettyHandlerAdapter, connectionStats, (exchange, newState) -> {
+                    log.info("HE state change: "+ newState);
                         if (newState.endState()) {
                             nettyHandlerAdapter.onResponseComplete(exchange, serverStats, connectionStats);
                             ctx.channel().eventLoop().execute(() -> {
+                                log.info("HE state change in event loop. newState=" + newState + " and exchange: " + exchange + " ( this.currentExchange=" + this.currentExchange + ")");
                                 if (exchange.state() != HttpExchangeState.UPGRADED) {
                                     if (currentExchange != exchange) {
                                         throw new IllegalStateException("Expected current exchange to be " + exchange + " but was " + currentExchange);
@@ -157,13 +159,16 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
             ExchangeUpgradeEvent eue = (ExchangeUpgradeEvent) evt;
             if (eue.success()) {
                 if (this.currentExchange instanceof HttpExchange) {
+                    log.info("Upgrade success. Current exchange is " + this.currentExchange);
                     ((HttpExchange) this.currentExchange).addChangeListener((upgradeExchange, newState) -> {
+                        log.info("Upgrading.... http exchange state change: " + newState);
                         if (newState.endState()) {
                             this.currentExchange = eue.newExchange;
                             ctx.channel().read();
                         }
                     });
                 } else {
+                    log.info("Upgrading. Current exchange null so just setting " + eue.newExchange);
                     this.currentExchange = eue.newExchange;
                     ctx.channel().read();
                 }

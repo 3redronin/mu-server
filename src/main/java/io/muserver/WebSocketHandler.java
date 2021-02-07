@@ -32,8 +32,7 @@ public class WebSocketHandler implements MuHandler {
             return false;
         }
 
-        boolean isUpgradeRequest = isWebSocketUpgrade(request);
-        if (!isUpgradeRequest) {
+        if (!isWebSocketUpgrade(request)) {
             return false;
         }
         HttpHeaders nettyHeaders = new DefaultHttpHeaders();
