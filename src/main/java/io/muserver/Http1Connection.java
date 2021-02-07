@@ -86,7 +86,6 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
                         if (newState.endState()) {
                             nettyHandlerAdapter.onResponseComplete(exchange, serverStats, connectionStats);
                             ctx.channel().eventLoop().execute(() -> {
-                                log.info("HE state change in event loop. newState=" + newState + " and exchange: " + exchange + " ( this.currentExchange=" + this.currentExchange + ")");
                                 if (exchange.state() != HttpExchangeState.UPGRADED) {
                                     if (currentExchange != exchange) {
                                         throw new IllegalStateException("Expected current exchange to be " + exchange + " but was " + currentExchange);

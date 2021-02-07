@@ -70,7 +70,6 @@ class MuStatsImpl implements MuStats {
 
 
     void onRequestStarted(MuRequest request) {
-        log.info("Adding " + request);
         activeRequests.add(request);
     }
 

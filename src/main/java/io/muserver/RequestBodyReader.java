@@ -296,7 +296,7 @@ abstract class RequestBodyReader {
             super(maxSize);
             this.bodyCharset = bodyCharset;
             if (sizeInBytes > 0) {
-                sb = new StringBuilder(sizeInBytes); // not necessarily the size in characters, but a good enough estimate
+                sb = new StringBuilder(sizeInBytes / 2); // not necessarily the size in characters, but a good enough estimate
             } else {
                 sb = new StringBuilder();
             }
