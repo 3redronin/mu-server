@@ -72,6 +72,7 @@ public class FlakyClientTest {
             shortReader.newCall(request(server.uri().resolve("/chunks?i=" + i)).build()).enqueue(responseCallback);
         }
 
+
         assertThat(latch.await(2, TimeUnit.MINUTES), is(true));
 
         try (Response resp = call(request(server.uri().resolve("/full")))) {

@@ -86,8 +86,8 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
                     nettyHandlerAdapter, connectionStats, (exchange, newState) -> {
                         if (newState.endState()) {
                             nettyHandlerAdapter.onResponseComplete(exchange, serverStats, connectionStats);
-                            if (exchange.state() != HttpExchangeState.UPGRADED) {
-                                ctx.channel().eventLoop().execute(() -> {
+                            ctx.channel().eventLoop().execute(() -> {
+                                if (exchange.state() != HttpExchangeState.UPGRADED) {
                                     if (currentExchange != exchange) {
                                         throw new IllegalStateException("Expected current exchange to be " + exchange + " but was " + currentExchange);
                                     }
@@ -98,8 +98,8 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
                                     } else {
                                         ctx.channel().read();
                                     }
-                                });
-                            }
+                                }
+                            });
                         }
                     });
             } catch (InvalidHttpRequestException ihr) {

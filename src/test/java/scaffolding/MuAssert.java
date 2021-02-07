@@ -42,7 +42,7 @@ public class MuAssert {
     public static void stopAndCheck(MuServer server) {
         if (server != null) {
             int count = 0;
-            while (count < 600 && !server.stats().activeRequests().isEmpty()) {
+            while (count < 1200 && !server.stats().activeRequests().isEmpty()) {
                 sleep(50);
                 count++;
             }
