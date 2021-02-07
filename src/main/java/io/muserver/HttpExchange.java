@@ -211,11 +211,13 @@ class HttpExchange implements ResponseInfo, Exchange {
         httpExchange.addChangeListener(stateChangeListener);
 
         try {
-            nettyHandlerAdapter.onHeaders(httpExchange, serverStats, connectionStats);
+            nettyHandlerAdapter.onHeaders(httpExchange);
         } catch (RejectedExecutionException e) {
             log.warn("Could not service " + muRequest + " because the thread pool is full so sending a 503");
             throw new InvalidHttpRequestException(503, "503 Service Unavailable");
         }
+        serverStats.onRequestStarted(httpExchange.request);
+        connectionStats.onRequestStarted(httpExchange.request);
         return httpExchange;
     }
 

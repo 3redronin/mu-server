@@ -54,7 +54,7 @@ class NettyHandlerAdapter {
 //        }
     }
 
-    void onHeaders(HttpExchange muCtx, MuStatsImpl serverStats, MuStatsImpl connectionStats) {
+    void onHeaders(HttpExchange muCtx) {
 
         executor.execute(() -> {
             if (muCtx.state().endState()) {
@@ -64,9 +64,6 @@ class NettyHandlerAdapter {
             NettyResponseAdaptor response = muCtx.response;
             boolean error = false;
             try {
-                serverStats.onRequestStarted(request);
-                connectionStats.onRequestStarted(request);
-
                 boolean handled = false;
                 for (MuHandler muHandler : muHandlers) {
                     handled = muHandler.handle(request, response);
