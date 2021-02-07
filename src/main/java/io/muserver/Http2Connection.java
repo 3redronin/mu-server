@@ -151,13 +151,15 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
             });
             exchanges.put(streamId, httpExchange);
             try {
+                server.stats.onRequestStarted(httpExchange.request);
+                connectionStats.onRequestStarted(httpExchange.request);
                 nettyHandlerAdapter.onHeaders(httpExchange);
             } catch (RejectedExecutionException e) {
+                server.stats.onRequestEnded(httpExchange.request);
+                connectionStats.onRequestEnded(httpExchange.request);
                 log.warn("Could not service " + httpExchange.request + " because the thread pool is full so sending a 503");
                 throw new InvalidHttpRequestException(503, "Service Unavailable");
             }
-            server.stats.onRequestStarted(httpExchange.request);
-            connectionStats.onRequestStarted(httpExchange.request);
 
         } catch (InvalidHttpRequestException ihr) {
             if (ihr.code == 429 || ihr.code == 503) {
