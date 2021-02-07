@@ -453,19 +453,14 @@ class NettyRequestAdapter implements MuRequest {
         return httpExchange;
     }
 
-    static class AsyncHandleImpl implements AsyncHandle, ConnectionState.Listener {
+    static class AsyncHandleImpl implements AsyncHandle {
 
-        public final boolean isConnectionStateSupported;
         private final NettyRequestAdapter request;
         private final HttpExchange httpExchange;
 
         private AsyncHandleImpl(NettyRequestAdapter request, HttpExchange httpExchange) {
             this.request = request;
             this.httpExchange = httpExchange;
-            this.isConnectionStateSupported = request.connection() instanceof ConnectionState;
-            if (isConnectionStateSupported) {
-                ((ConnectionState) request.connection()).registerConnectionStateListener(this);
-            }
         }
 
         @Override

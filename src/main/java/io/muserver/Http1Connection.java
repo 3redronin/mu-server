@@ -23,7 +23,7 @@ import static io.netty.buffer.Unpooled.copiedBuffer;
 import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
-class Http1Connection extends SimpleChannelInboundHandler<Object> implements HttpConnection, ConnectionState {
+class Http1Connection extends SimpleChannelInboundHandler<Object> implements HttpConnection {
     private static final Logger log = LoggerFactory.getLogger(Http1Connection.class);
 
     private final NettyHandlerAdapter nettyHandlerAdapter;
@@ -34,7 +34,6 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
     private final Instant startTime = Instant.now();
     private ChannelHandlerContext nettyCtx;
     private InetSocketAddress remoteAddress;
-    private ConnectionState.Listener connectionStateListener;
     private Exchange currentExchange = null;
 
     Http1Connection(NettyHandlerAdapter nettyHandlerAdapter, MuServerImpl server, String proto) {
@@ -121,18 +120,6 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
             log.debug("Got a chunk of message for an unknown request. This can happen when a request is rejected based on headers, and then the rejected body arrives.");
             ctx.channel().read();
         }
-    }
-
-    @Override
-    public void channelWritabilityChanged(ChannelHandlerContext ctx) throws Exception {
-        if (connectionStateListener != null) {
-            if (ctx.channel().isWritable()) {
-                connectionStateListener.onWriteable();
-            } else {
-                connectionStateListener.onUnWriteable();
-            }
-        }
-        super.channelWritabilityChanged(ctx);
     }
 
     private static ChannelFuture sendSimpleResponse(ChannelHandlerContext ctx, String message, int code) {
@@ -255,8 +242,4 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
         return server;
     }
 
-    @Override
-    public void registerConnectionStateListener(ConnectionState.Listener listener) {
-        this.connectionStateListener = listener;
-    }
 }
