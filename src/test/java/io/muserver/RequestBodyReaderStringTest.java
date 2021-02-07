@@ -5,7 +5,6 @@ import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import okio.BufferedSink;
-import org.jetbrains.annotations.Nullable;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
@@ -70,7 +69,6 @@ public class RequestBodyReaderStringTest {
         Request.Builder request = request()
             .url(server.uri().toString())
             .post(new RequestBody() {
-                @Nullable
                 @Override
                 public MediaType contentType() {
                     return MediaType.get("text/plain");
