@@ -2,6 +2,7 @@ package io.muserver;
 
 import io.netty.util.HashedWheelTimer;
 import okhttp3.Response;
+import org.junit.After;
 import org.junit.Test;
 import scaffolding.ServerUtils;
 
@@ -16,11 +17,13 @@ import static scaffolding.MuAssert.assertEventually;
 
 public class RateLimiterTest {
 
+    private final HashedWheelTimer timer = new HashedWheelTimer();
+
     @Test
     public void returnsFalseIfLimitExceeded() throws InterruptedException {
         RateLimiterImpl limiter = new RateLimiterImpl(
             request -> rateLimit().withBucket("blah").withRate(3).withWindow(100, TimeUnit.MILLISECONDS).build(),
-            new HashedWheelTimer());
+            timer);
         assertThat(limiter.record(null), is(true));
         assertThat(limiter.record(null), is(true));
         assertThat(limiter.record(null), is(true));
@@ -32,7 +35,7 @@ public class RateLimiterTest {
 
     @Test
     public void returningNullMeansAlwaysAllow() throws InterruptedException {
-        RateLimiterImpl limiter = new RateLimiterImpl(request -> null, new HashedWheelTimer());
+        RateLimiterImpl limiter = new RateLimiterImpl(request -> null, timer);
         for (int i = 0; i < 10; i++) {
             assertThat(limiter.record(null), is(true));
         }
@@ -43,7 +46,7 @@ public class RateLimiterTest {
     public void ignoreActionDoesNotBlock() throws InterruptedException {
         RateLimiterImpl limiter = new RateLimiterImpl(request -> rateLimit().withBucket("blah")
             .withRate(1).withRejectionAction(RateLimitRejectionAction.IGNORE)
-            .build(), new HashedWheelTimer());
+            .build(), timer);
         for (int i = 0; i < 10; i++) {
             assertThat(limiter.record(null), is(true));
         }
@@ -90,6 +93,11 @@ public class RateLimiterTest {
         assertThat(server.rateLimiters().get(1).currentBuckets().get("127.0.0.1"), equalTo(2L));
         assertThat(server.rateLimiters().get(2).currentBuckets(), aMapWithSize(1));
         assertThat(server.rateLimiters().get(2).currentBuckets().get("127.0.0.1"), equalTo(1L));
+    }
+
+    @After
+    public void cleanup() {
+        timer.stop();
     }
 
 }
