@@ -45,7 +45,8 @@ public class HeaderObjectBuilder {
      * @param style <p>Describes how the parameter value will be serialized depending on the type of the parameter value.
      *              Default value is <code>simple</code>.</p>
      *              <p>In order to support common ways of serializing simple parameters, a set of <code>style</code> values are defined.</p>
-     *              <table summary="Style values">
+     *              <table>
+     *              <caption>Style values</caption>
      *              <thead>
      *              <tr>
      *              <th><code>style</code></th>

@@ -110,6 +110,7 @@ public class ParameterObjectBuilder {
      *              for <code>cookie</code> - <code>form</code>.</p>
      *              <p>In order to support common ways of serializing simple parameters, a set of <code>style</code> values are defined.</p>
      *              <table>
+     *              <caption>Style values</caption>
      *              <thead>
      *              <tr>
      *              <th><code>style</code></th>
