@@ -5,7 +5,6 @@ import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import okio.BufferedSink;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.junit.After;
 import org.junit.Assert;
@@ -78,7 +77,7 @@ public class RequestBodyReaderStringTest {
                 }
 
                 @Override
-                public void writeTo(@NotNull BufferedSink bufferedSink) throws IOException {
+                public void writeTo(BufferedSink bufferedSink) throws IOException {
                     bufferedSink.write(m1.getBytes(StandardCharsets.UTF_8)).flush();
                     bufferedSink.write(m2.getBytes(StandardCharsets.UTF_8)).flush();
                 }

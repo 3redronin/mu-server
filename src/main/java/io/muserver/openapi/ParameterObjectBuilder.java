@@ -109,7 +109,7 @@ public class ParameterObjectBuilder {
      *              for <code>path</code> - <code>simple</code>; for <code>header</code> - <code>simple</code>;
      *              for <code>cookie</code> - <code>form</code>.</p>
      *              <p>In order to support common ways of serializing simple parameters, a set of <code>style</code> values are defined.</p>
-     *              <table summary="Style values">
+     *              <table>
      *              <thead>
      *              <tr>
      *              <th><code>style</code></th>
