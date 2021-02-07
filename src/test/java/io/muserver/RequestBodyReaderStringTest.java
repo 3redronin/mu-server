@@ -4,17 +4,22 @@ import okhttp3.MediaType;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
+import okio.BufferedSink;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 import scaffolding.SlowBodySender;
+import scaffolding.StringUtils;
 
 import javax.ws.rs.ClientErrorException;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -30,7 +35,84 @@ public class RequestBodyReaderStringTest {
     public void requestBodiesCanBeReadAsStrings() throws IOException {
         server = ServerUtils.httpsServerForTest()
             .addHandler((request, response) -> {
-                response.write(request.readBodyAsString());
+                String body = request.readBodyAsString();
+                response.write(body);
+                return true;
+            })
+            .start();
+
+        int messagesToSend = 200;
+        Request.Builder request = request()
+            .url(server.uri().toString())
+            .post(new SlowBodySender(messagesToSend, 2));
+
+        try (Response resp = call(request)) {
+            assertThat(resp.code(), equalTo(200));
+            StringBuilder expected = new StringBuilder();
+            for (int i = 0; i < messagesToSend; i++) {
+                expected.append("Loop " + i +"\n");
+            }
+            assertThat(resp.body().string(), equalTo(expected.toString()));
+        }
+    }
+
+    @Test
+    public void requestBodiesCanBeReadAsStringsWithLargeChunks() throws IOException {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler((request, response) -> {
+                String body = request.readBodyAsString();
+                response.write(body);
+                return true;
+            })
+            .start();
+
+        String m1 = StringUtils.randomAsciiStringOfLength(100000);
+        String m2 = StringUtils.randomAsciiStringOfLength(100000);
+        Request.Builder request = request()
+            .url(server.uri().toString())
+            .post(new RequestBody() {
+                @Nullable
+                @Override
+                public MediaType contentType() {
+                    return MediaType.get("text/plain");
+                }
+
+                @Override
+                public void writeTo(@NotNull BufferedSink bufferedSink) throws IOException {
+                    bufferedSink.write(m1.getBytes(StandardCharsets.UTF_8)).flush();
+                    bufferedSink.write(m2.getBytes(StandardCharsets.UTF_8)).flush();
+                }
+            });
+
+        try (Response resp = call(request)) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.body().string(), equalTo(m1 + m2));
+        }
+    }
+
+    @Test
+    public void requestBodiesCanBeReadAsStringsWithJustOneMessage() throws IOException {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler((request, response) -> {
+                String body = request.readBodyAsString();
+                response.write(body);
+                return true;
+            })
+            .start();
+
+        try (Response resp = call(request(server.uri())
+            .post(RequestBody.create("Hi", MediaType.get("text/plain"))))) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.body().string(), equalTo("Hi"));
+        }
+    }
+
+    @Test
+    public void smallRequestBodiesCanBeReadAsStrings() throws IOException {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler((request, response) -> {
+                String body = request.readBodyAsString();
+                response.write(body);
                 return true;
             })
             .start();
@@ -210,7 +292,7 @@ public class RequestBodyReaderStringTest {
     public void exceedingUploadSizeResultsInKilledConnectionForChunkedRequestWhereResponseStarted() throws Exception {
         AtomicReference<Throwable> exception = new AtomicReference<>();
         server = ServerUtils.httpsServerForTest()
-            .withMaxRequestSize(100)
+            .withMaxRequestSize(1000)
             .addHandler((request, response) -> {
                 response.sendChunk("starting");
                 try {

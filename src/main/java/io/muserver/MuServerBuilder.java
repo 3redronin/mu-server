@@ -552,6 +552,10 @@ public class MuServerBuilder {
             SslContextProvider sslContextProvider = null;
 
             boolean http2Enabled = http2Config != null && http2Config.enabled;
+            if (http2Enabled) {
+                log.info("HTTP/2 disabled in this version of mu-server");
+                http2Enabled = false;
+            }
             MuServerImpl server = new MuServerImpl(stats, http2Enabled, settings);
 
             Channel httpChannel = httpPort < 0 ? null : createChannel(bossGroup, workerGroup, nettyHandlerAdapter, host, httpPort, null, trafficShapingHandler, server, false, idleTimeoutMills, writeBufferWaterMark);
@@ -620,7 +624,7 @@ public class MuServerBuilder {
                     boolean addAlpn = http2 && usesSsl;
                     if (addAlpn) {
                         p.addLast("pressure", new BackPressureHandler());
-                        p.addLast("http1or2", new AlpnHandler(nettyHandlerAdapter, server, proto));
+                        p.addLast("alpn", new AlpnHandler(nettyHandlerAdapter, server, proto));
                     }
                     p.addLast("conerror", new ChannelInboundHandlerAdapter() {
                         @Override

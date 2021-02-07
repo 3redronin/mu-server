@@ -3,10 +3,9 @@ package io.muserver;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.handler.codec.http.HttpHeaderValues;
-import io.netty.handler.codec.http.HttpMethod;
-import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.http.*;
 import io.netty.handler.codec.http2.*;
+import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -86,27 +85,9 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
     }
 
     @Override
-    public int onDataRead(ChannelHandlerContext ctx, int streamId, ByteBuf data, int padding, boolean endOfStream) {
-        int processed = data.readableBytes() + padding;
-
-        HttpExchange httpExchange = exchanges.get(streamId);
-        if (httpExchange == null) {
-            log.debug("Got a chunk of message for an unknown request. This can happen when a request is rejected based on headers, and then the rejected body arrives.");
-        } else {
-            NettyHandlerAdapter.passDataToHandler(data, httpExchange, DoneCallback.NoOp);
-            if (endOfStream) {
-//                nettyHandlerAdapter.onRequestComplete(httpExchange);
-                exchanges.remove(streamId);
-            }
-        }
-        // TODO: return only the amount actually processed and report back full processed amount when actually processed
-        // so that per-stream back-pressure can be applied
-        return processed;
-    }
-
-    @Override
     public void onHeadersRead(ChannelHandlerContext ctx, int streamId,
                               io.netty.handler.codec.http2.Http2Headers headers, int padding, boolean endOfStream) {
+        log.info("onHeadersRead " + streamId + " / " + endOfStream);
         lastStreamId = streamId;
 
         try {
@@ -138,6 +119,10 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
             HttpExchange httpExchange = new HttpExchange(this, muReq, resp);
             resp.setExchange(httpExchange);
             muReq.setExchange(httpExchange);
+            muReq.bufferReads(); // messages may arrive before we're ready for them, so need to buffer them
+            httpExchange.addChangeListener((exchange, newState) -> {
+                log.info("H2 exchange change "+ newState);
+            });
 
             if (settings.block(muReq)) {
                 throw new InvalidHttpRequestException(429, "429 Too Many Requests");
@@ -158,7 +143,7 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
                 server.stats.onRequestEnded(httpExchange.request);
                 connectionStats.onRequestEnded(httpExchange.request);
                 log.warn("Could not service " + httpExchange.request + " because the thread pool is full so sending a 503");
-                throw new InvalidHttpRequestException(503, "Service Unavailable");
+                throw new InvalidHttpRequestException(503, "503 Service Unavailable");
             }
 
         } catch (InvalidHttpRequestException ihr) {
@@ -170,8 +155,33 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
                 server.stats.onInvalidRequest();
             }
             sendSimpleResponse(ctx, streamId, ihr.getMessage(), ihr.code);
-            ctx.channel().read();
         }
+    }
+
+    @Override
+    public int onDataRead(ChannelHandlerContext ctx, int streamId, ByteBuf data, int padding, boolean endOfStream) {
+        log.info("onDataRead " + data.readableBytes() + "bytes " + endOfStream);
+        int processed = data.readableBytes() + padding;
+        boolean empty = data.readableBytes() == 0;
+
+        HttpExchange httpExchange = exchanges.get(streamId);
+        if (httpExchange == null) {
+            log.debug("Got a chunk of message for an unknown request. This can happen when a request is rejected based on headers, and then the rejected body arrives.");
+        } else {
+            HttpContent msg;
+            if (endOfStream) {
+                msg = empty ? DefaultLastHttpContent.EMPTY_LAST_CONTENT : new DefaultLastHttpContent(data, false);
+            } else {
+                msg = new DefaultHttpContent(data);
+            }
+            httpExchange.onMessage(ctx, msg);
+            if (endOfStream) {
+                exchanges.remove(streamId);
+            }
+        }
+        // TODO: return only the amount actually processed and report back full processed amount when actually processed
+        // so that per-stream back-pressure can be applied
+        return processed;
     }
 
     static CharSequence compressionToUse(Headers requestHeaders) {
@@ -190,6 +200,7 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
     @Override
     public void onHeadersRead(ChannelHandlerContext ctx, int streamId, io.netty.handler.codec.http2.Http2Headers headers, int streamDependency,
                               short weight, boolean exclusive, int padding, boolean endOfStream) {
+        log.info("onHeadersRead bigger " + streamDependency + weight + exclusive);
         onHeadersRead(ctx, streamId, headers, padding, endOfStream);
     }
 
@@ -244,7 +255,10 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
     @Override
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) {
         if (evt instanceof IdleStateEvent) {
-            closeAllAndDisconnect(ctx, Http2Error.NO_ERROR, ResponseState.TIMED_OUT);
+            IdleStateEvent ise = (IdleStateEvent) evt;
+            if (ise.state() != IdleState.READER_IDLE) {
+                closeAllAndDisconnect(ctx, Http2Error.NO_ERROR, ResponseState.TIMED_OUT);
+            }
         }
     }
 

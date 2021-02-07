@@ -1,6 +1,5 @@
 package io.muserver;
 
-import io.netty.buffer.ByteBuf;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,36 +21,6 @@ class NettyHandlerAdapter {
         this.executor = executor;
         this.muHandlers = muHandlers;
         this.completeListeners = completeListeners;
-    }
-
-    static void passDataToHandler(ByteBuf data, HttpExchange httpExchange, DoneCallback dataQueuedCallback) {
-//        if (data.readableBytes() > 0) {
-//            data.retain();
-//            try {
-//                httpExchange.requestBody.handOff(data, error -> {
-//                    data.release();
-//                    dataQueuedCallback.onComplete(error);
-//                });
-//            } catch (Exception e) {
-//                data.release();
-//                if (e instanceof MuException) {
-//                    MuResponse resp = httpExchange.response;
-//                    if (!resp.hasStartedSendingData()) {
-//                        resp.status(413);
-//                        resp.contentType(ContentTypes.TEXT_PLAIN_UTF8);
-//                        resp.headers().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
-//                        resp.write("413 Payload Too Large");
-//                    } else {
-//                        httpExchange.onCancelled(ResponseState.ERRORED);
-//                    }
-//                }
-//            }
-//        } else {
-//            try {
-//                dataQueuedCallback.onComplete(null);
-//            } catch (Exception ignored) {
-//            }
-//        }
     }
 
     void onHeaders(HttpExchange muCtx) {

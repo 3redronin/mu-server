@@ -20,10 +20,11 @@ import java.util.logging.Logger;
 public class ClientUtils {
 
     public static final OkHttpClient client;
-    private static X509TrustManager veryTrustingTrustManager = veryTrustingTrustManager();
+    private static final X509TrustManager veryTrustingTrustManager = veryTrustingTrustManager();
     private static volatile HttpClient jettyClient;
 
     static {
+        System.setProperty("io.netty.leakDetection.targetRecords", "1000");
         Logger.getLogger(OkHttpClient.class.getName()).setLevel(Level.FINE);
         boolean isDebug = ManagementFactory.getRuntimeMXBean().getInputArguments().toString().contains("jdwp");
         client = new OkHttpClient.Builder()

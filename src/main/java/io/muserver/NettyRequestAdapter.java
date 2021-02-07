@@ -153,6 +153,10 @@ class NettyRequestAdapter implements MuRequest {
         }
     }
 
+    void bufferReads() {
+        claimingBodyRead(new RequestBodyReader.BufferingReader(maxRequestBytes()));
+    }
+
     public String readBodyAsString() throws IOException {
         RequestBodyReader.StringRequestBodyReader reader = createStringRequestBodyReader(maxRequestBytes(), headers());
         claimingBodyRead(reader);
@@ -174,7 +178,9 @@ class NettyRequestAdapter implements MuRequest {
     }
 
     private void claimingBodyRead(RequestBodyReader reader) {
-        if (requestBodyReader != null) {
+        if (requestBodyReader instanceof RequestBodyReader.BufferingReader) {
+            ((RequestBodyReader.BufferingReader) this.requestBodyReader).copyTo(reader);
+        } else if (requestBodyReader != null) {
             throw new IllegalStateException("The body of the request message cannot be read twice. This can happen when calling any 2 of inputStream(), readBodyAsString(), or form() methods.");
         }
         requestBodyReader = reader;

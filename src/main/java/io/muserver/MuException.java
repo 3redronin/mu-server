@@ -27,7 +27,7 @@ class InvalidHttpRequestException extends Exception {
     }
 }
 
-class UnexpectedMessageException extends Exception {
+class UnexpectedMessageException extends RuntimeException {
     final Exchange exchange;
     final Object unexpectedMessage;
     UnexpectedMessageException(Exchange exchange, Object unexpectedMessage) {

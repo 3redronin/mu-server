@@ -304,12 +304,14 @@ class HttpExchange implements ResponseInfo, Exchange {
 
     static boolean dealWithUnhandledException(NettyRequestAdapter request, NettyResponseAdaptor response, Throwable ex) {
 
-        boolean forceDisconnect = response instanceof Http1Response;
+        boolean streamUnrecoverable = true;
 
         if (!response.hasStartedSendingData()) {
             WebApplicationException wae;
             if (ex instanceof WebApplicationException) {
-                forceDisconnect = false;
+                if (request.requestState() != RequestState.ERROR) {
+                    streamUnrecoverable = false;
+                }
                 wae = (WebApplicationException) ex;
             } else {
                 String errorID = "ERR-" + UUID.randomUUID().toString();
@@ -325,7 +327,7 @@ class HttpExchange implements ResponseInfo, Exchange {
 
             MuRuntimeDelegate.writeResponseHeaders(request.uri(), exResp, response);
 
-            if (forceDisconnect) {
+            if (streamUnrecoverable) {
                 response.headers().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
             }
             response.contentType(ContentTypes.TEXT_HTML_UTF8);
@@ -334,7 +336,7 @@ class HttpExchange implements ResponseInfo, Exchange {
             response.write("<h1>" + exResp.getStatus() + " " + exResp.getStatusInfo().getReasonPhrase() + "</h1><p>" +
                 Mutils.htmlEncode(message) + "</p>");
         }
-        return forceDisconnect;
+        return streamUnrecoverable;
     }
 
     public long startTime() {

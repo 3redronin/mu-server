@@ -166,6 +166,7 @@ abstract class RequestBodyReader {
     }
 
     static class DiscardingReader extends RequestBodyReader {
+
         DiscardingReader(long maxSize) {
             super(maxSize);
         }
@@ -177,6 +178,67 @@ abstract class RequestBodyReader {
             } catch (Exception ignored) {
             }
         }
+    }
+
+    static class BufferingReader extends RequestBodyReader {
+
+        private static class Data {
+
+            private final ByteBuf content;
+            private final boolean last;
+            private final DoneCallback callback;
+
+            Data(ByteBuf content, boolean last, DoneCallback callback) {
+                this.content = content;
+                this.last = last;
+                this.callback = callback;
+            }
+        }
+
+        private final Queue<Data> datas = new LinkedList<>();
+        BufferingReader(long maxSize) {
+            super(maxSize);
+        }
+
+        @Override
+        protected void onRequestBodyRead0(ByteBuf content, boolean last, DoneCallback callback) {
+            if (currentError() == null) {
+                datas.add(new Data(content, last, callback));
+            } else {
+                try {
+                    callback.onComplete(currentError());
+                } catch (Exception ignored) {
+                }
+            }
+        }
+
+        private static final Logger log = LoggerFactory.getLogger(BufferingReader.class);
+        public void copyTo(RequestBodyReader reader) {
+            log.info("Copying " + datas.size() + " buffers to " + reader);
+            Data d;
+            while ((d = datas.poll()) != null) {
+                reader.onRequestBodyRead(d.content, d.last, d.callback);
+            }
+            Throwable throwable = currentError();
+            if (throwable != null) {
+                log.info("Reported error to " + reader, throwable);
+                reader.onCancelled(throwable);
+            }
+        }
+
+
+        @Override
+        void onCancelled(Throwable cause) {
+            super.onCancelled(cause);
+            Data d;
+            while ((d = datas.poll()) != null) {
+                try {
+                    d.callback.onComplete(cause);
+                } catch (Exception ignored) {
+                }
+            }
+        }
+
     }
 
     static class UrlEncodedBodyReader extends RequestBodyReader implements FormRequestBodyReader {
