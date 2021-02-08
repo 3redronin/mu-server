@@ -1,6 +1,8 @@
 package io.muserver;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.CompositeByteBuf;
+import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.http.DefaultHttpContent;
 import io.netty.handler.codec.http.DefaultLastHttpContent;
 import io.netty.handler.codec.http.HttpRequest;
@@ -352,24 +354,23 @@ abstract class RequestBodyReader {
 
     static class StringRequestBodyReader extends RequestBodyReader {
         private final Charset bodyCharset;
-        private final StringBuilder sb;
+        private final CompositeByteBuf list = Unpooled.compositeBuffer();
+        private volatile String result;
 
-        public StringRequestBodyReader(long maxSize, Charset bodyCharset, int sizeInBytes) {
+        public StringRequestBodyReader(long maxSize, Charset bodyCharset) {
             super(maxSize);
             this.bodyCharset = bodyCharset;
-            if (sizeInBytes > 0) {
-                sb = new StringBuilder(sizeInBytes / 2); // not necessarily the size in characters, but a good enough estimate
-            } else {
-                sb = new StringBuilder();
-            }
         }
 
         @Override
         public void onRequestBodyRead0(ByteBuf content, boolean last, DoneCallback callback) {
             try {
                 if (content.readableBytes() > 0) {
-                    String toAdd = content.toString(bodyCharset);
-                    sb.append(toAdd);
+                    list.addComponent(true, content.retain());
+                }
+                if (last) {
+                    result = list.toString(bodyCharset);
+                    list.release();
                 }
                 callback.onComplete(null);
             } catch (Exception e) {
@@ -380,8 +381,23 @@ abstract class RequestBodyReader {
             }
         }
 
+        @Override
+        void onCancelled(Throwable cause) {
+            super.onCancelled(cause);
+            list.release();
+        }
+
+        @Override
+        public void cleanup() {
+            super.cleanup();
+            result = null;
+        }
+
         public String body() {
-            return sb.toString();
+            if (result == null) {
+                throw new IllegalStateException("Can only read the body after the entire body is read and before the request is completed");
+            }
+            return result;
         }
     }
 }

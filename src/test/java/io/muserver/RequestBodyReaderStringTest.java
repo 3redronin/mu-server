@@ -8,16 +8,15 @@ import okio.BufferedSink;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
-import scaffolding.MuAssert;
-import scaffolding.ServerUtils;
-import scaffolding.SlowBodySender;
-import scaffolding.StringUtils;
+import scaffolding.*;
 
 import javax.ws.rs.ClientErrorException;
+import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -167,6 +166,26 @@ public class RequestBodyReaderStringTest {
         }
     }
 
+    @Test
+    public void largeStringsInNonUTF8AreFine() throws IOException {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler((request, response) -> {
+                String requestBody = request.readBodyAsString();
+                response.write(requestBody);
+                return true;
+            })
+            .start();
+        File warAndPeaceInRussian = FileUtils.warAndPeaceInRussian();
+        Request.Builder request = request()
+            .url(server.uri().toString())
+            .post(RequestBody.create(warAndPeaceInRussian, MediaType.get("text/plain;charset=ISO-8859-5")));
+
+        try (Response resp = call(request)) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.body().string(), equalTo(new String(Files.readAllBytes(warAndPeaceInRussian.toPath()), "ISO-8859-5")));
+        }
+    }
+
 
     @Test
     public void chineseWorks() throws IOException {
@@ -188,6 +207,49 @@ public class RequestBodyReaderStringTest {
         }
     }
 
+    @Test
+    public void largeUTF8CharactersAreFine() throws IOException {
+        server = ServerUtils.httpsServerForTest()
+            .withGzipEnabled(false)
+            .addHandler((request, response) -> {
+                String requestBody = request.readBodyAsString();
+                response.write(requestBody);
+                return true;
+            })
+            .start();
+        String actual = StringUtils.randomStringOfLength(100000);
+        Request.Builder request = request()
+            .url(server.uri().toString())
+            .post(RequestBody.create(actual, MediaType.get("text/plain;charset=UTF-8")));
+
+        try (Response resp = call(request)) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.body().string(), equalTo(actual));
+            assertThat(Integer.parseInt(resp.header("content-length")), greaterThanOrEqualTo(actual.length()));
+        }
+    }
+
+    @Test
+    public void largeUTF8CharactersAreFineGzipped() throws IOException {
+        server = ServerUtils.httpsServerForTest()
+            .withGzipEnabled(true)
+            .addHandler((request, response) -> {
+                String requestBody = request.readBodyAsString();
+                response.write(requestBody);
+                return true;
+            })
+            .start();
+        String actual = StringUtils.randomStringOfLength(100000);
+        Request.Builder request = request()
+            .url(server.uri().toString())
+            .post(RequestBody.create(actual, MediaType.get("text/plain;charset=UTF-8")));
+
+        try (Response resp = call(request)) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.body().string(), equalTo(actual));
+            assertThat(resp.header("content-length"), nullValue());
+        }
+    }
     @Test
     public void aSlowReadResultsInACompleted408OrKilledConnectionIfResponseNotStarted() {
         AtomicReference<Throwable> exception = new AtomicReference<>();

@@ -8,10 +8,7 @@ import okhttp3.internal.http2.ErrorCode;
 import okhttp3.internal.http2.StreamResetException;
 import okio.BufferedSink;
 import org.junit.*;
-import scaffolding.ClientUtils;
-import scaffolding.MuAssert;
-import scaffolding.RawClient;
-import scaffolding.ServerUtils;
+import scaffolding.*;
 
 import java.io.File;
 import java.io.IOException;
@@ -106,7 +103,6 @@ public class MuServerTest {
             }
         }
         assertEventually(() -> server.stats().completedRequests(), equalTo(5000L));
-//        assertThat(server.stats().completedRequests(), equalTo(5000L));
         assertThat(server.stats().completedConnections(), lessThan(1000L)); // just make sure it's not one connection per request
     }
 
@@ -318,8 +314,7 @@ public class MuServerTest {
 
     @Test
     public void nonUTF8IsSupported() throws IOException {
-        File warAndPeaceInRussian = new File("src/test/resources/sample-static/war-and-peace-in-ISO-8859-5.txt");
-        assertThat("Couldn't find " + Mutils.fullPath(warAndPeaceInRussian), warAndPeaceInRussian.isFile(), is(true));
+        File warAndPeaceInRussian = FileUtils.warAndPeaceInRussian();
 
         server = ServerUtils.httpsServerForTest()
             .addHandler((req, resp) -> {

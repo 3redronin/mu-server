@@ -1,9 +1,9 @@
 package scaffolding;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
+import io.muserver.MuException;
+import io.muserver.Mutils;
+
+import java.io.*;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
@@ -26,4 +26,13 @@ public class FileUtils {
             stream.close();
         }
     }
+
+    public static File warAndPeaceInRussian() {
+        File file = new File("src/test/resources/sample-static/war-and-peace-in-ISO-8859-5.txt");
+        if (!file.isFile()) {
+            throw new MuException("Could not find War and Peace in Russian at " + Mutils.fullPath(file));
+        }
+        return file;
+    }
+
 }

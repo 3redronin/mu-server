@@ -2,13 +2,13 @@ package io.muserver.rest;
 
 import io.muserver.ContentTypes;
 import io.muserver.MuServer;
-import io.muserver.Mutils;
 import okhttp3.FormBody;
 import okhttp3.MediaType;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
+import scaffolding.FileUtils;
 import scaffolding.StringUtils;
 
 import javax.ws.rs.POST;
@@ -51,8 +51,7 @@ public class StringEntityProvidersTest {
 
     @Test
     public void nonUTF8IsSupported() throws IOException {
-        File warAndPeaceInRussian = new File("src/test/resources/sample-static/war-and-peace-in-ISO-8859-5.txt");
-        assertThat("Couldn't find " + Mutils.fullPath(warAndPeaceInRussian), warAndPeaceInRussian.isFile(), is(true));
+        File warAndPeaceInRussian= FileUtils.warAndPeaceInRussian();
 
         @Path("samples")
         class Sample {

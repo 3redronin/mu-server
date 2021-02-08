@@ -173,8 +173,7 @@ class NettyRequestAdapter implements MuRequest {
                 bodyCharset = Charset.forName(charset);
             }
         }
-        int len = headers.getInt("content-length", -1);
-        return new RequestBodyReader.StringRequestBodyReader(maxSize, bodyCharset, len);
+        return new RequestBodyReader.StringRequestBodyReader(maxSize, bodyCharset);
     }
 
     private void claimingBodyRead(RequestBodyReader reader) {
