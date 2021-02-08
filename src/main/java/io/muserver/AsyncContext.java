@@ -14,6 +14,11 @@ public class AsyncContext implements ResponseInfo {
     @Deprecated
     public Object state;
 
+    /**
+     *
+     * @param forceDisconnect true to disconnect
+     * @return a future
+     */
     @Deprecated
     public Future<Void> complete(boolean forceDisconnect) {
         throw new MuException("This class has been deprecated");

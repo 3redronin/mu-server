@@ -21,6 +21,10 @@ public class CallbackObjectBuilder {
         return this;
     }
 
+    /**
+     * Creates the object
+     * @return A new {@link CallbackObject}
+     */
     public CallbackObject build() {
         return new CallbackObject(callbacks);
     }

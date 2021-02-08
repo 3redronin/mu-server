@@ -75,7 +75,7 @@ public interface MuWebSocket {
      *     in which case the cause will be a {@link java.util.concurrent.TimeoutException}</li>
      *     <li>An Exception is thrown by any of the methods that implement this interface, such as
      *     {@link #onText(String, DoneCallback)} etc (but not onError itself).</li>
-     *     <li>The client sends an invalid frame, in which case cause will be {@link WebSocketProtocolException}</li>
+     *     <li>The client sends an invalid frame</li>
      * </ul>
      * @param cause The cause of the error
      * @throws Exception Any exceptions thrown will result in the connection being closed.

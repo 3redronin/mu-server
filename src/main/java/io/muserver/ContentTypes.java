@@ -3,6 +3,9 @@ package io.muserver;
 import io.netty.handler.codec.http.HttpHeaderValues;
 import io.netty.util.AsciiString;
 
+/**
+ * String constants for content-types
+ */
 public class ContentTypes {
 
     /**

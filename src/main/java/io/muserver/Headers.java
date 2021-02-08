@@ -6,6 +6,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * HTTP headers
+ */
 public interface Headers extends Iterable<Map.Entry<String, String>> {
     /**
      * <p>Gets the value with the given name, or null if there is no parameter with that name.</p>
@@ -35,6 +38,11 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
      */
     String get(CharSequence name, String defaultValue);
 
+    /**
+     * @param name The name
+     * @return The value
+     * @deprecated use {@link #getInt(CharSequence, int)}
+     */
     @Deprecated
     Integer getInt(CharSequence name);
 
@@ -79,9 +87,21 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
      */
     boolean getBoolean(String name);
 
+    /**
+     * Deprecated
+     * @param name The name
+     * @return The value
+     * @deprecated Please use an alternate accessor
+     */
     @Deprecated
     Short getShort(CharSequence name);
 
+    /**
+     * Deprecated
+     * @param name The name
+     * @return The value
+     * @deprecated Please use an alternate accessor
+     */
     @Deprecated
     short getShort(CharSequence name, short defaultValue);
 
@@ -123,6 +143,9 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
 
     Iterator<Map.Entry<String, String>> iterator();
 
+    /**
+     * @return True if there are no headers
+     */
     boolean isEmpty();
 
     /**

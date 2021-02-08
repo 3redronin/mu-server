@@ -2,6 +2,9 @@ package io.muserver.openapi;
 
 import java.util.Map;
 
+/**
+ * A builder for {@link HeaderObject} objects
+ */
 public class HeaderObjectBuilder {
     private String description;
     private boolean required;

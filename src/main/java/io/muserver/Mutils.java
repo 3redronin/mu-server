@@ -14,6 +14,9 @@ import java.util.stream.Stream;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
+/**
+ * Utility methods
+ */
 public class Mutils {
 
     /**

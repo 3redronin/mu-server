@@ -55,7 +55,7 @@ class SseBroadcasterImpl implements SseBroadcaster {
                             break;
                         default:
                         case ERRORED:
-                            ex = new MuException();
+                            ex = new MuException("Generic error");
                     }
                     onSinkErrored(sseEventSink, ex);
                 }
