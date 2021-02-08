@@ -99,14 +99,28 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
     /**
      * Deprecated
      * @param name The name
+     * @param defaultValue Default
      * @return The value
      * @deprecated Please use an alternate accessor
      */
     @Deprecated
     short getShort(CharSequence name, short defaultValue);
 
+    /**
+     * Gets a date header.
+     * <p>This converts the string date values into milliseconds</p>
+     * @param name The header name
+     * @return The value in milliseconds of the date header, or null if not found
+     */
     Long getTimeMillis(CharSequence name);
 
+    /**
+     * Gets a date header.
+     * <p>This converts the string date values into milliseconds</p>
+     * @param name The header name
+     * @param defaultValue The default to use if no date header is available
+     * @return The value in milliseconds of the date header, or the default if not found
+     */
     long getTimeMillis(CharSequence name, long defaultValue);
 
     /**
