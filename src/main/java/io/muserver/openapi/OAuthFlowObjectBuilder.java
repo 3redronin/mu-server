@@ -48,6 +48,9 @@ public class OAuthFlowObjectBuilder {
         return this;
     }
 
+    /**
+     * @return A new object
+     */
     public OAuthFlowObject build() {
         return new OAuthFlowObject(authorizationUrl, tokenUrl, refreshUrl, scopes);
     }

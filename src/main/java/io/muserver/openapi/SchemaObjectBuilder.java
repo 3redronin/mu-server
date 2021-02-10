@@ -419,6 +419,9 @@ public class SchemaObjectBuilder {
         return this;
     }
 
+    /**
+     * @return A new object
+     */
     public SchemaObject build() {
         return new SchemaObject(title, multipleOf, maximum, exclusiveMaximum, minimum, exclusiveMinimum, maxLength, minLength, pattern, maxItems, minItems, uniqueItems, maxProperties, minProperties, required, enumValue, type, allOf, oneOf, anyOf, not, items, properties, additionalProperties, description, format, defaultValue, nullable, discriminator, readOnly, writeOnly, xml, externalDocs, example, deprecated);
     }

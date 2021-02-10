@@ -28,6 +28,9 @@ public class ExternalDocumentationObjectBuilder {
         return this;
     }
 
+    /**
+     * @return A new object
+     */
     public ExternalDocumentationObject build() {
         return new ExternalDocumentationObject(description, url);
     }

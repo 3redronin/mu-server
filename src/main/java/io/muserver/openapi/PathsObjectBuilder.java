@@ -25,6 +25,9 @@ public class PathsObjectBuilder {
         return this;
     }
 
+    /**
+     * @return A new object
+     */
     public PathsObject build() {
         return new PathsObject(pathItemObjects);
     }

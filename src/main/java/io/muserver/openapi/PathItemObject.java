@@ -23,7 +23,7 @@ public class PathItemObject implements JsonWriter {
     PathItemObject(String summary, String description, Map<String, OperationObject> operations,
                           List<ServerObject> servers, List<ParameterObject> parameters) {
         if (parameters != null) {
-            Set<String> nameIns = parameters.stream().map(p -> p.name + "\0" + p.in).collect(toSet());
+            Set<String> nameIns = parameters.stream().map(p -> p.name() + "\0" + p.in()).collect(toSet());
             if (nameIns.size() != parameters.size()) {
                 throw new IllegalArgumentException("Got duplicate parameter name and locations in " + parameters);
             }

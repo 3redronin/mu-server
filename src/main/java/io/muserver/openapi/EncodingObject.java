@@ -18,8 +18,8 @@ public class EncodingObject implements JsonWriter {
     public final boolean allowReserved;
 
     EncodingObject(String contentType, Map<String, HeaderObject> headers, String style, boolean explode, boolean allowReserved) {
-        if (style != null && !allowedStyles.contains(style)) {
-            throw new IllegalArgumentException("'style' must be one of " + allowedStyles + " but was " + style);
+        if (style != null && !allowedStyles().contains(style)) {
+            throw new IllegalArgumentException("'style' must be one of " + allowedStyles() + " but was " + style);
         }
         this.contentType = contentType;
         this.headers = headers;

@@ -86,6 +86,9 @@ public class OpenAPIObjectBuilder {
         return this;
     }
 
+    /**
+     * @return A new object
+     */
     public OpenAPIObject build() {
         InfoObject infoToUse = this.info == null ? infoObject().build() : this.info;
         return new OpenAPIObject(infoToUse, servers, paths, components, security, tags, externalDocs);

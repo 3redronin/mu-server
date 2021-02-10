@@ -67,6 +67,9 @@ public class LinkObjectBuilder {
         return this;
     }
 
+    /**
+     * @return A new object
+     */
     public LinkObject build() {
         return new LinkObject(operationId, parameters, requestBody, description, server);
     }

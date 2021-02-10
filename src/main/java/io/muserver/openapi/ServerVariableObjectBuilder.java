@@ -38,6 +38,9 @@ public class ServerVariableObjectBuilder {
         return this;
     }
 
+    /**
+     * @return A new object
+     */
     public ServerVariableObject build() {
         return new ServerVariableObject(enumValues, defaultValue, description);
     }

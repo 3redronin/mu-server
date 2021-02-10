@@ -96,6 +96,9 @@ public class SecuritySchemeObjectBuilder {
         return this;
     }
 
+    /**
+     * @return A new object
+     */
     public SecuritySchemeObject build() {
         return new SecuritySchemeObject(type, description, name, in, scheme, bearerFormat, flows, openIdConnectUrl);
     }

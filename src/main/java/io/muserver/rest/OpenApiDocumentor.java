@@ -61,11 +61,11 @@ class OpenApiDocumentor implements MuHandler {
 
 
         OpenAPIObjectBuilder api = OpenAPIObjectBuilder.openAPIObject()
-            .withInfo(openAPIObject.info)
-            .withExternalDocs(openAPIObject.externalDocs)
-            .withSecurity(openAPIObject.security)
-            .withComponents(openAPIObject.components)
-            .withServers(openAPIObject.servers != null ? openAPIObject.servers :
+            .withInfo(openAPIObject.info())
+            .withExternalDocs(openAPIObject.externalDocs())
+            .withSecurity(openAPIObject.security())
+            .withComponents(openAPIObject.components())
+            .withServers(openAPIObject.servers() != null ? openAPIObject.servers() :
                 request.contextPath().length() > 0 ?
                     singletonList(
                         serverObject()

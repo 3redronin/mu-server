@@ -98,6 +98,9 @@ public class ComponentsObjectBuilder {
         return this;
     }
 
+    /**
+     * @return A new object
+     */
     public ComponentsObject build() {
         return new ComponentsObject(schemas, responses, parameters, examples, requestBodies, headers, securitySchemes, links, callbacks);
     }

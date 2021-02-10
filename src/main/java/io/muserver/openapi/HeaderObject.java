@@ -26,8 +26,8 @@ public class HeaderObject implements JsonWriter {
                     String style, String explode, SchemaObject schema, Object example,
                     Map<String, ExampleObject> examples, Map<String, MediaTypeObject> content) {
 
-        if (style != null && !allowedStyles.contains(style)) {
-            throw new IllegalArgumentException("'style' must be one of " + allowedStyles + " but was " + style);
+        if (style != null && !allowedStyles().contains(style)) {
+            throw new IllegalArgumentException("'style' must be one of " + allowedStyles() + " but was " + style);
         }
         if (content != null && content.size() != 1) {
             throw new IllegalArgumentException("'content', when specified, must have a single value only, but was " + content);

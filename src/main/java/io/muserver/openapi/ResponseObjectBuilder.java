@@ -55,6 +55,9 @@ public class ResponseObjectBuilder {
         return this;
     }
 
+    /**
+     * @return A new object
+     */
     public ResponseObject build() {
         return new ResponseObject(description, headers, content, links);
     }

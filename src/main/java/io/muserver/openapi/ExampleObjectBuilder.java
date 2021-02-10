@@ -52,6 +52,9 @@ public class ExampleObjectBuilder {
         return this;
     }
 
+    /**
+     * @return A new object
+     */
     public ExampleObject build() {
         return new ExampleObject(summary, description, value, externalValue);
     }

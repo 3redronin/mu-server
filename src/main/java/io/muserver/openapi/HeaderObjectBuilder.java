@@ -130,6 +130,9 @@ public class HeaderObjectBuilder {
         return this;
     }
 
+    /**
+     * @return A new object
+     */
     public HeaderObject build() {
         return new HeaderObject(description, required, deprecated, style, explode, schema, example, examples, content);
     }

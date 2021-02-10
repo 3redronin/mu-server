@@ -39,6 +39,9 @@ public class ServerObjectBuilder {
         return this;
     }
 
+    /**
+     * @return A new object
+     */
     public ServerObject build() {
         return new ServerObject(url, description, variables);
     }

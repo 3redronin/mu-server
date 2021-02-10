@@ -74,6 +74,9 @@ public class EncodingObjectBuilder {
         return this;
     }
 
+    /**
+     * @return A new object
+     */
     public EncodingObject build() {
         boolean explodeVal = this.explode == null ? "form".equals(style) : this.explode;
         return new EncodingObject(contentType, headers, style, explodeVal, allowReserved);

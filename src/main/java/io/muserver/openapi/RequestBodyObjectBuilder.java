@@ -40,6 +40,9 @@ public class RequestBodyObjectBuilder {
         return this;
     }
 
+    /**
+     * @return A new object
+     */
     public RequestBodyObject build() {
         return new RequestBodyObject(description, content, required);
     }

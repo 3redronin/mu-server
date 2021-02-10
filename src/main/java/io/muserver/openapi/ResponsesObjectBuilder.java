@@ -44,6 +44,9 @@ public class ResponsesObjectBuilder {
         return this;
     }
 
+    /**
+     * @return A new object
+     */
     public ResponsesObject build() {
         return new ResponsesObject(defaultValue, httpStatusCodes);
     }

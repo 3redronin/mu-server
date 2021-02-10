@@ -69,6 +69,9 @@ public class InfoObjectBuilder {
         return this;
     }
 
+    /**
+     * @return A new object
+     */
     public InfoObject build() {
         return new InfoObject(title, description, termsOfService, contact, license, version);
     }

@@ -34,7 +34,7 @@ public class OperationObject implements JsonWriter {
                            List<ServerObject> servers) {
         notNull("responses", responses);
         if (parameters != null) {
-            Set<String> nameIns = parameters.stream().map(p -> p.name + "\0" + p.in).collect(toSet());
+            Set<String> nameIns = parameters.stream().map(p -> p.name() + "\0" + p.in()).collect(toSet());
             if (nameIns.size() != parameters.size()) {
                 throw new IllegalArgumentException("Got duplicate parameter name and locations in " + parameters + " for operation with summary " + summary);
             }

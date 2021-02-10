@@ -242,6 +242,9 @@ public class ParameterObjectBuilder {
         return this;
     }
 
+    /**
+     * @return A new object
+     */
     public ParameterObject build() {
         Boolean explodeVal = this.explode == null ? "form".equals(style) : this.explode;
         Boolean requiredVal = this.required == null ? "path".equals(in) : this.required;

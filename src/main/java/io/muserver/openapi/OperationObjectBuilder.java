@@ -148,6 +148,9 @@ public class OperationObjectBuilder {
         return this;
     }
 
+    /**
+     * @return A new object
+     */
     public OperationObject build() {
         return new OperationObject(tags, summary, description, externalDocs, operationId, parameters, requestBody, responses, callbacks, deprecated, security, servers);
     }

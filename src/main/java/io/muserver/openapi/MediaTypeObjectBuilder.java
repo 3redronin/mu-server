@@ -51,6 +51,9 @@ public class MediaTypeObjectBuilder {
         return this;
     }
 
+    /**
+     * @return A new object
+     */
     public MediaTypeObject build() {
         return new MediaTypeObject(schema, example, examples, encoding);
     }

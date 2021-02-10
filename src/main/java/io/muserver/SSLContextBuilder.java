@@ -36,35 +36,70 @@ public class SSLContextBuilder {
     private KeyManagerFactory keyManagerFactory;
     private String defaultAlias;
 
+    /**
+     * The type of keystore, such as JKS, JCEKS, PKCS12, etc
+     * @param keystoreType The type of keystore to load
+     * @return This builder
+     */
     public SSLContextBuilder withKeystoreType(String keystoreType) {
         this.keystoreType = keystoreType;
         return this;
     }
 
+    /**
+     * The password to use to get the key from the keystore
+     * @param keyPassword The password
+     * @return This builder
+     */
     public SSLContextBuilder withKeyPassword(String keyPassword) {
         return withKeyPassword(keyPassword.toCharArray());
     }
 
+    /**
+     * The password to use to access the keystore
+     * @param keystorePassword The password
+     * @return This builder
+     */
     public SSLContextBuilder withKeystorePassword(String keystorePassword) {
         return withKeystorePassword(keystorePassword.toCharArray());
     }
 
+    /**
+     * The password to use to get the key from the keystore
+     * @param keyPassword The password
+     * @return This builder
+     */
     public SSLContextBuilder withKeyPassword(char[] keyPassword) {
         this.keyPassword = keyPassword;
         return this;
     }
 
+    /**
+     * The password to use to access the keystore
+     * @param keystorePassword The password
+     * @return This builder
+     */
+    public SSLContextBuilder withKeystorePassword(char[] keystorePassword) {
+        this.keystorePassword = keystorePassword;
+        return this;
+    }
+
+    /**
+     * The pre-built SSL Context to use
+     * @param sslContext an SSL context
+     * @return This builder
+     */
     SSLContextBuilder withSSLContext(SSLContext sslContext) {
         keyManagerFactory = null;
         this.sslContext = sslContext;
         return this;
     }
 
-    public SSLContextBuilder withKeystorePassword(char[] keystorePassword) {
-        this.keystorePassword = keystorePassword;
-        return this;
-    }
-
+    /**
+     * Sets the keystore to use
+     * @param is The input stream of the keystore
+     * @param closeAfter Whether or not this method should close the stream
+     */
     protected void setKeystoreBytes(InputStream is, boolean closeAfter) {
         sslContext = null;
         keyManagerFactory = null;
@@ -97,6 +132,11 @@ public class SSLContextBuilder {
         return this;
     }
 
+    /**
+     * Specifies the keystore to use
+     * @param file A file object pointing to the keystore
+     * @return This builder
+     */
     public SSLContextBuilder withKeystore(File file) {
         if (!file.isFile()) {
             throw new IllegalArgumentException(Mutils.fullPath(file) + " does not exist");
@@ -179,6 +219,16 @@ public class SSLContextBuilder {
         return this;
     }
 
+    /**
+     * This option may be useful for cases where multiple certificates exist in a single keystore. For clients
+     * that support it, SNI will be used to pick the correct certificate, however if the SNI is not used then
+     * by default the first cert from the keystore will be picked. To override this default behaviour, you can
+     * specify the certificate to use here when SNI is not available.
+     * <p>Note you do not need to set this if your keystore has only one certificate in it.</p>
+     * @param certAlias The alias of the cert to pick when SNI isn't available, or null to allow an arbitrary
+     *                  cert to be picked (normally the first one).
+     * @return This builder
+     */
     public SSLContextBuilder withDefaultAlias(String certAlias) {
         this.defaultAlias = certAlias;
         return this;
@@ -339,6 +389,9 @@ public class SSLContextBuilder {
         return new SSLContextBuilder();
     }
 
+    /**
+     * @return The JDK's default SSL context
+     */
     @Deprecated
     public static SSLContext defaultSSLContext() {
         try {

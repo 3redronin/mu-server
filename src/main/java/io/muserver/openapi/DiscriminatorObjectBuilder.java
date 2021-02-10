@@ -30,6 +30,9 @@ public class DiscriminatorObjectBuilder {
         return this;
     }
 
+    /**
+     * @return A new object
+     */
     public DiscriminatorObject build() {
         return new DiscriminatorObject(propertyName, mapping);
     }

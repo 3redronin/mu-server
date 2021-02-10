@@ -64,6 +64,9 @@ public class PathItemObjectBuilder {
         return this;
     }
 
+    /**
+     * @return A new object
+     */
     public PathItemObject build() {
         return new PathItemObject(summary, description, operations, servers, parameters);
     }

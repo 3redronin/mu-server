@@ -30,6 +30,9 @@ public class SecurityRequirementObjectBuilder {
         return this;
     }
 
+    /**
+     * @return A new object
+     */
     public SecurityRequirementObject build() {
         return new SecurityRequirementObject(requirements);
     }
