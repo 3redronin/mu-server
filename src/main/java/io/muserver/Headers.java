@@ -231,6 +231,9 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
 
     /**
      * @deprecated use an alternative such as {@link #addInt(CharSequence, int)}
+     * @param name The header name
+     * @param value The value
+     * @return This headers object
      */
     @Deprecated
     Headers addShort(CharSequence name, short value);
@@ -291,6 +294,9 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
 
     /**
      * @deprecated use {@link #setInt(CharSequence, int)} instead
+     * @param name The header name
+     * @param value The value
+     * @return This headers object
      */
     @Deprecated
     Headers setShort(CharSequence name, short value);
@@ -344,18 +350,23 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
 
     /**
      * @deprecated use an alternative
+     * @param name The header name
+     * @return This headers object
      */
     @Deprecated
     String getAsString(CharSequence name);
 
     /**
      * @deprecated use an alternative
+     * @param name The header name
+     * @return This headers object
      */
     @Deprecated
     List<String> getAllAsString(CharSequence name);
 
     /**
      * @deprecated use an alternative
+     * @return Am iterator
      */
     @Deprecated
     Iterator<Map.Entry<String, String>> iteratorAsString();
