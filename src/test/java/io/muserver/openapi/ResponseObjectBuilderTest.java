@@ -44,7 +44,7 @@ public class ResponseObjectBuilderTest {
             assertThat(merged.content.keySet(), contains("text/plain"));
             assertThat(merged.content.get("text/plain").example, is("An example"));
             assertThat(merged.content.get("text/plain").schema.description, is("scheming"));
-            assertThat(merged.content.get("text/plain").encoding.get("form").style, is("form"));
+            assertThat(merged.content.get("text/plain").encoding.get("form").style(), is("form"));
 
             assertThat(merged.links.keySet(), contains("something"));
             assertThat(merged.links.get("something").description, is("a link"));

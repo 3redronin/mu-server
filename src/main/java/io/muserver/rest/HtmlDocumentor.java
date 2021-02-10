@@ -56,15 +56,15 @@ class HtmlDocumentor {
         if (api.info().contact != null) {
             ContactObject contact = api.info().contact;
             metaData.content(" | Contact: ");
-            if (contact.url != null) {
-                String contactName = contact.name == null ? contact.url.toString() : contact.name;
-                new El("a").open(Collections.singletonMap("href", contact.url.toString())).content(contactName).close();
-            } else if (contact.name != null) {
-                metaData.content(" " + contact.name);
+            if (contact.url() != null) {
+                String contactName = contact.name() == null ? contact.url().toString() : contact.name();
+                new El("a").open(Collections.singletonMap("href", contact.url().toString())).content(contactName).close();
+            } else if (contact.name() != null) {
+                metaData.content(" " + contact.name());
             }
-            if (contact.email != null) {
+            if (contact.email() != null) {
                 metaData.content(" | ");
-                new El("a").open(Collections.singletonMap("href", "mailto:" + contact.email)).content(contact.email).close();
+                new El("a").open(Collections.singletonMap("href", "mailto:" + contact.email())).content(contact.email()).close();
             }
         }
         LicenseObject license = api.info().license;
@@ -368,8 +368,8 @@ class HtmlDocumentor {
 
                 new El("code").open().content(exampleEntry.getKey()).close();
                 ExampleObject ex = exampleEntry.getValue();
-                new El("span").open().content(" ", ex.summary, " ", ex.description).close();
-                new El("pre").open().content(ex.value).close();
+                new El("span").open().content(" ", ex.summary(), " ", ex.description()).close();
+                new El("pre").open().content(ex.value()).close();
 
                 div.close();
             }

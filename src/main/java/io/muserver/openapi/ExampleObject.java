@@ -9,9 +9,25 @@ import java.net.URI;
  */
 public class ExampleObject implements JsonWriter {
 
+    /**
+     * @deprecated use {@link #summary()} instead
+     */
+    @Deprecated
     public final String summary;
+    /**
+      @deprecated use {@link #description()} instead
+     */
+    @Deprecated
     public final String description;
+    /**
+      @deprecated use {@link #value()} instead
+     */
+    @Deprecated
     public final Object value;
+    /**
+      @deprecated use {@link #externalValue()} instead
+     */
+    @Deprecated
     public final URI externalValue;
 
     ExampleObject(String summary, String description, Object value, URI externalValue) {
@@ -33,5 +49,33 @@ public class ExampleObject implements JsonWriter {
         isFirst = Jsonizer.append(writer, "value", value, isFirst);
         isFirst = Jsonizer.append(writer, "externalValue", externalValue, isFirst);
         writer.append('}');
+    }
+
+    /**
+     * @return the value described by {@link ExampleObjectBuilder#withSummary}
+     */
+    public String summary() {
+        return summary;
+    }
+
+    /**
+     * @return the value described by {@link ExampleObjectBuilder#withDescription}
+     */
+    public String description() {
+        return description;
+    }
+
+    /**
+     * @return the value described by {@link ExampleObjectBuilder#withValue}
+     */
+    public Object value() {
+        return value;
+    }
+
+    /**
+     * @return the value described by {@link ExampleObjectBuilder#withExternalValue}
+     */
+    public URI externalValue() {
+        return externalValue;
     }
 }
