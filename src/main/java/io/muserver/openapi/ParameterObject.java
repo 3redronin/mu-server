@@ -121,10 +121,16 @@ public class ParameterObject implements JsonWriter {
         this.content = content;
     }
 
+    /**
+     * @return The values allowed to be passed to {@link ParameterObjectBuilder#withIn(String)}
+     */
     public static List<String> allowedIns() {
         return allowedIns;
     }
 
+    /**
+     * @return The values allowed to be passed to {@link ParameterObjectBuilder#withStyle(String)}
+     */
     public static List<String> allowedStyles() {
         return allowedStyles;
     }

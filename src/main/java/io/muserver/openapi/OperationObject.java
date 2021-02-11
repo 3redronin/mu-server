@@ -120,6 +120,9 @@ public class OperationObject implements JsonWriter {
         writer.write('}');
     }
 
+    /**
+     * @return the value described by {@link OperationObjectBuilder#withDeprecated(Boolean)}, or false if not specified when building
+     */
     public boolean isDeprecated() {
         return deprecated != null && deprecated;
     }

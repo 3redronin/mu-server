@@ -86,11 +86,6 @@ public class SecuritySchemeObject implements JsonWriter {
         this.openIdConnectUrl = openIdConnectUrl;
     }
 
-    public static List<String> validTypes() {
-        return validTypes;
-    }
-
-
     @Override
     public void writeJson(Writer writer) throws IOException {
         writer.write('{');
@@ -161,4 +156,12 @@ public class SecuritySchemeObject implements JsonWriter {
     public URI openIdConnectUrl() {
         return openIdConnectUrl;
     }
+
+    /**
+     * @return The types allowed to be passed to {@link SecuritySchemeObjectBuilder#withType(String)}
+     */
+    public static List<String> validTypes() {
+        return validTypes;
+    }
+
 }

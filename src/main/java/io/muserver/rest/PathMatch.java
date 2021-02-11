@@ -11,6 +11,9 @@ import java.util.regex.Pattern;
  */
 public class PathMatch {
 
+    /**
+     * An empty match
+     */
     public static final PathMatch EMPTY_MATCH = new PathMatch(true, Collections.emptyMap(), Pattern.compile("").matcher(""));
 
     private final boolean matches;

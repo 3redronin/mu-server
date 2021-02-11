@@ -23,6 +23,9 @@ public class MuException extends RuntimeException {
 	}
 }
 
+/**
+ * Thrown when an HttpExchange can't start because the request is invalid
+ */
 class InvalidHttpRequestException extends Exception {
     final int code;
     InvalidHttpRequestException(int code, String clientMessage) {
@@ -31,6 +34,9 @@ class InvalidHttpRequestException extends Exception {
     }
 }
 
+/**
+ * Thrown when an exchange gets a message it wasn't expected
+ */
 class UnexpectedMessageException extends RuntimeException {
     final Exchange exchange;
     final Object unexpectedMessage;
