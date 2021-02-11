@@ -15,17 +15,65 @@ import static java.util.stream.Collectors.toSet;
  */
 public class OperationObject implements JsonWriter {
 
+    /**
+     * @deprecated use {@link #tags()} instead
+     */
+    @Deprecated
     public final List<String> tags;
+    /**
+      @deprecated use {@link #summary()} instead
+     */
+    @Deprecated
     public final String summary;
+    /**
+      @deprecated use {@link #description()} instead
+     */
+    @Deprecated
     public final String description;
+    /**
+      @deprecated use {@link #externalDocs()} instead
+     */
+    @Deprecated
     public final ExternalDocumentationObject externalDocs;
+    /**
+      @deprecated use {@link #operationId()} instead
+     */
+    @Deprecated
     public final String operationId;
+    /**
+      @deprecated use {@link #parameters()} instead
+     */
+    @Deprecated
     public final List<ParameterObject> parameters;
+    /**
+      @deprecated use {@link #requestBody()} instead
+     */
+    @Deprecated
     public final RequestBodyObject requestBody;
+    /**
+      @deprecated use {@link #responses()} instead
+     */
+    @Deprecated
     public final ResponsesObject responses;
+    /**
+      @deprecated use {@link #callbacks()} instead
+     */
+    @Deprecated
     public final Map<String, CallbackObject> callbacks;
+    /**
+      @deprecated use {@link #deprecated()} instead
+     */
+    @Deprecated
     public final Boolean deprecated;
+    /**
+      @deprecated use {@link #security()} instead
+     */
+    @Deprecated
     public final List<SecurityRequirementObject> security;
+    /**
+      @deprecated use {@link #servers()} instead
+     */
+    @Deprecated
     public final List<ServerObject> servers;
 
     OperationObject(List<String> tags, String summary, String description, ExternalDocumentationObject externalDocs,
@@ -74,5 +122,89 @@ public class OperationObject implements JsonWriter {
 
     public boolean isDeprecated() {
         return deprecated != null && deprecated;
+    }
+
+    /**
+     * @return the value described by {@link OperationObjectBuilder#withTags}
+     */
+    public List<String> tags() {
+        return tags;
+    }
+
+    /**
+      @return the value described by {@link OperationObjectBuilder#withSummary}
+     */
+    public String summary() {
+        return summary;
+    }
+
+    /**
+      @return the value described by {@link OperationObjectBuilder#withDescription}
+     */
+    public String description() {
+        return description;
+    }
+
+    /**
+      @return the value described by {@link OperationObjectBuilder#withExternalDocs}
+     */
+    public ExternalDocumentationObject externalDocs() {
+        return externalDocs;
+    }
+
+    /**
+      @return the value described by {@link OperationObjectBuilder#withOperationId}
+     */
+    public String operationId() {
+        return operationId;
+    }
+
+    /**
+      @return the value described by {@link OperationObjectBuilder#withParameters}
+     */
+    public List<ParameterObject> parameters() {
+        return parameters;
+    }
+
+    /**
+      @return the value described by {@link OperationObjectBuilder#withRequestBody}
+     */
+    public RequestBodyObject requestBody() {
+        return requestBody;
+    }
+
+    /**
+      @return the value described by {@link OperationObjectBuilder#withResponses}
+     */
+    public ResponsesObject responses() {
+        return responses;
+    }
+
+    /**
+      @return the value described by {@link OperationObjectBuilder#withCallbacks}
+     */
+    public Map<String, CallbackObject> callbacks() {
+        return callbacks;
+    }
+
+    /**
+      @return the value described by {@link OperationObjectBuilder#withDeprecated}
+     */
+    public Boolean deprecated() {
+        return deprecated;
+    }
+
+    /**
+      @return the value described by {@link OperationObjectBuilder#withSecurity}
+     */
+    public List<SecurityRequirementObject> security() {
+        return security;
+    }
+
+    /**
+      @return the value described by {@link OperationObjectBuilder#withServers}
+     */
+    public List<ServerObject> servers() {
+        return servers;
     }
 }

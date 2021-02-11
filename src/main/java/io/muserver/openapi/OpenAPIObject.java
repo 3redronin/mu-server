@@ -57,7 +57,7 @@ public class OpenAPIObject implements JsonWriter {
     OpenAPIObject(InfoObject info, List<ServerObject> servers, PathsObject paths, ComponentsObject components, List<SecurityRequirementObject> security, List<TagObject> tags, ExternalDocumentationObject externalDocs) {
         notNull("info", info);
         notNull("paths", paths);
-        if (tags != null && tags.size() != tags.stream().map(t -> t.name).collect(Collectors.toSet()).size()) {
+        if (tags != null && tags.size() != tags.stream().map(t -> t.name()).collect(Collectors.toSet()).size()) {
             throw new IllegalArgumentException("Tags must have unique names");
         }
         this.info = info;

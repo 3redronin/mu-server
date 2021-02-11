@@ -11,8 +11,20 @@ import static io.muserver.openapi.Jsonizer.append;
  * @see ServerObjectBuilder
  */
 public class ServerObject implements JsonWriter {
+    /**
+     * @deprecated use {@link #url()} instead
+     */
+    @Deprecated
     public final String url;
+    /**
+      @deprecated use {@link #description()} instead
+     */
+    @Deprecated
     public final String description;
+    /**
+      @deprecated use {@link #variables()} instead
+     */
+    @Deprecated
     public final Map<String, ServerVariableObject> variables;
 
     ServerObject(String url, String description, Map<String, ServerVariableObject> variables) {
@@ -30,5 +42,26 @@ public class ServerObject implements JsonWriter {
         isFirst = append(writer, "description", description, isFirst);
         isFirst = append(writer, "variables", variables, isFirst);
         writer.write("}");
+    }
+
+    /**
+     * @return the value described by {@link ServerObjectBuilder#withUrl}
+     */
+    public String url() {
+        return url;
+    }
+
+    /**
+      @return the value described by {@link ServerObjectBuilder#withDescription}
+     */
+    public String description() {
+        return description;
+    }
+
+    /**
+      @return the value described by {@link ServerObjectBuilder#withVariables}
+     */
+    public Map<String, ServerVariableObject> variables() {
+        return variables;
     }
 }

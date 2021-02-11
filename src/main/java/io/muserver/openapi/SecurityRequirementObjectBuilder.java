@@ -3,6 +3,8 @@ package io.muserver.openapi;
 import java.util.List;
 import java.util.Map;
 
+import static io.muserver.openapi.OpenApiUtils.immutable;
+
 /**
  * <p>Lists the required security schemes to execute this operation. The name used for each property MUST correspond to
  * a security scheme declared in the {@link SecuritySchemeObject} under the {@link ComponentsObject}.</p>
@@ -34,7 +36,7 @@ public class SecurityRequirementObjectBuilder {
      * @return A new object
      */
     public SecurityRequirementObject build() {
-        return new SecurityRequirementObject(requirements);
+        return new SecurityRequirementObject(immutable(requirements));
     }
 
     /**

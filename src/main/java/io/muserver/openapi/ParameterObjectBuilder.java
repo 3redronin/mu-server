@@ -2,6 +2,8 @@ package io.muserver.openapi;
 
 import java.util.Map;
 
+import static io.muserver.openapi.OpenApiUtils.immutable;
+
 /**
  * <p>Describes a single operation parameter.</p>
  * <p>A unique parameter is defined by a combination of a name and {@link ParameterObjectBuilder#withIn(String)} (location).</p>
@@ -246,9 +248,10 @@ public class ParameterObjectBuilder {
      * @return A new object
      */
     public ParameterObject build() {
-        Boolean explodeVal = this.explode == null ? "form".equals(style) : this.explode;
-        Boolean requiredVal = this.required == null ? "path".equals(in) : this.required;
-        return new ParameterObject(name, in, description, requiredVal, deprecated, allowEmptyValue, style, explodeVal, allowReserved, schema, example, examples, content);
+        boolean explodeVal = this.explode == null ? "form".equals(style) : this.explode;
+        boolean requiredVal = this.required == null ? "path".equals(in) : this.required;
+        return new ParameterObject(name, in, description, requiredVal, deprecated, allowEmptyValue, style, explodeVal,
+            allowReserved, schema, example, immutable(examples), immutable(content));
     }
 
     /**

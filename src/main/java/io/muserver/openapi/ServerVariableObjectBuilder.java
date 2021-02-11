@@ -2,6 +2,8 @@ package io.muserver.openapi;
 
 import java.util.List;
 
+import static io.muserver.openapi.OpenApiUtils.immutable;
+
 /**
  * An object representing a Server Variable for server URL template substitution.
  */
@@ -42,7 +44,7 @@ public class ServerVariableObjectBuilder {
      * @return A new object
      */
     public ServerVariableObject build() {
-        return new ServerVariableObject(enumValues, defaultValue, description);
+        return new ServerVariableObject(immutable(enumValues), defaultValue, description);
     }
 
     /**

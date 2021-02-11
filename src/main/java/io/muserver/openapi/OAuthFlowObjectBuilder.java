@@ -52,7 +52,7 @@ public class OAuthFlowObjectBuilder {
      * @return A new object
      */
     public OAuthFlowObject build() {
-        return new OAuthFlowObject(authorizationUrl, tokenUrl, refreshUrl, scopes);
+        return new OAuthFlowObject(authorizationUrl, tokenUrl, refreshUrl, OpenApiUtils.immutable(scopes));
     }
 
     /**

@@ -13,6 +13,7 @@ import java.time.temporal.Temporal;
 import java.util.*;
 import java.util.regex.Pattern;
 
+import static io.muserver.openapi.OpenApiUtils.immutable;
 import static java.util.Arrays.asList;
 
 /**
@@ -423,7 +424,11 @@ public class SchemaObjectBuilder {
      * @return A new object
      */
     public SchemaObject build() {
-        return new SchemaObject(title, multipleOf, maximum, exclusiveMaximum, minimum, exclusiveMinimum, maxLength, minLength, pattern, maxItems, minItems, uniqueItems, maxProperties, minProperties, required, enumValue, type, allOf, oneOf, anyOf, not, items, properties, additionalProperties, description, format, defaultValue, nullable, discriminator, readOnly, writeOnly, xml, externalDocs, example, deprecated);
+        return new SchemaObject(title, multipleOf, maximum, exclusiveMaximum, minimum, exclusiveMinimum, maxLength,
+            minLength, pattern, maxItems, minItems, uniqueItems, maxProperties, minProperties, immutable(required),
+            immutable(enumValue), type, immutable(allOf), immutable(oneOf), immutable(anyOf), immutable(not),
+            items, immutable(properties), additionalProperties, description, format, defaultValue, nullable,
+            discriminator, readOnly, writeOnly, xml, externalDocs, example, deprecated);
     }
 
     /**

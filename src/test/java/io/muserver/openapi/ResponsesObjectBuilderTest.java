@@ -56,12 +56,12 @@ public class ResponsesObjectBuilderTest {
             .build();
 
         ResponsesObject merged = ResponsesObjectBuilder.mergeResponses(responsesA, responsesB).build();
-        assertThat(merged.defaultValue.description, is("This is the second description"));
-        assertThat(merged.httpStatusCodes.keySet(), containsInAnyOrder("200", "2XX"));
-        assertThat(merged.httpStatusCodes.get("2XX").description, is("This is the second description"));
-        ResponseObject _200 = merged.httpStatusCodes.get("200");
-        assertThat(_200.description, is("This is the first description"));
-        assertThat(_200.content.keySet(), containsInAnyOrder("text/plain;charset=utf-8", "text/plain", "application/json"));
+        assertThat(merged.defaultValue().description(), is("This is the second description"));
+        assertThat(merged.httpStatusCodes().keySet(), containsInAnyOrder("200", "2XX"));
+        assertThat(merged.httpStatusCodes().get("2XX").description(), is("This is the second description"));
+        ResponseObject _200 = merged.httpStatusCodes().get("200");
+        assertThat(_200.description(), is("This is the first description"));
+        assertThat(_200.content().keySet(), containsInAnyOrder("text/plain;charset=utf-8", "text/plain", "application/json"));
 
     }
 

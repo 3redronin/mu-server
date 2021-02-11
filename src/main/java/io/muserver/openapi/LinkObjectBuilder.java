@@ -2,6 +2,8 @@ package io.muserver.openapi;
 
 import java.util.Map;
 
+import static io.muserver.openapi.OpenApiUtils.immutable;
+
 /**
  * <p>The <code>Link object</code> represents a possible design-time link for a response. The presence of a link does not
  * guarantee the caller's ability to successfully invoke it, rather it provides a known relationship and traversal mechanism
@@ -71,7 +73,7 @@ public class LinkObjectBuilder {
      * @return A new object
      */
     public LinkObject build() {
-        return new LinkObject(operationId, parameters, requestBody, description, server);
+        return new LinkObject(operationId, immutable(parameters), requestBody, description, server);
     }
 
     /**

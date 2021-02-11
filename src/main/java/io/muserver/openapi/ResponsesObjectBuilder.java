@@ -7,6 +7,8 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
+import static io.muserver.openapi.OpenApiUtils.immutable;
+
 /**
  * <p>A container for the expected responses of an operation. The container maps a HTTP response code to the expected response.</p>
  * <p>The documentation is not necessarily expected to cover all possible HTTP response codes because they may not be known
@@ -48,7 +50,7 @@ public class ResponsesObjectBuilder {
      * @return A new object
      */
     public ResponsesObject build() {
-        return new ResponsesObject(defaultValue, httpStatusCodes);
+        return new ResponsesObject(defaultValue, immutable(httpStatusCodes));
     }
 
     /**
@@ -68,17 +70,17 @@ public class ResponsesObjectBuilder {
      * @return A builder that is the merged value of the two given ones
      */
     public static ResponsesObjectBuilder mergeResponses(ResponsesObject primary, ResponsesObject secondary) {
-        Set<String> allCodes = new HashSet<>(primary.httpStatusCodes.keySet());
-        allCodes.addAll(secondary.httpStatusCodes.keySet());
+        Set<String> allCodes = new HashSet<>(primary.httpStatusCodes().keySet());
+        allCodes.addAll(secondary.httpStatusCodes().keySet());
         Map<String, ResponseObject> mergedStatusCodes = new HashMap<>();
         for (String code : allCodes) {
             mergedStatusCodes.put(code, ResponseObjectBuilder.mergeResponses(
-                primary.httpStatusCodes.get(code), secondary.httpStatusCodes.get(code)
+                primary.httpStatusCodes().get(code), secondary.httpStatusCodes().get(code)
             ).build());
         }
         return responsesObject()
             .withHttpStatusCodes(mergedStatusCodes)
-            .withDefaultValue(Mutils.coalesce(primary.defaultValue, secondary.defaultValue));
+            .withDefaultValue(Mutils.coalesce(primary.defaultValue(), secondary.defaultValue()));
     }
 
 

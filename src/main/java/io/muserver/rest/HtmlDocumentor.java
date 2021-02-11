@@ -35,7 +35,7 @@ class HtmlDocumentor {
         El html = new El("html").open();
         El head = new El("head").open();
 
-        render("title", api.info().title);
+        render("title", api.info().title());
 
         new El("style").open().contentRaw(css).close();
 
@@ -43,18 +43,18 @@ class HtmlDocumentor {
 
         El body = new El("body").open();
 
-        new El("h1").open().content(api.info().title).close();
+        new El("h1").open().content(api.info().title()).close();
 
         El preamble = new El("div").open(singletonMap("class", "preamble"));
 
-        renderIfValue("p", api.info().description);
+        renderIfValue("p", api.info().description());
 
         renderExternalLinksParagraph(api.externalDocs());
 
         El metaData = new El("p").open(singletonMap("class", "apiMetaData"));
-        metaData.content("Version " + api.info().version);
-        if (api.info().contact != null) {
-            ContactObject contact = api.info().contact;
+        metaData.content("Version " + api.info().version());
+        if (api.info().contact() != null) {
+            ContactObject contact = api.info().contact();
             metaData.content(" | Contact: ");
             if (contact.url() != null) {
                 String contactName = contact.name() == null ? contact.url().toString() : contact.name();
@@ -67,21 +67,21 @@ class HtmlDocumentor {
                 new El("a").open(Collections.singletonMap("href", "mailto:" + contact.email())).content(contact.email()).close();
             }
         }
-        LicenseObject license = api.info().license;
+        LicenseObject license = api.info().license();
         if (license != null) {
             metaData.content(" | License: ");
-            String name = license.name == null ? license.url.toString() : license.name;
-            new El("a").open(Collections.singletonMap("href", "mailto:" + license.url)).content(name).close();
+            String name = license.name() == null ? license.url().toString() : license.name();
+            new El("a").open(Collections.singletonMap("href", "mailto:" + license.url())).content(name).close();
         }
 
-        if (api.info().termsOfService != null) {
+        if (api.info().termsOfService() != null) {
             metaData.content(" | ");
-            new El("a").open(Collections.singletonMap("href", api.info().termsOfService.toString())).content("Terms of service").close();
+            new El("a").open(Collections.singletonMap("href", api.info().termsOfService().toString())).content("Terms of service").close();
         }
 
         String baseUri = "";
         if (api.servers() != null && !api.servers().isEmpty()) {
-            baseUri = api.servers().get(0).url;
+            baseUri = api.servers().get(0).url();
         }
 
         preamble.close();
@@ -90,19 +90,19 @@ class HtmlDocumentor {
         El nav = new El("ul").open(singletonMap("class", "nav operation"));
         for (TagObject tag : api.tags()) {
             El li = new El("li").open();
-            new El("a").open(singletonMap("href", "#" + Mutils.htmlEncode(tag.name))).content(tag.name).close();
+            new El("a").open(singletonMap("href", "#" + Mutils.htmlEncode(tag.name()))).content(tag.name()).close();
 
             El subNav = new El("ul").open(singletonMap("class", "subNav"));
-            for (Map.Entry<String, PathItemObject> entry : api.paths().pathItemObjects.entrySet()) {
+            for (Map.Entry<String, PathItemObject> entry : api.paths().pathItemObjects().entrySet()) {
                 String url = entry.getKey();
                 PathItemObject item = entry.getValue();
-                for (Map.Entry<String, OperationObject> operationObjectEntry : item.operations.entrySet()) {
+                for (Map.Entry<String, OperationObject> operationObjectEntry : item.operations().entrySet()) {
                     String method = operationObjectEntry.getKey();
                     OperationObject operation = operationObjectEntry.getValue();
-                    if (operation.tags.contains(tag.name)) {
+                    if (operation.tags().contains(tag.name())) {
 
                         El subNavLi = new El("li").open();
-                        new El("a").open(singletonMap("href", "#" + Mutils.htmlEncode(operation.operationId))).content(method.toUpperCase() + " " + url).close();
+                        new El("a").open(singletonMap("href", "#" + Mutils.htmlEncode(operation.operationId()))).content(method.toUpperCase() + " " + url).close();
                         subNavLi.close();
 
                     }
@@ -120,21 +120,21 @@ class HtmlDocumentor {
 
         for (TagObject tag : api.tags()) {
             El tagContainer = new El("div").open(singletonMap("class", "tagContainer"));
-            new El("h2").open(singletonMap("id", Mutils.htmlEncode(tag.name))).content(tag.name).close();
-            renderIfValue("p", tag.description);
-            renderExternalLinksParagraph(tag.externalDocs);
+            new El("h2").open(singletonMap("id", Mutils.htmlEncode(tag.name()))).content(tag.name()).close();
+            renderIfValue("p", tag.description());
+            renderExternalLinksParagraph(tag.externalDocs());
 
-            for (Map.Entry<String, PathItemObject> entry : api.paths().pathItemObjects.entrySet()) {
+            for (Map.Entry<String, PathItemObject> entry : api.paths().pathItemObjects().entrySet()) {
                 String url = entry.getKey();
                 PathItemObject item = entry.getValue();
-                for (Map.Entry<String, OperationObject> operationObjectEntry : item.operations.entrySet()) {
+                for (Map.Entry<String, OperationObject> operationObjectEntry : item.operations().entrySet()) {
                     String method = operationObjectEntry.getKey();
                     OperationObject operation = operationObjectEntry.getValue();
 
-                    if (operation.tags.contains(tag.name)) {
+                    if (operation.tags().contains(tag.name())) {
 
                         Map<String, String> operationAttributes = new HashMap<>();
-                        operationAttributes.put("id", Mutils.htmlEncode(operation.operationId));
+                        operationAttributes.put("id", Mutils.htmlEncode(operation.operationId()));
                         operationAttributes.put("class", "operation");
                         El operationDiv = new El("div").open(operationAttributes);
 
@@ -142,9 +142,9 @@ class HtmlDocumentor {
                         String urlWithContext = baseUri + url;
                         new El("a").open(Collections.singletonMap("href", urlWithContext)).content(url).close();
                         h3.close();
-                        renderIfValue("p", operation.summary);
-                        renderIfValue("p", operation.description);
-                        renderExternalLinksParagraph(operation.externalDocs);
+                        renderIfValue("p", operation.summary());
+                        renderIfValue("p", operation.description());
+                        renderExternalLinksParagraph(operation.externalDocs());
 
                         if (operation.isDeprecated()) {
                             new El("p").open(singletonMap("class", "deprecated")).content("WARNING: This operation is marked as deprecated and may not be supported in future versions of this API.").close();
@@ -153,8 +153,8 @@ class HtmlDocumentor {
                         StringBuilder queryString = new StringBuilder();
                         StringBuilder curlHeaders = new StringBuilder();
 
-                        RequestBodyObject requestBody = operation.requestBody;
-                        if (!operation.parameters.isEmpty()) {
+                        RequestBodyObject requestBody = operation.requestBody();
+                        if (!operation.parameters().isEmpty()) {
                             render("h4", "Parameters");
                             El table = new El("table").open(singletonMap("class", "parameterTable"));
 
@@ -169,7 +169,7 @@ class HtmlDocumentor {
                             El tbody = new El("tbody").open();
 
 
-                            for (ParameterObject parameter : operation.parameters) {
+                            for (ParameterObject parameter : operation.parameters()) {
                                 El row = new El("tr").open();
                                 render("td", parameter.name());
                                 String type = parameter.in();
@@ -187,12 +187,12 @@ class HtmlDocumentor {
                                 Object defaultVal = null;
                                 ExternalDocumentationObject externalDocs = null;
                                 if (schema != null) {
-                                    type += " - " + schema.type;
-                                    if (schema.format != null) {
-                                        type += " (" + schema.format + ")";
+                                    type += " - " + schema.type();
+                                    if (schema.format() != null) {
+                                        type += " (" + schema.format() + ")";
                                     }
-                                    defaultVal = schema.defaultValue;
-                                    externalDocs = schema.externalDocs;
+                                    defaultVal = schema.defaultValue();
+                                    externalDocs = schema.externalDocs();
                                 }
                                 render("td", type);
                                 El paramDesc = new El("td").open();
@@ -219,22 +219,22 @@ class HtmlDocumentor {
                         if (requestBody != null) {
                             render("h4", "Request body");
 
-                            renderIfValue("p", requestBody.description);
+                            renderIfValue("p", requestBody.description());
 
-                            for (Map.Entry<String, MediaTypeObject> bodyEntry : requestBody.content.entrySet()) {
+                            for (Map.Entry<String, MediaTypeObject> bodyEntry : requestBody.content().entrySet()) {
                                 String mediaType = bodyEntry.getKey();
                                 MediaTypeObject value = bodyEntry.getValue();
                                 render("h5", mediaType);
 
-                                renderExamples(value.example, value.examples, value.schema == null ? null : value.schema.defaultValue);
+                                renderExamples(value.example(), value.examples(), value.schema() == null ? null : value.schema().defaultValue());
 
                                 String curlFormParam = (mediaType.equalsIgnoreCase(MediaType.MULTIPART_FORM_DATA)) ? "-F" : "-d";
                                 if (curlBody.length() == 0) {
                                     curlBody = new StringBuilder(" -H 'content-type: " + mediaType + "'");
                                 }
 
-                                if (value.schema == null || value.schema.properties == null) {
-                                    curlBody.append(" --data '").append(bashValue(value.example)).append("'");
+                                if (value.schema() == null || value.schema().properties() == null) {
+                                    curlBody.append(" --data '").append(bashValue(value.example())).append("'");
                                     continue;
                                 }
 
@@ -250,16 +250,16 @@ class HtmlDocumentor {
                                 El tbody = new El("tbody").open();
 
 
-                                List<String> requiredParams = value.schema.required;
-                                for (Map.Entry<String, SchemaObject> props : value.schema.properties.entrySet()) {
+                                List<String> requiredParams = value.schema().required();
+                                for (Map.Entry<String, SchemaObject> props : value.schema().properties().entrySet()) {
                                     String formName = props.getKey();
                                     SchemaObject schema = props.getValue();
                                     El row = new El("tr").open();
                                     render("td", formName);
 
-                                    String type = schema.type;
-                                    if (schema.format != null) {
-                                        type += " (" + schema.format + ")";
+                                    String type = schema.type();
+                                    if (schema.format() != null) {
+                                        type += " (" + schema.format() + ")";
                                     }
                                     render("td", type);
 
@@ -270,11 +270,11 @@ class HtmlDocumentor {
                                     if (requiredParams != null && requiredParams.contains(formName)) {
                                         render("strong", "REQUIRED. ");
                                     }
-                                    paramDesc.content(schema.description);
-                                    renderExamples(schema.example, null, schema.defaultValue);
+                                    paramDesc.content(schema.description());
+                                    renderExamples(schema.example(), null, schema.defaultValue());
 
 
-                                    curlBody.append(" ").append(curlFormParam).append(" '").append(urlEncode(formName)).append("=").append(bashValue(schema.example)).append("'");
+                                    curlBody.append(" ").append(curlFormParam).append(" '").append(urlEncode(formName)).append("=").append(bashValue(schema.example())).append("'");
 
                                     paramDesc.close();
                                     row.close();
@@ -288,7 +288,7 @@ class HtmlDocumentor {
                         }
 
                         String curlAccept = "";
-                        if (!operation.responses.httpStatusCodes.isEmpty()) {
+                        if (!operation.responses().httpStatusCodes().isEmpty()) {
                             render("h4", "Responses");
 
 
@@ -305,14 +305,14 @@ class HtmlDocumentor {
                             El tbody = new El("tbody").open();
 
 
-                            for (Map.Entry<String, ResponseObject> respEntry : operation.responses.httpStatusCodes.entrySet()) {
+                            for (Map.Entry<String, ResponseObject> respEntry : operation.responses().httpStatusCodes().entrySet()) {
                                 El row = new El("tr").open();
                                 String code = respEntry.getKey();
                                 ResponseObject resp = respEntry.getValue();
                                 render("td", code);
-                                String contentTypes = resp.content == null ? "" : String.join("\n", resp.content.keySet());
+                                String contentTypes = resp.content() == null ? "" : String.join("\n", resp.content().keySet());
                                 render("td", contentTypes);
-                                render("td", resp.description);
+                                render("td", resp.description());
                                 if (curlAccept.isEmpty() && !contentTypes.isEmpty()) {
                                     curlAccept = " -H 'accept: " + contentTypes.split("\n", 2)[0] + "'";
                                 }
@@ -349,8 +349,8 @@ class HtmlDocumentor {
 
     private void renderExternalLinksParagraph(ExternalDocumentationObject externalDocs) throws IOException {
         if (externalDocs != null) {
-            String url = externalDocs.url.toString();
-            String desc = externalDocs.description == null ? url : externalDocs.description;
+            String url = externalDocs.url().toString();
+            String desc = externalDocs.description() == null ? url : externalDocs.description();
             El ext = new El("p").open().content("For more info, see ");
             new El("a").open(Collections.singletonMap("href", url)).content(desc).close();
             ext.close();

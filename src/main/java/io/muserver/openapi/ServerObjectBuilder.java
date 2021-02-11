@@ -2,6 +2,8 @@ package io.muserver.openapi;
 
 import java.util.Map;
 
+import static io.muserver.openapi.OpenApiUtils.immutable;
+
 /**
  * An object representing a Server.
  */
@@ -43,7 +45,7 @@ public class ServerObjectBuilder {
      * @return A new object
      */
     public ServerObject build() {
-        return new ServerObject(url, description, variables);
+        return new ServerObject(url, description, immutable(variables));
     }
 
     /**

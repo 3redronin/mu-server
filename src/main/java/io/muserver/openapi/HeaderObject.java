@@ -12,15 +12,15 @@ import static io.muserver.openapi.ParameterObject.allowedStyles;
  */
 public class HeaderObject implements JsonWriter {
 
-    final String description;
-    final boolean required;
-    final Boolean deprecated;
-    final String style;
-    final String explode;
-    final SchemaObject schema;
-    final Object example;
-    final Map<String, ExampleObject> examples;
-    final Map<String, MediaTypeObject> content;
+    private final String description;
+    private final boolean required;
+    private final Boolean deprecated;
+    private final String style;
+    private final String explode;
+    private final SchemaObject schema;
+    private final Object example;
+    private final Map<String, ExampleObject> examples;
+    private final Map<String, MediaTypeObject> content;
 
     HeaderObject(String description, boolean required, Boolean deprecated,
                     String style, String explode, SchemaObject schema, Object example,
@@ -62,4 +62,66 @@ public class HeaderObject implements JsonWriter {
         writer.write('}');
     }
 
+    /**
+     * @return the value described by {@link HeaderObjectBuilder#withDescription}
+     */
+    public String description() {
+        return description;
+    }
+
+    /**
+     * @return the value described by {@link HeaderObjectBuilder#withRequired}
+     */
+    public boolean required() {
+        return required;
+    }
+
+    /**
+     * @return the value described by {@link HeaderObjectBuilder#withDeprecated}
+     */
+    public Boolean deprecated() {
+        return deprecated;
+    }
+
+    /**
+     * @return the value described by {@link HeaderObjectBuilder#withStyle}
+     */
+    public String style() {
+        return style;
+    }
+
+    /**
+     * @return the value described by {@link HeaderObjectBuilder#withExplode}
+     */
+    public String explode() {
+        return explode;
+    }
+
+    /**
+     * @return the value described by {@link HeaderObjectBuilder#withSchema}
+     */
+    public SchemaObject schema() {
+        return schema;
+    }
+
+    /**
+     * @return the value described by {@link HeaderObjectBuilder#withExample}
+     */
+    public Object example() {
+        return example;
+    }
+
+    /**
+     * @return the value described by {@link HeaderObjectBuilder#withExamples}
+     */
+    public Map<String, ExampleObject> examples() {
+        return examples;
+    }
+
+    /**
+     * @return the value described by {@link HeaderObjectBuilder#withContent}
+     */
+    public Map<String, MediaTypeObject> content() {
+        return content;
+    }
 }

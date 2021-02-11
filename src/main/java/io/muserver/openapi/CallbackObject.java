@@ -30,4 +30,11 @@ public class CallbackObject implements JsonWriter {
         writer.append('}');
 
     }
+
+    /**
+     * @return the value described by {@link CallbackObjectBuilder#withCallbacks}
+     */
+    public Map<String, PathItemObject> callbacks() {
+        return callbacks;
+    }
 }

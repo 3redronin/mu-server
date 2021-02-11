@@ -13,11 +13,35 @@ import static io.muserver.openapi.Jsonizer.append;
  */
 public class InfoObject implements JsonWriter {
 
+    /**
+     * @deprecated use {@link #title()} instead
+     */
+    @Deprecated
     public final String title;
+    /**
+      @deprecated use {@link #description()} instead
+     */
+    @Deprecated
     public final String description;
+    /**
+      @deprecated use {@link #termsOfService()} instead
+     */
+    @Deprecated
     public final URI termsOfService;
+    /**
+      @deprecated use {@link #contact()} instead
+     */
+    @Deprecated
     public final ContactObject contact;
+    /**
+      @deprecated use {@link #license()} instead
+     */
+    @Deprecated
     public final LicenseObject license;
+    /**
+      @deprecated use {@link #version()} instead
+     */
+    @Deprecated
     public final String version;
 
 
@@ -43,5 +67,47 @@ public class InfoObject implements JsonWriter {
         isFirst = append(writer, "license", license, isFirst);
         isFirst = append(writer, "version", version, isFirst);
         writer.write('}');
+    }
+
+    /**
+     * @return the value described by {@link InfoObjectBuilder#withTitle}
+     */
+    public String title() {
+        return title;
+    }
+
+    /**
+      @return the value described by {@link InfoObjectBuilder#withDescription}
+     */
+    public String description() {
+        return description;
+    }
+
+    /**
+      @return the value described by {@link InfoObjectBuilder#withTermsOfService}
+     */
+    public URI termsOfService() {
+        return termsOfService;
+    }
+
+    /**
+      @return the value described by {@link InfoObjectBuilder#withContact}
+     */
+    public ContactObject contact() {
+        return contact;
+    }
+
+    /**
+      @return the value described by {@link InfoObjectBuilder#withLicense}
+     */
+    public LicenseObject license() {
+        return license;
+    }
+
+    /**
+      @return the value described by {@link InfoObjectBuilder#withVersion}
+     */
+    public String version() {
+        return version;
     }
 }

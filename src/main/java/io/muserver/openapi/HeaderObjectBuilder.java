@@ -2,6 +2,8 @@ package io.muserver.openapi;
 
 import java.util.Map;
 
+import static io.muserver.openapi.OpenApiUtils.immutable;
+
 /**
  * A builder for {@link HeaderObject} objects
  */
@@ -134,7 +136,8 @@ public class HeaderObjectBuilder {
      * @return A new object
      */
     public HeaderObject build() {
-        return new HeaderObject(description, required, deprecated, style, explode, schema, example, examples, content);
+        return new HeaderObject(description, required, deprecated, style, explode, schema, example,
+            immutable(examples), immutable(content));
     }
 
     /**

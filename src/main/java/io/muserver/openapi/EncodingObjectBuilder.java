@@ -2,6 +2,8 @@ package io.muserver.openapi;
 
 import java.util.Map;
 
+import static io.muserver.openapi.OpenApiUtils.immutable;
+
 /**
  * A single encoding definition applied to a single schema property.
  */
@@ -79,7 +81,7 @@ public class EncodingObjectBuilder {
      */
     public EncodingObject build() {
         boolean explodeVal = this.explode == null ? "form".equals(style) : this.explode;
-        return new EncodingObject(contentType, headers, style, explodeVal, allowReserved);
+        return new EncodingObject(contentType, immutable(headers), style, explodeVal, allowReserved);
     }
 
     /**

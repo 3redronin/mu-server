@@ -2,6 +2,8 @@ package io.muserver.openapi;
 
 import java.util.Map;
 
+import static io.muserver.openapi.OpenApiUtils.immutable;
+
 /**
  * <p>Holds the relative paths to the individual endpoints and their operations. The path is appended to the
  * URL from the {@link ServerObject} in order to construct the full URL. The Paths MAY be empty, due to
@@ -29,7 +31,7 @@ public class PathsObjectBuilder {
      * @return A new object
      */
     public PathsObject build() {
-        return new PathsObject(pathItemObjects);
+        return new PathsObject(immutable(pathItemObjects));
     }
 
     /**

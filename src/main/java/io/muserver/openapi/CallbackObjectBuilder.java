@@ -2,6 +2,8 @@ package io.muserver.openapi;
 
 import java.util.Map;
 
+import static io.muserver.openapi.OpenApiUtils.immutable;
+
 /**
  * A map of possible out-of band callbacks related to the parent operation. Each value in the map is a Path Item Object
  * that describes a set of requests that may be initiated by the API provider and the expected responses. The key value
@@ -26,7 +28,7 @@ public class CallbackObjectBuilder {
      * @return A new {@link CallbackObject}
      */
     public CallbackObject build() {
-        return new CallbackObject(callbacks);
+        return new CallbackObject(immutable(callbacks));
     }
 
     /**

@@ -121,7 +121,7 @@ class OpenApiDocumentor implements MuHandler {
 
             Map<String, OperationObject> operations;
             if (pathItems.containsKey(path)) {
-                operations = pathItems.get(path).operations;
+                operations = pathItems.get(path).operations();
             } else {
                 operations = new LinkedHashMap<>();
                 PathItemObject pathItem = pathItemObject()
@@ -142,34 +142,34 @@ class OpenApiDocumentor implements MuHandler {
             if (existing == null) {
                 existing = method.createOperationBuilder(customSchemas)
                     .withOperationId(method.httpMethod.name() + "_" + opPath)
-                    .withTags(singletonList(root.tag.name))
+                    .withTags(singletonList(root.tag.name()))
                     .withParameters(parameters)
                     .build();
             } else {
                 OperationObject curOO = method.createOperationBuilder(customSchemas).build();
-                List<ParameterObject> combinedParams = new ArrayList<>(existing.parameters);
+                List<ParameterObject> combinedParams = new ArrayList<>(existing.parameters());
                 combinedParams.addAll(parameters);
 
                 Map<String, MediaTypeObject> mergedContent = new HashMap<>();
-                if (existing.requestBody != null && existing.requestBody.content != null) {
-                    mergedContent.putAll(existing.requestBody.content);
+                if (existing.requestBody() != null && existing.requestBody().content() != null) {
+                    mergedContent.putAll(existing.requestBody().content());
                 }
-                if (curOO.requestBody != null) {
-                    mergedContent.putAll(curOO.requestBody.content);
+                if (curOO.requestBody() != null) {
+                    mergedContent.putAll(curOO.requestBody().content());
                 }
                 OperationObjectBuilder operationObjectBuilder = OperationObjectBuilder.builderFrom(existing)
                     .withParameters(combinedParams)
-                    .withResponses(mergeResponses(existing.responses, curOO.responses).build())
+                    .withResponses(mergeResponses(existing.responses(), curOO.responses()).build())
                     .withRequestBody(requestBodyObject()
-                        .withRequired(existing.requestBody != null && existing.requestBody.required &&
-                            curOO.requestBody != null && curOO.requestBody.required)
-                        .withDescription(Mutils.coalesce(existing.description, curOO.description))
+                        .withRequired(existing.requestBody() != null && existing.requestBody().required() &&
+                            curOO.requestBody() != null && curOO.requestBody().required())
+                        .withDescription(Mutils.coalesce(existing.description(), curOO.description()))
                         .withContent(mergedContent)
                         .build());
-                if (existing.summary == null && existing.description == null) {
+                if (existing.summary() == null && existing.description() == null) {
                     operationObjectBuilder
-                        .withSummary(curOO.summary)
-                        .withDescription(curOO.description);
+                        .withSummary(curOO.summary())
+                        .withDescription(curOO.description());
                 }
                 existing = operationObjectBuilder.build();
             }
