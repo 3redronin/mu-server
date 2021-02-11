@@ -9,6 +9,7 @@ import java.io.OutputStreamWriter;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import static io.muserver.Mutils.notNull;
 import static io.muserver.openapi.PathItemObjectBuilder.pathItemObject;
@@ -54,10 +55,11 @@ class OpenApiDocumentor implements MuHandler {
 
         List<TagObject> tags = new ArrayList<>();
 
-        Map<String, PathItemObject> pathItems = new LinkedHashMap<>();
+        Map<String, PathItemObjectBuilder> pathItemBuilders = new LinkedHashMap<>();
         for (ResourceClass root : roots) {
-            addResourceClass(0, "", tags, pathItems, root);
+            addResourceClass(0, "", tags, pathItemBuilders, root);
         }
+        Map<String, PathItemObject> pathItems = pathItemBuilders.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, v -> v.getValue().build()));
 
 
         OpenAPIObjectBuilder api = OpenAPIObjectBuilder.openAPIObject()
@@ -101,7 +103,7 @@ class OpenApiDocumentor implements MuHandler {
         return true;
     }
 
-    private void addResourceClass(int recursiveLevel, String parentResourcePath, List<TagObject> tags, Map<String, PathItemObject> pathItems, ResourceClass root) {
+    private void addResourceClass(int recursiveLevel, String parentResourcePath, List<TagObject> tags, Map<String, PathItemObjectBuilder> pathItems, ResourceClass root) {
         if (recursiveLevel == 5) {
             return;
         }
@@ -124,9 +126,8 @@ class OpenApiDocumentor implements MuHandler {
                 operations = pathItems.get(path).operations();
             } else {
                 operations = new LinkedHashMap<>();
-                PathItemObject pathItem = pathItemObject()
-                    .withOperations(operations)
-                    .build();
+                PathItemObjectBuilder pathItem = pathItemObject()
+                    .withOperations(operations);
                 pathItems.put(path, pathItem);
             }
             List<ParameterObject> parameters = method.params.stream()

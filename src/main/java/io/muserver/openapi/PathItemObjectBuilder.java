@@ -81,4 +81,27 @@ public class PathItemObjectBuilder {
     public static PathItemObjectBuilder pathItemObject() {
         return new PathItemObjectBuilder();
     }
+
+    String summary() {
+        return summary;
+    }
+
+    String description() {
+        return description;
+    }
+
+    /**
+     * @return The value set with {@link #withOperations}
+     */
+    public Map<String, OperationObject> operations() {
+        return operations;
+    }
+
+    List<ServerObject> servers() {
+        return servers;
+    }
+
+    List<ParameterObject> parameters() {
+        return parameters;
+    }
 }
