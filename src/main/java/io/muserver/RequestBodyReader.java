@@ -7,10 +7,7 @@ import io.netty.handler.codec.http.DefaultHttpContent;
 import io.netty.handler.codec.http.DefaultLastHttpContent;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.QueryStringDecoder;
-import io.netty.handler.codec.http.multipart.Attribute;
-import io.netty.handler.codec.http.multipart.FileUpload;
-import io.netty.handler.codec.http.multipart.HttpPostMultipartRequestDecoder;
-import io.netty.handler.codec.http.multipart.InterfaceHttpData;
+import io.netty.handler.codec.http.multipart.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -288,9 +285,10 @@ abstract class RequestBodyReader {
             return form;
         }
 
-        public MultipartFormReader(long maxSize, HttpRequest nettyRequest) {
+        public MultipartFormReader(long maxSize, HttpRequest nettyRequest, Charset charset) {
             super(maxSize);
-            multipartRequestDecoder = new HttpPostMultipartRequestDecoder(nettyRequest);
+            HttpDataFactory factory = new DefaultHttpDataFactory(charset);
+            multipartRequestDecoder = new HttpPostMultipartRequestDecoder(factory, nettyRequest, charset);
         }
 
         @Override

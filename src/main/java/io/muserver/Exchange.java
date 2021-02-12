@@ -8,7 +8,7 @@ import io.netty.handler.timeout.IdleStateEvent;
  */
 interface Exchange {
 
-    void onMessage(ChannelHandlerContext ctx, Object message) throws UnexpectedMessageException;
+    void onMessage(ChannelHandlerContext ctx, Object message, DoneCallback doneCallback) throws UnexpectedMessageException;
 
     void onIdleTimeout(ChannelHandlerContext ctx, IdleStateEvent ise);
 

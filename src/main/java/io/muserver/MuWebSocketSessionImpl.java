@@ -125,7 +125,7 @@ class MuWebSocketSessionImpl implements MuWebSocketSession, Exchange {
     }
 
     @Override
-    public void onMessage(ChannelHandlerContext ctx, Object msg) throws UnexpectedMessageException {
+    public void onMessage(ChannelHandlerContext ctx, Object msg, DoneCallback doneCallback) throws UnexpectedMessageException {
         if (!(msg instanceof WebSocketFrame)) {
             if (msg instanceof HttpContent) return; // upgrade requests always send a LastHttpComplete message that can be ignored. Any request body can be discarded too.
             throw new UnexpectedMessageException(this, msg);
@@ -140,11 +140,10 @@ class MuWebSocketSessionImpl implements MuWebSocketSession, Exchange {
         }
         MuWebSocket muWebSocket = this.muWebSocket;
         DoneCallback onComplete = error -> {
-            if (error == null) {
-                ctx.channel().read();
-            } else {
+            if (error != null) {
                 handleWebsocketError(ctx, muWebSocket, error);
             }
+            doneCallback.onComplete(error);
         };
         ByteBuf retained = null;
         try {

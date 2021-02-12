@@ -12,6 +12,7 @@ import io.netty.handler.timeout.IdleStateHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.ws.rs.ClientErrorException;
 import javax.ws.rs.ServerErrorException;
 import javax.ws.rs.core.MediaType;
 import java.io.IOException;
@@ -19,6 +20,8 @@ import java.io.InputStream;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
+import java.nio.charset.IllegalCharsetNameException;
+import java.nio.charset.UnsupportedCharsetException;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Future;
@@ -165,15 +168,24 @@ class NettyRequestAdapter implements MuRequest {
     }
 
     static RequestBodyReader.StringRequestBodyReader createStringRequestBodyReader(long maxSize, Headers headers) {
+        Charset bodyCharset = requestBodyCharset(headers);
+        return new RequestBodyReader.StringRequestBodyReader(maxSize, bodyCharset);
+    }
+
+    private static Charset requestBodyCharset(Headers headers) {
         MediaType mediaType = headers.contentType();
         Charset bodyCharset = UTF_8;
         if (mediaType != null) {
             String charset = mediaType.getParameters().get("charset");
             if (!Mutils.nullOrEmpty(charset)) {
-                bodyCharset = Charset.forName(charset);
+                try {
+                    bodyCharset = Charset.forName(charset);
+                } catch (IllegalCharsetNameException | UnsupportedCharsetException e) {
+                    throw new ClientErrorException("Invalid request body charset", 400);
+                }
             }
         }
-        return new RequestBodyReader.StringRequestBodyReader(maxSize, bodyCharset);
+        return bodyCharset;
     }
 
     private void claimingBodyRead(RequestBodyReader reader) {
@@ -183,7 +195,7 @@ class NettyRequestAdapter implements MuRequest {
             throw new IllegalStateException("The body of the request message cannot be read twice. This can happen when calling any 2 of inputStream(), readBodyAsString(), or form() methods.");
         }
         requestBodyReader = reader;
-        ctx.channel().read();
+        setState(RequestState.RECEIVING_BODY);
     }
 
     void discardInputStreamIfNotConsumed() {
@@ -335,7 +347,7 @@ class NettyRequestAdapter implements MuRequest {
         if (requestBodyReader == null) {
             String ct = contentType();
             if (ct.startsWith("multipart/")) {
-                claimingBodyRead(new RequestBodyReader.MultipartFormReader(maxRequestBytes(), nettyRequest));
+                claimingBodyRead(new RequestBodyReader.MultipartFormReader(maxRequestBytes(), nettyRequest, requestBodyCharset(headers)));
             } else if (ct.equals("application/x-www-form-urlencoded")) {
                 claimingBodyRead(new RequestBodyReader.UrlEncodedBodyReader(createStringRequestBodyReader(maxRequestBytes(), headers())));
             } else {

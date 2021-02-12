@@ -130,30 +130,29 @@ class HttpExchange implements ResponseInfo, Exchange {
     }
 
     @Override
-    public void onMessage(ChannelHandlerContext ctx, Object msg) throws UnexpectedMessageException {
+    public void onMessage(ChannelHandlerContext ctx, Object msg, DoneCallback doneCallback) throws UnexpectedMessageException {
         if (!(msg instanceof HttpContent)) {
             throw new UnexpectedMessageException(this, msg);
         }
         HttpContent content = (HttpContent) msg;
         ByteBuf byteBuf = content.content().retain();
         boolean last = msg instanceof LastHttpContent;
-        DoneCallback doneCallback = error -> {
+        DoneCallback onDone = error -> {
             if (error == null) {
                 if (last) {
                     request.setState(RequestState.COMPLETE);
-                } else {
-                    ctx.channel().read();
                 }
             } else {
                 request.onCancelled(ResponseState.ERRORED, error);
             }
             byteBuf.release();
+            doneCallback.onComplete(error);
         };
         try {
-            request.onRequestBodyRead(byteBuf, last, doneCallback);
+            request.onRequestBodyRead(byteBuf, last, onDone);
         } catch (Exception e) {
             try {
-                doneCallback.onComplete(e);
+                onDone.onComplete(e);
             } catch (Exception exception) {
                 log.error("Unhandled callback error", exception);
             }
@@ -186,7 +185,7 @@ class HttpExchange implements ResponseInfo, Exchange {
 
     static HttpExchange create(MuServerImpl server, String proto, ChannelHandlerContext ctx, Http1Connection connection,
                                HttpRequest nettyRequest, NettyHandlerAdapter nettyHandlerAdapter, MuStatsImpl connectionStats,
-                               HttpExchangeStateChangeListener stateChangeListener) throws InvalidHttpRequestException {
+                               RequestStateChangeListener requestStateChangeListener, HttpExchangeStateChangeListener stateChangeListener) throws InvalidHttpRequestException {
         ServerSettings settings = server.settings();
         throwIfInvalid(settings, ctx, nettyRequest);
 
@@ -209,6 +208,7 @@ class HttpExchange implements ResponseInfo, Exchange {
             throw new InvalidHttpRequestException(429, "429 Too Many Requests");
         }
         httpExchange.addChangeListener(stateChangeListener);
+        muRequest.addChangeListener(requestStateChangeListener);
 
         try {
             serverStats.onRequestStarted(httpExchange.request);

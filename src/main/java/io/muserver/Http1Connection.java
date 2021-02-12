@@ -3,10 +3,7 @@ package io.muserver;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
-import io.netty.handler.codec.http.DefaultFullHttpResponse;
-import io.netty.handler.codec.http.FullHttpResponse;
-import io.netty.handler.codec.http.HttpRequest;
-import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.*;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
@@ -78,29 +75,37 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
         }
     }
 
-    private void onChannelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+    private void onChannelRead(ChannelHandlerContext ctx, Object msg) {
         if (msg instanceof HttpRequest) {
             try {
-                this.currentExchange = HttpExchange.create(server, proto, ctx, this, (HttpRequest) msg,
-                    nettyHandlerAdapter, connectionStats, (exchange, newState) -> {
+                HttpExchange hex = HttpExchange.create(server, proto, ctx, this, (HttpRequest) msg,
+                    nettyHandlerAdapter, connectionStats,
+                    (exchange, newState) -> {
+                        if (newState == RequestState.RECEIVING_BODY) {
+                            ctx.channel().read();
+                        }
+                    },
+                    (exchange, newState) -> {
                         if (newState.endState()) {
                             nettyHandlerAdapter.onResponseComplete(exchange, serverStats, connectionStats);
                             ctx.channel().eventLoop().execute(() -> {
                                 if (exchange.state() != HttpExchangeState.UPGRADED) {
-                                    if (currentExchange != exchange) {
-                                        throw new IllegalStateException("Expected current exchange to be " + exchange + " but was " + currentExchange);
+                                    if (this.currentExchange != exchange) {
+                                        throw new IllegalStateException("Expected current exchange to be " + exchange + " but was " + this.currentExchange);
                                     }
-                                    currentExchange = null;
+                                    this.currentExchange = null;
                                     exchange.request.cleanup();
                                     if (exchange.request.requestState() == RequestState.ERROR) {
                                         ctx.channel().close();
                                     } else {
-                                        ctx.channel().read();
+                                        ctx.channel().read(); // should it actually read after request complete?
                                     }
                                 }
                             });
                         }
                     });
+                this.currentExchange = hex;
+
             } catch (InvalidHttpRequestException ihr) {
                 if (ihr.code == 429 || ihr.code == 503) {
                     connectionStats.onRejectedDueToOverload();
@@ -113,7 +118,15 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
                 ctx.channel().read();
             }
         } else if (currentExchange != null) {
-            currentExchange.onMessage(ctx, msg);
+            currentExchange.onMessage(ctx, msg, error -> {
+                if (error == null) {
+                    if (!(msg instanceof LastHttpContent)) {
+                        ctx.channel().read();
+                    }
+                } else {
+                    ctx.channel().close();
+                }
+            });
         } else {
             log.debug("Got a chunk of message for an unknown request. This can happen when a request is rejected based on headers, and then the rejected body arrives.");
             ctx.channel().read();

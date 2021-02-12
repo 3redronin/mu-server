@@ -174,7 +174,9 @@ final class Http2Connection extends Http2ConnectionHandler implements Http2Frame
             } else {
                 msg = new DefaultHttpContent(data);
             }
-            httpExchange.onMessage(ctx, msg);
+            httpExchange.onMessage(ctx, msg, error -> {
+                // TODO: flowcontrol and error handling
+            });
             if (endOfStream) {
                 exchanges.remove(streamId);
             }
