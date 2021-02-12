@@ -307,10 +307,6 @@ public class SchemaObject implements JsonWriter {
         writer.append('}');
     }
 
-    public boolean isDeprecated() {
-        return deprecated != null && deprecated;
-    }
-
     @Override
     public String toString() {
         return "SchemaObject{" +
@@ -389,6 +385,13 @@ public class SchemaObject implements JsonWriter {
             .withExternalDocs(externalDocs)
             .withExample(example)
             .withDeprecated(deprecated);
+    }
+
+    /**
+     * @return the value described by {@link SchemaObjectBuilder#withDeprecated(Boolean)}, unless null was passed in which case this returns false
+     */
+    public boolean isDeprecated() {
+        return deprecated != null && deprecated;
     }
 
     /**

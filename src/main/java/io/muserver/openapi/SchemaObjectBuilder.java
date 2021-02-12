@@ -61,283 +61,615 @@ public class SchemaObjectBuilder {
     private Object example;
     private Boolean deprecated;
 
+    /**
+     * @return the value set by {@link #withTitle}
+     */
     public String title() {
         return title;
     }
 
+    /**
+     * @return the value set by {@link #withMultipleOf}
+     */
     public Double multipleOf() {
         return multipleOf;
     }
 
+    /**
+     * @return the value set by {@link #withMaximum}
+     */
     public Double maximum() {
         return maximum;
     }
 
+    /**
+     * @return the value set by {@link #withExclusiveMaximum}
+     */
     public Boolean exclusiveMaximum() {
         return exclusiveMaximum;
     }
 
+    /**
+     * @return the value set by {@link #withMinimum}
+     */
     public Double minimum() {
         return minimum;
     }
 
+    /**
+     * @return the value set by {@link #withExclusiveMinimum}
+     */
     public Boolean exclusiveMinimum() {
         return exclusiveMinimum;
     }
 
+    /**
+     * @return the value set by {@link #withMaxLength}
+     */
     public Integer maxLength() {
         return maxLength;
     }
 
+    /**
+     * @return the value set by {@link #withMinLength}
+     */
     public Integer minLength() {
         return minLength;
     }
 
+    /**
+     * @return the value set by {@link #withPattern}
+     */
     public Pattern pattern() {
         return pattern;
     }
 
+    /**
+     * @return the value set by {@link #withMaxItems}
+     */
     public Integer maxItems() {
         return maxItems;
     }
 
+    /**
+     * @return the value set by {@link #withMinItems}
+     */
     public Integer minItems() {
         return minItems;
     }
 
+    /**
+     * @return the value set by {@link #withUniqueItems}
+     */
     public Boolean uniqueItems() {
         return uniqueItems;
     }
 
+    /**
+     * @return the value set by {@link #withMaxProperties}
+     */
     public Integer maxProperties() {
         return maxProperties;
     }
 
+    /**
+     * @return the value set by {@link #withMinProperties}
+     */
     public Integer minProperties() {
         return minProperties;
     }
 
+    /**
+     * @return the value set by {@link #withRequired}
+     */
     public List<String> required() {
         return required;
     }
 
+    /**
+     * @return the value set by {@link #withEnumValue}
+     */
     public List<Object> enumValue() {
         return enumValue;
     }
 
+    /**
+     * @return the value set by {@link #withType}
+     */
     public String type() {
         return type;
     }
 
+    /**
+     * @return the value set by {@link #withAllOf}
+     */
     public List<SchemaObject> allOf() {
         return allOf;
     }
 
+    /**
+     * @return the value set by {@link #withOneOf}
+     */
     public List<SchemaObject> oneOf() {
         return oneOf;
     }
 
+    /**
+     * @return the value set by {@link #withAnyOf}
+     */
     public List<SchemaObject> anyOf() {
         return anyOf;
     }
 
+    /**
+     * @return the value set by {@link #withNot}
+     */
     public List<SchemaObject> not() {
         return not;
     }
 
+    /**
+     * @return the value set by {@link #withItems}
+     */
     public SchemaObject items() {
         return items;
     }
 
+    /**
+     * @return the value set by {@link #withProperties}
+     */
     public Map<String, SchemaObject> properties() {
         return properties;
     }
 
+    /**
+     * @return the value set by {@link #withAdditionalProperties}
+     */
     public Object additionalProperties() {
         return additionalProperties;
     }
 
+    /**
+     * @return the value set by {@link #withDescription}
+     */
     public String description() {
         return description;
     }
 
+    /**
+     * @return the value set by {@link #withFormat}
+     */
     public String format() {
         return format;
     }
 
+    /**
+     * @return the value set by {@link #withDefaultValue}
+     */
     public Object defaultValue() {
         return defaultValue;
     }
 
+    /**
+     * @return the value set by {@link #withNullable}
+     */
     public Boolean nullable() {
         return nullable;
     }
 
+    /**
+     * @return the value set by {@link #withDiscriminator}
+     */
     public DiscriminatorObject discriminator() {
         return discriminator;
     }
 
+    /**
+     * @return the value set by {@link #withReadOnly}
+     */
     public Boolean readOnly() {
         return readOnly;
     }
 
+    /**
+     * @return the value set by {@link #withWriteOnly}
+     */
     public Boolean writeOnly() {
         return writeOnly;
     }
 
+    /**
+     * @return the value set by {@link #withXml}
+     */
     public XmlObject xml() {
         return xml;
     }
 
+    /**
+     * @return the value set by {@link #withExternalDocs}
+     */
     public ExternalDocumentationObject externalDocs() {
         return externalDocs;
     }
 
+    /**
+     * @return the value set by {@link #withExample}
+     */
     public Object example() {
         return example;
     }
 
+    /**
+     * @return the value set by {@link #withDeprecated}
+     */
     public Boolean deprecated() {
         return deprecated;
     }
 
+    /**
+     * @param title the name of this object type
+     * @return this builder
+     */
     public SchemaObjectBuilder withTitle(String title) {
         this.title = title;
         return this;
     }
 
+    /**
+     * Restricts numeric values to be a multiple of the given value
+     * @param multipleOf the multiple
+     * @return this builder
+     */
     public SchemaObjectBuilder withMultipleOf(Double multipleOf) {
         this.multipleOf = multipleOf;
         return this;
     }
 
+    /**
+     * @param maximum The maximum allowed value for numeric values
+     * @return this builder
+     * @see #withExclusiveMaximum(Boolean)
+     */
     public SchemaObjectBuilder withMaximum(Double maximum) {
         this.maximum = maximum;
         return this;
     }
 
+    /**
+     * @param exclusiveMaximum <code>true</code> if the value specified with {@link #withMaximum(Double)} is exclusive;
+     *                         otherwise the default <code>false</code> means it is an inclusive number.
+     * @return this builder
+     * @see #withMaximum(Double)
+     */
     public SchemaObjectBuilder withExclusiveMaximum(Boolean exclusiveMaximum) {
         this.exclusiveMaximum = exclusiveMaximum;
         return this;
     }
 
+    /**
+     * @param minimum The minimum allowed value for numeric values
+     * @return this builder
+     * @see #withExclusiveMinimum(Boolean)
+     */
     public SchemaObjectBuilder withMinimum(Double minimum) {
         this.minimum = minimum;
         return this;
     }
 
+    /**
+     * @param exclusiveMinimum <code>true</code> if the value specified with {@link #withMinimum(Double)} is exclusive;
+     *                         otherwise the default <code>false</code> means it is an inclusive number.
+     * @return this builder
+     * @see #withMinimum(Double)
+     */
     public SchemaObjectBuilder withExclusiveMinimum(Boolean exclusiveMinimum) {
         this.exclusiveMinimum = exclusiveMinimum;
         return this;
     }
 
+    /**
+     * @param maxLength the maximum allowed length of string values
+     * @return this builder
+     */
     public SchemaObjectBuilder withMaxLength(Integer maxLength) {
         this.maxLength = maxLength;
         return this;
     }
 
+    /**
+     * @param minLength the minimum allowed length of string values
+     * @return this builder
+     */
     public SchemaObjectBuilder withMinLength(Integer minLength) {
         this.minLength = minLength;
         return this;
     }
 
+    /**
+     * @param pattern a regular expression that string values must match against
+     * @return this builder
+     */
     public SchemaObjectBuilder withPattern(Pattern pattern) {
         this.pattern = pattern;
         return this;
     }
 
+    /**
+     * @param maxItems the maximum number of items allowed in an array value
+     * @return this builder
+     */
     public SchemaObjectBuilder withMaxItems(Integer maxItems) {
         this.maxItems = maxItems;
         return this;
     }
 
+    /**
+     * @param minItems the minimum number of items allowed in an array value
+     * @return this builder
+     */
     public SchemaObjectBuilder withMinItems(Integer minItems) {
         this.minItems = minItems;
         return this;
     }
 
+    /**
+     * @param uniqueItems if true, then all items in an array value must be unique
+     * @return this builder
+     */
     public SchemaObjectBuilder withUniqueItems(Boolean uniqueItems) {
         this.uniqueItems = uniqueItems;
         return this;
     }
 
+    /**
+     * @param maxProperties the maximum number of properties allowed for an &quot;object&quot; type.
+     * @return this builder
+     */
     public SchemaObjectBuilder withMaxProperties(Integer maxProperties) {
         this.maxProperties = maxProperties;
         return this;
     }
 
+    /**
+     * @param minProperties the minimum number of properties allowed for an &quot;object&quot; type.
+     * @return this builder
+     */
     public SchemaObjectBuilder withMinProperties(Integer minProperties) {
         this.minProperties = minProperties;
         return this;
     }
 
+    /**
+     * @param required the list of properties that are required to have a value for an &quot;object&quot; type.
+     * @return this builder
+     */
     public SchemaObjectBuilder withRequired(List<String> required) {
         this.required = required;
         return this;
     }
 
+    /**
+     * @param enumValue the allowed values for an &quot;enum&quot; type
+     * @return this builder
+     */
     public SchemaObjectBuilder withEnumValue(List<Object> enumValue) {
         this.enumValue = enumValue;
         return this;
     }
 
+    /**
+     * @param type the type of this schema object. One of <code>string</code>, <code>number</code>, <code>integer</code>, <code>boolean</code>, <code>array</code> or <code>object</code>
+     * @return this builder
+     */
     public SchemaObjectBuilder withType(String type) {
         this.type = type;
         return this;
     }
 
+    /**
+     * @param allOf the schemas that the value must match
+     * @return this builder
+     */
     public SchemaObjectBuilder withAllOf(List<SchemaObject> allOf) {
         this.allOf = allOf;
         return this;
     }
 
+    /**
+     * Forces a value to be one of several different schemas
+     * @param oneOf the schemas the validate against
+     * @return this builder
+     * @see #withAnyOf(List)
+     */
     public SchemaObjectBuilder withOneOf(List<SchemaObject> oneOf) {
         this.oneOf = oneOf;
         return this;
     }
 
+    /**
+     * Forces a value to be any of a number of different schemas
+     * @param anyOf the schemas the validate against
+     * @return this builder
+     * @see #withOneOf(List)
+     */
     public SchemaObjectBuilder withAnyOf(List<SchemaObject> anyOf) {
         this.anyOf = anyOf;
         return this;
     }
 
+    /**
+     * @param not schemas the value must not validate against
+     * @return this builder
+     */
     public SchemaObjectBuilder withNot(List<SchemaObject> not) {
         this.not = not;
         return this;
     }
 
+    /**
+     * @param items the schema that items in an array object must validate against
+     * @return this builder
+     */
     public SchemaObjectBuilder withItems(SchemaObject items) {
         this.items = items;
         return this;
     }
 
+    /**
+     * @param properties the schema objects of each property for an <code>object</code> type
+     * @return this builder
+     */
     public SchemaObjectBuilder withProperties(Map<String, SchemaObject> properties) {
         this.properties = properties;
         return this;
     }
 
+    /**
+     * Defines how properties not covered by {@link #withProperties(Map)} are handled when the
+     * type is <code>object</code>
+     * @param additionalProperties If <code>false</code> then extra properties are not allowed.
+     *                             If it is a schema object then any extra properties must validate
+     *                             against this schema.
+     * @return this builder
+     */
     public SchemaObjectBuilder withAdditionalProperties(Object additionalProperties) {
         this.additionalProperties = additionalProperties;
         return this;
     }
 
+    /**
+     * @param description a description of this type
+     * @return this builder
+     * @see #withTitle(String)
+     */
     public SchemaObjectBuilder withDescription(String description) {
         this.description = description;
         return this;
     }
 
+    /**
+     * This is used to further specify the format of <code>string</code> types.
+     * <table>
+     *     <caption>Example type/format combos</caption>
+     *     <thead>
+     *         <tr>
+     *             <th>Type</th>
+     *             <th>Format</th>
+     *             <th>Description</th>
+     *         </tr>
+     *     </thead>
+     *     <tbody>
+     *         <tr>
+     *             <td>number</td>
+     *             <td></td>
+     *             <td>Any numbers.</td>
+     *         </tr>
+     *         <tr>
+     *             <td>number</td>
+     *             <td>float</td>
+     *             <td>Floating-point numbers.</td>
+     *         </tr>
+     *         <tr>
+     *             <td>number</td>
+     *             <td>double</td>
+     *             <td>Floating-point numbers with double precision.</td>
+     *         </tr>
+     *         <tr>
+     *             <td>integer</td>
+     *             <td></td>
+     *             <td>Integer numbers.</td>
+     *         </tr>
+     *         <tr>
+     *             <td>integer</td>
+     *             <td>in32</td>
+     *             <td>Signed 32-bit integers (commonly used integer type).</td>
+     *         </tr>
+     *         <tr>
+     *             <td>integer</td>
+     *             <td>int64</td>
+     *             <td>Signed 64-bit integers (long type).</td>
+     *         </tr>
+     *         <tr>
+     *             <td>string</td>
+     *             <td>date</td>
+     *             <td>full-date notation as defined by RFC 3339, section 5.6, for example, <code>2021-02-12</code></td>
+     *         </tr>
+     *         <tr>
+     *             <td>string</td>
+     *             <td>date-time</td>
+     *             <td>the date-time notation as defined by RFC 3339, section 5.6, for example, <code>2021-02-12T15:33:28Z</code></td>
+     *         </tr>
+     *         <tr>
+     *             <td>string</td>
+     *             <td>password</td>
+     *             <td>a hint to UIs to mask the input</td>
+     *         </tr>
+     *         <tr>
+     *             <td>string</td>
+     *             <td>byte</td>
+     *             <td>base64-encoded characters, for example, <code>U3dhZ2dlciByb2Nrcw==</code></td>
+     *         </tr>
+     *         <tr>
+     *             <td>string</td>
+     *             <td>binary</td>
+     *             <td>binary data, used to describe files (not text)</td>
+     *         </tr>
+     *         <tr>
+     *             <td>string</td>
+     *             <td>email</td>
+     *             <td>email addresses</td>
+     *         </tr>
+     *         <tr>
+     *             <td>string</td>
+     *             <td>uuid</td>
+     *             <td>UUIDs such as <code>93d35de9-0083-4765-8b60-822258e8ffad</code></td>
+     *         </tr>
+     *         <tr>
+     *             <td>string</td>
+     *             <td>uri</td>
+     *             <td>URIs, for example <code>https://muserver.io/</code></td>
+     *         </tr>
+     *         <tr>
+     *             <td>string</td>
+     *             <td>hostname</td>
+     *             <td>A server hostname</td>
+     *         </tr>
+     *         <tr>
+     *             <td>string</td>
+     *             <td>ipv4</td>
+     *             <td>An IP4 address</td>
+     *         </tr>
+     *         <tr>
+     *             <td>string</td>
+     *             <td>ipv6</td>
+     *             <td>An IP6 address</td>
+     *         </tr>
+     *     </tbody>
+     * </table>
+     * <p>Custom formats may be specified too.</p>
+     * @param format the format of the type specified by {@link #withType(String)}
+     * @return this builder
+     */
     public SchemaObjectBuilder withFormat(String format) {
         this.format = format;
         return this;
     }
 
+    /**
+     * @param defaultValue The default value to use when none is specified
+     * @return this builder
+     */
     public SchemaObjectBuilder withDefaultValue(Object defaultValue) {
         this.defaultValue = defaultValue;
         return this;
     }
 
     /**
-     * @param nullable Allows sending a <code>null</code> value for the defined schema. Default value is <code>false</code>.
+     * @param nullable A <code>true</code> value adds <code>&quot;null&quot;</code> to the allowed type specified by the
+     *                 <code>type</code> keyword, only if <code>type</code> is explicitly defined within the same Schema
+     *                 Object. Other Schema Object constraints retain their defined behavior, and therefore may disallow
+     *                 the use of <code>null</code> as a value. A <code>false</code> value leaves the specified or default
+     *                 <code>type</code> unmodified. The default value is <code>false</code>.
      * @return The current builder
      */
     public SchemaObjectBuilder withNullable(Boolean nullable) {
@@ -607,4 +939,5 @@ public class SchemaObjectBuilder {
             ", deprecated=" + deprecated +
             '}';
     }
+
 }

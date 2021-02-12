@@ -16,11 +16,35 @@ import static java.util.stream.Collectors.toSet;
  */
 public class CORSConfig {
 
+    /**
+     * @deprecated use {@link #allowCredentials()} instead
+     */
+    @Deprecated
     public final boolean allowCredentials;
+    /**
+      @deprecated use {@link #allowedOrigins()} instead
+     */
+    @Deprecated
     public final Collection<String> allowedOrigins;
+    /**
+      @deprecated use {@link #allowedOriginRegex()} instead
+     */
+    @Deprecated
     public final List<Pattern> allowedOriginRegex;
+    /**
+      @deprecated use {@link #exposedHeaders()} instead
+     */
+    @Deprecated
     public final Collection<String> exposedHeaders;
+    /**
+      @deprecated use {@link #maxAge()} instead
+     */
+    @Deprecated
     public final long maxAge;
+    /**
+      @deprecated use {@link #allowedHeaders()} instead
+     */
+    @Deprecated
     public final Collection<String> allowedHeaders;
     private final String exposedHeadersCSV;
     private final String allowedHeadersCSV;
@@ -38,7 +62,7 @@ public class CORSConfig {
     }
 
     /**
-     * Adds CORS headers to the response, if neeeded.
+     * Adds CORS headers to the response, if needed.
      *
      * @param request        The request
      * @param response       The response to add headers to
@@ -115,4 +139,45 @@ public class CORSConfig {
         return false;
     }
 
+    /**
+     * @return the value described by {@link CORSConfigBuilder#withAllowCredentials}
+     */
+    public boolean allowCredentials() {
+        return allowCredentials;
+    }
+
+    /**
+      @return the value described by {@link CORSConfigBuilder#withAllowedOrigins}
+     */
+    public Collection<String> allowedOrigins() {
+        return allowedOrigins;
+    }
+
+    /**
+      @return the value described by {@link CORSConfigBuilder#withAllowedOriginRegex}
+     */
+    public List<Pattern> allowedOriginRegex() {
+        return allowedOriginRegex;
+    }
+
+    /**
+      @return the value described by {@link CORSConfigBuilder#withExposedHeaders}
+     */
+    public Collection<String> exposedHeaders() {
+        return exposedHeaders;
+    }
+
+    /**
+      @return the value described by {@link CORSConfigBuilder#withMaxAge}
+     */
+    public long maxAge() {
+        return maxAge;
+    }
+
+    /**
+      @return the value described by {@link CORSConfigBuilder#withAllowedHeaders}
+     */
+    public Collection<String> allowedHeaders() {
+        return allowedHeaders;
+    }
 }
