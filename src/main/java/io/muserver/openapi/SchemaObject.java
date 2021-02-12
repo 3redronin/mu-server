@@ -348,6 +348,9 @@ public class SchemaObject implements JsonWriter {
             '}';
     }
 
+    /**
+     * @return A new builder with the values set based on this instance
+     */
     public SchemaObjectBuilder toBuilder() {
         return new SchemaObjectBuilder()
             .withTitle(title)
