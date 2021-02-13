@@ -59,7 +59,7 @@ public class AsyncTest {
         }
     }
 
-    @Test
+    @Test(timeout = 30000)
     public void canWriteAsyncAndDoneCallbackWillDelayWhenNotWritable() throws Exception {
 
         AtomicInteger sendDoneCallbackCount = new AtomicInteger(0);

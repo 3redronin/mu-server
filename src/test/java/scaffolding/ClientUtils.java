@@ -107,7 +107,9 @@ public class ClientUtils {
     public static synchronized HttpClient jettyClient() {
         if (jettyClient == null) {
             try {
-                jettyClient = new HttpClient(new SslContextFactory.Client(true));
+                SslContextFactory.Client sslContextFactory = new SslContextFactory.Client(true);
+                sslContextFactory.setEndpointIdentificationAlgorithm("HTTPS");
+                jettyClient = new HttpClient(sslContextFactory);
                 jettyClient.start();
             } catch (Exception e) {
                 throw new RuntimeException("Couldn't start jetty client", e);

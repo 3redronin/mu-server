@@ -21,6 +21,7 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -158,8 +159,10 @@ public class RequestBodyReaderInputStreamAdapterTest {
     public void requestBodiesCanBeReadAsInputStreams() throws IOException {
         server = ServerUtils.httpsServerForTest()
             .addHandler((request, response) -> {
-                try (InputStream is = request.inputStream().orElseThrow(() -> new MuException("No input stream"))) {
-                    Mutils.copy(is, response.outputStream(), 8192);
+                Optional<InputStream> inputStream = request.inputStream();
+                try (OutputStream os = response.outputStream();
+                    InputStream is = inputStream.orElseThrow(() -> new MuException("No input stream"))) {
+                    Mutils.copy(is, os, 8192);
                 }
                 return true;
             })

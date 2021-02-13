@@ -7,8 +7,6 @@ import javax.ws.rs.NotFoundException;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 
-import static io.muserver.HttpExchange.dealWithUnhandledException;
-
 class NettyHandlerAdapter {
 
 
@@ -31,7 +29,6 @@ class NettyHandlerAdapter {
             }
             NettyRequestAdapter request = muCtx.request;
             NettyResponseAdaptor response = muCtx.response;
-            boolean error = false;
             try {
                 boolean handled = false;
                 for (MuHandler muHandler : muHandlers) {
@@ -46,17 +43,11 @@ class NettyHandlerAdapter {
                 if (!handled) {
                     throw new NotFoundException();
                 }
-
-            } catch (Throwable ex) {
-                error = dealWithUnhandledException(request, response, ex);
-            } finally {
-                if ((error || !request.isAsync()) && !response.outputState().endState()) {
-                    try {
-                        muCtx.complete(error);
-                    } catch (Throwable e) {
-                        log.warn("Error while completing request", e);
-                    }
+                if (!request.isAsync() && !response.outputState().endState()) {
+                    muCtx.complete();
                 }
+            } catch (Throwable ex) {
+                muCtx.fireException(ex);
             }
         });
     }

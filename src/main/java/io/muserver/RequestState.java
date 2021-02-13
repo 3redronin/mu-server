@@ -20,7 +20,8 @@ enum RequestState {
     /**
      * An error occurred before the full request was received, e.g. because the client disconnected or was uploading data too slowly
      */
-    ERROR(true);
+    ERRORED(true);
+
     private final boolean endState;
 
     RequestState(boolean endState) {

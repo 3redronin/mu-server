@@ -45,3 +45,17 @@ class UnexpectedMessageException extends RuntimeException {
         this.unexpectedMessage = unexpectedMessage;
     }
 }
+
+/**
+ * Exchanges can throw these to connections when something goes wrong
+ */
+class MuExceptionFiredEvent {
+    final Exchange exchange;
+    final int streamId;
+    final Throwable error;
+    MuExceptionFiredEvent(Exchange exchange, int streamId, Throwable error) {
+        this.exchange = exchange;
+        this.streamId = streamId;
+        this.error = error;
+    }
+}

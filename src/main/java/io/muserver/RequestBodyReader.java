@@ -8,6 +8,7 @@ import io.netty.handler.codec.http.DefaultLastHttpContent;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.QueryStringDecoder;
 import io.netty.handler.codec.http.multipart.*;
+import io.netty.handler.codec.http2.Http2Exception;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -93,6 +94,9 @@ abstract class RequestBodyReader {
         Throwable throwable;
         try {
             throwable = future.get(1, TimeUnit.HOURS); // TODO: configure this. Note max-upload-size + read-idle timeouts are applying too.
+            if (throwable instanceof Http2Exception.StreamException) {
+                throwable = throwable.getCause();
+            }
             if (throwable instanceof TimeoutException) {
                 throw new ClientErrorException(closingResponse(408, "Idle time out reading request body"));
             } else if (throwable instanceof WebApplicationException) {
@@ -107,7 +111,13 @@ abstract class RequestBodyReader {
             throw new InterruptedIOException("Interrupted while reading request body");
         }
         if (throwable != null) {
-            throw throwable instanceof IOException ? (IOException) throwable : new IOException("Error while reading body");
+            if(throwable instanceof IOException) {
+                throw (IOException) throwable;
+            } else if (throwable instanceof WebApplicationException) {
+                throw (WebApplicationException) throwable;
+            } else {
+                throw new IOException("Error while reading body", throwable);
+            }
         }
     }
 
@@ -177,67 +187,6 @@ abstract class RequestBodyReader {
             } catch (Exception ignored) {
             }
         }
-    }
-
-    static class BufferingReader extends RequestBodyReader {
-
-        private static class Data {
-
-            private final ByteBuf content;
-            private final boolean last;
-            private final DoneCallback callback;
-
-            Data(ByteBuf content, boolean last, DoneCallback callback) {
-                this.content = content;
-                this.last = last;
-                this.callback = callback;
-            }
-        }
-
-        private final Queue<Data> datas = new LinkedList<>();
-        BufferingReader(long maxSize) {
-            super(maxSize);
-        }
-
-        @Override
-        protected void onRequestBodyRead0(ByteBuf content, boolean last, DoneCallback callback) {
-            if (currentError() == null) {
-                datas.add(new Data(content, last, callback));
-            } else {
-                try {
-                    callback.onComplete(currentError());
-                } catch (Exception ignored) {
-                }
-            }
-        }
-
-        private static final Logger log = LoggerFactory.getLogger(BufferingReader.class);
-        public void copyTo(RequestBodyReader reader) {
-            log.info("Copying " + datas.size() + " buffers to " + reader);
-            Data d;
-            while ((d = datas.poll()) != null) {
-                reader.onRequestBodyRead(d.content, d.last, d.callback);
-            }
-            Throwable throwable = currentError();
-            if (throwable != null) {
-                log.info("Reported error to " + reader, throwable);
-                reader.onCancelled(throwable);
-            }
-        }
-
-
-        @Override
-        void onCancelled(Throwable cause) {
-            super.onCancelled(cause);
-            Data d;
-            while ((d = datas.poll()) != null) {
-                try {
-                    d.callback.onComplete(cause);
-                } catch (Exception ignored) {
-                }
-            }
-        }
-
     }
 
     static class UrlEncodedBodyReader extends RequestBodyReader implements FormRequestBodyReader {
@@ -332,6 +281,7 @@ abstract class RequestBodyReader {
 
         @Override
         public void cleanup() {
+            super.cleanup();
             multipartRequestDecoder.destroy();
         }
 

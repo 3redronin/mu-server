@@ -249,7 +249,7 @@ class MuWebSocketSessionImpl implements MuWebSocketSession, Exchange {
             muWebSocket.onConnect(this);
         } catch (Exception e) {
             log.warn("Error thrown by websocket onComplete handler", e);
-            onException(ctx, e);
+            ctx.fireUserEventTriggered(new MuExceptionFiredEvent(this, -1, e));
         }
     }
 }

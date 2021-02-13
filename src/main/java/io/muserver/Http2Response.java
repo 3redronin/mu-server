@@ -6,8 +6,6 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http2.Http2ConnectionEncoder;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 class Http2Response extends NettyResponseAdaptor {
 
@@ -32,30 +30,21 @@ class Http2Response extends NettyResponseAdaptor {
     }
 
     static ChannelFuture writeToChannel(ChannelHandlerContext ctx, Http2ConnectionEncoder encoder, int streamId, ByteBuf content, boolean isLast) {
+        assert ctx.executor().inEventLoop() : "Not in event loop";
         ChannelPromise channelPromise = ctx.newPromise();
-        if (ctx.executor().inEventLoop()) {
-            writeToChannelForReal(ctx, encoder, streamId, content, isLast, channelPromise);
-        } else {
-            ctx.executor().execute(() -> writeToChannelForReal(ctx, encoder, streamId, content, isLast, channelPromise));
-        }
+        encoder.writeData(ctx, streamId, content, 0, isLast, channelPromise);
+        ctx.channel().flush();
         return channelPromise;
     }
 
-    private static void writeToChannelForReal(ChannelHandlerContext ctx, Http2ConnectionEncoder encoder, int streamId, ByteBuf content, boolean isLast, ChannelPromise channelPromise) {
-
-        encoder.writeData(ctx, streamId, content, 0, isLast, channelPromise);
-        ctx.channel().flush();
-    }
-
     @Override
-    protected boolean onBadRequestSent() {
-        return false; // the stream is bad, but the connection is fine. Doesn't matter.
-    }
-
-    @Override
-    protected void startStreaming() {
-        super.startStreaming();
-        writeHeaders(false);
+    protected ChannelFuture startStreaming() {
+        if (httpExchange.inLoop()) {
+            super.startStreaming();
+            return writeHeaders(false);
+        } else {
+            return httpExchange.block(this::startStreaming);
+        }
     }
 
     @Override
@@ -65,7 +54,8 @@ class Http2Response extends NettyResponseAdaptor {
             bytesStreamed + " bytes being sent.");
     }
 
-    private void writeHeaders(boolean isEnd) {
+    private ChannelFuture writeHeaders(boolean isEnd) {
+        assert ctx.executor().inEventLoop() : "Not in event loop";
         headers.entries.status(httpStatus().codeAsText());
 
         if (settings.shouldCompress(headers.get(HeaderNames.CONTENT_LENGTH), headers.get(HeaderNames.CONTENT_TYPE))) {
@@ -77,35 +67,18 @@ class Http2Response extends NettyResponseAdaptor {
                 headers.set(HeaderNames.CONTENT_ENCODING, "mu-" + toUse);
             }
         }
-
-        if (ctx.executor().inEventLoop()) {
-            writeHeadersForReal(isEnd);
-        } else {
-            ctx.executor().execute(() -> writeHeadersForReal(isEnd));
-        }
-    }
-
-    private void writeHeadersForReal(boolean isEnd) {
-        encoder.writeHeaders(ctx, streamId, headers.entries, 0, isEnd, ctx.newPromise());
+        ChannelPromise promise = ctx.newPromise();
+        encoder.writeHeaders(ctx, streamId, headers.entries, 0, isEnd, promise);
         if (isEnd) {
             ctx.channel().flush();
         }
+        return promise;
     }
 
     @Override
     protected ChannelFuture writeFullResponse(ByteBuf body) {
-        writeHeaders(false);
+        writeHeaders(false); // TODO should the writeToChannel be a listener on this?
         return writeToChannel(true, body);
-    }
-
-    @Override
-    protected boolean connectionOpen() {
-        return ctx.channel().isOpen();
-    }
-
-    @Override
-    protected ChannelFuture closeConnection() {
-        return ctx.channel().close();
     }
 
     @Override
@@ -114,17 +87,17 @@ class Http2Response extends NettyResponseAdaptor {
     }
 
     @Override
-    protected void sendEmptyResponse(boolean addContentLengthHeader) {
+    protected ChannelFuture sendEmptyResponse(boolean addContentLengthHeader) {
         if (addContentLengthHeader) {
             headers.set(HeaderNames.CONTENT_LENGTH, HeaderValues.ZERO);
         }
-        writeHeaders(true);
+        return writeHeaders(true);
     }
 
 
     @Override
-    protected void writeRedirectResponse() {
-        writeHeaders(true);
+    protected ChannelFuture writeRedirectResponse() {
+        return writeHeaders(true);
     }
 
     @Override

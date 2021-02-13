@@ -14,7 +14,7 @@ import static io.netty.util.internal.ObjectUtil.checkNotNull;
 class Http2Headers implements Headers {
 
     final io.netty.handler.codec.http2.Http2Headers entries;
-    private boolean hasRequestBody;
+    private final boolean hasRequestBody;
 
     Http2Headers() {
         this(new DefaultHttp2Headers(), false);

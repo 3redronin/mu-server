@@ -11,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.net.ssl.SSLSession;
+import javax.ws.rs.WebApplicationException;
 import java.net.InetSocketAddress;
 import java.time.Instant;
 import java.util.Collections;
@@ -78,7 +79,7 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
     private void onChannelRead(ChannelHandlerContext ctx, Object msg) {
         if (msg instanceof HttpRequest) {
             try {
-                HttpExchange hex = HttpExchange.create(server, proto, ctx, this, (HttpRequest) msg,
+                this.currentExchange = HttpExchange.create(server, proto, ctx, this, (HttpRequest) msg,
                     nettyHandlerAdapter, connectionStats,
                     (exchange, newState) -> {
                         if (newState == RequestState.RECEIVING_BODY) {
@@ -95,7 +96,7 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
                                     }
                                     this.currentExchange = null;
                                     exchange.request.cleanup();
-                                    if (exchange.request.requestState() == RequestState.ERROR) {
+                                    if (exchange.request.requestState() == RequestState.ERRORED) {
                                         ctx.channel().close();
                                     } else {
                                         ctx.channel().read(); // should it actually read after request complete?
@@ -104,7 +105,6 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
                             });
                         }
                     });
-                this.currentExchange = hex;
 
             } catch (InvalidHttpRequestException ihr) {
                 if (ihr.code == 429 || ihr.code == 503) {
@@ -118,15 +118,62 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
                 ctx.channel().read();
             }
         } else if (currentExchange != null) {
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             currentExchange.onMessage(ctx, msg, error -> {
                 if (error == null) {
                     if (!(msg instanceof LastHttpContent)) {
                         ctx.channel().read();
                     }
                 } else {
-                    ctx.channel().close();
+                    exceptionCaught(ctx, error);
                 }
             });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         } else {
             log.debug("Got a chunk of message for an unknown request. This can happen when a request is rejected based on headers, and then the rejected body arrives.");
             ctx.channel().read();
@@ -173,15 +220,24 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
             } else {
                 ctx.channel().close();
             }
+        } else if (evt instanceof MuExceptionFiredEvent) {
+            MuExceptionFiredEvent mefe = (MuExceptionFiredEvent) evt;
+            exceptionCaught(ctx, mefe.error);
         }
         super.userEventTriggered(ctx, evt);
     }
 
     @Override
-    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
         Exchange exchange = this.currentExchange;
         if (exchange != null) {
             exchange.onException(ctx, cause);
+            if (!(cause instanceof WebApplicationException)) {
+                log.info("Weird exception; closing");
+                ctx.channel().close();
+            } else {
+                log.info("Exception, but was a WebAppEx, so prolly okay");
+            }
         } else {
             ctx.channel().close();
         }

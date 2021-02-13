@@ -5,15 +5,12 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 
 import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 
 class Http1Response extends NettyResponseAdaptor {
-    private static final Logger log = LoggerFactory.getLogger(Http1Response.class);
 
     final ChannelHandlerContext ctx;
     private final Http1Headers headers;
@@ -25,19 +22,18 @@ class Http1Response extends NettyResponseAdaptor {
     }
 
     @Override
-    protected void startStreaming() {
+    protected ChannelFuture startStreaming() {
         super.startStreaming();
         HttpResponse response = isHead ? new EmptyHttpResponse(httpStatus()) : new DefaultHttpResponse(HTTP_1_1, httpStatus(), false);
         if (declaredLength == -1) {
             headers.set(HeaderNames.TRANSFER_ENCODING, HeaderValues.CHUNKED);
         }
         writeHeaders(response);
-        lastAction = ctx.write(response);
+        return ctx.write(response);
     }
 
     @Override
     protected void onContentLengthMismatch() {
-        closeConnection();
         throw new IllegalStateException("The declared content length for " + request + " was " + declaredLength + " bytes. " +
             "The current write is being aborted and the connection is being closed because it would have resulted in " +
             bytesStreamed + " bytes being sent.");
@@ -58,16 +54,6 @@ class Http1Response extends NettyResponseAdaptor {
     }
 
     @Override
-    protected boolean onBadRequestSent() {
-        if (connectionOpen()) {
-            log.warn("Closing client connection for " + request + " because " + declaredLength + " bytes was the " +
-                "expected length, however " + bytesStreamed + " bytes were sent.");
-        }
-        return true;
-    }
-
-
-    @Override
     protected ChannelFuture writeFullResponse(ByteBuf body) {
         if (!ctx.executor().inEventLoop()) {
             ChannelPromise promise = ctx.newPromise();
@@ -83,26 +69,23 @@ class Http1Response extends NettyResponseAdaptor {
             return promise;
         }
 
-        if (ctx.channel().isActive()) {
-            FullHttpResponse resp = isHead ?
-                new EmptyHttpResponse(httpStatus())
-                : new DefaultFullHttpResponse(HTTP_1_1, httpStatus(), body, false);
-            writeHeaders(resp);
-            lastAction = ctx.writeAndFlush(resp);
-        }
-        return lastAction;
+        FullHttpResponse resp = isHead ?
+            new EmptyHttpResponse(httpStatus())
+            : new DefaultFullHttpResponse(HTTP_1_1, httpStatus(), body, false);
+        writeHeaders(resp);
+        return ctx.writeAndFlush(resp);
     }
 
 
     @Override
-    protected void writeRedirectResponse() {
+    protected ChannelFuture writeRedirectResponse() {
         HttpResponse resp = new EmptyHttpResponse(httpStatus());
         writeHeaders(resp);
-        lastAction = ctx.writeAndFlush(resp);
+        return ctx.writeAndFlush(resp);
     }
 
     @Override
-    protected void sendEmptyResponse(boolean addContentLengthHeader) {
+    protected ChannelFuture sendEmptyResponse(boolean addContentLengthHeader) {
         HttpResponse msg = isHead ?
             new EmptyHttpResponse(httpStatus()) :
             new DefaultFullHttpResponse(HTTP_1_1, httpStatus(), false);
@@ -110,23 +93,12 @@ class Http1Response extends NettyResponseAdaptor {
         if (addContentLengthHeader) {
             msg.headers().set(HeaderNames.CONTENT_LENGTH, 0);
         }
-        lastAction = ctx.writeAndFlush(msg);
+        return ctx.writeAndFlush(msg);
     }
 
     @Override
     protected ChannelFuture writeLastContentMarker() {
         return ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
-    }
-
-
-    @Override
-    protected boolean connectionOpen() {
-        return ctx.channel().isOpen();
-    }
-
-    @Override
-    protected ChannelFuture closeConnection() {
-        return ctx.channel().close();
     }
 
     @Override
