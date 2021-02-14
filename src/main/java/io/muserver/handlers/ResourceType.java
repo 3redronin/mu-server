@@ -338,6 +338,10 @@ public class ResourceType {
      */
     public static final ResourceType VIDEO_WEBM = new ResourceType(ContentTypes.VIDEO_WEBM, shortCache(), false, singletonList("webm"));
     /**
+     * <code>image/avif</code>
+     */
+    public static final ResourceType IMAGE_AVIF = new ResourceType(ContentTypes.IMAGE_AVIF, shortCache(), false, singletonList("avif"));
+    /**
      * <code>image/webp</code>
      */
     public static final ResourceType IMAGE_WEBP = new ResourceType(ContentTypes.IMAGE_WEBP, shortCache(), false, singletonList("webp"));

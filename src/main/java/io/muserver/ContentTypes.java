@@ -294,6 +294,11 @@ public class ContentTypes {
     public static final CharSequence IMAGE_WEBP = AsciiString.cached("image/webp");
 
     /**
+     * AVIF image:  {@code "image/avif"}
+     */
+    public static final CharSequence IMAGE_AVIF = AsciiString.cached("image/avif");
+
+    /**
      * Web Open Font Format (WOFF):  {@code "font/woff"}
      */
     public static final CharSequence FONT_WOFF = AsciiString.cached("font/woff");
