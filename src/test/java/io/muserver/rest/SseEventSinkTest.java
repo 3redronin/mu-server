@@ -4,6 +4,8 @@ package io.muserver.rest;
 import io.muserver.MuServer;
 import org.junit.After;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import scaffolding.*;
 
 import javax.ws.rs.*;
@@ -164,7 +166,7 @@ public class SseEventSinkTest {
         assertThat(error.get(), instanceOf(InternalServerErrorException.class));
     }
 
-
+    private static final Logger log = LoggerFactory.getLogger(SseEventSinkTest.class);
     @Test
     public void theCallbacksCanBeUsedToDetectClientDisconnections() {
         CountDownLatch oneSentLatch = new CountDownLatch(1);
@@ -174,7 +176,8 @@ public class SseEventSinkTest {
 
             private void sendStuff(SseEventSink sink, Sse sse) {
                 sink.send(sse.newEvent("Hello"))
-                    .whenComplete((o, throwable) -> {
+                    .whenCompleteAsync((o, throwable) -> {
+                        log.info("whenCompleteAsync " + o + " " + throwable);
                         if (throwable == null) {
                             sendStuff(sink, sse);
                             oneSentLatch.countDown();
