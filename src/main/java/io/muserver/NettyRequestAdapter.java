@@ -573,7 +573,7 @@ class NettyRequestAdapter implements MuRequest {
 
         @Override
         public void addResponseCompleteHandler(ResponseCompleteListener responseCompleteListener) {
-            this.httpExchange.response.addChangeListener((exchange, newState) -> {
+            this.httpExchange.addChangeListener((exchange, newState) -> {
                 if (newState.endState()) {
                     responseCompleteListener.onComplete(exchange);
                 }

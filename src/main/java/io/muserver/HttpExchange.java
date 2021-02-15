@@ -137,7 +137,7 @@ class HttpExchange implements ResponseInfo, Exchange {
         if (!response.outputState().endState()) {
             response.complete();
         } else {
-            log.info("Complete called twice for " + request);
+            log.debug("Complete called twice for " + request);
         }
     }
 

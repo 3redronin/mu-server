@@ -50,9 +50,6 @@ public class WebSocketHandler implements MuHandler {
             response.headers().set(HeaderNames.SEC_WEBSOCKET_VERSION, "13");
             return true;
         }
-        if (upgraded) {
-            ((NettyResponseAdaptor) response).setWebsocket();
-        }
         return upgraded;
     }
 
