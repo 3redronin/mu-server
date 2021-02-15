@@ -5,10 +5,7 @@ import okhttp3.*;
 import okio.BufferedSink;
 import org.junit.After;
 import org.junit.Assert;
-import org.junit.Ignore;
 import org.junit.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 import scaffolding.StringUtils;
@@ -65,9 +62,7 @@ public class AsyncTest {
         }
     }
 
-    private static final Logger log = LoggerFactory.getLogger(AsyncTest.class);
     @Test(timeout = 35000)
-    @Ignore("This is failing due to the wait writability is being checked (the sleep) where it is missing events. Need to make a connection raise events for this to work reliably")
     public void canWriteAsyncAndDoneCallbackWillDelayWhenNotWritable() throws Exception {
 
         AtomicInteger sendDoneCallbackCount = new AtomicInteger(0);
@@ -91,11 +86,9 @@ public class AsyncTest {
                             sendDoneCallbackCount.incrementAndGet();
                         } else {
                             failureCount.incrementAndGet();
-                            log.warn("Error on write callback", error);
                         }
                     });
                 }
-                log.info("Wrote them all");
 
                 Channel channel = ((NettyRequestAdapter)request).ctx.channel();
                 executorService.submit(()->{
