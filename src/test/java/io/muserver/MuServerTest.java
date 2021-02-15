@@ -86,7 +86,7 @@ public class MuServerTest {
         try (Response resp = call(request(server.uri()))) {
             assertThat(resp.body().string(), is("X"));
         }
-        assertThat(server.stats().activeRequests(), empty());
+        assertEventually(() -> server.stats().activeRequests(), empty());
         assertThat(server.stats().completedRequests(), equalTo(1L));
     }
 
