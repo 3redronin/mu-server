@@ -41,30 +41,24 @@ class BackPressureHandler extends ChannelDuplexHandler {
 
     @Override
     public void handlerRemoved(ChannelHandlerContext ctx) throws Exception {
-        cancelTasks();
         super.handlerRemoved(ctx);
+        deliverTasks(ctx);
     }
 
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-        cancelTasks();
         super.channelInactive(ctx);
-    }
-
-    private void cancelTasks() {
-        if (!toSend.isEmpty()) {
-            Exception cause = new ClientDisconnectedException();
-            Delivery task;
-            while ((task = toSend.poll()) != null) {
-                task.cancel(cause);
-            }
-        }
+        deliverTasks(ctx); // even though we know these will fail, by delivering them it gives relevant handles to release buffers
     }
 
     @Override
     public void channelWritabilityChanged(ChannelHandlerContext ctx) throws Exception {
         super.channelWritabilityChanged(ctx);
+        deliverTasks(ctx);
+    }
+
+    private void deliverTasks(ChannelHandlerContext ctx) {
         Delivery task;
         while (ctx.channel().isWritable() && (task = toSend.poll()) != null) {
             task.send(ctx);
