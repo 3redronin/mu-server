@@ -156,7 +156,8 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
             ExchangeUpgradeEvent eue = (ExchangeUpgradeEvent) evt;
             if (eue.success()) {
                 if (this.currentExchange instanceof HttpExchange) {
-                    ((HttpExchange) this.currentExchange).addChangeListener((upgradeExchange, newState) -> {
+                    HttpExchange httpExchange = (HttpExchange) this.currentExchange;
+                    httpExchange.addChangeListener((upgradeExchange, newState) -> {
                         if (newState == HttpExchangeState.UPGRADED) {
                             this.currentExchange = eue.newExchange;
                             this.currentExchange.onUpgradeComplete(ctx);
@@ -165,6 +166,8 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
                             eue.newExchange.onConnectionEnded(ctx);
                         }
                     });
+                    httpExchange.response.setWebsocket();
+                    ctx.channel().read();
                 } else {
                     this.currentExchange = eue.newExchange;
                     ctx.channel().read();

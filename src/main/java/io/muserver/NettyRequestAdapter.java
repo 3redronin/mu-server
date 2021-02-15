@@ -427,7 +427,7 @@ class NettyRequestAdapter implements MuRequest {
                 if (future.isSuccess()) {
                     ctx.pipeline().fireUserEventTriggered(new ExchangeUpgradeEvent(session));
                 } else {
-                    ctx.pipeline().fireUserEventTriggered(new ExchangeUpgradeEvent(null));
+                    ctx.pipeline().fireUserEventTriggered(new MuExceptionFiredEvent(httpExchange, 0, future.cause()));
                 }
             });
 

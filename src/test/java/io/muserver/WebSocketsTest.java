@@ -108,7 +108,7 @@ public class WebSocketsTest {
         clientSocket.send(largeText);
 
         assertNotTimedOut("Erroring", listener.failureLatch);
-        assertEventually(() -> serverSocket.state(), equalTo(WebsocketSessionState.ERRORED));
+        assertEventually(() -> serverSocket.state(), equalTo(WebsocketSessionState.DISCONNECTED));
 
         clientSocket.close(1000, "Finished");
     }

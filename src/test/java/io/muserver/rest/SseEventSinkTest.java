@@ -4,8 +4,6 @@ package io.muserver.rest;
 import io.muserver.MuServer;
 import org.junit.After;
 import org.junit.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import scaffolding.*;
 
 import javax.ws.rs.*;
@@ -166,10 +164,10 @@ public class SseEventSinkTest {
         assertThat(error.get(), instanceOf(InternalServerErrorException.class));
     }
 
-    private static final Logger log = LoggerFactory.getLogger(SseEventSinkTest.class);
     @Test
     public void theCallbacksCanBeUsedToDetectClientDisconnections() {
         CountDownLatch oneSentLatch = new CountDownLatch(1);
+        CountDownLatch responseClosedLatch = new CountDownLatch(1);
         CountDownLatch failureLatch = new CountDownLatch(1);
         @Path("/streamer")
         class Streamer {
@@ -177,10 +175,10 @@ public class SseEventSinkTest {
             private void sendStuff(SseEventSink sink, Sse sse) {
                 sink.send(sse.newEvent("Hello"))
                     .whenCompleteAsync((o, throwable) -> {
-                        log.info("whenCompleteAsync " + o + " " + throwable);
                         if (throwable == null) {
-                            sendStuff(sink, sse);
                             oneSentLatch.countDown();
+                            MuAssert.assertNotTimedOut("Waiting for response to close", responseClosedLatch);
+                            sendStuff(sink, sse);
                         } else {
                             failureLatch.countDown();
                         }
@@ -196,7 +194,11 @@ public class SseEventSinkTest {
             }
         }
 
-        server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Streamer())).start();
+        server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Streamer()))
+            .addResponseCompleteListener(info -> {
+                responseClosedLatch.countDown();
+            })
+            .start();
         try (SseClient.ServerSentEvent ignored = sseClient.newServerSentEvent(request(server.uri().resolve("/streamer/eventStream")).build(), listener)) {
             assertNotTimedOut("Waiting for one message", oneSentLatch);
         }
