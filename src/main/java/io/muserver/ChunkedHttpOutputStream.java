@@ -24,9 +24,7 @@ class ChunkedHttpOutputStream extends OutputStream {
         if (isClosed) {
             throw new IOException("Cannot write to closed output stream");
         }
-        response.httpExchange.block(() -> {
-            response.writeAndFlush(Unpooled.wrappedBuffer(b, off, len));
-        });
+        response.httpExchange.block(() -> response.writeAndFlush(Unpooled.wrappedBuffer(b, off, len)));
     }
 
     public void close() {

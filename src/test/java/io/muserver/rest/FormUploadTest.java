@@ -2,8 +2,10 @@ package io.muserver.rest;
 
 import io.muserver.MuServer;
 import io.muserver.UploadedFile;
+import io.netty.util.ResourceLeakDetector;
 import okhttp3.*;
 import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 import scaffolding.ServerUtils;
 
@@ -22,6 +24,17 @@ import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 
 public class FormUploadTest {
+
+    private ResourceLeakDetector.Level originalLevel;
+    @Before
+    public void turnDownLeakDetectionBecauseItIsTooSlow() {
+        originalLevel = ResourceLeakDetector.getLevel();
+        ResourceLeakDetector.setLevel(ResourceLeakDetector.Level.ADVANCED);
+    }
+    @After
+    public void restoreLeakDetection() {
+        ResourceLeakDetector.setLevel(originalLevel);
+    }
 
     private MuServer server;
 

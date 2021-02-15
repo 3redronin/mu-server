@@ -59,6 +59,7 @@ class HttpExchange implements ResponseInfo, Exchange {
     }
 
     void block(Runnable runnable) {
+        // TODO: only use the callable version as this perhaps doesn't block until the runnable is finished? (e.g. when doing a write)
         assert !inLoop() : "Should not be blocking on the event loop";
         io.netty.util.concurrent.Future<?> task = ctx.executor().submit(runnable);
         try {
