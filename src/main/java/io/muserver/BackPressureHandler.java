@@ -21,10 +21,6 @@ class BackPressureHandler extends ChannelDuplexHandler {
             this.promise = promise;
         }
 
-        public void cancel(Throwable cause) {
-            promise.setFailure(cause);
-        }
-
         public void send(ChannelHandlerContext ctx) {
             ctx.write(msg, promise);
         }
@@ -44,7 +40,6 @@ class BackPressureHandler extends ChannelDuplexHandler {
         super.handlerRemoved(ctx);
         deliverTasks(ctx, true);
     }
-
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {

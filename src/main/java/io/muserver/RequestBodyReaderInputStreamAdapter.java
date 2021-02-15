@@ -93,13 +93,13 @@ class RequestBodyReaderInputStreamAdapter extends RequestBodyReader {
             synchronized (lock) {
                 userClosed = true;
                 if (currentCallback != null) {
-                    IOException error = new IOException("The request body input stream was not fully read before closing");
+                    // just discard it
                     try {
-                        currentCallback.onComplete(error);
+                        currentCallback.onComplete(null);
                     } catch (Exception e2) {
                         throw new IOException("Exception raising error", e2);
                     }
-                    throw error;
+                    currentBuf = null;
                 }
             }
         }
@@ -146,14 +146,19 @@ class RequestBodyReaderInputStreamAdapter extends RequestBodyReader {
     @Override
     public void onRequestBodyRead0(ByteBuf content, boolean last, DoneCallback callback) {
         synchronized (lock) {
+
+            if (userClosed) {
+                try {
+                    callback.onComplete(null);
+                } catch (Exception ignored) {
+                }
+                return;
+            }
             if (currentBuf != null) {
                 throw new IllegalStateException("Got content before the previous was completed");
             }
             if (currentCallback != null) {
                 throw new IllegalStateException("Got content before the previous callback was invoked");
-            }
-            if (userClosed) {
-                throw new IllegalStateException("Request body data received after the user closed the input stream");
             }
             this.currentBuf = content;
             this.currentCallback = callback;

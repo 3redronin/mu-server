@@ -189,12 +189,12 @@ public class RequestBodyReaderInputStreamAdapterTest {
     }
 
     @Test
-    public void closingTheStreamEarlyCancelsRequest() throws Exception {
+    public void closingTheStreamEarlyIsFine() throws Exception {
         byte[] chunkPayload = StringUtils.randomBytes(2);
         server = ServerUtils.httpsServerForTest()
             .addHandler((request, response) -> {
                 try (InputStream is = request.inputStream().orElseThrow(() -> new MuException("No input stream"))) {
-                    is.read();
+                    response.sendChunk("The first letter is " + ((char) is.read()));
                 }
                 return true;
             })
@@ -216,10 +216,8 @@ public class RequestBodyReaderInputStreamAdapterTest {
                 bufferedSink.flush();
             }
         }))) {
-            resp.body().bytes();
-            assertThat(resp.code(), equalTo(500)); // server error or closed connection is fine
-        } catch (Exception ex) {
-            MuAssert.assertIOException(ex);
+            assertThat(resp.body().string(), equalTo("The first letter is " + ((char)chunkPayload[0])));
+            assertThat(resp.code(), equalTo(200)); // server error or closed connection is fine
         }
     }
 
