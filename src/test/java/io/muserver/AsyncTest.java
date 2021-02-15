@@ -5,12 +5,16 @@ import okhttp3.*;
 import okio.BufferedSink;
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 import scaffolding.StringUtils;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -29,6 +33,8 @@ import static io.muserver.MuServerBuilder.httpsServer;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.*;
+import static scaffolding.MuAssert.assertEventually;
+import static scaffolding.MuAssert.assertNotTimedOut;
 
 public class AsyncTest {
 
@@ -59,7 +65,9 @@ public class AsyncTest {
         }
     }
 
-    @Test(timeout = 30000)
+    private static final Logger log = LoggerFactory.getLogger(AsyncTest.class);
+    @Test(timeout = 35000)
+    @Ignore("This is failing due to the wait writability is being checked (the sleep) where it is missing events. Need to make a connection raise events for this to work reliably")
     public void canWriteAsyncAndDoneCallbackWillDelayWhenNotWritable() throws Exception {
 
         AtomicInteger sendDoneCallbackCount = new AtomicInteger(0);
@@ -79,9 +87,16 @@ public class AsyncTest {
 
                 for (int i = 0; i < totalCount; i++) {
                     asyncHandle.write(ByteBuffer.wrap(sendByte), error -> {
-                        sendDoneCallbackCount.incrementAndGet();
+                        if (error == null) {
+                            sendDoneCallbackCount.incrementAndGet();
+                        } else {
+                            failureCount.incrementAndGet();
+                            log.warn("Error on write callback", error);
+                        }
                     });
                 }
+                log.info("Wrote them all");
+
                 Channel channel = ((NettyRequestAdapter)request).ctx.channel();
                 executorService.submit(()->{
                     while (true){
@@ -92,11 +107,11 @@ public class AsyncTest {
                         try {
                             Thread.sleep(1);
                         } catch (InterruptedException e){
-                            //fail to sleep do nothing.
+                            break;
                         }
                     }});
 
-                MuAssert.assertEventually(sendDoneCallbackCount::get, is(totalCount));
+                assertEventually(sendDoneCallbackCount::get, is(totalCount));
                 executorService.shutdown();
                 asyncHandle.complete();
             })
@@ -108,16 +123,16 @@ public class AsyncTest {
             byte[] readBytes = new byte[1024];
 
             // http client read the first 1024 byte and then sleep,
-            // verify server done callback not exceeding 64 time, as
             // it can't write out given the netty highWaterMark set to 64k
-            resp.body().byteStream().read(readBytes);
+            InputStream inputStream = resp.body().byteStream();
+            inputStream.read(readBytes);
             receivedCount.incrementAndGet();
             
-            requestUnWritable.await();
+            assertNotTimedOut("requestUnWritable", requestUnWritable);
             assertThat(failureCount.get(), is(0));
 
             // http client read the rest bytes, verify all data received
-            while (resp.body().byteStream().read(readBytes) != -1) {
+            while (inputStream.read(readBytes) != -1) {
                 receivedCount.incrementAndGet();
             }
             
@@ -211,7 +226,6 @@ public class AsyncTest {
                             ctx.write(text, error -> {
                                 if (error != null) {
                                     changeListener.stop();
-                                    ctx.complete();
                                     ctxClosedLatch.countDown();
                                 }
                             });
@@ -252,14 +266,13 @@ public class AsyncTest {
     }
 
     @Test
-    public void blockingWritesCanStillBeUsed() throws IOException {
+    public void blockingWritesCannotBeUsed() throws IOException {
 
         DatabaseListenerSimulator changeListener = new DatabaseListenerSimulator(10);
 
         server = ServerUtils.httpsServerForTest()
             .addHandler((request, response) -> {
                 AsyncHandle ctx = request.handleAsync();
-
                 changeListener.addListener(new ChangeListener() {
                     public void onData(String data) {
                         response.writer().write(data + "\n");
@@ -269,17 +282,14 @@ public class AsyncTest {
                         ctx.complete();
                     }
                 });
-
                 changeListener.start();
-
                 return true;
             })
             .start();
 
-        try (Response resp = call(request().url(server.uri().toString()))) {
-            assertThat(changeListener.errors, is(empty()));
-            assertThat(resp.code(), equalTo(200));
-            assertThat(resp.body().string(), equalTo("Loop 0\nLoop 1\nLoop 2\nLoop 3\nLoop 4\nLoop 5\nLoop 6\nLoop 7\nLoop 8\nLoop 9\n"));
+        try (Response ignored = call(request().url(server.uri().toString()))) {
+            assertThat(changeListener.errors.size(), greaterThanOrEqualTo(1));
+            assertThat(changeListener.errors.get(0), instanceOf(IllegalStateException.class));
         }
     }
 

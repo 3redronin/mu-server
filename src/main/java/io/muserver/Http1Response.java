@@ -48,7 +48,7 @@ class Http1Response extends NettyResponseAdaptor {
 
 
     @Override
-    ChannelFuture writeToChannel(boolean isLast, ByteBuf content) {
+    ChannelFuture writeAndFlushToChannel(boolean isLast, ByteBuf content) {
         HttpContent msg = isLast ? new DefaultLastHttpContent(content) : new DefaultHttpContent(content);
         return ctx.writeAndFlush(msg);
     }
@@ -76,14 +76,6 @@ class Http1Response extends NettyResponseAdaptor {
         return ctx.writeAndFlush(resp);
     }
 
-
-    @Override
-    protected ChannelFuture writeRedirectResponse() {
-        HttpResponse resp = new EmptyHttpResponse(httpStatus());
-        writeHeaders(resp);
-        return ctx.writeAndFlush(resp);
-    }
-
     @Override
     protected ChannelFuture sendEmptyResponse(boolean addContentLengthHeader) {
         HttpResponse msg = isHead ?
@@ -91,7 +83,7 @@ class Http1Response extends NettyResponseAdaptor {
             new DefaultFullHttpResponse(HTTP_1_1, httpStatus(), false);
         writeHeaders(msg);
         if (addContentLengthHeader) {
-            msg.headers().set(HeaderNames.CONTENT_LENGTH, 0);
+            msg.headers().set(HeaderNames.CONTENT_LENGTH, HeaderValues.ZERO);
         }
         return ctx.writeAndFlush(msg);
     }

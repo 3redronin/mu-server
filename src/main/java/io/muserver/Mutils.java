@@ -257,8 +257,10 @@ public class Mutils {
     public static ByteBuffer toByteBuffer(String text) {
         notNull("text", text);
         if (text.isEmpty()) {
-            return ByteBuffer.allocate(0);
+            return EMPTY_BUFFER;
         }
         return ByteBuffer.wrap(text.getBytes(UTF_8));
     }
+
+    private static final ByteBuffer EMPTY_BUFFER = ByteBuffer.allocate(0);
 }

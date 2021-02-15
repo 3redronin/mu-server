@@ -75,11 +75,12 @@ class HttpExchange implements ResponseInfo, Exchange {
             }
         }
     }
-    ChannelFuture block(Callable<ChannelFuture> callable) {
+
+    void block(Callable<ChannelFuture> callable) {
         assert !inLoop() : "Should not be blocking on the event loop";
         io.netty.util.concurrent.Future<ChannelFuture> task = ctx.executor().submit(callable);
         try {
-            return task.get().sync();
+            task.get().sync();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new UncheckedIOException(new InterruptedIOException("Interrupted while writing"));
@@ -132,13 +133,12 @@ class HttpExchange implements ResponseInfo, Exchange {
     }
 
     public void complete() {
-        block(() -> {
-            if (!response.outputState().endState()) {
-                response.complete();
-            } else {
-                log.info("Complete called twice for " + request);
-            }
-        });
+        assert inLoop() : "Not in NIO event loop";
+        if (!response.outputState().endState()) {
+            response.complete();
+        } else {
+            log.info("Complete called twice for " + request);
+        }
     }
 
     void onCancelled(ResponseState reason) {
@@ -160,7 +160,7 @@ class HttpExchange implements ResponseInfo, Exchange {
 
     @Override
     public boolean completedSuccessfully() {
-        return state != HttpExchangeState.ERRORED && response.outputState().completedSuccessfully();
+        return state.endState() && state != HttpExchangeState.ERRORED && response.outputState().completedSuccessfully();
     }
 
     @Override
@@ -192,15 +192,30 @@ class HttpExchange implements ResponseInfo, Exchange {
         boolean last = msg instanceof LastHttpContent;
 
         DoneCallback onDone = error -> {
-            if (error == null) {
-                if (last) {
-                    request.setState(RequestState.COMPLETE);
-                } else {
-                    scheduleReadTimeout();
-                }
-            }
             byteBuf.release();
-            doneCallback.onComplete(error);
+            try {
+                Runnable cleanup = () -> {
+                    boolean requestInProgress = !request.requestState().endState();
+                    if (error == null) {
+                        if (requestInProgress) {
+                            if (last) {
+                                request.setState(RequestState.COMPLETE);
+                            } else {
+                                scheduleReadTimeout();
+                            }
+                        }
+                    } else if (requestInProgress) {
+                        request.onCancelled(ResponseState.ERRORED, error);
+                    }
+                };
+                if (ctx.executor().inEventLoop()) {
+                    cleanup.run();
+                } else {
+                    ctx.executor().execute(cleanup);
+                }
+            } finally {
+                doneCallback.onComplete(error);
+            }
         };
         try {
             request.onRequestBodyRead(byteBuf, last, onDone);
@@ -217,6 +232,7 @@ class HttpExchange implements ResponseInfo, Exchange {
         long delay = connection.server().requestIdleTimeoutMillis();
         this.readTimer = ctx.executor().schedule(request::onReadTimeout, delay, TimeUnit.MILLISECONDS);
     }
+
     private void cancelReadTimeout() {
         ScheduledFuture<?> rt = this.readTimer;
         if (rt != null) {
@@ -355,23 +371,23 @@ class HttpExchange implements ResponseInfo, Exchange {
     }
 
     @Override
-    public void onException(ChannelHandlerContext ctx, Throwable cause) {
+    public boolean onException(ChannelHandlerContext ctx, Throwable cause) {
         assert inLoop() : "onException not called from nio event loop";
 
         if (state.endState()) {
             log.warn("Got exception after state is " + state);
-            return;
+            return true;
         }
 
+        boolean streamUnrecoverable = true;
         try {
-            boolean streamUnrecoverable = true;
 
             if (!response.hasStartedSendingData()) {
+                if (request.requestState() != RequestState.ERRORED) {
+                    streamUnrecoverable = false;
+                }
                 WebApplicationException wae;
                 if (cause instanceof WebApplicationException) {
-                    if (request.requestState() != RequestState.ERRORED) {
-                        streamUnrecoverable = false;
-                    }
                     wae = (WebApplicationException) cause;
                 } else {
                     String errorID = "ERR-" + UUID.randomUUID().toString();
@@ -382,7 +398,11 @@ class HttpExchange implements ResponseInfo, Exchange {
                 if (exResp == null) {
                     exResp = Response.serverError().build();
                 }
-                response.status(exResp.getStatus());
+                int status = exResp.getStatus();
+                if (status == 429 || status == 408 || status == 413) {
+                    streamUnrecoverable = true;
+                }
+                response.status(status);
                 MuRuntimeDelegate.writeResponseHeaders(request.uri(), exResp, response);
                 if (streamUnrecoverable) {
                     response.headers().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
@@ -390,17 +410,25 @@ class HttpExchange implements ResponseInfo, Exchange {
                 response.contentType(ContentTypes.TEXT_HTML_UTF8);
                 String message = wae.getMessage();
                 message = exceptionMessageMap.getOrDefault(message, message);
-                response.writeOnLoop("<h1>" + exResp.getStatus() + " " + exResp.getStatusInfo().getReasonPhrase() + "</h1><p>" +
-                    Mutils.htmlEncode(message) + "</p>"); // future is ignored as it gets cancelled below
+                response.writeOnLoop("<h1>" + status + " " + exResp.getStatusInfo().getReasonPhrase() + "</h1><p>" +
+                    Mutils.htmlEncode(message) + "</p>")
+                        .addListener(f -> {
+                            ResponseState state = f.isSuccess() ? ResponseState.FULL_SENT : ResponseState.ERRORED;
+                            response.outputState(f, state);
+                        });
             } else {
-                log.info(cause.getClass().getName() + " while handling " + request + " - note a " + response.status + " was already sent and the client may have received an incomplete response. Exception was " + cause.getMessage());
+                log.info(cause.getClass().getName() + " while handling " + request + " - note a " + response.status +
+                    " was already sent and the client may have received an incomplete response. Exception was " + cause.getMessage());
             }
         } catch (Exception e) {
             log.warn("Error while processing processing " + cause + " for " + request, e);
         } finally {
-            response.onCancelled(ResponseState.ERRORED);
-            request.onCancelled(ResponseState.ERRORED, cause);
+            if (streamUnrecoverable) {
+                response.onCancelled(ResponseState.ERRORED);
+                request.onCancelled(ResponseState.ERRORED, cause);
+            }
         }
+        return streamUnrecoverable;
     }
 
     @Override

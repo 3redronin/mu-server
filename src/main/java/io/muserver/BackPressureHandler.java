@@ -8,6 +8,7 @@ import java.util.LinkedList;
 import java.util.Queue;
 
 class BackPressureHandler extends ChannelDuplexHandler {
+    static final String NAME = "pressure";
 
     private final Queue<Runnable> todo = new LinkedList<>();
 

@@ -44,7 +44,8 @@ class NettyHandlerAdapter {
                     throw new NotFoundException();
                 }
                 if (!request.isAsync() && !response.outputState().endState()) {
-                    muCtx.complete();
+                    response.flushAndCloseOutputStream();
+                    muCtx.block(muCtx::complete);
                 }
             } catch (Throwable ex) {
                 muCtx.fireException(ex);

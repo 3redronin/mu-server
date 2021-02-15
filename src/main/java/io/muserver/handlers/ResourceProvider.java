@@ -248,9 +248,8 @@ class AsyncFileProvider implements ResourceProvider, CompletionHandler<Integer, 
                     bytesSent += bytesRead;
                     channel.read(buf, curPos, null, AsyncFileProvider.this);
                 } else {
-                    // client probably disconnected... no big deal
                     closeChannelQuietly();
-                    handle.complete();
+                    handle.complete(error);
                 }
             });
         }

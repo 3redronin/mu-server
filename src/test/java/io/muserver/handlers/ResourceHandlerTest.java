@@ -118,6 +118,7 @@ public class ResourceHandlerTest {
             try (Response resp = call(request(imageUri).header("If-Modified-Since", Mutils.toHttpDate(oneSecBeforeLastModified)))) {
                 assertThat(resp.code(), is(200));
                 assertThat(resp.header("last-modified"), is(lastModified));
+                resp.body().bytes();
             }
         }
     }

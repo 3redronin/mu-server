@@ -9,8 +9,6 @@ import org.eclipse.jetty.client.api.Result;
 import org.eclipse.jetty.client.util.InputStreamContentProvider;
 import org.junit.After;
 import org.junit.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 import scaffolding.SlowBodySender;
@@ -29,18 +27,16 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.*;
+import static scaffolding.MuAssert.assertEventually;
 import static scaffolding.MuAssert.assertNotTimedOut;
 
 public class RequestBodyReaderInputStreamAdapterTest {
-    private static final Logger log = LoggerFactory.getLogger(RequestBodyReaderInputStreamAdapterTest.class);
     private MuServer server;
 
     @Test
     public void hugeBodiesCanBeStreamed() throws IOException {
         int chunkSize = 10000;
         int loops = 6400;
-
-        log.info("Sending " + ((chunkSize * (long) loops) / 1_000_000L) + "mb");
 
         server = ServerUtils.httpsServerForTest()
             .withMaxRequestSize(loops * (long) chunkSize)
@@ -93,15 +89,10 @@ public class RequestBodyReaderInputStreamAdapterTest {
         server = ServerUtils.httpsServerForTest()
             .withMaxRequestSize(loops * (long) chunkSize)
             .addHandler((request, response) -> {
-                log.info("Got " + request + " with " + request.headers());
                 response.contentType("application/octet-stream");
                 try (InputStream is = request.inputStream().orElseThrow(() -> new MuException("No input stream"));
                      OutputStream out = response.outputStream(chunkSize)) {
-                    try {
-                        Mutils.copy(is, out, chunkSize);
-                    } catch (Throwable e) {
-                        log.error("ARGH", e);
-                    }
+                    Mutils.copy(is, out, chunkSize);
                 }
                 return true;
             })
@@ -120,7 +111,6 @@ public class RequestBodyReaderInputStreamAdapterTest {
                 .send(new org.eclipse.jetty.client.api.Response.Listener() {
                     @Override
                     public void onBegin(org.eclipse.jetty.client.api.Response response) {
-                        log.info("Client response starting");
                     }
 
                     @Override
@@ -130,11 +120,6 @@ public class RequestBodyReaderInputStreamAdapterTest {
 
                     @Override
                     public void onComplete(Result result) {
-                        log.info("Client response complete " + result);
-                        if (result.getFailure() != null) {
-                            log.warn("Client response failure", result.getFailure());
-                        }
-                        log.info("Got " + (bytesReceived.get() / 1_000_000) + "mb");
                         clientResult.set(result);
                         latch.countDown();
                     }
@@ -161,7 +146,7 @@ public class RequestBodyReaderInputStreamAdapterTest {
             .addHandler((request, response) -> {
                 Optional<InputStream> inputStream = request.inputStream();
                 try (OutputStream os = response.outputStream();
-                    InputStream is = inputStream.orElseThrow(() -> new MuException("No input stream"))) {
+                     InputStream is = inputStream.orElseThrow(() -> new MuException("No input stream"))) {
                     Mutils.copy(is, os, 8192);
                 }
                 return true;
@@ -325,8 +310,8 @@ public class RequestBodyReaderInputStreamAdapterTest {
             // So allow a valid 413 response or an error
             MuAssert.assertIOException(e);
         }
-        assertThat(exception.get(), instanceOf(ClientErrorException.class));
-        assertThat(((ClientErrorException)exception.get()).getResponse().getStatus(), equalTo(413));
+        assertEventually(exception::get, instanceOf(ClientErrorException.class));
+        assertThat(((ClientErrorException) exception.get()).getResponse().getStatus(), equalTo(413));
     }
 
     @After

@@ -376,7 +376,7 @@ class NettyRequestAdapter implements MuRequest {
     }
 
     public String toString() {
-        return method().name() + " " + uri();
+        return method().name() + " " + uri() + " (" + state + ")";
     }
 
     void addContext(String contextToAdd) {
@@ -446,6 +446,7 @@ class NettyRequestAdapter implements MuRequest {
     }
 
     void setState(RequestState status) {
+        assert httpExchange.inLoop() : "Not in event loop";
         RequestState oldState = this.state;
         if (oldState.endState()) {
             throw new IllegalStateException("Didn't expect to get a status update to " + status + " when the current status is " + oldState);
@@ -477,7 +478,6 @@ class NettyRequestAdapter implements MuRequest {
     }
 
     void onReadTimeout() {
-        log.info("onReadTimeout! " + requestBodyReader + " " + state);
         if (requestBodyReader != null && !state.endState()) {
             requestBodyReader.onCancelled(new TimeoutException());
         }
@@ -504,7 +504,13 @@ class NettyRequestAdapter implements MuRequest {
 
         @Override
         public void complete() {
-            httpExchange.complete();
+            if (!httpExchange.state().endState()) {
+                if (!httpExchange.inLoop()) {
+                    httpExchange.ctx.executor().execute(this::complete);
+                } else {
+                    httpExchange.complete();
+                }
+            }
         }
 
         @Override
@@ -512,13 +518,14 @@ class NettyRequestAdapter implements MuRequest {
             if (throwable == null) {
                 complete();
             } else {
-                httpExchange.fireException(throwable);
+                if (!httpExchange.state().endState()) {
+                    httpExchange.fireException(throwable);
+                }
             }
         }
 
         @Override
         public void write(ByteBuffer data, DoneCallback callback) {
-
             ChannelFuture writeFuture = (ChannelFuture) write(data);
             writeFuture.addListener(future -> {
                 try {
@@ -550,7 +557,7 @@ class NettyRequestAdapter implements MuRequest {
         public Future<Void> write(ByteBuffer data) {
             NettyResponseAdaptor response = request.httpExchange.response;
             try {
-                return response.write(data);
+                return response.writeAndFlush(data);
             } catch (Throwable e) {
                 return request.ctx.channel().newFailedFuture(e);
             }

@@ -108,7 +108,7 @@ public class MuServerTest {
 
 
     @Test
-    public void unhandledExceptionsAreJustLoggedIfResponsesAreAlreadyStarted() {
+    public void unhandledExceptionsAreLoggedAndTheResponseIsKilledEarly() {
         server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
@@ -118,6 +118,8 @@ public class MuServerTest {
             .start();
         try (Response resp = call(request().url(server.uri().toString()))) {
             assertThat(resp.code(), is(200));
+        } catch (Exception ex) {
+            MuAssert.assertIOException(ex);
         }
     }
 
@@ -401,6 +403,8 @@ public class MuServerTest {
             if (!ClientUtils.isHttp2(resp)) {
                 assertThat(resp.header("connection"), equalTo("close"));
             }
+        } catch (StreamResetException sre) {
+            // HTTP2 will through these
         } catch (RuntimeException re) {
             // HTTP 1 will have killed connections
             assertThat(re.getCause(), instanceOf(IOException.class));
@@ -425,8 +429,7 @@ public class MuServerTest {
             Assert.fail("Should not succeed but got " + resp.code());
         } catch (RuntimeException re) {
             if (re.getCause() instanceof StreamResetException) {
-                // HTTP2 will result in a canceled stream
-                assertThat(((StreamResetException) re.getCause()).errorCode, is(ErrorCode.CANCEL));
+                assertThat(((StreamResetException) re.getCause()).errorCode, is(ErrorCode.INTERNAL_ERROR));
             } else {
                 // expected on HTTP1
                 assertThat(re.getCause(), instanceOf(IOException.class));
@@ -512,8 +515,7 @@ public class MuServerTest {
             resp.body().string();
             Assert.fail("Body should not be readable");
         } catch (StreamResetException e) {
-            // HTTP2 will result in a canceled stream
-            assertThat(e.errorCode, is(ErrorCode.CANCEL));
+            assertThat(e.errorCode, is(ErrorCode.INTERNAL_ERROR));
         } catch (IOException e) {
             // expected on HTTP1
         }

@@ -344,11 +344,12 @@ public class RequestBodyReaderStringTest {
 
         Request.Builder request = request()
             .url(server.uri().toString())
-            .post(new SlowBodySender(1000, 0));
+            .post(new SlowBodySender(1000, 5));
 
         try (Response resp = call(request)) {
             assertThat(resp.code(), equalTo(413));
             assertThat(resp.body().string(), containsString("413 Request Entity Too Large"));
+            Assert.fail("Should not read the whole body");
         } catch (Exception e) {
             // The HttpServerKeepAliveHandler will probably close the connection before the full request body is read, which is probably a good thing in this case.
             // So allow a valid 413 response or an error
@@ -359,7 +360,7 @@ public class RequestBodyReaderStringTest {
                 assertThat(e, not(instanceOf(StreamResetException.class)));
             }
         }
-        assertThat(exception.get(), instanceOf(ClientErrorException.class));
+        assertEventually(exception::get, instanceOf(ClientErrorException.class));
         assertThat(((ClientErrorException) exception.get()).getResponse().getStatus(), equalTo(413));
 
         assertEventually(() -> infos, not(empty()));
@@ -368,7 +369,7 @@ public class RequestBodyReaderStringTest {
         assertThat(ri.completedSuccessfully(), equalTo(false));
         assertThat(ri.state(), equalTo(HttpExchangeState.ERRORED));
         assertThat(ri.request.requestState(), equalTo(RequestState.ERRORED));
-        assertThat(ri.response.responseState(), equalTo(ResponseState.ERRORED));
+        assertThat(ri.response.responseState(), equalTo(ResponseState.FULL_SENT));
     }
 
     @Test

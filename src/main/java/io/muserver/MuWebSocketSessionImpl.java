@@ -204,14 +204,16 @@ class MuWebSocketSessionImpl implements MuWebSocketSession, Exchange {
     }
 
     @Override
-    public void onException(ChannelHandlerContext ctx, Throwable cause) {
+    public boolean onException(ChannelHandlerContext ctx, Throwable cause) {
         if (!state.endState()) {
             try {
                 muWebSocket.onError(cause);;
+                return false;
             } catch (Exception e) {
-                ctx.channel().close().addListener(future -> setState(WebsocketSessionState.ERRORED));
+                return true;
             }
         }
+        return true;
     }
 
     @Override

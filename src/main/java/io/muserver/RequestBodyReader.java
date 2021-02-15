@@ -127,7 +127,7 @@ abstract class RequestBodyReader {
             .build();
     }
 
-    public void cleanup() {};
+    public void cleanup() {}
 
     static class ListenerAdapter extends RequestBodyReader {
         private final NettyRequestAdapter.AsyncHandleImpl asyncHandle;

@@ -12,7 +12,7 @@ interface Exchange {
 
     void onIdleTimeout(ChannelHandlerContext ctx, IdleStateEvent ise);
 
-    void onException(ChannelHandlerContext ctx, Throwable cause);
+    boolean onException(ChannelHandlerContext ctx, Throwable cause);
 
     void onConnectionEnded(ChannelHandlerContext ctx);
 

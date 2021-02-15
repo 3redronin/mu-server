@@ -1,6 +1,7 @@
 package io.muserver;
 
 import okhttp3.Response;
+import okhttp3.internal.http2.StreamResetException;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
@@ -13,9 +14,11 @@ import java.net.ProtocolException;
 import java.util.concurrent.CountDownLatch;
 
 import static org.hamcrest.CoreMatchers.equalTo;
+import static org.hamcrest.CoreMatchers.instanceOf;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.is;
-import static scaffolding.ClientUtils.*;
+import static org.hamcrest.Matchers.anyOf;
+import static scaffolding.ClientUtils.call;
+import static scaffolding.ClientUtils.request;
 
 public class FixedLengthTest {
 
@@ -42,32 +45,27 @@ public class FixedLengthTest {
                 } catch (Exception ex) {
                     errors.append(ex.getMessage());
                     errorSetLatch.countDown();
+                    throw ex;
                 }
 
                 return true;
             }).start();
 
-        boolean http2;
         try (Response resp = call(request(server.uri().resolve("/blah")))) {
-            http2 = isHttp2(resp);
-            String body = resp.body().string();
-            if (http2) {
-                assertThat(body, is("01234"));
-            } else {
-                Assert.fail("Should have failed due to invalid HTTP response");
-            }
-        } catch (ProtocolException pe) {
-            // yay
+            resp.body().string();
+            Assert.fail("Should have failed due to invalid HTTP response");
+        } catch (Exception e) {
+            assertThat(e, anyOf(instanceOf(StreamResetException.class), instanceOf(ProtocolException.class)));
         }
 
         MuAssert.assertNotTimedOut("exception", errorSetLatch);
-        assertThat(errors.toString(), equalTo("The declared content length for GET " + server.uri().resolve("/blah") + " was 20 bytes. " +
+        assertThat(errors.toString(), equalTo("The declared content length for GET " + server.uri().resolve("/blah") + " (HEADERS_RECEIVED) was 20 bytes. " +
             "The current write is being aborted and the connection is being closed because it would have resulted in " +
             "59 bytes being sent."));
     }
 
     @Test
-    public void ifLessThanDeclaredAreSentThenAnExceptionIsThrownAndConnectionIsClosed() throws IOException {
+    public void ifLessThanDeclaredAreSentThenAnExceptionIsThrownAndConnectionIsClosed() throws Exception {
         server = ServerUtils.httpsServerForTest()
             .addHandler((req, resp) -> {
                 resp.contentType("text/plain");
@@ -78,14 +76,10 @@ public class FixedLengthTest {
             }).start();
 
         try (Response resp = call(request(server.uri().resolve("/blah")))) {
-            String body = resp.body().string();
-            if (isHttp2(resp)) {
-                assertThat(body, is("01234"));
-            } else {
-                Assert.fail("Should have failed due to invalid HTTP response");
-            }
-        } catch (ProtocolException pe) {
-            // yay
+            resp.body().string();
+            Assert.fail("Should have failed due to invalid HTTP response");
+        } catch (Exception e) {
+            assertThat(e, anyOf(instanceOf(StreamResetException.class), instanceOf(ProtocolException.class)));
         }
     }
 

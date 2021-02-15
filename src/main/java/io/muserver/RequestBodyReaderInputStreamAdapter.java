@@ -91,10 +91,16 @@ class RequestBodyReaderInputStreamAdapter extends RequestBodyReader {
         @Override
         public void close() throws IOException {
             synchronized (lock) {
-                if (currentCallback != null) {
-                    throw new IOException("The request body input stream was not fully read before closing");
-                }
                 userClosed = true;
+                if (currentCallback != null) {
+                    IOException error = new IOException("The request body input stream was not fully read before closing");
+                    try {
+                        currentCallback.onComplete(error);
+                    } catch (Exception e2) {
+                        throw new IOException("Exception raising error", e2);
+                    }
+                    throw error;
+                }
             }
         }
 

@@ -18,7 +18,6 @@ import java.util.concurrent.RejectedExecutionException;
 
 import static io.netty.buffer.Unpooled.EMPTY_BUFFER;
 import static io.netty.buffer.Unpooled.copiedBuffer;
-import static io.netty.handler.codec.http2.Http2Exception.streamError;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 abstract class Http2ConnectionFlowControl extends Http2ConnectionHandler implements Http2FrameListener {
@@ -71,7 +70,14 @@ abstract class Http2ConnectionFlowControl extends Http2ConnectionHandler impleme
     protected abstract void onDataRead0(ChannelHandlerContext ctx, int streamId, ByteBuf data, int padding, boolean endOfStream);
 
     @Override
-    public final int onDataRead(ChannelHandlerContext ctx, int streamId, ByteBuf data, int padding, boolean endOfStream) throws Http2Exception {
+    public void onHeadersRead(ChannelHandlerContext ctx, int streamId, io.netty.handler.codec.http2.Http2Headers headers, int padding, boolean endOfStream) throws Http2Exception {
+        if (endOfStream) {
+            onDataRead(ctx, streamId, EMPTY_BUFFER, 0, true);
+        }
+    }
+
+    @Override
+    public final int onDataRead(ChannelHandlerContext ctx, int streamId, ByteBuf data, int padding, boolean endOfStream) {
         int size = data.readableBytes();
         Queue<DataReadData> buf = buffer.computeIfAbsent(streamId, integer -> new LinkedList<>());
         buf.add(new DataReadData(data.retain(), padding, endOfStream));
@@ -149,7 +155,6 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-        log.info("channelInactive");
         server.stats.onConnectionClosed();
         server.onConnectionEnded(this);
         super.channelInactive(ctx);
@@ -163,9 +168,8 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
     }
 
     private void closeAllAndDisconnect(ChannelHandlerContext ctx, Http2Error error, ResponseState reason) {
-        log.error("Closing all for some reason");
         if (error != null) {
-            encoder().writeGoAway(ctx, lastStreamId, error.code(), EMPTY_BUFFER, ctx.channel().newPromise());
+            encoder().writeGoAway(ctx, lastStreamId, error.code(), EMPTY_BUFFER, ctx.channel().voidPromise());
         }
         for (HttpExchange httpExchange : exchanges.values()) {
             httpExchange.onCancelled(reason);
@@ -181,8 +185,8 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
         headers.status(String.valueOf(code));
         headers.set(HeaderNames.CONTENT_TYPE, ContentTypes.TEXT_PLAIN_UTF8);
         headers.set(HeaderNames.CONTENT_LENGTH, String.valueOf(bytes.length));
-        encoder().writeHeaders(ctx, streamId, headers, 0, false, ctx.newPromise());
-        return Http2Response.writeToChannel(ctx, encoder(), streamId, content, true);
+        encoder().writeHeaders(ctx, streamId, headers, 0, false, ctx.voidPromise());
+        return Http2Response.writeAndFlushToChannel(ctx, encoder(), streamId, content, true);
     }
 
     @Override
@@ -193,8 +197,8 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
 
     @Override
     public void onHeadersRead(ChannelHandlerContext ctx, int streamId,
-                              io.netty.handler.codec.http2.Http2Headers headers, int padding, boolean endOfStream) {
-//        log.info("onHeadersRead " + streamId + " / " + endOfStream);
+                              io.netty.handler.codec.http2.Http2Headers headers, int padding, boolean endOfStream) throws Http2Exception {
+        super.onHeadersRead(ctx, streamId, headers, padding, endOfStream);
         lastStreamId = streamId;
 
         try {
@@ -239,12 +243,12 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
             });
             exchanges.put(streamId, httpExchange);
             httpExchange.addChangeListener((exchange, newState) -> {
-                log.info("H2 exchange change " + newState);
                 if (newState.endState()) {
                     muReq.cleanup();
                     cleanStream(streamId);
                     if (newState == HttpExchangeState.ERRORED) {
-                        resetStream(ctx, streamId, Http2Error.INTERNAL_ERROR.code(), ctx.newPromise());
+                        resetStream(ctx, streamId, Http2Error.INTERNAL_ERROR.code(), ctx.voidPromise());
+                        ctx.flush();
                     }
                 }
             });
@@ -278,29 +282,13 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
         }
     }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     @Override
     public void onDataRead0(ChannelHandlerContext ctx, int streamId, ByteBuf data, int padding, boolean endOfStream) {
-        log.info("onDataRead " + data.readableBytes() + "bytes " + endOfStream);
         boolean empty = data.readableBytes() == 0;
 
         HttpExchange httpExchange = exchanges.get(streamId);
         if (httpExchange == null) {
-            log.info("Got a chunk of message for an unknown request. This can happen when a request is rejected based on headers, and then the rejected body arrives.");
+            log.debug("Got a chunk of message for an unknown request. This can happen when a request is rejected based on headers, and then the rejected body arrives.");
         } else {
             HttpContent msg;
             if (endOfStream) {
@@ -317,31 +305,11 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
                 if (error == null) {
                     read(ctx, streamId);
                 } else {
-                    log.info("Firing exception caught");
-                    Http2Exception http2Ex = streamError(streamId, Http2Error.INTERNAL_ERROR, error, "Error processing request data");
-                    onError(ctx, false, http2Ex);
+                    ctx.fireUserEventTriggered(new MuExceptionFiredEvent(httpExchange, streamId, error));
                 }
             });
         }
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     @Override
     protected void onStreamError(ChannelHandlerContext ctx, boolean outbound, Throwable cause, Http2Exception.StreamException http2Ex) {
@@ -354,15 +322,15 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
             if (toy == null) {
                 toy = cause;
             }
-            log.info("Got stream error!", toy);
             try {
-                httpExchange.onException(ctx, toy);
+                if (httpExchange.onException(ctx, toy)) {
+                    super.onStreamError(ctx, outbound, cause, http2Ex);
+                }
             } catch (Throwable e) {
                 log.warn("Unexpected exception for " + httpExchange + " .onException " + toy, e);
-                throw e;
+                super.onStreamError(ctx, outbound, cause, http2Ex);
             }
         } else {
-            log.warn("Stream error for stream that wasn't active: " + http2Ex.streamId(), cause);
             super.onStreamError(ctx, outbound, cause, http2Ex);
         }
     }
@@ -382,8 +350,7 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
 
     @Override
     public void onHeadersRead(ChannelHandlerContext ctx, int streamId, io.netty.handler.codec.http2.Http2Headers headers, int streamDependency,
-                              short weight, boolean exclusive, int padding, boolean endOfStream) {
-        log.info("onHeadersRead bigger " + streamDependency + weight + exclusive);
+                              short weight, boolean exclusive, int padding, boolean endOfStream) throws Http2Exception {
         onHeadersRead(ctx, streamId, headers, padding, endOfStream);
     }
 
@@ -394,7 +361,6 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
 
     @Override
     public void onRstStreamRead(ChannelHandlerContext ctx, int streamId, long errorCode) {
-        log.warn("onRstStreamRead! " + errorCode);
         HttpExchange httpExchange = exchanges.remove(streamId);
         if (httpExchange != null) {
             httpExchange.onCancelled(ResponseState.ERRORED);
@@ -424,7 +390,6 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
 
     @Override
     public void onGoAwayRead(ChannelHandlerContext ctx, int lastStreamId, long errorCode, ByteBuf debugData) {
-        log.warn("onGoAwayRead");
         closeAllAndDisconnect(ctx, null, ResponseState.CLIENT_DISCONNECTED);
     }
 
@@ -435,16 +400,14 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
     @Override
     public void onUnknownFrame(ChannelHandlerContext ctx, byte frameType, int streamId,
                                Http2Flags flags, ByteBuf payload) {
-        log.info("onUnknownFrame");
     }
 
     @Override
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
         if (evt instanceof IdleStateEvent) {
-            log.info("Timeout event " + evt);
             IdleStateEvent ise = (IdleStateEvent) evt;
             if (ise.state() != IdleState.READER_IDLE) {
-                log.warn("Closing all because reader idle!");
+                log.info("Closed idle connection to " + remoteAddress);
                 closeAllAndDisconnect(ctx, Http2Error.NO_ERROR, ResponseState.TIMED_OUT);
             }
         } else if (evt instanceof MuExceptionFiredEvent) {

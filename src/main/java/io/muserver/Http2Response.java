@@ -25,11 +25,11 @@ class Http2Response extends NettyResponseAdaptor {
     }
 
     @Override
-    protected ChannelFuture writeToChannel(boolean isLast, ByteBuf content) {
-        return writeToChannel(ctx, encoder, streamId, content, isLast);
+    protected ChannelFuture writeAndFlushToChannel(boolean isLast, ByteBuf content) {
+        return writeAndFlushToChannel(ctx, encoder, streamId, content, isLast);
     }
 
-    static ChannelFuture writeToChannel(ChannelHandlerContext ctx, Http2ConnectionEncoder encoder, int streamId, ByteBuf content, boolean isLast) {
+    static ChannelFuture writeAndFlushToChannel(ChannelHandlerContext ctx, Http2ConnectionEncoder encoder, int streamId, ByteBuf content, boolean isLast) {
         assert ctx.executor().inEventLoop() : "Not in event loop";
         ChannelPromise channelPromise = ctx.newPromise();
         encoder.writeData(ctx, streamId, content, 0, isLast, channelPromise);
@@ -39,12 +39,8 @@ class Http2Response extends NettyResponseAdaptor {
 
     @Override
     protected ChannelFuture startStreaming() {
-        if (httpExchange.inLoop()) {
-            super.startStreaming();
-            return writeHeaders(false);
-        } else {
-            return httpExchange.block(this::startStreaming);
-        }
+        super.startStreaming();
+        return writeHeaders(false);
     }
 
     @Override
@@ -67,23 +63,22 @@ class Http2Response extends NettyResponseAdaptor {
                 headers.set(HeaderNames.CONTENT_ENCODING, "mu-" + toUse);
             }
         }
-        ChannelPromise promise = ctx.newPromise();
-        encoder.writeHeaders(ctx, streamId, headers.entries, 0, isEnd, promise);
+        ChannelFuture future = encoder.writeHeaders(ctx, streamId, headers.entries, 0, isEnd, ctx.voidPromise());
         if (isEnd) {
             ctx.channel().flush();
         }
-        return promise;
+        return future;
     }
 
     @Override
     protected ChannelFuture writeFullResponse(ByteBuf body) {
-        writeHeaders(false); // TODO should the writeToChannel be a listener on this?
-        return writeToChannel(true, body);
+        writeHeaders(false);
+        return writeAndFlushToChannel(true, body);
     }
 
     @Override
     protected ChannelFuture writeLastContentMarker() {
-        return writeToChannel(true, Unpooled.directBuffer(0));
+        return writeAndFlushToChannel(true, Unpooled.directBuffer(0));
     }
 
     @Override
@@ -91,12 +86,6 @@ class Http2Response extends NettyResponseAdaptor {
         if (addContentLengthHeader) {
             headers.set(HeaderNames.CONTENT_LENGTH, HeaderValues.ZERO);
         }
-        return writeHeaders(true);
-    }
-
-
-    @Override
-    protected ChannelFuture writeRedirectResponse() {
         return writeHeaders(true);
     }
 

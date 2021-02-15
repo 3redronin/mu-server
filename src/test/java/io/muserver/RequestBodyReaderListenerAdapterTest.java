@@ -21,6 +21,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
+import static scaffolding.MuAssert.assertEventually;
 
 public class RequestBodyReaderListenerAdapterTest {
     private MuServer server;
@@ -48,7 +49,7 @@ public class RequestBodyReaderListenerAdapterTest {
         assertThat("All: " + readListener.events.toString(), readListener.events, contains("data received: 7 bytes", "data written", "data received: 7 bytes", "data written", "onComplete"));
     }
 
-    @Test
+    @Test(timeout = 10000)
     public void emptyBodiesAreOkay() {
         server = ServerUtils.httpsServerForTest()
             .withRequestTimeout(100, TimeUnit.MILLISECONDS)
@@ -133,7 +134,7 @@ public class RequestBodyReaderListenerAdapterTest {
             // So allow a valid 413 response or an error
             MuAssert.assertIOException(e);
         }
-        assertThat(exception.get(), instanceOf(ClientErrorException.class));
+        assertEventually(exception::get, instanceOf(ClientErrorException.class));
         assertThat(((ClientErrorException)exception.get()).getResponse().getStatus(), equalTo(413));
     }
 

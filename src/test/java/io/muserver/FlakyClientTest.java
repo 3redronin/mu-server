@@ -36,6 +36,7 @@ public class FlakyClientTest {
 
     private void runTest(MuServerBuilder muServerBuilder) throws InterruptedException, IOException {
         server = muServerBuilder
+            .withInterface("localhost")
             .addHandler(Method.GET, "/full", (req, resp, pp) -> {
                 try {
                     resp.write("A full length message");
