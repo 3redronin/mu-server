@@ -155,7 +155,7 @@ public class RequestBodyReaderInputStreamAdapterTest {
 
         Request.Builder request = request()
             .url(server.uri().toString())
-            .post(new SlowBodySender(10));
+            .post(new SlowBodySender(10, 10));
 
         try (Response resp = call(request)) {
             assertThat(resp.code(), equalTo(200));
@@ -180,7 +180,7 @@ public class RequestBodyReaderInputStreamAdapterTest {
 
         Request.Builder request = request()
             .url(server.uri().toString())
-            .post(new SlowBodySender(10));
+            .post(new SlowBodySender(10, 10));
 
         try (Response resp = call(request)) {
             assertThat(resp.code(), equalTo(200));
@@ -217,7 +217,6 @@ public class RequestBodyReaderInputStreamAdapterTest {
             }
         }))) {
             resp.body().bytes();
-            Thread.sleep(1000);
             assertThat(resp.code(), equalTo(500)); // server error or closed connection is fine
         } catch (Exception ex) {
             MuAssert.assertIOException(ex);
@@ -272,7 +271,7 @@ public class RequestBodyReaderInputStreamAdapterTest {
 
         Request.Builder request = request()
             .url(server.uri().toString())
-            .post(new SlowBodySender(10));
+            .post(new SlowBodySender(10, 2));
 
         try (Response resp = call(request)) {
             assertThat(resp.body().string(), equalTo("After it was already closed it returned -1"));

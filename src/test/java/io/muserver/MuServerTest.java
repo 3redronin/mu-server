@@ -392,7 +392,7 @@ public class MuServerTest {
                 bufferedSink.writeUtf8("Hello");
                 bufferedSink.flush();
                 try {
-                    Thread.sleep(200);
+                    Thread.sleep(80);
                 } catch (InterruptedException e) {
                     throw new RuntimeException(e);
                 }
@@ -415,9 +415,9 @@ public class MuServerTest {
     public void idleTimeoutCanBeConfiguredAndConnectionClosedEvenIfNotAlreadyStarted() throws Exception {
         CompletableFuture<Throwable> exceptionFromServer = new CompletableFuture<>();
         server = ServerUtils.httpsServerForTest()
-            .withIdleTimeout(100, TimeUnit.MILLISECONDS)
+            .withIdleTimeout(50, TimeUnit.MILLISECONDS)
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
-                Thread.sleep(200);
+                Thread.sleep(80);
                 try {
                     response.write("Hmmm");
                 } catch (Throwable e) {
@@ -442,7 +442,7 @@ public class MuServerTest {
     @Test
     public void idleTimeoutCanBeConfiguredAndTimeoutHappensWhenItDoes() throws Exception {
         server = MuServerBuilder.httpServer()
-            .withIdleTimeout(200, TimeUnit.MILLISECONDS)
+            .withIdleTimeout(50, TimeUnit.MILLISECONDS)
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.write("Hi");
             })
@@ -496,13 +496,13 @@ public class MuServerTest {
         CompletableFuture<Throwable> exceptionFromServer = new CompletableFuture<>();
         CompletableFuture<ResponseInfo> received = new CompletableFuture<>();
         server = ServerUtils.httpsServerForTest()
-            .withIdleTimeout(200, TimeUnit.MILLISECONDS)
+            .withIdleTimeout(50, TimeUnit.MILLISECONDS)
             .addResponseCompleteListener(received::complete)
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.sendChunk("Hi");
                 try {
                     while (true) {
-                        Thread.sleep(210);
+                        Thread.sleep(120);
                         response.sendChunk("Hi");
                     }
                 } catch (Throwable e) {

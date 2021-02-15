@@ -29,6 +29,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.instanceOf;
 import static scaffolding.ClientUtils.request;
+import static scaffolding.MuAssert.assertNotTimedOut;
 
 public class SseEventSinkTest {
     public MuServer server;
@@ -194,9 +195,9 @@ public class SseEventSinkTest {
 
         server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Streamer())).start();
         try (SseClient.ServerSentEvent ignored = sseClient.newServerSentEvent(request(server.uri().resolve("/streamer/eventStream")).build(), listener)) {
-            MuAssert.assertNotTimedOut("Waiting for one message", oneSentLatch);
+            assertNotTimedOut("Waiting for one message", oneSentLatch);
         }
-        MuAssert.assertNotTimedOut("Timed out waiting for error", failureLatch);
+        assertNotTimedOut("Timed out waiting for error", failureLatch);
     }
 
     @After

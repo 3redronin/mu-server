@@ -49,7 +49,7 @@ class BackPressureHandler extends ChannelDuplexHandler {
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         super.channelInactive(ctx);
-        deliverTasks(ctx); // even though we know these will fail, by delivering them it gives relevant handles to release buffers
+        deliverTasks(ctx); // even though we know these will fail, by delivering them it gives relevant handlers the opportunity to release bytebufs
     }
 
     @Override

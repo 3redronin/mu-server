@@ -295,7 +295,7 @@ public class RequestBodyReaderStringTest {
     public void aSlowReadResultsInAKilledConnectionIfResponseStarted() {
         AtomicReference<Throwable> exception = new AtomicReference<>();
         server = ServerUtils.httpsServerForTest()
-            .withRequestTimeout(100, TimeUnit.MILLISECONDS)
+            .withRequestTimeout(50, TimeUnit.MILLISECONDS)
             .addHandler((request, response) -> {
                 response.sendChunk("starting");
                 try {
@@ -310,7 +310,7 @@ public class RequestBodyReaderStringTest {
 
         Request.Builder request = request()
             .url(server.uri().toString())
-            .post(new SlowBodySender(10, 400));
+            .post(new SlowBodySender(5, 80));
 
         try (Response resp = call(request)) {
             resp.body().string();
