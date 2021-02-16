@@ -1,14 +1,10 @@
 package io.muserver;
 
-import okhttp3.Call;
-import okhttp3.OkHttpClient;
 import okhttp3.Response;
 import org.junit.After;
-import org.junit.Assert;
 import org.junit.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import scaffolding.*;
+import scaffolding.MuAssert;
+import scaffolding.ServerUtils;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -35,6 +31,7 @@ public class EventsTest {
             .start();
         try (Response resp = call(request(server.uri().resolve("/blah")))) {
             assertThat(resp.code(), is(400));
+            resp.body().string();
         }
         ResponseInfo info = received.get(10, TimeUnit.SECONDS);
         assertThat(info, notNullValue());
