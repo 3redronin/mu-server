@@ -7,7 +7,6 @@ import okhttp3.WebSocketListener;
 import okio.ByteString;
 import org.junit.After;
 import org.junit.Assert;
-import org.junit.Ignore;
 import org.junit.Test;
 import scaffolding.MuAssert;
 import scaffolding.RawClient;
@@ -30,7 +29,6 @@ import static scaffolding.ClientUtils.*;
 import static scaffolding.MuAssert.assertEventually;
 import static scaffolding.MuAssert.assertNotTimedOut;
 
-@Ignore("Need to fix the threads that the upgrade event gets set on")
 public class WebSocketsTest {
 
     private MuServer server;
@@ -108,7 +106,7 @@ public class WebSocketsTest {
         clientSocket.send(largeText);
 
         assertNotTimedOut("Erroring", listener.failureLatch);
-        assertEventually(() -> serverSocket.state(), equalTo(WebsocketSessionState.DISCONNECTED));
+        assertEventually(() -> serverSocket.state(), equalTo(WebsocketSessionState.ERRORED));
 
         clientSocket.close(1000, "Finished");
     }
