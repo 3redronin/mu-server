@@ -10,6 +10,7 @@ import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 import scaffolding.StringUtils;
 
+import javax.ws.rs.RedirectionException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.SocketTimeoutException;
@@ -410,6 +411,20 @@ public class AsyncTest {
         }
     }
 
+    @Test
+    public void webApplicationExceptionsCanBeSetOnCompletion() throws Exception {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                AsyncHandle handle = request.handleAsync();
+                handle.complete(new RedirectionException("Blah not here!", 301, request.uri().resolve("/blah")));
+            })
+            .start();
+        try (Response resp = call(request(server.uri()))) {
+            assertThat(resp.code(), is(301));
+            assertThat(resp.header("location"), is(server.uri().resolve("/blah").toString()));
+            assertThat(resp.body().string(), containsString("Blah not here!"));
+        }
+    }
 
     @After
     public void destroy() {
