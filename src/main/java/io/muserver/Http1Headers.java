@@ -333,7 +333,7 @@ class Http1Headers implements Headers {
 
     @Override
     public boolean hasBody() {
-        return contains(HeaderNames.TRANSFER_ENCODING) || getInt(HeaderNames.CONTENT_LENGTH, -1) > 0;
+        return contains(HeaderNames.TRANSFER_ENCODING) || getLong(HeaderNames.CONTENT_LENGTH.toString(), -1) > 0;
     }
 
     @Override
