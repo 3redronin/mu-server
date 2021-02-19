@@ -167,6 +167,25 @@ public class ContextHandlerTest {
         }
     }
 
+    @Test
+    public void unreservedCharactersComeThroughUnencoded() throws Exception {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(context("~.-_")
+                .addHandler(Method.GET, "~.-_", (request, response, pathParams) -> {
+                    response.write(request.contextPath() + " - " + request.relativePath());
+                })
+            )
+            .start();
+        try (Response resp = call(request(server.uri().resolve("/~.-_/~.-_")))) {
+            assertThat(resp.body().string(), is("/~.-_ - /~.-_"));
+            assertThat(resp.code(), is(200));
+        }
+        try (Response resp = call(request(server.uri().resolve("/%7E%2E%2D%5F/%7E%2E%2D%5F")))) {
+            assertThat(resp.body().string(), is("/~.-_ - /~.-_"));
+            assertThat(resp.code(), is(200));
+        }
+    }
+
     @After
     public void destroy() {
         scaffolding.MuAssert.stopAndCheck(server);

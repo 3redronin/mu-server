@@ -59,7 +59,7 @@ public class FixedLengthTest {
         }
 
         MuAssert.assertNotTimedOut("exception", errorSetLatch);
-        assertThat(errors.toString(), equalTo("The declared content length for GET " + server.uri().resolve("/blah") + " (HEADERS_RECEIVED) was 20 bytes. " +
+        assertThat(errors.toString(), equalTo("The declared content length for GET " + server.uri().resolve("/blah") + " was 20 bytes. " +
             "The current write is being aborted and the connection is being closed because it would have resulted in " +
             "59 bytes being sent."));
     }

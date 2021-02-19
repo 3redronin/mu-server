@@ -310,6 +310,13 @@ class HttpExchange implements ResponseInfo, Exchange {
             String s = requestUri.getRawPath();
             if (Mutils.nullOrEmpty(s)) {
                 s = "/";
+            } else {
+                // TODO: consider a redirect if the URL is changed? Handle other percent-encoded characters?
+                s = s.replace("%7E", "~")
+                    .replace("%5F", "_")
+                    .replace("%2E", ".")
+                    .replace("%2D", "-")
+                ;
             }
             String q = requestUri.getRawQuery();
             if (q != null) {
@@ -413,10 +420,10 @@ class HttpExchange implements ResponseInfo, Exchange {
                 message = exceptionMessageMap.getOrDefault(message, message);
                 response.writeOnLoop("<h1>" + status + " " + exResp.getStatusInfo().getReasonPhrase() + "</h1><p>" +
                     Mutils.htmlEncode(message) + "</p>")
-                        .addListener(f -> {
-                            ResponseState state = f.isSuccess() ? ResponseState.FULL_SENT : ResponseState.ERRORED;
-                            response.outputState(f, state);
-                        });
+                    .addListener(f -> {
+                        ResponseState state = f.isSuccess() ? ResponseState.FULL_SENT : ResponseState.ERRORED;
+                        response.outputState(f, state);
+                    });
             } else {
                 log.info(cause.getClass().getName() + " while handling " + request + " - note a " + response.status +
                     " was already sent and the client may have received an incomplete response. Exception was " + cause.getMessage());

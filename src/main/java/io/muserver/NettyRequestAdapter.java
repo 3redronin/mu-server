@@ -376,7 +376,7 @@ class NettyRequestAdapter implements MuRequest {
     }
 
     public String toString() {
-        return method().name() + " " + uri() + " (" + state + ")";
+        return method().name() + " " + uri();
     }
 
     void addContext(String contextToAdd) {

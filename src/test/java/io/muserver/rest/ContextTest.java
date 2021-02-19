@@ -145,6 +145,30 @@ public class ContextTest {
         }
     }
 
+    @Test
+    public void unreservedCharactersComeThroughUnencoded() throws Exception {
+        @Path("~.-_")
+        class Sample {
+            @GET
+            @Path("~.-_")
+            public String get(@Context UriInfo uriInfo) {
+                return uriInfo.getRequestUri().getPath();
+            }
+        }
+        this.server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new Sample()))
+            .start();
+
+        try (Response resp = call(request(server.uri().resolve("/~.-_/~.-_")))) {
+            assertThat(resp.body().string(), is("/~.-_/~.-_"));
+            assertThat(resp.code(), is(200));
+        }
+        try (Response resp = call(request(server.uri().resolve("/%7E%2E%2D%5F/%7E%2E%2D%5F")))) {
+            assertThat(resp.body().string(), is("/~.-_/~.-_"));
+            assertThat(resp.code(), is(200));
+        }
+    }
+
     @After
     public void stop() {
         scaffolding.MuAssert.stopAndCheck(server);

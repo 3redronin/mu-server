@@ -14,6 +14,16 @@ import static org.hamcrest.Matchers.is;
 public class MutilsTest {
 
     @Test
+    public void unreservedCharactersAreNotUrlEncodedAsPerRFC3986() {
+        assertThat(Mutils.urlEncode("Aa09-._~"), equalTo("Aa09-._~"));
+    }
+
+    @Test
+    public void unreservedCharactersCanBeDecoded() {
+        assertThat(Mutils.urlDecode("A%41-%2D.%2E_%5F~%7E"), equalTo("AA--..__~~"));
+    }
+
+    @Test
     public void joinJoinsThingsToBeJoined() {
         assertThat(join("/sample-static/", "/", "/something.txt"), equalTo("/sample-static/something.txt"));
         assertThat(join("/sample-static", "/", "/something.txt"), equalTo("/sample-static/something.txt"));
