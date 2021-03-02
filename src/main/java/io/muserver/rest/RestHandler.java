@@ -185,6 +185,9 @@ public class RestHandler implements MuHandler {
 
     private void sendResponse(int nestingLevel, MuContainerRequestContext requestContext, MuResponse muResponse, List<MediaType> acceptHeaders, List<MediaType> produces, List<MediaType> directlyProduces, Object result) throws Exception {
         try {
+            if (requestContext.hasEntity()) {
+                requestContext.getEntityStream().close();
+            }
             if (!muResponse.hasStartedSendingData()) {
                 ObjWithType obj = ObjWithType.objType(result);
 

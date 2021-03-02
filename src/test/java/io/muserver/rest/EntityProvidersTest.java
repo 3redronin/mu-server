@@ -2,10 +2,13 @@ package io.muserver.rest;
 
 import io.muserver.MuServer;
 import io.muserver.Mutils;
+import io.muserver.ResponseInfo;
 import okhttp3.MediaType;
 import okhttp3.RequestBody;
 import okhttp3.Response;
+import okio.BufferedSink;
 import org.example.MyStringReaderWriter;
+import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Test;
 
@@ -21,7 +24,10 @@ import java.io.PrintStream;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 import static io.muserver.Mutils.NEWLINE;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
@@ -209,6 +215,68 @@ public class EntityProvidersTest {
         )) {
             assertThat(resp.body().string(), equalTo("Dog: Papillon"));
         }
+    }
+
+    @Test
+    public void entityStreamsAreClosedAfter() throws Exception {
+        String body = "Yaptal";
+
+        class Dog {
+            public final String breed;
+            Dog(String breed) {
+                this.breed = breed;
+            }
+        }
+        @Path("api")
+        class DogFather {
+            @POST
+            @Path("dogs")
+            public String dogs(Dog dog) {
+                return dog.breed;
+            }
+        }
+        @Consumes("text/plain")
+        class DogReader implements MessageBodyReader<Dog> {
+            @Override
+            public boolean isReadable(Class<?> type, Type genericType, Annotation[] annotations, javax.ws.rs.core.MediaType mediaType) {
+                return type.equals(Dog.class);
+            }
+            @Override
+            public Dog readFrom(Class<Dog> type, Type genericType, Annotation[] annotations, javax.ws.rs.core.MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
+                // gonna read the exact body length, but won't close the stream
+                byte[] buffer = new byte[body.length()];
+                entityStream.read(buffer);
+                return new Dog(new String(buffer, EntityProviders.charsetFor(mediaType)));
+            }
+        }
+
+        CompletableFuture<ResponseInfo> info = new CompletableFuture<>();
+        this.server = httpsServerForTest().addHandler(
+            restHandler(new DogFather())
+                .addCustomReader(new DogReader())
+                .build())
+            .addResponseCompleteListener(info::complete)
+            .start();
+        try (Response resp = call(request()
+            .post(new RequestBody() {
+                @Override
+                public MediaType contentType() {
+                    return MediaType.get("text/plain;charset=utf-8");
+                }
+
+                @Override
+                public void writeTo(BufferedSink bufferedSink) throws IOException {
+                    bufferedSink.write(body.getBytes(StandardCharsets.UTF_8));
+                    bufferedSink.flush(); // force an HTTP chunk to be sent that will cause the body reader to read the bytes, but not have a complete request
+                    bufferedSink.close();
+                }
+            })
+            .url(server.uri().resolve("/api/dogs").toString())
+        )) {
+            assertThat(resp.body().string(), equalTo(body));
+        }
+        ResponseInfo ri = info.get(5, TimeUnit.SECONDS);
+        assertThat(ri.completedSuccessfully(), Matchers.is(true));
     }
 
     private void startServer(Object restResource) {
