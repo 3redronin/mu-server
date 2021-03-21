@@ -1,6 +1,5 @@
 package io.muserver;
 
-import io.netty.util.ResourceLeakDetector;
 import okhttp3.Headers;
 import okhttp3.*;
 import org.junit.After;
@@ -19,17 +18,6 @@ import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 
 public class UploadTest {
-
-    private ResourceLeakDetector.Level originalLevel;
-    @Before
-    public void turnDownLeakDetectionBecauseItIsTooSlow() {
-        originalLevel = ResourceLeakDetector.getLevel();
-        ResourceLeakDetector.setLevel(ResourceLeakDetector.Level.ADVANCED);
-    }
-    @After
-    public void restoreLeakDetection() {
-        ResourceLeakDetector.setLevel(originalLevel);
-    }
 
     private MuServer server;
     public static File guangzhou = new File("src/test/resources/sample-static/images/guangzhou.jpeg");
