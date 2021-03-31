@@ -152,6 +152,7 @@ public class AsyncTest {
         } catch (Exception ex) {
             MuAssert.assertIOException(ex);
         }
+        assertEventually(infoRef::get, not(nullValue()));
         assertThat(infoRef.get().completedSuccessfully(), is(false));
     }
 
