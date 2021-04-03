@@ -61,6 +61,9 @@ public class XmlObjectBuilder {
         return this;
     }
 
+    /**
+     * @return A new object
+     */
     public XmlObject build() {
         return new XmlObject(name, namespace, prefix, attribute, wrapped);
     }

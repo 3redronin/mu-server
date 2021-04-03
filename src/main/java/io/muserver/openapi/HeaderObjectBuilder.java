@@ -2,6 +2,11 @@ package io.muserver.openapi;
 
 import java.util.Map;
 
+import static io.muserver.openapi.OpenApiUtils.immutable;
+
+/**
+ * A builder for {@link HeaderObject} objects
+ */
 public class HeaderObjectBuilder {
     private String description;
     private boolean required;
@@ -45,7 +50,8 @@ public class HeaderObjectBuilder {
      * @param style <p>Describes how the parameter value will be serialized depending on the type of the parameter value.
      *              Default value is <code>simple</code>.</p>
      *              <p>In order to support common ways of serializing simple parameters, a set of <code>style</code> values are defined.</p>
-     *              <table summary="Style values">
+     *              <table>
+     *              <caption>Style values</caption>
      *              <thead>
      *              <tr>
      *              <th><code>style</code></th>
@@ -126,8 +132,12 @@ public class HeaderObjectBuilder {
         return this;
     }
 
+    /**
+     * @return A new object
+     */
     public HeaderObject build() {
-        return new HeaderObject(description, required, deprecated, style, explode, schema, example, examples, content);
+        return new HeaderObject(description, required, deprecated, style, explode, schema, example,
+            immutable(examples), immutable(content));
     }
 
     /**

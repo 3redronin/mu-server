@@ -2,13 +2,13 @@ package io.muserver.rest;
 
 import io.muserver.ContentTypes;
 import io.muserver.MuServer;
-import io.muserver.Mutils;
 import okhttp3.FormBody;
 import okhttp3.MediaType;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
+import scaffolding.FileUtils;
 import scaffolding.StringUtils;
 
 import javax.ws.rs.POST;
@@ -51,8 +51,7 @@ public class StringEntityProvidersTest {
 
     @Test
     public void nonUTF8IsSupported() throws IOException {
-        File warAndPeaceInRussian = new File("src/test/resources/sample-static/war-and-peace-in-ISO-8859-5.txt");
-        assertThat("Couldn't find " + Mutils.fullPath(warAndPeaceInRussian), warAndPeaceInRussian.isFile(), is(true));
+        File warAndPeaceInRussian= FileUtils.warAndPeaceInRussian();
 
         @Path("samples")
         class Sample {
@@ -65,7 +64,7 @@ public class StringEntityProvidersTest {
         this.server = httpsServerForTest().addHandler(restHandler(new Sample())).start();
 
         try (Response resp = call(request(server.uri().resolve("/samples"))
-            .post(RequestBody.create(okhttp3.MediaType.get("text/plain; charset=ISO-8859-5"), warAndPeaceInRussian))
+            .post(RequestBody.create(warAndPeaceInRussian, okhttp3.MediaType.get("text/plain; charset=ISO-8859-5")))
         )) {
             assertThat(resp.code(), is(200));
             assertThat(resp.header("Content-Type"), is("text/plain;charset=ISO-8859-5"));
@@ -185,7 +184,7 @@ public class StringEntityProvidersTest {
     private void check(String value, int expectedStatus, String mimeType) throws IOException {
         try (Response resp = call(
             request(server.uri().resolve("/samples"))
-                .post(RequestBody.create(MediaType.parse(mimeType), value))
+                .post(RequestBody.create(value, MediaType.parse(mimeType)))
         )) {
             assertThat(resp.code(), equalTo(expectedStatus));
             assertThat(resp.header("Content-Type"), expectedStatus == 204 ? nullValue() : equalTo(mimeType));

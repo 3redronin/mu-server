@@ -9,6 +9,7 @@ import java.io.OutputStreamWriter;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import static io.muserver.Mutils.notNull;
 import static io.muserver.openapi.PathItemObjectBuilder.pathItemObject;
@@ -54,18 +55,19 @@ class OpenApiDocumentor implements MuHandler {
 
         List<TagObject> tags = new ArrayList<>();
 
-        Map<String, PathItemObject> pathItems = new LinkedHashMap<>();
+        Map<String, PathItemObjectBuilder> pathItemBuilders = new LinkedHashMap<>();
         for (ResourceClass root : roots) {
-            addResourceClass(0, "", tags, pathItems, root);
+            addResourceClass(0, "", tags, pathItemBuilders, root);
         }
+        Map<String, PathItemObject> pathItems = pathItemBuilders.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, v -> v.getValue().build()));
 
 
         OpenAPIObjectBuilder api = OpenAPIObjectBuilder.openAPIObject()
-            .withInfo(openAPIObject.info)
-            .withExternalDocs(openAPIObject.externalDocs)
-            .withSecurity(openAPIObject.security)
-            .withComponents(openAPIObject.components)
-            .withServers(openAPIObject.servers != null ? openAPIObject.servers :
+            .withInfo(openAPIObject.info())
+            .withExternalDocs(openAPIObject.externalDocs())
+            .withSecurity(openAPIObject.security())
+            .withComponents(openAPIObject.components())
+            .withServers(openAPIObject.servers() != null ? openAPIObject.servers() :
                 request.contextPath().length() > 0 ?
                     singletonList(
                         serverObject()
@@ -101,7 +103,7 @@ class OpenApiDocumentor implements MuHandler {
         return true;
     }
 
-    private void addResourceClass(int recursiveLevel, String parentResourcePath, List<TagObject> tags, Map<String, PathItemObject> pathItems, ResourceClass root) {
+    private void addResourceClass(int recursiveLevel, String parentResourcePath, List<TagObject> tags, Map<String, PathItemObjectBuilder> pathItems, ResourceClass root) {
         if (recursiveLevel == 5) {
             return;
         }
@@ -121,12 +123,11 @@ class OpenApiDocumentor implements MuHandler {
 
             Map<String, OperationObject> operations;
             if (pathItems.containsKey(path)) {
-                operations = pathItems.get(path).operations;
+                operations = pathItems.get(path).operations();
             } else {
                 operations = new LinkedHashMap<>();
-                PathItemObject pathItem = pathItemObject()
-                    .withOperations(operations)
-                    .build();
+                PathItemObjectBuilder pathItem = pathItemObject()
+                    .withOperations(operations);
                 pathItems.put(path, pathItem);
             }
             List<ParameterObject> parameters = method.params.stream()
@@ -142,34 +143,34 @@ class OpenApiDocumentor implements MuHandler {
             if (existing == null) {
                 existing = method.createOperationBuilder(customSchemas)
                     .withOperationId(method.httpMethod.name() + "_" + opPath)
-                    .withTags(singletonList(root.tag.name))
+                    .withTags(singletonList(root.tag.name()))
                     .withParameters(parameters)
                     .build();
             } else {
                 OperationObject curOO = method.createOperationBuilder(customSchemas).build();
-                List<ParameterObject> combinedParams = new ArrayList<>(existing.parameters);
+                List<ParameterObject> combinedParams = new ArrayList<>(existing.parameters());
                 combinedParams.addAll(parameters);
 
                 Map<String, MediaTypeObject> mergedContent = new HashMap<>();
-                if (existing.requestBody != null && existing.requestBody.content != null) {
-                    mergedContent.putAll(existing.requestBody.content);
+                if (existing.requestBody() != null && existing.requestBody().content() != null) {
+                    mergedContent.putAll(existing.requestBody().content());
                 }
-                if (curOO.requestBody != null) {
-                    mergedContent.putAll(curOO.requestBody.content);
+                if (curOO.requestBody() != null) {
+                    mergedContent.putAll(curOO.requestBody().content());
                 }
                 OperationObjectBuilder operationObjectBuilder = OperationObjectBuilder.builderFrom(existing)
                     .withParameters(combinedParams)
-                    .withResponses(mergeResponses(existing.responses, curOO.responses).build())
+                    .withResponses(mergeResponses(existing.responses(), curOO.responses()).build())
                     .withRequestBody(requestBodyObject()
-                        .withRequired(existing.requestBody != null && existing.requestBody.required &&
-                            curOO.requestBody != null && curOO.requestBody.required)
-                        .withDescription(Mutils.coalesce(existing.description, curOO.description))
+                        .withRequired(existing.requestBody() != null && existing.requestBody().required() &&
+                            curOO.requestBody() != null && curOO.requestBody().required())
+                        .withDescription(Mutils.coalesce(existing.description(), curOO.description()))
                         .withContent(mergedContent)
                         .build());
-                if (existing.summary == null && existing.description == null) {
+                if (existing.summary() == null && existing.description() == null) {
                     operationObjectBuilder
-                        .withSummary(curOO.summary)
-                        .withDescription(curOO.description);
+                        .withSummary(curOO.summary())
+                        .withDescription(curOO.description());
                 }
                 existing = operationObjectBuilder.build();
             }

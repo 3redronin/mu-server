@@ -10,6 +10,14 @@ import java.io.OutputStream;
  */
 class LazyAccessOutputStream extends OutputStream {
     private final MuResponse muResponse;
+    private OutputStream os;
+
+    private OutputStream out() {
+        if (os == null) {
+            os = muResponse.outputStream();
+        }
+        return os;
+    }
 
     LazyAccessOutputStream(MuResponse muResponse) {
         this.muResponse = muResponse;
@@ -17,21 +25,26 @@ class LazyAccessOutputStream extends OutputStream {
 
     @Override
     public void write(int b) throws IOException {
-        muResponse.outputStream().write(b);
+        out().write(b);
     }
 
     @Override
     public void write(byte[] b, int off, int len) throws IOException {
-        muResponse.outputStream().write(b, off, len);
+        out().write(b, off, len);
     }
 
     @Override
     public void flush() throws IOException {
-        muResponse.outputStream().flush();
+        if (os != null) {
+            os.flush();
+        }
     }
 
     @Override
     public void close() throws IOException {
-        muResponse.outputStream().close();
+        if (os != null) {
+            os.close();
+            os = null;
+        }
     }
 }

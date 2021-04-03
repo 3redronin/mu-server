@@ -5,16 +5,19 @@ import java.net.Socket;
 import java.security.Principal;
 import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
+import java.util.Map;
 
 class SniKeyManager extends X509ExtendedKeyManager {
     // with thanks to https://github.com/grahamedgecombe/netty-sni-example
 
     private final X509ExtendedKeyManager keyManager;
     private final String defaultAlias;
+    private final Map<String, String> sanToAliasMap;
 
-    public SniKeyManager(X509ExtendedKeyManager keyManager, String defaultAlias) {
+    public SniKeyManager(X509ExtendedKeyManager keyManager, String defaultAlias, Map<String, String> sanToAliasMap) {
         this.keyManager = keyManager;
         this.defaultAlias = defaultAlias;
+        this.sanToAliasMap = sanToAliasMap;
     }
 
     @Override
@@ -47,13 +50,15 @@ class SniKeyManager extends X509ExtendedKeyManager {
         ExtendedSSLSession session = (ExtendedSSLSession) engine.getHandshakeSession();
 
         // Pick first SNIHostName in the list of SNI names.
-        String hostname = null;
+        String sniHostname = null;
         for (SNIServerName name : session.getRequestedServerNames()) {
             if (name.getType() == StandardConstants.SNI_HOST_NAME) {
-                hostname = ((SNIHostName) name).getAsciiName();
+                sniHostname = ((SNIHostName) name).getAsciiName();
                 break;
             }
         }
+
+        String hostname = sanToAliasMap.getOrDefault(sniHostname, sniHostname);
 
         // If we got given a hostname over SNI, check if we have a cert and key for that hostname. If so, we use it.
         // Otherwise, we fall back to the default certificate.

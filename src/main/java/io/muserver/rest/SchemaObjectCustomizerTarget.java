@@ -6,5 +6,18 @@ import io.muserver.openapi.SchemaObject;
  * The aspect of the API that a {@link SchemaObject} refers to
  */
 public enum SchemaObjectCustomizerTarget {
-    REQUEST_BODY, RESPONSE_BODY, FORM_PARAM
+    /**
+     * The request body
+     */
+    REQUEST_BODY,
+
+    /**
+     * The response body
+     */
+    RESPONSE_BODY,
+
+    /**
+     * A form parameter
+     */
+    FORM_PARAM
 }

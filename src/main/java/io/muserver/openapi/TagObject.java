@@ -12,8 +12,20 @@ import static io.muserver.openapi.Jsonizer.append;
  */
 public class TagObject implements JsonWriter {
 
+    /**
+     * @deprecated use {@link #name()} instead
+     */
+    @Deprecated
     public final String name;
+    /**
+      @deprecated use {@link #description()} instead
+     */
+    @Deprecated
     public final String description;
+    /**
+      @deprecated use {@link #externalDocs()} instead
+     */
+    @Deprecated
     public final ExternalDocumentationObject externalDocs;
 
     TagObject(String name, String description, ExternalDocumentationObject externalDocs) {
@@ -44,5 +56,26 @@ public class TagObject implements JsonWriter {
     @Override
     public int hashCode() {
         return Objects.hash(name);
+    }
+
+    /**
+     * @return the value described by {@link TagObjectBuilder#withName}
+     */
+    public String name() {
+        return name;
+    }
+
+    /**
+      @return the value described by {@link TagObjectBuilder#withDescription}
+     */
+    public String description() {
+        return description;
+    }
+
+    /**
+      @return the value described by {@link TagObjectBuilder#withExternalDocs}
+     */
+    public ExternalDocumentationObject externalDocs() {
+        return externalDocs;
     }
 }

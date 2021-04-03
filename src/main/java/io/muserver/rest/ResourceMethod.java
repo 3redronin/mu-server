@@ -111,8 +111,8 @@ class ResourceMethod {
                         SchemaObjectBuilder builder = schemaReference == null ? schemaObjectFrom(responseClass) : schemaReference.schema.toBuilder();
                         responseSchema = schemaObjectCustomizer.customize(builder,
                             schemaContext(SchemaObjectCustomizerTarget.RESPONSE_BODY, null, responseClass, apiResponse.genericReturnType, mt)).build();
-                        if (responseSchema.example != null) {
-                            example = responseSchema.example;
+                        if (responseSchema.example() != null) {
+                            example = responseSchema.example();
                         }
                     }
                     return mediaTypeObject()

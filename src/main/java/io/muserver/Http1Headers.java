@@ -298,16 +298,19 @@ class Http1Headers implements Headers {
     }
 
     @Override
+    @Deprecated
     public String getAsString(CharSequence name) {
         return entries.getAsString(name);
     }
 
     @Override
+    @Deprecated
     public List<String> getAllAsString(CharSequence name) {
         return entries.getAllAsString(name);
     }
 
     @Override
+    @Deprecated
     public Iterator<Map.Entry<String, String>> iteratorAsString() {
         return entries.iteratorAsString();
     }
@@ -330,7 +333,7 @@ class Http1Headers implements Headers {
 
     @Override
     public boolean hasBody() {
-        return contains(HeaderNames.TRANSFER_ENCODING) || getInt(HeaderNames.CONTENT_LENGTH, -1) > 0;
+        return contains(HeaderNames.TRANSFER_ENCODING) || getLong(HeaderNames.CONTENT_LENGTH.toString(), -1) > 0;
     }
 
     @Override

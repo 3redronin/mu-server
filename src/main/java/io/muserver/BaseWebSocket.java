@@ -1,5 +1,7 @@
 package io.muserver;
 
+import io.netty.handler.codec.CorruptedFrameException;
+
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.concurrent.TimeoutException;
@@ -13,7 +15,14 @@ import java.util.concurrent.TimeoutException;
 @SuppressWarnings("RedundantThrows") // because implementing classes might throw exceptions
 public abstract class BaseWebSocket implements MuWebSocket {
     private MuWebSocketSession session;
-    private volatile boolean closeSent = false;
+
+    /**
+     * @return The state of the current session
+     */
+    protected WebsocketSessionState state() {
+        MuWebSocketSession session = this.session;
+        return session == null ? WebsocketSessionState.NOT_STARTED : session.state();
+    }
 
     @Override
     public void onConnect(MuWebSocketSession session) throws Exception {
@@ -32,12 +41,9 @@ public abstract class BaseWebSocket implements MuWebSocket {
 
     @Override
     public void onClientClosed(int statusCode, String reason) throws Exception {
-        if (!closeSent) {
-            closeSent = true;
-            try {
-                session.close(statusCode, reason);
-            } catch (IOException ignored) {
-            }
+        try {
+            session.close(statusCode, reason);
+        } catch (IOException ignored) {
         }
     }
 
@@ -53,13 +59,13 @@ public abstract class BaseWebSocket implements MuWebSocket {
 
     @Override
     public void onError(Throwable cause) throws Exception {
-        if (!closeSent) {
+        if (!state().endState()) {
             if (cause instanceof TimeoutException) {
-                session().close(1001, "Idle Timeout");
-            } else if (cause instanceof WebSocketProtocolException) {
-                // do nothing as it is already closed by Netty
+                session().close(1001, WebsocketSessionState.TIMED_OUT.name());
+            } else if (cause instanceof CorruptedFrameException) {
+                session().close(1008, WebsocketSessionState.ERRORED.name());
             } else if (session != null) {
-                session().close(1011, "Server error");
+                session().close(1011, WebsocketSessionState.ERRORED.name());
             }
         }
     }
@@ -73,8 +79,6 @@ public abstract class BaseWebSocket implements MuWebSocket {
     protected MuWebSocketSession session() {
         if (session == null) {
             throw new IllegalStateException("The websocket has not been connected yet");
-        } else if (closeSent) {
-            throw new IllegalStateException("The session is no longer available as the close event has been sent.");
         }
         return session;
     }

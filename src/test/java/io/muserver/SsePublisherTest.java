@@ -2,6 +2,8 @@ package io.muserver;
 
 import org.junit.After;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import scaffolding.*;
 
 import java.io.IOException;
@@ -22,7 +24,7 @@ public class SsePublisherTest {
     private final SseClient.OkSse sseClient = new SseClient.OkSse(ClientUtils.client);
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final TestSseClient listener = new TestSseClient();
-
+    private static final Logger log = LoggerFactory.getLogger(SsePublisherTest.class);
 
     @Test
     public void canCall() throws InterruptedException {
@@ -45,8 +47,8 @@ public class SsePublisherTest {
                         ssePublisher.send("A message and event and ID", "customevent", "myid");
                         ssePublisher.sendComment("this is a comment 2");
                         ssePublisher.send(multilineJson, null, null);
-                    } catch (IOException e) {
-                        // the user has disconnected
+                    } catch (Exception e) {
+                        log.info("Error while publishing", e);
                     } finally {
                         ssePublisher.close();
                     }
@@ -55,7 +57,7 @@ public class SsePublisherTest {
             })
             .start();
 
-        SseClient.ServerSentEvent clientHandle = sseClient.newServerSentEvent(request().url(server.uri().resolve("/streamer").toString()).build(), listener);
+        SseClient.ServerSentEvent clientHandle = sseClient.newServerSentEvent(request(server.uri().resolve("/streamer")).build(), listener);
         listener.assertListenerIsClosed();
         clientHandle.close();
         assertThat(listener.receivedMessages, equalTo(asList(

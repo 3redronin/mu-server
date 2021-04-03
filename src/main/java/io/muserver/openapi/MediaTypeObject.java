@@ -9,9 +9,25 @@ import java.util.Map;
  */
 public class MediaTypeObject implements JsonWriter {
 
+    /**
+     * @deprecated use {@link #schema()} instead
+     */
+    @Deprecated
     public final SchemaObject schema;
+    /**
+      @deprecated use {@link #example()} instead
+     */
+    @Deprecated
     public final Object example;
+    /**
+      @deprecated use {@link #examples()} instead
+     */
+    @Deprecated
     public final Map<String, ExampleObject> examples;
+    /**
+      @deprecated use {@link #encoding()} instead
+     */
+    @Deprecated
     public final Map<String, EncodingObject> encoding;
 
     MediaTypeObject(SchemaObject schema, Object example, Map<String, ExampleObject> examples, Map<String, EncodingObject> encoding) {
@@ -33,5 +49,33 @@ public class MediaTypeObject implements JsonWriter {
         isFirst = Jsonizer.append(writer, "examples", examples, isFirst);
         isFirst = Jsonizer.append(writer, "encoding", encoding, isFirst);
         writer.append('}');
+    }
+
+    /**
+     * @return the value described by {@link MediaTypeObjectBuilder#withSchema}
+     */
+    public SchemaObject schema() {
+        return schema;
+    }
+
+    /**
+      @return the value described by {@link MediaTypeObjectBuilder#withExample}
+     */
+    public Object example() {
+        return example;
+    }
+
+    /**
+      @return the value described by {@link MediaTypeObjectBuilder#withExamples}
+     */
+    public Map<String, ExampleObject> examples() {
+        return examples;
+    }
+
+    /**
+      @return the value described by {@link MediaTypeObjectBuilder#withEncoding}
+     */
+    public Map<String, EncodingObject> encoding() {
+        return encoding;
     }
 }

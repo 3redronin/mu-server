@@ -1,11 +1,7 @@
 package io.muserver.handlers;
 
-import io.muserver.AsyncContext;
 import io.muserver.AsyncMuHandler;
-import io.muserver.Headers;
-
-import java.net.URI;
-import java.nio.ByteBuffer;
+import io.muserver.MuException;
 
 /**
  * @deprecated Use {@link HttpsRedirectorBuilder#toHttpsPort(int)} instead and add it as standard handler.
@@ -13,31 +9,14 @@ import java.nio.ByteBuffer;
 @Deprecated
 public class HttpToHttpsRedirector implements AsyncMuHandler {
 
-    private final int httpsPort;
-
     /**
      * Creates a HTTPS redirector
      * @param httpsPort The port that HTTPS is running on
+     * @deprecated Use {@link HttpsRedirectorBuilder#toHttpsPort(int)} instead and add it as standard handler.
      */
+    @Deprecated
     public HttpToHttpsRedirector(int httpsPort) {
-        this.httpsPort = httpsPort;
+        throw new MuException("This class has been deprecated. Please use HttpsRedirectorBuilder.toHttpsPort(int) instead.");
     }
 
-    public boolean onHeaders(AsyncContext ctx, Headers headers) throws Exception {
-        URI uri = ctx.request.uri();
-        boolean isHttp = uri.getScheme().equals("http");
-        if (!isHttp) {
-            return false;
-        }
-        URI newURI = new URI("https", uri.getUserInfo(), uri.getHost(), httpsPort, uri.getPath(), uri.getQuery(), uri.getFragment());
-        ctx.response.redirect(newURI);
-        ctx.complete(true);
-        return true;
-    }
-
-    public void onRequestData(AsyncContext ctx, ByteBuffer buffer) {
-    }
-
-    public void onRequestComplete(AsyncContext ctx) {
-    }
 }

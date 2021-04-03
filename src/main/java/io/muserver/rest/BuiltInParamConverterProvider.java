@@ -8,8 +8,6 @@ import javax.ws.rs.ext.ParamConverter;
 import javax.ws.rs.ext.ParamConverterProvider;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.*;
-import java.time.Instant;
-import java.time.format.DateTimeParseException;
 import java.util.*;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -72,10 +70,6 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
         }
         if (rawType.isEnum()) {
             return new EnumConverter(rawType);
-        }
-
-        if (rawType.equals(Instant.class)) {
-            return new InstantConverter();
         }
 
         ConstructorConverter<T> cc = ConstructorConverter.tryToCreate(rawType);
@@ -275,7 +269,7 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
             return String.valueOf(value);
         }
         public String toString() {
-            return "StaticMethodConverter{" + staticMethod + '}';
+            return staticMethod.toString();
         }
 
         static <T> StaticMethodConverter<T> tryToCreate(Class clazz) {
@@ -283,6 +277,9 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
             Method staticMethod = getSingleParamPublicStaticMethodNamed(clazz, declaredMethods, "valueOf");
             if (staticMethod == null) {
                 staticMethod = getSingleParamPublicStaticMethodNamed(clazz, declaredMethods, "fromString");
+            }
+            if (staticMethod == null) {
+                staticMethod = getSingleParamPublicStaticMethodNamed(clazz, declaredMethods, "parse");
             }
             if (staticMethod == null) {
                 return null;
@@ -306,24 +303,4 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
         }
     }
 
-    private static class InstantConverter implements ParamConverter<Instant> {
-        @Override
-        public Instant fromString(String value) {
-            try {
-                return Mutils.nullOrEmpty(value) ? null : Instant.parse(value);
-            } catch (DateTimeParseException e) {
-                throw new IllegalArgumentException("The value was not a valid Instant", e);
-            }
-        }
-
-        @Override
-        public String toString(Instant value) {
-            return value == null ? null : value.toString();
-        }
-
-        @Override
-        public String toString() {
-            return "Instant converter, expecting ISO format dates such as '2020-03-06T04:43:00.691Z'";
-        }
-    }
 }

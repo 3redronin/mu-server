@@ -65,9 +65,9 @@ public interface MuRequest {
     Headers headers();
 
     /**
-     * The input stream of the request, if there was a request body.
-     * <p>
-     * Note: this can only be read once and cannot be used with {@link #readBodyAsString()} or {@link #form()}.
+     * <p>The input stream of the request, if there was a request body.</p>
+     * <p>If you call this method and an input stream is available, then <strong>you must close the input stream</strong>.</p>
+     * <p>Also note that this can only be read once and cannot be used with {@link #readBodyAsString()} or {@link #form()}.</p>
      *
      * @return {@link Optional#empty()} if there is no request body; otherwise the input stream of the request body.
      */
@@ -277,9 +277,7 @@ public interface MuRequest {
     /**
      * The protocol for the request.
      * @return A string such as <code>HTTP/1.1</code> or <code>HTTP/2</code>
-     * @deprecated Call {@link #connection()} to get the connection and then use {@link HttpConnection#protocol()}
      */
-    @Deprecated
     String protocol();
 
     /**

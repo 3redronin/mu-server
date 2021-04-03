@@ -82,6 +82,8 @@ public class RestHandler implements MuHandler {
                 try {
                     Object instance = invokeResourceMethod(requestContext, muResponse, matchedMethod, onSuspended, entityProviders);
                     return ResourceClass.forSubResourceLocator(rm, instance.getClass(), instance, schemaObjectCustomizer, paramConverterProviders);
+                } catch (WebApplicationException wae) {
+                    throw wae;
                 } catch (Exception e) {
                     throw new MuException("Error creating instance returned by sub-resource-locator " + rm.methodHandle, e);
                 }
@@ -183,6 +185,9 @@ public class RestHandler implements MuHandler {
 
     private void sendResponse(int nestingLevel, MuContainerRequestContext requestContext, MuResponse muResponse, List<MediaType> acceptHeaders, List<MediaType> produces, List<MediaType> directlyProduces, Object result) throws Exception {
         try {
+            if (requestContext.hasEntity()) {
+                requestContext.getEntityStream().close();
+            }
             if (!muResponse.hasStartedSendingData()) {
                 ObjWithType obj = ObjWithType.objType(result);
 
@@ -197,44 +202,44 @@ public class RestHandler implements MuHandler {
                     jaxRSResponse = new JaxRSResponse(Response.Status.fromStatusCode(obj.status()), new LowercasedMultivaluedHashMap<>(), obj.entity, null, new NewCookie[0], emptyList(), new Annotation[0]);
                 }
 
-                MuResponseContext responseContext = new MuResponseContext(jaxRSResponse, obj, requestContext.getMuMethod() == Method.HEAD ? NullOutputStream.INSTANCE : new LazyAccessOutputStream(muResponse));
-                if (obj.entity != null) {
-                    MediaType responseMediaType = MediaTypeDeterminer.determine(obj, produces, directlyProduces, entityProviders.writers, acceptHeaders);
-                    responseContext.setEntity(result, jaxRSResponse.getAnnotations(), responseMediaType);
-                }
-
-                filterManagerThing.onBeforeSendResponse(requestContext, responseContext);
-                int status = responseContext.getStatus();
-                muResponse.status(status);
-                MuRuntimeDelegate.writeResponseHeaders(requestContext.muRequest.uri(), jaxRSResponse, muResponse);
-
-                Object entity = responseContext.getEntity();
-                if (entity == null) {
-                    if (status != 204 && status != 304 && status != 205) {
-                        muResponse.headers().set(HeaderNames.CONTENT_LENGTH, HeaderValues.ZERO);
-                    }
-                } else {
-
-                    MediaType responseMediaType = responseContext.getMediaType();
-                    Annotation[] entityAnnotations = responseContext.getEntityAnnotations();
-
-                    Class entityType = responseContext.getEntityClass();
-                    Type entityGenericType = responseContext.getEntityType();
-                    MessageBodyWriter messageBodyWriter = entityProviders.selectWriter(entityType, entityGenericType, entityAnnotations, responseMediaType);
-
-                    long size = messageBodyWriter.getSize(entity, entityType, entityGenericType, entityAnnotations, responseMediaType);
-                    if (size > -1) {
-                        muResponse.headers().set(HeaderNames.CONTENT_LENGTH.toString(), size);
+                try (LazyAccessOutputStream out = new LazyAccessOutputStream(muResponse)) {
+                    MuResponseContext responseContext = new MuResponseContext(jaxRSResponse, obj, requestContext.getMuMethod() == Method.HEAD ? NullOutputStream.INSTANCE : out);
+                    if (obj.entity != null) {
+                        MediaType responseMediaType = MediaTypeDeterminer.determine(obj, produces, directlyProduces, entityProviders.writers, acceptHeaders);
+                        responseContext.setEntity(result, jaxRSResponse.getAnnotations(), responseMediaType);
                     }
 
-                    String contentType = responseMediaType.toString();
-                    if (responseMediaType.getType().equals("text") && !responseMediaType.getParameters().containsKey("charset")) {
-                        contentType += ";charset=utf-8";
+                    filterManagerThing.onBeforeSendResponse(requestContext, responseContext);
+                    int status = responseContext.getStatus();
+                    muResponse.status(status);
+                    MuRuntimeDelegate.writeResponseHeaders(requestContext.muRequest.uri(), jaxRSResponse, muResponse);
+
+                    Object entity = responseContext.getEntity();
+                    if (entity == null) {
+                        if (status != 204 && status != 304 && status != 205) {
+                            muResponse.headers().set(HeaderNames.CONTENT_LENGTH, HeaderValues.ZERO);
+                        }
+                    } else {
+
+                        MediaType responseMediaType = responseContext.getMediaType();
+                        Annotation[] entityAnnotations = responseContext.getEntityAnnotations();
+
+                        Class entityType = responseContext.getEntityClass();
+                        Type entityGenericType = responseContext.getEntityType();
+                        MessageBodyWriter messageBodyWriter = entityProviders.selectWriter(entityType, entityGenericType, entityAnnotations, responseMediaType);
+
+                        long size = messageBodyWriter.getSize(entity, entityType, entityGenericType, entityAnnotations, responseMediaType);
+                        if (size > -1) {
+                            muResponse.headers().set(HeaderNames.CONTENT_LENGTH.toString(), size);
+                        }
+
+                        String contentType = responseMediaType.toString();
+                        if (responseMediaType.getType().equals("text") && !responseMediaType.getParameters().containsKey("charset")) {
+                            contentType += ";charset=utf-8";
+                        }
+                        muResponse.headers().set(HeaderNames.CONTENT_TYPE, contentType);
+                        messageBodyWriter.writeTo(entity, entityType, entityGenericType, entityAnnotations, responseMediaType, muHeadersToJaxObj(muResponse.headers()), responseContext.getEntityStream());
                     }
-                    muResponse.headers().set(HeaderNames.CONTENT_TYPE, contentType);
-
-                    messageBodyWriter.writeTo(entity, entityType, entityGenericType, entityAnnotations, responseMediaType, muHeadersToJaxObj(muResponse.headers()), responseContext.getEntityStream());
-
                 }
             }
         } catch (Exception ex) {

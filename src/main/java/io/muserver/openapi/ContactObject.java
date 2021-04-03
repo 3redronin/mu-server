@@ -10,8 +10,20 @@ import static io.muserver.openapi.Jsonizer.append;
  * @see ContactObjectBuilder
  */
 public class ContactObject implements JsonWriter {
+    /**
+     * Use {@link #name()} instead
+     */
+    @Deprecated
     public final String name;
+    /**
+     * Use {@link #url()} instead
+     */
+    @Deprecated
     public final URI url;
+    /**
+     * Use {@link #email()} instead
+     */
+    @Deprecated
     public final String email;
 
     ContactObject(String name, URI url, String email) {
@@ -31,5 +43,26 @@ public class ContactObject implements JsonWriter {
         isFirst = append(writer, "url", url, isFirst);
         isFirst = append(writer, "email", email, isFirst);
         writer.write("}");
+    }
+
+    /**
+     * @return The value described by {@link ContactObjectBuilder#withName}
+     */
+    public String name() {
+        return name;
+    }
+
+    /**
+     * @return The value described by {@link ContactObjectBuilder#withUrl}
+     */
+    public URI url() {
+        return url;
+    }
+
+    /**
+     * @return The value described by {@link ContactObjectBuilder#withEmail}
+     */
+    public String email() {
+        return email;
     }
 }

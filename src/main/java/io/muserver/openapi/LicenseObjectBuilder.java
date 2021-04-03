@@ -27,6 +27,9 @@ public class LicenseObjectBuilder {
         return this;
     }
 
+    /**
+     * @return A new object
+     */
     public LicenseObject build() {
         return new LicenseObject(name, url);
     }

@@ -3,6 +3,8 @@ package io.muserver.openapi;
 import java.util.List;
 import java.util.Map;
 
+import static io.muserver.openapi.OpenApiUtils.immutable;
+
 /**
  * Describes the operations available on a single path. A Path Item MAY be empty, due to ACL constraints.
  * The path itself is still exposed to the documentation viewer but they will not know which operations
@@ -64,8 +66,11 @@ public class PathItemObjectBuilder {
         return this;
     }
 
+    /**
+     * @return A new object
+     */
     public PathItemObject build() {
-        return new PathItemObject(summary, description, operations, servers, parameters);
+        return new PathItemObject(summary, description, immutable(operations), immutable(servers), immutable(parameters));
     }
 
     /**
@@ -75,5 +80,28 @@ public class PathItemObjectBuilder {
      */
     public static PathItemObjectBuilder pathItemObject() {
         return new PathItemObjectBuilder();
+    }
+
+    String summary() {
+        return summary;
+    }
+
+    String description() {
+        return description;
+    }
+
+    /**
+     * @return The value set with {@link #withOperations}
+     */
+    public Map<String, OperationObject> operations() {
+        return operations;
+    }
+
+    List<ServerObject> servers() {
+        return servers;
+    }
+
+    List<ParameterObject> parameters() {
+        return parameters;
     }
 }

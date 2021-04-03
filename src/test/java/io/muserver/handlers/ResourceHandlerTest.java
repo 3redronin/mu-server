@@ -118,6 +118,7 @@ public class ResourceHandlerTest {
             try (Response resp = call(request(imageUri).header("If-Modified-Since", Mutils.toHttpDate(oneSecBeforeLastModified)))) {
                 assertThat(resp.code(), is(200));
                 assertThat(resp.header("last-modified"), is(lastModified));
+                resp.body().bytes();
             }
         }
     }
@@ -409,6 +410,48 @@ public class ResourceHandlerTest {
         try (Response resp = call(request(server.uri().resolve("/umm/")))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.body().string(), containsString("<title>Mu-Server API Documentation</title>"));
+        }
+    }
+
+    @Test
+    public void canServeResourcesFromMultipleJarsOnClasspath() throws IOException {
+        server = ServerUtils.httpsServerForTest()
+            .withGzipEnabled(false)
+            .addHandler(context("/lib")
+                .addHandler(context("/jquery")
+                    .addHandler(classpathHandler("/META-INF/resources/webjars/jquery"))
+                    .addHandler(context("/ui")
+                        .addHandler(classpathHandler("/META-INF/resources/webjars/jquery-ui"))
+                    )
+                )
+                .addHandler(context("/jquery-1.12.0")
+                    .addHandler(classpathHandler("/META-INF/resources/webjars/jquery/1.12.0"))
+                )
+                .addHandler(context("/jquery-ui-1.12.1")
+                    .addHandler(classpathHandler("/META-INF/resources/webjars/jquery-ui/1.12.1"))
+                )
+            )
+            .start();
+
+        try (Response resp = call(request(server.uri().resolve("/lib/jquery/1.12.0/jquery.min.js")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.header("Content-Type"), is("application/javascript"));
+            assertThat(resp.body().string(), is(readResource("/META-INF/resources/webjars/jquery/1.12.0/jquery.min.js")));
+        }
+        try (Response resp = call(request(server.uri().resolve("/lib/jquery/ui/1.12.1/jquery-ui.min.js")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.header("Content-Type"), is("application/javascript"));
+            assertThat(resp.body().string(), is(readResource("/META-INF/resources/webjars/jquery-ui/1.12.1/jquery-ui.min.js")));
+        }
+        try (Response resp = call(request(server.uri().resolve("/lib/jquery-1.12.0/jquery.min.js")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.header("Content-Type"), is("application/javascript"));
+            assertThat(resp.body().string(), is(readResource("/META-INF/resources/webjars/jquery/1.12.0/jquery.min.js")));
+        }
+        try (Response resp = call(request(server.uri().resolve("/lib/jquery-ui-1.12.1/jquery-ui.min.js")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.header("Content-Type"), is("application/javascript"));
+            assertThat(resp.body().string(), is(readResource("/META-INF/resources/webjars/jquery-ui/1.12.1/jquery-ui.min.js")));
         }
     }
 

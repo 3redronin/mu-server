@@ -6,11 +6,8 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http2.Http2ConnectionEncoder;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 class Http2Response extends NettyResponseAdaptor {
-    private static final Logger log = LoggerFactory.getLogger(Http2Response.class);
 
     private final ChannelHandlerContext ctx;
     private final Http2Headers headers;
@@ -28,43 +25,33 @@ class Http2Response extends NettyResponseAdaptor {
     }
 
     @Override
-    protected ChannelFuture writeToChannel(boolean isLast, ByteBuf content) {
-        return writeToChannel(ctx, encoder, streamId, content, isLast);
+    protected ChannelFuture writeAndFlushToChannel(boolean isLast, ByteBuf content) {
+        return writeAndFlushToChannel(ctx, encoder, streamId, content, isLast);
     }
 
-    static ChannelFuture writeToChannel(ChannelHandlerContext ctx, Http2ConnectionEncoder encoder, int streamId, ByteBuf content, boolean isLast) {
+    static ChannelFuture writeAndFlushToChannel(ChannelHandlerContext ctx, Http2ConnectionEncoder encoder, int streamId, ByteBuf content, boolean isLast) {
+        assert ctx.executor().inEventLoop() : "Not in event loop";
         ChannelPromise channelPromise = ctx.newPromise();
-        if (ctx.executor().inEventLoop()) {
-            writeToChannelForReal(ctx, encoder, streamId, content, isLast, channelPromise);
-        } else {
-            ctx.executor().execute(() -> writeToChannelForReal(ctx, encoder, streamId, content, isLast, channelPromise));
-        }
+        encoder.writeData(ctx, streamId, content, 0, isLast, channelPromise);
+        ctx.channel().flush();
         return channelPromise;
     }
 
-    private static void writeToChannelForReal(ChannelHandlerContext ctx, Http2ConnectionEncoder encoder, int streamId, ByteBuf content, boolean isLast, ChannelPromise channelPromise) {
-        encoder.writeData(ctx, streamId, content, 0, isLast, channelPromise);
-        ctx.channel().flush();
-    }
-
     @Override
-    protected boolean onBadRequestSent() {
-        return false; // the stream is bad, but the connection is fine. Doesn't matter.
-    }
-
-    @Override
-    protected void startStreaming() {
+    protected ChannelFuture startStreaming() {
         super.startStreaming();
-        writeHeaders(false);
+        return writeHeaders(false);
     }
 
     @Override
     protected void onContentLengthMismatch() {
-        // don't really care for http2
-        log.info("The declared content length for " + request + " was " + declaredLength + " bytes however " + bytesStreamed + " bytes being sent.");
+        throw new IllegalStateException("The declared content length for " + request + " was " + declaredLength + " bytes. " +
+            "The current write is being aborted and the connection is being closed because it would have resulted in " +
+            bytesStreamed + " bytes being sent.");
     }
 
-    private void writeHeaders(boolean isEnd) {
+    private ChannelFuture writeHeaders(boolean isEnd) {
+        assert ctx.executor().inEventLoop() : "Not in event loop";
         headers.entries.status(httpStatus().codeAsText());
 
         if (settings.shouldCompress(headers.get(HeaderNames.CONTENT_LENGTH), headers.get(HeaderNames.CONTENT_TYPE))) {
@@ -76,60 +63,36 @@ class Http2Response extends NettyResponseAdaptor {
                 headers.set(HeaderNames.CONTENT_ENCODING, "mu-" + toUse);
             }
         }
-
-        if (ctx.executor().inEventLoop()) {
-            writeHeadersForReal(isEnd);
-        } else {
-            ctx.executor().execute(() -> writeHeadersForReal(isEnd));
-        }
-    }
-
-    private void writeHeadersForReal(boolean isEnd) {
-        encoder.writeHeaders(ctx, streamId, headers.entries, 0, isEnd, ctx.newPromise());
+        ChannelFuture future = encoder.writeHeaders(ctx, streamId, headers.entries, 0, isEnd, ctx.voidPromise());
         if (isEnd) {
             ctx.channel().flush();
         }
+        return future;
     }
 
     @Override
-    protected void writeFullResponse(ByteBuf body) {
+    protected ChannelFuture writeFullResponse(ByteBuf body) {
         writeHeaders(false);
-        writeToChannel(true, body);
-    }
-
-    @Override
-    protected boolean connectionOpen() {
-        return ctx.channel().isOpen();
-    }
-
-    @Override
-    protected ChannelFuture closeConnection() {
-        return ctx.channel().close();
+        return writeAndFlushToChannel(true, body);
     }
 
     @Override
     protected ChannelFuture writeLastContentMarker() {
-        return writeToChannel(true, Unpooled.directBuffer(0));
+        return writeAndFlushToChannel(true, Unpooled.directBuffer(0));
     }
 
     @Override
-    protected void sendEmptyResponse(boolean addContentLengthHeader) {
+    protected ChannelFuture sendEmptyResponse(boolean addContentLengthHeader) {
         if (addContentLengthHeader) {
             headers.set(HeaderNames.CONTENT_LENGTH, HeaderValues.ZERO);
         }
-        writeHeaders(true);
-    }
-
-
-    @Override
-    protected void writeRedirectResponse() {
-        writeHeaders(true);
+        return writeHeaders(true);
     }
 
     @Override
     public String toString() {
         return "Http2Response{" +
-            "outputState=" + outputState +
+            "outputState=" + outputState() +
             ", status=" + status +
             "}";
     }

@@ -78,6 +78,11 @@ public class HttpsRedirectorBuilder implements MuHandlerBuilder<HttpsRedirector>
         return this;
     }
 
+    /**
+     * Creates a new redirect builder
+     * @param port The port to redirect to (e.g. 443)
+     * @return A new builder
+     */
     public static HttpsRedirectorBuilder toHttpsPort(int port) {
         return new HttpsRedirectorBuilder()
             .withPort(port);

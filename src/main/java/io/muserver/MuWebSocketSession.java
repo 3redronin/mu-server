@@ -64,4 +64,9 @@ public interface MuWebSocketSession {
      * @return The client's address
      */
     InetSocketAddress remoteAddress();
+
+    /**
+     * @return The state of the current session
+     */
+    WebsocketSessionState state();
 }

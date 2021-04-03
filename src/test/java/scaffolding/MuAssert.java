@@ -1,15 +1,19 @@
 package scaffolding;
 
+import io.muserver.MuRequest;
 import io.muserver.MuServer;
+import io.muserver.StatusLogger;
 import org.hamcrest.Matcher;
 import org.junit.Assert;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.empty;
-import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.*;
 
 public class MuAssert {
 
@@ -38,13 +42,23 @@ public class MuAssert {
     public static void stopAndCheck(MuServer server) {
         if (server != null) {
             int count = 0;
-            while (count < 40 && !server.stats().activeRequests().isEmpty()) {
+            while (count < 50 && !server.stats().activeRequests().isEmpty()) {
                 sleep(50);
                 count++;
             }
+            Set<MuRequest> active = server.stats().activeRequests();
+            StatusLogger.logRequests(active);
             assertThat("Expected no requests to still be in flight when stopping server",
-                server.stats().activeRequests(), is(empty()));
+                active, is(empty()));
             server.stop();
+        }
+    }
+
+    public static void assertIOException(Throwable t) {
+        if (t instanceof UncheckedIOException) {
+            assertThat(t.getCause(), instanceOf(IOException.class));
+        } else {
+            assertThat(t, instanceOf(IOException.class));
         }
     }
 
@@ -71,6 +85,6 @@ public class MuAssert {
     }
 
     public interface Func<V> {
-        public V apply() throws Exception;
+        V apply() throws Exception;
     }
 }

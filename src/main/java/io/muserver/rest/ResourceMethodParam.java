@@ -11,6 +11,7 @@ import javax.ws.rs.container.Suspended;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.ext.ParamConverter;
 import javax.ws.rs.ext.ParamConverterProvider;
+import java.io.File;
 import java.io.IOException;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Parameter;
@@ -149,6 +150,9 @@ abstract class ResourceMethodParam {
             Class<?> paramClass = parameterHandle.getType();
             if (UploadedFile.class.isAssignableFrom(paramClass)) {
                 return request.uploadedFile(key);
+            } else if (File.class.isAssignableFrom(paramClass)) {
+                UploadedFile uf = request.uploadedFile(key);
+                return uf == null ? null : uf.asFile();
             } else if (List.class.isAssignableFrom(paramClass)) {
                 Type t = parameterHandle.getParameterizedType();
                 if (t instanceof ParameterizedType) {

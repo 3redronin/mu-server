@@ -2,6 +2,8 @@ package io.muserver.openapi;
 
 import java.util.Map;
 
+import static io.muserver.openapi.OpenApiUtils.immutable;
+
 /**
  * Each Media Type Object provides schema and examples for the media type identified by its key.
  */
@@ -51,8 +53,11 @@ public class MediaTypeObjectBuilder {
         return this;
     }
 
+    /**
+     * @return A new object
+     */
     public MediaTypeObject build() {
-        return new MediaTypeObject(schema, example, examples, encoding);
+        return new MediaTypeObject(schema, example, immutable(examples), immutable(encoding));
     }
 
     /**

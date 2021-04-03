@@ -150,7 +150,7 @@ public class ResourceHandler implements MuHandler {
             String extension = fileName.substring(ind + 1).toLowerCase();
             type = extensionToResourceType.getOrDefault(extension, ResourceType.DEFAULT);
         }
-        response.contentType(type.mimeType);
+        response.contentType(type.mimeType());
         Headers headers = response.headers();
         headers.set(HeaderNames.ACCEPT_RANGES, HeaderValues.BYTES);
         if (fileSize != null) {
@@ -159,7 +159,7 @@ public class ResourceHandler implements MuHandler {
         if (lastModified != null) {
             headers.set(HeaderNames.LAST_MODIFIED, Mutils.toHttpDate(lastModified));
         }
-        headers.add(type.headers);
+        headers.add(type.headers());
         if (this.resourceCustomizer != null) {
             this.resourceCustomizer.beforeHeadersSent(request, headers);
         }

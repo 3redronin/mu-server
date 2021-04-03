@@ -6,12 +6,20 @@ import java.util.Map;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
+/**
+ * Lowercase, because headers should be lowercase
+ * @param <V> The value type (the key type is String)
+ */
 class LowercasedMultivaluedHashMap<V> extends AbstractMultivaluedMap<String, V> {
 
     LowercasedMultivaluedHashMap() {
         super(new LowercasedHashMap<>());
     }
 
+    /**
+     * Lowercase, because headers should be lowercase
+     * @param <V> The value type (the key type is String)
+     */
     private static class LowercasedHashMap<V> extends HashMap<String, V> {
         @Override
         public V get(Object key) {

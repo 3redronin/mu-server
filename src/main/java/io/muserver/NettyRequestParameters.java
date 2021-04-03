@@ -1,25 +1,24 @@
 package io.muserver;
 
-import io.netty.handler.codec.http.QueryStringDecoder;
-
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import static io.muserver.Mutils.urlEncode;
 import static java.util.Collections.emptyList;
 
 class NettyRequestParameters implements RequestParameters {
 
-    private final QueryStringDecoder decoder;
+    private final Map<String, List<String>> parameters;
 
-    NettyRequestParameters(QueryStringDecoder decoder) {
-        Mutils.notNull("decoder", decoder);
-        this.decoder = decoder;
+    NettyRequestParameters(Map<String, List<String>> parameters) {
+        Mutils.notNull("parameters", parameters);
+        this.parameters = parameters;
     }
 
     @Override
     public Map<String, List<String>> all() {
-        return decoder.parameters();
+        return parameters;
     }
 
     @Override
@@ -29,7 +28,7 @@ class NettyRequestParameters implements RequestParameters {
 
     @Override
     public String get(String name, String defaultValue) {
-        List<String> values = decoder.parameters().get(name);
+        List<String> values = parameters.get(name);
         if (values == null) {
             return defaultValue;
         }
@@ -108,7 +107,7 @@ class NettyRequestParameters implements RequestParameters {
 
     @Override
     public List<String> getAll(String name) {
-        List<String> values = decoder.parameters().get(name);
+        List<String> values = parameters.get(name);
         if (values == null) {
             return emptyList();
         }
@@ -117,26 +116,36 @@ class NettyRequestParameters implements RequestParameters {
 
     @Override
     public boolean contains(String name) {
-        return decoder.parameters().containsKey(name);
+        return parameters.containsKey(name);
     }
+
 
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         NettyRequestParameters that = (NettyRequestParameters) o;
-        return Objects.equals(decoder.parameters(), that.decoder.parameters());
+        return Objects.equals(parameters, that.parameters);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(decoder.parameters());
+        return Objects.hash(parameters);
     }
 
     @Override
     public String toString() {
-        String s = decoder.toString();
-        int qm = s.indexOf('?');
-        return qm == -1 ? s : s.substring(qm + 1);
+        StringBuilder sb = new StringBuilder();
+        boolean isFirst = true;
+        for (Map.Entry<String, List<String>> entry : parameters.entrySet()) {
+            for (String value : entry.getValue()) {
+                if (!isFirst) {
+                    sb.append('&');
+                }
+                sb.append(urlEncode(entry.getKey())).append('=').append(urlEncode(value));
+                isFirst = false;
+            }
+        }
+        return sb.toString();
     }
 }

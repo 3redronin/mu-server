@@ -5,10 +5,45 @@ package io.muserver;
  */
 public enum Method {
 
-	GET, POST, HEAD, OPTIONS, PUT, DELETE, TRACE, CONNECT, PATCH;
+    /**
+     * The GET HTTP method
+     */
+    GET,
+    /**
+     * The POST HTTP method
+     */
+    POST,
+    /**
+     * The HEAD HTTP method
+     */
+    HEAD,
+    /**
+     * The OPTIONS HTTP method
+     */
+    OPTIONS,
+    /**
+     * The PUT HTTP method
+     */
+    PUT,
+    /**
+     * The DELETE HTTP method
+     */
+    DELETE,
+    /**
+     * The TRACE HTTP method
+     */
+    TRACE,
+    /**
+     * The CONNECT HTTP method
+     */
+    CONNECT,
+    /**
+     * The PATCH HTTP method
+     */
+    PATCH;
 
-	static Method fromNetty(io.netty.handler.codec.http.HttpMethod method) {
-		return Method.valueOf(method.name());
-	}
+    static Method fromNetty(io.netty.handler.codec.http.HttpMethod method) {
+        return Method.valueOf(method.name());
+    }
 
 }

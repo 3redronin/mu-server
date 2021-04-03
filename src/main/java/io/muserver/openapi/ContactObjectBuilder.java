@@ -37,6 +37,9 @@ public class ContactObjectBuilder {
         return this;
     }
 
+    /**
+     * @return A new object
+     */
     public ContactObject build() {
         return new ContactObject(name, url, email);
     }

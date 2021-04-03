@@ -2,11 +2,14 @@ package io.muserver;
 
 import java.util.Map;
 
+/**
+ * A handler for a Route created with {@link MuServerBuilder#addHandler(Method, String, RouteHandler)}
+ * or {@link Routes#route(Method, String, RouteHandler)}
+ */
 public interface RouteHandler {
 
     /**
-     * A handler for a Route created with {@link MuServerBuilder#addHandler(Method, String, RouteHandler)}
-     * or {@link Routes#route(Method, String, RouteHandler)}
+     * Called when a request matches the given route
      * @param request The request
      * @param response The response
      * @param pathParams A map of path parameters, for example <code>id</code> would equal <code>"123"</code>

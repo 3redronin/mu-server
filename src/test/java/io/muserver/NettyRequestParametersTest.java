@@ -23,6 +23,7 @@ public class NettyRequestParametersTest {
         assertThat(params.get("name", "ignored"), equalTo("Frank Manger"));
         assertThat(params.get("notThere"), is(nullValue()));
         assertThat(params.get("notThere", "Horza Culture"), equalTo("Horza Culture"));
+        assertThat(params.toString(), equalTo("name=Frank%20Manger&age=10&car=Holden&car=Ford%20Escort"));
     }
 
     @Test
@@ -90,7 +91,7 @@ public class NettyRequestParametersTest {
     }
 
     private static NettyRequestParameters create(String qs) {
-        return new NettyRequestParameters(new QueryStringDecoder(qs, false));
+        return new NettyRequestParameters(new QueryStringDecoder(qs, false).parameters());
     }
 
 }

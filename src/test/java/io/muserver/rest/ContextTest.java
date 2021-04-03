@@ -82,15 +82,16 @@ public class ContextTest {
             }
         }
         this.server = muServer()
-            .withHttpsPort(50378)
+            .withHttpsPort(0)
             .addHandler(
                 context("/api/ha ha/").addHandler(restHandler(new Sample()))
             )
             .start();
+        int port = server.uri().getPort();
         try (Response resp = call(request().url(server.uri().resolve("/api/ha%20ha/samples/zample/barmpit?hoo=har%20har").toString()))) {
-            assertThat(resp.body().string(), equalTo("https://localhost:50378/api/ha%20ha/\nsamples/zample/barmpit\n" +
-                "https://localhost:50378/api/ha%20ha/samples/zample/barmpit\n" +
-                "https://localhost:50378/api/ha%20ha/samples/zample/barmpit?hoo=har%20har\nhar har\nhar%20har\n" +
+            assertThat(resp.body().string(), equalTo("https://localhost:" + port + "/api/ha%20ha/\nsamples/zample/barmpit\n" +
+                "https://localhost:" + port + "/api/ha%20ha/samples/zample/barmpit\n" +
+                "https://localhost:" + port + "/api/ha%20ha/samples/zample/barmpit?hoo=har%20har\nhar har\nhar%20har\n" +
                 "Sample Resource Class\nsamples/zample/barmpit:samples"));
         }
     }
@@ -141,6 +142,30 @@ public class ContextTest {
         )) {
             assertThat(resp.code(), is(200));
             assertThat(resp.body().string(), equalTo("x-something=Blah x-something-else=Another blah "));
+        }
+    }
+
+    @Test
+    public void unreservedCharactersComeThroughUnencoded() throws Exception {
+        @Path("~.-_")
+        class Sample {
+            @GET
+            @Path("~.-_")
+            public String get(@Context UriInfo uriInfo) {
+                return uriInfo.getRequestUri().getPath();
+            }
+        }
+        this.server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new Sample()))
+            .start();
+
+        try (Response resp = call(request(server.uri().resolve("/~.-_/~.-_")))) {
+            assertThat(resp.body().string(), is("/~.-_/~.-_"));
+            assertThat(resp.code(), is(200));
+        }
+        try (Response resp = call(request(server.uri().resolve("/%7E%2E%2D%5F/%7E%2E%2D%5F")))) {
+            assertThat(resp.body().string(), is("/~.-_/~.-_"));
+            assertThat(resp.code(), is(200));
         }
     }
 

@@ -2,6 +2,8 @@ package io.muserver.openapi;
 
 import java.util.Map;
 
+import static io.muserver.openapi.OpenApiUtils.immutable;
+
 /**
  * Holds a set of reusable objects for different aspects of the OAS. All objects defined within the components object
  * will have no effect on the API unless they are explicitly referenced from properties outside the components object.
@@ -98,8 +100,12 @@ public class ComponentsObjectBuilder {
         return this;
     }
 
+    /**
+     * @return A new object
+     */
     public ComponentsObject build() {
-        return new ComponentsObject(schemas, responses, parameters, examples, requestBodies, headers, securitySchemes, links, callbacks);
+        return new ComponentsObject(immutable(schemas), immutable(responses), immutable(parameters), immutable(examples),
+            immutable(requestBodies), immutable(headers), immutable(securitySchemes), immutable(links), immutable(callbacks));
     }
 
     /**

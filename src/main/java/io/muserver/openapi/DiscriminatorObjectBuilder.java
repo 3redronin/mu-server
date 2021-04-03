@@ -2,6 +2,8 @@ package io.muserver.openapi;
 
 import java.util.Map;
 
+import static io.muserver.openapi.OpenApiUtils.immutable;
+
 /**
  * <p>When request bodies or response payloads may be one of a number of different schemas, a <code>discriminator</code>
  * object can be used to aid in serialization, deserialization, and validation.  The discriminator is a specific object
@@ -30,8 +32,11 @@ public class DiscriminatorObjectBuilder {
         return this;
     }
 
+    /**
+     * @return A new object
+     */
     public DiscriminatorObject build() {
-        return new DiscriminatorObject(propertyName, mapping);
+        return new DiscriminatorObject(propertyName, immutable(mapping));
     }
 
     /**

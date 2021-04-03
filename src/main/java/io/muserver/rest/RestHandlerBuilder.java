@@ -6,6 +6,7 @@ import io.muserver.handlers.CORSHandlerBuilder;
 import io.muserver.openapi.InfoObject;
 import io.muserver.openapi.OpenAPIObjectBuilder;
 import io.muserver.openapi.SchemaObject;
+import io.muserver.openapi.SchemaObjectBuilder;
 
 import javax.ws.rs.container.ContainerRequestFilter;
 import javax.ws.rs.container.ContainerResponseFilter;
@@ -42,6 +43,11 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     private CORSConfig corsConfig = CORSConfigBuilder.disabled().build();
     private final List<SchemaObjectCustomizer> schemaObjectCustomizers = new ArrayList<>();
 
+    /**
+     * @deprecated Use {@link #restHandler(Object...)} instead
+     * @param resources The resources to use
+     */
+    @Deprecated
     public RestHandlerBuilder(Object... resources) {
         addResource(resources);
     }
@@ -240,6 +246,9 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
         return this;
     }
 
+    /**
+     * @return The newly build {@link RestHandler}
+     */
     public RestHandler build() {
         List<MessageBodyReader> readers = EntityProviders.builtInReaders();
         readers.addAll(customReaders);
@@ -358,6 +367,14 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
         return this;
     }
 
+    /**
+     * Registers a custom OpenAPI schema description for the given class.
+     * <p>This allows you to provide rich schema objects (created with {@link SchemaObjectBuilder#schemaObject()}) in your
+     * OpenAPI documents. Wherever the give type is used as a parameter or body, the given schema will be used to describe it.</p>
+     * @param dataClass The type of class to describe
+     * @param schema The schema object describing the class
+     * @return This builder
+     */
     public RestHandlerBuilder addCustomSchema(Class<?> dataClass, SchemaObject schema) {
         String id = "schema" + customSchemas.size();
         this.customSchemas.add(new SchemaReference(id, dataClass, null, schema));

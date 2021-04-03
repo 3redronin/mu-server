@@ -11,7 +11,15 @@ import static io.muserver.openapi.Jsonizer.append;
  * @see ExternalDocumentationObjectBuilder
  */
 public class ExternalDocumentationObject implements JsonWriter {
+    /**
+     * @deprecated use {@link #description()} instead
+     */
+    @Deprecated
     public final String description;
+    /**
+      @deprecated use {@link #url()} instead
+     */
+    @Deprecated
     public final URI url;
 
     ExternalDocumentationObject(String description, URI url) {
@@ -27,5 +35,19 @@ public class ExternalDocumentationObject implements JsonWriter {
         isFirst = append(writer, "description", description, isFirst);
         isFirst = append(writer, "url", url, isFirst);
         writer.write('}');
+    }
+
+    /**
+     * @return the value described by {@link ExternalDocumentationObjectBuilder#withDescription}
+     */
+    public String description() {
+        return description;
+    }
+
+    /**
+      @return the value described by {@link ExternalDocumentationObjectBuilder#withUrl}
+     */
+    public URI url() {
+        return url;
     }
 }

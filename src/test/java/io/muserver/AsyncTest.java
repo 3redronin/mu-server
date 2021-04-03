@@ -6,14 +6,13 @@ import okio.BufferedSink;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 import scaffolding.StringUtils;
 
+import javax.ws.rs.RedirectionException;
 import java.io.IOException;
-import java.lang.reflect.Field;
+import java.io.InputStream;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -26,16 +25,16 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.MuServerBuilder.httpsServer;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
-import static org.junit.Assert.assertTrue;
 import static scaffolding.ClientUtils.*;
+import static scaffolding.MuAssert.assertEventually;
+import static scaffolding.MuAssert.assertNotTimedOut;
 
 public class AsyncTest {
-
-    private static final Logger log = LoggerFactory.getLogger(AsyncTest.class);
 
     private MuServer server;
 
@@ -50,11 +49,10 @@ public class AsyncTest {
                 asyncHandle.write(ByteBuffer.wrap(bytes), error -> {
                     if (error == null) {
                         result.append("success");
-                        asyncHandle.complete();
                     } else {
                         result.append("fail ").append(error);
-                        asyncHandle.complete();
                     }
+                    asyncHandle.complete();
                 });
             })
             .start();
@@ -65,18 +63,17 @@ public class AsyncTest {
         }
     }
 
-    @Test
+    @Test(timeout = 35000)
     public void canWriteAsyncAndDoneCallbackWillDelayWhenNotWritable() throws Exception {
 
         AtomicInteger sendDoneCallbackCount = new AtomicInteger(0);
         AtomicInteger receivedCount = new AtomicInteger(0);
         AtomicInteger failureCount = new AtomicInteger(0);
-        CountDownLatch requestUnWrtiable = new CountDownLatch(1);
-        CountDownLatch testDone = new CountDownLatch(1);
-        AtomicBoolean isDoneCallBackCountLessThan64 = new AtomicBoolean(false);
+        CountDownLatch requestUnWritable = new CountDownLatch(1);
 
         int totalCount = 1000;
         server = httpsServer()
+            .withWriteBufferWaterMark(1, 1000)
             .withHttp2Config(Http2ConfigBuilder.http2Config()) // test http 1 only
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.contentType(ContentTypes.APPLICATION_OCTET_STREAM);
@@ -86,31 +83,29 @@ public class AsyncTest {
 
                 for (int i = 0; i < totalCount; i++) {
                     asyncHandle.write(ByteBuffer.wrap(sendByte), error -> {
-                        sendDoneCallbackCount.incrementAndGet();
+                        if (error == null) {
+                            sendDoneCallbackCount.incrementAndGet();
+                        } else {
+                            failureCount.incrementAndGet();
+                        }
                     });
                 }
-                
-                Field requestField = asyncHandle.getClass().getDeclaredField("request");
-                requestField.setAccessible(true);
-                NettyRequestAdapter requestAdapter = (NettyRequestAdapter) requestField.get(asyncHandle);
-                Field channelField = requestAdapter.getClass().getDeclaredField("channel");
-                channelField.setAccessible(true);
-                Channel channel = (Channel) channelField.get(requestAdapter);
-                
+
+                Channel channel = ((NettyRequestAdapter)request).ctx.channel();
                 executorService.submit(()->{
                     while (true){
                         if (!channel.isWritable()){
-                            requestUnWrtiable.countDown();
+                            requestUnWritable.countDown();
                             break;
                         }
                         try {
                             Thread.sleep(1);
                         } catch (InterruptedException e){
-                            //fail to sleep do nothing.
+                            break;
                         }
                     }});
 
-                MuAssert.assertEventually(sendDoneCallbackCount::get, is(totalCount));
+                assertEventually(sendDoneCallbackCount::get, is(totalCount));
                 executorService.shutdown();
                 asyncHandle.complete();
             })
@@ -122,37 +117,43 @@ public class AsyncTest {
             byte[] readBytes = new byte[1024];
 
             // http client read the first 1024 byte and then sleep,
-            // verify server done callback not exceeding 64 time, as
             // it can't write out given the netty highWaterMark set to 64k
-            resp.body().byteStream().read(readBytes);
+            InputStream inputStream = resp.body().byteStream();
+            inputStream.read(readBytes);
             receivedCount.incrementAndGet();
             
-            ExecutorService executorService = Executors.newFixedThreadPool(1);
-            executorService.submit(()->{
-                try {
-                    requestUnWrtiable.await();
-                    if (sendDoneCallbackCount.get() < 64) {
-                        isDoneCallBackCountLessThan64.getAndSet(true);
-                        testDone.countDown();
-                    }
-                } catch (InterruptedException e) {
-                    failureCount.getAndIncrement();
-                }
-            });
-
-            testDone.await();
-            assertTrue(isDoneCallBackCountLessThan64.get());
+            assertNotTimedOut("requestUnWritable", requestUnWritable);
             assertThat(failureCount.get(), is(0));
-            executorService.shutdown();
 
             // http client read the rest bytes, verify all data received
-            while (resp.body().byteStream().read(readBytes) != -1) {
+            while (inputStream.read(readBytes) != -1) {
                 receivedCount.incrementAndGet();
             }
             
             assertThat(sendDoneCallbackCount.get(), is(totalCount));
             assertThat(receivedCount.get(), is(totalCount));
         }
+    }
+
+    @Test
+    public void errorCallbackInvokedWhenTimeoutOccurs() {
+        AtomicReference<ResponseInfo> infoRef = new AtomicReference<>();
+        server = ServerUtils.httpsServerForTest()
+            .withIdleTimeout(50, TimeUnit.MILLISECONDS)
+            .addHandler((request, response) -> {
+                AsyncHandle handle = request.handleAsync();
+                handle.addResponseCompleteHandler(infoRef::set);
+                return true;
+            })
+            .start();
+        try (Response resp = call(request(server.uri()))) {
+            resp.body().string();
+            Assert.fail("Should not succeed");
+        } catch (Exception ex) {
+            MuAssert.assertIOException(ex);
+        }
+        assertEventually(infoRef::get, not(nullValue()));
+        assertThat(infoRef.get().completedSuccessfully(), is(false));
     }
 
     @Test
@@ -220,7 +221,6 @@ public class AsyncTest {
                             ctx.write(text, error -> {
                                 if (error != null) {
                                     changeListener.stop();
-                                    ctx.complete();
                                     ctxClosedLatch.countDown();
                                 }
                             });
@@ -261,14 +261,13 @@ public class AsyncTest {
     }
 
     @Test
-    public void blockingWritesCanStillBeUsed() throws IOException {
+    public void blockingWritesCannotBeUsed() throws IOException {
 
         DatabaseListenerSimulator changeListener = new DatabaseListenerSimulator(10);
 
         server = ServerUtils.httpsServerForTest()
             .addHandler((request, response) -> {
                 AsyncHandle ctx = request.handleAsync();
-
                 changeListener.addListener(new ChangeListener() {
                     public void onData(String data) {
                         response.writer().write(data + "\n");
@@ -278,17 +277,14 @@ public class AsyncTest {
                         ctx.complete();
                     }
                 });
-
                 changeListener.start();
-
                 return true;
             })
             .start();
 
-        try (Response resp = call(request().url(server.uri().toString()))) {
-            assertThat(changeListener.errors, is(empty()));
-            assertThat(resp.code(), equalTo(200));
-            assertThat(resp.body().string(), equalTo("Loop 0\nLoop 1\nLoop 2\nLoop 3\nLoop 4\nLoop 5\nLoop 6\nLoop 7\nLoop 8\nLoop 9\n"));
+        try (Response ignored = call(request().url(server.uri().toString()))) {
+            assertThat(changeListener.errors.size(), greaterThanOrEqualTo(1));
+            assertThat(changeListener.errors.get(0), instanceOf(IllegalStateException.class));
         }
     }
 
@@ -416,6 +412,20 @@ public class AsyncTest {
         }
     }
 
+    @Test
+    public void webApplicationExceptionsCanBeSetOnCompletion() throws Exception {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                AsyncHandle handle = request.handleAsync();
+                handle.complete(new RedirectionException("Blah not here!", 301, request.uri().resolve("/blah")));
+            })
+            .start();
+        try (Response resp = call(request(server.uri()))) {
+            assertThat(resp.code(), is(301));
+            assertThat(resp.header("location"), is(server.uri().resolve("/blah").toString()));
+            assertThat(resp.body().string(), containsString("Blah not here!"));
+        }
+    }
 
     @After
     public void destroy() {

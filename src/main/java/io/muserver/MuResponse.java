@@ -93,13 +93,20 @@ public interface MuResponse {
     void addCookie(io.muserver.Cookie cookie);
 
     /**
-     * <p>Gets an output stream that sends an HTTP chunk each time the <code>write</code>
-     * method is called.</p>
-     * <p>You may consider wrapping it in a {@link java.io.BufferedOutputStream} if you want to buffer the chunks before sending to the client.</p>
+     * <p>Gets a buffered output stream that can send data to the client.</p>
+     * <p>To set the size of the buffer, use @{link {@link #outputStream(int)}} instead.</p>
      * <p>If you are writing text, you may prefer the {@link #writer()} or {@link #sendChunk(String)} methods.</p>
      * @return An output stream to send data to the client.
      */
     OutputStream outputStream();
+
+    /**
+     * <p>Gets a buffered output stream that can send data to the client.</p>
+     * <p>If you are writing text, you may prefer the {@link #writer()} or {@link #sendChunk(String)} methods.</p>
+     * @param bufferSize The size of the output buffer, e.g. 8192, or 0 if you do not want to buffer the response bytes.
+     * @return An output stream to send data to the client.
+     */
+    OutputStream outputStream(int bufferSize);
 
     /**
      * <p>A print writer that can be used to send text to the client. It is a convenience method, wrapping {@link #outputStream()}
@@ -115,4 +122,9 @@ public interface MuResponse {
      * @return Returns <code>true</code> if any data has been sent to the client; otherwise <code>false</code>.
      */
     boolean hasStartedSendingData();
+
+    /**
+     * @return The current state of this response
+     */
+    ResponseState responseState();
 }

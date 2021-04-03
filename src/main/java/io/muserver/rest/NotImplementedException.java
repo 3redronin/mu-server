@@ -1,19 +1,18 @@
 package io.muserver.rest;
 
+/**
+ * Thrown when a feature in MuServer that is not implemented is invoked
+ */
 class NotImplementedException extends RuntimeException {
 
-    public NotImplementedException() {
-        super();
-    }
-
-    public NotImplementedException(String message) {
+    NotImplementedException(String message) {
         super(message);
     }
 
-    public static NotImplementedException notYet() {
+    static NotImplementedException notYet() {
         return new NotImplementedException("This is not yet implemented by MuServer, but will be in the future.");
     }
-    public static NotImplementedException willNot() {
+    static NotImplementedException willNot() {
         return new NotImplementedException("This will never be supported by MuServer");
     }
 }

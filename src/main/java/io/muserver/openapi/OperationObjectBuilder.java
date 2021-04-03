@@ -3,6 +3,8 @@ package io.muserver.openapi;
 import java.util.List;
 import java.util.Map;
 
+import static io.muserver.openapi.OpenApiUtils.immutable;
+
 /**
  * Describes a single API operation on a path.
  */
@@ -148,8 +150,12 @@ public class OperationObjectBuilder {
         return this;
     }
 
+    /**
+     * @return A new object
+     */
     public OperationObject build() {
-        return new OperationObject(tags, summary, description, externalDocs, operationId, parameters, requestBody, responses, callbacks, deprecated, security, servers);
+        return new OperationObject(immutable(tags), summary, description, externalDocs, operationId, immutable(parameters),
+            requestBody, responses, immutable(callbacks), deprecated, immutable(security), immutable(servers));
     }
 
     /**
@@ -168,18 +174,18 @@ public class OperationObjectBuilder {
      */
     public static OperationObjectBuilder builderFrom(OperationObject operation) {
         return new OperationObjectBuilder()
-            .withTags(operation.tags)
-            .withSummary(operation.summary)
-            .withDescription(operation.description)
-            .withExternalDocs(operation.externalDocs)
-            .withOperationId(operation.operationId)
-            .withParameters(operation.parameters)
-            .withRequestBody(operation.requestBody)
-            .withResponses(operation.responses)
-            .withCallbacks(operation.callbacks)
-            .withDeprecated(operation.deprecated)
-            .withSecurity(operation.security)
-            .withServers(operation.servers)
+            .withTags(operation.tags())
+            .withSummary(operation.summary())
+            .withDescription(operation.description())
+            .withExternalDocs(operation.externalDocs())
+            .withOperationId(operation.operationId())
+            .withParameters(operation.parameters())
+            .withRequestBody(operation.requestBody())
+            .withResponses(operation.responses())
+            .withCallbacks(operation.callbacks())
+            .withDeprecated(operation.deprecated())
+            .withSecurity(operation.security())
+            .withServers(operation.servers())
             ;
     }
 }

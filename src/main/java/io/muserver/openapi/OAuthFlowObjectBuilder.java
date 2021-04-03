@@ -3,6 +3,8 @@ package io.muserver.openapi;
 import java.net.URI;
 import java.util.Map;
 
+import static io.muserver.openapi.OpenApiUtils.immutable;
+
 /**
  * Configuration details for a supported OAuth Flow
  */
@@ -48,8 +50,11 @@ public class OAuthFlowObjectBuilder {
         return this;
     }
 
+    /**
+     * @return A new object
+     */
     public OAuthFlowObject build() {
-        return new OAuthFlowObject(authorizationUrl, tokenUrl, refreshUrl, scopes);
+        return new OAuthFlowObject(authorizationUrl, tokenUrl, refreshUrl, immutable(scopes));
     }
 
     /**

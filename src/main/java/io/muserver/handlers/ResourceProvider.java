@@ -57,8 +57,6 @@ interface ResourceProviderFactory {
 
 
 class ClasspathCache implements ResourceProviderFactory {
-    private static FileSystem zipFileSystem;
-
     private final String basePath;
     private final Map<String, ClasspathResourceProvider> all = new HashMap<>();
 
@@ -72,13 +70,14 @@ class ClasspathCache implements ResourceProviderFactory {
             URI uri = resource.toURI();
             Path myPath;
             if (uri.getScheme().equals("jar")) {
-                if (zipFileSystem == null) {
+                FileSystem zipFileSystem;
+                try {
+                    zipFileSystem = FileSystems.getFileSystem(uri);
+                } catch (FileSystemNotFoundException e) {
                     try {
                         zipFileSystem = FileSystems.newFileSystem(uri, Collections.emptyMap());
-                    } catch (FileSystemAlreadyExistsException e) {
-                        if (zipFileSystem == null) {
-                            throw new MuException("Cannot create the classpath handler as the Zip File System for this jar file has already been created");
-                        }
+                    } catch (FileSystemAlreadyExistsException e2) {
+                        throw new MuException("Cannot create the classpath handler as the Zip File System for this jar file has already been created");
                     }
                 }
                 myPath = zipFileSystem.getPath(basePath);
@@ -249,9 +248,8 @@ class AsyncFileProvider implements ResourceProvider, CompletionHandler<Integer, 
                     bytesSent += bytesRead;
                     channel.read(buf, curPos, null, AsyncFileProvider.this);
                 } else {
-                    // client probably disconnected... no big deal
                     closeChannelQuietly();
-                    handle.complete();
+                    handle.complete(error);
                 }
             });
         }
