@@ -85,7 +85,7 @@ abstract class Http2ConnectionFlowControl extends Http2ConnectionHandler impleme
         return size + padding;
     }
 
-    private void cleanup() {
+    protected void cleanup() {
         if (!wantsToRead.isEmpty()) {
             wantsToRead.clear();
         }
@@ -171,9 +171,7 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
         if (error != null) {
             encoder().writeGoAway(ctx, lastStreamId, error.code(), EMPTY_BUFFER, ctx.channel().voidPromise());
         }
-        for (HttpExchange httpExchange : exchanges.values()) {
-            httpExchange.onCancelled(reason);
-        }
+        cleanup();
         ctx.close();
     }
 
@@ -191,8 +189,20 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
 
     @Override
     protected void cleanStream(int streamId) {
+        if (!exchanges.containsKey(streamId)) return;
         super.cleanStream(streamId);
         exchanges.remove(streamId);
+    }
+
+    @Override
+    protected void cleanup() {
+        super.cleanup();
+        if (!exchanges.isEmpty()) {
+            ArrayList<Integer> streamIds = Collections.list(exchanges.keys());
+            for (Integer streamId: streamIds) {
+                cancelExchange(streamId);
+            }
+        }
     }
 
     @Override
@@ -301,10 +311,9 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
                 data.release();
                 if (endOfStream) {
                     cleanStream(streamId);
-                }
-                if (error == null) {
+                } else if (error == null) {
                     read(ctx, streamId);
-                } else {
+                } else{
                     ctx.fireUserEventTriggered(new MuExceptionFiredEvent(httpExchange, streamId, error));
                 }
             });
@@ -361,6 +370,11 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
 
     @Override
     public void onRstStreamRead(ChannelHandlerContext ctx, int streamId, long errorCode) {
+        cancelExchange(streamId);
+        cleanStream(streamId);
+    }
+
+    private void cancelExchange(int streamId) {
         HttpExchange httpExchange = exchanges.remove(streamId);
         if (httpExchange != null) {
             httpExchange.onCancelled(ResponseState.ERRORED);
