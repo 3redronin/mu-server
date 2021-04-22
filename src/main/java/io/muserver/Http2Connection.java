@@ -197,8 +197,7 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
     protected void cleanup() {
         super.cleanup();
         if (!exchanges.isEmpty()) {
-            ArrayList<Integer> streamIds = Collections.list(exchanges.keys());
-            for (Integer streamId : streamIds) {
+            for (Integer streamId : exchanges.keySet()) {
                 cancelExchange(streamId);
             }
         }
@@ -308,13 +307,13 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
             data.retain();
             httpExchange.onMessage(ctx, msg, error -> {
                 data.release();
-                if (endOfStream) {
-                    // do nothing as it just indicate the request is finished, no more data to read.
-                } else if (error == null) {
-                    read(ctx, streamId);
-                } else{
+                if (error != null) {
                     ctx.fireUserEventTriggered(new MuExceptionFiredEvent(httpExchange, streamId, error));
+                } else if (!endOfStream) {
+                    read(ctx, streamId);
                 }
+                // error == null && endOfStream == true here, then do nothing
+                // as it just indicate the request is finished, no more data to read.
             });
         }
     }
@@ -386,11 +385,6 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
         HttpExchange httpExchange = exchanges.get(streamId);
         if (httpExchange != null) {
             httpExchange.onCancelled(ResponseState.ERRORED);
-        }
-        if (exchanges.containsKey(streamId)) {
-            HttpExchange leak = exchanges.get(streamId);
-            log.error("stream not clean correctly which might cause leaking, streamId={}, request=[{}], startTime={}",
-                streamId, leak.request, leak.request.startTime());
         }
     }
 
