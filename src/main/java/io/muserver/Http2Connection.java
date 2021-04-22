@@ -308,13 +308,13 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
             data.retain();
             httpExchange.onMessage(ctx, msg, error -> {
                 data.release();
-                if (error != null) {
-                    ctx.fireUserEventTriggered(new MuExceptionFiredEvent(httpExchange, streamId, error));
-                } else if (!endOfStream) {
+                if (endOfStream) {
+                    // do nothing as it just indicate the request is finished, no more data to read.
+                } else if (error == null) {
                     read(ctx, streamId);
+                } else{
+                    ctx.fireUserEventTriggered(new MuExceptionFiredEvent(httpExchange, streamId, error));
                 }
-                // error == null && endOfStream == true here, then do nothing
-                // as it just indicate the request is finished, no more data to read.
             });
         }
     }
