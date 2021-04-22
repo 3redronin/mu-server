@@ -189,7 +189,6 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
 
     @Override
     protected void cleanStream(int streamId) {
-        if (!exchanges.containsKey(streamId)) return;
         super.cleanStream(streamId);
         exchanges.remove(streamId);
     }
@@ -199,7 +198,7 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
         super.cleanup();
         if (!exchanges.isEmpty()) {
             ArrayList<Integer> streamIds = Collections.list(exchanges.keys());
-            for (Integer streamId: streamIds) {
+            for (Integer streamId : streamIds) {
                 cancelExchange(streamId);
             }
         }
@@ -309,13 +308,13 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
             data.retain();
             httpExchange.onMessage(ctx, msg, error -> {
                 data.release();
-                if (endOfStream) {
-                    cleanStream(streamId);
-                } else if (error == null) {
-                    read(ctx, streamId);
-                } else{
+                if (error != null) {
                     ctx.fireUserEventTriggered(new MuExceptionFiredEvent(httpExchange, streamId, error));
+                } else if (!endOfStream) {
+                    read(ctx, streamId);
                 }
+                // error == null && endOfStream == true here, then do nothing
+                // as it just indicate the request is finished, no more data to read.
             });
         }
     }
@@ -371,13 +370,27 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
     @Override
     public void onRstStreamRead(ChannelHandlerContext ctx, int streamId, long errorCode) {
         cancelExchange(streamId);
-        cleanStream(streamId);
     }
 
+    /**
+     * This method will cancel exchange by streamId if it still alive.
+     *
+     * @param streamId http2 stream Id
+     */
     private void cancelExchange(int streamId) {
-        HttpExchange httpExchange = exchanges.remove(streamId);
+        /*
+          It does NOT removed the live exchange from exchanges Map directly here, the side effect of
+          'httpExchange.onCancelled(ResponseState.ERRORED)' call, (e.g. HttpExchangeStateChangeListener)
+          will do the removal.
+         */
+        HttpExchange httpExchange = exchanges.get(streamId);
         if (httpExchange != null) {
             httpExchange.onCancelled(ResponseState.ERRORED);
+        }
+        if (exchanges.containsKey(streamId)) {
+            HttpExchange leak = exchanges.get(streamId);
+            log.error("stream not clean correctly which might cause leaking, streamId={}, request=[{}], startTime={}",
+                streamId, leak.request, leak.request.startTime());
         }
     }
 
