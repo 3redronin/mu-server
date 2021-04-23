@@ -1,13 +1,17 @@
 package io.muserver;
 
+import okhttp3.Request;
+import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
@@ -40,6 +44,58 @@ public class EventsTest {
         assertThat(info.response().status(), is(400));
         assertThat(info.response().headers().get("Hello"), is("World"));
         assertThat(info.request().uri(), equalTo(server.uri().resolve("/blah")));
+    }
+
+    @Test
+    public void completeListenerCallbackTest_POST() throws Exception {
+
+        AtomicReference<String> completeStateSnapshot = new AtomicReference<>("");
+
+        server = ServerUtils.httpsServerForTest()
+            .addResponseCompleteListener(info -> {
+                completeStateSnapshot.set(String.valueOf(info.completedSuccessfully()));
+            })
+            .addHandler(Method.POST, "/blah", (req, resp, pp) -> {
+                String body = req.readBodyAsString();
+                resp.headers().set("Hello", "World");
+                resp.status(200);
+                resp.write("Hey there");
+            })
+            .start();
+        Request.Builder request = request(server.uri().resolve("/blah"))
+            .post(RequestBody.create("Hello".getBytes(StandardCharsets.UTF_8)));
+        try (Response resp = call(request)) {
+            assertThat(resp.code(), is(200));
+            resp.body().string();
+        }
+
+        assertThat(completeStateSnapshot.get(), is("true"));
+    }
+
+    @Test
+    public void completeListenerCallbackTest_GET() throws Exception {
+
+        AtomicReference<String> completeStateSnapshot = new AtomicReference<>("");
+
+        server = ServerUtils.httpsServerForTest()
+            .addResponseCompleteListener(info -> {
+                completeStateSnapshot.set(String.valueOf(info.completedSuccessfully()));
+            })
+            .addHandler(Method.GET, "/blah", (req, resp, pp) -> {
+                String body = req.readBodyAsString();
+                resp.headers().set("Hello", "World");
+                resp.status(200);
+                resp.write("Hey there");
+            })
+            .start();
+        Request.Builder request = request(server.uri().resolve("/blah"))
+            .get();
+        try (Response resp = call(request)) {
+            assertThat(resp.code(), is(200));
+            resp.body().string();
+        }
+
+        assertThat(completeStateSnapshot.get(), is("true"));
     }
 
     @After
