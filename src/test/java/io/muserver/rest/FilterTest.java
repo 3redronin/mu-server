@@ -234,6 +234,7 @@ public class FilterTest {
         try (Response resp = call(request().url(server.uri().resolve("/something").toString()))) {
             assertThat(resp.code(), is(409));
             assertThat(resp.body().string(), is("Blocked!"));
+            assertThat(resp.header("content-type"), is("text/plain;charset=utf-8"));
         }
     }
 

@@ -144,6 +144,8 @@ public class RestHandler implements MuHandler {
         } catch (NotMatchedException e) {
             return false;
         } catch (Exception ex) {
+            if (producesRef == null) producesRef = emptyList();
+            if (directlyProducesRef == null) directlyProducesRef = emptyList();
             dealWithUnhandledException(0, requestContext, muResponse, ex, acceptHeaders, producesRef, directlyProducesRef);
             if (muRequest.isAsync()) {
                 muRequest.handleAsync().complete();
