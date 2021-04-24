@@ -234,6 +234,7 @@ public class FilterTest {
         try (Response resp = call(request().url(server.uri().resolve("/something").toString()))) {
             assertThat(resp.code(), is(409));
             assertThat(resp.body().string(), is("Blocked!"));
+            assertThat(resp.header("content-type"), is("text/plain;charset=utf-8"));
         }
     }
 
@@ -262,6 +263,35 @@ public class FilterTest {
         try (Response resp = call(request().url(server.uri().resolve("/something").toString()))) {
             assertThat(resp.code(), is(400));
             assertThat(resp.body().string(), is("<h1>400 Bad Request</h1><p>Bad!!!</p>"));
+        }
+    }
+
+    @Test
+    public void exceptionMappersDoNotCatchAFiltersAbortWithResponse() throws IOException {
+        @Path("something")
+        class TheWay {
+            @GET
+            public String itMoves() {
+                return "Not called";
+            }
+        }
+        class AbortFilter implements ContainerRequestFilter {
+            @Override
+            public void filter(ContainerRequestContext requestContext) throws IOException {
+                requestContext.abortWith(javax.ws.rs.core.Response.status(401).entity("No auth!!").build());
+            }
+        }
+        MuServer server = ServerUtils.httpsServerForTest()
+            .addHandler(
+                restHandler(new TheWay())
+                    .addRequestFilter(new AbortFilter())
+                .addExceptionMapper(Exception.class, exception -> javax.ws.rs.core.Response.serverError().entity("Server error").build())
+            )
+            .start();
+        try (Response resp = call(request().url(server.uri().resolve("/something").toString()))) {
+            assertThat(resp.body().string(), is("No auth!!"));
+            assertThat(resp.code(), is(401));
+            assertThat(resp.header("content-type"), is("text/plain;charset=utf-8"));
         }
     }
 

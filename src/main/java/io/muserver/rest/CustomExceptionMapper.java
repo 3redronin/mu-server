@@ -24,6 +24,10 @@ class CustomExceptionMapper {
 
         Class<? extends Throwable> exClass = ex.getClass();
 
+        if (exClass.equals(MuContainerRequestContext.FilterAbortedException.class)) {
+            return ((MuContainerRequestContext.FilterAbortedException)ex).getResponse();
+        }
+
         int maxDepth = Integer.MAX_VALUE;
         ExceptionMapper exceptionMapper = findBestMatchingExceptionMapper(exClass, maxDepth);
 
