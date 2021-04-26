@@ -499,7 +499,11 @@ class NettyRequestAdapter implements MuRequest {
 
         @Override
         public void setReadListener(RequestBodyListener readListener) {
-            request.claimingBodyRead(new RequestBodyReader.ListenerAdapter(this, request.maxRequestBytes(), readListener));
+            if (request.state.endState()) {
+                readListener.onComplete();
+            } else {
+                request.claimingBodyRead(new RequestBodyReader.ListenerAdapter(this, request.maxRequestBytes(), readListener));
+            }
         }
 
         @Override
