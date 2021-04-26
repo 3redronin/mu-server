@@ -38,7 +38,7 @@ public class EventsTest {
         }
         ResponseInfo info = received.get(10, TimeUnit.SECONDS);
         assertThat(info, notNullValue());
-        assertEventually(info::completedSuccessfully, is(true));
+        assertThat(info.completedSuccessfully(), is(true));
         assertThat(info.duration(), greaterThan(-1L));
         assertThat(info.response().status(), is(400));
         assertThat(info.response().headers().get("Hello"), is("World"));
@@ -65,7 +65,7 @@ public class EventsTest {
             assertThat(resp.code(), is(200));
         }
 
-        assertThat(completeStateSnapshot.get(), is("true"));
+        assertEventually(completeStateSnapshot::get, is("true"));
     }
 
     @After
