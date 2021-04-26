@@ -108,10 +108,11 @@ public class RestHandler implements MuHandler {
             corsConfig.writeHeadersInternal(muRequest, muResponse, Collections.singleton(mm));
 
             requestContext.setMatchedMethod(mm);
-            filterManagerThing.onPostMatch(requestContext);
 
             List<MediaType> produces = producesRef = mm.resourceMethod.resourceClass.produces;
             List<MediaType> directlyProduces = directlyProducesRef = mm.resourceMethod.directlyProduces;
+
+            filterManagerThing.onPostMatch(requestContext);
 
             Function<ResourceMethod, Object> suspendedParamCallback = rm -> {
                 if (muRequest.isAsync()) {
@@ -143,6 +144,8 @@ public class RestHandler implements MuHandler {
         } catch (NotMatchedException e) {
             return false;
         } catch (Exception ex) {
+            if (producesRef == null) producesRef = emptyList();
+            if (directlyProducesRef == null) directlyProducesRef = emptyList();
             dealWithUnhandledException(0, requestContext, muResponse, ex, acceptHeaders, producesRef, directlyProducesRef);
             if (muRequest.isAsync()) {
                 muRequest.handleAsync().complete();

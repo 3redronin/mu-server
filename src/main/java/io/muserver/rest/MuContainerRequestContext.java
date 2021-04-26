@@ -181,7 +181,7 @@ class MuContainerRequestContext implements ContainerRequestContext {
 
     @Override
     public void abortWith(Response response) {
-        throw new WebApplicationException(response);
+        throw new FilterAbortedException(response);
     }
 
     void setMatchedMethod(RequestMatcher.MatchedMethod matchedMethod) {
@@ -198,4 +198,13 @@ class MuContainerRequestContext implements ContainerRequestContext {
         return getUriInfo().getPath(false);
     }
 
+    /**
+     * This special exception doesn't get mapped by an exception mapper, so that the {@link #abortWith(Response)} method
+     * can just return the Response passed to it without mapping it.
+     */
+    static class FilterAbortedException extends WebApplicationException {
+        public FilterAbortedException(Response response) {
+            super(response);
+        }
+    }
 }

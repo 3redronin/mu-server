@@ -13,6 +13,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
+import static scaffolding.MuAssert.assertEventually;
 
 public class EventsTest {
 
@@ -35,8 +36,8 @@ public class EventsTest {
         }
         ResponseInfo info = received.get(10, TimeUnit.SECONDS);
         assertThat(info, notNullValue());
+        assertEventually(info::completedSuccessfully, is(true));
         assertThat(info.duration(), greaterThan(-1L));
-        assertThat(info.completedSuccessfully(), is(true));
         assertThat(info.response().status(), is(400));
         assertThat(info.response().headers().get("Hello"), is("World"));
         assertThat(info.request().uri(), equalTo(server.uri().resolve("/blah")));

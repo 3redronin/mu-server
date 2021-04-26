@@ -85,7 +85,7 @@ abstract class Http2ConnectionFlowControl extends Http2ConnectionHandler impleme
         return size + padding;
     }
 
-    private void cleanup() {
+    protected void cleanup() {
         if (!wantsToRead.isEmpty()) {
             wantsToRead.clear();
         }
@@ -171,9 +171,7 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
         if (error != null) {
             encoder().writeGoAway(ctx, lastStreamId, error.code(), EMPTY_BUFFER, ctx.channel().voidPromise());
         }
-        for (HttpExchange httpExchange : exchanges.values()) {
-            httpExchange.onCancelled(reason);
-        }
+        cleanup();
         ctx.close();
     }
 
@@ -193,6 +191,16 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
     protected void cleanStream(int streamId) {
         super.cleanStream(streamId);
         exchanges.remove(streamId);
+    }
+
+    @Override
+    protected void cleanup() {
+        super.cleanup();
+        if (!exchanges.isEmpty()) {
+            for (Integer streamId : exchanges.keySet()) {
+                cancelExchange(streamId);
+            }
+        }
     }
 
     @Override
@@ -299,14 +307,13 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
             data.retain();
             httpExchange.onMessage(ctx, msg, error -> {
                 data.release();
-                if (endOfStream) {
-                    cleanStream(streamId);
-                }
-                if (error == null) {
-                    read(ctx, streamId);
-                } else {
+                if (error != null) {
                     ctx.fireUserEventTriggered(new MuExceptionFiredEvent(httpExchange, streamId, error));
+                } else if (!endOfStream) {
+                    read(ctx, streamId);
                 }
+                // error == null && endOfStream == true here, then do nothing
+                // as it just indicate the request is finished, no more data to read.
             });
         }
     }
@@ -361,7 +368,21 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
 
     @Override
     public void onRstStreamRead(ChannelHandlerContext ctx, int streamId, long errorCode) {
-        HttpExchange httpExchange = exchanges.remove(streamId);
+        cancelExchange(streamId);
+    }
+
+    /**
+     * This method will cancel exchange by streamId if it still alive.
+     *
+     * @param streamId http2 stream Id
+     */
+    private void cancelExchange(int streamId) {
+        /*
+          It does NOT removed the live exchange from exchanges Map directly here, the side effect of
+          'httpExchange.onCancelled(ResponseState.ERRORED)' call, (e.g. HttpExchangeStateChangeListener)
+          will do the removal.
+         */
+        HttpExchange httpExchange = exchanges.get(streamId);
         if (httpExchange != null) {
             httpExchange.onCancelled(ResponseState.ERRORED);
         }
