@@ -1,5 +1,6 @@
 package io.muserver;
 
+import okhttp3.Request;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
@@ -8,6 +9,7 @@ import scaffolding.ServerUtils;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
@@ -41,6 +43,29 @@ public class EventsTest {
         assertThat(info.response().status(), is(400));
         assertThat(info.response().headers().get("Hello"), is("World"));
         assertThat(info.request().uri(), equalTo(server.uri().resolve("/blah")));
+    }
+
+    @Test
+    public void completeListenerCallbackTest_GET() {
+
+        AtomicReference<String> completeStateSnapshot = new AtomicReference<>("");
+
+        server = ServerUtils.httpsServerForTest()
+            .addResponseCompleteListener(info -> {
+                completeStateSnapshot.set(String.valueOf(info.completedSuccessfully()));
+            })
+            .addHandler(Method.GET, "/blah", (req, resp, pp) -> {
+                resp.status(200);
+                resp.write("Hey there");
+            })
+            .start();
+        Request.Builder request = request(server.uri().resolve("/blah"))
+            .get();
+        try (Response resp = call(request)) {
+            assertThat(resp.code(), is(200));
+        }
+
+        assertThat(completeStateSnapshot.get(), is("true"));
     }
 
     @After

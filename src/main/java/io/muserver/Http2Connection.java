@@ -267,6 +267,10 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
                 }
             });
 
+            if (endOfStream) {
+                muReq.setState(RequestState.COMPLETE);
+            }
+
             try {
                 server.stats.onRequestStarted(httpExchange.request);
                 connectionStats.onRequestStarted(httpExchange.request);
