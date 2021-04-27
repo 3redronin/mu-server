@@ -230,6 +230,7 @@ class HttpExchange implements ResponseInfo, Exchange {
     }
 
     void scheduleReadTimeout() {
+        cancelReadTimeout();
         long delay = connection.server().requestIdleTimeoutMillis();
         this.readTimer = ctx.executor().schedule(request::onReadTimeout, delay, TimeUnit.MILLISECONDS);
     }
