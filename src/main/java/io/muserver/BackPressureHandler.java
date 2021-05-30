@@ -28,11 +28,18 @@ class BackPressureHandler extends ChannelDuplexHandler {
 
     @Override
     public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
-        if (ctx.channel().isWritable() && toSend.size() == 0) {
-            super.write(ctx, msg, promise);
-        } else {
+        if (!ctx.channel().isWritable()) {
             toSend.add(new Delivery(msg, promise));
+            return;
         }
+
+        if (toSend.size() > 0) {
+            toSend.add(new Delivery(msg, promise));
+            deliverTasks(ctx, false);
+            return;
+        }
+
+        super.write(ctx, msg, promise);
     }
 
     @Override
