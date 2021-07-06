@@ -64,13 +64,20 @@ abstract class NettyResponseAdaptor implements MuResponse {
      * @param successState The state to set if the future completes successfully
      */
     protected void outputState(io.netty.util.concurrent.Future<? super Void> future, ResponseState successState) {
-        if (future == null || future.isSuccess()) {
+        if (future == null) {
             outputState(successState);
-        } else {
-            if (!state.endState()) {
-                outputState(ResponseState.ERRORED);
-            }
+            return;
         }
+
+        future.addListener(result -> {
+            if (result.isSuccess()) {
+                outputState(successState);
+            } else {
+                if (!state.endState()) {
+                    outputState(ResponseState.ERRORED);
+                }
+            }
+        });
     }
 
 
