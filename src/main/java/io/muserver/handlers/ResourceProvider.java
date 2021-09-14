@@ -236,7 +236,7 @@ class AsyncFileProvider implements ResourceProvider, CompletionHandler<Integer, 
         } else {
 
             // for range requests, more bytes may be read than should be written, so the write is limited
-            long remaining = maxLen - bytesSent;
+            long remaining = Math.max(0, maxLen - bytesSent);
             if (remaining < buf.limit()) {
                 buf.limit((int) remaining);
             }

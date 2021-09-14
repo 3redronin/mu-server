@@ -3,27 +3,28 @@ package io.muserver.handlers;
 import io.muserver.MuServer;
 import io.muserver.Mutils;
 import okhttp3.Response;
-import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
+import scaffolding.StringUtils;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.util.Date;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.Mutils.urlEncode;
 import static io.muserver.handlers.ResourceHandlerBuilder.fileHandler;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 
@@ -44,7 +45,7 @@ public class AsyncFileProviderTest {
             .start();
 
         File[] files = BIG_FILE_DIR.listFiles(File::isFile);
-        assertThat(files.length, Matchers.greaterThanOrEqualTo(2));
+        assertThat(files.length, greaterThanOrEqualTo(2));
         for (File file : files) {
             boolean isLarge = file.length() > 10000000L;
             if (SKIP_LARGE_FILES && isLarge) {
@@ -58,6 +59,54 @@ public class AsyncFileProviderTest {
                 assertThat(resp.headers().get("last-modified"), equalTo(Mutils.toHttpDate(new Date(file.lastModified()))));
                 assertThat(isEqual(new FileInputStream(file), resp.body().byteStream()), is(true));
             }
+        }
+    }
+
+    @Test
+    public void canRespondWithFilesThatAreBeingWrittenTo() throws Exception {
+        File dir = new File("target/test-data/file-provider");
+        assertThat(dir.isDirectory() || dir.mkdirs(), is(true));
+        File exampleFile = new File(dir, UUID.randomUUID() + ".txt");
+        try (FileWriter writer = new FileWriter(exampleFile)) {
+
+            AtomicBoolean running = new AtomicBoolean(false);
+            AtomicReference<Exception> writeException = new AtomicReference<>(null);
+            Thread writerThread = new Thread(() -> {
+                while (running.get()) {
+                    try {
+                        writer.write("More text " + System.currentTimeMillis() + "\n");
+                        writer.flush();
+                    } catch (Exception e) {
+                        writeException.set(e);
+                    }
+                }
+            });
+
+
+            String prefix = StringUtils.randomAsciiStringOfLength(32000);
+            writer.write(prefix);
+            writer.flush();
+            server = ServerUtils.httpsServerForTest()
+                .withGzipEnabled(false)
+                .addHandler((request, response) -> {
+                    running.set(true);
+                    writerThread.start();
+                    return false;
+                })
+                .addHandler(fileHandler(dir))
+                .addResponseCompleteListener(info -> running.set(false))
+                .start();
+
+            try (Response resp = call(request(server.uri().resolve("/" + exampleFile.getName())))) {
+                assertThat(resp.code(), is(200));
+                assertThat(resp.headers().toString(), Long.parseLong(resp.headers().get("content-length")), greaterThanOrEqualTo((long) prefix.length()));
+                String body = resp.body().string();
+                assertThat(body, startsWith(prefix));
+            }
+            assertThat(writeException.get(), is(nullValue()));
+
+        } finally {
+            exampleFile.delete();
         }
     }
 
