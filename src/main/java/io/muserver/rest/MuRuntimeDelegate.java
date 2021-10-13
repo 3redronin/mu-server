@@ -6,6 +6,7 @@ import io.muserver.MuResponse;
 import io.muserver.Mutils;
 
 import javax.ws.rs.ServerErrorException;
+import javax.ws.rs.container.ContainerRequestContext;
 import javax.ws.rs.core.*;
 import javax.ws.rs.ext.RuntimeDelegate;
 import javax.ws.rs.sse.Sse;
@@ -135,5 +136,18 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
         return new JaxSseImpl();
     }
 
+    /**
+     * The {@link ContainerRequestContext} property name to use to get the {@link io.muserver.MuRequest} for the current
+     * JAX-RS request, which can be used in {@link javax.ws.rs.container.ContainerRequestFilter}s and {@link javax.ws.rs.container.ContainerResponseFilter}s.
+     * <p>Example: <code>MuRequest muRequest = (MuRequest) requestContext.getProperty(MuRuntimeDelegate.MU_REQUEST_PROPERTY);</code></p>
+     */
+    public static final String MU_REQUEST_PROPERTY = "io.muserver.MU_REQUEST";
+
+    /**
+     * The {@link ContainerRequestContext} property name to use to get the {@link javax.ws.rs.container.ResourceInfo} for the current
+     * JAX-RS request, which can be used in {@link javax.ws.rs.container.ContainerRequestFilter}s and {@link javax.ws.rs.container.ContainerResponseFilter}s.
+     * <p>Example: <code>ResourceInfo resourceInfo = (ResourceInfo) requestContext.getProperty(MuRuntimeDelegate.RESOURCE_INFO_PROPERTY);</code></p>
+     */
+    public static final String RESOURCE_INFO_PROPERTY = "io.muserver.RESOURCE_INFO";
 
 }

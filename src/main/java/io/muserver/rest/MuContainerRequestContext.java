@@ -5,6 +5,7 @@ import io.muserver.MuRequest;
 
 import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.container.ContainerRequestContext;
+import javax.ws.rs.container.ResourceInfo;
 import javax.ws.rs.core.*;
 import java.io.InputStream;
 import java.lang.annotation.Annotation;
@@ -47,12 +48,22 @@ class MuContainerRequestContext implements ContainerRequestContext {
 
     @Override
     public Object getProperty(String name) {
+        if (MuRuntimeDelegate.MU_REQUEST_PROPERTY.equals(name)) {
+            return muRequest;
+        } else if (MuRuntimeDelegate.RESOURCE_INFO_PROPERTY.equals(name)) {
+            Class<?> resourceInstanceClass = (matchedMethod == null) ? null : matchedMethod.matchedClass.resourceClass.resourceInstance.getClass();
+            java.lang.reflect.Method resourceInstanceMethod = (matchedMethod == null) ? null : matchedMethod.resourceMethod.methodHandle;
+            return new MuResourceInfo(resourceInstanceClass, resourceInstanceMethod);
+        }
         return muRequest.attribute(name);
     }
 
     @Override
     public Collection<String> getPropertyNames() {
-        return muRequest.attributes().keySet();
+        Set<String> copy = new HashSet<>(muRequest.attributes().keySet());
+        copy.add(MuRuntimeDelegate.MU_REQUEST_PROPERTY);
+        copy.add(MuRuntimeDelegate.RESOURCE_INFO_PROPERTY);
+        return Collections.unmodifiableSet(copy);
     }
 
     @Override
@@ -205,6 +216,27 @@ class MuContainerRequestContext implements ContainerRequestContext {
     static class FilterAbortedException extends WebApplicationException {
         public FilterAbortedException(Response response) {
             super(response);
+        }
+    }
+
+    private static class MuResourceInfo implements ResourceInfo {
+
+        private final Class<?> clazz;
+        private final java.lang.reflect.Method method;
+
+        private MuResourceInfo(Class<?> clazz, java.lang.reflect.Method method) {
+            this.clazz = clazz;
+            this.method = method;
+        }
+
+        @Override
+        public java.lang.reflect.Method getResourceMethod() {
+            return method;
+        }
+
+        @Override
+        public Class<?> getResourceClass() {
+            return clazz;
         }
     }
 }

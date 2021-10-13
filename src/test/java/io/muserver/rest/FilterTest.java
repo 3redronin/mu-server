@@ -24,8 +24,11 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 import static io.muserver.ContextHandlerBuilder.context;
+import static io.muserver.rest.MuRuntimeDelegate.MU_REQUEST_PROPERTY;
+import static io.muserver.rest.MuRuntimeDelegate.RESOURCE_INFO_PROPERTY;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static java.util.Arrays.asList;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -125,7 +128,7 @@ public class FilterTest {
                             } catch (UnsupportedOperationException e) {
                                 // expected
                             }
-                            assertThat(requestContext.getPropertyNames(), containsInAnyOrder("murequest", "hello", "hello2"));
+                            assertThat(requestContext.getPropertyNames(), containsInAnyOrder("murequest", "hello", "hello2", MU_REQUEST_PROPERTY, RESOURCE_INFO_PROPERTY));
                             requestContext.removeProperty("hello");
                             requestContext.setProperty("hello2", null);
                             requestContext.setProperty("hello3", "temp");
@@ -137,6 +140,7 @@ public class FilterTest {
                 .addResource(new Blah())
             ).start();
 
+        assertThat(error.get(), is(nullValue()));
         try (Response resp = call(request(server.uri().resolve("/blah")))) {
             assertThat(resp.body().string(), is("MUR: GET null null hello3 CRC: GET null null hello3"));
         }
@@ -361,5 +365,105 @@ public class FilterTest {
         }
     }
 
+    @Test
+    public void resourceInfoAndMuRequestCanBeFoundOnPreMatchingFilters() throws IOException {
+
+        @Path("/blah")
+        class Blah {
+            @GET
+            public void hello() {}
+        }
+
+        @PreMatching
+        class PreMatchingFilter implements ContainerRequestFilter {
+
+            @Override
+            public void filter(ContainerRequestContext requestContext) throws IOException {
+                MuRequest muRequest = (MuRequest) requestContext.getProperty(MU_REQUEST_PROPERTY);
+                ResourceInfo resourceInfo = (ResourceInfo) requestContext.getProperty(MuRuntimeDelegate.RESOURCE_INFO_PROPERTY);
+                requestContext.abortWith(javax.ws.rs.core.Response.ok()
+                    .entity(
+                        "properties=" + requestContext.getPropertyNames().stream().sorted().collect(Collectors.joining(", ")) +
+                            " and method=" + muRequest.method() + " and "
+                            + resourceInfo.getResourceClass() + " / " + resourceInfo.getResourceMethod())
+                    .build());
+            }
+        }
+
+        MuServer server = ServerUtils.httpsServerForTest()
+            .addHandler(
+                restHandler(new Blah())
+                    .addRequestFilter(new PreMatchingFilter())
+            ).start();
+
+        try (Response resp = call(request(server.uri().resolve("/blah")))) {
+            assertThat(resp.body().string(), is("properties=" + MU_REQUEST_PROPERTY + ", " + RESOURCE_INFO_PROPERTY + " and method=GET and null / null"));
+        }
+    }
+
+    @Test
+    public void resourceInfoAndMuRequestCanBeFoundOnPostMatchingFilters() throws IOException {
+
+        @Path("/blah")
+        class Blah {
+            @GET
+            public void hello() {}
+        }
+
+        class PostMatchingFilter implements ContainerRequestFilter {
+
+            @Override
+            public void filter(ContainerRequestContext requestContext) throws IOException {
+                MuRequest muRequest = (MuRequest) requestContext.getProperty(MU_REQUEST_PROPERTY);
+                ResourceInfo resourceInfo = (ResourceInfo) requestContext.getProperty(MuRuntimeDelegate.RESOURCE_INFO_PROPERTY);
+                requestContext.abortWith(javax.ws.rs.core.Response.ok()
+                    .entity(
+                        "properties=" + requestContext.getPropertyNames().stream().sorted().collect(Collectors.joining(", ")) +
+                            " and method=" + muRequest.method() + " and "
+                            + resourceInfo.getResourceClass() + " / " + resourceInfo.getResourceMethod().getName())
+                    .build());
+            }
+        }
+
+        MuServer server = ServerUtils.httpsServerForTest()
+            .addHandler(
+                restHandler(new Blah())
+                    .addRequestFilter(new PostMatchingFilter())
+            ).start();
+
+        try (Response resp = call(request(server.uri().resolve("/blah")))) {
+            assertThat(resp.body().string(), is("properties=" + MU_REQUEST_PROPERTY + ", " + RESOURCE_INFO_PROPERTY + " and method=GET and " + Blah.class + " / hello"));
+        }
+    }
+
+    @Test
+    public void resourceInfoAndMuRequestCanBeFoundOnResponseFilters() throws IOException {
+
+        @Path("/blah")
+        class Blah {
+            @GET
+            public void hello() {}
+        }
+        StringBuilder result = new StringBuilder();
+
+        class ResponseFilter implements ContainerResponseFilter {
+
+            @Override
+            public void filter(ContainerRequestContext requestContext, ContainerResponseContext responseContext) throws IOException {
+                MuRequest muRequest = (MuRequest) requestContext.getProperty(MU_REQUEST_PROPERTY);
+                ResourceInfo resourceInfo = (ResourceInfo) requestContext.getProperty(MuRuntimeDelegate.RESOURCE_INFO_PROPERTY);
+                result.append("properties=").append(requestContext.getPropertyNames().stream().sorted().collect(Collectors.joining(", "))).append(" and method=").append(muRequest.method()).append(" and ").append(resourceInfo.getResourceClass()).append(" / ").append(resourceInfo.getResourceMethod().getName());
+            }
+        }
+
+        MuServer server = ServerUtils.httpsServerForTest()
+            .addHandler(
+                restHandler(new Blah())
+                    .addResponseFilter(new ResponseFilter())
+            ).start();
+
+        call(request(server.uri().resolve("/blah"))).close();
+        assertThat(result.toString(), is("properties=" + MU_REQUEST_PROPERTY + ", " + RESOURCE_INFO_PROPERTY + " and method=GET and " + Blah.class + " / hello"));
+    }
 
 }

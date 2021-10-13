@@ -380,3 +380,4 @@ The following are not described by the spec but are interfaces defined in the ja
 - [x] `UriBuilder`
 - [x] `Link`
 - [ ] `VariantListBuilder`
+- [x] `ResourceInfo` (this is available in a filter by calling `ResourceInfo resourceInfo = (ResourceInfo) requestContext.getProperty(MuRuntimeDelegate.RESOURCE_INFO_PROPERTY);`)
