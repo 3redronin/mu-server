@@ -14,7 +14,7 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <netty.version>4.1.68.Final</netty.version>
+        <netty.version>4.1.69.Final</netty.version>
         <slf4j.version>1.7.30</slf4j.version>
     </properties>
 
@@ -29,8 +29,8 @@
     </issueManagement>
 
     <ciManagement>
-        <system>travis-ci</system>
-        <url>https://travis-ci.org/3redronin/mu-server</url>
+        <system>GitHub Actions</system>
+        <url>https://github.com/3redronin/mu-server/actions/workflows/ci.yaml</url>
     </ciManagement>
 
 
