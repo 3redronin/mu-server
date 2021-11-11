@@ -9,7 +9,7 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * will have no effect on the API unless they are explicitly referenced from properties outside the components object.
  */
 public class ComponentsObjectBuilder {
-    private Map<String, SchemaObject> schemas;
+    Map<String, SchemaObject> schemas;
     private Map<String, ResponseObject> responses;
     private Map<String, ParameterObject> parameters;
     private Map<String, ExampleObject> examples;
@@ -115,5 +115,28 @@ public class ComponentsObjectBuilder {
      */
     public static ComponentsObjectBuilder componentsObject() {
         return new ComponentsObjectBuilder();
+    }
+
+    /**
+     * Creates a builder for a {@link ComponentsObject} based on an existing components object
+     * @param toCopy A component to copy. If <code>null</code> then an empty builder is returned.
+     * @return A new builder pre-populated with values from an existing component
+     */
+    public static ComponentsObjectBuilder componentsObject(ComponentsObject toCopy) {
+        ComponentsObjectBuilder builder = componentsObject();
+        if (toCopy != null) {
+            builder
+                .withCallbacks(toCopy.callbacks())
+                .withExamples(toCopy.examples())
+                .withHeaders(toCopy.headers())
+                .withLinks(toCopy.links())
+                .withParameters(toCopy.parameters())
+                .withRequestBodies(toCopy.requestBodies())
+                .withResponses(toCopy.responses())
+                .withSecuritySchemes(toCopy.securitySchemes())
+                .withSchemas(toCopy.schemas());
+
+        }
+        return builder;
     }
 }

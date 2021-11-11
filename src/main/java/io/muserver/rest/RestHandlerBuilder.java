@@ -371,12 +371,40 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * Registers a custom OpenAPI schema description for the given class.
      * <p>This allows you to provide rich schema objects (created with {@link SchemaObjectBuilder#schemaObject()}) in your
      * OpenAPI documents. Wherever the give type is used as a parameter or body, the given schema will be used to describe it.</p>
+     * <p><strong>Warning:</strong> When generating OpenAPI documentation, the schema information will be added to the <code>/components/schemas</code>
+     * section with a key equal to the simple class name of the given data class. If you do not wish to expose the class name
+     * in your API documentation, you can override it by annotating the class with a {@link Description} annotation in which
+     * case the <code>value</code> field will be used.</p>
      * @param dataClass The type of class to describe
      * @param schema The schema object describing the class
      * @return This builder
      */
     public RestHandlerBuilder addCustomSchema(Class<?> dataClass, SchemaObject schema) {
-        String id = "schema" + customSchemas.size();
+        String id;
+        Description desc = dataClass.getDeclaredAnnotation(Description.class);
+        if (desc != null) {
+            id = desc.value();
+        } else {
+            id = dataClass.getSimpleName();
+        }
+        while (true) {
+            boolean anyMatch = false;
+            for (SchemaReference customSchema : customSchemas) {
+                if (customSchema.id.equals(id)) {
+                    anyMatch = true;
+                    break;
+                }
+            }
+            if (anyMatch) {
+                id += "0";
+            } else {
+                break;
+            }
+        }
+        String regex = "^[a-zA-Z0-9.\\-_]+$";
+        if (!id.matches(regex)) {
+            throw new IllegalArgumentException("The ID " + id + " given for custom schema for class " + dataClass.getName() + " does not match required regex " + regex);
+        }
         this.customSchemas.add(new SchemaReference(id, dataClass, null, schema));
         return this;
     }

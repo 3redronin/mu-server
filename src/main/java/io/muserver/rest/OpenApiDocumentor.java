@@ -12,6 +12,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 import static io.muserver.Mutils.notNull;
+import static io.muserver.openapi.ComponentsObjectBuilder.componentsObject;
 import static io.muserver.openapi.PathItemObjectBuilder.pathItemObject;
 import static io.muserver.openapi.PathsObjectBuilder.pathsObject;
 import static io.muserver.openapi.RequestBodyObjectBuilder.requestBodyObject;
@@ -61,11 +62,23 @@ class OpenApiDocumentor implements MuHandler {
         Map<String, PathItemObject> pathItems = pathItemBuilders.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, v -> v.getValue().build()));
 
 
+        ComponentsObject components = openAPIObject.components();
+        if (!customSchemas.isEmpty()) {
+            ComponentsObjectBuilder componentsObjectBuilder = componentsObject(components);
+            Map<String, SchemaObject> schemas = (components != null && components.schemas() != null) ? components.schemas() : new HashMap<>();
+            for (SchemaReference customSchema : customSchemas) {
+                if (!schemas.containsKey(customSchema.id)) {
+                    schemas.put(customSchema.id, customSchema.schema);
+                }
+            }
+            components = componentsObjectBuilder.withSchemas(schemas).build();
+        }
+
         OpenAPIObjectBuilder api = OpenAPIObjectBuilder.openAPIObject()
             .withInfo(openAPIObject.info())
             .withExternalDocs(openAPIObject.externalDocs())
             .withSecurity(openAPIObject.security())
-            .withComponents(openAPIObject.components())
+            .withComponents(components)
             .withServers(openAPIObject.servers() != null ? openAPIObject.servers() :
                 request.contextPath().length() > 0 ?
                     singletonList(

@@ -13,6 +13,8 @@ import javax.ws.rs.*;
 import java.time.*;
 import java.util.UUID;
 
+import static io.muserver.openapi.SchemaObjectBuilder.schemaObject;
+
 public class DocumentationExamples {
     public static void main(String[] args) {
         @Path("/fruits")
@@ -56,6 +58,7 @@ public class DocumentationExamples {
                     .withCORS(CORSConfigBuilder.corsConfig().withAllOriginsAllowed()
                         .withAllowedHeaders("content-type")
                     )
+                    .addCustomSchema(Fruit.class, schemaObject().build())
             ).start();
         System.out.println("Browse documentation at " + server.uri().resolve("/docs.html")
             + " and " + server.uri().resolve("/api.json"));

@@ -214,6 +214,8 @@ public class OpenApiCustomSchemaTest {
             .start();
         try (okhttp3.Response resp = call(request(server.uri().resolve("/openapi.json")))) {
             JSONObject json = new JSONObject(resp.body().string());
+            System.out.println("json.toString(4) = " + json.toString(4));
+
             JSONObject peopleItems = (JSONObject) json.query("/paths/~1blah~1people/get/responses/200/content/application~1json/schema/properties/items");
             assertThat(peopleItems.getString("type"), is("array"));
             assertThat(peopleItems.query("/items/properties/age/format"), is("int32"));
