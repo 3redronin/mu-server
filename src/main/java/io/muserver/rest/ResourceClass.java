@@ -36,7 +36,12 @@ class ResourceClass {
     final List<Class<? extends Annotation>> nameBindingAnnotations;
     private final SchemaObjectCustomizer schemaObjectCustomizer;
 
-    private ResourceClass(UriPattern pathPattern, String pathTemplate, Class<?> resourceClass, Object resourceInstance, List<MediaType> consumes, List<MediaType> produces, TagObject tag, List<Class<? extends Annotation>> nameBindingAnnotations, SchemaObjectCustomizer schemaObjectCustomizer) {
+    /**
+     * If this class is sub-resource, then this is the locator method. Otherwise null.
+     */
+    final ResourceMethod locatorMethod;
+
+    private ResourceClass(UriPattern pathPattern, String pathTemplate, Class<?> resourceClass, Object resourceInstance, List<MediaType> consumes, List<MediaType> produces, TagObject tag, List<Class<? extends Annotation>> nameBindingAnnotations, SchemaObjectCustomizer schemaObjectCustomizer, ResourceMethod locatorMethod) {
         this.pathPattern = pathPattern;
         this.pathTemplate = pathTemplate;
         this.resourceClass = resourceClass;
@@ -46,6 +51,7 @@ class ResourceClass {
         this.tag = tag;
         this.nameBindingAnnotations = nameBindingAnnotations;
         this.schemaObjectCustomizer = schemaObjectCustomizer;
+        this.locatorMethod = locatorMethod;
     }
 
     public boolean matches(URI uri) {
@@ -131,7 +137,7 @@ class ResourceClass {
         List<Class<? extends Annotation>> classLevelNameBindingAnnotations = getNameBindingAnnotations(annotationSource);
 
         TagObject tag = DescriptionData.fromAnnotation(annotationSource, annotationSource.getSimpleName()).toTag();
-        ResourceClass resourceClass = new ResourceClass(pathPattern, path.value(), restResource.getClass(), restResource, consumesList, producesList, tag, classLevelNameBindingAnnotations, schemaObjectCustomizer);
+        ResourceClass resourceClass = new ResourceClass(pathPattern, path.value(), restResource.getClass(), restResource, consumesList, producesList, tag, classLevelNameBindingAnnotations, schemaObjectCustomizer, null);
         resourceClass.setupMethodInfo(paramConverterProviders);
         return resourceClass;
     }
@@ -159,7 +165,7 @@ class ResourceClass {
         List<MediaType> consumes = getConsumes(existingConsumes, instanceClass);
         List<MediaType> existingProduces = rm.effectiveProduces.isEmpty() || (rm.directlyProduces.isEmpty() && rm.effectiveProduces.size() == 1 && rm.effectiveProduces.get(0) == MediaType.WILDCARD_TYPE) ? null : rm.effectiveProduces;
         List<MediaType> produces = getProduces(existingProduces, instanceClass);
-        ResourceClass resourceClass = new ResourceClass(rm.pathPattern, rm.pathTemplate, instanceClass, instance, consumes, produces, rm.resourceClass.tag, rm.resourceClass.nameBindingAnnotations, schemaObjectCustomizer);
+        ResourceClass resourceClass = new ResourceClass(rm.pathPattern, rm.pathTemplate, instanceClass, instance, consumes, produces, rm.resourceClass.tag, rm.resourceClass.nameBindingAnnotations, schemaObjectCustomizer, rm);
         resourceClass.setupMethodInfo(paramConverterProviders);
         return resourceClass;
     }

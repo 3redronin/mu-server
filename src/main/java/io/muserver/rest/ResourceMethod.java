@@ -67,6 +67,15 @@ class ResourceMethod {
         return true;
     }
 
+    List<ResourceMethodParam> paramsIncludingLocators() {
+        if (resourceClass.locatorMethod == null) {
+            return params;
+        }
+        List<ResourceMethodParam> all = new ArrayList<>(resourceClass.locatorMethod.paramsIncludingLocators());
+        all.addAll(params);
+        return all;
+    }
+
     boolean isSubResource() {
         return pathPattern != null;
     }

@@ -807,9 +807,18 @@ public class OpenApiDocumentorTest {
 
             JSONObject cat = (JSONObject)doc.query("/paths/~1widgets~1{id}~1category~1{cat}/get");
             assertThat(cat.query("/tags/0"), equalTo("WidgetsResource"));
+            JSONArray catParams = cat.getJSONArray("parameters");
+            assertThat(catParams.toList(), hasSize(2));
+            JSONObject catIdParam = catParams.getJSONObject(0);
+            assertThat(catIdParam.getString("name"), equalTo("id"));
+            assertThat(catIdParam.getString("in"), equalTo("path"));
+            JSONObject catCatParam = catParams.getJSONObject(1);
+            assertThat(catCatParam.getString("name"), equalTo("cat"));
+            assertThat(catCatParam.getString("in"), equalTo("path"));
 
             JSONObject deep = (JSONObject)doc.query("/paths/~1widgets~1{id}~1deeper~1{id}~1{id}/get");
             assertThat(deep.query("/tags/0"), equalTo("WidgetsResource"));
+            assertThat(deep.getJSONArray("parameters").toList(), hasSize(1));
         }
     }
 

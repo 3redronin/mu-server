@@ -19,7 +19,6 @@ import static io.muserver.openapi.ResponsesObjectBuilder.mergeResponses;
 import static io.muserver.openapi.ServerObjectBuilder.serverObject;
 import static java.util.Collections.emptySet;
 import static java.util.Collections.singletonList;
-import static java.util.stream.Collectors.toList;
 
 class OpenApiDocumentor implements MuHandler {
     private final List<ResourceClass> roots;
@@ -130,11 +129,18 @@ class OpenApiDocumentor implements MuHandler {
                     .withOperations(operations);
                 pathItems.put(path, pathItem);
             }
-            List<ParameterObject> parameters = method.params.stream()
+            List<ParameterObject> parameters = method.paramsIncludingLocators().stream()
                 .filter(p -> p.source.openAPIIn != null && p instanceof ResourceMethodParam.RequestBasedParam)
                 .map(ResourceMethodParam.RequestBasedParam.class::cast)
                 .map(p -> p.createDocumentationBuilder().build())
-                .collect(toList());
+                .reduce(new ArrayList<>(), (parameterObjects, parameterObject) -> {
+                    if (parameterObjects.stream().noneMatch(existing -> existing.name().equals(parameterObject.name()) && existing.in().equals(parameterObject.in())))
+                    parameterObjects.add(parameterObject);
+                    return parameterObjects;
+                }, (list1, list2) -> {
+                    list1.addAll(list2);
+                    return list1;
+                });
 
             String opIdPath = getPathWithoutRegex(root, method, parentResourcePath).replace("{", "_").replace("}", "_");
             String opPath = Mutils.trim(opIdPath, "/").replace("/", "_");
