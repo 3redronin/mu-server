@@ -215,13 +215,16 @@ Only server-based filters and interceptors are being implemented as there is no 
 
 ### 6.3 Entity Interceptors 
 
-- [ ] Not yet implemented.
+- [ ] Reader interceptors can be added to a `RestHandlerBuilder`.
+- [x] Writer interceptors can be added to a `RestHandlerBuilder`.
 
 ### 6.4 Lifecycle 
 
 N/A as Mu Server does not control the lifecycle of your objects.
 
-### 6.5 Binding 
+### 6.5 Binding
+
+Filters and interceptors are registered on an `RestHandlerBuilder` instance (regardless of binding used).
 
 #### 6.5.1 Global Binding 
 
@@ -241,7 +244,7 @@ N/A
 
 ### 6.6 Priorities 
 
-No plan to implement as it would add another dependency. The order filters are added are the order they are run in.
+No plan to implement as it would add another dependency. The order filters and interceptors are added are the order they are run in.
 
 ### 6.7 Exceptions 
 

@@ -29,7 +29,9 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
 
     private final List<Object> resources = new ArrayList<>();
     private final List<MessageBodyWriter> customWriters = new ArrayList<>();
+    private final List<WriterInterceptor> writerInterceptors = new ArrayList<>();
     private final List<MessageBodyReader> customReaders = new ArrayList<>();
+    private final List<ReaderInterceptor> readerInterceptors = new ArrayList<>();
     private final List<ParamConverterProvider> customParamConverterProviders = new ArrayList<>();
     private final List<SchemaReference> customSchemas = new ArrayList<>();
     private String openApiJsonUrl = null;
@@ -288,7 +290,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
 
         FilterManagerThing filterManagerThing = new FilterManagerThing(preMatchRequestFilters, requestFilters, responseFilters);
 
-        return new RestHandler(entityProviders, roots, documentor, customExceptionMapper, filterManagerThing, corsConfig, paramConverterProviders, schemaObjectCustomizer);
+        return new RestHandler(entityProviders, roots, documentor, customExceptionMapper, filterManagerThing, corsConfig, paramConverterProviders, schemaObjectCustomizer, readerInterceptors, writerInterceptors);
     }
 
     /**
@@ -343,6 +345,11 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * <p>Registers a request filter, which is run before a rest method is executed.</p>
      * <p>It will be run after the method has been matched, or if the {@link PreMatching} annotation is applied to the
      * filter then it will run before matching occurs.</p>
+     * <p>To access the {@link javax.ws.rs.container.ResourceInfo} or {@link io.muserver.MuRequest} for the current
+     * request, the following code can be used:</p>
+     * <pre><code>
+     * ResourceInfo resourceInfo = (ResourceInfo) context.getProperty(MuRuntimeDelegate.RESOURCE_INFO_PROPERTY);
+     * MuRequest muRequest = (MuRequest) context.getProperty(MuRuntimeDelegate.MU_REQUEST_PROPERTY);</code></pre>
      *
      * @param filter The filter to register
      * @return This builder
@@ -358,6 +365,11 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
 
     /**
      * Registers a response filter, which is called after execution of a method takes place.
+     * <p>To access the {@link javax.ws.rs.container.ResourceInfo} or {@link io.muserver.MuRequest} for the current
+     * request, the following code can be used:</p>
+     * <pre><code>
+     * ResourceInfo resourceInfo = (ResourceInfo) context.getProperty(MuRuntimeDelegate.RESOURCE_INFO_PROPERTY);
+     * MuRequest muRequest = (MuRequest) context.getProperty(MuRuntimeDelegate.MU_REQUEST_PROPERTY);</code></pre>
      *
      * @param filter The filter to register
      * @return This builder
@@ -406,6 +418,44 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
             throw new IllegalArgumentException("The ID " + id + " given for custom schema for class " + dataClass.getName() + " does not match required regex " + regex);
         }
         this.customSchemas.add(new SchemaReference(id, dataClass, null, schema));
+        return this;
+    }
+
+    /**
+     * Registers a writer interceptor allowing for inspection and alteration of response bodies.
+     * <p>Interceptors are executed in the order added, and are called before any message body
+     * writers added by {@link #addCustomWriter(MessageBodyWriter)}.</p>
+     * <p>To access the {@link javax.ws.rs.container.ResourceInfo} or {@link io.muserver.MuRequest} for the current
+     * request, the following code can be used:</p>
+     * <pre><code>
+     * ResourceInfo resourceInfo = (ResourceInfo) context.getProperty(MuRuntimeDelegate.RESOURCE_INFO_PROPERTY);
+     * MuRequest muRequest = (MuRequest) context.getProperty(MuRuntimeDelegate.MU_REQUEST_PROPERTY);</code></pre>
+     * @param writerInterceptor The interceptor to add. If <code>null</code> then this is a no-op.
+     * @return This builder
+     */
+    public RestHandlerBuilder addWriterInterceptor(WriterInterceptor writerInterceptor) {
+        if (writerInterceptor != null) {
+            this.writerInterceptors.add(writerInterceptor);
+        }
+        return this;
+    }
+
+    /**
+     * Registers a reader interceptor allowing for inspection and alteration of request bodies.
+     * <p>Interceptors are executed in the order added, and are called before any message body
+     * readers added by {@link #addCustomReader(MessageBodyReader)}.</p>
+     * <p>To access the {@link javax.ws.rs.container.ResourceInfo} or {@link io.muserver.MuRequest} for the current
+     * request, the following code can be used:</p>
+     * <pre><code>
+     * ResourceInfo resourceInfo = (ResourceInfo) context.getProperty(MuRuntimeDelegate.RESOURCE_INFO_PROPERTY);
+     * MuRequest muRequest = (MuRequest) context.getProperty(MuRuntimeDelegate.MU_REQUEST_PROPERTY);</code></pre>
+     * @param readerInterceptor The interceptor to add. If <code>null</code> then this is a no-op.
+     * @return This builder
+     */
+    private RestHandlerBuilder addReaderInterceptor(ReaderInterceptor readerInterceptor) {
+        if (readerInterceptor != null) {
+            this.readerInterceptors.add(readerInterceptor);
+        }
         return this;
     }
 }

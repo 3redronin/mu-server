@@ -12,7 +12,7 @@ class ObjWithType {
     final JaxRSResponse response;
     final Object entity;
 
-    private ObjWithType(Class type, Type genericType, JaxRSResponse response, Object entity) {
+    ObjWithType(Class type, Type genericType, JaxRSResponse response, Object entity) {
         this.type = type;
         this.genericType = genericType;
         this.response = response;

@@ -7,9 +7,7 @@ import org.slf4j.LoggerFactory;
 import javax.ws.rs.*;
 import javax.ws.rs.container.ContainerRequestContext;
 import javax.ws.rs.core.*;
-import javax.ws.rs.ext.MessageBodyReader;
-import javax.ws.rs.ext.MessageBodyWriter;
-import javax.ws.rs.ext.ParamConverterProvider;
+import javax.ws.rs.ext.*;
 import javax.ws.rs.sse.Sse;
 import javax.ws.rs.sse.SseEventSink;
 import java.io.InputStream;
@@ -22,7 +20,6 @@ import java.util.concurrent.CompletionStage;
 import java.util.function.Function;
 
 import static io.muserver.rest.CORSConfig.getAllowedMethods;
-import static io.muserver.rest.JaxRSResponse.muHeadersToJaxObj;
 import static java.util.Collections.emptyList;
 import static java.util.Collections.singletonList;
 
@@ -42,8 +39,10 @@ public class RestHandler implements MuHandler {
     private final CORSConfig corsConfig;
     private final List<ParamConverterProvider> paramConverterProviders;
     private final SchemaObjectCustomizer schemaObjectCustomizer;
+    private final List<ReaderInterceptor> readerInterceptors;
+    private final List<WriterInterceptor> writerInterceptors;
 
-    RestHandler(EntityProviders entityProviders, List<ResourceClass> roots, MuHandler documentor, CustomExceptionMapper customExceptionMapper, FilterManagerThing filterManagerThing, CORSConfig corsConfig, List<ParamConverterProvider> paramConverterProviders, SchemaObjectCustomizer schemaObjectCustomizer) {
+    RestHandler(EntityProviders entityProviders, List<ResourceClass> roots, MuHandler documentor, CustomExceptionMapper customExceptionMapper, FilterManagerThing filterManagerThing, CORSConfig corsConfig, List<ParamConverterProvider> paramConverterProviders, SchemaObjectCustomizer schemaObjectCustomizer, List<ReaderInterceptor> readerInterceptors, List<WriterInterceptor> writerInterceptors) {
         this.requestMatcher = new RequestMatcher(roots);
         this.entityProviders = entityProviders;
         this.documentor = documentor;
@@ -52,6 +51,8 @@ public class RestHandler implements MuHandler {
         this.corsConfig = corsConfig;
         this.paramConverterProviders = paramConverterProviders;
         this.schemaObjectCustomizer = schemaObjectCustomizer;
+        this.readerInterceptors = readerInterceptors;
+        this.writerInterceptors = writerInterceptors;
     }
 
     @Override
@@ -194,54 +195,65 @@ public class RestHandler implements MuHandler {
             if (!muResponse.hasStartedSendingData()) {
                 ObjWithType obj = ObjWithType.objType(result);
 
-
                 if (obj.entity instanceof Exception) {
                     throw (Exception) obj.entity;
                 }
 
-
                 JaxRSResponse jaxRSResponse = obj.response;
                 if (jaxRSResponse == null) {
-                    jaxRSResponse = new JaxRSResponse(Response.Status.fromStatusCode(obj.status()), new LowercasedMultivaluedHashMap<>(), obj.entity, null, new NewCookie[0], emptyList(), new Annotation[0]);
+                    jaxRSResponse = new JaxRSResponse(Response.Status.fromStatusCode(obj.status()), new LowercasedMultivaluedHashMap<>(), obj, new NewCookie[0], emptyList(), new Annotation[0]);
                 }
 
                 try (LazyAccessOutputStream out = new LazyAccessOutputStream(muResponse)) {
-                    MuResponseContext responseContext = new MuResponseContext(jaxRSResponse, obj, requestContext.getMuMethod() == Method.HEAD ? NullOutputStream.INSTANCE : out);
+                    jaxRSResponse.setEntityStream(requestContext.getMuMethod() == Method.HEAD ? NullOutputStream.INSTANCE : out);
+                    jaxRSResponse.setRequestContext(requestContext);
                     if (obj.entity != null) {
                         MediaType responseMediaType = MediaTypeDeterminer.determine(obj, produces, directlyProduces, entityProviders.writers, acceptHeaders);
-                        responseContext.setEntity(result, jaxRSResponse.getAnnotations(), responseMediaType);
+                        jaxRSResponse.setMediaType(responseMediaType);
                     }
 
-                    filterManagerThing.onBeforeSendResponse(requestContext, responseContext);
-                    int status = responseContext.getStatus();
-                    muResponse.status(status);
-                    MuRuntimeDelegate.writeResponseHeaders(requestContext.muRequest.uri(), jaxRSResponse, muResponse);
+                    filterManagerThing.onBeforeSendResponse(requestContext, jaxRSResponse);
 
-                    Object entity = responseContext.getEntity();
+                    if (jaxRSResponse.hasEntity()) {
+                        jaxRSResponse.executeInterceptors(writerInterceptors); // run the interceptors
+                    }
+                    Object entity = jaxRSResponse.getEntity();
+                    if (entity instanceof Exception) {
+                        throw (Exception) entity;
+                    }
+
+                    int status = jaxRSResponse.getStatus();
+                    muResponse.status(status);
+
                     if (entity == null) {
                         if (status != 204 && status != 304 && status != 205) {
-                            muResponse.headers().set(HeaderNames.CONTENT_LENGTH, HeaderValues.ZERO);
+                            jaxRSResponse.getHeaders().putSingle("content-length", "0");
                         }
+                        MuRuntimeDelegate.writeResponseHeaders(requestContext.muRequest.uri(), jaxRSResponse, muResponse);
                     } else {
 
-                        MediaType responseMediaType = responseContext.getMediaType();
-                        Annotation[] entityAnnotations = responseContext.getEntityAnnotations();
+                        MediaType responseMediaType = jaxRSResponse.getMediaType();
+                        Annotation[] entityAnnotations = jaxRSResponse.getEntityAnnotations();
 
-                        Class entityType = responseContext.getEntityClass();
-                        Type entityGenericType = responseContext.getEntityType();
+                        Class entityType = jaxRSResponse.getEntityClass();
+                        Type entityGenericType = jaxRSResponse.getEntityType();
                         MessageBodyWriter messageBodyWriter = entityProviders.selectWriter(entityType, entityGenericType, entityAnnotations, responseMediaType);
 
                         long size = messageBodyWriter.getSize(entity, entityType, entityGenericType, entityAnnotations, responseMediaType);
                         if (size > -1) {
-                            muResponse.headers().set(HeaderNames.CONTENT_LENGTH.toString(), size);
+                            jaxRSResponse.getHeaders().putSingle("content-length", size);
                         }
 
                         String contentType = responseMediaType.toString();
                         if (responseMediaType.getType().equals("text") && !responseMediaType.getParameters().containsKey("charset")) {
                             contentType += ";charset=utf-8";
                         }
-                        muResponse.headers().set(HeaderNames.CONTENT_TYPE, contentType);
-                        messageBodyWriter.writeTo(entity, entityType, entityGenericType, entityAnnotations, responseMediaType, muHeadersToJaxObj(muResponse.headers()), responseContext.getEntityStream());
+                        jaxRSResponse.getHeaders().putSingle("content-type", contentType);
+
+                        MuRuntimeDelegate.writeResponseHeaders(requestContext.muRequest.uri(), jaxRSResponse, muResponse);
+
+                        messageBodyWriter.writeTo(jaxRSResponse.getEntity(), jaxRSResponse.getType(), jaxRSResponse.getGenericType(), jaxRSResponse.getAnnotations(),
+                            jaxRSResponse.getMediaType(), jaxRSResponse.getHeaders(), jaxRSResponse.getOutputStream());
                     }
                 }
             }
@@ -315,7 +327,7 @@ public class RestHandler implements MuHandler {
             matchedURIs.add(relativePath.replace("/" + methodSpecific, ""));
             rm = mm.resourceMethod;
         }
-        List<Object> matchedResources = rm == null ? emptyList() : Collections.unmodifiableList(singletonList(mm.resourceMethod.resourceClass.resourceInstance));
+        List<Object> matchedResources = rm == null ? emptyList() : singletonList(mm.resourceMethod.resourceClass.resourceInstance);
         return new MuUriInfo(baseUri, requestUri,
             Mutils.trim(relativePath, "/"), Collections.unmodifiableList(matchedURIs),
             matchedResources);

@@ -1,15 +1,19 @@
 package io.muserver.rest;
 
-
-import io.muserver.HeaderNames;
-import io.muserver.Headers;
-import io.muserver.MuException;
-import io.muserver.Mutils;
+import io.muserver.*;
 import io.netty.handler.codec.http.HttpHeaderNames;
 
+import javax.ws.rs.WebApplicationException;
+import javax.ws.rs.container.ContainerResponseContext;
+import javax.ws.rs.core.Cookie;
 import javax.ws.rs.core.*;
 import javax.ws.rs.ext.RuntimeDelegate;
+import javax.ws.rs.ext.WriterInterceptor;
+import javax.ws.rs.ext.WriterInterceptorContext;
+import java.io.IOException;
+import java.io.OutputStream;
 import java.lang.annotation.Annotation;
+import java.lang.reflect.Type;
 import java.net.URI;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -18,24 +22,27 @@ import java.util.stream.Stream;
 import static java.util.Arrays.asList;
 import static java.util.stream.Collectors.toMap;
 
-class JaxRSResponse extends Response {
+class JaxRSResponse extends Response implements ContainerResponseContext, WriterInterceptorContext {
     static {
         MuRuntimeDelegate.ensureSet();
     }
 
     private final MultivaluedMap<String, Object> headers;
-    private final StatusType status;
-    private final Object entity;
-    private final MediaType type;
+    private StatusType status;
+    private ObjWithType objWithType;
     private final NewCookie[] cookies;
     private final List<Link> links;
-    private final Annotation[] annotations;
+    private Annotation[] annotations;
+    private OutputStream outputStream;
 
-    JaxRSResponse(StatusType status, MultivaluedMap<String, Object> headers, Object entity, MediaType type, NewCookie[] cookies, List<Link> links, Annotation[] annotations) {
+    private MuContainerRequestContext requestContext;
+    private List<WriterInterceptor> writerInterceptors;
+    private int nextWriter = 0;
+
+    JaxRSResponse(StatusType status, MultivaluedMap<String, Object> headers, ObjWithType entity, NewCookie[] cookies, List<Link> links, Annotation[] annotations) {
         this.status = status;
         this.headers = headers;
-        this.entity = entity;
-        this.type = type;
+        this.objWithType = entity;
         this.cookies = cookies;
         this.links = links;
         this.annotations = annotations;
@@ -47,8 +54,41 @@ class JaxRSResponse extends Response {
     }
 
     @Override
+    public void setAnnotations(Annotation[] annotations) {
+        if (annotations == null) {
+            throw new NullPointerException("The 'annotations' parameter must not be null");
+        }
+        this.annotations = annotations;
+    }
+
+    @Override
+    public Class<?> getType() {
+        return objWithType.type;
+    }
+
+    @Override
+    public void setType(Class<?> type) {
+        objWithType = new ObjWithType(type, objWithType.genericType, objWithType.response, objWithType.entity);
+    }
+
+    @Override
+    public Type getGenericType() {
+        return objWithType.genericType;
+    }
+
+    @Override
+    public void setGenericType(Type genericType) {
+        objWithType = new ObjWithType(objWithType.type, genericType, objWithType.response, objWithType.entity);
+    }
+
+    @Override
     public int getStatus() {
         return status.getStatusCode();
+    }
+
+    @Override
+    public void setStatus(int code) {
+        this.status = Status.fromStatusCode(code);
     }
 
     @Override
@@ -57,8 +97,64 @@ class JaxRSResponse extends Response {
     }
 
     @Override
+    public void setStatusInfo(StatusType statusInfo) {
+        this.status = statusInfo;
+    }
+
+    @Override
     public Object getEntity() {
-        return entity;
+        return objWithType.entity;
+    }
+
+    @Override
+    public Class<?> getEntityClass() {
+        return getType();
+    }
+
+    @Override
+    public Type getEntityType() {
+        return getGenericType();
+    }
+
+    @Override
+    public void setEntity(Object entity) {
+        objWithType = ObjWithType.objType(entity);
+        if (entity instanceof Response) {
+            Response resp = (Response) entity;
+            setStatusInfo(resp.getStatusInfo());
+        }
+    }
+
+    @Override
+    public OutputStream getOutputStream() {
+        return outputStream;
+    }
+
+    @Override
+    public void setOutputStream(OutputStream os) {
+        this.outputStream = os;
+    }
+
+    @Override
+    public void setEntity(Object entity, Annotation[] annotations, MediaType mediaType) {
+        setEntity(entity);
+        setAnnotations(annotations);
+        setMediaType(mediaType);
+    }
+
+    @Override
+    public Annotation[] getEntityAnnotations() {
+        return getAnnotations();
+    }
+
+    @Override
+    public OutputStream getEntityStream() {
+        return outputStream;
+    }
+
+    @Override
+    public void setEntityStream(OutputStream outputStream) {
+        this.outputStream = outputStream;
     }
 
     @Override
@@ -83,7 +179,7 @@ class JaxRSResponse extends Response {
 
     @Override
     public boolean hasEntity() {
-        return entity != null;
+        return objWithType.entity != null;
     }
 
     @Override
@@ -98,7 +194,17 @@ class JaxRSResponse extends Response {
 
     @Override
     public MediaType getMediaType() {
-        return type;
+        String h = getHeaderString("content-type");
+        return h == null ? null : MediaTypeParser.fromString(h);
+    }
+
+    @Override
+    public void setMediaType(MediaType mediaType) {
+        if (mediaType == null) {
+            headers.remove("content-type");
+        } else {
+            headers.putSingle("content-type", MediaTypeParser.toString(mediaType));
+        }
     }
 
     @Override
@@ -229,6 +335,58 @@ class JaxRSResponse extends Response {
         }
     }
 
+
+    // Start interceptor specific things
+
+    void executeInterceptors(List<WriterInterceptor> writerInterceptors) throws IOException {
+        this.nextWriter = 0;
+        this.writerInterceptors = writerInterceptors;
+        proceed();
+    }
+
+    @Override
+    public void proceed() throws IOException, WebApplicationException {
+        if (nextWriter < writerInterceptors.size()) {
+            nextWriter++;
+            WriterInterceptor nextInterceptor = writerInterceptors.get(nextWriter - 1);
+            List<Class<? extends Annotation>> filterBindings = ResourceClass.getNameBindingAnnotations(nextInterceptor.getClass());
+            if (requestContext.methodHasAnnotations(filterBindings)) {
+                nextInterceptor.aroundWriteTo(this);
+            }
+        }
+    }
+
+    @Override
+    public Object getProperty(String name) {
+        return requestContext.getProperty(name);
+    }
+
+    @Override
+    public Collection<String> getPropertyNames() {
+        return requestContext.getPropertyNames();
+    }
+
+    @Override
+    public void setProperty(String name, Object object) {
+        requestContext.setProperty(name, object);
+    }
+
+    @Override
+    public void removeProperty(String name) {
+        requestContext.removeProperty(name);
+    }
+
+    public void setRequestContext(MuContainerRequestContext requestContext) {
+        this.requestContext = requestContext;
+    }
+
+    // End interceptor specific things
+
+    @Override
+    public String toString() {
+        return getStatusInfo().toString();
+    }
+
     public static class Builder extends Response.ResponseBuilder {
         static {
             MuRuntimeDelegate.ensureSet();
@@ -248,16 +406,10 @@ class JaxRSResponse extends Response {
             for (Link linkHeader : linkHeaders) {
                 headers.add(HeaderNames.LINK.toString(), linkHeader.toString());
             }
-            MediaType typeToUse = this.type;
-            if (typeToUse == null) {
-                String ct = (String) headers.getFirst(HeaderNames.CONTENT_TYPE.toString());
-                if (ct != null) {
-                    typeToUse = MediaType.valueOf(ct);
-                }
-            } else {
-                headers.putSingle(HeaderNames.CONTENT_TYPE.toString(), typeToUse.toString());
+            if (this.type != null) {
+                headers.putSingle(HeaderNames.CONTENT_TYPE.toString(), this.type.toString());
             }
-            return new JaxRSResponse(status, headers, entity, typeToUse, cookies, linkHeaders, annotations);
+            return new JaxRSResponse(status, headers, ObjWithType.objType(entity), cookies, linkHeaders, annotations);
         }
 
         @Override
