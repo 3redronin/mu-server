@@ -8,7 +8,7 @@ import org.junit.Test;
 import scaffolding.ServerUtils;
 
 import javax.ws.rs.*;
-import javax.ws.rs.container.*;
+import javax.ws.rs.container.ResourceInfo;
 import javax.ws.rs.ext.WriterInterceptor;
 import javax.ws.rs.ext.WriterInterceptorContext;
 import java.io.FilterOutputStream;
@@ -19,8 +19,6 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -104,7 +102,7 @@ public class WriterInterceptorTest {
     }
 
     @Test
-    public void resourceInfoAnMuRequestCanBeExtractedFromProperties() throws Exception {
+    public void resourceInfoAndMuRequestCanBeExtractedFromProperties() throws Exception {
         @Path("/greetings")
         class GreetingResource {
             @GET
@@ -215,28 +213,6 @@ public class WriterInterceptorTest {
             assertThat(resp.body().string(), containsString("Entity exception!!"));
         }
     }
-
-
-    @NameBinding
-    @Target({ ElementType.TYPE, ElementType.METHOD })
-    @Retention(value = RetentionPolicy.RUNTIME)
-    public @interface Logged { }
-
-    @FilterBindingTest.Logged
-    private class LoggingFilter implements ContainerRequestFilter, ContainerResponseFilter {
-        final List<String> received = new ArrayList<>();
-
-        @Override
-        public void filter(ContainerRequestContext requestContext) {
-            received.add("REQUEST");
-        }
-
-        @Override
-        public void filter(ContainerRequestContext requestContext, ContainerResponseContext responseContext) {
-            received.add("RESPONSE");
-        }
-    }
-
 
     @NameBinding
     @Target({ ElementType.TYPE, ElementType.METHOD })

@@ -386,7 +386,7 @@ public class RequestMatcherTest {
             }
         };
         InputStream inputStream = contentBodyType == null ? null : new ByteArrayInputStream("Hello".getBytes(StandardCharsets.US_ASCII));
-        MuContainerRequestContext rc = new MuContainerRequestContext(request, inputStream, request.uri().getPath(), null);
+        MuContainerRequestContext rc = new MuContainerRequestContext(request, inputStream, request.uri().getPath(), null, emptyList(), null);
         return rm.findResourceMethod(rc, method, acceptHeaders, null);
     }
 

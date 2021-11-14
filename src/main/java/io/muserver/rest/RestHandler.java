@@ -4,13 +4,18 @@ import io.muserver.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.ws.rs.*;
+import javax.ws.rs.ClientErrorException;
+import javax.ws.rs.NotAllowedException;
+import javax.ws.rs.ServerErrorException;
+import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.container.ContainerRequestContext;
 import javax.ws.rs.core.*;
-import javax.ws.rs.ext.*;
+import javax.ws.rs.ext.MessageBodyWriter;
+import javax.ws.rs.ext.ParamConverterProvider;
+import javax.ws.rs.ext.ReaderInterceptor;
+import javax.ws.rs.ext.WriterInterceptor;
 import javax.ws.rs.sse.Sse;
 import javax.ws.rs.sse.SseEventSink;
-import java.io.InputStream;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.Type;
@@ -71,7 +76,7 @@ public class RestHandler implements MuHandler {
         List<MediaType> directlyProducesRef = null;
         SecurityContext securityContext = muRequest.uri().getScheme().equals("https") ? MuSecurityContext.notLoggedInHttpsContext : MuSecurityContext.notLoggedInHttpContext;
 
-        MuContainerRequestContext requestContext = new MuContainerRequestContext(muRequest, new LazyAccessInputStream(muRequest), Mutils.trim(muRequest.relativePath(), "/"), securityContext);
+        MuContainerRequestContext requestContext = new MuContainerRequestContext(muRequest, new LazyAccessInputStream(muRequest), Mutils.trim(muRequest.relativePath(), "/"), securityContext, readerInterceptors, entityProviders);
         try {
             filterManagerThing.onPreMatch(requestContext);
 
@@ -333,33 +338,11 @@ public class RestHandler implements MuHandler {
             matchedResources);
     }
 
-    @SuppressWarnings("unchecked")
     private static Object readRequestEntity(MuContainerRequestContext requestContext, ResourceMethod rm, Parameter parameter, EntityProviders entityProviders) throws java.io.IOException {
-        MultivaluedMap<String, String> headers = requestContext.getHeaders();
-        InputStream inputStream = requestContext.getEntityStream();
-        Annotation[] annotations = parameter.getDeclaredAnnotations();
-
-        // Section 4.2.1 - determine message body reader
-
-        // 1. Obtain the media type of the request. If the request does not contain a Content-Type header then use application/octet-stream
-        MediaType requestBodyMediaType = requestContext.muRequest.headers().contentType();
-        if (requestBodyMediaType == null) {
-            requestBodyMediaType = MediaType.APPLICATION_OCTET_STREAM_TYPE;
-        }
-
-        // 2. Identify the Java type of the parameter whose value will be mapped from the entity body.
-        Class<?> type = parameter.getType();
-        Type genericType = parameter.getParameterizedType();
-
-
-        // 3 & 4: Select a reader that supports the media type of the request and isReadable
-        MessageBodyReader messageBodyReader = entityProviders.selectReader(type, genericType, annotations, requestBodyMediaType);
-        try {
-            return messageBodyReader.readFrom(type, genericType, annotations, requestBodyMediaType, headers, inputStream);
-        } catch (NoContentException nce) {
-            throw new BadRequestException("No request body was sent to the " + parameter.getName() + " parameter of " + rm.methodHandle
-                + " - if this should be optional then specify an @DefaultValue annotation on the parameter", nce);
-        }
+        requestContext.setAnnotations(parameter.getDeclaredAnnotations());
+        requestContext.setType(parameter.getType());
+        requestContext.setGenericType(parameter.getParameterizedType());
+        return requestContext.executeInterceptors();
     }
 
 }

@@ -452,9 +452,9 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * @param readerInterceptor The interceptor to add. If <code>null</code> then this is a no-op.
      * @return This builder
      */
-    private RestHandlerBuilder addReaderInterceptor(ReaderInterceptor readerInterceptor) {
+    public RestHandlerBuilder addReaderInterceptor(ReaderInterceptor readerInterceptor) {
         if (readerInterceptor != null) {
-            this.readerInterceptors.add(readerInterceptor);
+            this.readerInterceptors.add(0, readerInterceptor);
         }
         return this;
     }

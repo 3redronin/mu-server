@@ -215,7 +215,7 @@ Only server-based filters and interceptors are being implemented as there is no 
 
 ### 6.3 Entity Interceptors 
 
-- [ ] Reader interceptors can be added to a `RestHandlerBuilder`.
+- [x] Reader interceptors can be added to a `RestHandlerBuilder`.
 - [x] Writer interceptors can be added to a `RestHandlerBuilder`.
 
 ### 6.4 Lifecycle 

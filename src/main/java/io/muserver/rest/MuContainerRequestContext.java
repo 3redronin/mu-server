@@ -1,20 +1,27 @@
 package io.muserver.rest;
 
+import io.muserver.MediaTypeParser;
 import io.muserver.Method;
 import io.muserver.MuRequest;
 
+import javax.ws.rs.BadRequestException;
 import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.container.ContainerRequestContext;
 import javax.ws.rs.container.ResourceInfo;
 import javax.ws.rs.core.*;
+import javax.ws.rs.ext.MessageBodyReader;
+import javax.ws.rs.ext.ReaderInterceptor;
+import javax.ws.rs.ext.ReaderInterceptorContext;
+import java.io.IOException;
 import java.io.InputStream;
 import java.lang.annotation.Annotation;
+import java.lang.reflect.Type;
 import java.net.URI;
 import java.util.*;
 
 import static java.util.Collections.emptyList;
 
-class MuContainerRequestContext implements ContainerRequestContext {
+class MuContainerRequestContext implements ContainerRequestContext, ReaderInterceptorContext {
 
     final MuRequest muRequest;
     private InputStream inputStream;
@@ -24,12 +31,20 @@ class MuContainerRequestContext implements ContainerRequestContext {
     private RequestMatcher.MatchedMethod matchedMethod;
     private final JaxRequest jaxRequest;
     private SecurityContext securityContext;
+    private Annotation[] annotations = new Annotation[0];
+    private Class<?> type;
+    private Type genericType;
+    private int nextReader;
+    private final List<ReaderInterceptor> readerInterceptors;
+    private final EntityProviders entityProviders;
 
-    MuContainerRequestContext(MuRequest muRequest, InputStream inputStream, String relativePath, SecurityContext securityContext) {
+    MuContainerRequestContext(MuRequest muRequest, InputStream inputStream, String relativePath, SecurityContext securityContext, List<ReaderInterceptor> readerInterceptors, EntityProviders entityProviders) {
         this.muRequest = muRequest;
         this.inputStream = inputStream;
         this.relativePath = relativePath;
         this.securityContext = securityContext;
+        this.readerInterceptors = readerInterceptors;
+        this.entityProviders = entityProviders;
         String basePath = muRequest.contextPath();
         if (!basePath.endsWith("/")) {
             basePath += "/";
@@ -77,6 +92,39 @@ class MuContainerRequestContext implements ContainerRequestContext {
     }
 
     @Override
+    public Annotation[] getAnnotations() {
+        return annotations;
+    }
+
+    @Override
+    public void setAnnotations(Annotation[] annotations) {
+        if (annotations == null) {
+            throw new NullPointerException("The 'annotations' parameter must not be null");
+        }
+        this.annotations = annotations;
+    }
+
+    @Override
+    public Class<?> getType() {
+        return type;
+    }
+
+    @Override
+    public void setType(Class<?> type) {
+        this.type = type;
+    }
+
+    @Override
+    public Type getGenericType() {
+        return genericType;
+    }
+
+    @Override
+    public void setGenericType(Type genericType) {
+        this.genericType = genericType;
+    }
+
+    @Override
     public UriInfo getUriInfo() {
         return uriInfo;
     }
@@ -120,6 +168,55 @@ class MuContainerRequestContext implements ContainerRequestContext {
         jaxRequest.setMethod(method);
     }
 
+    Object executeInterceptors() throws IOException {
+        this.nextReader = 0;
+        return proceed();
+    }
+
+    @Override
+    public Object proceed() throws IOException, WebApplicationException {
+        if (nextReader < readerInterceptors.size()) {
+            nextReader++;
+            ReaderInterceptor nextInterceptor = readerInterceptors.get(nextReader - 1);
+            List<Class<? extends Annotation>> filterBindings = ResourceClass.getNameBindingAnnotations(nextInterceptor.getClass());
+            if (methodHasAnnotations(filterBindings)) {
+                return nextInterceptor.aroundReadFrom(this);
+            }
+        }
+
+        // read the entity
+        // Section 4.2.1 - determine message body reader
+
+        // 1. Obtain the media type of the request. If the request does not contain a Content-Type header then use application/octet-stream
+        MediaType requestBodyMediaType = getMediaType();
+        if (requestBodyMediaType == null) {
+            requestBodyMediaType = MediaType.APPLICATION_OCTET_STREAM_TYPE;
+        }
+
+        // 2. Identify the Java type of the parameter whose value will be mapped from the entity body.
+        Class<?> type = getType();
+        Type genericType = getGenericType();
+        Annotation[] annotations = getAnnotations();
+
+        // 3 & 4: Select a reader that supports the media type of the request and isReadable
+        MessageBodyReader messageBodyReader = entityProviders.selectReader(type, genericType, annotations, requestBodyMediaType);
+        try {
+            return messageBodyReader.readFrom(type, genericType, annotations, requestBodyMediaType, getHeaders(), getInputStream());
+        } catch (NoContentException nce) {
+            throw new BadRequestException("No request body was sent", nce);
+        }
+    }
+
+    @Override
+    public InputStream getInputStream() {
+        return getEntityStream();
+    }
+
+    @Override
+    public void setInputStream(InputStream is) {
+        setEntityStream(is);
+    }
+
     @Override
     public MultivaluedMap<String, String> getHeaders() {
         return jaxHeaders.getRequestHeaders();
@@ -148,6 +245,15 @@ class MuContainerRequestContext implements ContainerRequestContext {
     @Override
     public MediaType getMediaType() {
         return jaxHeaders.getMediaType();
+    }
+
+    @Override
+    public void setMediaType(MediaType mediaType) {
+        if (mediaType == null) {
+            jaxHeaders.getRequestHeaders().remove("content-type");
+        } else {
+            jaxHeaders.getRequestHeaders().putSingle("content-type", MediaTypeParser.toString(mediaType));
+        }
     }
 
     @Override
