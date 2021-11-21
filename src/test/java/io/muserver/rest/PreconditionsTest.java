@@ -2,7 +2,6 @@ package io.muserver.rest;
 
 import io.muserver.HeaderNames;
 import io.muserver.MuServer;
-import io.muserver.Mutils;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.jetbrains.annotations.NotNull;
@@ -19,8 +18,10 @@ import javax.ws.rs.core.Request;
 import java.net.URI;
 import java.util.Date;
 
+import static io.muserver.Mutils.toHttpDate;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
@@ -47,36 +48,89 @@ public class PreconditionsTest {
         URI url = server.uri().resolve("/samples");
         try (Response resp = call(request(url))) {
             assertThat(resp.code(), equalTo(200));
-            assertThat(resp.header("last-modified"), equalTo(Mutils.toHttpDate(lastModified)));
+            assertThat(resp.header("last-modified"), equalTo(toHttpDate(lastModified)));
             assertThat(resp.body().string(), equalTo("The content"));
         }
 
         Date oneSecondAfterLastModified = new Date(lastModified.toInstant().plusSeconds(1).toEpochMilli());
         try (Response resp = call(request(url)
-            .header(HeaderNames.IF_MODIFIED_SINCE.toString(), Mutils.toHttpDate(oneSecondAfterLastModified))
+            .header(HeaderNames.IF_MODIFIED_SINCE.toString(), toHttpDate(oneSecondAfterLastModified))
         )) {
             assertThat(resp.code(), equalTo(304));
-            assertThat(resp.header("last-modified"), equalTo(Mutils.toHttpDate(lastModified)));
+            assertThat(resp.header("last-modified"), equalTo(toHttpDate(lastModified)));
             assertThat(resp.body().contentLength(), equalTo(0L));
         }
 
-        try (Response resp = call(request(url).header(HeaderNames.IF_MODIFIED_SINCE.toString(), Mutils.toHttpDate(lastModified)))) {
+        try (Response resp = call(request(url).header(HeaderNames.IF_MODIFIED_SINCE.toString(), toHttpDate(lastModified)))) {
             assertThat(resp.code(), equalTo(304));
-            assertThat(resp.header("last-modified"), equalTo(Mutils.toHttpDate(lastModified)));
+            assertThat(resp.header("last-modified"), equalTo(toHttpDate(lastModified)));
             assertThat(resp.body().contentLength(), equalTo(0L));
         }
 
         Date oneSecondBeforeLastModified = new Date(lastModified.toInstant().minusSeconds(1).toEpochMilli());
         try (Response resp = call(request(url)
-            .header(HeaderNames.IF_MODIFIED_SINCE.toString(), Mutils.toHttpDate(oneSecondBeforeLastModified))
+            .header(HeaderNames.IF_MODIFIED_SINCE.toString(), toHttpDate(oneSecondBeforeLastModified))
         )) {
             assertThat(resp.code(), equalTo(200));
-            assertThat(resp.header("last-modified"), equalTo(Mutils.toHttpDate(lastModified)));
+            assertThat(resp.header("last-modified"), equalTo(toHttpDate(lastModified)));
+            assertThat(resp.body().string(), equalTo("The content"));
+        }
+    }
+
+
+    @Test
+    public void ifUnmodifiedSinceCanBeUsedForPuts() throws Exception {
+        Date lastModified = new Date();
+        @Path("samples")
+        class Sample {
+            @PUT
+            public javax.ws.rs.core.Response get(@Context Request jaxRequest) {
+                javax.ws.rs.core.Response.ResponseBuilder resp = jaxRequest.evaluatePreconditions(lastModified);
+                if (resp == null) {
+                    resp = javax.ws.rs.core.Response.ok("The content");
+                }
+                return resp.lastModified(lastModified).build();
+            }
+        }
+        this.server = httpsServerForTest().addHandler(restHandler(new Sample())).start();
+        URI url = server.uri().resolve("/samples");
+        try (Response resp = call(request(url).put(somePutBody()))) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.header("last-modified"), equalTo(toHttpDate(lastModified)));
             assertThat(resp.body().string(), equalTo("The content"));
         }
 
+        Date oneSecondAfterLastModified = new Date(lastModified.toInstant().plusSeconds(1).toEpochMilli());
+        try (Response resp = call(request(url)
+            .put(somePutBody())
+            .header(HeaderNames.IF_UNMODIFIED_SINCE.toString(), toHttpDate(oneSecondAfterLastModified))
+        )) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.header("last-modified"), equalTo(toHttpDate(lastModified)));
+            assertThat(resp.body().string(), equalTo("The content"));
+        }
+
+        try (Response resp = call(request(url)
+            .put(somePutBody())
+            .header(HeaderNames.IF_UNMODIFIED_SINCE.toString(), toHttpDate(lastModified)))) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.header("last-modified"), equalTo(toHttpDate(lastModified)));
+            assertThat(resp.body().string(), equalTo("The content"));
+        }
+
+        Date oneSecondBeforeLastModified = new Date(lastModified.toInstant().minusSeconds(1).toEpochMilli());
+        try (Response resp = call(request(url)
+            .put(somePutBody())
+            .header(HeaderNames.IF_UNMODIFIED_SINCE.toString(), toHttpDate(oneSecondBeforeLastModified))
+        )) {
+            assertThat(resp.code(), equalTo(412));
+            String body = resp.body().string();
+            assertThat(body, containsString("412 Precondition Failed"));
+            assertThat(body, containsString("if-unmodified-since"));
+        }
 
     }
+
 
     @Test
     public void ifNoneMatchCanBeUsedForGets() throws Exception {
@@ -118,7 +172,7 @@ public class PreconditionsTest {
     }
 
     @Test
-    public void ifNoneMatchCanBeUsedForPuts() throws Exception {
+    public void ifMatchCanBeUsedForPuts() throws Exception {
         String etag = "some-etag";
         @Path("samples")
         class Sample {
@@ -141,21 +195,54 @@ public class PreconditionsTest {
         }
 
         try (Response resp = call(request(url).put(somePutBody())
-            .addHeader(HeaderNames.IF_NONE_MATCH.toString(), "W/\"67ab43\"")
+            .addHeader(HeaderNames.IF_MATCH.toString(), "W/\"67ab43\"")
+        )) {
+            assertThat(resp.code(), equalTo(412));
+            String body = resp.body().string();
+            assertThat(body, containsString("412 Precondition Failed"));
+            assertThat(body, containsString("if-match"));
+        }
+        try (Response resp = call(request(url).put(somePutBody())
+            .addHeader(HeaderNames.IF_MATCH.toString(), "W/\"67ab43\"")
+            .addHeader(HeaderNames.IF_MATCH.toString(), "\"" + etag + "\"")
         )) {
             assertThat(resp.code(), equalTo(200));
             assertThat(resp.header("etag"), equalTo("\"" + etag + "\""));
             assertThat(resp.body().string(), equalTo("The content"));
         }
+    }
+
+    @Test
+    public void emptyEvaluationPassesIfNoIfMatch() throws Exception {
+        @Path("samples")
+        class Sample {
+            @PUT
+            @Consumes("*/*")
+            public javax.ws.rs.core.Response put(@Context Request jaxRequest) {
+                javax.ws.rs.core.Response.ResponseBuilder resp = jaxRequest.evaluatePreconditions();
+                if (resp == null) {
+                    resp = javax.ws.rs.core.Response.ok("The content");
+                }
+                return resp.build();
+            }
+        }
+        this.server = httpsServerForTest().addHandler(restHandler(new Sample())).start();
+        URI url = server.uri().resolve("/samples");
+        try (Response resp = call(request(url).put(somePutBody()))) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.body().string(), equalTo("The content"));
+        }
+
         try (Response resp = call(request(url).put(somePutBody())
-            .addHeader(HeaderNames.IF_NONE_MATCH.toString(), "W/\"67ab43\"")
-            .addHeader(HeaderNames.IF_NONE_MATCH.toString(), "\"" + etag + "\"")
+            .addHeader(HeaderNames.IF_MATCH.toString(), "*")
         )) {
             assertThat(resp.code(), equalTo(412));
-            assertThat(resp.header("etag"), equalTo("\"" + etag + "\""));
-            assertThat(resp.body().contentLength(), equalTo(0L));
+            String body = resp.body().string();
+            assertThat(body, containsString("412 Precondition Failed"));
+            assertThat(body, containsString("if-match"));
         }
     }
+
 
     @NotNull
     private RequestBody somePutBody() {
@@ -199,7 +286,22 @@ public class PreconditionsTest {
         Date oneSecondBeforeLastModified = new Date(lastModified.toInstant().minusSeconds(1).toEpochMilli());
         try (Response resp = call(request(url)
             .addHeader(HeaderNames.IF_NONE_MATCH.toString(), "\"" + etag + "\"")
-            .addHeader(HeaderNames.IF_MODIFIED_SINCE.toString(), Mutils.toHttpDate(oneSecondBeforeLastModified))
+            .addHeader(HeaderNames.IF_MODIFIED_SINCE.toString(), toHttpDate(oneSecondBeforeLastModified))
+        )) {
+            assertThat(resp.code(), equalTo(304));
+            assertThat(resp.header("etag"), equalTo("\"" + etag + "\""));
+            assertThat(resp.body().contentLength(), equalTo(0L));
+        }
+        try (Response resp = call(request(url)
+            .addHeader(HeaderNames.IF_NONE_MATCH.toString(), "\"blah\"")
+            .addHeader(HeaderNames.IF_MODIFIED_SINCE.toString(), toHttpDate(oneSecondBeforeLastModified))
+        )) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.header("etag"), equalTo("\"" + etag + "\""));
+            assertThat(resp.body().string(), equalTo("The content"));
+        }
+        try (Response resp = call(request(url)
+            .addHeader(HeaderNames.IF_MODIFIED_SINCE.toString(), toHttpDate(oneSecondBeforeLastModified))
         )) {
             assertThat(resp.code(), equalTo(200));
             assertThat(resp.header("etag"), equalTo("\"" + etag + "\""));

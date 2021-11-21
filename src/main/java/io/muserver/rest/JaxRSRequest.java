@@ -3,6 +3,7 @@ package io.muserver.rest;
 import io.muserver.*;
 
 import javax.ws.rs.BadRequestException;
+import javax.ws.rs.ClientErrorException;
 import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.container.ContainerRequestContext;
 import javax.ws.rs.container.ResourceInfo;
@@ -186,10 +187,44 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
         if (eTag == null) {
             throw new IllegalArgumentException("eTag is null");
         }
-        boolean noneMatch = true;
-        for (String suppliedEtag : muRequest.headers().getAll(HeaderNames.IF_NONE_MATCH)) {
+        Response.ResponseBuilder ifMatchBuilder = evaluateIfMatch(eTag);
+        return ifMatchBuilder != null ? ifMatchBuilder : evaluateIfNoneMatch(eTag);
+    }
+
+    private Response.ResponseBuilder evaluateIfMatch(EntityTag eTag) {
+        boolean anyMatch = false;
+        List<String> ifMatches = muRequest.headers().getAll(HeaderNames.IF_MATCH);
+        if (ifMatches.isEmpty()) {
+            return null;
+        }
+        if (eTag.isWeak()) {
+            return Response.status(412).entity(new ClientErrorException("Precondition failed: if-match failed due to weak eTag", 412));
+        }
+        for (String suppliedEtag : ifMatches) {
             EntityTag supplied = EntityTag.valueOf(suppliedEtag);
             if (supplied.equals(eTag)) {
+                anyMatch = true;
+                break;
+            }
+        }
+        if (anyMatch) {
+            return null;
+        }
+        return Response.status(412).entity(new ClientErrorException("Precondition failed: if-match", 412));
+    }
+
+
+    private Response.ResponseBuilder evaluateIfNoneMatch(EntityTag eTag) {
+        List<String> ifNoneMatchTags = muRequest.headers().getAll(HeaderNames.IF_NONE_MATCH);
+        boolean getOrHead = isGetOrHead();
+        if (!getOrHead && eTag.isWeak()) {
+            return Response.status(412).entity(new ClientErrorException("Precondition failed: if-match failed due to weak eTag", 412));
+        }
+
+        boolean noneMatch = true;
+        for (String suppliedEtag : ifNoneMatchTags) {
+            EntityTag supplied = EntityTag.valueOf(suppliedEtag);
+            if (supplied.equals(eTag) || (getOrHead && supplied.getValue().equals(eTag.getValue()))) {
                 noneMatch = false;
                 break;
             }
@@ -197,8 +232,7 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
         if (noneMatch) {
             return null;
         }
-        int status = isGetOrHead() ? 304 : 412;
-        return Response.status(status).tag(eTag);
+        return getOrHead ? Response.status(304).tag(eTag) : Response.status(412).entity(new ClientErrorException("Precondition failed: if-match", 412));
     }
 
     private boolean isGetOrHead() {
@@ -229,25 +263,44 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
         if (ifUnmodifiedSince == null || lastModifiedSeconds <= (ifUnmodifiedSince / 1000)) {
             return null;
         } else {
-            return Response.status(Response.Status.PRECONDITION_FAILED);
+            return Response.status(Response.Status.PRECONDITION_FAILED)
+                .entity(new ClientErrorException("Failed precondition: if-unmodified-since", 412));
         }
     }
 
 
     @Override
     public Response.ResponseBuilder evaluatePreconditions(Date lastModified, EntityTag eTag) {
-        Response.ResponseBuilder etagCond = evaluatePreconditions(eTag);
-        Response.ResponseBuilder dateCond = evaluatePreconditions(lastModified);
-        if (etagCond == null || dateCond == null) {
-            return null;
+        if (lastModified == null) {
+            throw new IllegalArgumentException("lastModified is null");
         }
-        return etagCond;
+        if (eTag == null) {
+            throw new IllegalArgumentException("eTag is null");
+        }
+
+        Response.ResponseBuilder builder = evaluateIfMatch(eTag);
+        if (builder != null) {
+            return builder;
+        }
+        builder = evaluateIfUnmodifiedSince(lastModified);
+        if (builder != null) {
+            return builder;
+        }
+        builder = evaluateIfNoneMatch(eTag);
+        if (builder != null) {
+            return builder;
+        }
+        builder = evaluateIfModifiedSince(lastModified);
+        if (builder != null) {
+            builder.tag(eTag);
+        }
+        return builder;
     }
 
     @Override
     public Response.ResponseBuilder evaluatePreconditions() {
-        return muRequest.headers().get(HeaderNames.IF_MATCH) != null ?
-            Response.status(Response.Status.PRECONDITION_FAILED) : null;
+        return muRequest.headers().get(HeaderNames.IF_MATCH) == null ? null
+            : Response.status(Response.Status.PRECONDITION_FAILED).entity(new ClientErrorException("Precondition failed: if-match", 412));
     }
 
     Method getMuMethod() {

@@ -350,7 +350,7 @@ N/A. Will not implement, as there is no support for `Application`.
 #### 10.2.4 Content Negotiation and Preconditions 
 
 - [x] Content Negotiation
-- [ ] Preconditions
+- [x] Preconditions
 
 #### 10.2.5 Security Context 
 
