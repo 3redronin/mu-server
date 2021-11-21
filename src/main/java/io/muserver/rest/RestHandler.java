@@ -315,7 +315,7 @@ public class RestHandler implements MuHandler {
         } else if (type.equals(SseEventSink.class)) {
             AsyncSsePublisher pub = AsyncSsePublisher.start(requestContext.muRequest, muResponse);
             return new JaxSseEventSinkImpl(pub, muResponse, providers);
-        } else if (type.equals(ContainerRequestContext.class)) {
+        } else if (type.equals(ContainerRequestContext.class) || type.equals(Request.class)) {
             return requestContext;
         } else {
             throw new ServerErrorException("MuServer does not support @Context parameters with type " + type, 500);

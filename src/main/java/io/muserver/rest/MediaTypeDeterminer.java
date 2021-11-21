@@ -122,4 +122,21 @@ class MediaTypeDeterminer {
         }
         return list;
     }
+
+
+    static int compareQValues(MediaType one, MediaType two) {
+        double q1 = Double.parseDouble(one.getParameters().getOrDefault("q", "1.0"));
+        double q2 = Double.parseDouble(two.getParameters().getOrDefault("q", "1.0"));
+        int qCompare = Double.compare(q2, q1);
+        if (qCompare == 0) {
+            qCompare = Boolean.compare(one.isWildcardType(), two.isWildcardType());
+            if (qCompare == 0) {
+                qCompare = Boolean.compare(one.isWildcardSubtype(), two.isWildcardSubtype());
+                if (qCompare == 0) {
+                    qCompare = Integer.compare(two.getParameters().size(), one.getParameters().size());
+                }
+            }
+        }
+        return qCompare;
+    }
 }

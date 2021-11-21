@@ -104,7 +104,7 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
 
     @Override
     public Variant.VariantListBuilder createVariantListBuilder() {
-        throw NotImplementedException.notYet();
+        return new MuVariantListBuilder();
     }
 
     @Override

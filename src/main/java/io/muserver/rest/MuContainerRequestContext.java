@@ -3,6 +3,7 @@ package io.muserver.rest;
 import io.muserver.MediaTypeParser;
 import io.muserver.Method;
 import io.muserver.MuRequest;
+import io.muserver.Mutils;
 
 import javax.ws.rs.BadRequestException;
 import javax.ws.rs.WebApplicationException;
@@ -21,7 +22,7 @@ import java.util.*;
 
 import static java.util.Collections.emptyList;
 
-class MuContainerRequestContext implements ContainerRequestContext, ReaderInterceptorContext {
+class MuContainerRequestContext implements Request, ContainerRequestContext, ReaderInterceptorContext {
 
     final MuRequest muRequest;
     private InputStream inputStream;
@@ -29,7 +30,6 @@ class MuContainerRequestContext implements ContainerRequestContext, ReaderInterc
     private final JaxRsHttpHeadersAdapter jaxHeaders;
     private UriInfo uriInfo;
     private RequestMatcher.MatchedMethod matchedMethod;
-    private final JaxRequest jaxRequest;
     private SecurityContext securityContext;
     private Annotation[] annotations = new Annotation[0];
     private Class<?> type;
@@ -37,9 +37,11 @@ class MuContainerRequestContext implements ContainerRequestContext, ReaderInterc
     private int nextReader;
     private final List<ReaderInterceptor> readerInterceptors;
     private final EntityProviders entityProviders;
+    private String httpMethod;
 
     MuContainerRequestContext(MuRequest muRequest, InputStream inputStream, String relativePath, SecurityContext securityContext, List<ReaderInterceptor> readerInterceptors, EntityProviders entityProviders) {
         this.muRequest = muRequest;
+        this.httpMethod = muRequest.method().name();
         this.inputStream = inputStream;
         this.relativePath = relativePath;
         this.securityContext = securityContext;
@@ -50,7 +52,6 @@ class MuContainerRequestContext implements ContainerRequestContext, ReaderInterc
             basePath += "/";
         }
         this.uriInfo = RestHandler.createUriInfo(relativePath, null, muRequest.uri().resolve(basePath), muRequest.uri());
-        this.jaxRequest = new JaxRequest(muRequest);
         this.jaxHeaders = new JaxRsHttpHeadersAdapter(muRequest.headers(), muRequest.cookies());
     }
 
@@ -148,12 +149,38 @@ class MuContainerRequestContext implements ContainerRequestContext, ReaderInterc
 
     @Override
     public Request getRequest() {
-        return jaxRequest;
+        return this;
     }
 
     @Override
     public String getMethod() {
-        return jaxRequest.getMethod();
+        return httpMethod;
+    }
+
+    @Override
+    public Variant selectVariant(List<Variant> variants) {
+        List<Locale.LanguageRange> ranges = Locale.LanguageRange.parse(jaxHeaders.getHeaderString("accept-language"));
+        return MuVariantListBuilder.selectVariant(variants, ranges, getAcceptableMediaTypes(), muRequest.headers().acceptEncoding());
+    }
+
+    @Override
+    public Response.ResponseBuilder evaluatePreconditions(EntityTag eTag) {
+        throw NotImplementedException.notYet();
+    }
+
+    @Override
+    public Response.ResponseBuilder evaluatePreconditions(Date lastModified) {
+        throw NotImplementedException.notYet();
+    }
+
+    @Override
+    public Response.ResponseBuilder evaluatePreconditions(Date lastModified, EntityTag eTag) {
+        throw NotImplementedException.notYet();
+    }
+
+    @Override
+    public Response.ResponseBuilder evaluatePreconditions() {
+        throw NotImplementedException.notYet();
     }
 
     Method getMuMethod() {
@@ -165,7 +192,9 @@ class MuContainerRequestContext implements ContainerRequestContext, ReaderInterc
         if (matchedMethod != null) {
             throw new IllegalStateException("This method is only valid for @PreMatching filters");
         }
-        jaxRequest.setMethod(method);
+        Mutils.notNull("method", method);
+        String upper = method.toUpperCase();
+        this.httpMethod = Method.valueOf(upper).name();
     }
 
     Object executeInterceptors() throws IOException {
