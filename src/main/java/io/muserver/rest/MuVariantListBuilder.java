@@ -4,11 +4,10 @@ import io.muserver.ParameterizedHeaderWithValue;
 
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Variant;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
+import java.util.*;
 
 import static java.util.Arrays.asList;
+import static java.util.Collections.singleton;
 import static java.util.Collections.singletonList;
 
 class MuVariantListBuilder extends Variant.VariantListBuilder {
@@ -71,61 +70,77 @@ class MuVariantListBuilder extends Variant.VariantListBuilder {
         return this;
     }
 
-    static Variant selectVariant(List<Variant> available, List<Locale.LanguageRange> acceptableLanguages, List<MediaType> acceptableMediaTypes, List<ParameterizedHeaderWithValue> acceptableEncodings) {
+    static Variant selectVariant(List<Variant> available, List<Locale.LanguageRange> preferredLanguages, List<MediaType> acceptableMediaTypes, List<ParameterizedHeaderWithValue> acceptableEncodings) {
+        Locale.LanguageRange wildcardRanger = new Locale.LanguageRange("*");
 
         List<Variant> candidates = new ArrayList<>();
         for (Variant candidate : available) {
-            boolean mtOkay = true;
             MediaType cmt = candidate.getMediaType();
-            if (cmt != null) {
-                mtOkay = acceptableMediaTypes.stream().anyMatch(amt -> amt.isCompatible(cmt));
-            }
+            boolean mtOkay = cmt == null || MediaTypeHeaderDelegate.atLeastOneCompatible(acceptableMediaTypes, singletonList(cmt));
 
             String cenc = candidate.getEncoding();
             boolean encOkay = cenc == null || acceptableEncodings.stream().anyMatch(ae -> ae.value().equals(cenc));
 
             Locale clang = candidate.getLanguage();
-            boolean langOk = true;
-            if (clang != null) {
-                // from https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html
-                // A language-range matches a language-tag if it exactly equals the tag, or if it exactly equals a
-                // prefix of the tag such that the first tag character following the prefix is "-". The special
-                // range "*", if present in the Accept-Language field, matches every tag not matched by any other
-                // range present in the Accept-Language field.
-                String availableLang = clang.toLanguageTag();
-                langOk = availableLang.equals("*") || acceptableLanguages.stream().anyMatch(acceptedLang -> langMatchesRange(availableLang, acceptedLang));
-            }
+            boolean langOk = clang == null || (Locale.lookup(preferredLanguages, singleton(clang)) != null) || preferredLanguages.contains(wildcardRanger);
+
             if (langOk && encOkay && mtOkay) {
                 candidates.add(candidate);
             }
-
         }
         return candidates.stream().min((v1, v2) -> {
-            double v1LangScore = langScore(v1.getLanguage(), acceptableLanguages);
-            double v2LangScore = langScore(v2.getLanguage(), acceptableLanguages);
-            return Double.compare(v2LangScore, v1LangScore);
+            // Prioritise matching of languages first.
+            // If one has a language specified, it wins
+            int langCompare = Boolean.compare(v2.getLanguage() == null, v1.getLanguage() == null);
+            if (langCompare == 0 && v1.getLanguage() != null) {
+                // Both have languages, so figure out which one has a better match
+                Locale bestLang = Locale.lookup(preferredLanguages, asList(v1.getLanguage(), v2.getLanguage()));
+                langCompare = Boolean.compare(Objects.equals(bestLang, v2.getLanguage()), Objects.equals(bestLang, v1.getLanguage()));
+            }
+            if (langCompare != 0) {
+                return langCompare;
+            }
+
+            // Languages are the same - now match on media type
+            int mtCompare = Boolean.compare(v2.getMediaType() != null, v1.getMediaType() != null);
+            if (mtCompare == 0 && v1.getMediaType() != null) {
+                // Now find the one with best q-value
+                MediaType bestMT = bestMediaType(acceptableMediaTypes, asList(v1.getMediaType(), v2.getMediaType()));
+                mtCompare = Boolean.compare(Objects.equals(bestMT, v2.getMediaType()), Objects.equals(bestMT, v1.getMediaType()));
+            }
+            if (mtCompare != 0) {
+                return mtCompare;
+            }
+
+            // Finally check the encoding options. If one has an encoding, use it
+            int encCompare = Boolean.compare(v2.getEncoding() != null, v1.getEncoding() != null);
+            if (encCompare == 0 && v1.getEncoding() != null) {
+                // Now find the one with best q-value
+                encCompare = Double.compare(bestEncodingScore(acceptableEncodings, v2), bestEncodingScore(acceptableEncodings, v1));
+            }
+            return encCompare;
         }).orElse(null);
 
     }
 
-    private static boolean langMatchesRange(String availableLang, Locale.LanguageRange acceptedLang) {
-        String range = acceptedLang.getRange();
-        if (range.equals(availableLang)) {
-            return true;
-        }
-        if (availableLang.startsWith(range)) {
-            return availableLang.length() > range.length() && availableLang.charAt(range.length()) == '-';
-        }
-        return false;
+    private static MediaType bestMediaType(List<MediaType> acceptableMediaTypes, Collection<MediaType> candidates) {
+        return acceptableMediaTypes.stream().filter(amt -> candidates.stream().anyMatch(c -> c.isCompatible(amt)))
+            .min(Comparator.comparing(MuVariantListBuilder::mtqScore)
+            .thenComparing((o1, o2) -> Boolean.compare(candidates.contains(o2), candidates.contains(o1)))
+            .thenComparing((o1, o2) -> Boolean.compare(o1.isWildcardType(), o2.isWildcardType()))
+            .thenComparing((o1, o2) -> Boolean.compare(o1.isWildcardSubtype(), o2.isWildcardSubtype()))).orElse(null);
     }
 
-    private static double langScore(Locale variantLang, List<Locale.LanguageRange> acceptableLanguages) {
-        double score = 0.0;
-        for (Locale.LanguageRange acceptableLang : acceptableLanguages) {
-            if (langMatchesRange(variantLang.toLanguageTag(), acceptableLang)) {
-                score = Math.max(score, acceptableLang.getWeight());
-            }
-        }
-        return score;
+    private static double bestEncodingScore(List<ParameterizedHeaderWithValue> acceptableEncodings, Variant variant) {
+        return acceptableEncodings.stream().filter(enc -> variant.getEncoding().equals(enc.value())).min((o1, o2) -> Double.compare(qScore(o2), qScore(o1))).map(MuVariantListBuilder::qScore).orElse(1.0);
     }
+
+    private static double qScore(ParameterizedHeaderWithValue p) {
+        return Double.parseDouble(p.parameter("q", "1.0"));
+    }
+
+    private static double mtqScore(MediaType mediaType) {
+        return Double.parseDouble(mediaType.getParameters().getOrDefault("q", "1.0"));
+    }
+
 }

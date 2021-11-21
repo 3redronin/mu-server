@@ -1,14 +1,12 @@
 package io.muserver.rest;
 
-import io.muserver.MediaTypeParser;
-import io.muserver.Method;
-import io.muserver.MuRequest;
-import io.muserver.Mutils;
+import io.muserver.*;
 
 import javax.ws.rs.BadRequestException;
 import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.container.ContainerRequestContext;
 import javax.ws.rs.container.ResourceInfo;
+import javax.ws.rs.core.Cookie;
 import javax.ws.rs.core.*;
 import javax.ws.rs.ext.MessageBodyReader;
 import javax.ws.rs.ext.ReaderInterceptor;
@@ -22,9 +20,10 @@ import java.util.*;
 
 import static java.util.Collections.emptyList;
 
-class MuContainerRequestContext implements Request, ContainerRequestContext, ReaderInterceptorContext {
+class JaxRSRequest implements Request, ContainerRequestContext, ReaderInterceptorContext {
 
     final MuRequest muRequest;
+    private final MuResponse muResponse;
     private InputStream inputStream;
     private final String relativePath;
     private final JaxRsHttpHeadersAdapter jaxHeaders;
@@ -39,9 +38,10 @@ class MuContainerRequestContext implements Request, ContainerRequestContext, Rea
     private final EntityProviders entityProviders;
     private String httpMethod;
 
-    MuContainerRequestContext(MuRequest muRequest, InputStream inputStream, String relativePath, SecurityContext securityContext, List<ReaderInterceptor> readerInterceptors, EntityProviders entityProviders) {
+    JaxRSRequest(MuRequest muRequest, MuResponse muResponse, InputStream inputStream, String relativePath, SecurityContext securityContext, List<ReaderInterceptor> readerInterceptors, EntityProviders entityProviders) {
         this.muRequest = muRequest;
         this.httpMethod = muRequest.method().name();
+        this.muResponse = muResponse;
         this.inputStream = inputStream;
         this.relativePath = relativePath;
         this.securityContext = securityContext;
@@ -159,7 +159,25 @@ class MuContainerRequestContext implements Request, ContainerRequestContext, Rea
 
     @Override
     public Variant selectVariant(List<Variant> variants) {
-        List<Locale.LanguageRange> ranges = Locale.LanguageRange.parse(jaxHeaders.getHeaderString("accept-language"));
+        for (Variant variant : variants) {
+            if (variant.getMediaType() != null) {
+                if (!muResponse.headers().contains(HeaderNames.VARY, HeaderNames.ACCEPT, true)) {
+                    muResponse.headers().add(HeaderNames.VARY, HeaderNames.ACCEPT);
+                }
+            }
+            if (variant.getEncoding() != null) {
+                if (!muResponse.headers().contains(HeaderNames.VARY, HeaderNames.ACCEPT_ENCODING, true)) {
+                    muResponse.headers().add(HeaderNames.VARY, HeaderNames.ACCEPT_ENCODING);
+                }
+            }
+            if (variant.getLanguage() != null) {
+                if (!muResponse.headers().contains(HeaderNames.VARY, HeaderNames.ACCEPT_LANGUAGE, true)) {
+                    muResponse.headers().add(HeaderNames.VARY, HeaderNames.ACCEPT_LANGUAGE);
+                }
+            }
+        }
+        String acceptLang = jaxHeaders.getHeaderString("accept-language");
+        List<Locale.LanguageRange> ranges = Locale.LanguageRange.parse(acceptLang == null ? "*" : acceptLang);
         return MuVariantListBuilder.selectVariant(variants, ranges, getAcceptableMediaTypes(), muRequest.headers().acceptEncoding());
     }
 

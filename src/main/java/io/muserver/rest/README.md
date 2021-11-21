@@ -349,7 +349,8 @@ N/A. Will not implement, as there is no support for `Application`.
 
 #### 10.2.4 Content Negotiation and Preconditions 
 
-- [ ] Not yet implemented.
+- [x] Content Negotiation
+- [ ] Preconditions
 
 #### 10.2.5 Security Context 
 
@@ -382,5 +383,5 @@ The following are not described by the spec but are interfaces defined in the ja
 
 - [x] `UriBuilder`
 - [x] `Link`
-- [ ] `VariantListBuilder`
+- [x] `VariantListBuilder`
 - [x] `ResourceInfo` (this is available in a filter by calling `ResourceInfo resourceInfo = (ResourceInfo) requestContext.getProperty(MuRuntimeDelegate.RESOURCE_INFO_PROPERTY);`)

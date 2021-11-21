@@ -147,7 +147,7 @@ public class ContextTest {
     }
 
     @Test
-    public void acceptableLanguagesCanBeGotten() throws Exception {
+    public void acceptableLanguagesCanBeGottenInPreferredOrder() throws Exception {
         @Path("samples")
         class Sample {
             @GET
@@ -159,7 +159,7 @@ public class ContextTest {
         }
         this.server = httpsServerForTest().addHandler(restHandler(new Sample())).start();
         try (Response resp = call(request(server.uri().resolve("/samples"))
-            .header("Accept-Language", "fr;q=0.3, es;q=1.0, en-US;q=0.1")
+            .header("Accept-Language", "fr;q=0.3, es, en-US;q=0.1")
         )) {
             assertThat(resp.body().string(), equalTo("es , fr , en US"));
         }

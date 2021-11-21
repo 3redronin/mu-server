@@ -76,7 +76,7 @@ public class RestHandler implements MuHandler {
         List<MediaType> directlyProducesRef = null;
         SecurityContext securityContext = muRequest.uri().getScheme().equals("https") ? MuSecurityContext.notLoggedInHttpsContext : MuSecurityContext.notLoggedInHttpContext;
 
-        MuContainerRequestContext requestContext = new MuContainerRequestContext(muRequest, new LazyAccessInputStream(muRequest), Mutils.trim(muRequest.relativePath(), "/"), securityContext, readerInterceptors, entityProviders);
+        JaxRSRequest requestContext = new JaxRSRequest(muRequest, muResponse, new LazyAccessInputStream(muRequest), Mutils.trim(muRequest.relativePath(), "/"), securityContext, readerInterceptors, entityProviders);
         try {
             filterManagerThing.onPreMatch(requestContext);
 
@@ -160,7 +160,7 @@ public class RestHandler implements MuHandler {
         return true;
     }
 
-    static Object invokeResourceMethod(MuContainerRequestContext requestContext, MuResponse muResponse, RequestMatcher.MatchedMethod mm, Function<ResourceMethod, Object> suspendedParamCallback, EntityProviders entityProviders) throws Exception {
+    static Object invokeResourceMethod(JaxRSRequest requestContext, MuResponse muResponse, RequestMatcher.MatchedMethod mm, Function<ResourceMethod, Object> suspendedParamCallback, EntityProviders entityProviders) throws Exception {
         ResourceMethod rm = mm.resourceMethod;
         Object[] params = new Object[rm.methodHandle.getParameterCount()];
         for (ResourceMethodParam param : rm.params) {
@@ -181,7 +181,7 @@ public class RestHandler implements MuHandler {
         return result;
     }
 
-    private void dealWithUnhandledException(int nestingLevel, MuContainerRequestContext request, MuResponse muResponse, Exception ex, List<MediaType> acceptHeaders, List<MediaType> producesRef, List<MediaType> directlyProducesRef) throws Exception {
+    private void dealWithUnhandledException(int nestingLevel, JaxRSRequest request, MuResponse muResponse, Exception ex, List<MediaType> acceptHeaders, List<MediaType> producesRef, List<MediaType> directlyProducesRef) throws Exception {
         Response response = customExceptionMapper.toResponse(ex);
         if (response == null && ex instanceof WebApplicationException) {
             dealWithWebApplicationException(nestingLevel, request, muResponse, (WebApplicationException) ex, acceptHeaders, producesRef == null ? emptyList() : producesRef, directlyProducesRef == null ? emptyList() : directlyProducesRef);
@@ -192,7 +192,7 @@ public class RestHandler implements MuHandler {
         }
     }
 
-    private void sendResponse(int nestingLevel, MuContainerRequestContext requestContext, MuResponse muResponse, List<MediaType> acceptHeaders, List<MediaType> produces, List<MediaType> directlyProduces, Object result) throws Exception {
+    private void sendResponse(int nestingLevel, JaxRSRequest requestContext, MuResponse muResponse, List<MediaType> acceptHeaders, List<MediaType> produces, List<MediaType> directlyProduces, Object result) throws Exception {
         try {
             if (requestContext.hasEntity()) {
                 requestContext.getEntityStream().close();
@@ -267,7 +267,7 @@ public class RestHandler implements MuHandler {
         }
     }
 
-    private void dealWithWebApplicationException(int nestingLevel, MuContainerRequestContext requestContext, MuResponse muResponse, WebApplicationException e, List<MediaType> acceptHeaders, List<MediaType> produces, List<MediaType> directlyProduces) throws Exception {
+    private void dealWithWebApplicationException(int nestingLevel, JaxRSRequest requestContext, MuResponse muResponse, WebApplicationException e, List<MediaType> acceptHeaders, List<MediaType> produces, List<MediaType> directlyProduces) throws Exception {
         if (muResponse.hasStartedSendingData()) {
             log.warn("A web application exception " + e + " was thrown for " + requestContext.muRequest + ", however the response code and message cannot be sent to the client as some data was already sent.");
         } else {
@@ -296,7 +296,7 @@ public class RestHandler implements MuHandler {
         }
     }
 
-    private static Object getContextParam(MuContainerRequestContext requestContext, MuResponse muResponse, RequestMatcher.MatchedMethod mm, ResourceMethodParam param, EntityProviders providers) {
+    private static Object getContextParam(JaxRSRequest requestContext, MuResponse muResponse, RequestMatcher.MatchedMethod mm, ResourceMethodParam param, EntityProviders providers) {
         MuRequest request = requestContext.muRequest;
         Object paramValue;
         Class<?> type = param.parameterHandle.getType();
@@ -338,7 +338,7 @@ public class RestHandler implements MuHandler {
             matchedResources);
     }
 
-    private static Object readRequestEntity(MuContainerRequestContext requestContext, ResourceMethod rm, Parameter parameter, EntityProviders entityProviders) throws java.io.IOException {
+    private static Object readRequestEntity(JaxRSRequest requestContext, ResourceMethod rm, Parameter parameter, EntityProviders entityProviders) throws java.io.IOException {
         requestContext.setAnnotations(parameter.getDeclaredAnnotations());
         requestContext.setType(parameter.getType());
         requestContext.setGenericType(parameter.getParameterizedType());

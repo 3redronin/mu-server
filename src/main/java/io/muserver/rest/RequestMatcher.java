@@ -37,7 +37,7 @@ class RequestMatcher {
         this.roots = roots;
     }
 
-    MatchedMethod findResourceMethod(MuContainerRequestContext requestContext, Method httpMethod, List<MediaType> acceptHeaders, Function<MatchedMethod, ResourceClass> subResourceLocator) throws NotAllowedException, NotAcceptableException, NotSupportedException, NotMatchedException {
+    MatchedMethod findResourceMethod(JaxRSRequest requestContext, Method httpMethod, List<MediaType> acceptHeaders, Function<MatchedMethod, ResourceClass> subResourceLocator) throws NotAllowedException, NotAcceptableException, NotSupportedException, NotMatchedException {
         String path = requestContext.relativePath();
         Set<MatchedMethod> candidateMethods = getMatchedMethodsForPath(path, subResourceLocator);
         MuRequest req = requestContext.muRequest;
@@ -209,7 +209,7 @@ class RequestMatcher {
         final Map<String, String> pathParams;
         final PathMatch pathMatch;
 
-        MatchedMethod(MatchedClass matchedClass, ResourceMethod resourceMethod, Map<String,String> pathParams, PathMatch pathMatch) {
+        MatchedMethod(MatchedClass matchedClass, ResourceMethod resourceMethod, Map<String, String> pathParams, PathMatch pathMatch) {
             this.matchedClass = matchedClass;
             this.resourceMethod = resourceMethod;
             this.pathParams = pathParams;
@@ -264,8 +264,9 @@ class RequestMatcher {
 
     private static CombinedMediaType bestMediaType(List<MediaType> requestedTypes, List<MediaType> serverProvided) {
         return serverProvided.stream()
-            .map(serverType -> requestedTypes.stream().map(clientType -> CombinedMediaType.s(clientType, serverType)).max(Comparator.reverseOrder()).get())
-            .max(Comparator.reverseOrder()).get();
+            .map(serverType -> requestedTypes.stream().map(clientType -> CombinedMediaType.s(clientType, serverType))
+                .min(Comparator.naturalOrder()).get())
+            .min(Comparator.naturalOrder()).get();
     }
 
     static class StepOneOutput {

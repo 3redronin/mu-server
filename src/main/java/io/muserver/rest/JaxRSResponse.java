@@ -35,7 +35,7 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
     private Annotation[] annotations;
     private OutputStream outputStream;
 
-    private MuContainerRequestContext requestContext;
+    private JaxRSRequest requestContext;
     private List<WriterInterceptor> writerInterceptors;
     private int nextWriter = 0;
 
@@ -376,7 +376,7 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
         requestContext.removeProperty(name);
     }
 
-    public void setRequestContext(MuContainerRequestContext requestContext) {
+    public void setRequestContext(JaxRSRequest requestContext) {
         this.requestContext = requestContext;
     }
 
