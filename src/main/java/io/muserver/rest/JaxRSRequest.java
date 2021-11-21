@@ -183,22 +183,71 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
 
     @Override
     public Response.ResponseBuilder evaluatePreconditions(EntityTag eTag) {
-        throw NotImplementedException.notYet();
+        if (eTag == null) {
+            throw new IllegalArgumentException("eTag is null");
+        }
+        boolean noneMatch = true;
+        for (String suppliedEtag : muRequest.headers().getAll(HeaderNames.IF_NONE_MATCH)) {
+            EntityTag supplied = EntityTag.valueOf(suppliedEtag);
+            if (supplied.equals(eTag)) {
+                noneMatch = false;
+                break;
+            }
+        }
+        if (noneMatch) {
+            return null;
+        }
+        int status = isGetOrHead() ? 304 : 412;
+        return Response.status(status).tag(eTag);
+    }
+
+    private boolean isGetOrHead() {
+        return muRequest.method() == Method.GET || muRequest.method() == Method.HEAD;
     }
 
     @Override
     public Response.ResponseBuilder evaluatePreconditions(Date lastModified) {
-        throw NotImplementedException.notYet();
+        if (lastModified == null) {
+            throw new IllegalArgumentException("lastModified is null");
+        }
+        Response.ResponseBuilder ifUnmodifiedSince = evaluateIfUnmodifiedSince(lastModified);
+        return ifUnmodifiedSince != null ? ifUnmodifiedSince : evaluateIfModifiedSince(lastModified);
     }
+
+    private Response.ResponseBuilder evaluateIfModifiedSince(Date lastModified) {
+        long lastModifiedSeconds = lastModified.getTime() / 1000;
+        Long ifModifiedMillis = muRequest.headers().getTimeMillis(HeaderNames.IF_MODIFIED_SINCE);
+        if (ifModifiedMillis == null || lastModifiedSeconds > (ifModifiedMillis / 1000)) {
+            return null;
+        } else {
+            return isGetOrHead() ? Response.notModified() : null;
+        }
+    }
+    private Response.ResponseBuilder evaluateIfUnmodifiedSince(Date lastModified) {
+        long lastModifiedSeconds = lastModified.getTime() / 1000;
+        Long ifUnmodifiedSince = muRequest.headers().getTimeMillis(HeaderNames.IF_UNMODIFIED_SINCE);
+        if (ifUnmodifiedSince == null || lastModifiedSeconds <= (ifUnmodifiedSince / 1000)) {
+            return null;
+        } else {
+            return Response.status(Response.Status.PRECONDITION_FAILED);
+        }
+    }
+
 
     @Override
     public Response.ResponseBuilder evaluatePreconditions(Date lastModified, EntityTag eTag) {
-        throw NotImplementedException.notYet();
+        Response.ResponseBuilder etagCond = evaluatePreconditions(eTag);
+        Response.ResponseBuilder dateCond = evaluatePreconditions(lastModified);
+        if (etagCond == null || dateCond == null) {
+            return null;
+        }
+        return etagCond;
     }
 
     @Override
     public Response.ResponseBuilder evaluatePreconditions() {
-        throw NotImplementedException.notYet();
+        return muRequest.headers().get(HeaderNames.IF_MATCH) != null ?
+            Response.status(Response.Status.PRECONDITION_FAILED) : null;
     }
 
     Method getMuMethod() {

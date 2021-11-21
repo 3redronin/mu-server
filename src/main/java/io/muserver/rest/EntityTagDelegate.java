@@ -8,7 +8,7 @@ class EntityTagDelegate implements RuntimeDelegate.HeaderDelegate<EntityTag> {
     public EntityTag fromString(String value) {
 
         if (value == null || !value.endsWith("\"")) {
-            throw new IllegalArgumentException("Not a value etag value");
+            throw new IllegalArgumentException("Not a valid etag value");
         }
 
         if (value.startsWith("\"")) {

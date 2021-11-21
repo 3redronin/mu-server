@@ -581,12 +581,12 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
 
         @Override
         public ResponseBuilder tag(EntityTag tag) {
-            return tag(tag.toString());
+            return header(HeaderNames.ETAG, tag.toString());
         }
 
         @Override
         public ResponseBuilder tag(String tag) {
-            return header(HeaderNames.ETAG, tag);
+            return tag(new EntityTag(tag));
         }
 
         @Override
