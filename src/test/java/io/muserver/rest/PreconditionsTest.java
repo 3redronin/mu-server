@@ -4,7 +4,6 @@ import io.muserver.HeaderNames;
 import io.muserver.MuServer;
 import okhttp3.RequestBody;
 import okhttp3.Response;
-import org.jetbrains.annotations.NotNull;
 import org.junit.After;
 import org.junit.Test;
 
@@ -244,7 +243,6 @@ public class PreconditionsTest {
     }
 
 
-    @NotNull
     private RequestBody somePutBody() {
         return RequestBody.create("blah", okhttp3.MediaType.get("text/plain"));
     }
