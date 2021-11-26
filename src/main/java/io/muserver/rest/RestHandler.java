@@ -177,8 +177,7 @@ public class RestHandler implements MuHandler {
             }
             params[param.index] = paramValue;
         }
-        Object result = rm.invoke(params);
-        return result;
+        return rm.invoke(params);
     }
 
     private void dealWithUnhandledException(int nestingLevel, JaxRSRequest request, MuResponse muResponse, Exception ex, List<MediaType> acceptHeaders, List<MediaType> producesRef, List<MediaType> directlyProducesRef) throws Exception {

@@ -21,7 +21,6 @@ import static io.muserver.openapi.ResponseObjectBuilder.responseObject;
 import static io.muserver.openapi.ResponsesObjectBuilder.responsesObject;
 import static io.muserver.openapi.SchemaObjectBuilder.schemaObject;
 import static io.muserver.openapi.SchemaObjectBuilder.schemaObjectFrom;
-import static io.muserver.rest.MethodMapping.jaxToMu;
 import static java.util.Collections.singletonMap;
 import static java.util.stream.Collectors.toMap;
 
@@ -263,11 +262,12 @@ class ResourceMethod {
         Method value = null;
         for (Annotation annotation : annotations) {
             Class<? extends Annotation> anno = annotation.annotationType();
-            if (anno.getAnnotation(HttpMethod.class) != null) {
+            HttpMethod httpMethodAnno = anno.getAnnotation(HttpMethod.class);
+            if (httpMethodAnno != null) {
                 if (value != null) {
                     throw new IllegalArgumentException("The method " + restMethod + " has multiple HttpMethod annotations. Only one is allowed per method.");
                 }
-                value = jaxToMu(anno);
+                value = Method.valueOf(httpMethodAnno.value());
             }
         }
         return value;
