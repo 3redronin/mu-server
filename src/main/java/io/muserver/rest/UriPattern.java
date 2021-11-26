@@ -16,6 +16,7 @@ import static io.muserver.Mutils.urlDecode;
 public class UriPattern {
 
     static final String DEFAULT_CAPTURING_GROUP_PATTERN = "[^/]+?";
+    static final String MATRIX_PARAMETERS_PATTERN = "(;[A-Za-z0-9-._~@!$&'()*+,=%]*)*";
     private final Pattern pattern;
     private final List<String> namedGroups;
     private final List<String> namedGroupRegexes;
@@ -118,7 +119,7 @@ public class UriPattern {
                 String literal = template.substring(curIndex, endIndex);
                 numberOfLiterals += literal.length();
                 if (literal.equals("/")) {
-                    regex.append('/');
+                    regex.append(MATRIX_PARAMETERS_PATTERN).append('/');
                     simplePath.append('/');
                 } else if (!literal.contains("/")) {
                     regex.append(escapeRegex(literal));
@@ -130,7 +131,7 @@ public class UriPattern {
                             regex.append(escapeRegex(segment));
                             simplePath.append(segment);
                         }
-                        regex.append('/');
+                        regex.append(MATRIX_PARAMETERS_PATTERN).append('/');
                         simplePath.append('/');
                     }
                 }
@@ -169,6 +170,8 @@ public class UriPattern {
         // 4. If the resulting string ends with '/' then remove the final character.
         if (regex.length() > 0 && regex.lastIndexOf("/") == regex.length() - 1) {
             regex.delete(regex.length() - 1, regex.length());
+        } else {
+            regex.append(MATRIX_PARAMETERS_PATTERN);
         }
 
         // 5. Append '(/.*)?' to the result.

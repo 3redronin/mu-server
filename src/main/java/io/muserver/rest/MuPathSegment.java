@@ -12,16 +12,10 @@ import static java.util.Collections.emptyList;
 class MuPathSegment implements PathSegment {
     private final String path;
     private final MultivaluedMap<String, String> params;
-    private final List<String> pathParams;
 
     MuPathSegment(String path, MultivaluedMap<String, String> params) {
         this.params = params;
         this.path = path;
-        if (path.contains("{")) {
-            pathParams = UriPattern.uriTemplateToRegex(path).namedGroups();
-        } else {
-            pathParams = emptyList();
-        }
     }
 
     @Override
@@ -73,13 +67,37 @@ class MuPathSegment implements PathSegment {
     }
 
     public List<String> pathParameters() {
+        if (!path.contains("{") && params.isEmpty()) {
+            return emptyList();
+        }
+        List<String> pathParams = new ArrayList<>(UriPattern.uriTemplateToRegex(path).namedGroups());
+        for (Map.Entry<String, List<String>> matrixEntry : params.entrySet()) {
+            List<String> matrixKeys = UriPattern.uriTemplateToRegex(matrixEntry.getKey()).namedGroups();
+            for (String matrixKey : matrixKeys) {
+                if (!pathParams.contains(matrixKey)) {
+                    pathParams.add(matrixKey);
+                }
+            }
+            for (String matrixValue : matrixEntry.getValue()) {
+                List<String> matrixValues = UriPattern.uriTemplateToRegex(matrixValue).namedGroups();
+                for (String value : matrixValues) {
+                    if (!pathParams.contains(value)) {
+                        pathParams.add(value);
+                    }
+                }
+            }
+        }
         return pathParams;
     }
 
     public List<MuPathSegment> resolve(String name, String value, boolean encodeSlashInPath) {
         String newPath = MuUriBuilder.resolve(path, name, value);
         MultivaluedMap<String, String> newParams = new MultivaluedHashMap<>();
-        newParams.putAll(this.params);
+        for (Map.Entry<String, List<String>> matrixParam : params.entrySet()) {
+            newParams.put(MuUriBuilder.resolve(matrixParam.getKey(), name, value), matrixParam.getValue().stream()
+                .map(mv -> MuUriBuilder.resolve(mv, name, value))
+                .collect(Collectors.toList()));
+        }
         if (encodeSlashInPath) {
             return Collections.singletonList(new MuPathSegment(newPath, newParams));
         }

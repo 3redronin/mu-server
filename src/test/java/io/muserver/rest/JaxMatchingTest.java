@@ -12,6 +12,7 @@ import javax.ws.rs.GET;
 import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
 import java.io.IOException;
+import java.net.URI;
 
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -120,6 +121,27 @@ public class JaxMatchingTest {
             assertThat(resp.code(), is(404));
         }
     }
+
+
+    @Test
+    public void matrixParametersAreIgnored() throws IOException {
+        @Path("/blah/{thing : [a-z]+}")
+        class Thing {
+            @GET
+            @Path("/something")
+            public String get(@PathParam("thing") String thing) {
+                return thing;
+            }
+        }
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(RestHandlerBuilder.restHandler(new Thing()).build())
+            .start();
+        URI matrixUri = server.uri().resolve("/blah;hello=there/tiger;type=cat/something;type=else");
+        try (Response resp = call(request().url(matrixUri.toString()))) {
+            assertThat(resp.body().string(), is("tiger"));
+        }
+    }
+
 
     @After
     public void stopIt() {

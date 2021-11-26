@@ -35,15 +35,16 @@ public class MuUriBuilderTest {
             .userInfo("{name}:{password}")
             .host("www.example.{extension}")
             .path("some-{path}")
+            .matrixParam("{matrixKey}", "{matrixValue}")
             .queryParam("{key}", "{value}")
             .fragment("frag{ment}");
 
-        URI built = builder.build("s", "dan man", "p@sswor!", "org", "some thing", "a param", "a value", " a boo");
+        URI built = builder.build("s", "dan man", "p@sswor!", "org", "some thing", "matrixWho", "neo", "a param", "a value", " a boo");
         assertThat(built.toString(),
-            equalTo("https://dan%20man:p%40sswor%21@www.example.org/some-some%20thing?a%20param=a%20value#frag%20a%20boo"));
+            equalTo("https://dan%20man:p%40sswor%21@www.example.org/some-some%20thing;matrixWho=neo?a%20param=a%20value#frag%20a%20boo"));
 
         assertThat(builder.toTemplate(),
-            equalTo("http{s}://{name}:{password}@www.example.{extension}/some-{path}?{key}={value}#frag{ment}"));
+            equalTo("http{s}://{name}:{password}@www.example.{extension}/some-{path};{matrixKey}={matrixValue}?{key}={value}#frag{ment}"));
     }
 
     @Test
@@ -112,8 +113,9 @@ public class MuUriBuilderTest {
 
     @Test
     public void fromUriObject() {
-        UriBuilder builder = MuUriBuilder.fromUri(u("http://example.org/blah/?a=b"));
-        assertThat(builder.build(), equalTo(u("http://example.org/blah/?a=b")));
+        UriBuilder builder = MuUriBuilder.fromUri(u("http://example.org/blah;color=red;size=large/?a=b"));
+        URI uri = builder.build();
+        assertThat(uri, equalTo(u("http://example.org/blah;color=red;size=large/?a=b")));
     }
 
     @Test
