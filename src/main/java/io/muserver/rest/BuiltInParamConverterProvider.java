@@ -4,6 +4,7 @@ import io.muserver.Mutils;
 import io.muserver.UploadedFile;
 
 import javax.ws.rs.InternalServerErrorException;
+import javax.ws.rs.core.PathSegment;
 import javax.ws.rs.ext.ParamConverter;
 import javax.ws.rs.ext.ParamConverterProvider;
 import java.lang.annotation.Annotation;
@@ -68,6 +69,9 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
         if (UploadedFile.class.isAssignableFrom(rawType)) {
             return new UploadedFileConverter();
         }
+        if (PathSegment.class.isAssignableFrom(rawType)) {
+            return new PathSegmentConverter();
+        }
         if (rawType.isEnum()) {
             return new EnumConverter(rawType);
         }
@@ -108,6 +112,21 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
         @Override
         public String toString(UploadedFile value) {
             return value.filename();
+        }
+    }
+
+    private static class PathSegmentConverter implements ParamConverter<PathSegment> {
+        @Override
+        public PathSegment fromString(String value) {
+            if (value == null) throw new IllegalArgumentException("value cannot be null");
+            MuPathSegment seg = MuUriInfo.pathStringToSegments(value, true).findFirst().orElse(null);
+            if (seg == null) throw new IllegalArgumentException("Could not parse a path segment");
+            return seg;
+        }
+        @Override
+        public String toString(PathSegment value) {
+            if (value == null) throw new IllegalArgumentException("value cannot be null");
+            return value.toString();
         }
     }
 

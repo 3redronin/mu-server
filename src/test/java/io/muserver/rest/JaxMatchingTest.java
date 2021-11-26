@@ -2,6 +2,7 @@ package io.muserver.rest;
 
 import io.muserver.MuServer;
 import okhttp3.Response;
+import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.MuAssert;
@@ -14,10 +15,13 @@ import javax.ws.rs.PathParam;
 import java.io.IOException;
 import java.net.URI;
 
+import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
+import static scaffolding.ServerUtils.httpsServerForTest;
 
 public class JaxMatchingTest {
     private MuServer server;
@@ -142,6 +146,20 @@ public class JaxMatchingTest {
         }
     }
 
+    @Test
+    public void pathParamsUseTheFinalPathParam() throws Exception {
+        @Path("/customers/{id}")
+        class CustomerResource {
+            @GET
+            @Path("/address/{id}")
+            public String getAddress(@PathParam("id") String addressId) {return addressId;}
+        }
+        this.server = httpsServerForTest().addHandler(restHandler(new CustomerResource()).build()).start();
+        try (Response resp = call(request(server.uri().resolve("/customers/123/address/456")))) {
+            assertThat(resp.code(), Matchers.is(200));
+            assertThat(resp.body().string(), containsString("456"));
+        }
+    }
 
     @After
     public void stopIt() {

@@ -44,7 +44,7 @@ public class PathMatch {
     }
 
     /**
-     * Returns a mapping of URI names to path params. For example the the template URI is <code>/fruit/{name}</code>
+     * Returns a mapping of URI names to path params. For example the template URI is <code>/fruit/{name}</code>
      * then <code>pathMatch.params().get("name")</code> will return <code>orange</code> if the URI was <code>/fruit/orange</code>
      * @return Returns a read-only map of path parameters names to values.
      */
