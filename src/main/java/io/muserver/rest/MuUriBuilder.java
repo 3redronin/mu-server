@@ -406,7 +406,6 @@ class MuUriBuilder extends UriBuilder {
         return template.replaceAll("\\{\\s*" + Pattern.quote(name) + "\\s*(:[^}]*)?\\s*}", value);
     }
 
-
     private String buildIt(Function<String, String> encodeFunction) {
         StringBuilder sb = new StringBuilder();
         if (scheme != null) {

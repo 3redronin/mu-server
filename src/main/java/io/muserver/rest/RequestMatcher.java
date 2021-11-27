@@ -9,6 +9,7 @@ import javax.ws.rs.NotAllowedException;
 import javax.ws.rs.NotSupportedException;
 import javax.ws.rs.ServerErrorException;
 import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.PathSegment;
 import java.net.URI;
 import java.util.*;
 import java.util.function.Function;
@@ -109,8 +110,8 @@ class RequestMatcher {
                         PathMatch matcher = resourceMethod.pathPattern.matcher(relativeUri);
                         // 2(c) add and 2(d) filter out
                         if (matcher.fullyMatches() || (resourceMethod.isSubResourceLocator() && matcher.prefixMatches())) {
-                            Map<String, String> combinedParams = new HashMap<>(candidateClass.pathMatch.params());
-                            combinedParams.putAll(matcher.params());
+                            Map<String, PathSegment> combinedParams = new HashMap<>(candidateClass.pathMatch.segments());
+                            combinedParams.putAll(matcher.segments());
                             candidates.add(new MatchedMethod(candidateClass, resourceMethod, combinedParams, matcher));
                         }
                     }
@@ -185,7 +186,7 @@ class RequestMatcher {
         for (MatchedClass mc : candidateClasses) {
             for (ResourceMethod resourceMethod : mc.resourceClass.resourceMethods) {
                 if (resourceMethod.isSubResource() == isSubResource && !resourceMethod.isSubResourceLocator()) {
-                    MatchedMethod matchedMethod = new MatchedMethod(mc, resourceMethod, mc.pathMatch.params(), mc.pathMatch);
+                    MatchedMethod matchedMethod = new MatchedMethod(mc, resourceMethod, mc.pathMatch.segments(), mc.pathMatch);
                     candidates.add(matchedMethod);
                 }
             }
@@ -206,10 +207,10 @@ class RequestMatcher {
     static class MatchedMethod {
         final MatchedClass matchedClass;
         final ResourceMethod resourceMethod;
-        final Map<String, String> pathParams;
+        final Map<String, PathSegment> pathParams;
         final PathMatch pathMatch;
 
-        MatchedMethod(MatchedClass matchedClass, ResourceMethod resourceMethod, Map<String, String> pathParams, PathMatch pathMatch) {
+        MatchedMethod(MatchedClass matchedClass, ResourceMethod resourceMethod, Map<String, PathSegment> pathParams, PathMatch pathMatch) {
             this.matchedClass = matchedClass;
             this.resourceMethod = resourceMethod;
             this.pathParams = pathParams;
@@ -222,6 +223,11 @@ class RequestMatcher {
                 "resourceMethod=" + resourceMethod +
                 ", pathParams=" + pathParams +
                 '}';
+        }
+
+        public String getPathParam(String key) {
+            PathSegment segment = pathParams.get(key);
+            return segment == null ? null : segment.getPath();
         }
     }
 

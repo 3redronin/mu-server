@@ -1,6 +1,8 @@
 package io.muserver.rest;
 
+import javax.ws.rs.core.PathSegment;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -17,10 +19,10 @@ public class PathMatch {
     public static final PathMatch EMPTY_MATCH = new PathMatch(true, Collections.emptyMap(), Pattern.compile("").matcher(""));
 
     private final boolean matches;
-    private final Map<String, String> params;
+    private final Map<String, PathSegment> params;
     private final Matcher matcher;
 
-    PathMatch(boolean matches, Map<String, String> params, Matcher matcher) {
+    PathMatch(boolean matches, Map<String, PathSegment> params, Matcher matcher) {
         this.matches = matches;
         this.params = params;
         this.matcher = matcher;
@@ -49,6 +51,19 @@ public class PathMatch {
      * @return Returns a read-only map of path parameters names to values.
      */
     public Map<String, String> params() {
+        Map<String, String> copy = new HashMap<>(params.size());
+        for (Map.Entry<String, PathSegment> entry : params.entrySet()) {
+            copy.put(entry.getKey(), entry.getValue().getPath());
+        }
+        return copy;
+    }
+    /**
+     * Returns a mapping of URI names to path segments. For example the template URI is <code>/fruit/{name}</code>
+     * then <code>pathMatch.params().get("name").getPath()</code> will return <code>orange</code> if the URI was <code>/fruit/orange</code>.
+     * <p>The segments also contain matrix parameter info.</p>
+     * @return Returns a read-only map of path parameters names to values.
+     */
+    public Map<String, PathSegment> segments() {
         return params;
     }
 

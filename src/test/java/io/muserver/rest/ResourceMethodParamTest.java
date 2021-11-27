@@ -91,7 +91,7 @@ public class ResourceMethodParamTest {
             }
         }
         server = httpsServerForTest().addHandler(restHandler(new Sample())).start();
-        try (Response resp = call(request().url(server.uri().resolve("/samples?one=some%20thing%2F&three=some%20thing%2F").toString()))) {
+        try (Response resp = call(request().url(server.uri().resolve("/samples?one=some%20thing%2F&one=ignored&three=some%20thing%2F").toString()))) {
             assertThat(resp.body().string(), equalTo("some thing/ / Some default / some%20thing%2F"));
         }
     }
@@ -224,6 +224,7 @@ public class ResourceMethodParamTest {
             .post(
                 new FormBody.Builder()
                     .add("someThing", "Is here")
+                    .add("someThing", "Is ignored")
                     .add("someThings", "some things one")
                     .add("someThings", "some things two")
                     .build())
@@ -312,7 +313,7 @@ public class ResourceMethodParamTest {
             }
         }
         server = httpsServerForTest().addHandler(restHandler(new Sample())).start();
-        try (Response resp = call(request().url(server.uri().resolve("/samples?breedOne=CHIHUAHUA").toString()))) {
+        try (Response resp = call(request().url(server.uri().resolve("/samples?breedOne=CHIHUAHUA&breedOne=ignored").toString()))) {
             assertThat(resp.body().string(), equalTo("chihuahua / null / big_hairy"));
         }
         try (Response resp = call(request().url(server.uri().resolve("/samples/headers").toString())
@@ -337,7 +338,6 @@ public class ResourceMethodParamTest {
             assertThat(resp.code(), is(400));
             assertThat(resp.body().string(), containsString("Could not convert"));
         }
-
     }
 
     @Test

@@ -128,8 +128,8 @@ public class JaxMatchingTest {
 
 
     @Test
-    public void matrixParametersAreIgnored() throws IOException {
-        @Path("/blah/{thing : [a-z]+}")
+    public void matrixParametersMatchDefaultPathParamRegex() throws IOException {
+        @Path("/blah/{thing}")
         class Thing {
             @GET
             @Path("/something")
@@ -140,7 +140,7 @@ public class JaxMatchingTest {
         server = ServerUtils.httpsServerForTest()
             .addHandler(RestHandlerBuilder.restHandler(new Thing()).build())
             .start();
-        URI matrixUri = server.uri().resolve("/blah;hello=there/tiger;type=cat/something;type=else");
+        URI matrixUri = server.uri().resolve("/blah;ignored=true/tiger;color=red;type=cat/something;ignored=true");
         try (Response resp = call(request().url(matrixUri.toString()))) {
             assertThat(resp.body().string(), is("tiger"));
         }

@@ -7,11 +7,11 @@ import org.junit.Test;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 
-import javax.ws.rs.GET;
-import javax.ws.rs.Path;
-import javax.ws.rs.PathParam;
+import javax.ws.rs.*;
 import javax.ws.rs.core.PathSegment;
 import java.io.IOException;
+import java.util.List;
+import java.util.stream.Collectors;
 
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -25,21 +25,43 @@ public class MatrixParamTest {
     public void canAccessMatrixParamsViaPathSegments() throws IOException {
         @Path("/cars/{make}")
         class CarResource {
-
             @GET
             @Path("/{model}/{year}")
-            public String getPicture(@PathParam("make") String make,
-                                   @PathParam("model") PathSegment car,
+            public String getPicture(@PathParam("make") PathSegment make,
+                                   @PathParam("model") @Encoded PathSegment car,
                                    @PathParam("year") String year) {
-                return make + " " + car.getPath() + " with color " + car.getMatrixParameters().getFirst("color") + " from year " + year;
+                return make.getPath() + "-" + make.getMatrixParameters().getFirst("surname") + " " + car.getPath() + " with color " + car.getMatrixParameters().getFirst("color") + " from year " + year;
             }
         }
 
         server = ServerUtils.httpsServerForTest()
             .addHandler(RestHandlerBuilder.restHandler(new CarResource()).build())
             .start();
-        try (Response resp = call(request(server.uri().resolve("/cars/mercedes/e55;color=black/2006")))) {
-            assertThat(resp.body().string(), is("mercedes e55 with color black from year 2006"));
+        try (Response resp = call(request(server.uri().resolve("/cars/mercedes;surname=be%20nz/e55;color=black%20blue/2006")))) {
+            assertThat(resp.body().string(), is("mercedes-be nz e55 with color black%20blue from year 2006"));
+        }
+    }
+
+    @Test
+    public void matrixParamCanGetMatrixParamsFromLastSegment() throws IOException {
+        @Path("/cars")
+        class CarResource {
+            @GET
+            @Path("/{make}/{model}")
+            public String getPicture(
+                @MatrixParam("country") String country,
+                @MatrixParam("colour") List<String> colours,
+                                     @MatrixParam("year") int year
+            ) {
+                return year + ": " + colours.stream().sorted().collect(Collectors.joining(", "));
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(RestHandlerBuilder.restHandler(new CarResource()).build())
+            .start();
+        try (Response resp = call(request(server.uri().resolve("/cars/mercedes;country=Germany/e55;colour=black;colour=blue;year=2021")))) {
+            assertThat(resp.body().string(), is("2021: black, blue"));
         }
     }
 

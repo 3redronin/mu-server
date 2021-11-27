@@ -2,6 +2,7 @@ package io.muserver.rest;
 
 import io.muserver.Mutils;
 
+import javax.ws.rs.core.PathSegment;
 import java.net.URI;
 import java.util.*;
 import java.util.regex.Matcher;
@@ -16,6 +17,7 @@ import static io.muserver.Mutils.urlDecode;
 public class UriPattern {
 
     static final String DEFAULT_CAPTURING_GROUP_PATTERN = "[^/]+?";
+    static final String MATRIX_PARAMETERS_PATTERN = "(;[A-Za-z0-9-._~@!$&'()*+,=%]*)*";
     private final Pattern pattern;
     private final List<String> namedGroups;
     private final List<String> namedGroupRegexes;
@@ -72,9 +74,12 @@ public class UriPattern {
         }
         Matcher matcher = pattern.matcher(rawPath);
         if (matcher.matches()) {
-            HashMap<String, String> params = new HashMap<>();
+            HashMap<String, PathSegment> params = new HashMap<>();
             for (String namedGroup : namedGroups) {
-                params.put(namedGroup, urlDecode(matcher.group(namedGroup)));
+                MuPathSegment segment = MuUriInfo.pathStringToSegments(urlDecode(matcher.group(namedGroup)), true).findFirst().orElse(null);
+                if (segment != null) {
+                    params.put(namedGroup, segment);
+                }
             }
             return new PathMatch(true, params, matcher);
         } else {
@@ -121,13 +126,13 @@ public class UriPattern {
                     regex.append('/');
                     simplePath.append('/');
                 } else if (!literal.contains("/")) {
-                    regex.append(escapeRegex(literal));
+                    regex.append(escapeRegex(literal)).append(MATRIX_PARAMETERS_PATTERN);
                     simplePath.append(literal);
                 } else {
                     String[] segments = literal.split("/");
                     for (String segment : segments) {
                         if (!segment.isEmpty()) {
-                            regex.append(escapeRegex(segment));
+                            regex.append(escapeRegex(segment)).append(MATRIX_PARAMETERS_PATTERN);
                             simplePath.append(segment);
                         }
                         regex.append('/');
@@ -154,7 +159,7 @@ public class UriPattern {
                 if (!groupNames.contains(groupName)) {
                     groupNames.add(groupName);
                     namedGroupRegexes.add(groupRegex);
-                    regex.append("(?<").append(groupName).append(">").append(groupRegex).append(')');
+                    regex.append("(?<").append(groupName).append(">").append(groupRegex).append(MATRIX_PARAMETERS_PATTERN).append(')');
                 } else {
                     regex.append("\\k<").append(groupName).append('>');
                 }

@@ -166,7 +166,7 @@ public class RestHandler implements MuHandler {
         for (ResourceMethodParam param : rm.params) {
             Object paramValue;
             if (param.source == ResourceMethodParam.ValueSource.MESSAGE_BODY) {
-                paramValue = readRequestEntity(requestContext, rm, param.parameterHandle, entityProviders);
+                paramValue = readRequestEntity(requestContext, param.parameterHandle);
             } else if (param.source == ResourceMethodParam.ValueSource.CONTEXT) {
                 paramValue = getContextParam(requestContext, muResponse, mm, param, entityProviders);
             } else if (param.source == ResourceMethodParam.ValueSource.SUSPENDED) {
@@ -337,7 +337,7 @@ public class RestHandler implements MuHandler {
             matchedResources);
     }
 
-    private static Object readRequestEntity(JaxRSRequest requestContext, ResourceMethod rm, Parameter parameter, EntityProviders entityProviders) throws java.io.IOException {
+    private static Object readRequestEntity(JaxRSRequest requestContext, Parameter parameter) throws java.io.IOException {
         requestContext.setAnnotations(parameter.getDeclaredAnnotations());
         requestContext.setType(parameter.getType());
         requestContext.setGenericType(parameter.getParameterizedType());

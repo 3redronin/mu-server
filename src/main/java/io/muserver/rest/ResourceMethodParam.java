@@ -2,6 +2,7 @@ package io.muserver.rest;
 
 import io.muserver.MuException;
 import io.muserver.MuRequest;
+import io.muserver.Mutils;
 import io.muserver.UploadedFile;
 import io.muserver.openapi.ExternalDocumentationObject;
 import io.muserver.openapi.ParameterObjectBuilder;
@@ -9,6 +10,7 @@ import io.muserver.openapi.ParameterObjectBuilder;
 import javax.ws.rs.*;
 import javax.ws.rs.container.Suspended;
 import javax.ws.rs.core.Context;
+import javax.ws.rs.core.PathSegment;
 import javax.ws.rs.ext.ParamConverter;
 import javax.ws.rs.ext.ParamConverterProvider;
 import java.io.File;
@@ -17,12 +19,15 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
+import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
-import static io.muserver.Mutils.urlEncode;
 import static io.muserver.openapi.ParameterObjectBuilder.parameterObject;
 import static io.muserver.openapi.SchemaObjectBuilder.schemaObjectFrom;
+import static java.util.Collections.emptyList;
 
 abstract class ResourceMethodParam {
 
@@ -166,19 +171,39 @@ abstract class ResourceMethodParam {
                 }
             }
 
-            String specifiedValue =
-                source == ValueSource.COOKIE_PARAM ? request.cookie(key).orElse("") // TODO make request.cookie return a string and default it
-                    : source == ValueSource.HEADER_PARAM ? String.join(",", request.headers().getAll(key))
-                    : source == ValueSource.MATRIX_PARAM ? "" // TODO support matrix params
-                    : source == ValueSource.FORM_PARAM ? String.join(",", request.form().getAll(key))
-                    : source == ValueSource.PATH_PARAM ? matchedMethod.pathParams.get(key)
-                    : source == ValueSource.QUERY_PARAM ? String.join(",", request.query().getAll(key))
-                    : null;
-            boolean isSpecified = specifiedValue != null && specifiedValue.length() > 0;
-            if (isSpecified && encodedRequested) {
-                specifiedValue = urlEncode(specifiedValue);
+            if (paramClass.isAssignableFrom(PathSegment.class)) {
+                PathSegment seg = matchedMethod.pathParams.get(key);
+                if (seg != null && encodedRequested) {
+                    return ((MuPathSegment)seg).toEncoded();
+                }
+                return seg;
             }
-            return isSpecified ? ResourceMethodParam.convertValue(parameterHandle, paramConverter, false, specifiedValue) : defaultValue();
+            List<String> specifiedValue =
+                source == ValueSource.COOKIE_PARAM ? cookieValue(request, key)
+                    : source == ValueSource.HEADER_PARAM ? request.headers().getAll(key)
+                    : source == ValueSource.MATRIX_PARAM ? matrixParamValue(request, key)
+                    : source == ValueSource.FORM_PARAM ? request.form().getAll(key)
+                    : source == ValueSource.PATH_PARAM ? Collections.singletonList(matchedMethod.getPathParam(key))
+                    : source == ValueSource.QUERY_PARAM ? request.query().getAll(key)
+                    : emptyList();
+            boolean isSpecified = !specifiedValue.isEmpty();
+            if (encodedRequested && isSpecified) {
+                specifiedValue = specifiedValue.stream().map(Mutils::urlEncode).collect(Collectors.toList());
+            }
+            return isSpecified ? ResourceMethodParam.convertValue(parameterHandle, paramConverter, false, String.join(",", specifiedValue)) : defaultValue();
+        }
+
+        private List<String> cookieValue(MuRequest request, String key) {
+            Optional<String> cookie = request.cookie(key);
+            return cookie.map(Collections::singletonList).orElse(emptyList());
+        }
+
+        private List<String> matrixParamValue(MuRequest request, String key) {
+            MuPathSegment last = MuUriInfo.pathStringToSegments(request.relativePath(), false).reduce((first, second) -> second).orElse(null);
+            if (last != null && last.getMatrixParameters().containsKey(key)) {
+                return last.getMatrixParameters().get(key);
+            }
+            return emptyList();
         }
     }
 
