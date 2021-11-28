@@ -49,7 +49,6 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
     }
 
     public Annotation[] getAnnotations() {
-        if (annotations == null) return new Annotation[0];
         return annotations;
     }
 
@@ -391,12 +390,13 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
         static {
             MuRuntimeDelegate.ensureSet();
         }
+        static final Annotation[] EMPTY_ANNOTATIONS = new Annotation[0];
 
         private final MultivaluedMap<String, Object> headers = new LowercasedMultivaluedHashMap<>();
         private final List<Link> linkHeaders = new ArrayList<>();
         private StatusType status;
         private Object entity;
-        private Annotation[] annotations;
+        private Annotation[] annotations = EMPTY_ANNOTATIONS;
         private NewCookie[] cookies = new NewCookie[0];
         private MediaType type;
         private List<Variant> variants = new ArrayList<>();
@@ -436,9 +436,7 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
 
         @Override
         public ResponseBuilder entity(Object entity) {
-            this.entity = entity;
-            this.annotations = null;
-            return this;
+            return entity(entity, EMPTY_ANNOTATIONS);
         }
 
         @Override

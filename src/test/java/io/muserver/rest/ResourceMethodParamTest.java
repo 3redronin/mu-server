@@ -17,6 +17,8 @@ import javax.ws.rs.ext.ParamConverter;
 import javax.ws.rs.ext.ParamConverterProvider;
 import java.io.IOException;
 import java.lang.annotation.Annotation;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.time.Instant;
@@ -1036,6 +1038,55 @@ public class ResourceMethodParamTest {
             assertThat(resp.body().string(), equalTo("Holder of [car: one], Holder of [car: two]"));
         }
     }
+
+    @Retention(RetentionPolicy.RUNTIME)
+    private @interface ChangeCase {
+        String value();
+    }
+
+    @Test
+    public void paramConvertsHaveAccessToTheParamAnnotations() throws Exception {
+        @Path("/thing")
+        class ThingResource {
+            @GET
+            public String get(@ChangeCase("upper") @QueryParam("one") String one, @ChangeCase("lower") @QueryParam("two") String two, @QueryParam("three") String three) {
+                return one + " " + two + " " + three;
+            }
+        }
+        server = httpsServerForTest()
+            .addHandler(restHandler(new ThingResource())
+                .addCustomParamConverterProvider(new ParamConverterProvider() {
+                    @Override
+                    public <T> ParamConverter<T> getConverter(Class<T> rawType, Type genericType, Annotation[] annotations) {
+                        if (rawType.equals(String.class)) {
+                            return new ParamConverter<T>() {
+                                @Override
+                                public T fromString(String value) {
+                                    ChangeCase changer = Arrays.stream(annotations)
+                                        .filter(a -> a.annotationType().equals(ChangeCase.class))
+                                        .map(a -> (ChangeCase)a)
+                                        .findFirst().orElse(null);
+                                    if (changer != null) {
+                                        value = (changer.value().equals("upper")) ? value.toUpperCase() : changer.value().equals("lower") ? value.toLowerCase() : value;
+                                    }
+                                    return (T) value;
+                                }
+                                @Override
+                                public String toString(T value) {
+                                    return value.toString();
+                                }
+                            };
+                        }
+                        return null;
+                    }
+                })
+            )
+            .start();
+        try (Response resp = call(request(server.uri().resolve("/thing?one=ValueOne&two=ValueTwo&three=ValueThree")))) {
+            assertThat(resp.body().string(), equalTo("VALUEONE valuetwo ValueThree"));
+        }
+    }
+
 
 
     @After

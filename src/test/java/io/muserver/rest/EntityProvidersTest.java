@@ -23,6 +23,7 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -78,6 +79,103 @@ public class EntityProvidersTest {
             assertThat(resp.body().string(), equalTo("--HELLO WORLD--"));
         }
     }
+
+    @Test
+    public void customWritersGetTheAnnotationsOfTheResourceMethod() throws Exception {
+
+        @Path("dummy")
+        class Thing {}
+
+        @Path("samples")
+        class Sample {
+            @GET
+            @Description("A description")
+            @Produces({"text/vnd.custom.txt;charset=utf-8", "*/*"})
+            public javax.ws.rs.core.Response echo() {
+                return javax.ws.rs.core.Response.ok().entity(new Thing(), Thing.class.getAnnotations()).build();
+            }
+        }
+
+        this.server = httpsServerForTest().addHandler(
+            restHandler(new Sample())
+                .addCustomWriter(new MessageBodyWriter<Object>() {
+                    @Override
+                    public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, javax.ws.rs.core.MediaType mediaType) {
+                        return type.equals(Thing.class);
+                    }
+                    @Override
+                    public void writeTo(Object o, Class<?> type, Type genericType, Annotation[] annotations, javax.ws.rs.core.MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException, WebApplicationException {
+                        try (OutputStreamWriter writer = new OutputStreamWriter(entityStream)) {
+                            Description description = Arrays.stream(annotations).filter(a -> a.annotationType().equals(Description.class))
+                                .map(a -> (Description) a)
+                                .findFirst().orElse(null);
+                            Path path = Arrays.stream(annotations).filter(a -> a.annotationType().equals(Path.class))
+                                .map(a -> (Path) a)
+                                .findFirst().orElse(null);
+                            writer.write(mediaType + " "
+                                + (description == null ? "null" : description.value()) + " "
+                                + (path == null ? "null" : path.value())
+                            );
+                        }
+                    }
+                })
+                .build()).start();
+        try (Response resp = call(request(server.uri().resolve("/samples")))) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.header("Content-Type"), equalTo("text/vnd.custom.txt;charset=utf-8"));
+            assertThat(resp.body().string(), equalTo("text/vnd.custom.txt;charset=utf-8 A description dummy"));
+        }
+    }
+
+    @Test
+    public void customReadersGetTheAnnotationsOfTheResourceMethod() throws Exception {
+
+        @Path("dummy")
+        class Thing {
+            final String value;
+
+            Thing(String value) {
+                this.value = value;
+            }
+        }
+
+        @Path("samples")
+        class Sample {
+            @POST
+            public String echo(@Description("A description") @Required Thing thing) {
+                return thing.value;
+            }
+        }
+
+        @Consumes({"text/vnd.custom.txt;charset=utf-8", "*/*"})
+        class ThingReader implements MessageBodyReader<Thing> {
+            @Override
+            public boolean isReadable(Class<?> type, Type genericType, Annotation[] annotations, javax.ws.rs.core.MediaType mediaType) {
+                return type.equals(Thing.class);
+            }
+
+            @Override
+            public Thing readFrom(Class<Thing> type, Type genericType, Annotation[] annotations, javax.ws.rs.core.MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
+                Description description = Arrays.stream(annotations).filter(a -> a.annotationType().equals(Description.class))
+                    .map(a -> (Description) a)
+                    .findFirst().orElse(null);
+                Required required = Arrays.stream(annotations).filter(a -> a.annotationType().equals(Required.class))
+                    .map(a -> (Required) a)
+                    .findFirst().orElse(null);
+                return new Thing(mediaType.toString() + " " + description.value() + " " + (required != null));
+            }
+        }
+
+        this.server = httpsServerForTest().addHandler(
+            restHandler(new Sample())
+                .addCustomReader(new ThingReader())
+                .build()).start();
+        try (Response resp = call(request(server.uri().resolve("/samples")).post(RequestBody.create("dummy", MediaType.parse("text/vnd.custom.txt;charset=utf-8"))))) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.body().string(), equalTo("text/vnd.custom.txt;charset=utf-8 A description true"));
+        }
+    }
+
     @Test
     public void customConvertersCanBeUsedEvenWithGenerics() throws Exception {
 

@@ -117,6 +117,7 @@ public class RestHandler implements MuHandler {
 
             List<MediaType> produces = producesRef = mm.resourceMethod.resourceClass.produces;
             List<MediaType> directlyProduces = directlyProducesRef = mm.resourceMethod.directlyProduces;
+            Annotation[] methodAnnotations = mm.resourceMethod.methodAnnotations;
 
             filterManagerThing.onPostMatch(requestContext);
 
@@ -125,7 +126,7 @@ public class RestHandler implements MuHandler {
                     throw new MuException("A REST method can only have one @Suspended attribute. Error for " + rm);
                 }
                 return new AsyncResponseAdapter(muRequest.handleAsync(),
-                    response -> sendResponse(0, requestContext, muResponse, acceptHeaders, produces, directlyProduces, response));
+                    response -> sendResponse(0, requestContext, muResponse, acceptHeaders, produces, directlyProduces, methodAnnotations, response));
             };
 
 
@@ -137,14 +138,14 @@ public class RestHandler implements MuHandler {
                     CompletionStage cs = (CompletionStage) result;
                     cs.thenAccept(o -> {
                         try {
-                            sendResponse(0, requestContext, muResponse, acceptHeaders, produces, directlyProduces, o);
+                            sendResponse(0, requestContext, muResponse, acceptHeaders, produces, directlyProduces, methodAnnotations, o);
                             asyncHandle1.complete();
                         } catch (Exception e) {
                             asyncHandle1.complete(e);
                         }
                     });
                 } else {
-                    sendResponse(0, requestContext, muResponse, acceptHeaders, produces, directlyProduces, result);
+                    sendResponse(0, requestContext, muResponse, acceptHeaders, produces, directlyProduces, methodAnnotations, result);
                 }
             }
         } catch (NotMatchedException e) {
@@ -187,11 +188,11 @@ public class RestHandler implements MuHandler {
         } else if (response == null) {
             throw ex;
         } else {
-            sendResponse(nestingLevel, request, muResponse, acceptHeaders, producesRef, directlyProducesRef, response);
+            sendResponse(nestingLevel, request, muResponse, acceptHeaders, producesRef, directlyProducesRef, JaxRSResponse.Builder.EMPTY_ANNOTATIONS, response);
         }
     }
 
-    private void sendResponse(int nestingLevel, JaxRSRequest requestContext, MuResponse muResponse, List<MediaType> acceptHeaders, List<MediaType> produces, List<MediaType> directlyProduces, Object result) throws Exception {
+    private void sendResponse(int nestingLevel, JaxRSRequest requestContext, MuResponse muResponse, List<MediaType> acceptHeaders, List<MediaType> produces, List<MediaType> directlyProduces, Annotation[] annotations, Object result) throws Exception {
         try {
             if (requestContext.hasEntity()) {
                 requestContext.getEntityStream().close();
@@ -205,14 +206,25 @@ public class RestHandler implements MuHandler {
 
                 JaxRSResponse jaxRSResponse = obj.response;
                 if (jaxRSResponse == null) {
-                    jaxRSResponse = new JaxRSResponse(Response.Status.fromStatusCode(obj.status()), new LowercasedMultivaluedHashMap<>(), obj, new NewCookie[0], emptyList(), new Annotation[0]);
+                    jaxRSResponse = new JaxRSResponse(Response.Status.fromStatusCode(obj.status()), new LowercasedMultivaluedHashMap<>(), obj, new NewCookie[0], emptyList(), JaxRSResponse.Builder.EMPTY_ANNOTATIONS);
                 }
 
                 try (LazyAccessOutputStream out = new LazyAccessOutputStream(muResponse)) {
                     jaxRSResponse.setEntityStream(requestContext.getMuMethod() == Method.HEAD ? NullOutputStream.INSTANCE : out);
                     jaxRSResponse.setRequestContext(requestContext);
+
+                    Annotation[] writerAnnontations = annotations;
+                    if (jaxRSResponse.getAnnotations().length > 0) {
+                        if (writerAnnontations.length == 0) {
+                            writerAnnontations = jaxRSResponse.getAnnotations();
+                        } else {
+                            writerAnnontations = Arrays.copyOf(annotations, annotations.length + jaxRSResponse.getAnnotations().length);
+                            System.arraycopy(jaxRSResponse.getAnnotations(), 0, writerAnnontations, annotations.length, jaxRSResponse.getAnnotations().length);
+                        }
+                    }
+
                     if (obj.entity != null) {
-                        MediaType responseMediaType = MediaTypeDeterminer.determine(obj, produces, directlyProduces, entityProviders.writers, acceptHeaders);
+                        MediaType responseMediaType = MediaTypeDeterminer.determine(obj, produces, directlyProduces, entityProviders.writers, acceptHeaders, writerAnnontations);
                         jaxRSResponse.setMediaType(responseMediaType);
                     }
 
@@ -237,13 +249,12 @@ public class RestHandler implements MuHandler {
                     } else {
 
                         MediaType responseMediaType = jaxRSResponse.getMediaType();
-                        Annotation[] entityAnnotations = jaxRSResponse.getEntityAnnotations();
 
                         Class entityType = jaxRSResponse.getEntityClass();
                         Type entityGenericType = jaxRSResponse.getEntityType();
-                        MessageBodyWriter messageBodyWriter = entityProviders.selectWriter(entityType, entityGenericType, entityAnnotations, responseMediaType);
+                        MessageBodyWriter messageBodyWriter = entityProviders.selectWriter(entityType, entityGenericType, writerAnnontations, responseMediaType);
 
-                        long size = messageBodyWriter.getSize(entity, entityType, entityGenericType, entityAnnotations, responseMediaType);
+                        long size = messageBodyWriter.getSize(entity, entityType, entityGenericType, writerAnnontations, responseMediaType);
                         if (size > -1) {
                             jaxRSResponse.getHeaders().putSingle("content-length", size);
                         }
@@ -256,7 +267,7 @@ public class RestHandler implements MuHandler {
 
                         MuRuntimeDelegate.writeResponseHeaders(requestContext.muRequest.uri(), jaxRSResponse, muResponse);
 
-                        messageBodyWriter.writeTo(jaxRSResponse.getEntity(), jaxRSResponse.getType(), jaxRSResponse.getGenericType(), jaxRSResponse.getAnnotations(),
+                        messageBodyWriter.writeTo(jaxRSResponse.getEntity(), jaxRSResponse.getType(), jaxRSResponse.getGenericType(), writerAnnontations,
                             jaxRSResponse.getMediaType(), jaxRSResponse.getHeaders(), jaxRSResponse.getOutputStream());
                     }
                 }
@@ -284,7 +295,7 @@ public class RestHandler implements MuHandler {
                         toSend.entity(entity + "<p>" + Mutils.htmlEncode(e.getMessage()) + "</p>");
                     }
                 }
-                sendResponse(nestingLevel + 1, requestContext, muResponse, acceptHeaders, produces, directlyProduces, toSend.build());
+                sendResponse(nestingLevel + 1, requestContext, muResponse, acceptHeaders, produces, directlyProduces, JaxRSResponse.Builder.EMPTY_ANNOTATIONS, toSend.build());
             } else {
                 muResponse.status(r.getStatus());
                 muResponse.contentType(ContentTypes.TEXT_PLAIN_UTF8);

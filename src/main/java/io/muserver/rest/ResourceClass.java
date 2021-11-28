@@ -99,7 +99,7 @@ class ResourceClass {
             DescriptionData descriptionData = DescriptionData.fromAnnotation(restMethod, null);
             String pathTemplate = methodPath == null ? null : methodPath.value();
             boolean isDeprecated = annotationSource.isAnnotationPresent(Deprecated.class);
-            resourceMethods.add(new ResourceMethod(this, methodPattern, restMethod, params, httpMethod, pathTemplate, methodProduces, methodConsumes, schemaObjectCustomizer, descriptionData, isDeprecated, methodNameBindingAnnotations));
+            resourceMethods.add(new ResourceMethod(this, methodPattern, restMethod, params, httpMethod, pathTemplate, methodProduces, methodConsumes, schemaObjectCustomizer, descriptionData, isDeprecated, methodNameBindingAnnotations, annotationSource.getAnnotations()));
         }
         this.resourceMethods = Collections.unmodifiableList(resourceMethods);
     }

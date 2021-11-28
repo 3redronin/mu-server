@@ -39,8 +39,9 @@ class ResourceMethod {
     private final DescriptionData descriptionData;
     private final boolean isDeprecated;
     private final List<Class<? extends Annotation>> nameBindingAnnotations;
+    final Annotation[] methodAnnotations; // the annotations defined on the method to be passed to the message body writers
 
-    ResourceMethod(ResourceClass resourceClass, UriPattern pathPattern, java.lang.reflect.Method methodHandle, List<ResourceMethodParam> params, Method httpMethod, String pathTemplate, List<MediaType> produces, List<MediaType> consumes, SchemaObjectCustomizer schemaObjectCustomizer, DescriptionData descriptionData, boolean isDeprecated, List<Class<? extends Annotation>> nameBindingAnnotations) {
+    ResourceMethod(ResourceClass resourceClass, UriPattern pathPattern, java.lang.reflect.Method methodHandle, List<ResourceMethodParam> params, Method httpMethod, String pathTemplate, List<MediaType> produces, List<MediaType> consumes, SchemaObjectCustomizer schemaObjectCustomizer, DescriptionData descriptionData, boolean isDeprecated, List<Class<? extends Annotation>> nameBindingAnnotations, Annotation[] methodAnnotations) {
         this.resourceClass = resourceClass;
         this.pathPattern = pathPattern;
         this.methodHandle = methodHandle;
@@ -53,6 +54,7 @@ class ResourceMethod {
         this.descriptionData = descriptionData;
         this.isDeprecated = isDeprecated;
         this.nameBindingAnnotations = nameBindingAnnotations;
+        this.methodAnnotations = methodAnnotations;
         this.effectiveProduces = !produces.isEmpty() ? produces : (!resourceClass.produces.isEmpty() ? resourceClass.produces : RequestMatcher.WILDCARD_AS_LIST);
         this.effectiveConsumes = !consumes.isEmpty() ? consumes : (!resourceClass.consumes.isEmpty() ? resourceClass.consumes : RequestMatcher.WILDCARD_AS_LIST);
     }

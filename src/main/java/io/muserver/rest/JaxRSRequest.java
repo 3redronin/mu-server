@@ -31,7 +31,7 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
     private UriInfo uriInfo;
     private RequestMatcher.MatchedMethod matchedMethod;
     private SecurityContext securityContext;
-    private Annotation[] annotations = new Annotation[0];
+    private Annotation[] annotations = JaxRSResponse.Builder.EMPTY_ANNOTATIONS;
     private Class<?> type;
     private Type genericType;
     private int nextReader;
