@@ -3,15 +3,16 @@ package io.muserver.rest;
 import io.muserver.Mutils;
 import io.muserver.UploadedFile;
 
-import javax.ws.rs.InternalServerErrorException;
 import javax.ws.rs.core.PathSegment;
 import javax.ws.rs.ext.ParamConverter;
 import javax.ws.rs.ext.ParamConverterProvider;
 import java.lang.annotation.Annotation;
-import java.lang.reflect.*;
-import java.util.*;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.lang.reflect.Type;
+import java.util.List;
 import java.util.function.Function;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -81,27 +82,8 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
             return cc;
         }
         StaticMethodConverter<T> smc = StaticMethodConverter.tryToCreate(rawType);
-        if (smc != null) {
-            return smc;
-        }
-
-        if (Collection.class.isAssignableFrom(rawType) && genericType instanceof ParameterizedType) {
-            Type type = ((ParameterizedType) genericType).getActualTypeArguments()[0];
-            if (type instanceof WildcardType) {
-                type = ((WildcardType)type).getUpperBounds()[0];
-            }
-            if (type instanceof Class) {
-                Class genericClass = (Class) type;
-                ParamConverter genericTypeConverter = getConverter(genericClass, type, annotations);
-                if (genericTypeConverter != null) {
-                    CollectionConverter collectionConverter = CollectionConverter.create(rawType, genericClass, genericTypeConverter);
-                    if (collectionConverter != null) {
-                        return collectionConverter;
-                    }
-                }
-            }
-        }
-        return null;
+        // may be null
+        return smc;
     }
 
     private static class UploadedFileConverter implements ParamConverter<UploadedFile> {
@@ -127,49 +109,6 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
         public String toString(PathSegment value) {
             if (value == null) throw new IllegalArgumentException("value cannot be null");
             return value.toString();
-        }
-    }
-
-    private static class CollectionConverter implements ParamConverter {
-        private final ParamConverter genericTypeConverter;
-        private final Supplier collectionSupplier;
-        private CollectionConverter(ParamConverter genericTypeConverter, Supplier collectionSupplier) {
-            this.genericTypeConverter = genericTypeConverter;
-            this.collectionSupplier = collectionSupplier;
-        }
-        public Object fromString(String value) {
-            Collection values = (Collection)collectionSupplier.get();
-            if (!Mutils.nullOrEmpty(value)) {
-                String[] parts = value.split("\\s*,\\s*");
-                Stream.of(parts).map(v -> genericTypeConverter.fromString(v))
-                    .forEach(values::add);
-            }
-            return values;
-        }
-        public String toString(Object value) {
-            Collection<?> collection = (Collection) value;
-            return collection.stream().map(genericTypeConverter::toString).collect(Collectors.joining(""));
-        }
-        public static CollectionConverter create(Class collectionType, Class genericClass, ParamConverter genericTypeConverter) {
-            Supplier supplier;
-            if (SortedSet.class.equals(collectionType)) {
-                if (!Comparable.class.isAssignableFrom(genericClass)) {
-                    throw new InternalServerErrorException("The class " + genericClass + " does not implement Comparable so cannot be used in a SortedSet");
-                }
-                supplier = TreeSet::new;
-            } else if (Set.class.equals(collectionType)) {
-                supplier = HashSet::new;
-            } else if (List.class.equals(collectionType)) {
-                supplier = ArrayList::new;
-            } else if (Collection.class.equals(collectionType)) {
-                supplier = ArrayList::new;
-            } else {
-                return null;
-            }
-            return new CollectionConverter(genericTypeConverter, supplier);
-        }
-        public String toString() {
-            return "CollectionConverter<" + genericTypeConverter + '>';
         }
     }
 

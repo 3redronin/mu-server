@@ -19,9 +19,8 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
-import java.util.Collections;
-import java.util.List;
-import java.util.Optional;
+import java.lang.reflect.WildcardType;
+import java.util.*;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -137,7 +136,7 @@ abstract class ResourceMethodParam {
         }
 
         /**
-         * @return True if the API author has explicity set a default value for the param
+         * @return True if the API author has explicitly set a default value for the param
          * using the {@link DefaultValue} annotation.
          */
         public boolean hasExplicitDefault() {
@@ -190,7 +189,22 @@ abstract class ResourceMethodParam {
             if (encodedRequested && isSpecified) {
                 specifiedValue = specifiedValue.stream().map(Mutils::urlEncode).collect(Collectors.toList());
             }
-            return isSpecified ? ResourceMethodParam.convertValue(parameterHandle, paramConverter, false, String.join(",", specifiedValue)) : defaultValue();
+            Collection<Object> collection = createCollection(paramClass);
+            if (collection != null) {
+                if (isSpecified) {
+                    for (String stringValue : specifiedValue) {
+                        collection.add(ResourceMethodParam.convertValue(parameterHandle, paramConverter, false, stringValue));
+                    }
+                } else if (hasExplicitDefault()) {
+                    collection.add(defaultValue());
+                }
+                return (collection instanceof List) ? Collections.unmodifiableList((List)collection)
+                    : (collection instanceof SortedSet) ? Collections.unmodifiableSortedSet((SortedSet)collection)
+                    : (collection instanceof Set) ? Collections.unmodifiableSet((Set)collection)
+                    : Collections.unmodifiableCollection(collection);
+            } else {
+                return isSpecified ? ResourceMethodParam.convertValue(parameterHandle, paramConverter, false, specifiedValue.get(0)) : defaultValue();
+            }
         }
 
         private List<String> cookieValue(MuRequest request, String key) {
@@ -204,6 +218,18 @@ abstract class ResourceMethodParam {
                 return last.getMatrixParameters().get(key);
             }
             return emptyList();
+        }
+
+        static Collection<Object> createCollection(Class<?> collectionType) {
+            if (SortedSet.class.equals(collectionType)) {
+                return new TreeSet<>();
+            } else if (Set.class.equals(collectionType)) {
+                return new HashSet<>();
+            } else if (List.class.equals(collectionType) || Collection.class.equals(collectionType)) {
+                return new ArrayList<>();
+            } else {
+                return null;
+            }
         }
     }
 
@@ -245,12 +271,29 @@ abstract class ResourceMethodParam {
     private static ParamConverter<?> getParamConverter(Parameter parameterHandle, List<ParamConverterProvider> paramConverterProviders) {
         Class<?> paramType = parameterHandle.getType();
         Type parameterizedType = parameterHandle.getParameterizedType();
+        if (Collection.class.isAssignableFrom(paramType) && parameterizedType instanceof ParameterizedType) {
+            Type possiblyWildcardType = ((ParameterizedType) parameterizedType).getActualTypeArguments()[0];
+            Type type =  (possiblyWildcardType instanceof WildcardType) ? ((WildcardType) possiblyWildcardType).getUpperBounds()[0] : possiblyWildcardType;
+            if (type instanceof Class) {
+                paramType = (Class<?>)type;
+            }
+        }
         Annotation[] declaredAnnotations = parameterHandle.getDeclaredAnnotations();
         for (ParamConverterProvider paramConverterProvider : paramConverterProviders) {
             ParamConverter<?> converter = paramConverterProvider.getConverter(paramType, parameterizedType, declaredAnnotations);
-            if (converter != null) {
-                return converter;
+            if (converter == null && RequestBasedParam.createCollection(paramType) != null && parameterizedType instanceof ParameterizedType) {
+                // Things like List<A> can be converted with just an 'A' param converter, so let's see if we have that
+                ParameterizedType pt = (ParameterizedType) parameterizedType;
+                Type[] ata = pt.getActualTypeArguments();
+                if (ata.length == 1 && ata[0] instanceof ParameterizedType) {
+                    ParameterizedType type = (ParameterizedType) ata[0];
+                    Type rawType = type.getRawType();
+                    if (rawType instanceof Class) {
+                        converter = paramConverterProvider.getConverter((Class)rawType, type, declaredAnnotations);
+                    }
+                }
             }
+            if (converter != null) return converter;
         }
         throw new MuException("Could not find a suitable ParamConverter for " + parameterizedType + " at " + parameterHandle.getDeclaringExecutable());
     }
@@ -268,10 +311,14 @@ abstract class ResourceMethodParam {
             return value;
         } else {
             try {
+                // the value is only a non-string if a DefaultValue was specified which was converted to a non-string value already, in which case skipConverter is true
                 String valueAsString = (String) value;
-                return converter instanceof HasDefaultValue && valueAsString.isEmpty()
+                if (value != null) {
+                    return converter.fromString(valueAsString);
+                }
+                return converter instanceof HasDefaultValue
                     ? ((HasDefaultValue) converter).getDefault()
-                    : converter.fromString(valueAsString);
+                    : null;
             } catch (Exception e) {
                 throw new BadRequestException("Could not convert String value \"" + value + "\" to a " + parameterHandle.getType() + " using " + converter + " on parameter " + parameterHandle, e);
             }
