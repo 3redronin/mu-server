@@ -49,7 +49,7 @@ public class FilterBindingTest {
     }
 
     @Test
-    public void onlyMathodsMarkedWithNameBoundAnnotationsAreIntercepted() throws IOException {
+    public void onlyMethodsMarkedWithNameBoundAnnotationsAreIntercepted() throws IOException {
 
         @Path("something")
         class TheWay {
