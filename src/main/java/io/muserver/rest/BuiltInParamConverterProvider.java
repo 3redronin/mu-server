@@ -1,5 +1,6 @@
 package io.muserver.rest;
 
+import io.muserver.Cookie;
 import io.muserver.Mutils;
 import io.muserver.UploadedFile;
 
@@ -73,6 +74,9 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
         if (PathSegment.class.isAssignableFrom(rawType)) {
             return new PathSegmentConverter();
         }
+        if (Cookie.class.isAssignableFrom(rawType)) {
+            return new DummyCookieConverter();
+        }
         if (rawType.isEnum()) {
             return new EnumConverter(rawType);
         }
@@ -94,6 +98,18 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
         @Override
         public String toString(UploadedFile value) {
             return value.filename();
+        }
+    }
+
+    // Not actually used because it is handled specially in ResourceMethodParam but needs to exist during parameter setup
+    private static class DummyCookieConverter implements ParamConverter<Cookie> {
+        @Override
+        public Cookie fromString(String value) {
+            return null;
+        }
+        @Override
+        public String toString(Cookie value) {
+            return value.toString();
         }
     }
 

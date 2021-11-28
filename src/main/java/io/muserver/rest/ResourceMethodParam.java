@@ -1,15 +1,13 @@
 package io.muserver.rest;
 
-import io.muserver.MuException;
-import io.muserver.MuRequest;
-import io.muserver.Mutils;
-import io.muserver.UploadedFile;
+import io.muserver.*;
 import io.muserver.openapi.ExternalDocumentationObject;
 import io.muserver.openapi.ParameterObjectBuilder;
 
 import javax.ws.rs.*;
 import javax.ws.rs.container.Suspended;
 import javax.ws.rs.core.Context;
+import javax.ws.rs.core.Cookie;
 import javax.ws.rs.core.PathSegment;
 import javax.ws.rs.ext.ParamConverter;
 import javax.ws.rs.ext.ParamConverterProvider;
@@ -176,6 +174,12 @@ abstract class ResourceMethodParam {
                     return ((MuPathSegment)seg).toEncoded();
                 }
                 return seg;
+            } else if (paramClass.equals(Cookie.class)) {
+                List<String> cookieValues = cookieValue(request, key);
+                return cookieValues.isEmpty() ? null : new Cookie(key, cookieValues.get(0));
+            } else if (paramClass.equals(io.muserver.Cookie.class)) {
+                List<String> cookieValues = cookieValue(request, key);
+                return cookieValues.isEmpty() ? null : new CookieBuilder().withName(key).withValue(cookieValues.get(0)).build();
             }
             List<String> specifiedValue =
                 source == ValueSource.COOKIE_PARAM ? cookieValue(request, key)
