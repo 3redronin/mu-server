@@ -147,13 +147,13 @@ abstract class ResourceMethodParam {
             return convertValue(parameterHandle, paramConverter, skipConverter, defaultValue);
         }
 
-        public Object getValue(MuRequest request, RequestMatcher.MatchedMethod matchedMethod) throws IOException {
-
+        public Object getValue(JaxRSRequest jaxRequest, RequestMatcher.MatchedMethod matchedMethod) throws IOException {
+            MuRequest muRequest = jaxRequest.muRequest;
             Class<?> paramClass = parameterHandle.getType();
             if (UploadedFile.class.isAssignableFrom(paramClass)) {
-                return request.uploadedFile(key);
+                return muRequest.uploadedFile(key);
             } else if (File.class.isAssignableFrom(paramClass)) {
-                UploadedFile uf = request.uploadedFile(key);
+                UploadedFile uf = muRequest.uploadedFile(key);
                 return uf == null ? null : uf.asFile();
             } else if (List.class.isAssignableFrom(paramClass)) {
                 Type t = parameterHandle.getParameterizedType();
@@ -162,7 +162,7 @@ abstract class ResourceMethodParam {
                     if (actualTypeArguments.length == 1) {
                         Type argType = actualTypeArguments[0];
                         if (argType instanceof Class<?> && UploadedFile.class.isAssignableFrom((Class<?>) argType)) {
-                            return request.uploadedFiles(key);
+                            return muRequest.uploadedFiles(key);
                         }
                     }
                 }
@@ -175,21 +175,21 @@ abstract class ResourceMethodParam {
                 }
                 return seg;
             } else if (paramClass.equals(Cookie.class)) {
-                List<String> cookieValues = cookieValue(request, key);
+                List<String> cookieValues = cookieValue(muRequest, key);
                 return cookieValues.isEmpty() ? null : new Cookie(key, cookieValues.get(0));
             } else if (paramClass.equals(io.muserver.Cookie.class)) {
-                List<String> cookieValues = cookieValue(request, key);
+                List<String> cookieValues = cookieValue(muRequest, key);
                 return cookieValues.isEmpty() ? null : new CookieBuilder().withName(key).withValue(cookieValues.get(0)).build();
             }
             List<String> specifiedValue =
-                source == ValueSource.COOKIE_PARAM ? cookieValue(request, key)
-                    : source == ValueSource.HEADER_PARAM ? request.headers().getAll(key)
-                    : source == ValueSource.MATRIX_PARAM ? matrixParamValue(request, key)
-                    : source == ValueSource.FORM_PARAM ? request.form().getAll(key)
+                source == ValueSource.COOKIE_PARAM ? cookieValue(muRequest, key)
+                    : source == ValueSource.HEADER_PARAM ? jaxRequest.getHeaders().get(key)
+                    : source == ValueSource.MATRIX_PARAM ? matrixParamValue(key, jaxRequest.relativePath())
+                    : source == ValueSource.FORM_PARAM ? muRequest.form().getAll(key)
                     : source == ValueSource.PATH_PARAM ? Collections.singletonList(matchedMethod.getPathParam(key))
-                    : source == ValueSource.QUERY_PARAM ? request.query().getAll(key)
+                    : source == ValueSource.QUERY_PARAM ?  jaxRequest.getUriInfo().getQueryParameters().get(key)
                     : emptyList();
-            boolean isSpecified = !specifiedValue.isEmpty();
+            boolean isSpecified = specifiedValue != null && !specifiedValue.isEmpty();
             if (encodedRequested && isSpecified) {
                 specifiedValue = specifiedValue.stream().map(Mutils::urlEncode).collect(Collectors.toList());
             }
@@ -216,8 +216,8 @@ abstract class ResourceMethodParam {
             return cookie.map(Collections::singletonList).orElse(emptyList());
         }
 
-        private List<String> matrixParamValue(MuRequest request, String key) {
-            MuPathSegment last = MuUriInfo.pathStringToSegments(request.relativePath(), false).reduce((first, second) -> second).orElse(null);
+        private List<String> matrixParamValue(String key, String path) {
+            MuPathSegment last = MuUriInfo.pathStringToSegments(path, false).reduce((first, second) -> second).orElse(null);
             if (last != null && last.getMatrixParameters().containsKey(key)) {
                 return last.getMatrixParameters().get(key);
             }

@@ -174,7 +174,7 @@ public class RestHandler implements MuHandler {
                 paramValue = suspendedParamCallback.apply(rm);
             } else {
                 ResourceMethodParam.RequestBasedParam rbp = (ResourceMethodParam.RequestBasedParam) param;
-                paramValue = rbp.getValue(requestContext.muRequest, mm);
+                paramValue = rbp.getValue(requestContext, mm);
             }
             params[param.index] = paramValue;
         }

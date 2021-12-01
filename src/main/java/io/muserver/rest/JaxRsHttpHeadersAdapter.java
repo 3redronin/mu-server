@@ -27,7 +27,7 @@ class JaxRsHttpHeadersAdapter implements HttpHeaders {
 
     @Override
     public List<String> getRequestHeader(String name) {
-        return getRequestHeaders().get(name);
+        return getMutableRequestHeaders().get(name);
     }
 
     @Override
@@ -41,12 +41,16 @@ class JaxRsHttpHeadersAdapter implements HttpHeaders {
 
     @Override
     public MultivaluedMap<String, String> getRequestHeaders() {
+        return ReadOnlyMultivaluedMap.readOnly(getMutableRequestHeaders());
+    }
+
+    MultivaluedMap<String, String> getMutableRequestHeaders() {
         if (copy == null) {
             MultivaluedMap<String, String> c = new LowercasedMultivaluedHashMap<>();
             for (Map.Entry<String, String> entry : muHeaders) {
                 c.add(entry.getKey(), entry.getValue());
             }
-            copy = ReadOnlyMultivaluedMap.readOnly(c);
+            copy = c;
         }
         return copy;
     }

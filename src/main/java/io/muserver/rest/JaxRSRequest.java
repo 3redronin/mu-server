@@ -19,8 +19,6 @@ import java.lang.reflect.Type;
 import java.net.URI;
 import java.util.*;
 
-import static java.util.Collections.emptyList;
-
 class JaxRSRequest implements Request, ContainerRequestContext, ReaderInterceptorContext {
 
     final MuRequest muRequest;
@@ -133,9 +131,6 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
 
     @Override
     public void setRequestUri(URI requestUri) {
-        if (matchedMethod != null) {
-            throw new IllegalStateException("This method is only valid for @PreMatching filters");
-        }
         setRequestUri(uriInfo.getBaseUri(), requestUri);
     }
 
@@ -144,8 +139,8 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
         if (matchedMethod != null) {
             throw new IllegalStateException("This method is only valid for @PreMatching filters");
         }
-        URI fullRequestUri = baseUri.resolve(requestUri);
-        uriInfo = new MuUriInfo(baseUri, fullRequestUri, requestUri.getRawPath(), emptyList(), emptyList());
+        URI absoluteUri = baseUri.resolve(requestUri);
+        this.uriInfo = RestHandler.createUriInfo(baseUri.relativize(requestUri).getRawPath(), null, baseUri, absoluteUri);
     }
 
     @Override
@@ -368,7 +363,7 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
 
     @Override
     public MultivaluedMap<String, String> getHeaders() {
-        return jaxHeaders.getRequestHeaders();
+        return jaxHeaders.getMutableRequestHeaders();
     }
 
     @Override
@@ -399,9 +394,9 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
     @Override
     public void setMediaType(MediaType mediaType) {
         if (mediaType == null) {
-            jaxHeaders.getRequestHeaders().remove("content-type");
+            jaxHeaders.getMutableRequestHeaders().remove("content-type");
         } else {
-            jaxHeaders.getRequestHeaders().putSingle("content-type", MediaTypeParser.toString(mediaType));
+            jaxHeaders.getMutableRequestHeaders().putSingle("content-type", MediaTypeParser.toString(mediaType));
         }
     }
 
