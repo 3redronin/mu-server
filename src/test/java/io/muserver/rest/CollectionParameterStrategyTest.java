@@ -85,10 +85,19 @@ public class CollectionParameterStrategyTest {
             assertThat(resp.body().string(), equalTo("0 values: "));
         }
         try (Response resp = call(request(server.uri().resolve("/values?value=")))) {
-            assertThat(resp.body().string(), equalTo("1 values: "));
+            assertThat(resp.body().string(), equalTo("0 values: "));
+        }
+        try (Response resp = call(request(server.uri().resolve("/values?value=,%2C")))) {
+            assertThat(resp.body().string(), equalTo("0 values: "));
         }
         try (Response resp = call(request(server.uri().resolve("/values?value=one,two,three")))) {
             assertThat(resp.body().string(), equalTo("3 values: one, two, three"));
+        }
+        try (Response resp = call(request(server.uri().resolve("/values?value=one")))) {
+            assertThat(resp.body().string(), equalTo("1 values: one"));
+        }
+        try (Response resp = call(request(server.uri().resolve("/values?value=%20one%20,%20")))) {
+            assertThat(resp.body().string(), equalTo("1 values: one"));
         }
         try (Response resp = call(request(server.uri().resolve("/values?value=one%2Ctwo%2Cthree")))) {
             assertThat(resp.body().string(), equalTo("3 values: one, two, three"));

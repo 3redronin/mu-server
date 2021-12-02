@@ -217,10 +217,11 @@ abstract class ResourceMethodParam {
             if (isCollectionType && values != null && cps == CollectionParameterStrategy.SPLIT_ON_COMMA) {
                 List<String> copy = new ArrayList<>(values.size());
                 for (String value : values) {
+                    value = value.trim();
                     if (value.contains(",")) {
                         String[] bits = value.split("\\s*,\\s*");
                         Collections.addAll(copy, bits);
-                    } else {
+                    } else if (!value.isEmpty()) {
                         copy.add(value.trim());
                     }
                 }
