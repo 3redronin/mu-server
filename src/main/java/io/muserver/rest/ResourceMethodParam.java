@@ -8,6 +8,7 @@ import javax.ws.rs.*;
 import javax.ws.rs.container.Suspended;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.Cookie;
+import javax.ws.rs.core.MultivaluedMap;
 import javax.ws.rs.core.PathSegment;
 import javax.ws.rs.ext.ParamConverter;
 import javax.ws.rs.ext.ParamConverterProvider;
@@ -147,7 +148,7 @@ abstract class ResourceMethodParam {
             return convertValue(parameterHandle, paramConverter, skipConverter, defaultValue);
         }
 
-        public Object getValue(JaxRSRequest jaxRequest, RequestMatcher.MatchedMethod matchedMethod) throws IOException {
+        public Object getValue(JaxRSRequest jaxRequest, RequestMatcher.MatchedMethod matchedMethod, CollectionParameterStrategy cps) throws IOException {
             MuRequest muRequest = jaxRequest.muRequest;
             Class<?> paramClass = parameterHandle.getType();
             if (UploadedFile.class.isAssignableFrom(paramClass)) {
@@ -171,7 +172,7 @@ abstract class ResourceMethodParam {
             if (paramClass.isAssignableFrom(PathSegment.class)) {
                 PathSegment seg = matchedMethod.pathParams.get(key);
                 if (seg != null && encodedRequested) {
-                    return ((MuPathSegment)seg).toEncoded();
+                    return ((MuPathSegment) seg).toEncoded();
                 }
                 return seg;
             } else if (paramClass.equals(Cookie.class)) {
@@ -181,19 +182,19 @@ abstract class ResourceMethodParam {
                 List<String> cookieValues = cookieValue(muRequest, key);
                 return cookieValues.isEmpty() ? null : new CookieBuilder().withName(key).withValue(cookieValues.get(0)).build();
             }
+            Collection<Object> collection = createCollection(paramClass);
             List<String> specifiedValue =
-                source == ValueSource.COOKIE_PARAM ? cookieValue(muRequest, key)
-                    : source == ValueSource.HEADER_PARAM ? jaxRequest.getHeaders().get(key)
-                    : source == ValueSource.MATRIX_PARAM ? matrixParamValue(key, jaxRequest.relativePath())
+                source == ValueSource.PATH_PARAM ? Collections.singletonList(matchedMethod.getPathParam(key))
+                    : source == ValueSource.QUERY_PARAM ? getParamValues(jaxRequest.getUriInfo().getQueryParameters(), key, cps, collection != null)
+                    : source == ValueSource.HEADER_PARAM ? getParamValues(jaxRequest.getHeaders(), key, cps, collection != null)
                     : source == ValueSource.FORM_PARAM ? muRequest.form().getAll(key)
-                    : source == ValueSource.PATH_PARAM ? Collections.singletonList(matchedMethod.getPathParam(key))
-                    : source == ValueSource.QUERY_PARAM ?  jaxRequest.getUriInfo().getQueryParameters().get(key)
+                    : source == ValueSource.COOKIE_PARAM ? cookieValue(muRequest, key)
+                    : source == ValueSource.MATRIX_PARAM ? matrixParamValue(key, jaxRequest.relativePath())
                     : emptyList();
             boolean isSpecified = specifiedValue != null && !specifiedValue.isEmpty();
             if (encodedRequested && isSpecified) {
                 specifiedValue = specifiedValue.stream().map(Mutils::urlEncode).collect(Collectors.toList());
             }
-            Collection<Object> collection = createCollection(paramClass);
             if (collection != null) {
                 if (isSpecified) {
                     for (String stringValue : specifiedValue) {
@@ -202,13 +203,30 @@ abstract class ResourceMethodParam {
                 } else if (hasExplicitDefault()) {
                     collection.add(defaultValue());
                 }
-                return (collection instanceof List) ? Collections.unmodifiableList((List)collection)
-                    : (collection instanceof SortedSet) ? Collections.unmodifiableSortedSet((SortedSet)collection)
-                    : (collection instanceof Set) ? Collections.unmodifiableSet((Set)collection)
+                return (collection instanceof List) ? Collections.unmodifiableList((List) collection)
+                    : (collection instanceof SortedSet) ? Collections.unmodifiableSortedSet((SortedSet) collection)
+                    : (collection instanceof Set) ? Collections.unmodifiableSet((Set) collection)
                     : Collections.unmodifiableCollection(collection);
             } else {
                 return isSpecified ? ResourceMethodParam.convertValue(parameterHandle, paramConverter, false, specifiedValue.get(0)) : defaultValue();
             }
+        }
+
+        private List<String> getParamValues(MultivaluedMap<String, String> queryParameters, String key, CollectionParameterStrategy cps, boolean isCollectionType) {
+            List<String> values = queryParameters.get(key);
+            if (isCollectionType && values != null && cps == CollectionParameterStrategy.SPLIT_ON_COMMA) {
+                List<String> copy = new ArrayList<>(values.size());
+                for (String value : values) {
+                    if (value.contains(",")) {
+                        String[] bits = value.split("\\s*,\\s*");
+                        Collections.addAll(copy, bits);
+                    } else {
+                        copy.add(value.trim());
+                    }
+                }
+                return copy;
+            }
+            return values;
         }
 
         private List<String> cookieValue(MuRequest request, String key) {
@@ -277,9 +295,9 @@ abstract class ResourceMethodParam {
         Type parameterizedType = parameterHandle.getParameterizedType();
         if (Collection.class.isAssignableFrom(paramType) && parameterizedType instanceof ParameterizedType) {
             Type possiblyWildcardType = ((ParameterizedType) parameterizedType).getActualTypeArguments()[0];
-            Type type =  (possiblyWildcardType instanceof WildcardType) ? ((WildcardType) possiblyWildcardType).getUpperBounds()[0] : possiblyWildcardType;
+            Type type = (possiblyWildcardType instanceof WildcardType) ? ((WildcardType) possiblyWildcardType).getUpperBounds()[0] : possiblyWildcardType;
             if (type instanceof Class) {
-                paramType = (Class<?>)type;
+                paramType = (Class<?>) type;
             }
         }
         Annotation[] declaredAnnotations = parameterHandle.getDeclaredAnnotations();
@@ -293,7 +311,7 @@ abstract class ResourceMethodParam {
                     ParameterizedType type = (ParameterizedType) ata[0];
                     Type rawType = type.getRawType();
                     if (rawType instanceof Class) {
-                        converter = paramConverterProvider.getConverter((Class)rawType, type, declaredAnnotations);
+                        converter = paramConverterProvider.getConverter((Class) rawType, type, declaredAnnotations);
                     }
                 }
             }

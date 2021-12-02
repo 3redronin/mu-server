@@ -46,8 +46,9 @@ public class RestHandler implements MuHandler {
     private final SchemaObjectCustomizer schemaObjectCustomizer;
     private final List<ReaderInterceptor> readerInterceptors;
     private final List<WriterInterceptor> writerInterceptors;
+    private final CollectionParameterStrategy collectionParameterStrategy;
 
-    RestHandler(EntityProviders entityProviders, List<ResourceClass> roots, MuHandler documentor, CustomExceptionMapper customExceptionMapper, FilterManagerThing filterManagerThing, CORSConfig corsConfig, List<ParamConverterProvider> paramConverterProviders, SchemaObjectCustomizer schemaObjectCustomizer, List<ReaderInterceptor> readerInterceptors, List<WriterInterceptor> writerInterceptors) {
+    RestHandler(EntityProviders entityProviders, List<ResourceClass> roots, MuHandler documentor, CustomExceptionMapper customExceptionMapper, FilterManagerThing filterManagerThing, CORSConfig corsConfig, List<ParamConverterProvider> paramConverterProviders, SchemaObjectCustomizer schemaObjectCustomizer, List<ReaderInterceptor> readerInterceptors, List<WriterInterceptor> writerInterceptors, CollectionParameterStrategy collectionParameterStrategy) {
         this.requestMatcher = new RequestMatcher(roots);
         this.entityProviders = entityProviders;
         this.documentor = documentor;
@@ -58,6 +59,7 @@ public class RestHandler implements MuHandler {
         this.schemaObjectCustomizer = schemaObjectCustomizer;
         this.readerInterceptors = readerInterceptors;
         this.writerInterceptors = writerInterceptors;
+        this.collectionParameterStrategy = collectionParameterStrategy;
     }
 
     @Override
@@ -86,7 +88,7 @@ public class RestHandler implements MuHandler {
                 };
                 ResourceMethod rm = matchedMethod.resourceMethod;
                 try {
-                    Object instance = invokeResourceMethod(requestContext, muResponse, matchedMethod, onSuspended, entityProviders);
+                    Object instance = invokeResourceMethod(requestContext, muResponse, matchedMethod, onSuspended, entityProviders, collectionParameterStrategy);
                     return ResourceClass.forSubResourceLocator(rm, instance.getClass(), instance, schemaObjectCustomizer, paramConverterProviders);
                 } catch (WebApplicationException wae) {
                     throw wae;
@@ -130,7 +132,7 @@ public class RestHandler implements MuHandler {
             };
 
 
-            Object result = invokeResourceMethod(requestContext, muResponse, mm, suspendedParamCallback, entityProviders);
+            Object result = invokeResourceMethod(requestContext, muResponse, mm, suspendedParamCallback, entityProviders, collectionParameterStrategy);
 
             if (!muRequest.isAsync()) {
                 if (result instanceof CompletionStage) {
@@ -161,7 +163,7 @@ public class RestHandler implements MuHandler {
         return true;
     }
 
-    static Object invokeResourceMethod(JaxRSRequest requestContext, MuResponse muResponse, RequestMatcher.MatchedMethod mm, Function<ResourceMethod, Object> suspendedParamCallback, EntityProviders entityProviders) throws Exception {
+    static Object invokeResourceMethod(JaxRSRequest requestContext, MuResponse muResponse, RequestMatcher.MatchedMethod mm, Function<ResourceMethod, Object> suspendedParamCallback, EntityProviders entityProviders, CollectionParameterStrategy collectionParameterStrategy) throws Exception {
         ResourceMethod rm = mm.resourceMethod;
         Object[] params = new Object[rm.methodHandle.getParameterCount()];
         for (ResourceMethodParam param : rm.params) {
@@ -174,7 +176,7 @@ public class RestHandler implements MuHandler {
                 paramValue = suspendedParamCallback.apply(rm);
             } else {
                 ResourceMethodParam.RequestBasedParam rbp = (ResourceMethodParam.RequestBasedParam) param;
-                paramValue = rbp.getValue(requestContext, mm);
+                paramValue = rbp.getValue(requestContext, mm, collectionParameterStrategy);
             }
             params[param.index] = paramValue;
         }

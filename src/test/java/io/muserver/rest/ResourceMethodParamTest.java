@@ -318,8 +318,9 @@ public class ResourceMethodParamTest {
                 return breeds.stream().map(breed -> breed == null ? "nullinlist" : breed.name()).collect(Collectors.joining(","));
             }
         }
-        server = httpsServerForTest().addHandler(restHandler(new Sample())).start();
-        try (Response resp = call(request().url(server.uri().resolve("/samples?breedOne=CHIHUAHUA&breedOne=ignored").toString()))) {
+        server = httpsServerForTest().addHandler(restHandler(new Sample()).withCollectionParameterStrategy(CollectionParameterStrategy.NO_TRANSFORM)).start();
+        try (Response resp = call(request()
+            .url(server.uri().resolve("/samples?breedOne=CHIHUAHUA&breedOne=ignored").toString()))) {
             assertThat(resp.body().string(), equalTo("chihuahua / null / big_hairy"));
         }
         try (Response resp = call(request().url(server.uri().resolve("/samples/headers").toString())
@@ -357,7 +358,7 @@ public class ResourceMethodParamTest {
                 return breeds.stream().map(Enum::name).collect(Collectors.joining(", "));
             }
         }
-        server = httpsServerForTest().addHandler(restHandler(new Sample()).withOpenApiJsonUrl("/openapi.json")).start();
+        server = httpsServerForTest().addHandler(restHandler(new Sample()).withCollectionParameterStrategy(CollectionParameterStrategy.NO_TRANSFORM).withOpenApiJsonUrl("/openapi.json")).start();
         try (Response resp = call(request(server.uri().resolve("/samples?breeds=CHIHUAHUA&breeds=YELPER")))) {
             assertThat(resp.body().string(), equalTo("CHIHUAHUA, YELPER"));
         }
@@ -555,7 +556,7 @@ public class ResourceMethodParamTest {
                 return cats.stream().map(d -> d == null ? "null in collection" : d.name).sorted().collect(Collectors.joining(", "));
             }
         }
-        server = httpsServerForTest().addHandler(restHandler(new Cats())).start();
+        server = httpsServerForTest().addHandler(restHandler(new Cats()).withCollectionParameterStrategy(CollectionParameterStrategy.NO_TRANSFORM)).start();
 
         try (Response resp = call(request().url(server.uri().resolve("/cats/list?cats=Little&cats=Twinkle").toString()))) {
             assertThat(resp.body().string(), equalTo("Little, Twinkle"));
@@ -627,7 +628,7 @@ public class ResourceMethodParamTest {
                 return cats.stream().map(d -> d.name).collect(Collectors.joining(", "));
             }
         }
-        server = httpsServerForTest().addHandler(restHandler(new Cats())).start();
+        server = httpsServerForTest().addHandler(restHandler(new Cats()).withCollectionParameterStrategy(CollectionParameterStrategy.NO_TRANSFORM)).start();
         try (Response resp = call(request().url(server.uri().resolve("/cats/list?cats=Little&cats=Twinkle").toString()))) {
             assertThat(resp.body().string(), equalTo("Little, Twinkle"));
         }
@@ -874,6 +875,7 @@ public class ResourceMethodParamTest {
         }
         server = httpsServerForTest()
             .addHandler(restHandler(new HolderResource())
+                .withCollectionParameterStrategy(CollectionParameterStrategy.NO_TRANSFORM)
                 .addCustomParamConverterProvider(new ParamConverterProvider() {
                     @Override
                     public <T> ParamConverter<T> getConverter(Class<T> rawType, Type genericType, Annotation[] annotations) {
@@ -975,6 +977,7 @@ public class ResourceMethodParamTest {
         }
         server = httpsServerForTest()
             .addHandler(restHandler(new HolderResource())
+                .withCollectionParameterStrategy(CollectionParameterStrategy.NO_TRANSFORM)
                 .addCustomParamConverterProvider(new ParamConverterProvider() {
                     @Override
                     public <T> ParamConverter<T> getConverter(Class<T> rawType, Type genericType, Annotation[] annotations) {

@@ -502,6 +502,7 @@ public class FilterTest {
             .addHandler(
                 context("api").addHandler(
                     restHandler(new Blah())
+                        .withCollectionParameterStrategy(CollectionParameterStrategy.NO_TRANSFORM)
                         .addRequestFilter(new QueryChanger())
                 )
             ).start();
@@ -542,6 +543,7 @@ public class FilterTest {
             .addHandler(
                 context("api").addHandler(
                     restHandler(new Blah())
+                        .withCollectionParameterStrategy(CollectionParameterStrategy.NO_TRANSFORM)
                         .addRequestFilter(new HeaderChanger())
                 )
             ).start();
@@ -588,6 +590,7 @@ public class FilterTest {
             .addHandler(
                 context("api").addHandler(
                     restHandler(new Blah())
+                        .withCollectionParameterStrategy(CollectionParameterStrategy.NO_TRANSFORM)
                         .addRequestFilter(new HeaderChanger())
                 )
             ).start();

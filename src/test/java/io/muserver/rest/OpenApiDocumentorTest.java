@@ -255,7 +255,7 @@ public class OpenApiDocumentorTest {
             }
         }
         server = httpsServerForTest()
-            .addHandler(restHandler(new Blah()).withOpenApiJsonUrl("/openapi.json"))
+            .addHandler(restHandler(new Blah()).withCollectionParameterStrategy(CollectionParameterStrategy.NO_TRANSFORM).withOpenApiJsonUrl("/openapi.json"))
             .start();
         try (okhttp3.Response resp = call(request(server.uri().resolve("/openapi.json")))) {
             JSONObject json = new JSONObject(resp.body().string());
@@ -584,7 +584,7 @@ public class OpenApiDocumentorTest {
             }
         }
         server = httpsServerForTest()
-            .addHandler(RestHandlerBuilder.restHandler(new Blah()).withOpenApiJsonUrl("/openapi.json"))
+            .addHandler(RestHandlerBuilder.restHandler(new Blah()).withCollectionParameterStrategy(CollectionParameterStrategy.NO_TRANSFORM).withOpenApiJsonUrl("/openapi.json"))
             .start();
         try (okhttp3.Response resp = call(request(server.uri().resolve("/openapi.json")))) {
             JSONObject json = new JSONObject(resp.body().string());

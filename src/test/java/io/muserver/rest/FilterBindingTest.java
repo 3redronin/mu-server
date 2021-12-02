@@ -2,6 +2,7 @@ package io.muserver.rest;
 
 import io.muserver.MuServer;
 import okhttp3.Response;
+import org.junit.After;
 import org.junit.Test;
 import scaffolding.ServerUtils;
 
@@ -28,13 +29,15 @@ import static scaffolding.ClientUtils.request;
 
 public class FilterBindingTest {
 
+    private MuServer server;
+
     @NameBinding
     @Target({ ElementType.TYPE, ElementType.METHOD })
     @Retention(value = RetentionPolicy.RUNTIME)
     public @interface Logged { }
 
     @Logged
-    private class LoggingFilter implements ContainerRequestFilter, ContainerResponseFilter {
+    private static class LoggingFilter implements ContainerRequestFilter, ContainerResponseFilter {
         final List<String> received = new ArrayList<>();
 
         @Override
@@ -68,7 +71,7 @@ public class FilterBindingTest {
         }
 
         LoggingFilter loggingFilter = new LoggingFilter();
-        MuServer server = ServerUtils.httpsServerForTest()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(
                 restHandler(new TheWay())
                     .addRequestFilter(loggingFilter)
@@ -102,7 +105,7 @@ public class FilterBindingTest {
         }
 
         LoggingFilter loggingFilter = new LoggingFilter();
-        MuServer server = ServerUtils.httpsServerForTest()
+        server = ServerUtils.httpsServerForTest()
             .addHandler(
                 restHandler(new TheWay())
                     .addRequestFilter(loggingFilter)
@@ -113,6 +116,11 @@ public class FilterBindingTest {
             assertThat(resp.body().string(), is("moves"));
             assertThat(loggingFilter.received, contains("REQUEST", "RESPONSE"));
         }
+    }
+
+    @After
+    public void stop() {
+        scaffolding.MuAssert.stopAndCheck(server);
     }
 
 }

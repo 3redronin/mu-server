@@ -44,6 +44,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     private final List<ContainerResponseFilter> responseFilters = new ArrayList<>();
     private CORSConfig corsConfig = CORSConfigBuilder.disabled().build();
     private final List<SchemaObjectCustomizer> schemaObjectCustomizers = new ArrayList<>();
+    private CollectionParameterStrategy collectionParameterStrategy;
 
     /**
      * @deprecated Use {@link #restHandler(Object...)} instead
@@ -158,6 +159,22 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     }
 
     /**
+     * Specifies if values passed to method parameters with {@link javax.ws.rs.QueryParam} or {@link javax.ws.rs.HeaderParam} annotations should be transformed or not.
+     * <p>The primary use of this is to allow querystring parameters such as <code>/path?value=one,two,three</code> to be interpreted
+     * as a list of three values rather than a single string. This only applies to parameters that are collections.</p>
+     * <p>The default is {@link CollectionParameterStrategy#NO_TRANSFORM} which is the JAX-RS standard.</p>
+     * <p><strong>Note:</strong> until MuServer 1.0, if no value is specified but methods with collection parameters are detected
+     * then the handler will fail to start and this value will need to be explicitly set. This is in order to highlight the change
+     * in behaviour introduced in Mu Server 0.70 where it used {@link CollectionParameterStrategy#SPLIT_ON_COMMA} behaviour.</p>
+     * @param collectionParameterStrategy The strategy to use
+     * @return This builder
+     */
+    public RestHandlerBuilder withCollectionParameterStrategy(CollectionParameterStrategy collectionParameterStrategy) {
+        this.collectionParameterStrategy = collectionParameterStrategy;
+        return this;
+    }
+
+    /**
      * When using the HTML endpoint made available by calling {@link #withOpenApiDocument(OpenAPIObjectBuilder)}
      * this allows you to override the default CSS that is used.
      *
@@ -246,51 +263,6 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     @Deprecated
     public RestHandlerBuilder withDocumentation() {
         return this;
-    }
-
-    /**
-     * @return The newly build {@link RestHandler}
-     */
-    public RestHandler build() {
-        List<MessageBodyReader> readers = EntityProviders.builtInReaders();
-        readers.addAll(customReaders);
-        List<MessageBodyWriter> writers = EntityProviders.builtInWriters();
-        writers.addAll(customWriters);
-        EntityProviders entityProviders = new EntityProviders(readers, writers);
-        List<ParamConverterProvider> paramConverterProviders = new ArrayList<>(customParamConverterProviders);
-        paramConverterProviders.add(new BuiltInParamConverterProvider());
-
-        List<ResourceClass> list = new ArrayList<>();
-        SchemaObjectCustomizer schemaObjectCustomizer = new CompositeSchemaObjectCustomizer(schemaObjectCustomizers);
-        for (Object resource : resources) {
-            if (resource instanceof SchemaObjectCustomizer && !schemaObjectCustomizers.contains(resource)) {
-                schemaObjectCustomizers.add((SchemaObjectCustomizer) resource);
-            }
-        }
-        for (Object restResource : resources) {
-            list.add(ResourceClass.fromObject(restResource, paramConverterProviders, schemaObjectCustomizer));
-        }
-        List<ResourceClass> roots = Collections.unmodifiableList(list);
-
-        OpenApiDocumentor documentor = null;
-        if (openApiHtmlUrl != null || openApiJsonUrl != null) {
-            if (openApiHtmlCss == null) {
-                InputStream cssStream = RestHandlerBuilder.class.getResourceAsStream("/io/muserver/resources/api.css");
-                Scanner scanner = new Scanner(cssStream, "UTF-8").useDelimiter("\\A");
-                openApiHtmlCss = scanner.next();
-                scanner.close();
-
-            }
-            OpenAPIObjectBuilder openAPIObjectToUse = this.openAPIObject == null ? OpenAPIObjectBuilder.openAPIObject() : this.openAPIObject;
-            openAPIObjectToUse.withPaths(pathsObject().build());
-            documentor = new OpenApiDocumentor(roots, openApiJsonUrl, openApiHtmlUrl, openAPIObjectToUse.build(), openApiHtmlCss, corsConfig, new ArrayList<>(customSchemas), schemaObjectCustomizer, paramConverterProviders);
-        }
-
-        CustomExceptionMapper customExceptionMapper = new CustomExceptionMapper(exceptionMappers);
-
-        FilterManagerThing filterManagerThing = new FilterManagerThing(preMatchRequestFilters, requestFilters, responseFilters);
-
-        return new RestHandler(entityProviders, roots, documentor, customExceptionMapper, filterManagerThing, corsConfig, paramConverterProviders, schemaObjectCustomizer, readerInterceptors, writerInterceptors);
     }
 
     /**
@@ -458,4 +430,70 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
         }
         return this;
     }
+
+    /**
+     * @return The newly build {@link RestHandler}
+     */
+    public RestHandler build() {
+        List<MessageBodyReader> readers = EntityProviders.builtInReaders();
+        readers.addAll(customReaders);
+        List<MessageBodyWriter> writers = EntityProviders.builtInWriters();
+        writers.addAll(customWriters);
+        EntityProviders entityProviders = new EntityProviders(readers, writers);
+        List<ParamConverterProvider> paramConverterProviders = new ArrayList<>(customParamConverterProviders);
+        paramConverterProviders.add(new BuiltInParamConverterProvider());
+
+        List<ResourceClass> list = new ArrayList<>();
+        SchemaObjectCustomizer schemaObjectCustomizer = new CompositeSchemaObjectCustomizer(schemaObjectCustomizers);
+        for (Object resource : resources) {
+            if (resource instanceof SchemaObjectCustomizer && !schemaObjectCustomizers.contains(resource)) {
+                schemaObjectCustomizers.add((SchemaObjectCustomizer) resource);
+            }
+        }
+        for (Object restResource : resources) {
+            list.add(ResourceClass.fromObject(restResource, paramConverterProviders, schemaObjectCustomizer));
+        }
+        List<ResourceClass> roots = Collections.unmodifiableList(list);
+
+        OpenApiDocumentor documentor = null;
+        if (openApiHtmlUrl != null || openApiJsonUrl != null) {
+            if (openApiHtmlCss == null) {
+                InputStream cssStream = RestHandlerBuilder.class.getResourceAsStream("/io/muserver/resources/api.css");
+                Scanner scanner = new Scanner(cssStream, "UTF-8").useDelimiter("\\A");
+                openApiHtmlCss = scanner.next();
+                scanner.close();
+
+            }
+            OpenAPIObjectBuilder openAPIObjectToUse = this.openAPIObject == null ? OpenAPIObjectBuilder.openAPIObject() : this.openAPIObject;
+            openAPIObjectToUse.withPaths(pathsObject().build());
+            documentor = new OpenApiDocumentor(roots, openApiJsonUrl, openApiHtmlUrl, openAPIObjectToUse.build(), openApiHtmlCss, corsConfig, new ArrayList<>(customSchemas), schemaObjectCustomizer, paramConverterProviders);
+        }
+
+        CustomExceptionMapper customExceptionMapper = new CustomExceptionMapper(exceptionMappers);
+
+        FilterManagerThing filterManagerThing = new FilterManagerThing(preMatchRequestFilters, requestFilters, responseFilters);
+
+        CollectionParameterStrategy cps = this.collectionParameterStrategy;
+        if (cps == null) {
+            for (ResourceClass root : roots) {
+                for (ResourceMethod rm : root.resourceMethods) {
+                    for (ResourceMethodParam param : rm.params) {
+                        if (Collection.class.isAssignableFrom(param.parameterHandle.getType()) && (param.source == ResourceMethodParam.ValueSource.HEADER_PARAM || param.source == ResourceMethodParam.ValueSource.QUERY_PARAM)) {
+                            throw new IllegalStateException("Please specify a string handling strategy for collections for querystring and header parameters. " +
+                                "Please note that the behaviour of these parameters have changed since Mu Server 0.70.0 to follow the JAX-RS standard. " +
+                                "Previously, a parameter values such as 'one,two,three' when passed to a collection parameter would be interpreted as 3 values, " +
+                                "however the JAX-RS standard is for this to be a single value. To follow the standard, please use " +
+                                "RestHandlerBuilder.withCollectionParameterStrategy(CollectionParameterStrategy.NO_TRANSFORM) or keep early behaviour where the value is split " +
+                                "into multiple values, use RestHandlerBuilder.withCollectionParameterStrategy(CollectionParameterStrategy.SPLIT_ON_COMMA) no your rest handler builder instance.");
+                        }
+                    }
+                }
+            }
+
+            cps = CollectionParameterStrategy.NO_TRANSFORM;
+        }
+
+        return new RestHandler(entityProviders, roots, documentor, customExceptionMapper, filterManagerThing, corsConfig, paramConverterProviders, schemaObjectCustomizer, readerInterceptors, writerInterceptors, cps);
+    }
 }
+
