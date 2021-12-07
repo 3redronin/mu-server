@@ -76,7 +76,7 @@ class MuVariantListBuilder extends Variant.VariantListBuilder {
         List<Variant> candidates = new ArrayList<>();
         for (Variant candidate : available) {
             MediaType cmt = candidate.getMediaType();
-            boolean mtOkay = cmt == null || MediaTypeHeaderDelegate.atLeastOneCompatible(acceptableMediaTypes, singletonList(cmt));
+            boolean mtOkay = cmt == null || MediaTypeHeaderDelegate.atLeastOneCompatible(singletonList(cmt), acceptableMediaTypes, "charset");
 
             String cenc = candidate.getEncoding();
             boolean encOkay = cenc == null || acceptableEncodings.stream().anyMatch(ae -> ae.value().equals(cenc));

@@ -39,12 +39,21 @@ class MediaTypeHeaderDelegate implements RuntimeDelegate.HeaderDelegate<MediaTyp
         return results;
     }
 
-    static boolean atLeastOneCompatible(List<MediaType> providerProduces, List<MediaType> consumerAccepts) {
+    static boolean atLeastOneCompatible(List<MediaType> providerProduces, List<MediaType> consumerAccepts, String checkParameter) {
         for (MediaType clientAccept : consumerAccepts) {
             for (MediaType produce : providerProduces) {
                 boolean compatible = produce.isCompatible(clientAccept);
                 if (compatible) {
-                    return true;
+                    if (checkParameter != null) {
+                        String clientParam = clientAccept.getParameters().get(checkParameter);
+                        if (clientParam != null) {
+                            String serverParam = produce.getParameters().get(checkParameter);
+                            compatible = clientParam.equalsIgnoreCase(serverParam);
+                        }
+                    }
+                    if (compatible) {
+                        return true;
+                    }
                 }
             }
         }

@@ -281,10 +281,10 @@ class ResourceMethod {
     }
 
     boolean canProduceFor(List<MediaType> clientAccepts) {
-        return MediaTypeHeaderDelegate.atLeastOneCompatible(effectiveProduces, clientAccepts);
+        return MediaTypeHeaderDelegate.atLeastOneCompatible(effectiveProduces, clientAccepts, null);
     }
 
     boolean canConsume(MediaType requestBodyMediaType) {
-        return MediaTypeHeaderDelegate.atLeastOneCompatible(effectiveConsumes, Collections.singletonList(requestBodyMediaType));
+        return MediaTypeHeaderDelegate.atLeastOneCompatible(effectiveConsumes, Collections.singletonList(requestBodyMediaType), null);
     }
 }

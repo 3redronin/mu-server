@@ -121,9 +121,24 @@ public class MuVariantListBuilderTest {
         List<Variant> availableVariants = asList(text, textHtml, textHtmlUTF8);
         assertThat(MuVariantListBuilder.selectVariant(availableVariants, acceptLang("*"), singletonList(new MediaType("application", "xml")), emptyList()), nullValue());
         assertThat(MuVariantListBuilder.selectVariant(availableVariants, acceptLang("*"), singletonList(new MediaType("text", "xml")), emptyList()), equalTo(text));
-        assertThat(MuVariantListBuilder.selectVariant(availableVariants, acceptLang("*"), singletonList(new MediaType("text", null)), emptyList()), equalTo(text));
-        assertThat(MuVariantListBuilder.selectVariant(availableVariants, acceptLang("*"), singletonList(new MediaType("text", "html")), emptyList()), equalTo(textHtml));
+        assertThat(MuVariantListBuilder.selectVariant(availableVariants, acceptLang("*"), singletonList(new MediaType("text", "markdown")), emptyList()), equalTo(text));
+        assertThat(MuVariantListBuilder.selectVariant(availableVariants, acceptLang("*"), singletonList(new MediaType("text", null)), emptyList()), equalTo(textHtmlUTF8));
+        assertThat(MuVariantListBuilder.selectVariant(availableVariants, acceptLang("*"), singletonList(new MediaType("text", "html")), emptyList()), equalTo(textHtmlUTF8));
         assertThat(MuVariantListBuilder.selectVariant(availableVariants, acceptLang("*"), asList(new MediaType("text", "html", "UTF-8"), new MediaType("text", "html")), emptyList()), equalTo(textHtmlUTF8));
+        assertThat(MuVariantListBuilder.selectVariant(availableVariants, acceptLang("*"), asList(new MediaType("text", "html", "ascii"), new MediaType("text", "html", "custom")), emptyList()), nullValue());
+        assertThat(MuVariantListBuilder.selectVariant(availableVariants, acceptLang("*"), asList(new MediaType("text", "html", "ascii"), new MediaType("text", "html", "custom"), new MediaType("text", "html", "utf-8")), emptyList()), equalTo(textHtmlUTF8));
+    }
+
+    @Test
+    public void ifTheServerIsSpecificButTheClientIsNotThenSelectTheSpecificOne() {
+        Variant textHtmlUTF8 = new Variant(new MediaType("text", "html", "UTF-8"), (Locale)null, null);
+        List<Variant> availableVariants = singletonList(textHtmlUTF8);
+        assertThat(MuVariantListBuilder.selectVariant(availableVariants, acceptLang("*"), singletonList(new MediaType(null, null)), emptyList()), equalTo(textHtmlUTF8));
+        assertThat(MuVariantListBuilder.selectVariant(availableVariants, acceptLang("*"), singletonList(new MediaType("text", null)), emptyList()), equalTo(textHtmlUTF8));
+        assertThat(MuVariantListBuilder.selectVariant(availableVariants, acceptLang("*"), singletonList(new MediaType("text", "html")), emptyList()), equalTo(textHtmlUTF8));
+        assertThat(MuVariantListBuilder.selectVariant(availableVariants, acceptLang("*"), asList(new MediaType("text", "html", "UTF-8"), new MediaType("text", "html")), emptyList()), equalTo(textHtmlUTF8));
+        assertThat(MuVariantListBuilder.selectVariant(availableVariants, acceptLang("*"), asList(new MediaType("text", "html", "ascii"), new MediaType("text", "html", "custom")), emptyList()), nullValue());
+        assertThat(MuVariantListBuilder.selectVariant(availableVariants, acceptLang("*"), asList(new MediaType("text", "html", "ascii"), new MediaType("text", "html", "custom"), new MediaType("text", "html", "utf-8")), emptyList()), equalTo(textHtmlUTF8));
     }
 
     @Test
