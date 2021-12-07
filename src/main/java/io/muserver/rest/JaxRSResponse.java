@@ -20,6 +20,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static java.util.Arrays.asList;
+import static java.util.Collections.emptyList;
 import static java.util.stream.Collectors.toMap;
 
 class JaxRSResponse extends Response implements ContainerResponseContext, WriterInterceptorContext {
@@ -399,7 +400,6 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
         private Annotation[] annotations = EMPTY_ANNOTATIONS;
         private NewCookie[] cookies = new NewCookie[0];
         private MediaType type;
-        private List<Variant> variants = new ArrayList<>();
 
         @Override
         public Response build() {
@@ -524,7 +524,7 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
 
         @Override
         public ResponseBuilder language(Locale language) {
-            return language(language.toLanguageTag());
+            return language(language == null ? null : language.toLanguageTag());
         }
 
         @Override
@@ -544,7 +544,9 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
 
         @Override
         public ResponseBuilder variant(Variant variant) {
-            this.variants.add(variant);
+            language(variant == null ? null : variant.getLanguage());
+            type(variant == null ? null : variant.getMediaType());
+            encoding(variant == null ? null : variant.getEncoding());
             return this;
         }
 
@@ -594,10 +596,24 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
 
         @Override
         public ResponseBuilder variants(List<Variant> variants) {
-            if (variants == null) {
-                this.variants.clear();
-            } else {
-                this.variants.addAll(variants);
+            for (Variant variant : variants) {
+                if (variant == null) {
+                    this.headers.remove("vary");
+                } else {
+                    List<Object> existing = this.headers.get("vary");
+                    if (existing == null) {
+                        existing = emptyList();
+                    }
+                    if (variant.getMediaType() != null && !existing.contains("content-type")) {
+                        this.headers.add("vary", "content-type");
+                    }
+                    if (variant.getLanguage() != null && !existing.contains("content-language")) {
+                        this.headers.add("vary", "content-language");
+                    }
+                    if (variant.getEncoding() != null && !existing.contains("content-encoding")) {
+                        this.headers.add("vary", "content-encoding");
+                    }
+                }
             }
             return this;
         }

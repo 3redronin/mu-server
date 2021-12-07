@@ -112,7 +112,7 @@ class MuVariantListBuilder extends Variant.VariantListBuilder {
                 return mtCompare;
             }
 
-            // Finally check the encoding options. If one has an encoding, use it
+            // Finally, check the encoding options. If one has an encoding, use it
             int encCompare = Boolean.compare(v2.getEncoding() != null, v1.getEncoding() != null);
             if (encCompare == 0 && v1.getEncoding() != null) {
                 // Now find the one with best q-value
@@ -124,11 +124,25 @@ class MuVariantListBuilder extends Variant.VariantListBuilder {
     }
 
     private static MediaType bestMediaType(List<MediaType> acceptableMediaTypes, Collection<MediaType> candidates) {
-        return acceptableMediaTypes.stream().filter(amt -> candidates.stream().anyMatch(c -> c.isCompatible(amt)))
-            .min(Comparator.comparing(MuVariantListBuilder::mtqScore)
-            .thenComparing((o1, o2) -> Boolean.compare(candidates.contains(o2), candidates.contains(o1)))
-            .thenComparing((o1, o2) -> Boolean.compare(o1.isWildcardType(), o2.isWildcardType()))
-            .thenComparing((o1, o2) -> Boolean.compare(o1.isWildcardSubtype(), o2.isWildcardSubtype()))).orElse(null);
+
+        Map<CombinedMediaType, MediaType> combinedToServerType = new HashMap<>();
+        List<CombinedMediaType> m = new ArrayList<>();
+        for (MediaType clientAccepts : acceptableMediaTypes) {
+            for (MediaType serverProduces : candidates) {
+                if (clientAccepts.isCompatible(serverProduces)) {
+                    CombinedMediaType combined = CombinedMediaType.s(clientAccepts, serverProduces);
+                    combinedToServerType.put(combined, serverProduces);
+                    m.add(combined);
+                }
+            }
+        }
+
+        if (m.isEmpty()) {
+            return null;
+        }
+
+        m.sort(Comparator.reverseOrder());
+        return combinedToServerType.get(m.get(0));
     }
 
     private static double bestEncodingScore(List<ParameterizedHeaderWithValue> acceptableEncodings, Variant variant) {
@@ -137,10 +151,6 @@ class MuVariantListBuilder extends Variant.VariantListBuilder {
 
     private static double qScore(ParameterizedHeaderWithValue p) {
         return Double.parseDouble(p.parameter("q", "1.0"));
-    }
-
-    private static double mtqScore(MediaType mediaType) {
-        return Double.parseDouble(mediaType.getParameters().getOrDefault("q", "1.0"));
     }
 
 }
