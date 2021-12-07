@@ -458,14 +458,14 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
         @Override
         public ResponseBuilder allow(Set<String> methods) {
             if (methods == null) {
-                return header(HttpHeaderNames.ALLOW, null);
+                return setHeader(HttpHeaderNames.ALLOW, null, true);
             }
 
             StringBuilder allow = new StringBuilder();
             for (String m : methods) {
                 append(allow, true, m);
             }
-            return header(HttpHeaderNames.ALLOW, allow.toString());
+            return setHeader(HttpHeaderNames.ALLOW, allow.toString(), true);
         }
 
         private void append(StringBuilder sb, boolean v, String s) {
@@ -480,22 +480,26 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
 
         @Override
         public ResponseBuilder cacheControl(CacheControl cacheControl) {
-            return header(HeaderNames.CACHE_CONTROL, cacheControl.toString());
+            return setHeader(HeaderNames.CACHE_CONTROL, cacheControl.toString(), false);
         }
 
         @Override
         public ResponseBuilder encoding(String encoding) {
-            return header(HeaderNames.CONTENT_ENCODING, encoding);
+            return setHeader(HeaderNames.CONTENT_ENCODING, encoding, false);
         }
 
-        private ResponseBuilder header(CharSequence name, Object value) {
+        private ResponseBuilder setHeader(CharSequence name, Object value, boolean append) {
             if (value instanceof Iterable) {
-                ((Iterable) value).forEach(v -> header(name, v));
+                ((Iterable) value).forEach(v -> setHeader(name, v, append));
             } else {
                 if (value == null) {
                     headers.remove(name.toString());
                 } else {
-                    headers.add(name.toString(), value);
+                    if (append) {
+                        headers.add(name.toString(), value);
+                    } else {
+                        headers.putSingle(name.toString(), value);
+                    }
                 }
             }
             return this;
@@ -503,7 +507,7 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
 
         @Override
         public ResponseBuilder header(String name, Object value) {
-            return header((CharSequence) name, value);
+            return setHeader(name, value, true); // TODO should this actually be false?
         }
 
         @Override
@@ -519,7 +523,7 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
 
         @Override
         public ResponseBuilder language(String language) {
-            return header(HeaderNames.CONTENT_LANGUAGE, language);
+            return setHeader(HeaderNames.CONTENT_LANGUAGE, language, false);
         }
 
         @Override
@@ -552,7 +556,7 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
 
         @Override
         public ResponseBuilder contentLocation(URI location) {
-            return header(HeaderNames.CONTENT_LOCATION, location);
+            return setHeader(HeaderNames.CONTENT_LOCATION, location, false);
         }
 
         @Override
@@ -566,22 +570,22 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
 
         @Override
         public ResponseBuilder expires(Date expires) {
-            return header(HeaderNames.EXPIRES, expires);
+            return setHeader(HeaderNames.EXPIRES, expires, false);
         }
 
         @Override
         public ResponseBuilder lastModified(Date lastModified) {
-            return header(HeaderNames.LAST_MODIFIED, lastModified);
+            return setHeader(HeaderNames.LAST_MODIFIED, lastModified, false);
         }
 
         @Override
         public ResponseBuilder location(URI location) {
-            return header(HeaderNames.LOCATION, location);
+            return setHeader(HeaderNames.LOCATION, location, false);
         }
 
         @Override
         public ResponseBuilder tag(EntityTag tag) {
-            return header(HeaderNames.ETAG, tag.toString());
+            return setHeader(HeaderNames.ETAG, tag, false);
         }
 
         @Override

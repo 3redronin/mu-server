@@ -38,7 +38,6 @@ public class JaxRSResponseTest {
             .location(URI.create("/some-location"))
             .status(201)
             .tag(new EntityTag("lkajsd\"fkljsklfdj", true))
-            .variant(new Variant(MediaType.APPLICATION_JSON_TYPE, Locale.CHINESE, "UTF-8"))
             .header("X-Another", "something");
 
         JaxRSResponse response = (JaxRSResponse) builder.build();
@@ -50,7 +49,7 @@ public class JaxRSResponseTest {
         assertThat(actual.get("cache-control"), contains("private, no-transform, must-revalidate, max-age=10"));
         assertThat(response.getLength(), is(-1));
         assertThat(actual.get("content-location"), contains("http://localhost:8080"));
-        assertThat(actual.get("content-encoding"), contains("UTF-8"));
+        assertThat(actual.get("content-encoding").toString(), actual.get("content-encoding"), contains("UTF-8"));
         assertThat(actual.get("expires"), contains("Mon, 1 Jan 2018 02:24:12 GMT"));
         assertThat(actual.get("content-language"), contains("fr-CA"));
         assertThat(response.getLanguage(), equalTo(Locale.CANADA_FRENCH));
@@ -126,14 +125,18 @@ public class JaxRSResponseTest {
 
     @Test
     public void usesHeaderDelegatesIfAvailable() {
+        NewCookie newCookie = new NewCookie("some-name", "some value", "/path", "example.org", "comment", 32, true, true);
         Response resp = JaxRSResponse.ok()
             .header("cache", cacheControl())
             .header("string-val", "A string val")
             .header("int-val", 1234)
+            .header("set-cookie", newCookie)
             .build();
         assertThat(resp.getHeaderString("cache"), is("private, no-transform, must-revalidate, max-age=10"));
         assertThat(resp.getHeaderString("string-val"), is("A string val"));
         assertThat(resp.getHeaderString("int-val"), is("1234"));
+        assertThat(resp.getHeaderString("set-cookie"), is(MuRuntimeDelegate.getInstance().createHeaderDelegate(NewCookie.class).toString(newCookie)));
+        assertThat(resp.getHeaderString("set-cookie"), containsStringIgnoringCase("max-age=32;"));
     }
 
     @Test
