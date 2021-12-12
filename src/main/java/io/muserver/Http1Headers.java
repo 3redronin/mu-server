@@ -1,14 +1,10 @@
 package io.muserver;
 
-import io.netty.handler.codec.HeadersUtils;
 import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.HttpHeaders;
 
 import javax.ws.rs.core.MediaType;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 import static io.muserver.NettyRequestParameters.isTruthy;
 import static io.netty.util.internal.ObjectUtil.checkNotNull;
@@ -325,10 +321,14 @@ class Http1Headers implements Headers {
         return entries.hashCode();
     }
 
-
     @Override
     public String toString() {
-        return HeadersUtils.toString(getClass(), entries.iteratorCharSequence(), size());
+        return Headtils.toString(this, null);
+    }
+
+    @Override
+    public String toString(Collection<String> toSuppress) {
+        return Headtils.toString(this, toSuppress);
     }
 
     @Override
@@ -370,5 +370,6 @@ class Http1Headers implements Headers {
     public MediaType contentType() {
         return Headtils.getMediaType(this);
     }
+
 
 }

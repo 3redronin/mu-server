@@ -1,10 +1,7 @@
 package io.muserver;
 
 import javax.ws.rs.core.MediaType;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 /**
  * HTTP headers
@@ -442,6 +439,27 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
      * @return The media type of the content specified by the headers, or <code>null</code> if not set.
      */
     MediaType contentType();
+
+    /**
+     * Returns a string representation of the headers.
+     *
+     * <strong>Note:</strong> The following headers will have their actual values replaced with the string <code>(hidden)</code>
+     * in order to protect potentially sensitive information: <code>authorization</code>, <code>cookie</code> and <code>set-cookie</code>.
+     * <p>If you wish to print all values or customize the header values that are hidden, use {@link #toString(Collection)}</p>
+     * @return a string representation of these headers
+     */
+    String toString();
+
+    /**
+     * Returns a string representation of the headers with selected header values replaced with the string <code>(hidden)</code>.
+     * <p>This may be useful where headers are logged for diagnostic purposes while not revealing values that are held in
+     * potentially sensitive headers.</p>
+     * @param toSuppress A collection of case-insensitive header names which will not have their values printed.
+     *                   Pass an empty collection to print all header values. A <code>null</code> value will hide
+     *                   the header values as defined on {@link #toString()}.
+     * @return a string representation of these headers
+     */
+    String toString(Collection<String> toSuppress);
 
     /**
      * Creates new headers for HTTP1 requests

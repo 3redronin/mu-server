@@ -11,13 +11,13 @@ import scaffolding.ServerUtils;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.URI;
+import java.util.Collections;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static io.muserver.MuServerBuilder.httpServer;
-import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.CoreMatchers.nullValue;
+import static org.hamcrest.CoreMatchers.*;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.IsEqual.equalTo;
 import static scaffolding.ClientUtils.*;
@@ -401,4 +401,49 @@ public class HeadersTest {
         return request().header("X-Something", value).url(server.uri().toString());
     }
 
+    @Test
+    public void http1HeadersToStringDoesNotLogSensitiveHeaders() {
+        httpHeadersToStringDoesNotLogSensitiveHeaders(new Http1Headers());
+    }
+
+    @Test
+    public void http2HeadersToStringDoesNotLogSensitiveHeaders() {
+        httpHeadersToStringDoesNotLogSensitiveHeaders(new Http2Headers());
+    }
+
+    private void httpHeadersToStringDoesNotLogSensitiveHeaders(Headers headers) {
+        headers.add("some-header", "value 1");
+        headers.add("some-header", "value 2");
+        headers.set(HeaderNames.AUTHORIZATION.toString().toUpperCase(), "shouldnotprint");
+        headers.set(HeaderNames.SET_COOKIE, "shouldnotprint");
+        headers.set(HeaderNames.COOKIE, "shouldnotprint 1");
+        headers.add(HeaderNames.COOKIE.toString().toUpperCase(), "shouldnotprint 2");
+        assertThat(headers.toString(), allOf(
+            not(containsStringIgnoringCase("shouldnotprint")),
+            containsStringIgnoringCase("some-header: value 1"),
+            containsStringIgnoringCase("some-header: value 2"),
+            containsStringIgnoringCase("cookie: (hidden)"),
+            containsStringIgnoringCase("set-cookie: (hidden)"),
+            containsStringIgnoringCase("authorization: (hidden)")
+        ));
+        assertThat(headers.toString(Collections.emptyList()), allOf(
+            not(containsStringIgnoringCase("(hidden)")),
+            containsStringIgnoringCase("some-header: value 1"),
+            containsStringIgnoringCase("some-header: value 2"),
+            containsStringIgnoringCase("cookie: shouldnotprint"),
+            containsStringIgnoringCase("cookie: shouldnotprint 2"),
+            containsStringIgnoringCase("set-cookie: shouldnotprint"),
+            containsStringIgnoringCase("authorization: shouldnotprint")
+        ));
+        assertThat(headers.toString(Collections.singleton("SOME-header")), allOf(
+            not(containsStringIgnoringCase("value 1")),
+            not(containsStringIgnoringCase("value 2")),
+            containsStringIgnoringCase("some-header: (hidden)"),
+            containsStringIgnoringCase("some-header: (hidden)"),
+            containsStringIgnoringCase("cookie: shouldnotprint"),
+            containsStringIgnoringCase("cookie: shouldnotprint 2"),
+            containsStringIgnoringCase("set-cookie: shouldnotprint"),
+            containsStringIgnoringCase("authorization: shouldnotprint")
+        ));
+    }
 }

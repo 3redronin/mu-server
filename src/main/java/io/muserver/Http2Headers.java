@@ -1,6 +1,5 @@
 package io.muserver;
 
-import io.netty.handler.codec.HeadersUtils;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
 
 import javax.ws.rs.core.MediaType;
@@ -346,12 +345,15 @@ class Http2Headers implements Headers {
         return entries.hashCode();
     }
 
-
     @Override
     public String toString() {
-        return HeadersUtils.toString(getClass(), entries.iterator(), size());
+        return Headtils.toString(this, null);
     }
 
+    @Override
+    public String toString(Collection<String> toSuppress) {
+        return Headtils.toString(this, toSuppress);
+    }
 
     @Override
     public boolean hasBody() {

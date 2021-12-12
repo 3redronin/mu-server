@@ -1,9 +1,12 @@
 package io.muserver;
 
-import javax.ws.rs.core.MediaType;
-import java.util.ArrayList;
-import java.util.List;
+import io.netty.handler.codec.HeadersUtils;
 
+import javax.ws.rs.core.MediaType;
+import java.util.*;
+import java.util.stream.Collectors;
+
+import static java.util.Arrays.asList;
 import static java.util.Collections.emptyList;
 
 class Headtils {
@@ -69,5 +72,38 @@ class Headtils {
             return null;
         }
         return MediaTypeParser.fromString(value);
+    }
+
+    static String toString(Headers headers, Collection<String> toSuppress) {
+        return HeadersUtils.toString(headers.getClass(), new RedactorIterator(headers.iterator(), toSuppress), headers.size());
+    }
+
+    private static class RedactorIterator implements Iterator<Map.Entry<String, String>> {
+        static final List<String> sensitiveOnes = asList(HeaderNames.COOKIE.toString(), HeaderNames.SET_COOKIE.toString(), HeaderNames.AUTHORIZATION.toString());
+        private final Iterator<Map.Entry<String, String>> iterator;
+        private final Collection<String> toSuppress;
+
+        public RedactorIterator(Iterator<Map.Entry<String, String>> iterator, Collection<String> toSuppress) {
+            this.iterator = iterator;
+            if (toSuppress == null) {
+                this.toSuppress = sensitiveOnes;
+            } else {
+                this.toSuppress = toSuppress.stream().map(String::toLowerCase).collect(Collectors.toSet());
+            }
+        }
+
+        @Override
+        public boolean hasNext() {
+            return iterator.hasNext();
+        }
+
+        @Override
+        public Map.Entry<String, String> next() {
+            Map.Entry<String, String> next = iterator.next();
+            if (toSuppress.contains(next.getKey().toLowerCase())) {
+                return new AbstractMap.SimpleImmutableEntry<>(next.getKey(), "(hidden)");
+            }
+            return next;
+        }
     }
 }
