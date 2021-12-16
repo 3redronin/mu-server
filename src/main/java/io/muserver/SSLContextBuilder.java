@@ -35,6 +35,15 @@ public class SSLContextBuilder {
     private CipherSuiteFilter nettyCipherSuiteFilter;
     private KeyManagerFactory keyManagerFactory;
     private String defaultAlias;
+    private boolean enableOcsp;
+
+    /**
+     * Enables OCSP stapling.
+     */
+    public SSLContextBuilder withEnableOcsp(boolean enableOcsp) {
+        this.enableOcsp = enableOcsp;
+        return this;
+    }
 
     /**
      * The type of keystore, such as JKS, JCEKS, PKCS12, etc
@@ -373,6 +382,7 @@ public class SSLContextBuilder {
         }
 
         return builder
+            .enableOcsp(enableOcsp)
             .clientAuth(ClientAuth.NONE)
             .protocols(protocolsToUse.toArray(new String[0]))
             .ciphers(null, cipherFilter)

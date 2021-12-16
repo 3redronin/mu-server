@@ -17,6 +17,11 @@ public class HttpsConfigBuilder extends SSLContextBuilder {
         return new HttpsConfigBuilder();
     }
 
+    @Override
+    public HttpsConfigBuilder withEnableOcsp(boolean enableOcsp) {
+        return (HttpsConfigBuilder) super.withEnableOcsp(enableOcsp);
+    }
+
     /**
      * The type of keystore, such as JKS, JCEKS, PKCS12, etc
      * @param keystoreType The type of keystore to load
