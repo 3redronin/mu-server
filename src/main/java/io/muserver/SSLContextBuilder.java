@@ -38,7 +38,10 @@ public class SSLContextBuilder {
     private boolean enableOcsp;
 
     /**
-     * Enables OCSP stapling.
+     * Enables OCSP stapling. Please note that not all {@link SslProvider} implementations support OCSP
+     * stapling and an exception will be thrown upon {@link #build()}.
+     *
+     * @see OpenSsl#isOcspSupported()
      */
     public SSLContextBuilder withEnableOcsp(boolean enableOcsp) {
         this.enableOcsp = enableOcsp;
