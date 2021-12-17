@@ -25,6 +25,8 @@ public class HttpsConfigBuilder extends SSLContextBuilder {
      * stapling and an exception will be thrown upon {@link #build()}.
      *
      * @see OpenSsl#isOcspSupported()
+     * @param enableOcsp whether to enable or not
+     * @return This builder
      */
     @Override
     public HttpsConfigBuilder withEnableOcsp(boolean enableOcsp) {
