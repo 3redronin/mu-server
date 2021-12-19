@@ -1,8 +1,5 @@
 package io.muserver;
 
-import io.netty.handler.ssl.OpenSsl;
-import io.netty.handler.ssl.SslProvider;
-
 import javax.net.ssl.KeyManagerFactory;
 import java.io.File;
 import java.io.InputStream;
@@ -20,12 +17,6 @@ public class HttpsConfigBuilder extends SSLContextBuilder {
         return new HttpsConfigBuilder();
     }
 
-    /**
-     * Enables OCSP stapling. Please note that not all {@link SslProvider} implementations support OCSP
-     * stapling and an exception will be thrown upon {@link #build()}.
-     *
-     * @see OpenSsl#isOcspSupported()
-     */
     @Override
     public HttpsConfigBuilder withEnableOcsp(boolean enableOcsp) {
         return (HttpsConfigBuilder) super.withEnableOcsp(enableOcsp);
