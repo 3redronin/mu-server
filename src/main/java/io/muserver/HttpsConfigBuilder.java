@@ -24,21 +24,13 @@ public class HttpsConfigBuilder extends SSLContextBuilder {
      * Enables OCSP stapling. Please note that not all {@link SslProvider} implementations support OCSP
      * stapling and an exception will be thrown upon {@link #build()}.
      *
-     * @see #withOcspIfAvailable()
+     * @see OpenSsl#isOcspSupported()
      * @param enableOcsp whether to enable or not
      * @return This builder
      */
     @Override
     public HttpsConfigBuilder withEnableOcsp(boolean enableOcsp) {
         return (HttpsConfigBuilder) super.withEnableOcsp(enableOcsp);
-    }
-
-    /**
-     * Enables OCSP stapling if it is available.
-     * @return This builder
-     */
-    public HttpsConfigBuilder withOcspIfAvailable() {
-        return withEnableOcsp(OpenSsl.isOcspSupported());
     }
 
     /**

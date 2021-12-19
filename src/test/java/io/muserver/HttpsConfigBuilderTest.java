@@ -1,8 +1,6 @@
 package io.muserver;
 
-import io.netty.handler.ssl.OpenSsl;
 import okhttp3.Response;
-import org.junit.Assume;
 import org.junit.Test;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
@@ -178,17 +176,5 @@ public class HttpsConfigBuilderTest {
     public void throwsIfClasspathIsIncorrect() {
         HttpsConfigBuilder.httpsConfig()
             .withKeystoreFromClasspath("/some/path/that/is/no/there.jks");
-    }
-
-    @Test(expected = MuException.class)
-    public void throwsIfOcspRequestedButNotSupported() {
-        Assume.assumeThat(OpenSsl.isOcspSupported(), is(false));
-        ServerUtils.httpsServerForTest()
-            .withHttpsConfig(HttpsConfigBuilder.unsignedLocalhost().withEnableOcsp(true)).start();
-    }
-
-    @Test
-    public void noOcspIfNotSupported() {
-        ServerUtils.httpsServerForTest().withHttpsConfig(HttpsConfigBuilder.unsignedLocalhost().withOcspIfAvailable()).start().stop();
     }
 }
