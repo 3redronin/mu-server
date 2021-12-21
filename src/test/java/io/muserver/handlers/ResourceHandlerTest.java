@@ -294,6 +294,7 @@ public class ResourceHandlerTest {
         assertContentTypeAndContent("/images/friends.jpg", "image/jpeg", false);
     }
 
+
     private void assertContentTypeAndContent(String relativePath, String expectedContentType, boolean expectGzip) throws Exception {
         Map<String, List<String>> headersFromGET;
         URL url = server.httpsUri().resolve(relativePath).toURL();
@@ -339,11 +340,7 @@ public class ResourceHandlerTest {
                 assertThat(headersFromHEAD, equalTo(headersFromGET));
             }
 
-            if (!ClientUtils.isHttp2(resp)) {
-                // TODO: this is broken on okhttpclient until https://github.com/square/okhttp/issues/4948 is fixed
-                assertThat(resp.body().contentLength(), is(0L));
-            }
-
+            assertThat(resp.body().contentLength(), is(0L));
         }
 
     }

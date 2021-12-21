@@ -304,7 +304,7 @@ abstract class NettyResponseAdaptor implements MuResponse {
         boolean isFixedLength = headers.contains(HeaderNames.CONTENT_LENGTH);
         ChannelFuture finishedFuture = null;
         if (state == ResponseState.NOTHING) {
-            boolean addContentLengthHeader = ((!isHead || !isFixedLength) && status != 204 && status != 205 && status != 304);
+            boolean addContentLengthHeader = !isHead && !isFixedLength && status != 204 && status != 205 && status != 304;
             finishedFuture = sendEmptyResponse(addContentLengthHeader);
         } else if (state == ResponseState.STREAMING) {
             boolean badFixedLength = !isHead && isFixedLength && declaredLength != bytesStreamed && status != 304;
