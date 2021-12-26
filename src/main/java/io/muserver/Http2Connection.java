@@ -70,14 +70,7 @@ abstract class Http2ConnectionFlowControl extends Http2ConnectionHandler impleme
     protected abstract void onDataRead0(ChannelHandlerContext ctx, int streamId, ByteBuf data, int padding, boolean endOfStream);
 
     @Override
-    public void onHeadersRead(ChannelHandlerContext ctx, int streamId, io.netty.handler.codec.http2.Http2Headers headers, int padding, boolean endOfStream) throws Http2Exception {
-        if (endOfStream) {
-            onDataRead(ctx, streamId, EMPTY_BUFFER, 0, true);
-        }
-    }
-
-    @Override
-    public final int onDataRead(ChannelHandlerContext ctx, int streamId, ByteBuf data, int padding, boolean endOfStream) {
+    public int onDataRead(ChannelHandlerContext ctx, int streamId, ByteBuf data, int padding, boolean endOfStream) {
         int size = data.readableBytes();
         Queue<DataReadData> buf = buffer.computeIfAbsent(streamId, integer -> new LinkedList<>());
         buf.add(new DataReadData(data.retain(), padding, endOfStream));
@@ -101,6 +94,10 @@ abstract class Http2ConnectionFlowControl extends Http2ConnectionHandler impleme
 
     protected void cleanStream(int streamId) {
         wantsToRead.remove(streamId);
+        cleanBuffer(streamId);
+    }
+
+    protected void cleanBuffer(int streamId) {
         Queue<DataReadData> removed = buffer.remove(streamId);
         if (removed != null) {
             if (!removed.isEmpty()) {
@@ -204,9 +201,18 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
     }
 
     @Override
+    public int onDataRead(ChannelHandlerContext ctx, int streamId, ByteBuf data, int padding, boolean endOfStream) {
+        if (!exchanges.containsKey(streamId)) {
+            // there was exception in onHeadersRead() e.g. '413 Payload Too Large'
+            super.cleanBuffer(streamId);
+            return data.readableBytes() + padding;
+        }
+        return super.onDataRead(ctx, streamId, data, padding, endOfStream);
+    }
+
+    @Override
     public void onHeadersRead(ChannelHandlerContext ctx, int streamId,
                               io.netty.handler.codec.http2.Http2Headers headers, int padding, boolean endOfStream) throws Http2Exception {
-        super.onHeadersRead(ctx, streamId, headers, padding, endOfStream);
         lastStreamId = streamId;
 
         try {
@@ -269,6 +275,7 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
 
             if (endOfStream) {
                 muReq.setState(RequestState.COMPLETE);
+                super.onDataRead(ctx, streamId, EMPTY_BUFFER, 0, true);
             }
 
             try {

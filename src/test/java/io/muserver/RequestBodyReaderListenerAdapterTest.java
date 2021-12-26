@@ -1,6 +1,11 @@
 package io.muserver;
 
+import io.netty.buffer.ByteBufAllocator;
+import io.netty.buffer.ByteBufAllocatorMetric;
+import io.netty.buffer.ByteBufAllocatorMetricProvider;
+import okhttp3.MediaType;
 import okhttp3.Request;
+import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Assert;
@@ -22,6 +27,7 @@ import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 import static scaffolding.MuAssert.assertEventually;
+import static scaffolding.StringUtils.randomAsciiStringOfLength;
 
 public class RequestBodyReaderListenerAdapterTest {
     private MuServer server;
@@ -94,6 +100,60 @@ public class RequestBodyReaderListenerAdapterTest {
         ));
     }
 
+    private static long getDirectMemory() {
+        ByteBufAllocator allocator = ByteBufAllocator.DEFAULT;
+        if (allocator instanceof ByteBufAllocatorMetricProvider) {
+            ByteBufAllocatorMetric metric = ((ByteBufAllocatorMetricProvider) allocator).metric();
+            return metric.usedDirectMemory();
+        } else {
+            return -1;
+        }
+    }
+
+    @Test
+    public void exceedingMaxContentLengthWillResultIn413() {
+        int contentLength = 24 * 1024 * 1024 + 1;
+
+        server = ServerUtils.httpsServerForTest()
+            .withMaxRequestSize(1000)
+            .addHandler((request, response) -> {
+                response.write("hello");
+                return true;
+            })
+            .start();
+
+        final String bigString = randomAsciiStringOfLength(contentLength);
+
+        Request.Builder request = request()
+            .url(server.uri().toString())
+            .post(RequestBody.create(bigString, MediaType.get("text/plain")));
+
+
+
+        long before = -1;
+        for (int i = 0; i < 10; i++) {
+            // it shouldn't cause direct memory jump
+            try (Response resp = call(request)) {
+                assertThat(resp.code(), equalTo(413));
+                assertThat(resp.body().string(), containsString("413 Payload Too Large"));
+            } catch (Exception e) {
+                // The HttpServerKeepAliveHandler will probably close the connection before the full request body is read, which is probably a good thing in this case.
+                // So allow a valid 413 response or an error
+                MuAssert.assertIOException(e);
+            }
+
+            if (i == 0) {
+                // capture the direct memory after the first http call
+                before = getDirectMemory();
+                assertThat(before, greaterThan(0L));
+            }
+        }
+
+        // the direct memory should be stable
+        long after = getDirectMemory();
+        assertThat(after, equalTo(before));
+    }
+
     @Test
     public void exceedingUploadSizeResultsIn413OrKilledConnectionForChunkedRequestWhereResponseNotStarted() throws Exception {
         AtomicReference<Throwable> exception = new AtomicReference<>();
@@ -135,7 +195,7 @@ public class RequestBodyReaderListenerAdapterTest {
             MuAssert.assertIOException(e);
         }
         assertEventually(exception::get, instanceOf(ClientErrorException.class));
-        assertThat(((ClientErrorException)exception.get()).getResponse().getStatus(), equalTo(413));
+        assertThat(((ClientErrorException) exception.get()).getResponse().getStatus(), equalTo(413));
     }
 
     @Test
@@ -199,7 +259,7 @@ public class RequestBodyReaderListenerAdapterTest {
             if (err == null) {
                 events.add(message);
             } else {
-                events.add("Error for " + message +": " + Mutils.coalesce(err.getMessage(), err.getClass().getSimpleName()));
+                events.add("Error for " + message + ": " + Mutils.coalesce(err.getMessage(), err.getClass().getSimpleName()));
             }
         }
 
