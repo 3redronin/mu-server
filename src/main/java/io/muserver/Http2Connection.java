@@ -71,11 +71,10 @@ abstract class Http2ConnectionFlowControl extends Http2ConnectionHandler impleme
 
     @Override
     public int onDataRead(ChannelHandlerContext ctx, int streamId, ByteBuf data, int padding, boolean endOfStream) {
-        int size = data.readableBytes();
         Queue<DataReadData> buf = buffer.computeIfAbsent(streamId, integer -> new LinkedList<>());
         buf.add(new DataReadData(data.retain(), padding, endOfStream));
         sendItMaybe(ctx, streamId);
-        return size + padding;
+        return 0;
     }
 
     protected void cleanup() {
@@ -303,7 +302,9 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
 
     @Override
     public void onDataRead0(ChannelHandlerContext ctx, int streamId, ByteBuf data, int padding, boolean endOfStream) {
-        boolean empty = data.readableBytes() == 0;
+        int dataSize = data.readableBytes();
+        int consumed = dataSize + padding;
+        boolean empty = dataSize == 0;
 
         HttpExchange httpExchange = exchanges.get(streamId);
         if (httpExchange == null) {
@@ -316,7 +317,13 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
                 msg = new DefaultHttpContent(data);
             }
             data.retain();
-            httpExchange.onMessage(ctx, msg, error -> {
+            DoneCallback doneCallback = error -> {
+
+                Http2Stream stream = this.connection().stream(streamId);
+                if (stream != null && this.decoder().flowController().consumeBytes(stream, consumed)) {
+                    ctx.flush();
+                }
+
                 data.release();
                 if (error != null) {
                     ctx.fireUserEventTriggered(new MuExceptionFiredEvent(httpExchange, streamId, error));
@@ -325,6 +332,19 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
                 }
                 // error == null && endOfStream == true here, then do nothing
                 // as it just indicate the request is finished, no more data to read.
+            };
+            httpExchange.onMessage(ctx, msg, error -> {
+                if (ctx.executor().inEventLoop()) {
+                    doneCallback.onComplete(error);
+                } else {
+                    ctx.executor().execute(() -> {
+                        try {
+                            doneCallback.onComplete(error);
+                        } catch (Exception e) {
+                            log.debug("Error from doneCallback, e");
+                        }
+                    });
+                }
             });
         }
     }
