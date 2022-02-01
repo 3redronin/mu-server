@@ -19,6 +19,7 @@ import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.equalTo;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 import static scaffolding.ServerUtils.httpsServerForTest;
@@ -160,6 +161,47 @@ public class JaxMatchingTest {
             assertThat(resp.body().string(), containsString("456"));
         }
     }
+
+
+    @Test
+    public void interfacesWithDefaultImplementationSupported() throws IOException {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new DefaultImplementationResource()))
+            .start();
+        try (Response resp = call(request(server.uri().resolve("/default-impl/jax1")))) {
+            assertThat(resp.code(), Matchers.is(200));
+            assertThat(resp.body().string(), equalTo("Hello from default impl"));
+        }
+        try (Response resp = call(request(server.uri().resolve("/default-impl/jax2")))) {
+            assertThat(resp.code(), Matchers.is(200));
+            assertThat(resp.body().string(), equalTo("Overwritten by implementation"));
+        }
+    }
+
+    class DefaultImplementationResource implements InterfaceWithDefaultImplementation {
+        @Override
+        public void notAJaxMethod2() {
+        }
+
+        @Override
+        public String jaxMethodOverwritten() {
+            return "Overwritten by implementation";
+        }
+    }
+
+    @Path("/default-impl")
+    interface InterfaceWithDefaultImplementation {
+        default void notAJaxMethod() {}
+        default void notAJaxMethod2() {}
+        @GET
+        @Path("jax1")
+        default String jaxMethod() { return "Hello from default impl";}
+        @GET
+        @Path("jax2")
+        default String jaxMethodOverwritten() { return "Will be overwritten";}
+    }
+
+
 
     @After
     public void stopIt() {
