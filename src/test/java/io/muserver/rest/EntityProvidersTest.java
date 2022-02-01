@@ -23,10 +23,14 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 import static io.muserver.Mutils.NEWLINE;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
@@ -373,6 +377,43 @@ public class EntityProvidersTest {
         }
         ResponseInfo ri = info.get(5, TimeUnit.SECONDS);
         assertThat(ri.completedSuccessfully(), Matchers.is(true));
+    }
+
+    @Test
+    public void inputStreamsCanBeZipped() throws Exception {
+
+        @Path("/zipper")
+        class Zipper {
+            @POST
+            @Consumes({"application/octet-stream", "application/zip"})
+            public String getIt(@Required InputStream requestBody) throws Exception {
+                List<String> files = new ArrayList<>();
+                try (ZipInputStream zis = new ZipInputStream(requestBody)) {
+                    ZipEntry nextEntry;
+                    while ((nextEntry = zis.getNextEntry()) != null) {
+                        if (!nextEntry.isDirectory()) {
+                            files.add(nextEntry.getName());
+                            try (ByteArrayOutputStream fos = new ByteArrayOutputStream()) {
+                                Mutils.copy(zis, fos, 8192);
+                            }
+                        }
+                    }
+                }
+                requestBody.close();
+                return files.stream().sorted().collect(Collectors.joining(", "));
+            }
+        }
+        this.server = httpsServerForTest().addHandler(
+                restHandler(new Zipper())
+                    .build())
+            .start();
+        try (Response resp = call(request()
+            .post(RequestBody.create(new File("src/test/resources/sample-static/maven.zip"), MediaType.get("application/zip")))
+            .url(server.uri().resolve("/zipper").toString())
+        )) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.body().string(), equalTo(".editorconfig, .gitignore, pom.xml, src/main/java/samples/App.java, src/main/resources/logback.xml, src/main/resources/web/index.html"));
+        }
     }
 
     @Test

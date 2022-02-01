@@ -91,15 +91,17 @@ class RequestBodyReaderInputStreamAdapter extends RequestBodyReader {
         @Override
         public void close() throws IOException {
             synchronized (lock) {
-                userClosed = true;
-                if (currentCallback != null) {
-                    // just discard it
-                    try {
-                        currentCallback.onComplete(null);
-                    } catch (Exception e2) {
-                        throw new IOException("Exception raising error", e2);
+                if (!userClosed) {
+                    userClosed = true;
+                    if (currentCallback != null) {
+                        // just discard it
+                        try {
+                            currentCallback.onComplete(null);
+                        } catch (Exception e2) {
+                            throw new IOException("Exception raising error", e2);
+                        }
+                        currentBuf = null;
                     }
-                    currentBuf = null;
                 }
             }
         }
