@@ -657,35 +657,4 @@ public class MuServerBuilder {
         p.addLast("muhandler", new Http1Connection(nettyHandlerAdapter, server, proto));
     }
 
-    private static class LoggingChannelInboundHandlerAdapter extends ChannelInboundHandlerAdapter {
-        @Override
-        public void channelActive(ChannelHandlerContext ctx) throws Exception {
-            log.info("channelActive");
-            super.channelActive(ctx);
-        }
-
-        @Override
-        public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-            log.info("channelInactive");
-            super.channelInactive(ctx);
-        }
-
-        @Override
-        public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-            log.info("channelRead " + msg);
-            super.channelRead(ctx, msg);
-        }
-
-        @Override
-        public void channelReadComplete(ChannelHandlerContext ctx) throws Exception {
-            log.info("channelReadComplete");
-            super.channelReadComplete(ctx);
-        }
-
-        @Override
-        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-            log.info("exceptionCaught", cause);
-            super.exceptionCaught(ctx, cause);
-        }
-    }
 }
