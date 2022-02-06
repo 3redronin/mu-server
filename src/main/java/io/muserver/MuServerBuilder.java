@@ -657,4 +657,29 @@ public class MuServerBuilder {
         p.addLast("muhandler", new Http1Connection(nettyHandlerAdapter, server, proto));
     }
 
+
+    @Override
+    public String toString() {
+        return "MuServerBuilder{" +
+            "minimumGzipSize=" + minimumGzipSize +
+            ", httpPort=" + httpPort +
+            ", httpsPort=" + httpsPort +
+            ", maxHeadersSize=" + maxHeadersSize +
+            ", maxUrlSize=" + maxUrlSize +
+            ", nioThreads=" + nioThreads +
+            ", handlers=" + handlers +
+            ", gzipEnabled=" + gzipEnabled +
+            ", mimeTypesToGzip=" + mimeTypesToGzip +
+            ", addShutdownHook=" + addShutdownHook +
+            ", host='" + host + '\'' +
+            ", sslContextBuilder=" + sslContextBuilder +
+            ", http2Config=" + http2Config +
+            ", requestReadTimeoutMillis=" + requestReadTimeoutMillis +
+            ", idleTimeoutMills=" + idleTimeoutMills +
+            ", executor=" + executor +
+            ", maxRequestSize=" + maxRequestSize +
+            ", responseCompleteListeners=" + responseCompleteListeners +
+            ", rateLimiters=" + rateLimiters +
+            '}';
+    }
 }

@@ -59,4 +59,12 @@ public class ContextHandler implements MuHandler {
         }
         return false;
     }
+
+    @Override
+    public String toString() {
+        return "ContextHandler{" +
+            "context='" + contextPath + '\'' +
+            ", children='" + muHandlers + '\'' +
+            '}';
+    }
 }

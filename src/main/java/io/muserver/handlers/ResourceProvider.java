@@ -41,7 +41,19 @@ interface ResourceProviderFactory {
         if (!Files.isDirectory(baseDirectory, LinkOption.NOFOLLOW_LINKS)) {
             throw new MuException(baseDirectory + " is not a directory");
         }
-        return relativePath -> new AsyncFileProvider(baseDirectory, relativePath);
+        return new ResourceProviderFactory() {
+            @Override
+            public ResourceProvider get(String relativePath) {
+                return new AsyncFileProvider(baseDirectory, relativePath);
+            }
+
+            @Override
+            public String toString() {
+                return "AsyncFileProviderFactory{" +
+                    "baseDirectory='" + baseDirectory + '\'' +
+                    '}';
+            }
+        };
     }
 
     static ResourceProviderFactory classpathBased(String classpathBase) {
@@ -125,6 +137,12 @@ class ClasspathCache implements ResourceProviderFactory {
         return cur.newWithInputStream();
     }
 
+    @Override
+    public String toString() {
+        return "ClasspathCache{" +
+            "basePath='" + basePath + '\'' +
+            '}';
+    }
 
     private static final ResourceProvider nullProvider = new ResourceProvider() {
         public boolean exists() {

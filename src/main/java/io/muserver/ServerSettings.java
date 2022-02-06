@@ -50,4 +50,17 @@ class ServerSettings {
         }
         return !allowed;
     }
+
+    @Override
+    public String toString() {
+        return "ServerSettings{" +
+            "minimumGzipSize=" + minimumGzipSize +
+            ", maxHeadersSize=" + maxHeadersSize +
+            ", requestReadTimeoutMillis=" + requestReadTimeoutMillis +
+            ", maxRequestSize=" + maxRequestSize +
+            ", maxUrlSize=" + maxUrlSize +
+            ", gzipEnabled=" + gzipEnabled +
+            ", rateLimiters=" + rateLimiters +
+            '}';
+    }
 }

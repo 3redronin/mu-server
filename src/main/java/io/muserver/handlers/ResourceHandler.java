@@ -284,7 +284,6 @@ public class ResourceHandler implements MuHandler {
         return new Builder().withResourceProviderFactory(ResourceProviderFactory.fileBased(path));
     }
 
-
     /**
      * Creates a handler that serves files from the classpath..
      *
@@ -318,4 +317,12 @@ public class ResourceHandler implements MuHandler {
         }
     }
 
+    @Override
+    public String toString() {
+        return "ResourceHandler{" +
+            "defaultFile='" + defaultFile + '\'' +
+            ", directoryListingEnabled=" + directoryListingEnabled +
+            ", resourceProviderFactory=" + resourceProviderFactory +
+            '}';
+    }
 }

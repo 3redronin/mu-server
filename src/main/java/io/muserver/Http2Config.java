@@ -10,4 +10,11 @@ public class Http2Config {
     Http2Config(boolean enabled) {
         this.enabled = enabled;
     }
+
+    @Override
+    public String toString() {
+        return "Http2Config{" +
+            "enabled=" + enabled +
+            '}';
+    }
 }

@@ -25,4 +25,12 @@ public class CORSHandler implements MuHandler {
         corsConfig.writeHeaders(request, response, allowedMethods);
         return false;
     }
+
+    @Override
+    public String toString() {
+        return "CORSHandler{" +
+            "corsConfig=" + corsConfig +
+            ", allowedMethods=" + allowedMethods +
+            '}';
+    }
 }

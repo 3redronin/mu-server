@@ -2,10 +2,7 @@ package io.muserver.rest;
 
 import io.muserver.*;
 
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.regex.Pattern;
 
 import static java.util.stream.Collectors.joining;
@@ -179,5 +176,32 @@ public class CORSConfig {
      */
     public Collection<String> allowedHeaders() {
         return allowedHeaders;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        CORSConfig that = (CORSConfig) o;
+        return allowCredentials == that.allowCredentials && maxAge == that.maxAge && Objects.equals(allowedOrigins, that.allowedOrigins) && Objects.equals(allowedOriginRegex, that.allowedOriginRegex) && Objects.equals(exposedHeaders, that.exposedHeaders) && Objects.equals(allowedHeaders, that.allowedHeaders) && Objects.equals(exposedHeadersCSV, that.exposedHeadersCSV) && Objects.equals(allowedHeadersCSV, that.allowedHeadersCSV);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(allowCredentials, allowedOrigins, allowedOriginRegex, exposedHeaders, maxAge, allowedHeaders, exposedHeadersCSV, allowedHeadersCSV);
+    }
+
+    @Override
+    public String toString() {
+        return "CORSConfig{" +
+            "allowCredentials=" + allowCredentials +
+            ", allowedOrigins=" + allowedOrigins +
+            ", allowedOriginRegex=" + allowedOriginRegex +
+            ", exposedHeaders=" + exposedHeaders +
+            ", maxAge=" + maxAge +
+            ", allowedHeaders=" + allowedHeaders +
+            ", exposedHeadersCSV='" + exposedHeadersCSV + '\'' +
+            ", allowedHeadersCSV='" + allowedHeadersCSV + '\'' +
+            '}';
     }
 }

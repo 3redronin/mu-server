@@ -31,7 +31,7 @@ public class RunLocal {
 
     public static void main(String[] args) {
 
-        MuServer server = muServer()
+        MuServerBuilder builder = muServer()
             .withHttpPort(18080)
             .withHttpsPort(18443)
             .withHttp2Config(http2EnabledIfAvailable())
@@ -74,8 +74,8 @@ public class RunLocal {
             })
             .addHandler(
                 RestHandlerBuilder.restHandler(
-                    new PetResource(), new PetStoreResource(), new UserResource(), new VehicleResource()
-                )
+                        new PetResource(), new PetStoreResource(), new UserResource(), new VehicleResource()
+                    )
                     .withOpenApiJsonUrl("/openapi.json")
                     .withOpenApiHtmlUrl("/api.html")
                     .withCORS(CORSConfigBuilder.corsConfig()
@@ -152,8 +152,9 @@ public class RunLocal {
                 executor.schedule((Runnable) asyncHandle::complete,
                     req.query().getLong("millis", 5000), TimeUnit.MILLISECONDS);
                 asyncHandle.addResponseCompleteHandler(info -> log.info("Woke up: " + info));
-            })
-            .start();
+            });
+        log.info("Builder: " + builder);
+        MuServer server = builder.start();
 
 
         log.info("Started at " + server.httpUri() + " and " + server.httpsUri());

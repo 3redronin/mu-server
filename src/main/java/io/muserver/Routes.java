@@ -24,17 +24,28 @@ public class Routes {
 	public static MuHandler route(Method method, String uriTemplate, RouteHandler muHandler) {
         UriPattern uriPattern = UriPattern.uriTemplateToRegex(uriTemplate);
 
-        return (request, response) -> {
-			boolean methodMatches = method == null || method.equals(request.method());
-			if (methodMatches) {
-                PathMatch matcher = uriPattern.matcher(request.relativePath());
-                if (matcher.fullyMatches()) {
-                    muHandler.handle(request, response, matcher.params());
-                    return true;
+        return new MuHandler() {
+            @Override
+            public boolean handle(MuRequest request, MuResponse response) throws Exception {
+                boolean methodMatches = method == null || method.equals(request.method());
+                if (methodMatches) {
+                    PathMatch matcher = uriPattern.matcher(request.relativePath());
+                    if (matcher.fullyMatches()) {
+                        muHandler.handle(request, response, matcher.params());
+                        return true;
+                    }
                 }
-			}
-			return false;
-		};
+                return false;
+            }
+
+            @Override
+            public String toString() {
+                return "RouteHandler{" +
+                    "method='" + (method == null ? "Any" : method.name()) + '\'' +
+                    ", path='" + uriTemplate + '\'' +
+                    '}';
+            }
+        };
 	}
 
 	private Routes() {}

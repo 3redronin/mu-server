@@ -57,5 +57,14 @@ public class WebSocketHandler implements MuHandler {
         return request.headers().contains(HeaderNames.UPGRADE, HeaderValues.WEBSOCKET, true);
     }
 
+    @Override
+    public String toString() {
+        return "WebSocketHandler{" +
+            "path='" + path + '\'' +
+            ", idleReadTimeoutMills=" + idleReadTimeoutMills +
+            ", pingAfterWriteMillis=" + pingAfterWriteMillis +
+            ", maxFramePayloadLength=" + maxFramePayloadLength +
+            '}';
+    }
 }
 

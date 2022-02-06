@@ -71,7 +71,15 @@ public class HttpsRedirector implements MuHandler {
      */
     @Deprecated
     public static class Builder extends HttpsRedirectorBuilder {
+    }
 
-
+    @Override
+    public String toString() {
+        return "HttpsRedirector{" +
+            "httpsPort=" + httpsPort +
+            ", expireTimeInSeconds=" + expireTimeInSeconds +
+            ", includeSubDomainsForHSTS=" + includeSubDomainsForHSTS +
+            ", preload=" + preload +
+            '}';
     }
 }
