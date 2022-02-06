@@ -4,8 +4,6 @@ import io.netty.util.ResourceLeakDetector;
 import okhttp3.*;
 import okio.BufferedSink;
 import org.eclipse.jetty.client.HttpClient;
-import org.eclipse.jetty.client.http.HttpClientTransportOverHTTP;
-import org.eclipse.jetty.io.ClientConnector;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
 
 import javax.net.ssl.SSLContext;
@@ -111,9 +109,7 @@ public class ClientUtils {
             try {
                 SslContextFactory.Client sslContextFactory = new SslContextFactory.Client(true);
                 sslContextFactory.setEndpointIdentificationAlgorithm("HTTPS");
-                ClientConnector clientConnector = new ClientConnector();
-                clientConnector.setSslContextFactory(sslContextFactory);
-                jettyClient = new HttpClient(new HttpClientTransportOverHTTP(clientConnector));
+                jettyClient = new HttpClient(sslContextFactory);
                 jettyClient.start();
             } catch (Exception e) {
                 throw new RuntimeException("Couldn't start jetty client", e);

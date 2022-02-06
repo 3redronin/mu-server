@@ -6,8 +6,7 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 import okio.BufferedSink;
 import org.eclipse.jetty.client.api.Result;
-import org.eclipse.jetty.client.util.InputStreamRequestContent;
-import org.eclipse.jetty.http.HttpHeader;
+import org.eclipse.jetty.client.util.InputStreamContentProvider;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.MuAssert;
@@ -103,14 +102,12 @@ public class RequestBodyReaderInputStreamAdapterTest {
         AtomicLong bytesReceived = new AtomicLong();
 
         try (PipedOutputStream uploadOutStream = new PipedOutputStream();
-             PipedInputStream pipedInputStream = new PipedInputStream(uploadOutStream, chunkSize)) {
-
-            InputStreamRequestContent isrc = new InputStreamRequestContent(pipedInputStream, chunkSize);
+             InputStreamContentProvider inputProvider = new InputStreamContentProvider(new PipedInputStream(uploadOutStream, chunkSize), chunkSize)) {
 
             jettyClient().newRequest(server.uri())
                 .method("POST")
-                .headers(httpFields -> httpFields.put(HttpHeader.CONTENT_TYPE, "application/octet-stream"))
-                .body(isrc)
+                .header("content-type", "application/octet-stream")
+                .content(inputProvider)
                 .send(new org.eclipse.jetty.client.api.Response.Listener() {
                     @Override
                     public void onBegin(org.eclipse.jetty.client.api.Response response) {

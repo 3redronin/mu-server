@@ -3,9 +3,6 @@ package io.muserver;
 import okhttp3.Response;
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.api.ContentResponse;
-import org.eclipse.jetty.client.http.HttpClientTransportOverHTTP;
-import org.eclipse.jetty.http.HttpHeader;
-import org.eclipse.jetty.io.ClientConnector;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.junit.After;
 import org.junit.Test;
@@ -195,14 +192,10 @@ public class StreamingTest {
         // This test passes in OkHttpClient 4.9 as it doesn't seem to care about a truncated chunked response
         SslContextFactory.Client sslContextFactory = new SslContextFactory.Client(true);
         sslContextFactory.setEndpointIdentificationAlgorithm("https");
-        ClientConnector connector = new ClientConnector();
-        connector.setSslContextFactory(sslContextFactory);
-        HttpClient client = new HttpClient(new HttpClientTransportOverHTTP(connector));
+        HttpClient client = new HttpClient(sslContextFactory);
         client.start();
         try {
-            ContentResponse get = client.newRequest(server.uri())
-                .headers(httpFields -> httpFields.put(HttpHeader.CONNECTION, "close"))
-                .send();
+            ContentResponse get = client.newRequest(server.uri()).header("Connection", "close").send();
             assertThat(get.getStatus(), is(200));
             assertThat(get.getContentAsString(), is("This is a call"));
         } finally {
