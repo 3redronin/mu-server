@@ -166,8 +166,8 @@ public class WebSocketsTest {
             session.getRemote().sendPartialString("Sorry you can't get through.", true);
             session.getRemote().sendString("Goodbye");
             session.getRemote().flush();
-            session.close(1000, "Finished");
             assertNotTimedOut("Closing", serverSocket.closedLatch);
+            session.close(1000, "Finished");
             assertThat(serverSocket.received.toString(), serverSocket.received, contains("connected", "onText: Hello, How you doin? Sorry you can't get through.", "onText: Goodbye", "onClientClosed: 1000 Finished"));
         } finally {
             client.stop();
