@@ -152,7 +152,20 @@ public class WebSocketsTest {
 
         WebSocketClient client = new WebSocketClient(httpClient);
 
-        class TestWebSocketClient extends WebSocketAdapter { }
+        class TestWebSocketClient extends WebSocketAdapter {
+            private final CountDownLatch closureLatch = new CountDownLatch(1);
+
+            @Override
+            public void onWebSocketClose(int statusCode, String reason) {
+                super.onWebSocketClose(statusCode, reason);
+                closureLatch.countDown();
+            }
+
+
+            public void awaitClosure() throws InterruptedException {
+                closureLatch.await();
+            }
+        }
 
         try {
             client.start();
@@ -166,8 +179,10 @@ public class WebSocketsTest {
             session.getRemote().sendPartialString("Sorry you can't get through.", true);
             session.getRemote().sendString("Goodbye");
             session.getRemote().flush();
-            assertNotTimedOut("Closing", serverSocket.closedLatch);
+            assertEventually(() -> serverSocket.received, contains("connected", "onText: Hello, How you doin? Sorry you can't get through.", "onText: Goodbye"));
             session.close(1000, "Finished");
+            socket.awaitClosure();
+            assertNotTimedOut("Closing", serverSocket.closedLatch);
             assertThat(serverSocket.received.toString(), serverSocket.received, contains("connected", "onText: Hello, How you doin? Sorry you can't get through.", "onText: Goodbye", "onClientClosed: 1000 Finished"));
         } finally {
             client.stop();
