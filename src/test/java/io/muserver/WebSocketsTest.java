@@ -68,8 +68,8 @@ public class WebSocketsTest {
         clientSocket.close(1000, "Finished");
         assertNotTimedOut("Closing server socket", serverSocket.closedLatch);
         assertEventually(() -> serverSocket.state(), equalTo(WebsocketSessionState.CLIENT_CLOSED));
-        assertThat(serverSocket.received, contains("connected", "onText: This is a message",
-            "onBinary: This is a binary message", "onText: Another text", "onClientClosed: 1000 Finished"));
+        assertThat(serverSocket.received, contains("connected", "onText (true): This is a message",
+            "onBinary (true): This is a binary message", "onText (true): Another text", "onClientClosed: 1000 Finished"));
 
         assertEventually(() -> clientListener.events,
             contains("onOpen", "onMessage text: THIS IS A MESSAGE", "onMessage binary: This is a binary message", "onMessage text: ANOTHER TEXT", "onClosing 1000 Finished", "onClosed 1000 Finished"));
@@ -135,12 +135,12 @@ public class WebSocketsTest {
         clientSocket.send("Another text");
         clientSocket.close(1000, "Finished");
         assertNotTimedOut("Closing", serverSocket.closedLatch);
-        assertThat(serverSocket.received, contains("connected", "onText: " + largeText,
-            "onBinary: " + largeText, "onText: Another text", "onClientClosed: 1000 Finished"));
+        assertThat(serverSocket.received, contains("connected", "onText (true): " + largeText,
+            "onBinary (true): " + largeText, "onText (true): Another text", "onClientClosed: 1000 Finished"));
     }
 
     @Test
-    public void splitFramesAreAggregated() throws Exception {
+    public void splitFramesAreSentWithIsLastFalse() throws Exception {
         serverSocket.logErrors = true;
         server = ServerUtils.httpsServerForTest()
             .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket).withPath("/routed-websocket"))
@@ -178,12 +178,15 @@ public class WebSocketsTest {
             session.getRemote().sendPartialString("How you doin? ", false);
             session.getRemote().sendPartialString("Sorry you can't get through.", true);
             session.getRemote().sendString("Goodbye");
+            session.getRemote().sendPartialBytes(Mutils.toByteBuffer("binary1"), false);
+            session.getRemote().sendPartialBytes(Mutils.toByteBuffer("binary2"), true);
             session.getRemote().flush();
-            assertEventually(() -> serverSocket.received, contains("connected", "onText: Hello, How you doin? Sorry you can't get through.", "onText: Goodbye"));
+
+            assertEventually(() -> serverSocket.received, contains("connected", "onText (false): Hello, ", "onText (false): How you doin? ", "onText (true): Sorry you can't get through.", "onText (true): Goodbye", "onBinary (false): binary1", "onBinary (true): binary2"));
             session.close(1000, "Finished");
             socket.awaitClosure();
             assertNotTimedOut("Closing", serverSocket.closedLatch);
-            assertThat(serverSocket.received.toString(), serverSocket.received, contains("connected", "onText: Hello, How you doin? Sorry you can't get through.", "onText: Goodbye", "onClientClosed: 1000 Finished"));
+            assertThat(serverSocket.received.toString(), serverSocket.received, contains("connected", "onText (false): Hello, ", "onText (false): How you doin? ", "onText (true): Sorry you can't get through.", "onText (true): Goodbye", "onBinary (false): binary1", "onBinary (true): binary2", "onClientClosed: 1000 Finished"));
         } finally {
             client.stop();
             httpClient.stop();
@@ -385,7 +388,7 @@ public class WebSocketsTest {
     @Test
     public void exceptionsThrownByHandlersResultInOnErrorBeingCalled() {
         serverSocket = new RecordingMuWebSocket() {
-            public void onText(String message, DoneCallback onComplete) {
+            public void onText(String message, boolean isLast, DoneCallback onComplete) {
                 throw new MuException("Oops");
             }
         };
@@ -449,15 +452,15 @@ public class WebSocketsTest {
         }
 
         @Override
-        public void onText(String message, DoneCallback onComplete) {
-            received.add("onText: " + message);
+        public void onText(String message, boolean isLast, DoneCallback onComplete) {
+            received.add("onText (" + isLast + "): " + message);
             session.sendText(message.toUpperCase(), onComplete);
         }
 
         @Override
-        public void onBinary(ByteBuffer buffer, DoneCallback onComplete) {
+        public void onBinary(ByteBuffer buffer, boolean isLast, DoneCallback onComplete) {
             int initial = buffer.position();
-            received.add("onBinary: " + UTF_8.decode(buffer));
+            received.add("onBinary (" + isLast + "): " + UTF_8.decode(buffer));
             buffer.position(initial);
             session.sendBinary(buffer, onComplete);
         }

@@ -30,12 +30,12 @@ public abstract class BaseWebSocket implements MuWebSocket {
     }
 
     @Override
-    public void onText(String message, DoneCallback onComplete) throws Exception {
+    public void onText(String message, boolean isLast, DoneCallback onComplete) throws Exception {
         onComplete.onComplete(null);
     }
 
     @Override
-    public void onBinary(ByteBuffer buffer, DoneCallback onComplete) throws Exception {
+    public void onBinary(ByteBuffer buffer, boolean isLast, DoneCallback onComplete) throws Exception {
         onComplete.onComplete(null);
     }
 

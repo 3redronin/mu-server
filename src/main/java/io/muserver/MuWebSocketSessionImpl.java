@@ -1,7 +1,6 @@
 package io.muserver;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufHolder;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
@@ -14,6 +13,7 @@ import org.slf4j.LoggerFactory;
 
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeoutException;
 
 class MuWebSocketSessionImpl implements MuWebSocketSession, Exchange {
@@ -23,6 +23,11 @@ class MuWebSocketSessionImpl implements MuWebSocketSession, Exchange {
     final MuWebSocket muWebSocket;
     private final HttpConnection connection;
     private volatile WebsocketSessionState state = WebsocketSessionState.NOT_STARTED;
+    private volatile ContinuationState continuationState = ContinuationState.NONE;
+
+    enum ContinuationState {
+        NONE, TEXT, BINARY
+    }
 
     MuWebSocketSessionImpl(ChannelHandlerContext ctx, MuWebSocket muWebSocket, HttpConnection connection) {
         this.ctx = ctx;
@@ -130,6 +135,7 @@ class MuWebSocketSessionImpl implements MuWebSocketSession, Exchange {
             if (msg instanceof HttpContent) return; // upgrade requests always send a LastHttpComplete message that can be ignored. Any request body can be discarded too.
             throw new UnexpectedMessageException(this, msg);
         }
+        WebSocketFrame frame = (WebSocketFrame) msg;
         if (state.endState() || state.closing()) {
             // https://tools.ietf.org/html/rfc6455#section-1.4
             // After sending a control frame indicating the connection should be
@@ -147,31 +153,34 @@ class MuWebSocketSessionImpl implements MuWebSocketSession, Exchange {
         };
         ByteBuf retained = null;
         try {
-            if (msg instanceof TextWebSocketFrame) {
-                muWebSocket.onText(((TextWebSocketFrame) msg).text(), onComplete);
-            } else if (msg instanceof BinaryWebSocketFrame) {
-                ByteBuf content = ((ByteBufHolder) msg).content();
+            if (frame instanceof TextWebSocketFrame || (continuationState == ContinuationState.TEXT && frame instanceof ContinuationWebSocketFrame)) {
+                continuationState = (frame.isFinalFragment()) ? ContinuationState.NONE : ContinuationState.TEXT;
+                String content = frame.content().toString(StandardCharsets.UTF_8);
+                muWebSocket.onText(content, frame.isFinalFragment(), onComplete);
+            } else if (frame instanceof BinaryWebSocketFrame || (continuationState == ContinuationState.BINARY && frame instanceof ContinuationWebSocketFrame)) {
+                continuationState = (frame.isFinalFragment()) ? ContinuationState.NONE : ContinuationState.BINARY;
+                ByteBuf content = frame.content();
                 retained = content.retain();
-                muWebSocket.onBinary(content.nioBuffer(), error -> {
+                muWebSocket.onBinary(content.nioBuffer(), frame.isFinalFragment(), error -> {
                     content.release();
                     onComplete.onComplete(error);
                 });
-            } else if (msg instanceof PingWebSocketFrame) {
-                ByteBuf content = ((ByteBufHolder) msg).content();
+            } else if (frame instanceof PingWebSocketFrame) {
+                ByteBuf content = frame.content();
                 retained = content.retain();
                 muWebSocket.onPing(content.nioBuffer(), error -> {
                     content.release();
                     onComplete.onComplete(error);
                 });
-            } else if (msg instanceof PongWebSocketFrame) {
-                ByteBuf content = ((ByteBufHolder) msg).content();
+            } else if (frame instanceof PongWebSocketFrame) {
+                ByteBuf content = frame.content();
                 retained = content.retain();
                 muWebSocket.onPong(content.nioBuffer(), error -> {
                     content.release();
                     onComplete.onComplete(error);
                 });
-            } else if (msg instanceof CloseWebSocketFrame) {
-                CloseWebSocketFrame cwsf = (CloseWebSocketFrame) msg;
+            } else if (frame instanceof CloseWebSocketFrame) {
+                CloseWebSocketFrame cwsf = (CloseWebSocketFrame) frame;
                 if (state == WebsocketSessionState.SERVER_CLOSING) {
                     ctx.close().addListener(future -> setState(WebsocketSessionState.SERVER_CLOSED));
                 } else {
@@ -207,7 +216,7 @@ class MuWebSocketSessionImpl implements MuWebSocketSession, Exchange {
     public boolean onException(ChannelHandlerContext ctx, Throwable cause) {
         if (!state.endState()) {
             try {
-                muWebSocket.onError(cause);;
+                muWebSocket.onError(cause);
                 return false;
             } catch (Exception e) {
                 return true;
