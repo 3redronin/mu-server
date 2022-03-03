@@ -13,6 +13,8 @@ import org.eclipse.jetty.websocket.client.WebSocketClient;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import scaffolding.MuAssert;
 import scaffolding.RawClient;
 import scaffolding.ServerUtils;
@@ -139,6 +141,7 @@ public class WebSocketsTest {
 
     @Test
     public void splitFramesAreAggregated() throws Exception {
+        serverSocket.logErrors = true;
         server = ServerUtils.httpsServerForTest()
             .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket).withPath("/routed-websocket"))
             .start();
@@ -161,8 +164,8 @@ public class WebSocketsTest {
             session.getRemote().sendPartialString("Hello, ", false);
             session.getRemote().sendPartialString("How you doin? ", false);
             session.getRemote().sendPartialString("Sorry you can't get through.", true);
-
             session.getRemote().sendString("Goodbye");
+            session.getRemote().flush();
             session.close(1000, "Finished");
             assertNotTimedOut("Closing", serverSocket.closedLatch);
             assertThat(serverSocket.received.toString(), serverSocket.received, contains("connected", "onText: Hello, How you doin? Sorry you can't get through.", "onText: Goodbye", "onClientClosed: 1000 Finished"));
@@ -412,6 +415,7 @@ public class WebSocketsTest {
     }
 
     private static class RecordingMuWebSocket extends BaseWebSocket {
+        private static final Logger log = LoggerFactory.getLogger(RecordingMuWebSocket.class);
         private MuWebSocketSession session;
         List<String> received = new CopyOnWriteArrayList<>();
         CountDownLatch connectedLatch = new CountDownLatch(1);
@@ -419,6 +423,7 @@ public class WebSocketsTest {
         CountDownLatch pingLatch = new CountDownLatch(1);
         CountDownLatch pongLatch = new CountDownLatch(1);
         CountDownLatch errorLatch = new CountDownLatch(1);
+        public boolean logErrors = false;
 
         @Override
         public void onConnect(MuWebSocketSession session) throws Exception {
@@ -465,6 +470,9 @@ public class WebSocketsTest {
 
         @Override
         public void onError(Throwable cause) throws Exception {
+            if (logErrors) {
+                log.error("Error on server websocket", cause);
+            }
             super.onError(cause);
             received.add("onError " + cause.getClass().getSimpleName());
             errorLatch.countDown();
