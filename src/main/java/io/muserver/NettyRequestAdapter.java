@@ -6,6 +6,7 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.*;
 import io.netty.handler.codec.http.cookie.ServerCookieDecoder;
+import io.netty.handler.codec.http.websocketx.WebSocketFrameAggregator;
 import io.netty.handler.codec.http.websocketx.WebSocketServerHandshaker;
 import io.netty.handler.codec.http.websocketx.WebSocketServerHandshakerFactory;
 import io.netty.handler.timeout.IdleStateHandler;
@@ -419,6 +420,7 @@ class NettyRequestAdapter implements MuRequest {
             throw new UnsupportedOperationException();
         }
 
+        ctx.channel().pipeline().addBefore("muhandler", "wsframeaggregator", new WebSocketFrameAggregator(maxFramePayloadLength));
         ctx.channel().pipeline().replace("idle", "idle",
             new IdleStateHandler(idleReadTimeoutMills, pingAfterWriteMillis, 0, TimeUnit.MILLISECONDS));
         MuWebSocketSessionImpl session = new MuWebSocketSessionImpl(ctx, muWebSocket, connection());

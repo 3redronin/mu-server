@@ -5,6 +5,11 @@ import okhttp3.Response;
 import okhttp3.WebSocket;
 import okhttp3.WebSocketListener;
 import okio.ByteString;
+import org.eclipse.jetty.client.HttpClient;
+import org.eclipse.jetty.util.ssl.SslContextFactory;
+import org.eclipse.jetty.websocket.api.Session;
+import org.eclipse.jetty.websocket.api.WebSocketAdapter;
+import org.eclipse.jetty.websocket.client.WebSocketClient;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
@@ -132,6 +137,40 @@ public class WebSocketsTest {
             "onBinary: " + largeText, "onText: Another text", "onClientClosed: 1000 Finished"));
     }
 
+    @Test
+    public void splitFramesAreAggregated() throws Exception {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket).withPath("/routed-websocket"))
+            .start();
+
+        SslContextFactory.Client sslContextFactory = new SslContextFactory.Client(true);
+        sslContextFactory.setEndpointIdentificationAlgorithm("https");
+        HttpClient httpClient = new HttpClient(sslContextFactory);
+
+        WebSocketClient client = new WebSocketClient(httpClient);
+
+        class TestWebSocketClient extends WebSocketAdapter { }
+
+        try {
+            client.start();
+            TestWebSocketClient socket = new TestWebSocketClient();
+            Future<Session> fut = client.connect(socket, URI.create(server.uri().resolve("/routed-websocket").toString().replace("http", "ws")));
+            Session session = fut.get();
+            assertNotTimedOut("Connecting", serverSocket.connectedLatch);
+
+            session.getRemote().sendPartialString("Hello, ", false);
+            session.getRemote().sendPartialString("How you doin? ", false);
+            session.getRemote().sendPartialString("Sorry you can't get through.", true);
+
+            session.getRemote().sendString("Goodbye");
+            session.close(1000, "Finished");
+            assertNotTimedOut("Closing", serverSocket.closedLatch);
+            assertThat(serverSocket.received.toString(), serverSocket.received, contains("connected", "onText: Hello, How you doin? Sorry you can't get through.", "onText: Goodbye", "onClientClosed: 1000 Finished"));
+        } finally {
+            client.stop();
+            httpClient.stop();
+        }
+    }
 
     @Test
     public void asyncWritesWork() throws InterruptedException, ExecutionException, TimeoutException {

@@ -167,11 +167,10 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
                         }
                     });
                     httpExchange.response.setWebsocket();
-                    ctx.channel().read();
                 } else {
                     this.currentExchange = eue.newExchange;
-                    ctx.channel().read();
                 }
+                ctx.channel().read();
             } else {
                 ctx.channel().close();
             }
