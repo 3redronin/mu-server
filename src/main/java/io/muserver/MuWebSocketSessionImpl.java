@@ -23,7 +23,8 @@ class MuWebSocketSessionImpl implements MuWebSocketSession, Exchange {
     final MuWebSocket muWebSocket;
     private final HttpConnection connection;
     private volatile WebsocketSessionState state = WebsocketSessionState.NOT_STARTED;
-    private volatile ContinuationState continuationState = ContinuationState.NONE;
+    private volatile ContinuationState receivingState = ContinuationState.NONE;
+    private volatile ContinuationState sendingState = ContinuationState.NONE;
 
     enum ContinuationState {
         NONE, TEXT, BINARY
@@ -37,13 +38,53 @@ class MuWebSocketSessionImpl implements MuWebSocketSession, Exchange {
 
     @Override
     public void sendText(String message, DoneCallback doneCallback) {
-        writeAsync(new TextWebSocketFrame(message), doneCallback);
+        sendText(message, true, doneCallback);
+    }
+
+    @Override
+    public void sendText(String message, boolean isLastFragment, DoneCallback doneCallback) {
+        if (sendingState == ContinuationState.BINARY) {
+            throw new IllegalStateException("Cannot send a text message while a partial binary message is being sent");
+        }
+        WebSocketFrame frame;
+        if (sendingState == ContinuationState.NONE) {
+            frame = new TextWebSocketFrame(isLastFragment, 0, message);
+            if (!isLastFragment) {
+                sendingState = ContinuationState.TEXT;
+            }
+        } else {
+            frame = new ContinuationWebSocketFrame(isLastFragment, 0, message);
+            if (isLastFragment) {
+                sendingState = ContinuationState.NONE;
+            }
+        }
+        writeAsync(frame, doneCallback);
     }
 
     @Override
     public void sendBinary(ByteBuffer message, DoneCallback doneCallback) {
+        sendBinary(message, true, doneCallback);
+    }
+
+    @Override
+    public void sendBinary(ByteBuffer message, boolean isLastFragment, DoneCallback doneCallback) {
+        if (sendingState == ContinuationState.TEXT) {
+            throw new IllegalStateException("Cannot send a binary message while a partial text message is being sent");
+        }
         ByteBuf bb = Unpooled.wrappedBuffer(message);
-        writeAsync(new BinaryWebSocketFrame(bb), doneCallback);
+        WebSocketFrame frame;
+        if (sendingState == ContinuationState.NONE) {
+            frame = new BinaryWebSocketFrame(isLastFragment, 0, bb);
+            if (!isLastFragment) {
+                sendingState = ContinuationState.BINARY;
+            }
+        } else {
+            frame = new ContinuationWebSocketFrame(isLastFragment, 0, bb);
+            if (isLastFragment) {
+                sendingState = ContinuationState.NONE;
+            }
+        }
+        writeAsync(frame, doneCallback);
     }
 
     @Override
@@ -153,12 +194,12 @@ class MuWebSocketSessionImpl implements MuWebSocketSession, Exchange {
         };
         ByteBuf retained = null;
         try {
-            if (frame instanceof TextWebSocketFrame || (continuationState == ContinuationState.TEXT && frame instanceof ContinuationWebSocketFrame)) {
-                continuationState = (frame.isFinalFragment()) ? ContinuationState.NONE : ContinuationState.TEXT;
+            if (frame instanceof TextWebSocketFrame || (receivingState == ContinuationState.TEXT && frame instanceof ContinuationWebSocketFrame)) {
+                receivingState = (frame.isFinalFragment()) ? ContinuationState.NONE : ContinuationState.TEXT;
                 String content = frame.content().toString(StandardCharsets.UTF_8);
                 muWebSocket.onText(content, frame.isFinalFragment(), onComplete);
-            } else if (frame instanceof BinaryWebSocketFrame || (continuationState == ContinuationState.BINARY && frame instanceof ContinuationWebSocketFrame)) {
-                continuationState = (frame.isFinalFragment()) ? ContinuationState.NONE : ContinuationState.BINARY;
+            } else if (frame instanceof BinaryWebSocketFrame || (receivingState == ContinuationState.BINARY && frame instanceof ContinuationWebSocketFrame)) {
+                receivingState = (frame.isFinalFragment()) ? ContinuationState.NONE : ContinuationState.BINARY;
                 ByteBuf content = frame.content();
                 retained = content.retain();
                 muWebSocket.onBinary(content.nioBuffer(), frame.isFinalFragment(), error -> {

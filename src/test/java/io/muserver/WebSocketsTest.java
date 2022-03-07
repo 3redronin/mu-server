@@ -229,6 +229,39 @@ public class WebSocketsTest {
     }
 
     @Test
+    public void partialWritesArePossible() throws InterruptedException, ExecutionException, TimeoutException {
+        CompletableFuture<String> result = new CompletableFuture<>();
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(webSocketHandler((request, responseHeaders) -> new BaseWebSocket() {
+                @Override
+                public void onConnect(MuWebSocketSession session) throws Exception {
+                    super.onConnect(session);
+                    session.sendText("Partial one ", false, error -> {
+                        session.sendText("Partial two ", false, error1 -> {
+                            session.sendText("Last one", true, error2 -> {
+                                session.sendBinary(Mutils.toByteBuffer("Hello "),false, error3 -> {
+                                    session.sendBinary(Mutils.toByteBuffer("from binary"),true, error4 -> {
+                                        result.complete("Success");
+                                    });
+                                });
+                            });
+                        });
+                    });
+                }
+            }).withPath("/routed-websocket"))
+            .start();
+
+        ClientListener listener = new ClientListener();
+        WebSocket clientSocket = client.newWebSocket(webSocketRequest(server.uri().resolve("/routed-websocket")), listener);
+        assertThat(result.get(10, TimeUnit.SECONDS), is("Success"));
+        clientSocket.close(1000, "Done");
+        assertNotTimedOut("Client closed (received events: " + listener.events + ")", listener.closedLatch);
+        assertThat(listener.toString(), listener.events, contains(
+            "onOpen", "onMessage text: Partial one Partial two Last one", "onMessage binary: Hello from binary",
+            "onClosing 1000 Done", "onClosed 1000 Done"));
+    }
+
+    @Test
     public void ifTheFactoryThrowsAnExceptionThenItIsReturnedToTheClient() {
         server = ServerUtils.httpsServerForTest()
             .addHandler(webSocketHandler((request, responseHeaders) -> {
