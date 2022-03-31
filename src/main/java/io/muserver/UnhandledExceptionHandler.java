@@ -13,13 +13,13 @@ public interface UnhandledExceptionHandler {
      * message. In this case, you may want to allow for the default error handling by returning <code>false</code>.</p>
      * <p>The following shows a pattern to filter out certain errors:</p>
      * <pre><code>
-     * muServerBuilder.withExceptionHandler((request, response, exception) -> {
-     *                     if (response.hasStartedSendingData()) return false; // cannot customise the response
-     *                     if (exception instanceof NotAuthorizedException) return false;
-     *                     response.contentType(ContentTypes.TEXT_PLAIN_UTF8);
-     *                     response.write("Oh I'm worry, there was a problem");
-     *                     return true;
-     *                 })
+     * muServerBuilder.withExceptionHandler((request, response, exception) -&lt; {
+     *     if (response.hasStartedSendingData()) return false; // cannot customise the response
+     *     if (exception instanceof NotAuthorizedException) return false;
+     *     response.contentType(ContentTypes.TEXT_PLAIN_UTF8);
+     *     response.write("Oh I'm worry, there was a problem");
+     *     return true;
+     * })
      * </code></pre>
      * @param request The request
      * @param response The response
