@@ -10,13 +10,16 @@ import org.junit.Test;
 import scaffolding.ServerUtils;
 import scaffolding.StringUtils;
 
+import javax.ws.rs.BadRequestException;
 import javax.ws.rs.NotFoundException;
 import javax.ws.rs.RedirectionException;
+import javax.ws.rs.ServerErrorException;
 import java.io.EOFException;
 import java.net.URI;
 import java.util.Collections;
 import java.util.concurrent.ExecutionException;
 
+import static io.muserver.Mutils.htmlEncode;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
@@ -90,6 +93,50 @@ public class ExceptionsTest {
         try (Response resp = call(request(server.uri().resolve("/secured")))) {
             assertThat(resp.code(), is(302));
             assertThat(resp.headers("location"), is(Collections.singletonList(server.uri().resolve("/target").toString())));
+        }
+    }
+
+    @Test
+    public void exceptionHandlersCanCustomiseResponse() throws Exception {
+        this.server = ServerUtils.httpsServerForTest()
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                throw new ServerErrorException("ARGHHHHHHH", 500);
+            })
+            .withExceptionHandler((request, response, exception) -> {
+                if (!request.query().getBoolean("useCustom")) return false;
+                response.contentType(ContentTypes.TEXT_PLAIN_UTF8);
+                response.write("Oh I'm worry, there was a problem: " + exception.getMessage());
+                return true;
+            })
+            .start();
+        try (Response resp = call(request(server.uri().resolve("?useCustom=true")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), is("Oh I'm worry, there was a problem: ARGHHHHHHH"));
+        }
+        try (Response resp = call(request(server.uri().resolve("?useCustom=false")))) {
+            assertThat(resp.code(), is(500));
+            assertThat(resp.body().string(), allOf(
+                containsString("ARGHHHH"),
+                not(containsString("Oh I'm worry"))
+            ));
+        }
+    }
+
+
+
+    @Test
+    public void exceptionsThrownFromExceptionHandlersAreBubbledToClient() throws Exception {
+        this.server = ServerUtils.httpsServerForTest()
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                throw new ServerErrorException("ARGHHHHHHH", 500);
+            })
+            .withExceptionHandler((request, response, exception) -> {
+                throw new BadRequestException("It's bad");
+            })
+            .start();
+        try (Response resp = call(request(server.uri()))) {
+            assertThat(resp.code(), is(400));
+            assertThat(resp.body().string(), containsString(htmlEncode("It's bad")));
         }
     }
 

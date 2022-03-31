@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.ws.rs.NotFoundException;
+import javax.ws.rs.RedirectionException;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 
@@ -48,9 +49,20 @@ class NettyHandlerAdapter {
                     muCtx.block(muCtx::complete);
                 }
             } catch (Throwable ex) {
-                muCtx.fireException(ex);
+                useCustomExceptionHandlerOrFireIt(muCtx, ex);
             }
         });
+    }
+
+    static void useCustomExceptionHandlerOrFireIt(HttpExchange exchange, Throwable ex) {
+        MuServerImpl server = (MuServerImpl) exchange.request.server();
+        try {
+            if (!(server.unhandledExceptionHandler != null && !(ex instanceof RedirectionException) && server.unhandledExceptionHandler.handle(exchange.request, exchange.response, ex))) {
+                exchange.fireException(ex);
+            }
+        } catch (Throwable handlerException) {
+            exchange.fireException(handlerException);
+        }
     }
 
     void onResponseComplete(ResponseInfo info, MuStatsImpl serverStats, MuStatsImpl connectionStats) {

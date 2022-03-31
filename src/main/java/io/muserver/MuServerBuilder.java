@@ -64,6 +64,7 @@ public class MuServerBuilder {
     private HashedWheelTimer wheelTimer;
     private List<RateLimiterImpl> rateLimiters;
     private WriteBufferWaterMark writeBufferWaterMark = WriteBufferWaterMark.DEFAULT;
+    private UnhandledExceptionHandler unhandledExceptionHandler;
 
     /**
      * @param port The HTTP port to use. A value of 0 will have a random port assigned; a value of -1 will
@@ -476,6 +477,29 @@ public class MuServerBuilder {
         return this;
     }
 
+
+    /**
+     * Sets the handler to use for exceptions thrown by other handlers, allowing for things such as custom error pages.
+     * <p>Note that if the response has already started sending data, you will not be able to add a custom error
+     * message. In this case, you may want to allow for the default error handling by returning <code>false</code>.</p>
+     * <p>The following shows a pattern to filter out certain errors:</p>
+     * <pre><code>
+     * muServerBuilder.withExceptionHandler((request, response, exception) -> {
+     *                     if (response.hasStartedSendingData()) return false; // cannot customise the response
+     *                     if (exception instanceof NotAuthorizedException) return false;
+     *                     response.contentType(ContentTypes.TEXT_PLAIN_UTF8);
+     *                     response.write("Oh I'm worry, there was a problem");
+     *                     return true;
+     *                 })
+     * </code></pre>
+     * @param exceptionHandler The handler to be called when an unhandled exception is encountered
+     * @return This builder
+     */
+    public MuServerBuilder withExceptionHandler(UnhandledExceptionHandler exceptionHandler) {
+        this.unhandledExceptionHandler = exceptionHandler;
+        return this;
+    }
+
     /**
      * Creates a new server builder. Call {@link #withHttpsPort(int)} or {@link #withHttpPort(int)} to specify
      * the port to use, and call {@link #start()} to start the server.
@@ -552,7 +576,7 @@ public class MuServerBuilder {
             SslContextProvider sslContextProvider = null;
 
             boolean http2Enabled = http2Config != null && http2Config.enabled;
-            MuServerImpl server = new MuServerImpl(stats, http2Enabled, settings);
+            MuServerImpl server = new MuServerImpl(stats, http2Enabled, settings, unhandledExceptionHandler);
 
             Channel httpChannel = httpPort < 0 ? null : createChannel(bossGroup, workerGroup, nettyHandlerAdapter, host, httpPort, null, trafficShapingHandler, server, false, idleTimeoutMills, writeBufferWaterMark);
             Channel httpsChannel;

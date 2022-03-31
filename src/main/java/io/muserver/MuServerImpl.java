@@ -20,6 +20,7 @@ class MuServerImpl implements MuServer {
     private final boolean http2Enabled;
     private final ServerSettings settings;
     private final Set<HttpConnection> connections = ConcurrentHashMap.newKeySet();
+    final UnhandledExceptionHandler unhandledExceptionHandler;
 
     void onStarted(URI httpUri, URI httpsUri, Runnable shutdown, InetSocketAddress address, SslContextProvider sslContextProvider) {
         this.address = address;
@@ -32,10 +33,11 @@ class MuServerImpl implements MuServer {
         this.shutdown = shutdown;
     }
 
-    MuServerImpl(MuStatsImpl stats, boolean http2Enabled, ServerSettings settings) {
+    MuServerImpl(MuStatsImpl stats, boolean http2Enabled, ServerSettings settings, UnhandledExceptionHandler unhandledExceptionHandler) {
         this.stats = stats;
         this.http2Enabled = http2Enabled;
         this.settings = settings;
+        this.unhandledExceptionHandler = unhandledExceptionHandler;
     }
 
     @Override

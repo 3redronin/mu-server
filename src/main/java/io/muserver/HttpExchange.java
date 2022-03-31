@@ -399,7 +399,7 @@ class HttpExchange implements ResponseInfo, Exchange {
                 if (cause instanceof WebApplicationException) {
                     wae = (WebApplicationException) cause;
                 } else {
-                    String errorID = "ERR-" + UUID.randomUUID().toString();
+                    String errorID = "ERR-" + UUID.randomUUID();
                     log.info("Sending a 500 to the client with ErrorID=" + errorID + " for " + request, cause);
                     wae = new InternalServerErrorException("Oops! An unexpected error occurred. The ErrorID=" + errorID);
                 }

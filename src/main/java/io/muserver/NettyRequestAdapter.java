@@ -523,7 +523,7 @@ class NettyRequestAdapter implements MuRequest {
                 complete();
             } else {
                 if (!httpExchange.state().endState()) {
-                    httpExchange.fireException(throwable);
+                    NettyHandlerAdapter.useCustomExceptionHandlerOrFireIt(httpExchange, throwable);
                 }
             }
         }
