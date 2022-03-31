@@ -484,7 +484,7 @@ public class MuServerBuilder {
      * message. In this case, you may want to allow for the default error handling by returning <code>false</code>.</p>
      * <p>The following shows a pattern to filter out certain errors:</p>
      * <pre><code>
-     * muServerBuilder.withExceptionHandler((request, response, exception) -&lt; {
+     * muServerBuilder.withExceptionHandler((request, response, exception) -&gt; {
      *     if (response.hasStartedSendingData()) return false; // cannot customise the response
      *     if (exception instanceof NotAuthorizedException) return false;
      *     response.contentType(ContentTypes.TEXT_PLAIN_UTF8);
