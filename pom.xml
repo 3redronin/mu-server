@@ -14,7 +14,7 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <netty.version>4.1.74.Final</netty.version>
+        <netty.version>4.1.75.Final</netty.version>
         <slf4j.version>1.7.36</slf4j.version>
     </properties>
 
@@ -157,7 +157,7 @@
         <dependency>
             <groupId>org.json</groupId>
             <artifactId>json</artifactId>
-            <version>20211205</version>
+            <version>20220320</version>
             <scope>test</scope>
         </dependency>
         <dependency>
