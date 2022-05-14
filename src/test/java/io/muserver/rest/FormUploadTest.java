@@ -11,10 +11,13 @@ import javax.ws.rs.*;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static io.muserver.UploadTest.*;
+import static java.util.Arrays.asList;
 import static javax.ws.rs.core.MediaType.APPLICATION_OCTET_STREAM;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -120,8 +123,45 @@ public class FormUploadTest {
         class ImageResource {
 
             @POST
+            @Path("concreteList")
             @Consumes(javax.ws.rs.core.MediaType.MULTIPART_FORM_DATA)
-            public String create(@FormParam("image") List<UploadedFile> files) {
+            public String concreteList(@FormParam("image") List<UploadedFile> files) {
+                return describe(files);
+            }
+
+            @POST
+            @Path("wildcardList")
+            @Consumes(javax.ws.rs.core.MediaType.MULTIPART_FORM_DATA)
+            public String wildcardList(@FormParam("image") List<? extends UploadedFile> files) {
+                // The wildcard type is to simulate what a kotlin list looks like
+                return describe(files);
+            }
+
+            @POST
+            @Path("wildcardCollection")
+            @Consumes(javax.ws.rs.core.MediaType.MULTIPART_FORM_DATA)
+            public String wildcardCollection(@FormParam("image") Collection<? extends UploadedFile> files) {
+                // The wildcard type is to simulate what a kotlin list looks like
+                return describe(files);
+            }
+
+            @POST
+            @Path("concreteCollection")
+            @Consumes(javax.ws.rs.core.MediaType.MULTIPART_FORM_DATA)
+            public String concreteCollection(@FormParam("image") Collection<UploadedFile> files) {
+                // The wildcard type is to simulate what a kotlin list looks like
+                return describe(files);
+            }
+
+            @POST
+            @Path("concreteSet")
+            @Consumes(javax.ws.rs.core.MediaType.MULTIPART_FORM_DATA)
+            public String concreteSet(@FormParam("image") Set<UploadedFile> files) {
+                // The wildcard type is to simulate what a kotlin list looks like
+                return describe(files);
+            }
+
+            private String describe(Collection<? extends UploadedFile> files) {
                 String v = "";
                 for (UploadedFile file : files) {
                     String filename = file == null ? "null" : file.filename();
@@ -137,30 +177,31 @@ public class FormUploadTest {
             .addHandler(RestHandlerBuilder.restHandler(new ImageResource()))
             .start();
 
-        try (Response resp = call(request(server.uri().resolve("/images"))
-            .post(new MultipartBody.Builder()
-                .setType(MultipartBody.FORM)
-                .addFormDataPart("Hello", "World")
-                .build())
-        )) {
-            assertThat(resp.code(), is(200));
-            assertThat(resp.body().string(), is(""));
-        }
+        for (String path : asList("concreteList", "wildcardList", "wildcardCollection", "concreteSet")) {
 
-        try (Response resp = call(request(server.uri().resolve("/images"))
-            .post(new MultipartBody.Builder()
-                .setType(MultipartBody.FORM)
-                .addPart(Headers.of("Content-Disposition", "form-data; name=\"image\"; filename=\"guangzhou, china.jpeg\""),
-                    RequestBody.create(guangzhouChina, MediaType.parse("image/jpeg")))
-                .addPart(Headers.of("Content-Disposition", "form-data; name=\"image\"; filename=\"friends.jpg\""),
-                    RequestBody.create(friends, MediaType.parse("image/jpeg")))
-                .build())
-        )) {
-            assertThat(resp.code(), is(200));
-            assertThat(resp.body().string(), is("filename is guangzhou  china.jpeg and size is 372987\n" +
-                "filename is friends.jpg and size is 1712954\n"));
+            try (Response resp = call(request(server.uri().resolve("/images/" + path))
+                .post(new MultipartBody.Builder()
+                    .setType(MultipartBody.FORM)
+                    .addFormDataPart("Hello", "World")
+                    .build())
+            )) {
+                assertThat(resp.code(), is(200));
+                assertThat(resp.body().string(), is(""));
+            }
+            try (Response resp = call(request(server.uri().resolve("/images/" + path))
+                .post(new MultipartBody.Builder()
+                    .setType(MultipartBody.FORM)
+                    .addPart(Headers.of("Content-Disposition", "form-data; name=\"image\"; filename=\"guangzhou, china.jpeg\""),
+                        RequestBody.create(guangzhouChina, MediaType.parse("image/jpeg")))
+                    .addPart(Headers.of("Content-Disposition", "form-data; name=\"image\"; filename=\"friends.jpg\""),
+                        RequestBody.create(friends, MediaType.parse("image/jpeg")))
+                    .build())
+            )) {
+                assertThat(resp.code(), is(200));
+                assertThat(resp.body().string(), is("filename is guangzhou  china.jpeg and size is 372987\n" +
+                    "filename is friends.jpg and size is 1712954\n"));
+            }
         }
-
     }
 
     @After

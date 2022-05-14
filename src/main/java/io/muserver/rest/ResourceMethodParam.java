@@ -156,14 +156,28 @@ abstract class ResourceMethodParam {
             } else if (File.class.isAssignableFrom(paramClass)) {
                 UploadedFile uf = muRequest.uploadedFile(key);
                 return uf == null ? null : uf.asFile();
-            } else if (List.class.isAssignableFrom(paramClass)) {
+            } else if (Collection.class.isAssignableFrom(paramClass)) {
                 Type t = parameterHandle.getParameterizedType();
                 if (t instanceof ParameterizedType) {
                     Type[] actualTypeArguments = ((ParameterizedType) t).getActualTypeArguments();
                     if (actualTypeArguments.length == 1) {
                         Type argType = actualTypeArguments[0];
-                        if (argType instanceof Class<?> && UploadedFile.class.isAssignableFrom((Class<?>) argType)) {
-                            return muRequest.uploadedFiles(key);
+                        boolean isUploadedFileList = (argType instanceof Class<?> && UploadedFile.class.isAssignableFrom((Class<?>) argType));
+                        if (!isUploadedFileList && argType instanceof WildcardType) {
+                            WildcardType wt = (WildcardType) argType;
+                            for (Type upperBound : wt.getUpperBounds()) {
+                                if (upperBound instanceof Class<?> && UploadedFile.class.isAssignableFrom((Class<?>) upperBound)) {
+                                    isUploadedFileList = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (isUploadedFileList) {
+                            List<UploadedFile> uploadedFiles = muRequest.uploadedFiles(key);
+                            if (Set.class.isAssignableFrom(paramClass)) {
+                                return new HashSet<>(uploadedFiles);
+                            }
+                            return uploadedFiles;
                         }
                     }
                 }
