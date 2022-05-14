@@ -57,7 +57,7 @@ public class MuServerBuilder {
     private SSLContextBuilder sslContextBuilder;
     private Http2Config http2Config;
     private long requestReadTimeoutMillis = TimeUnit.MINUTES.toMillis(2);
-    private long idleTimeoutMills = TimeUnit.MINUTES.toMillis(5);
+    private long idleTimeoutMills = TimeUnit.MINUTES.toMillis(10);
     private ExecutorService executor;
     private long maxRequestSize = 24 * 1024 * 1024;
     private List<ResponseCompleteListener> responseCompleteListeners;
