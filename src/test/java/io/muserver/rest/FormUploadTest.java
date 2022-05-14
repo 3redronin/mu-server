@@ -15,6 +15,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static io.muserver.UploadTest.*;
 import static java.util.Arrays.asList;
@@ -158,7 +159,14 @@ public class FormUploadTest {
             @Consumes(javax.ws.rs.core.MediaType.MULTIPART_FORM_DATA)
             public String concreteSet(@FormParam("image") Set<UploadedFile> files) {
                 // The wildcard type is to simulate what a kotlin list looks like
-                return describe(files);
+                return describe(files.stream().sorted((o1, o2) -> o2.filename().compareTo(o1.filename())).collect(Collectors.toList()));
+            }
+            @POST
+            @Path("wildcardSet")
+            @Consumes(javax.ws.rs.core.MediaType.MULTIPART_FORM_DATA)
+            public String wildcardSet(@FormParam("image") Set<? extends UploadedFile> files) {
+                // The wildcard type is to simulate what a kotlin list looks like
+                return describe(files.stream().sorted((o1, o2) -> o2.filename().compareTo(o1.filename())).collect(Collectors.toList()));
             }
 
             private String describe(Collection<? extends UploadedFile> files) {
@@ -177,7 +185,7 @@ public class FormUploadTest {
             .addHandler(RestHandlerBuilder.restHandler(new ImageResource()))
             .start();
 
-        for (String path : asList("concreteList", "wildcardList", "wildcardCollection", "concreteSet")) {
+        for (String path : asList("concreteList", "wildcardList", "wildcardCollection", "concreteSet", "wildcardSet")) {
 
             try (Response resp = call(request(server.uri().resolve("/images/" + path))
                 .post(new MultipartBody.Builder()
