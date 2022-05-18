@@ -102,7 +102,7 @@ public class RunLocal {
             .addHandler(webSocketHandler()
                 .withPath("/websocket-echo")
                 .withWebSocketFactory((request, responseHeaders) -> new BaseWebSocket() {
-                    public void onText(String message, DoneCallback onComplete) throws IOException {
+                    public void onText(String message, boolean isLast, DoneCallback onComplete) throws IOException {
                         session().sendText(message, onComplete);
                         if (message.equalsIgnoreCase("close")) {
                             session().close(1000, "Finished");
@@ -153,9 +153,10 @@ public class RunLocal {
                     req.query().getLong("millis", 5000), TimeUnit.MILLISECONDS);
                 asyncHandle.addResponseCompleteHandler(info -> log.info("Woke up: " + info));
             })
+            .addHandler(Method.GET, "/throw-exception", (request, response, pathParams) -> { throw new RuntimeException("A runtime exception"); })
             .withExceptionHandler((request, response, cause) -> {
                 if (response.hasStartedSendingData()) return false;
-                response.write("Oops, something went wrong: " + cause);
+                response.writer().write("Oops, something went wrong: " + cause);
                 return true;
             });
         log.info("Builder: " + builder);

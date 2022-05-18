@@ -57,7 +57,10 @@ class NettyHandlerAdapter {
     static void useCustomExceptionHandlerOrFireIt(HttpExchange exchange, Throwable ex) {
         MuServerImpl server = (MuServerImpl) exchange.request.server();
         try {
-            if (!(server.unhandledExceptionHandler != null && !(ex instanceof RedirectionException) && server.unhandledExceptionHandler.handle(exchange.request, exchange.response, ex))) {
+            if (server.unhandledExceptionHandler != null && !(ex instanceof RedirectionException) && server.unhandledExceptionHandler.handle(exchange.request, exchange.response, ex)) {
+                exchange.response.flushAndCloseOutputStream();
+                exchange.block(exchange::complete);
+            } else {
                 exchange.fireException(ex);
             }
         } catch (Throwable handlerException) {

@@ -110,14 +110,14 @@ public class ExceptionsTest {
                 capturedResponse.set(response);
                 if (!request.query().getBoolean("useCustom")) return false;
                 response.contentType(ContentTypes.TEXT_PLAIN_UTF8);
-                response.write("Oh I'm worry, there was a problem: " + exception.getMessage());
+                response.writer().write("Oh I'm worry, there was a problem: " + exception.getMessage());
                 return true;
             })
             .start();
         try (Response resp = call(request(server.uri().resolve("?useCustom=true")))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.body().string(), is("Oh I'm worry, there was a problem: ARGHHHHHHH"));
-            MuAssert.assertEventually(capturedResponse.get()::responseState, equalTo(ResponseState.FULL_SENT));
+            MuAssert.assertEventually(capturedResponse.get()::responseState, equalTo(ResponseState.FINISHED));
         }
         try (Response resp = call(request(server.uri().resolve("?useCustom=false")))) {
             assertThat(resp.code(), is(500));
