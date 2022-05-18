@@ -7,6 +7,7 @@ import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
+import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 import scaffolding.StringUtils;
 
@@ -18,6 +19,7 @@ import java.io.EOFException;
 import java.net.URI;
 import java.util.Collections;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.Mutils.htmlEncode;
 import static org.hamcrest.CoreMatchers.is;
@@ -98,11 +100,14 @@ public class ExceptionsTest {
 
     @Test
     public void exceptionHandlersCanCustomiseResponse() throws Exception {
+        AtomicReference<MuResponse> capturedResponse = new AtomicReference<>();
         this.server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                capturedResponse.set(response);
                 throw new ServerErrorException("ARGHHHHHHH", 500);
             })
             .withExceptionHandler((request, response, exception) -> {
+                capturedResponse.set(response);
                 if (!request.query().getBoolean("useCustom")) return false;
                 response.contentType(ContentTypes.TEXT_PLAIN_UTF8);
                 response.write("Oh I'm worry, there was a problem: " + exception.getMessage());
@@ -112,6 +117,7 @@ public class ExceptionsTest {
         try (Response resp = call(request(server.uri().resolve("?useCustom=true")))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.body().string(), is("Oh I'm worry, there was a problem: ARGHHHHHHH"));
+            MuAssert.assertEventually(capturedResponse.get()::responseState, equalTo(ResponseState.FULL_SENT));
         }
         try (Response resp = call(request(server.uri().resolve("?useCustom=false")))) {
             assertThat(resp.code(), is(500));
@@ -119,6 +125,7 @@ public class ExceptionsTest {
                 containsString("ARGHHHH"),
                 not(containsString("Oh I'm worry"))
             ));
+            MuAssert.assertEventually(capturedResponse.get()::responseState, equalTo(ResponseState.FULL_SENT));
         }
     }
 
@@ -126,17 +133,21 @@ public class ExceptionsTest {
 
     @Test
     public void exceptionsThrownFromExceptionHandlersAreBubbledToClient() throws Exception {
+        AtomicReference<MuResponse> capturedResponse = new AtomicReference<>();
         this.server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                capturedResponse.set(response);
                 throw new ServerErrorException("ARGHHHHHHH", 500);
             })
             .withExceptionHandler((request, response, exception) -> {
+                capturedResponse.set(response);
                 throw new BadRequestException("It's bad");
             })
             .start();
         try (Response resp = call(request(server.uri()))) {
             assertThat(resp.code(), is(400));
             assertThat(resp.body().string(), containsString(htmlEncode("It's bad")));
+            MuAssert.assertEventually(capturedResponse.get()::responseState, equalTo(ResponseState.FULL_SENT));
         }
     }
 

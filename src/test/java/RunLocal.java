@@ -152,6 +152,11 @@ public class RunLocal {
                 executor.schedule((Runnable) asyncHandle::complete,
                     req.query().getLong("millis", 5000), TimeUnit.MILLISECONDS);
                 asyncHandle.addResponseCompleteHandler(info -> log.info("Woke up: " + info));
+            })
+            .withExceptionHandler((request, response, cause) -> {
+                if (response.hasStartedSendingData()) return false;
+                response.write("Oops, something went wrong: " + cause);
+                return true;
             });
         log.info("Builder: " + builder);
         MuServer server = builder.start();
