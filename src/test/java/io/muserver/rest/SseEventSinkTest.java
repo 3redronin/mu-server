@@ -205,6 +205,49 @@ public class SseEventSinkTest {
         assertNotTimedOut("Timed out waiting for error", failureLatch);
     }
 
+    @Test
+    public void whenTheClientDisconnectsTheEventSinkStatusIsChanged() {
+        CountDownLatch oneSentLatch = new CountDownLatch(1);
+        CountDownLatch closedLatch = new CountDownLatch(1);
+        @Path("/streamer")
+        class Streamer {
+
+            @GET
+            @Path("eventStream")
+            @Produces(MediaType.SERVER_SENT_EVENTS)
+            public void eventStream(@Context SseEventSink eventSink,
+                                    @Context Sse sse) {
+                eventSink.send(sse.newEvent("Blah")).whenCompleteAsync((o, throwable) -> {
+                    if (throwable == null) {
+                        oneSentLatch.countDown();
+                        for (int i = 0; i < 1000; i++) {
+                            if (eventSink.isClosed()) {
+                                closedLatch.countDown();
+                                break;
+                            }
+                            try {
+                                Thread.sleep(10);
+                            } catch (InterruptedException e) {
+                                throw new RuntimeException("Error while sleeping", e);
+                            }
+                        }
+                    } else {
+                        throwable.printStackTrace();
+                    }
+                });
+
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Streamer()))
+            .start();
+        try (SseClient.ServerSentEvent ignored = sseClient.newServerSentEvent(request(server.uri().resolve("/streamer/eventStream")).build(), listener)) {
+            assertNotTimedOut("Waiting for one message", oneSentLatch);
+        }
+        assertNotTimedOut("Timed out waiting for closedLatch", closedLatch);
+    }
+
+
     @After
     public void stop() {
         MuAssert.stopAndCheck(server);

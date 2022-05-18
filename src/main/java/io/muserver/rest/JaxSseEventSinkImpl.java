@@ -24,7 +24,6 @@ class JaxSseEventSinkImpl implements SseEventSink {
     private final AsyncSsePublisher ssePublisher;
     private final MuResponse response;
     private final EntityProviders entityProviders;
-    private volatile boolean isClosed = false;
 
     public JaxSseEventSinkImpl(AsyncSsePublisher ssePublisher, MuResponse response, EntityProviders entityProviders) {
         this.ssePublisher = ssePublisher;
@@ -38,7 +37,7 @@ class JaxSseEventSinkImpl implements SseEventSink {
 
     @Override
     public boolean isClosed() {
-        return isClosed;
+        return ssePublisher.isClosed();
     }
 
     @Override
@@ -79,9 +78,6 @@ class JaxSseEventSinkImpl implements SseEventSink {
 
     @Override
     public void close() {
-        if (!isClosed) {
-            isClosed = true;
-            ssePublisher.close();
-        }
+        ssePublisher.close();
     }
 }

@@ -95,6 +95,13 @@ public interface AsyncSsePublisher {
     void setResponseCompleteHandler(ResponseCompleteListener responseCompleteListener);
 
     /**
+     * Checks if this publisher has been closed.
+     * <p>This will be true if the server or the client closes the SSE stream.</p>
+     * @return true if it is closed; otherwise false
+     */
+    boolean isClosed();
+
+    /**
      * <p>Creates a new Server-Sent Events publisher. This is designed by be called from within a MuHandler.</p>
      * <p>This will set the content type of the response to <code>text/event-stream</code> and disable caching.</p>
      * <p>The request will also switch to async mode, which means you can use the returned publisher in another thread.</p>
@@ -107,7 +114,10 @@ public interface AsyncSsePublisher {
     static AsyncSsePublisher start(MuRequest request, MuResponse response) {
         response.contentType(ContentTypes.TEXT_EVENT_STREAM);
         response.headers().set(HeaderNames.CACHE_CONTROL, "no-cache, no-transform");
-        return new AsyncSsePublisherImpl(request.handleAsync());
+        AsyncHandle asyncHandle = request.handleAsync();
+        AsyncSsePublisherImpl ssePublisher = new AsyncSsePublisherImpl(asyncHandle);
+        asyncHandle.addResponseCompleteHandler(info -> ssePublisher.close());
+        return ssePublisher;
     }
 }
 
@@ -150,18 +160,24 @@ class AsyncSsePublisherImpl implements AsyncSsePublisher {
         asyncHandle.addResponseCompleteHandler(responseCompleteListener);
     }
 
+    @Override
+    public boolean isClosed() {
+        return closed;
+    }
+
     private CompletionStage<?> write(String text) {
-        if (closed) {
-            throw new IllegalStateException("The SSE stream was already closed");
-        }
         CompletableFuture<?> stage = new CompletableFuture<>();
-        asyncHandle.write(Mutils.toByteBuffer(text), error -> {
-            if (error == null) {
-                stage.complete(null);
-            } else {
-                stage.completeExceptionally(error);
-            }
-        });
+        if (closed) {
+            stage.completeExceptionally(new IllegalStateException("The SSE stream was already closed"));
+        } else {
+            asyncHandle.write(Mutils.toByteBuffer(text), error -> {
+                if (error == null) {
+                    stage.complete(null);
+                } else {
+                    stage.completeExceptionally(error);
+                }
+            });
+        }
         return stage;
     }
 
