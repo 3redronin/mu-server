@@ -196,7 +196,7 @@ abstract class NettyResponseAdaptor implements MuResponse {
             future.addListener(wf -> {
                 if (wf.isSuccess()) {
                     outputState(ResponseState.FULL_SENT);
-                } else {
+                } else if (!this.state.endState()) {
                     outputState(ResponseState.ERRORED);
                 }
             });
