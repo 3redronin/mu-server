@@ -352,6 +352,17 @@ class NettyRequestAdapter implements MuRequest {
     }
 
     @Override
+    public String clientIP() {
+        List<ForwardedHeader> forwarded = headers.forwarded();
+        for (ForwardedHeader forwardedHeader : forwarded) {
+            if (forwardedHeader.forValue() != null) {
+                return forwardedHeader.forValue();
+            }
+        }
+        return this.connection().remoteAddress().getHostString();
+    }
+
+    @Override
     public MuServer server() {
         return connection().server();
     }

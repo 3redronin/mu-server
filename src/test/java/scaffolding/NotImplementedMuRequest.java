@@ -157,6 +157,11 @@ public class NotImplementedMuRequest implements MuRequest {
     }
 
     @Override
+    public String clientIP() {
+        return throwIt();
+    }
+
+    @Override
     public MuServer server() {
         return throwIt();
     }

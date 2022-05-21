@@ -14,10 +14,10 @@ class Headtils {
         List<String> all = headers.getAll(HeaderNames.FORWARDED);
         if (all.isEmpty()) {
 
-            List<String> hosts = headers.getAll(HeaderNames.X_FORWARDED_HOST);
-            List<String> ports = headers.getAll(HeaderNames.X_FORWARDED_PORT);
-            List<String> protos = headers.getAll(HeaderNames.X_FORWARDED_PROTO);
-            List<String> fors = headers.getAll(HeaderNames.X_FORWARDED_FOR);
+            List<String> hosts = getXForwardedValue(headers, HeaderNames.X_FORWARDED_HOST);
+            List<String> ports = getXForwardedValue(headers, HeaderNames.X_FORWARDED_PORT);
+            List<String> protos = getXForwardedValue(headers, HeaderNames.X_FORWARDED_PROTO);
+            List<String> fors = getXForwardedValue(headers, HeaderNames.X_FORWARDED_FOR);
             int max = Math.max(Math.max(Math.max(hosts.size(), protos.size()), fors.size()), ports.size());
             if (max == 0) {
                 return emptyList();
@@ -56,6 +56,12 @@ class Headtils {
             }
             return results;
         }
+    }
+
+    private static List<String> getXForwardedValue(Headers headers, CharSequence name) {
+        List<String> values = headers.getAll(name);
+        if (values.isEmpty()) return emptyList();
+        return values.stream().map(v -> v.split("\\s*,\\s*")).flatMap(Arrays::stream).collect(Collectors.toList());
     }
 
     static List<ParameterizedHeaderWithValue> getParameterizedHeaderWithValues(Headers headers, CharSequence headerName) {

@@ -260,9 +260,22 @@ public interface MuRequest {
      * Gets the address that the request came from. Warning: this may not be the client's address and instead
      * may be an intermediary such as a network gateway.
      * <p>This is a convenience method that returns <code>connection().remoteAddress().getHostString()</code></p>
+     * <p>If you want to know the client's IP address when reverse proxies are used, consider using {@link #clientIP()}</p>
      * @return The IP address of the client, or of a gateway with NAT, etc, or null if the client has already disconnected.
      */
     String remoteAddress();
+
+    /**
+     * Makes a best-effort guess at the client's IP address, taking into account any <code>Forwarded</code> or <code>X-Forwarded-*</code> headers.
+     * <p><strong>Warning:</strong> <code>Forwarded</code> headers supplied from outside the perimeter of your network
+     * should not be trusted at it is trivial for clients to specify arbitrary <code>Forwarded</code> headers when
+     * making requests. Therefore it may be advisable for reverse proxies at the perimeter of your network to drop
+     * any <code>Forwarded</code> headers from untrusted networks before added their own headers.</p>
+     * <p>If there are no forwarded headers then the IP address of the socket connection is used (i.e.
+     * <code>connection().remoteAddress().getHostString()</code>).</p>
+     * @return A string containing an IP address.
+     */
+    String clientIP();
 
     /**
      * @return Returns a reference to the mu server instance.

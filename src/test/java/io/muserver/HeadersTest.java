@@ -2,6 +2,7 @@ package io.muserver;
 
 import okhttp3.Request;
 import okhttp3.Response;
+import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.ClientUtils;
@@ -12,9 +13,11 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.URI;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.MuServerBuilder.httpServer;
 import static org.hamcrest.CoreMatchers.*;
@@ -175,36 +178,41 @@ public class HeadersTest {
                 return true;
             }).start();
 
-        try (Response ignored = call(request(server.httpUri().resolve("/blah?query=value"))
+        call(request(server.httpUri().resolve("/blah?query=value"))
             .header("X-Forwarded-Proto", "https")
             .header("X-Forwarded-Host", "www.example.org")
             .header("X-Forwarded-Port", "443")
-        )) {
-        }
+        ).close();
         assertThat(actual[1].toString(), equalTo("http://localhost:12752/blah?query=value"));
         assertThat(actual[0].toString(), equalTo("https://www.example.org/blah?query=value"));
     }
 
     @Test
     public void ifMultipleXForwardedHeadersAreSpecifiedThenRequestUriUsesTheFirst() {
+        AtomicReference<List<ForwardedHeader>> forwardedHeaders = new AtomicReference<>();
         URI[] actual = new URI[2];
         server = ServerUtils.httpsServerForTest()
             .withHttpPort(12753)
             .addHandler((request, response) -> {
                 actual[0] = request.uri();
                 actual[1] = request.serverURI();
+                forwardedHeaders.set(request.headers().forwarded());
                 return true;
             }).start();
 
-        try (Response ignored = call(request(server.httpUri().resolve("/blah?query=value"))
-            .header("X-Forwarded-Proto", "https")
+        call(request(server.httpUri().resolve("/blah?query=value"))
+            .header("X-Forwarded-Proto", "https, ftp")
             .addHeader("X-Forwarded-Proto", "http")
-            .header("X-Forwarded-Host", "www.example.org:12000")
+            .header("X-Forwarded-Host", "www.example.org:12000, second.example.org")
             .addHeader("X-Forwarded-Host", "localhost:8192")
-        )) {
-        }
+        ).close();
         assertThat(actual[1].toString(), equalTo("http://localhost:12753/blah?query=value"));
         assertThat(actual[0].toString(), equalTo("https://www.example.org:12000/blah?query=value"));
+        assertThat(forwardedHeaders.get(), Matchers.contains(
+            ForwardedHeader.fromString("host=\"www.example.org:12000\";proto=https").get(0),
+            ForwardedHeader.fromString("host=second.example.org;proto=ftp").get(0),
+            ForwardedHeader.fromString("host=\"localhost:8192\";proto=http").get(0)
+        ));
     }
 
     @Test
@@ -317,6 +325,31 @@ public class HeadersTest {
             assertThat(resp.body().string(), equalTo("by=127.0.0.1;for=10.10.0.10;host=\"host.example.org:8000\";proto=https - https://host.example.org:8000/"));
         }
     }
+
+
+    @Test
+    public void clientIPUsesForwardedValueIfSpecified() throws IOException {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.status(200);
+                response.write(request.clientIP());
+            })
+            .start();
+        try (Response resp = call(request(server.uri())
+            .header(HeaderNames.X_FORWARDED_FOR.toString(), "10.10.0.10")
+        )) {
+            assertThat(resp.body().string(), equalTo("10.10.0.10"));
+        }
+        try (Response resp = call(request(server.uri())
+            .header(HeaderNames.FORWARDED.toString(), ForwardedHeader.fromString("for=10.10.0.11").get(0).toString())
+        )) {
+            assertThat(resp.body().string(), equalTo("10.10.0.11"));
+        }
+        try (Response resp = call(request(server.uri()))) {
+            assertThat(resp.body().string(), equalTo("127.0.0.1"));
+        }
+    }
+
 
     @Test
     public void aRquestWithErrorXForwardHostHeaderDontThrowException() throws IOException {
