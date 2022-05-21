@@ -341,7 +341,8 @@ public class HeadersTest {
             assertThat(resp.body().string(), equalTo("10.10.0.10"));
         }
         try (Response resp = call(request(server.uri())
-            .header(HeaderNames.FORWARDED.toString(), ForwardedHeader.fromString("for=10.10.0.11").get(0).toString())
+            .header(HeaderNames.FORWARDED.toString(), ForwardedHeader.fromString("by=10.10.0.12").get(0).toString()) // should be ignored because no 'for' value
+            .addHeader(HeaderNames.FORWARDED.toString(), ForwardedHeader.fromString("for=10.10.0.11").get(0).toString())
         )) {
             assertThat(resp.body().string(), equalTo("10.10.0.11"));
         }
