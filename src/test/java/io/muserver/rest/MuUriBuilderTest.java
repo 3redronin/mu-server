@@ -120,8 +120,8 @@ public class MuUriBuilderTest {
 
     @Test
     public void fromUriTemplate() {
-        assertThat(new MuUriBuilder().uri(u("http://user:pw@example.org:12000/blah/?a=b#hi")).build(),
-            equalTo(new MuUriBuilder().uri("http://user:pw@example.org:12000/blah/?a=b#hi").build()));
+        assertThat(new MuUriBuilder().uri(u("http://user:pw@example.org:12000/a%20blah/?a=b%25#hi")).build(),
+            equalTo(new MuUriBuilder().uri("http://user:pw@example.org:12000/a%20blah/?a=b%25#hi").build()));
     }
 
     @Test

@@ -64,9 +64,9 @@ class MuUriBuilder extends UriBuilder {
         userInfo(uri.getUserInfo());
         host(uri.getHost());
         port(uri.getPort());
-        replacePath(uri.getPath());
-        replaceQuery(uri.getQuery());
-        fragment(uri.getFragment());
+        replacePath(uri.getRawPath());
+        replaceQuery(uri.getRawQuery());
+        fragment(uri.getRawFragment());
         return this;
     }
 
