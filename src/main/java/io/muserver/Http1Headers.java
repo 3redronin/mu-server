@@ -2,8 +2,8 @@ package io.muserver;
 
 import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.HttpHeaders;
+import jakarta.ws.rs.core.MediaType;
 
-import javax.ws.rs.core.MediaType;
 import java.util.*;
 
 import static io.muserver.NettyRequestParameters.isTruthy;

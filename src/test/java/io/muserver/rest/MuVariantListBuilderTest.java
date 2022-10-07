@@ -1,10 +1,10 @@
 package io.muserver.rest;
 
 import io.muserver.ParameterizedHeaderWithValue;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Variant;
 import org.junit.Test;
 
-import javax.ws.rs.core.MediaType;
-import javax.ws.rs.core.Variant;
 import java.util.List;
 import java.util.Locale;
 

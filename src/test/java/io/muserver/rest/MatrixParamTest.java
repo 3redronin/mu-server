@@ -1,14 +1,14 @@
 package io.muserver.rest;
 
 import io.muserver.MuServer;
+import jakarta.ws.rs.*;
+import jakarta.ws.rs.core.PathSegment;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 
-import javax.ws.rs.*;
-import javax.ws.rs.core.PathSegment;
 import java.io.IOException;
 import java.util.List;
 import java.util.stream.Collectors;

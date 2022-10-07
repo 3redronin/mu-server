@@ -1,14 +1,13 @@
 package io.muserver.rest;
 
+import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.Produces;
 import org.junit.Test;
 
-import javax.ws.rs.Consumes;
-import javax.ws.rs.Path;
-import javax.ws.rs.Produces;
-
+import static io.muserver.rest.JaxClassLocator.getClassWithJaxRSAnnotations;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
-import static io.muserver.rest.JaxClassLocator.getClassWithJaxRSAnnotations;
 
 public class JaxClassLocatorTest {
 

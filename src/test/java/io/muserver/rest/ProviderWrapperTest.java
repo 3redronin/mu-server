@@ -1,13 +1,13 @@
 package io.muserver.rest;
 
+import jakarta.ws.rs.WebApplicationException;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.MultivaluedMap;
+import jakarta.ws.rs.core.StreamingOutput;
+import jakarta.ws.rs.ext.MessageBodyReader;
+import jakarta.ws.rs.ext.MessageBodyWriter;
 import org.junit.Test;
 
-import javax.ws.rs.WebApplicationException;
-import javax.ws.rs.core.MediaType;
-import javax.ws.rs.core.MultivaluedMap;
-import javax.ws.rs.core.StreamingOutput;
-import javax.ws.rs.ext.MessageBodyReader;
-import javax.ws.rs.ext.MessageBodyWriter;
 import java.io.*;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
@@ -22,7 +22,7 @@ public class ProviderWrapperTest {
         assertThat(readerType(StringEntityProviders.StringMessageReaderWriter.INSTANCE), equalTo(String.class));
         assertThat(readerType(StringEntityProviders.CharArrayReaderWriter.INSTANCE), equalTo(char[].class));
         assertThat(readerType(new StringEntityProviders.ReaderEntityReader()), equalTo(Reader.class));
-        assertThat(readerType(new StringEntityProviders.FormUrlEncodedReader()).getTypeName(), equalTo("javax.ws.rs.core.MultivaluedMap<java.lang.String, java.lang.String>"));
+        assertThat(readerType(new StringEntityProviders.FormUrlEncodedReader()).getTypeName(), equalTo("jakarta.ws.rs.core.MultivaluedMap<java.lang.String, java.lang.String>"));
         assertThat(readerType(new BinaryEntityProviders.ByteArrayReaderWriter()), equalTo(byte[].class));
         assertThat(readerType(new BinaryEntityProviders.InputStreamReader()), equalTo(InputStream.class));
         assertThat(readerType(new BinaryEntityProviders.FileReaderWriter()), equalTo(File.class));
@@ -32,7 +32,7 @@ public class ProviderWrapperTest {
     public void itCanFigureOutGenericWriterTypes() {
         assertThat(writerType(StringEntityProviders.StringMessageReaderWriter.INSTANCE), equalTo(String.class));
         assertThat(writerType(StringEntityProviders.CharArrayReaderWriter.INSTANCE), equalTo(char[].class));
-        assertThat(writerType(new StringEntityProviders.FormUrlEncodedWriter()).getTypeName(), equalTo("javax.ws.rs.core.MultivaluedMap<java.lang.String, java.lang.String>"));
+        assertThat(writerType(new StringEntityProviders.FormUrlEncodedWriter()).getTypeName(), equalTo("jakarta.ws.rs.core.MultivaluedMap<java.lang.String, java.lang.String>"));
         assertThat(writerType(new BinaryEntityProviders.ByteArrayReaderWriter()), equalTo(byte[].class));
         assertThat(writerType(new BinaryEntityProviders.StreamingOutputWriter()), equalTo(StreamingOutput.class));
         assertThat(writerType(new BinaryEntityProviders.FileReaderWriter()), equalTo(File.class));

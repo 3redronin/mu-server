@@ -2,12 +2,12 @@ package io.muserver.rest;
 
 import io.muserver.MuServer;
 import io.muserver.Mutils;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.core.*;
 import org.junit.Test;
 import scaffolding.ServerUtils;
 
-import javax.ws.rs.GET;
-import javax.ws.rs.Path;
-import javax.ws.rs.core.*;
 import java.net.URI;
 import java.util.Date;
 import java.util.Locale;

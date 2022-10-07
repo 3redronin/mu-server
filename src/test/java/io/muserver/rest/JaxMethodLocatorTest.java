@@ -1,9 +1,9 @@
 package io.muserver.rest;
 
+import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.Path;
 import org.junit.Test;
 
-import javax.ws.rs.Consumes;
-import javax.ws.rs.Path;
 import java.lang.reflect.Method;
 
 import static io.muserver.rest.JaxMethodLocator.getMethodThatHasJaxRSAnnotations;

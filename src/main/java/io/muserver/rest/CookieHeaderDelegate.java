@@ -3,9 +3,9 @@ package io.muserver.rest;
 import io.netty.handler.codec.http.cookie.ClientCookieEncoder;
 import io.netty.handler.codec.http.cookie.DefaultCookie;
 import io.netty.handler.codec.http.cookie.ServerCookieDecoder;
+import jakarta.ws.rs.core.Cookie;
+import jakarta.ws.rs.ext.RuntimeDelegate;
 
-import javax.ws.rs.core.Cookie;
-import javax.ws.rs.ext.RuntimeDelegate;
 import java.util.Set;
 
 class CookieHeaderDelegate implements RuntimeDelegate.HeaderDelegate<Cookie> {

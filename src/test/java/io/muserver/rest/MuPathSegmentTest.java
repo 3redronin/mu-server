@@ -1,10 +1,10 @@
 package io.muserver.rest;
 
 import io.muserver.Mutils;
+import jakarta.ws.rs.core.MultivaluedHashMap;
+import jakarta.ws.rs.core.MultivaluedMap;
 import org.junit.Test;
 
-import javax.ws.rs.core.MultivaluedHashMap;
-import javax.ws.rs.core.MultivaluedMap;
 import java.util.List;
 
 import static io.muserver.rest.ReadOnlyMultivaluedMap.empty;

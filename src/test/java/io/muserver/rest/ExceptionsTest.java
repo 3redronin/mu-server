@@ -1,15 +1,16 @@
 package io.muserver.rest;
 
 import io.muserver.MuServer;
+import jakarta.ws.rs.*;
+import jakarta.ws.rs.core.Context;
+import jakarta.ws.rs.core.Response.Status;
+import jakarta.ws.rs.core.UriInfo;
+import jakarta.ws.rs.ext.ExceptionMapper;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.ServerUtils;
 
-import javax.ws.rs.*;
-import javax.ws.rs.core.Context;
-import javax.ws.rs.core.Response.Status;
-import javax.ws.rs.core.UriInfo;
 import java.net.URI;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
@@ -179,7 +180,7 @@ public class ExceptionsTest {
         this.server = ServerUtils.httpsServerForTest()
             .addHandler(
                 restHandler(new Sample())
-                .addExceptionMapper(CustomException.class, exception -> javax.ws.rs.core.Response.status(414).entity("Custom exception").build())
+                .addExceptionMapper(CustomException.class, (ExceptionMapper<CustomException>) exception -> jakarta.ws.rs.core.Response.status(414).entity("Custom exception").build())
             )
             .start();
         try (Response resp = call(request(server.uri().resolve("/samples/sub")))) {

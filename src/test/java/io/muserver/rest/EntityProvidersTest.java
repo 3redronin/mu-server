@@ -3,6 +3,11 @@ package io.muserver.rest;
 import io.muserver.MuServer;
 import io.muserver.Mutils;
 import io.muserver.ResponseInfo;
+import jakarta.ws.rs.*;
+import jakarta.ws.rs.core.GenericEntity;
+import jakarta.ws.rs.core.MultivaluedMap;
+import jakarta.ws.rs.ext.MessageBodyReader;
+import jakarta.ws.rs.ext.MessageBodyWriter;
 import okhttp3.MediaType;
 import okhttp3.RequestBody;
 import okhttp3.Response;
@@ -13,11 +18,6 @@ import org.junit.After;
 import org.junit.Test;
 import scaffolding.StringUtils;
 
-import javax.ws.rs.*;
-import javax.ws.rs.core.GenericEntity;
-import javax.ws.rs.core.MultivaluedMap;
-import javax.ws.rs.ext.MessageBodyReader;
-import javax.ws.rs.ext.MessageBodyWriter;
 import java.io.*;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.ParameterizedType;
@@ -95,8 +95,8 @@ public class EntityProvidersTest {
             @GET
             @Description("A description")
             @Produces({"text/vnd.custom.txt;charset=utf-8", "*/*"})
-            public javax.ws.rs.core.Response echo() {
-                return javax.ws.rs.core.Response.ok().entity(new Thing(), Thing.class.getAnnotations()).build();
+            public jakarta.ws.rs.core.Response echo() {
+                return jakarta.ws.rs.core.Response.ok().entity(new Thing(), Thing.class.getAnnotations()).build();
             }
         }
 
@@ -104,11 +104,11 @@ public class EntityProvidersTest {
             restHandler(new Sample())
                 .addCustomWriter(new MessageBodyWriter<Object>() {
                     @Override
-                    public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, javax.ws.rs.core.MediaType mediaType) {
+                    public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType) {
                         return type.equals(Thing.class);
                     }
                     @Override
-                    public void writeTo(Object o, Class<?> type, Type genericType, Annotation[] annotations, javax.ws.rs.core.MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException, WebApplicationException {
+                    public void writeTo(Object o, Class<?> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException, WebApplicationException {
                         try (OutputStreamWriter writer = new OutputStreamWriter(entityStream)) {
                             Description description = Arrays.stream(annotations).filter(a -> a.annotationType().equals(Description.class))
                                 .map(a -> (Description) a)
@@ -154,12 +154,12 @@ public class EntityProvidersTest {
         @Consumes({"text/vnd.custom.txt;charset=utf-8", "*/*"})
         class ThingReader implements MessageBodyReader<Thing> {
             @Override
-            public boolean isReadable(Class<?> type, Type genericType, Annotation[] annotations, javax.ws.rs.core.MediaType mediaType) {
+            public boolean isReadable(Class<?> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType) {
                 return type.equals(Thing.class);
             }
 
             @Override
-            public Thing readFrom(Class<Thing> type, Type genericType, Annotation[] annotations, javax.ws.rs.core.MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
+            public Thing readFrom(Class<Thing> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
                 Description description = Arrays.stream(annotations).filter(a -> a.annotationType().equals(Description.class))
                     .map(a -> (Description) a)
                     .findFirst().orElse(null);
@@ -201,29 +201,29 @@ public class EntityProvidersTest {
 
             @GET
             @Path("all")
-            public javax.ws.rs.core.Response all() {
+            public jakarta.ws.rs.core.Response all() {
                 List<Dog> dogs = asList(new Dog("Little", "Chihuahua"), new Dog("Mangle", "Mongrel"));
                 GenericEntity<List<Dog>> dogList = new GenericEntity<List<Dog>>(dogs) {};
-                return javax.ws.rs.core.Response.ok(dogList).build();
+                return jakarta.ws.rs.core.Response.ok(dogList).build();
             }
         }
 
         class DogWriter implements MessageBodyWriter<Dog> {
-            public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, javax.ws.rs.core.MediaType mediaType) {
+            public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType) {
                 return type.equals(Dog.class);
             }
-            public void writeTo(Dog dog, Class<?> type, Type genericType, Annotation[] annotations, javax.ws.rs.core.MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException, WebApplicationException {
+            public void writeTo(Dog dog, Class<?> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException, WebApplicationException {
                 try (PrintStream stream = new PrintStream(entityStream)) {
                     stream.print("Dog: " + dog.name + " (" + dog.breed + ")");
                 }
             }
         }
         class DogListWriter implements MessageBodyWriter<List<Dog>> {
-            public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, javax.ws.rs.core.MediaType mediaType) {
+            public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType) {
                 return List.class.isAssignableFrom(type) && genericType instanceof ParameterizedType
                     && ((ParameterizedType)genericType).getActualTypeArguments()[0].equals(Dog.class);
             }
-            public void writeTo(List<Dog> dogs, Class<?> type, Type genericType, Annotation[] annotations, javax.ws.rs.core.MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException, WebApplicationException {
+            public void writeTo(List<Dog> dogs, Class<?> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException, WebApplicationException {
                 try (PrintStream stream = new PrintStream(entityStream)) {
                     for (Dog dog : dogs) {
                         stream.println(dog.name + " (" + dog.breed + ")");
@@ -283,10 +283,10 @@ public class EntityProvidersTest {
         }
         @Produces("text/plain")
         class DogWriter implements MessageBodyWriter<Dog> {
-            public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, javax.ws.rs.core.MediaType mediaType) {
+            public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType) {
                 return type.equals(Dog.class);
             }
-            public void writeTo(Dog dog, Class<?> type, Type genericType, Annotation[] annotations, javax.ws.rs.core.MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException, WebApplicationException {
+            public void writeTo(Dog dog, Class<?> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException, WebApplicationException {
                 try (PrintStream stream = new PrintStream(entityStream)) {
                     stream.print("Dog: " + dog.breed);
                 }
@@ -295,11 +295,11 @@ public class EntityProvidersTest {
         @Consumes("text/plain")
         class DogReader implements MessageBodyReader<Dog> {
             @Override
-            public boolean isReadable(Class<?> type, Type genericType, Annotation[] annotations, javax.ws.rs.core.MediaType mediaType) {
+            public boolean isReadable(Class<?> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType) {
                 return type.equals(Dog.class);
             }
             @Override
-            public Dog readFrom(Class<Dog> type, Type genericType, Annotation[] annotations, javax.ws.rs.core.MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
+            public Dog readFrom(Class<Dog> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
                 return new Dog(new String(Mutils.toByteArray(entityStream, 2048), EntityProviders.charsetFor(mediaType)));
             }
         }
@@ -338,11 +338,11 @@ public class EntityProvidersTest {
         @Consumes("text/plain")
         class DogReader implements MessageBodyReader<Dog> {
             @Override
-            public boolean isReadable(Class<?> type, Type genericType, Annotation[] annotations, javax.ws.rs.core.MediaType mediaType) {
+            public boolean isReadable(Class<?> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType) {
                 return type.equals(Dog.class);
             }
             @Override
-            public Dog readFrom(Class<Dog> type, Type genericType, Annotation[] annotations, javax.ws.rs.core.MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
+            public Dog readFrom(Class<Dog> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
                 // gonna read the exact body length, but won't close the stream
                 byte[] buffer = new byte[body.length()];
                 entityStream.read(buffer);
@@ -437,11 +437,11 @@ public class EntityProvidersTest {
         @Consumes("text/plain")
         class DogReader implements MessageBodyReader<Dog> {
             @Override
-            public boolean isReadable(Class<?> type, Type genericType, Annotation[] annotations, javax.ws.rs.core.MediaType mediaType) {
+            public boolean isReadable(Class<?> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType) {
                 return type.equals(Dog.class);
             }
             @Override
-            public Dog readFrom(Class<Dog> type, Type genericType, Annotation[] annotations, javax.ws.rs.core.MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
+            public Dog readFrom(Class<Dog> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
                 ByteArrayOutputStream baos = new ByteArrayOutputStream();
                 Mutils.copy(entityStream, baos, 8192);
                 entityStream.close();

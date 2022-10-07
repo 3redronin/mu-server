@@ -1,10 +1,10 @@
 package io.muserver.rest;
 
 import io.muserver.Mutils;
+import jakarta.ws.rs.core.MultivaluedHashMap;
+import jakarta.ws.rs.core.MultivaluedMap;
+import jakarta.ws.rs.core.PathSegment;
 
-import javax.ws.rs.core.MultivaluedHashMap;
-import javax.ws.rs.core.MultivaluedMap;
-import javax.ws.rs.core.PathSegment;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;

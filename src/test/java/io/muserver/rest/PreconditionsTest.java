@@ -2,18 +2,18 @@ package io.muserver.rest;
 
 import io.muserver.HeaderNames;
 import io.muserver.MuServer;
+import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.PUT;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.core.Context;
+import jakarta.ws.rs.core.EntityTag;
+import jakarta.ws.rs.core.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
 
-import javax.ws.rs.Consumes;
-import javax.ws.rs.GET;
-import javax.ws.rs.PUT;
-import javax.ws.rs.Path;
-import javax.ws.rs.core.Context;
-import javax.ws.rs.core.EntityTag;
-import javax.ws.rs.core.Request;
 import java.net.URI;
 import java.util.Date;
 
@@ -35,10 +35,10 @@ public class PreconditionsTest {
         @Path("samples")
         class Sample {
             @GET
-            public javax.ws.rs.core.Response get(@Context Request jaxRequest) {
-                javax.ws.rs.core.Response.ResponseBuilder resp = jaxRequest.evaluatePreconditions(lastModified);
+            public jakarta.ws.rs.core.Response get(@Context Request jaxRequest) {
+                jakarta.ws.rs.core.Response.ResponseBuilder resp = jaxRequest.evaluatePreconditions(lastModified);
                 if (resp == null) {
-                    resp = javax.ws.rs.core.Response.ok("The content");
+                    resp = jakarta.ws.rs.core.Response.ok("The content");
                 }
                 return resp.lastModified(lastModified).build();
             }
@@ -83,10 +83,10 @@ public class PreconditionsTest {
         @Path("samples")
         class Sample {
             @PUT
-            public javax.ws.rs.core.Response get(@Context Request jaxRequest) {
-                javax.ws.rs.core.Response.ResponseBuilder resp = jaxRequest.evaluatePreconditions(lastModified);
+            public jakarta.ws.rs.core.Response get(@Context Request jaxRequest) {
+                jakarta.ws.rs.core.Response.ResponseBuilder resp = jaxRequest.evaluatePreconditions(lastModified);
                 if (resp == null) {
-                    resp = javax.ws.rs.core.Response.ok("The content");
+                    resp = jakarta.ws.rs.core.Response.ok("The content");
                 }
                 return resp.lastModified(lastModified).build();
             }
@@ -137,10 +137,10 @@ public class PreconditionsTest {
         @Path("samples")
         class Sample {
             @GET
-            public javax.ws.rs.core.Response get(@Context Request jaxRequest) {
-                javax.ws.rs.core.Response.ResponseBuilder resp = jaxRequest.evaluatePreconditions(new EntityTag(etag));
+            public jakarta.ws.rs.core.Response get(@Context Request jaxRequest) {
+                jakarta.ws.rs.core.Response.ResponseBuilder resp = jaxRequest.evaluatePreconditions(new EntityTag(etag));
                 if (resp == null) {
-                    resp = javax.ws.rs.core.Response.ok("The content").tag(etag);
+                    resp = jakarta.ws.rs.core.Response.ok("The content").tag(etag);
                 }
                 return resp.build();
             }
@@ -177,10 +177,10 @@ public class PreconditionsTest {
         class Sample {
             @PUT
             @Consumes("*/*")
-            public javax.ws.rs.core.Response put(@Context Request jaxRequest) {
-                javax.ws.rs.core.Response.ResponseBuilder resp = jaxRequest.evaluatePreconditions(new EntityTag(etag));
+            public jakarta.ws.rs.core.Response put(@Context Request jaxRequest) {
+                jakarta.ws.rs.core.Response.ResponseBuilder resp = jaxRequest.evaluatePreconditions(new EntityTag(etag));
                 if (resp == null) {
-                    resp = javax.ws.rs.core.Response.ok("The content").tag(etag);
+                    resp = jakarta.ws.rs.core.Response.ok("The content").tag(etag);
                 }
                 return resp.build();
             }
@@ -217,10 +217,10 @@ public class PreconditionsTest {
         class Sample {
             @PUT
             @Consumes("*/*")
-            public javax.ws.rs.core.Response put(@Context Request jaxRequest) {
-                javax.ws.rs.core.Response.ResponseBuilder resp = jaxRequest.evaluatePreconditions();
+            public jakarta.ws.rs.core.Response put(@Context Request jaxRequest) {
+                jakarta.ws.rs.core.Response.ResponseBuilder resp = jaxRequest.evaluatePreconditions();
                 if (resp == null) {
-                    resp = javax.ws.rs.core.Response.ok("The content");
+                    resp = jakarta.ws.rs.core.Response.ok("The content");
                 }
                 return resp.build();
             }
@@ -256,10 +256,10 @@ public class PreconditionsTest {
         @Path("samples")
         class Sample {
             @GET
-            public javax.ws.rs.core.Response get(@Context Request jaxRequest) {
-                javax.ws.rs.core.Response.ResponseBuilder resp = jaxRequest.evaluatePreconditions(lastModified, new EntityTag(etag));
+            public jakarta.ws.rs.core.Response get(@Context Request jaxRequest) {
+                jakarta.ws.rs.core.Response.ResponseBuilder resp = jaxRequest.evaluatePreconditions(lastModified, new EntityTag(etag));
                 if (resp == null) {
-                    resp = javax.ws.rs.core.Response.ok("The content");
+                    resp = jakarta.ws.rs.core.Response.ok("The content");
                 }
                 return resp.tag(etag).build();
             }

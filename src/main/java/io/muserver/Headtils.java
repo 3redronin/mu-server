@@ -1,8 +1,8 @@
 package io.muserver;
 
 import io.netty.handler.codec.HeadersUtils;
+import jakarta.ws.rs.core.MediaType;
 
-import javax.ws.rs.core.MediaType;
 import java.util.*;
 import java.util.stream.Collectors;
 

@@ -2,15 +2,15 @@ package io.muserver.rest;
 
 import io.muserver.MuRequest;
 import io.muserver.MuServer;
+import jakarta.ws.rs.*;
+import jakarta.ws.rs.container.ResourceInfo;
+import jakarta.ws.rs.ext.WriterInterceptor;
+import jakarta.ws.rs.ext.WriterInterceptorContext;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.ServerUtils;
 
-import javax.ws.rs.*;
-import javax.ws.rs.container.ResourceInfo;
-import javax.ws.rs.ext.WriterInterceptor;
-import javax.ws.rs.ext.WriterInterceptorContext;
 import java.io.FilterOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -43,12 +43,12 @@ public class WriterInterceptorTest {
         }
         server = ServerUtils.httpsServerForTest()
             .addHandler(restHandler(new GreetingResource())
-                .addWriterInterceptor(context -> {
+                .addWriterInterceptor((WriterInterceptor) context -> {
                     context.setEntity("prefix-" + context.getEntity()); // should be uppercased by wrapped interceptor
                     context.proceed();
                     context.setEntity(context.getEntity() + "-suffix"); // should run after the uppercaser so should remain lowercase
                 })
-                .addWriterInterceptor(context -> {
+                .addWriterInterceptor((WriterInterceptor) context -> {
                     String body = (String) context.getEntity();
                     context.setEntity(body.toUpperCase());
                     context.proceed();
@@ -87,7 +87,7 @@ public class WriterInterceptorTest {
         }
         server = ServerUtils.httpsServerForTest()
             .addHandler(restHandler(new GreetingResource())
-                .addWriterInterceptor(context -> {
+                .addWriterInterceptor((WriterInterceptor) context -> {
                     context.setOutputStream(new UpperCaserOutputStream(context.getOutputStream()));
                     context.proceed();
                 })
@@ -113,7 +113,7 @@ public class WriterInterceptorTest {
         }
         server = ServerUtils.httpsServerForTest()
             .addHandler(restHandler(new GreetingResource())
-                .addWriterInterceptor(context -> {
+                .addWriterInterceptor((WriterInterceptor) context -> {
                     ResourceInfo resourceInfo = (ResourceInfo) context.getProperty(MuRuntimeDelegate.RESOURCE_INFO_PROPERTY);
                     MuRequest muRequest = (MuRequest) context.getProperty(MuRuntimeDelegate.MU_REQUEST_PROPERTY);
                     context.getHeaders().putSingle("X-Resource-Info", resourceInfo.getResourceClass().getSimpleName());
@@ -143,7 +143,7 @@ public class WriterInterceptorTest {
         }
         server = ServerUtils.httpsServerForTest()
             .addHandler(restHandler(new NoResource())
-                .addWriterInterceptor(context -> {
+                .addWriterInterceptor((WriterInterceptor) context -> {
                     throw new RuntimeException("This should not happen");
                 })
             )
@@ -182,13 +182,13 @@ public class WriterInterceptorTest {
         }
         server = ServerUtils.httpsServerForTest()
             .addHandler(restHandler(new ErrorResource())
-                .addWriterInterceptor(context -> {
+                .addWriterInterceptor((WriterInterceptor) context -> {
                     if (context.getEntity().equals("clientException")) {
                         throw new BadRequestException("Bad request!!");
                     } else if (context.getEntity().equals("runtimeException")) {
                         throw new RuntimeException("Runtime exception!!");
                     } else if (context.getEntity().equals("responseException")) {
-                        context.setEntity(javax.ws.rs.core.Response.status(409).entity("Response exception!!").build());
+                        context.setEntity(jakarta.ws.rs.core.Response.status(409).entity("Response exception!!").build());
                     } else if (context.getEntity().equals("entityException")) {
                         context.setEntity(new ClientErrorException("Entity exception!!", 488));
                     }

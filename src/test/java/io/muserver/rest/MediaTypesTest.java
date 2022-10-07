@@ -1,6 +1,9 @@
 package io.muserver.rest;
 
 import io.muserver.MuServer;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.Produces;
 import okhttp3.Request;
 import okhttp3.Response;
 import org.junit.After;
@@ -8,9 +11,6 @@ import org.junit.Test;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 
-import javax.ws.rs.GET;
-import javax.ws.rs.Path;
-import javax.ws.rs.Produces;
 import java.io.IOException;
 import java.util.List;
 

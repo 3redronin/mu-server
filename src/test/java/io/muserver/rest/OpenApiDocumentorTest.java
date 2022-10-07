@@ -6,6 +6,9 @@ import io.muserver.UploadedFile;
 import io.muserver.openapi.InfoObjectBuilder;
 import io.muserver.openapi.LicenseObjectBuilder;
 import io.muserver.openapi.OpenAPIObjectBuilder;
+import jakarta.ws.rs.*;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
 import org.example.petstore.resource.PetResource;
 import org.example.petstore.resource.PetStoreResource;
 import org.example.petstore.resource.UserResource;
@@ -16,9 +19,6 @@ import org.junit.After;
 import org.junit.Test;
 import scaffolding.MuAssert;
 
-import javax.ws.rs.*;
-import javax.ws.rs.core.MediaType;
-import javax.ws.rs.core.Response;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -177,7 +177,7 @@ public class OpenApiDocumentorTest {
         class FileUploadResource {
             @POST
             @Path("{ id : [0-9]+ }")
-            @Consumes(javax.ws.rs.core.MediaType.MULTIPART_FORM_DATA)
+            @Consumes(jakarta.ws.rs.core.MediaType.MULTIPART_FORM_DATA)
             public void create(@PathParam("id") String id,
                                @Description("The list of images")
                                @FormParam("images") List<UploadedFile> images,

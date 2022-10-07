@@ -1,6 +1,7 @@
 package io.muserver.rest;
 
-import javax.ws.rs.core.AbstractMultivaluedMap;
+import jakarta.ws.rs.core.AbstractMultivaluedMap;
+
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.BiFunction;

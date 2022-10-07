@@ -10,7 +10,7 @@ provided by Oracle.
 ## 2 Applications
 
 The Mu Jax-RS implementation does not support classpath scanning or definition of Resource classes, and as
-such the `javax.ws.rs.core.Application` class is not supported. All resources and optional providers are 
+such the `jakarta.ws.rs.core.Application` class is not supported. All resources and optional providers are 
 registered programmatically using the `io.muserver.rest.RestHandlerBuilder` class.
 
 ## 3 Resources
@@ -341,11 +341,11 @@ N/A. Will not implement, as there is no support for `Application`.
 
 #### 10.2.2 URIs and URI Templates 
 
-- [x] Implemented `@Context javax.ws.rs.core.UriInfo`
+- [x] Implemented `@Context jakarta.ws.rs.core.UriInfo`
 
 #### 10.2.3 Headers 
 
-- [x] Implemented `@Context javax.ws.rs.core.HttpHeaders`
+- [x] Implemented `@Context jakarta.ws.rs.core.HttpHeaders`
 
 #### 10.2.4 Content Negotiation and Preconditions 
 

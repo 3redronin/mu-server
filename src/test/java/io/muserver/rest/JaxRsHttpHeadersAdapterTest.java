@@ -3,10 +3,10 @@ package io.muserver.rest;
 import io.muserver.Cookie;
 import io.muserver.HeaderNames;
 import io.muserver.Headers;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.MultivaluedHashMap;
 import org.junit.Test;
 
-import javax.ws.rs.core.MediaType;
-import javax.ws.rs.core.MultivaluedHashMap;
 import java.util.*;
 
 import static java.util.Arrays.asList;
@@ -88,9 +88,9 @@ public class JaxRsHttpHeadersAdapterTest {
     public void getCookies() {
         cookies.add(Cookie.builder().withName("Blah").withValue("Hello").build());
         cookies.add(Cookie.builder().withName("Blah2").withValue("Hello2").build());
-        Map<String, javax.ws.rs.core.Cookie> expected = new HashMap<>();
-        expected.put("Blah", new javax.ws.rs.core.Cookie("Blah", "Hello"));
-        expected.put("Blah2", new javax.ws.rs.core.Cookie("Blah2", "Hello2"));
+        Map<String, jakarta.ws.rs.core.Cookie> expected = new HashMap<>();
+        expected.put("Blah", new jakarta.ws.rs.core.Cookie("Blah", "Hello"));
+        expected.put("Blah2", new jakarta.ws.rs.core.Cookie("Blah2", "Hello2"));
         assertThat(httpHeaders.getCookies(), equalTo(expected));
     }
 

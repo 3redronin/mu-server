@@ -2,6 +2,13 @@ package io.muserver.rest;
 
 import io.muserver.MuServer;
 import io.muserver.Mutils;
+import jakarta.ws.rs.*;
+import jakarta.ws.rs.container.AsyncResponse;
+import jakarta.ws.rs.container.CompletionCallback;
+import jakarta.ws.rs.container.ConnectionCallback;
+import jakarta.ws.rs.container.Suspended;
+import jakarta.ws.rs.core.MultivaluedMap;
+import jakarta.ws.rs.ext.MessageBodyWriter;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.RequestBody;
@@ -15,13 +22,6 @@ import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 import scaffolding.StringUtils;
 
-import javax.ws.rs.*;
-import javax.ws.rs.container.AsyncResponse;
-import javax.ws.rs.container.CompletionCallback;
-import javax.ws.rs.container.ConnectionCallback;
-import javax.ws.rs.container.Suspended;
-import javax.ws.rs.core.MultivaluedMap;
-import javax.ws.rs.ext.MessageBodyWriter;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -60,7 +60,7 @@ public class AsynchronousProcessingTest {
                 executor.submit(() -> {
                     captured[0] = ar;
                     MuAssert.sleep(100);
-                    javax.ws.rs.core.Response resp = javax.ws.rs.core.Response.status(202).entity("Suspended/cancelled/done: " + ar.isSuspended() + ar.isCancelled() + ar.isDone()).build();
+                    jakarta.ws.rs.core.Response resp = jakarta.ws.rs.core.Response.status(202).entity("Suspended/cancelled/done: " + ar.isSuspended() + ar.isCancelled() + ar.isDone()).build();
                     ar.resume(resp);
                     resumedLatch.countDown();
                 });
@@ -84,8 +84,8 @@ public class AsynchronousProcessingTest {
         @Path("samples")
         class Sample {
             @POST
-            public CompletionStage<javax.ws.rs.core.Response> go(InputStream requestBody) {
-                CompletableFuture<javax.ws.rs.core.Response> cs = new CompletableFuture<>();
+            public CompletionStage<jakarta.ws.rs.core.Response> go(InputStream requestBody) {
+                CompletableFuture<jakarta.ws.rs.core.Response> cs = new CompletableFuture<>();
                 executor.submit(() -> {
                     String entity;
                     try (ByteArrayOutputStream os = new ByteArrayOutputStream()) {
@@ -95,7 +95,7 @@ public class AsynchronousProcessingTest {
                     } catch (Exception ex) {
                         entity = "Error: " + ex;
                     }
-                    cs.complete(javax.ws.rs.core.Response.status(200).entity(entity).build());
+                    cs.complete(jakarta.ws.rs.core.Response.status(200).entity(entity).build());
                 });
                 return cs;
             }
@@ -186,11 +186,11 @@ public class AsynchronousProcessingTest {
         this.server = ServerUtils.httpsServerForTest()
             .addHandler(restHandler(new Sample())
                 .addCustomWriter(new MessageBodyWriter<Hawk>() {
-                    public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, javax.ws.rs.core.MediaType mediaType) {
+                    public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType) {
                         return type.equals(Hawk.class);
                     }
 
-                    public void writeTo(Hawk hawk, Class<?> type, Type genericType, Annotation[] annotations, javax.ws.rs.core.MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException, WebApplicationException {
+                    public void writeTo(Hawk hawk, Class<?> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException, WebApplicationException {
                         entityStream.write(hawk.toHawker().getBytes("UTF-8"));
                     }
                 })

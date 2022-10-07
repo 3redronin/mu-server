@@ -2,13 +2,13 @@ package io.muserver.rest;
 
 import io.muserver.MuServer;
 import io.muserver.openapi.SchemaObjectBuilder;
+import jakarta.ws.rs.*;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.MuAssert;
 
-import javax.ws.rs.*;
 import java.util.Collections;
 import java.util.List;
 

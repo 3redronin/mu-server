@@ -1,15 +1,15 @@
 package io.muserver.rest;
 
 import io.muserver.MuServer;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.HttpMethod;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.PathParam;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 
-import javax.ws.rs.GET;
-import javax.ws.rs.HttpMethod;
-import javax.ws.rs.Path;
-import javax.ws.rs.PathParam;
 import java.io.IOException;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;

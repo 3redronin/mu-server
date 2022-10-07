@@ -3,13 +3,13 @@ package io.muserver.rest;
 import io.muserver.AsyncSsePublisher;
 import io.muserver.MuResponse;
 import io.muserver.ResponseCompleteListener;
+import jakarta.ws.rs.ServerErrorException;
+import jakarta.ws.rs.ext.MessageBodyWriter;
+import jakarta.ws.rs.sse.OutboundSseEvent;
+import jakarta.ws.rs.sse.SseEventSink;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.ws.rs.ServerErrorException;
-import javax.ws.rs.ext.MessageBodyWriter;
-import javax.ws.rs.sse.OutboundSseEvent;
-import javax.ws.rs.sse.SseEventSink;
 import java.io.ByteArrayOutputStream;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;

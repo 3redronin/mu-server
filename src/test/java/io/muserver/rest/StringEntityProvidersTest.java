@@ -2,6 +2,10 @@ package io.muserver.rest;
 
 import io.muserver.ContentTypes;
 import io.muserver.MuServer;
+import jakarta.ws.rs.POST;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.core.MultivaluedMap;
 import okhttp3.FormBody;
 import okhttp3.MediaType;
 import okhttp3.RequestBody;
@@ -11,10 +15,6 @@ import org.junit.Test;
 import scaffolding.FileUtils;
 import scaffolding.StringUtils;
 
-import javax.ws.rs.POST;
-import javax.ws.rs.Path;
-import javax.ws.rs.Produces;
-import javax.ws.rs.core.MultivaluedMap;
 import java.io.File;
 import java.io.IOException;
 import java.io.Reader;
@@ -192,7 +192,7 @@ public class StringEntityProvidersTest {
 
             long len = Long.parseLong(resp.header("content-length", "-1"));
             if (len > -1) {
-                assertThat((long) value.getBytes(EntityProviders.charsetFor(javax.ws.rs.core.MediaType.valueOf(mimeType))).length, is(len));
+                assertThat((long) value.getBytes(EntityProviders.charsetFor(jakarta.ws.rs.core.MediaType.valueOf(mimeType))).length, is(len));
             }
         }
     }

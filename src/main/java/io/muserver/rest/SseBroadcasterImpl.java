@@ -3,10 +3,10 @@ package io.muserver.rest;
 import io.muserver.ClientDisconnectedException;
 import io.muserver.MuException;
 import io.muserver.Mutils;
+import jakarta.ws.rs.sse.OutboundSseEvent;
+import jakarta.ws.rs.sse.SseBroadcaster;
+import jakarta.ws.rs.sse.SseEventSink;
 
-import javax.ws.rs.sse.OutboundSseEvent;
-import javax.ws.rs.sse.SseBroadcaster;
-import javax.ws.rs.sse.SseEventSink;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;

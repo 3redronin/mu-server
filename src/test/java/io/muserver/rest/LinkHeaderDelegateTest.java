@@ -1,9 +1,8 @@
 package io.muserver.rest;
 
+import jakarta.ws.rs.core.Link;
+import jakarta.ws.rs.ext.RuntimeDelegate;
 import org.junit.Test;
-
-import javax.ws.rs.core.Link;
-import javax.ws.rs.ext.RuntimeDelegate;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;

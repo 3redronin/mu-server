@@ -2,14 +2,14 @@ package io.muserver.rest;
 
 import io.muserver.*;
 import io.netty.handler.codec.http.HttpHeaderNames;
+import jakarta.ws.rs.WebApplicationException;
+import jakarta.ws.rs.container.ContainerResponseContext;
+import jakarta.ws.rs.core.Cookie;
+import jakarta.ws.rs.core.*;
+import jakarta.ws.rs.ext.RuntimeDelegate;
+import jakarta.ws.rs.ext.WriterInterceptor;
+import jakarta.ws.rs.ext.WriterInterceptorContext;
 
-import javax.ws.rs.WebApplicationException;
-import javax.ws.rs.container.ContainerResponseContext;
-import javax.ws.rs.core.Cookie;
-import javax.ws.rs.core.*;
-import javax.ws.rs.ext.RuntimeDelegate;
-import javax.ws.rs.ext.WriterInterceptor;
-import javax.ws.rs.ext.WriterInterceptorContext;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.lang.annotation.Annotation;
@@ -331,7 +331,12 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
             RuntimeDelegate.HeaderDelegate headerDelegate = MuRuntimeDelegate.getInstance().createHeaderDelegate(value.getClass());
             return headerDelegate.toString(value);
         } catch (MuException e) {
-            return value.toString();
+            try {
+                LegacyMuRuntimeDelegate.HeaderDelegate headerDelegate = LegacyMuRuntimeDelegate.getInstance().createHeaderDelegate(value.getClass());
+                return headerDelegate.toString(value);
+            } catch (MuException e2) {
+                return value.toString();
+            }
         }
     }
 
@@ -414,7 +419,7 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
 
         @Override
         public ResponseBuilder clone() {
-            throw NotImplementedException.notYet();
+            return new Builder().status(status).entity(entity, annotations).cookie(cookies).type(type);
         }
 
         @Override
@@ -480,7 +485,7 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
 
         @Override
         public ResponseBuilder cacheControl(CacheControl cacheControl) {
-            return setHeader(HeaderNames.CACHE_CONTROL, cacheControl.toString(), false);
+            return setHeader(HeaderNames.CACHE_CONTROL, RuntimeDelegate.getInstance().createHeaderDelegate(CacheControl.class).toString(cacheControl), false);
         }
 
         @Override

@@ -2,13 +2,13 @@ package io.muserver.rest;
 
 import io.muserver.Method;
 import io.muserver.openapi.TagObject;
+import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.NameBinding;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.ext.ParamConverterProvider;
 
-import javax.ws.rs.Consumes;
-import javax.ws.rs.NameBinding;
-import javax.ws.rs.Path;
-import javax.ws.rs.Produces;
-import javax.ws.rs.core.MediaType;
-import javax.ws.rs.ext.ParamConverterProvider;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.Parameter;

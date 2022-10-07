@@ -1,6 +1,10 @@
 package io.muserver.rest;
 
 import io.muserver.MuServer;
+import jakarta.ws.rs.DELETE;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.PathParam;
 import okhttp3.Response;
 import org.hamcrest.Matchers;
 import org.junit.After;
@@ -8,10 +12,6 @@ import org.junit.Test;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 
-import javax.ws.rs.DELETE;
-import javax.ws.rs.GET;
-import javax.ws.rs.Path;
-import javax.ws.rs.PathParam;
 import java.io.IOException;
 import java.net.URI;
 

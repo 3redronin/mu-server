@@ -3,17 +3,17 @@ package io.muserver.rest;
 import io.muserver.ContentTypes;
 import io.muserver.HeaderNames;
 import io.muserver.MuServer;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.core.Context;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Request;
+import jakarta.ws.rs.core.Variant;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
 
-import javax.ws.rs.GET;
-import javax.ws.rs.Path;
-import javax.ws.rs.Produces;
-import javax.ws.rs.core.Context;
-import javax.ws.rs.core.MediaType;
-import javax.ws.rs.core.Request;
-import javax.ws.rs.core.Variant;
 import java.net.URI;
 import java.util.Collections;
 import java.util.List;
@@ -34,13 +34,13 @@ public class VariantTest {
         @Path("samples")
         class Sample {
             @GET
-            public javax.ws.rs.core.Response get(@Context Request jaxRequest) {
+            public jakarta.ws.rs.core.Response get(@Context Request jaxRequest) {
                 List<Variant> variants = Variant.VariantListBuilder.newInstance()
                     .mediaTypes(MediaType.APPLICATION_XML_TYPE, MediaType.APPLICATION_JSON_TYPE)
                     .languages(new Locale("en"), new Locale("es"))
                     .encodings("identity", "gzip").build();
                 Variant v = jaxRequest.selectVariant(variants);
-                javax.ws.rs.core.Response.ResponseBuilder builder = javax.ws.rs.core.Response.ok("{}");
+                jakarta.ws.rs.core.Response.ResponseBuilder builder = jakarta.ws.rs.core.Response.ok("{}");
                 builder
                     .type(v.getMediaType())
                     .language(v.getLanguage())
@@ -140,8 +140,8 @@ public class VariantTest {
         class Sample {
             @GET
             @Produces("text/plain")
-            public javax.ws.rs.core.Response get() {
-                return javax.ws.rs.core.Response.ok("Blah")
+            public jakarta.ws.rs.core.Response get() {
+                return jakarta.ws.rs.core.Response.ok("Blah")
                     .variants(
                         new Variant(MediaType.APPLICATION_JSON_TYPE, "en", "gzip"),
                         null,
@@ -154,8 +154,8 @@ public class VariantTest {
             @GET
             @Produces("text/plain")
             @Path("encoding")
-            public javax.ws.rs.core.Response encodingOnly() {
-                return javax.ws.rs.core.Response.ok("Blah")
+            public jakarta.ws.rs.core.Response encodingOnly() {
+                return jakarta.ws.rs.core.Response.ok("Blah")
                     .variants(
                         new Variant(null, null, null, "pkunzip")
                     )
@@ -186,8 +186,8 @@ public class VariantTest {
         class Sample {
             @GET
             @Produces("text/plain")
-            public javax.ws.rs.core.Response get() {
-                return javax.ws.rs.core.Response.ok("{}")
+            public jakarta.ws.rs.core.Response get() {
+                return jakarta.ws.rs.core.Response.ok("{}")
                     .variant(new Variant(MediaType.APPLICATION_JSON_TYPE, "en", "NZ", "bgzip"))
                     .build();
             }
@@ -195,8 +195,8 @@ public class VariantTest {
             @GET
             @Produces("text/plain")
             @Path("nulls")
-            public javax.ws.rs.core.Response getNulls() {
-                return javax.ws.rs.core.Response.ok("{}")
+            public jakarta.ws.rs.core.Response getNulls() {
+                return jakarta.ws.rs.core.Response.ok("{}")
                     .variant(new Variant(MediaType.APPLICATION_JSON_TYPE, "en", "NZ", "bgzip"))
                     .variant(new Variant(MediaType.APPLICATION_XML_TYPE, null, null, null))
                     .build();
@@ -205,8 +205,8 @@ public class VariantTest {
             @GET
             @Produces("text/plain")
             @Path("null")
-            public javax.ws.rs.core.Response getNull() {
-                return javax.ws.rs.core.Response.ok("{}")
+            public jakarta.ws.rs.core.Response getNull() {
+                return jakarta.ws.rs.core.Response.ok("{}")
                     .variant(new Variant(MediaType.APPLICATION_JSON_TYPE, "en", "NZ", "bgzip"))
                     .variant(null)
                     .build();

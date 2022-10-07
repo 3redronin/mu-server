@@ -2,6 +2,10 @@ package io.muserver.rest;
 
 import io.muserver.MuRequest;
 import io.muserver.MuServer;
+import jakarta.ws.rs.*;
+import jakarta.ws.rs.container.ResourceInfo;
+import jakarta.ws.rs.ext.ReaderInterceptor;
+import jakarta.ws.rs.ext.ReaderInterceptorContext;
 import okhttp3.MediaType;
 import okhttp3.RequestBody;
 import okhttp3.Response;
@@ -9,10 +13,6 @@ import org.junit.After;
 import org.junit.Test;
 import scaffolding.ServerUtils;
 
-import javax.ws.rs.*;
-import javax.ws.rs.container.ResourceInfo;
-import javax.ws.rs.ext.ReaderInterceptor;
-import javax.ws.rs.ext.ReaderInterceptorContext;
 import java.io.ByteArrayInputStream;
 import java.io.FilterInputStream;
 import java.io.IOException;
@@ -66,11 +66,11 @@ public class ReaderInterceptorTest {
 
         server = ServerUtils.httpsServerForTest()
             .addHandler(restHandler(new GreetingResource())
-                .addReaderInterceptor(context -> {
+                .addReaderInterceptor((ReaderInterceptor) context -> {
                     context.proceed();
                     return "new entity!";
                 })
-                .addReaderInterceptor(context -> ((String)context.proceed()).toUpperCase())
+                .addReaderInterceptor((ReaderInterceptor) context -> ((String)context.proceed()).toUpperCase())
             )
             .start();
 
@@ -96,7 +96,7 @@ public class ReaderInterceptorTest {
 
         server = ServerUtils.httpsServerForTest()
             .addHandler(restHandler(new GreetingResource())
-                .addReaderInterceptor(context -> {
+                .addReaderInterceptor((ReaderInterceptor) context -> {
                     context.setInputStream(new UpperCaserInputStream(context.getInputStream()));
                     return context.proceed();
                 })
@@ -125,7 +125,7 @@ public class ReaderInterceptorTest {
         }
         server = ServerUtils.httpsServerForTest()
             .addHandler(restHandler(new GreetingResource())
-                .addReaderInterceptor(context -> {
+                .addReaderInterceptor((ReaderInterceptor) context -> {
                     ResourceInfo resourceInfo = (ResourceInfo) context.getProperty(MuRuntimeDelegate.RESOURCE_INFO_PROPERTY);
                     MuRequest muRequest = (MuRequest) context.getProperty(MuRuntimeDelegate.MU_REQUEST_PROPERTY);
                     String val = resourceInfo.getResourceClass().getSimpleName() + " " + muRequest.uri().getPath();
@@ -158,7 +158,7 @@ public class ReaderInterceptorTest {
         }
         server = ServerUtils.httpsServerForTest()
             .addHandler(restHandler(new NoResource())
-                .addReaderInterceptor(context -> {
+                .addReaderInterceptor((ReaderInterceptor) context -> {
                     throw new RuntimeException("This should not happen");
                 })
             )
@@ -181,7 +181,7 @@ public class ReaderInterceptorTest {
         }
         server = ServerUtils.httpsServerForTest()
             .addHandler(restHandler(new ErrorResource())
-                .addReaderInterceptor(context -> {
+                .addReaderInterceptor((ReaderInterceptor) context -> {
                     Object entity = context.proceed();
                     if (entity.equals("clientException")) {
                         throw new BadRequestException("Bad request!!");

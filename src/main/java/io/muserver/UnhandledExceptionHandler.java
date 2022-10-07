@@ -3,7 +3,7 @@ package io.muserver;
 /**
  * A handler for exceptions that have been thrown by other handlers which allows for custom error pages.
  * <p>This is registered with {@link MuServerBuilder#withExceptionHandler(UnhandledExceptionHandler)}.</p>
- * <p>Note: {@link javax.ws.rs.RedirectionException}s will not get routed to this handler.</p>
+ * <p>Note: {@link jakarta.ws.rs.RedirectionException}s will not get routed to this handler.</p>
  */
 public interface UnhandledExceptionHandler {
 

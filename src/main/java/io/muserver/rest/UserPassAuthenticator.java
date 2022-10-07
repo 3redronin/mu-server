@@ -1,6 +1,7 @@
 package io.muserver.rest;
 
-import javax.ws.rs.core.SecurityContext;
+import jakarta.ws.rs.core.SecurityContext;
+
 import java.security.Principal;
 
 /**
@@ -11,7 +12,7 @@ public interface UserPassAuthenticator {
      * <p>Looks up a user.</p>
      * <p>It is required that the user object implements the Principal interface, so if you have custom classes for
      * users you may need to wrap them to include this.</p>
-     * <p>You can later get the principle from a {@link javax.ws.rs.core.SecurityContext} (using the <code>@Context</code>
+     * <p>You can later get the principle from a {@link jakarta.ws.rs.core.SecurityContext} (using the <code>@Context</code>
      * annotation on a REST method) and cast {@link SecurityContext#getUserPrincipal()} to your custom class.</p>
      * @param username The username
      * @param password The password

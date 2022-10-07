@@ -2,12 +2,12 @@ package io.muserver.rest;
 
 import io.muserver.HeaderNames;
 import io.muserver.Headers;
+import jakarta.ws.rs.BadRequestException;
+import jakarta.ws.rs.core.Cookie;
+import jakarta.ws.rs.core.HttpHeaders;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.MultivaluedMap;
 
-import javax.ws.rs.BadRequestException;
-import javax.ws.rs.core.Cookie;
-import javax.ws.rs.core.HttpHeaders;
-import javax.ws.rs.core.MediaType;
-import javax.ws.rs.core.MultivaluedMap;
 import java.util.*;
 
 import static java.util.stream.Collectors.toList;

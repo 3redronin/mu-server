@@ -1,13 +1,13 @@
 package io.muserver.rest;
 
 import io.muserver.MuServer;
+import jakarta.ws.rs.*;
+import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.StreamingOutput;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.ServerUtils;
 
-import javax.ws.rs.*;
-import javax.ws.rs.core.Response;
-import javax.ws.rs.core.StreamingOutput;
 import java.io.IOException;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;

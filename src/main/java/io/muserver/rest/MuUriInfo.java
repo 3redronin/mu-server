@@ -2,8 +2,8 @@ package io.muserver.rest;
 
 import io.muserver.Mutils;
 import io.netty.handler.codec.http.QueryStringDecoder;
+import jakarta.ws.rs.core.*;
 
-import javax.ws.rs.core.*;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
