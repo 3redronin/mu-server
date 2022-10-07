@@ -38,6 +38,18 @@ public class CORSHandlerTest {
     }
 
     @Test
+    public void aHandlerCanBeCreatedFromConfig() {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(CORSHandlerBuilder.config().withAllOriginsAllowed().toHandler(Method.GET, Method.HEAD))
+            .start();
+        try (Response resp = call(request(server.uri()).header("Origin", "http://example.org"))) {
+            assertThat(resp.headers("Vary"), contains("origin"));
+            assertThat(resp.header("Access-Control-Allow-Origin"), is("http://example.org"));
+            assertThat(resp.header("Access-Control-Allow-Methods"), is("GET, HEAD, OPTIONS"));
+        }
+    }
+
+    @Test
     public void accessHeadersAddedIfOriginIsDifferent() {
         server = ServerUtils.httpsServerForTest()
             .addHandler(corsHandler()

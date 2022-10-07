@@ -14,7 +14,7 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <netty.version>4.1.77.Final</netty.version>
+        <netty.version>4.1.82.Final</netty.version>
         <slf4j.version>1.7.36</slf4j.version>
     </properties>
 
@@ -162,7 +162,7 @@
         <dependency>
             <groupId>org.json</groupId>
             <artifactId>json</artifactId>
-            <version>20220320</version>
+            <version>20220924</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -183,7 +183,7 @@
     <licenses>
         <license>
             <name>MIT License</name>
-            <url>http://www.opensource.org/licenses/mit-license.php</url>
+            <url>https://opensource.org/licenses/mit-license.php</url>
             <distribution>repo</distribution>
         </license>
     </licenses>

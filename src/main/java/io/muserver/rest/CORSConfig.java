@@ -76,14 +76,16 @@ public class CORSConfig {
 
     boolean writeHeadersInternal(MuRequest request, MuResponse response, Set<RequestMatcher.MatchedMethod> matchedMethodsForPath) {
 
-        response.headers().add(HeaderNames.VARY, HeaderNames.ORIGIN);
+        Headers respHeaders = response.headers();
+        if (!respHeaders.containsValue(HeaderNames.VARY, HeaderNames.ORIGIN, true)) {
+            respHeaders.add(HeaderNames.VARY, HeaderNames.ORIGIN);
+        }
 
         String origin = request.headers().get(HeaderNames.ORIGIN);
         if (Mutils.nullOrEmpty(origin)) {
             return false;
         }
 
-        Headers respHeaders = response.headers();
         if (allowCors(origin)) {
             respHeaders.set(HeaderNames.ACCESS_CONTROL_ALLOW_ORIGIN, origin);
             if (matchedMethodsForPath != null) {
