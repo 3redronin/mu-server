@@ -35,33 +35,33 @@ class LegacyJaxRSResponse extends Response implements AutoCloseable, ContainerRe
 
 
     public MediaType getMediaType() {
-        RuntimeDelegate.HeaderDelegate<MediaType> headerDelegate = LegacyMuRuntimeDelegate.instance.createHeaderDelegate(MediaType.class);
+        RuntimeDelegate.HeaderDelegate<MediaType> headerDelegate = LegacyMuRuntimeDelegate.instance().createHeaderDelegate(MediaType.class);
         return headerDelegate.fromString(underlying.getMediaType().toString());
     }
 
 
     public Map<String, NewCookie> getCookies() {
-        RuntimeDelegate.HeaderDelegate<NewCookie> headerDelegate = LegacyMuRuntimeDelegate.instance.createHeaderDelegate(NewCookie.class);
+        RuntimeDelegate.HeaderDelegate<NewCookie> headerDelegate = LegacyMuRuntimeDelegate.instance().createHeaderDelegate(NewCookie.class);
         return underlying.getCookies().entrySet().stream().collect(Collectors.toMap(Object::toString, value -> headerDelegate.fromString(value.toString())));
     }
 
     public EntityTag getEntityTag() {
         jakarta.ws.rs.core.EntityTag entityTag = underlying.getEntityTag();
         if (entityTag == null) return null;
-        RuntimeDelegate.HeaderDelegate<EntityTag> headerDelegate = LegacyMuRuntimeDelegate.instance.createHeaderDelegate(EntityTag.class);
+        RuntimeDelegate.HeaderDelegate<EntityTag> headerDelegate = LegacyMuRuntimeDelegate.instance().createHeaderDelegate(EntityTag.class);
         return headerDelegate.fromString(entityTag.toString());
     }
 
 
     public Set<Link> getLinks() {
-        RuntimeDelegate.HeaderDelegate<Link> headerDelegate = LegacyMuRuntimeDelegate.instance.createHeaderDelegate(Link.class);
+        RuntimeDelegate.HeaderDelegate<Link> headerDelegate = LegacyMuRuntimeDelegate.instance().createHeaderDelegate(Link.class);
         return underlying.getLinks().stream().map(old -> headerDelegate.fromString(old.toString())).collect(Collectors.toSet());
     }
 
     public Link getLink(String relation) {
         jakarta.ws.rs.core.Link link = underlying.getLink(relation);
         if (link == null) return null;
-        RuntimeDelegate.HeaderDelegate<Link> headerDelegate = LegacyMuRuntimeDelegate.instance.createHeaderDelegate(Link.class);
+        RuntimeDelegate.HeaderDelegate<Link> headerDelegate = LegacyMuRuntimeDelegate.instance().createHeaderDelegate(Link.class);
         return headerDelegate.fromString(link.toString());
     }
 

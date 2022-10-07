@@ -23,7 +23,8 @@ import java.util.Map;
 @Deprecated
 public class LegacyMuRuntimeDelegate extends RuntimeDelegate {
 
-    static final LegacyMuRuntimeDelegate instance = new LegacyMuRuntimeDelegate();
+    private static final LegacyMuRuntimeDelegate instance = new LegacyMuRuntimeDelegate();
+
     private final Map<Class<?>, HeaderDelegate> headerDelegates = new HashMap<>();
 
     LegacyMuRuntimeDelegate() {
@@ -148,6 +149,10 @@ public class LegacyMuRuntimeDelegate extends RuntimeDelegate {
             return null;
         }
         return MuRuntimeDelegate.getInstance().createHeaderDelegate(jakarta.ws.rs.core.Link.class).fromString(link.toString());
+    }
+
+    public static LegacyMuRuntimeDelegate instance() {
+        return instance;
     }
 
     @Override

@@ -147,6 +147,61 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     }
 
     /**
+     * <p>Registers an object that can convert rest method parameters (e.g. querystring, header, form or path params)
+     * into custom classes.</p>
+     * <p>In most cases, it is easier to instead use {@link #addCustomParamConverter(Class, ParamConverter)}</p>
+     *
+     * @param paramConverterProvider A provider of parameter converters
+     * @return This builder
+     * @deprecated Please change your javax.ws.rs packages to jakarta.ws.rs
+     */
+    @Deprecated
+    public RestHandlerBuilder addCustomParamConverterProvider(javax.ws.rs.ext.ParamConverterProvider paramConverterProvider) {
+        customParamConverterProviders.add(new ParamConverterProvider() {
+            @Override
+            public <T> ParamConverter<T> getConverter(Class<T> rawType, Type genericType, Annotation[] annotations) {
+                javax.ws.rs.ext.ParamConverter<T> javaxConverter = paramConverterProvider.getConverter(rawType, genericType, annotations);
+                return new ParamConverter<T>() {
+                    @Override
+                    public T fromString(String value) {
+                        return javaxConverter.fromString(value);
+                    }
+
+                    @Override
+                    public String toString(T value) {
+                        return javaxConverter.toString(value);
+                    }
+                };
+            }
+        });
+        return this;
+    }
+
+    /**
+     * <p>Registers a parameter converter class that convert strings to and from a custom class.</p>
+     * <p>This allows you to specify query string parameters, form values, header params and path params as custom classes.</p>
+     * <p>For more functionality, {@link #addCustomParamConverterProvider(ParamConverterProvider)} is also available.</p>
+     *
+     * @param paramClass The class that this converter is meant for.
+     * @param converter  The converter
+     * @param <P>        The type of the parameter
+     * @return This builder
+     * @deprecated Please change your javax.ws.rs packages to jakarta.ws.rs
+     */
+    @Deprecated
+    public <P> RestHandlerBuilder addCustomParamConverter(Class<P> paramClass, javax.ws.rs.ext.ParamConverter<P> converter) {
+        return addCustomParamConverterProvider(new javax.ws.rs.ext.ParamConverterProvider() {
+            @Override
+            public <T> javax.ws.rs.ext.ParamConverter<T> getConverter(Class<T> rawType, Type genericType, Annotation[] annotations) {
+                if (!rawType.equals(paramClass)) {
+                    return null;
+                }
+                return (javax.ws.rs.ext.ParamConverter<T>) converter;
+            }
+        });
+    }
+
+    /**
      * <p>Registers a parameter converter class that convert strings to and from a custom class.</p>
      * <p>This allows you to specify query string parameters, form values, header params and path params as custom classes.</p>
      * <p>For more functionality, {@link #addCustomParamConverterProvider(ParamConverterProvider)} is also available.</p>

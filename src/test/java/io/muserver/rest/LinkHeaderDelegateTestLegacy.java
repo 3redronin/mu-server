@@ -23,7 +23,7 @@ public class LinkHeaderDelegateTestLegacy {
 
     @Test
     public void linkBuilderGala() {
-        Link link = LegacyMuRuntimeDelegate.instance.createLinkBuilder()
+        Link link = LegacyMuRuntimeDelegate.instance().createLinkBuilder()
             .baseUri("http://example.org/")
             .param("arb", "itrary value")
             .rel("href")
@@ -40,7 +40,7 @@ public class LinkHeaderDelegateTestLegacy {
         assertThat(link.getUriBuilder().build().toString(), is("http://example.org/something/else.html"));
         assertThat(link.toString(), is("<http://example.org/something/else.html>; rel=\"href\"; title=\"The title of \\\"my\\\" link\"; type=\"blah\"; arb=\"itrary value\""));
 
-        RuntimeDelegate.HeaderDelegate<Link> headerDelegate = LegacyMuRuntimeDelegate.instance.createHeaderDelegate(Link.class);
+        RuntimeDelegate.HeaderDelegate<Link> headerDelegate = LegacyMuRuntimeDelegate.instance().createHeaderDelegate(Link.class);
         Link reconstructed = headerDelegate.fromString(link.toString());
 
         assertThat(reconstructed, equalTo(link));
