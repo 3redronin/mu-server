@@ -1,9 +1,5 @@
 package io.muserver;
 
-import jakarta.ws.rs.BadRequestException;
-import jakarta.ws.rs.NotFoundException;
-import jakarta.ws.rs.RedirectionException;
-import jakarta.ws.rs.ServerErrorException;
 import okhttp3.Response;
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.api.ContentResponse;
@@ -15,6 +11,10 @@ import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 import scaffolding.StringUtils;
 
+import javax.ws.rs.BadRequestException;
+import javax.ws.rs.NotFoundException;
+import javax.ws.rs.RedirectionException;
+import javax.ws.rs.ServerErrorException;
 import java.io.EOFException;
 import java.net.URI;
 import java.util.Collections;
@@ -28,7 +28,7 @@ import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 
-public class ExceptionsTest {
+public class ExceptionsLegacyTest {
     private MuServer server;
 
     @Test
@@ -178,7 +178,7 @@ public class ExceptionsTest {
 
     @After
     public void stop() {
-        scaffolding.MuAssert.stopAndCheck(server);
+        MuAssert.stopAndCheck(server);
     }
 
 }

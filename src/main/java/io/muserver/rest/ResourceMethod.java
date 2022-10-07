@@ -271,6 +271,14 @@ class ResourceMethod {
                 }
                 value = Method.valueOf(httpMethodAnno.value());
             }
+            javax.ws.rs.HttpMethod oldHttpMethodAnno = anno.getAnnotation(javax.ws.rs.HttpMethod.class);
+            if (oldHttpMethodAnno != null) {
+                if (value != null) {
+                    throw new IllegalArgumentException("The method " + restMethod + " has multiple HttpMethod annotations. Only one is allowed per method.");
+                }
+                value = Method.valueOf(oldHttpMethodAnno.value());
+            }
+
         }
         return value;
     }

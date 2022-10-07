@@ -55,6 +55,35 @@ abstract class ResourceMethodParam {
             return new ContextParam(index, source, parameterHandle);
         } else if (source == ValueSource.SUSPENDED) {
             return new SuspendedParam(index, source, parameterHandle);
+        } else if (source.isLegacy) {
+            boolean encodedRequested = hasDeclared(parameterHandle, javax.ws.rs.Encoded.class);
+            boolean isDeprecated = hasDeclared(parameterHandle, Deprecated.class);
+            ParamConverter<?> converter = getParamConverter(parameterHandle, paramConverterProviders);
+            boolean lazyDefaultValue = converter.getClass().getDeclaredAnnotation(javax.ws.rs.ext.ParamConverter.Lazy.class) != null;
+            boolean explicitDefault = hasDeclared(parameterHandle, javax.ws.rs.DefaultValue.class);
+            Object defaultValue = getDefaultValue(parameterHandle, converter, lazyDefaultValue);
+
+            isRequired |= (!explicitDefault && parameterHandle.getType().isPrimitive());
+
+            String key = source == ValueSource.LEGACY_COOKIE_PARAM ? parameterHandle.getDeclaredAnnotation(javax.ws.rs.CookieParam.class).value()
+                : source == ValueSource.LEGACY_HEADER_PARAM ? parameterHandle.getDeclaredAnnotation(javax.ws.rs.HeaderParam.class).value()
+                : source == ValueSource.LEGACY_MATRIX_PARAM ? parameterHandle.getDeclaredAnnotation(javax.ws.rs.MatrixParam.class).value()
+                : source == ValueSource.LEGACY_FORM_PARAM ? parameterHandle.getDeclaredAnnotation(javax.ws.rs.FormParam.class).value()
+                : source == ValueSource.LEGACY_PATH_PARAM ? parameterHandle.getDeclaredAnnotation(javax.ws.rs.PathParam.class).value()
+                : source == ValueSource.LEGACY_QUERY_PARAM ? parameterHandle.getDeclaredAnnotation(javax.ws.rs.QueryParam.class).value()
+                : "";
+            if (key.length() == 0) {
+                throw new WebApplicationException("No parameter specified for the " + source + " in " + parameterHandle);
+            }
+            if (source == ValueSource.LEGACY_PATH_PARAM && methodPattern != null) {
+                String regex = methodPattern.regexFor(key);
+                if (regex != null) {
+                    pattern = Pattern.compile(regex);
+                }
+            }
+
+            DescriptionData descriptionData = DescriptionData.fromAnnotation(parameterHandle, key);
+            return new RequestBasedParam(index, source, parameterHandle, defaultValue, encodedRequested, lazyDefaultValue, converter, descriptionData, key, isDeprecated, isRequired, pattern, explicitDefault);
         } else {
             boolean encodedRequested = hasDeclared(parameterHandle, Encoded.class);
             boolean isDeprecated = hasDeclared(parameterHandle, Deprecated.class);
@@ -183,13 +212,13 @@ abstract class ResourceMethodParam {
                 }
             }
 
-            if (paramClass.isAssignableFrom(PathSegment.class)) {
+            if (paramClass.isAssignableFrom(PathSegment.class) || paramClass.isAssignableFrom(javax.ws.rs.core.PathSegment.class)) {
                 PathSegment seg = matchedMethod.pathParams.get(key);
                 if (seg != null && encodedRequested) {
                     return ((MuPathSegment) seg).toEncoded();
                 }
                 return seg;
-            } else if (paramClass.equals(Cookie.class)) {
+            } else if (paramClass.equals(Cookie.class) || paramClass.equals(javax.ws.rs.core.Cookie.class)) {
                 List<String> cookieValues = cookieValue(muRequest, key);
                 return cookieValues.isEmpty() ? null : new Cookie(key, cookieValues.get(0));
             } else if (paramClass.equals(io.muserver.Cookie.class)) {
@@ -198,12 +227,12 @@ abstract class ResourceMethodParam {
             }
             Collection<Object> collection = createCollection(paramClass);
             List<String> specifiedValue =
-                source == ValueSource.PATH_PARAM ? Collections.singletonList(matchedMethod.getPathParam(key))
-                    : source == ValueSource.QUERY_PARAM ? getParamValues(jaxRequest.getUriInfo().getQueryParameters(), key, cps, collection != null)
-                    : source == ValueSource.HEADER_PARAM ? getParamValues(jaxRequest.getHeaders(), key, cps, collection != null)
-                    : source == ValueSource.FORM_PARAM ? muRequest.form().getAll(key)
-                    : source == ValueSource.COOKIE_PARAM ? cookieValue(muRequest, key)
-                    : source == ValueSource.MATRIX_PARAM ? matrixParamValue(key, jaxRequest.relativePath())
+                source == ValueSource.PATH_PARAM || source == ValueSource.LEGACY_PATH_PARAM ? Collections.singletonList(matchedMethod.getPathParam(key))
+                    : source == ValueSource.QUERY_PARAM || source == ValueSource.LEGACY_QUERY_PARAM ? getParamValues(jaxRequest.getUriInfo().getQueryParameters(), key, cps, collection != null)
+                    : source == ValueSource.HEADER_PARAM || source == ValueSource.LEGACY_HEADER_PARAM ? getParamValues(jaxRequest.getHeaders(), key, cps, collection != null)
+                    : source == ValueSource.FORM_PARAM || source == ValueSource.LEGACY_FORM_PARAM ? muRequest.form().getAll(key)
+                    : source == ValueSource.COOKIE_PARAM || source == ValueSource.LEGACY_COOKIE_PARAM ? cookieValue(muRequest, key)
+                    : source == ValueSource.MATRIX_PARAM || source == ValueSource.LEGACY_MATRIX_PARAM ? matrixParamValue(key, jaxRequest.relativePath())
                     : emptyList();
             boolean isSpecified = specifiedValue != null && !specifiedValue.isEmpty();
             if (encodedRequested && isSpecified) {
@@ -297,6 +326,14 @@ abstract class ResourceMethodParam {
             : hasDeclared(p, HeaderParam.class) ? ValueSource.HEADER_PARAM
             : hasDeclared(p, Context.class) ? ValueSource.CONTEXT
             : hasDeclared(p, Suspended.class) ? ValueSource.SUSPENDED
+            : hasDeclared(p, javax.ws.rs.MatrixParam.class) ? ValueSource.LEGACY_MATRIX_PARAM
+            : hasDeclared(p, javax.ws.rs.QueryParam.class) ? ValueSource.LEGACY_QUERY_PARAM
+            : hasDeclared(p, javax.ws.rs.FormParam.class) ? ValueSource.LEGACY_FORM_PARAM
+            : hasDeclared(p, javax.ws.rs.PathParam.class) ? ValueSource.LEGACY_PATH_PARAM
+            : hasDeclared(p, javax.ws.rs.CookieParam.class) ? ValueSource.LEGACY_COOKIE_PARAM
+            : hasDeclared(p, javax.ws.rs.HeaderParam.class) ? ValueSource.LEGACY_HEADER_PARAM
+            : hasDeclared(p, javax.ws.rs.core.Context.class) ? ValueSource.CONTEXT
+            : hasDeclared(p, javax.ws.rs.container.Suspended.class) ? ValueSource.SUSPENDED
             : ValueSource.MESSAGE_BODY;
 
     }
@@ -363,12 +400,17 @@ abstract class ResourceMethodParam {
     }
 
     enum ValueSource {
-        MESSAGE_BODY(null), QUERY_PARAM("query"), MATRIX_PARAM(null), PATH_PARAM("path"), COOKIE_PARAM("cookie"), HEADER_PARAM("header"), FORM_PARAM(null), CONTEXT(null), SUSPENDED(null);
+        MESSAGE_BODY(null, false),
+        QUERY_PARAM("query", false), MATRIX_PARAM(null, false), PATH_PARAM("path", false), COOKIE_PARAM("cookie", false), HEADER_PARAM("header", false), FORM_PARAM(null, false),
+        LEGACY_QUERY_PARAM("query", true), LEGACY_MATRIX_PARAM(null, true), LEGACY_PATH_PARAM("path", true), LEGACY_COOKIE_PARAM("cookie", true), LEGACY_HEADER_PARAM("header", true), LEGACY_FORM_PARAM(null, true),
+        CONTEXT(null, false), SUSPENDED(null, false);
 
         final String openAPIIn;
+        final boolean isLegacy;
 
-        ValueSource(String openAPIIn) {
+        ValueSource(String openAPIIn, boolean isLegacy) {
             this.openAPIIn = openAPIIn;
+            this.isLegacy = isLegacy;
         }
     }
 

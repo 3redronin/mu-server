@@ -98,17 +98,35 @@ class MediaTypeDeterminer {
     }
 
     static List<MediaType> supportedProducesTypes(GenericDeclaration annotationSource) {
+        String[] value;
         Produces methodProducesAnnotation = annotationSource.getAnnotation(Produces.class);
-        return methodProducesAnnotation != null
-            ? MediaTypeHeaderDelegate.fromStrings(asList(methodProducesAnnotation.value()))
-            : emptyList();
+        if (methodProducesAnnotation != null) {
+            value = methodProducesAnnotation.value();
+        } else {
+            javax.ws.rs.Produces oldMethodProducesAnnotation = annotationSource.getAnnotation(javax.ws.rs.Produces.class);
+            if (oldMethodProducesAnnotation != null) {
+                value = oldMethodProducesAnnotation.value();
+            } else {
+                return emptyList();
+            }
+        }
+        return MediaTypeHeaderDelegate.fromStrings(asList(value));
     }
 
     static List<MediaType> supportedConsumesTypes(GenericDeclaration consumableMediaTypes) {
+        String[] value;
         Consumes methodConsumesAnnotation = consumableMediaTypes.getAnnotation(Consumes.class);
-        return methodConsumesAnnotation != null
-            ? MediaTypeHeaderDelegate.fromStrings(asList(methodConsumesAnnotation.value()))
-            : emptyList();
+        if (methodConsumesAnnotation != null) {
+            value = methodConsumesAnnotation.value();
+        } else {
+            javax.ws.rs.Consumes oldMethodConsumesAnnotation = consumableMediaTypes.getAnnotation(javax.ws.rs.Consumes.class);
+            if (oldMethodConsumesAnnotation != null) {
+                value = oldMethodConsumesAnnotation.value();
+            } else {
+                return emptyList();
+            }
+        }
+        return MediaTypeHeaderDelegate.fromStrings(asList(value));
     }
 
     static List<MediaType> parseAcceptHeaders(List<String> headers) throws IllegalArgumentException {

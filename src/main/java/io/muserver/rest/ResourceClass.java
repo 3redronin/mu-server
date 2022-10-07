@@ -78,13 +78,16 @@ class ResourceClass {
             Method httpMethod = ResourceMethod.getMuMethod(annotationSource);
             restMethod.setAccessible(true);
             Path methodPath = annotationSource.getAnnotation(Path.class);
-            if (methodPath == null && httpMethod == null) {
+            javax.ws.rs.Path oldMethodPath = annotationSource.getAnnotation(javax.ws.rs.Path.class);
+            if (methodPath == null && httpMethod == null && oldMethodPath == null) {
                 continue; // after this, only methods that are (sub)resource-methods or resource locators are processed
             }
 
             List<Class<? extends Annotation>> methodNameBindingAnnotations = getNameBindingAnnotations(annotationSource);
 
-            UriPattern methodPattern = methodPath == null ? null : UriPattern.uriTemplateToRegex(methodPath.value());
+            String methodPathValue = (methodPath != null ? methodPath.value() : (oldMethodPath != null ? oldMethodPath.value() : null));
+
+            UriPattern methodPattern = methodPathValue == null ? null : UriPattern.uriTemplateToRegex(methodPathValue);
 
 
             List<MediaType> methodProduces = MediaTypeDeterminer.supportedProducesTypes(annotationSource);
@@ -97,16 +100,15 @@ class ResourceClass {
                 params.add(resourceMethodParam);
             }
             DescriptionData descriptionData = DescriptionData.fromAnnotation(restMethod, null);
-            String pathTemplate = methodPath == null ? null : methodPath.value();
             boolean isDeprecated = annotationSource.isAnnotationPresent(Deprecated.class);
-            resourceMethods.add(new ResourceMethod(this, methodPattern, restMethod, params, httpMethod, pathTemplate, methodProduces, methodConsumes, schemaObjectCustomizer, descriptionData, isDeprecated, methodNameBindingAnnotations, annotationSource.getAnnotations()));
+            resourceMethods.add(new ResourceMethod(this, methodPattern, restMethod, params, httpMethod, methodPathValue, methodProduces, methodConsumes, schemaObjectCustomizer, descriptionData, isDeprecated, methodNameBindingAnnotations, annotationSource.getAnnotations()));
         }
         this.resourceMethods = Collections.unmodifiableList(resourceMethods);
     }
 
     static List<Class<? extends Annotation>> getNameBindingAnnotations(AnnotatedElement annotationSource) {
         return Stream.of(annotationSource.getAnnotations())
-            .filter(a -> a.annotationType().isAnnotationPresent(NameBinding.class))
+            .filter(a -> a.annotationType().isAnnotationPresent(NameBinding.class) || a.annotationType().isAnnotationPresent(javax.ws.rs.NameBinding.class))
             .map(Annotation::annotationType)
             .collect(toList());
     }
@@ -125,19 +127,27 @@ class ResourceClass {
         // all of the annotations on the super class or interface method are ignored.
 
         Path path = annotationSource.getDeclaredAnnotation(Path.class);
+        String pathValue;
         if (path == null) {
-            throw new IllegalArgumentException("The class " + annotationSource.getName() + " must specify a " + Path.class.getName()
-                + " annotation because it has other JAX RS annotations declared. (Note that @Path cannot be inherited if there are other JAX RS annotations declared on this class.)");
+            javax.ws.rs.Path oldPath = annotationSource.getDeclaredAnnotation(javax.ws.rs.Path.class);
+            if (oldPath == null) {
+                throw new IllegalArgumentException("The class " + annotationSource.getName() + " must specify a " + Path.class.getName()
+                    + " annotation because it has other JAX RS annotations declared. (Note that @Path cannot be inherited if there are other JAX RS annotations declared on this class.)");
+            } else {
+                pathValue = oldPath.value();
+            }
+        } else {
+            pathValue = path.value();
         }
 
-        UriPattern pathPattern = UriPattern.uriTemplateToRegex(path.value());
+        UriPattern pathPattern = UriPattern.uriTemplateToRegex(pathValue);
 
         List<MediaType> producesList = getProduces(null, annotationSource);
         List<MediaType> consumesList = getConsumes(null, annotationSource);
         List<Class<? extends Annotation>> classLevelNameBindingAnnotations = getNameBindingAnnotations(annotationSource);
 
         TagObject tag = DescriptionData.fromAnnotation(annotationSource, annotationSource.getSimpleName()).toTag();
-        ResourceClass resourceClass = new ResourceClass(pathPattern, path.value(), restResource.getClass(), restResource, consumesList, producesList, tag, classLevelNameBindingAnnotations, schemaObjectCustomizer, null);
+        ResourceClass resourceClass = new ResourceClass(pathPattern, pathValue, restResource.getClass(), restResource, consumesList, producesList, tag, classLevelNameBindingAnnotations, schemaObjectCustomizer, null);
         resourceClass.setupMethodInfo(paramConverterProviders);
         return resourceClass;
     }
@@ -145,6 +155,12 @@ class ResourceClass {
     private static List<MediaType> getProduces(List<MediaType> existing, Class<?> annotationSource) {
         Produces produces = annotationSource.getAnnotation(Produces.class);
         List<MediaType> producesList = new ArrayList<>(MediaTypeHeaderDelegate.fromStrings(produces == null ? null : asList(produces.value())));
+
+        javax.ws.rs.Produces oldProduces = annotationSource.getAnnotation(javax.ws.rs.Produces.class);
+        if (oldProduces != null) {
+            producesList.addAll(MediaTypeHeaderDelegate.fromStrings(asList(oldProduces.value())));
+        }
+
         if (existing != null) {
             producesList.addAll(existing);
         }
@@ -154,6 +170,12 @@ class ResourceClass {
     private static List<MediaType> getConsumes(List<MediaType> existing, Class<?> annotationSource) {
         Consumes consumes = annotationSource.getAnnotation(Consumes.class);
         List<MediaType> consumesList = new ArrayList<>(MediaTypeHeaderDelegate.fromStrings(consumes == null ? null : asList(consumes.value())));
+
+        javax.ws.rs.Consumes oldConsumes = annotationSource.getAnnotation(javax.ws.rs.Consumes.class);
+        if (oldConsumes != null) {
+            consumesList.addAll(MediaTypeHeaderDelegate.fromStrings(asList(oldConsumes.value())));
+        }
+
         if (existing != null) {
             consumesList.addAll(existing);
         }

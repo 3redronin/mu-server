@@ -31,7 +31,7 @@ class JaxClassLocator {
         boolean hasAJaxAnnotation = false;
         for (Annotation annotation : annotations) {
             String packageName = annotation.annotationType().getPackage().getName();
-            if (packageName.equals("jakarta.ws.rs") || packageName.startsWith("jakarta.ws.rs.")) {
+            if (packageName.equals("jakarta.ws.rs") || packageName.startsWith("jakarta.ws.rs.") || packageName.equals("javax.ws.rs") || packageName.startsWith("javax.ws.rs.")) {
                 hasAJaxAnnotation = true;
             }
         }
