@@ -22,6 +22,7 @@ import java.io.*;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -300,7 +301,7 @@ public class EntityProvidersTestLegacy {
             }
             @Override
             public Dog readFrom(Class<Dog> type, Type genericType, Annotation[] annotations, javax.ws.rs.core.MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
-                return new Dog(new String(Mutils.toByteArray(entityStream, 2048), LegacyEntityProviders.charsetFor(mediaType)));
+                return new Dog(new String(Mutils.toByteArray(entityStream, 2048), charsetFor(mediaType)));
             }
         }
 
@@ -316,7 +317,14 @@ public class EntityProvidersTestLegacy {
             assertThat(resp.body().string(), equalTo("Dog: Papillon"));
         }
     }
-
+    static Charset charsetFor(javax.ws.rs.core.MediaType mediaType) {
+        String charset = mediaType.getParameters().get("charset");
+        if (charset == null) {
+            return StandardCharsets.UTF_8;
+        } else {
+            return Charset.forName(charset);
+        }
+    }
     @Test
     public void entityStreamsAreClosedAfter() throws Exception {
         String body = "Yaptal";
@@ -346,7 +354,7 @@ public class EntityProvidersTestLegacy {
                 // gonna read the exact body length, but won't close the stream
                 byte[] buffer = new byte[body.length()];
                 entityStream.read(buffer);
-                return new Dog(new String(buffer, LegacyEntityProviders.charsetFor(mediaType)));
+                return new Dog(new String(buffer, charsetFor(mediaType)));
             }
         }
 

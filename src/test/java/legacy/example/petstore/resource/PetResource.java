@@ -14,19 +14,19 @@
  * limitations under the License.
  */
 
-package org.example.petstore.resource;
+package legacy.example.petstore.resource;
 
 import io.muserver.rest.ApiResponse;
 import io.muserver.rest.ApiResponses;
 import io.muserver.rest.Description;
 import io.muserver.rest.Required;
-import jakarta.ws.rs.*;
-import jakarta.ws.rs.core.MediaType;
-import jakarta.ws.rs.core.Response;
-import jakarta.ws.rs.core.StreamingOutput;
-import org.example.petstore.data.PetData;
-import org.example.petstore.model.Pet;
+import legacy.example.petstore.data.PetData;
+import legacy.example.petstore.model.Pet;
 
+import javax.ws.rs.*;
+import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.Response;
+import javax.ws.rs.core.StreamingOutput;
 import java.io.IOException;
 import java.io.OutputStream;
 
@@ -120,7 +120,7 @@ public class PetResource {
     public Response addPet(
         @Description(value = "Pet object that needs to be added to the store")
         @Required
-            Pet pet) {
+        Pet pet) {
         Pet updatedPet = petData.addPet(pet);
         return Response.ok().entity(updatedPet).build();
     }
@@ -134,7 +134,7 @@ public class PetResource {
     public Response updatePet(
         @Description(value = "Pet object that needs to be added to the store")
         @Required
-            Pet pet) {
+        Pet pet) {
         Pet updatedPet = petData.addPet(pet);
         return Response.ok().entity(updatedPet).build();
     }

@@ -3,6 +3,7 @@ package io.muserver;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.ByteBufAllocatorMetric;
 import io.netty.buffer.ByteBufAllocatorMetricProvider;
+import jakarta.ws.rs.ClientErrorException;
 import okhttp3.MediaType;
 import okhttp3.Request;
 import okhttp3.RequestBody;
@@ -14,7 +15,6 @@ import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 import scaffolding.SlowBodySender;
 
-import javax.ws.rs.ClientErrorException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;

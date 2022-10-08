@@ -14,15 +14,16 @@
  *  limitations under the License.
  */
 
-package org.example.petstore.resource;
+package legacy.example.petstore.resource;
 
 import io.muserver.rest.Required;
-import jakarta.ws.rs.*;
-import jakarta.ws.rs.core.MediaType;
-import jakarta.ws.rs.core.Response;
-import org.example.petstore.data.PetData;
-import org.example.petstore.data.StoreData;
-import org.example.petstore.model.Order;
+import legacy.example.petstore.data.PetData;
+import legacy.example.petstore.data.StoreData;
+import legacy.example.petstore.model.Order;
+
+import javax.ws.rs.*;
+import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.Response;
 
 @Path("/store")
 //@Api(value="/store" , description = "Operations about store")
@@ -71,7 +72,7 @@ public class PetStoreResource {
   public Order placeOrder(
 //      @ApiParam(value = "order placed for purchasing the pet", )
       @Required
-		      Order order) {
+      Order order) {
     storeData.placeOrder(order);
     return storeData.placeOrder(order);
   }

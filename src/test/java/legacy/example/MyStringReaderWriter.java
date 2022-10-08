@@ -1,4 +1,4 @@
-package org.example;
+package legacy.example;
 
 import io.muserver.Mutils;
 import jakarta.ws.rs.Consumes;
@@ -16,7 +16,7 @@ import java.lang.reflect.Type;
 
 @Produces({"text/plain", "*/*"})
 @Consumes({"text/plain", "*/*"})
-public class MyStringReaderWriterLegacy implements MessageBodyWriter<String>, MessageBodyReader<String> {
+public class MyStringReaderWriter implements MessageBodyWriter<String>, MessageBodyReader<String> {
 
     // this is in a non-io.muserver package so that it gets classified as a customer reader/writer
 

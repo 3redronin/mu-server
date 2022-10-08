@@ -443,9 +443,8 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
 
     /**
      * Returns a string representation of the headers.
-     *
-     * <strong>Note:</strong> The following headers will have their actual values replaced with the string <code>(hidden)</code>
-     * in order to protect potentially sensitive information: <code>authorization</code>, <code>cookie</code> and <code>set-cookie</code>.
+     * <p><strong>Note:</strong> The following headers will have their actual values replaced with the string <code>(hidden)</code>
+     * in order to protect potentially sensitive information: <code>authorization</code>, <code>cookie</code> and <code>set-cookie</code>.</p>
      * <p>If you wish to print all values or customize the header values that are hidden, use {@link #toString(Collection)}</p>
      * @return a string representation of these headers
      */

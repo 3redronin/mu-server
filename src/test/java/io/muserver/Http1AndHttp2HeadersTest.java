@@ -1,9 +1,9 @@
 package io.muserver;
 
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
+import jakarta.ws.rs.core.MediaType;
 import org.junit.Test;
 
-import javax.ws.rs.core.MediaType;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -164,7 +164,8 @@ public class Http1AndHttp2HeadersTest {
             assertThat(headers.contentType(), is(nullValue()));
 
             headers.set("Content-Type", "text/html; charset=ISO-8859-4");
-            assertThat(headers.contentType(), equalTo(new MediaType("text", "html", "ISO-8859-4")));
+            MediaType expected = new MediaType("text", "html", "ISO-8859-4");
+            assertThat(headers.contentType(), equalTo(expected));
         }
     }
 

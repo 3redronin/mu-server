@@ -14,16 +14,17 @@
  * limitations under the License.
  */
 
-package org.example.petstore.resource;
+package legacy.example.petstore.resource;
 
 import io.muserver.rest.ApiResponse;
 import io.muserver.rest.Description;
 import io.muserver.rest.Required;
-import jakarta.ws.rs.*;
-import jakarta.ws.rs.core.Response;
-import org.example.petstore.data.UserData;
-import org.example.petstore.exception.ApiException;
-import org.example.petstore.model.User;
+import legacy.example.petstore.data.UserData;
+import legacy.example.petstore.exception.ApiException;
+import legacy.example.petstore.model.User;
+
+import javax.ws.rs.*;
+import javax.ws.rs.core.Response;
 
 @Path("/user")
 @Description("Operations about user")
@@ -37,7 +38,7 @@ public class UserResource {
     public Response createUser(
         @Description(value = "Created user object")
         @Required
-            User user) {
+        User user) {
         userData.addUser(user);
         return Response.ok().entity("").build();
     }

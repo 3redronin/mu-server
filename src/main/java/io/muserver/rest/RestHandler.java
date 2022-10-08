@@ -324,9 +324,14 @@ public class RestHandler implements MuHandler {
             return requestContext.getSecurityContext();
         } else if (type.equals(Sse.class)) {
             return new JaxSseImpl();
+        } else if (type.equals(javax.ws.rs.sse.Sse.class)) {
+            return new LegacyJaxSseImpl();
         } else if (type.equals(SseEventSink.class)) {
             AsyncSsePublisher pub = AsyncSsePublisher.start(requestContext.muRequest, muResponse);
             return new JaxSseEventSinkImpl(pub, muResponse, providers);
+        } else if (type.equals(javax.ws.rs.sse.SseEventSink.class)) {
+            AsyncSsePublisher pub = AsyncSsePublisher.start(requestContext.muRequest, muResponse);
+            return new LegacyJaxSseEventSinkImpl(pub, muResponse, providers);
         } else if (type.equals(ContainerRequestContext.class) || type.equals(Request.class)) {
             return requestContext;
         } else {

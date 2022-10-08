@@ -1,6 +1,5 @@
 package io.muserver;
 
-import io.muserver.rest.RestHandlerBuilder;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
@@ -18,6 +17,7 @@ import java.util.Collections;
 import java.util.zip.GZIPInputStream;
 
 import static io.muserver.handlers.ResourceHandlerBuilder.classpathHandler;
+import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
@@ -123,17 +123,43 @@ public class GzipTest {
 
             @GET
             @Path("streamed")
+            public jakarta.ws.rs.core.StreamingOutput streamed() {
+                return output -> output.write(someText.getBytes(UTF_8));
+            }
+
+        }
+        server = httpsServerForTest()
+            .addHandler(restHandler(new StringResource()))
+            .start();
+        compareZippedVsNotZipped("/strings");
+        compareZippedVsNotZipped("/strings/streamed");
+    }
+
+    @Test
+    public void legacyJaxRSResponsesAreGZipped() throws IOException {
+        String someText = StringUtils.randomAsciiStringOfLength(8192);
+        @Path("/strings")
+        @Produces("application/json")
+        class StringResource {
+            @GET
+            public String get() {
+                return someText;
+            }
+
+            @GET
+            @Path("streamed")
             public StreamingOutput streamed() {
                 return output -> output.write(someText.getBytes(UTF_8));
             }
 
         }
         server = httpsServerForTest()
-            .addHandler(RestHandlerBuilder.restHandler(new StringResource()))
+            .addHandler(restHandler(new StringResource()))
             .start();
         compareZippedVsNotZipped("/strings");
         compareZippedVsNotZipped("/strings/streamed");
     }
+
 
     private void compareZippedVsNotZipped(String path) throws IOException {
         String unzipped;

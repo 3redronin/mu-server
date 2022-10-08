@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.io.Reader;
 import java.time.Instant;
 
+import static io.muserver.rest.EntityProvidersTestLegacy.charsetFor;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static java.util.stream.Collectors.toList;
 import static org.hamcrest.CoreMatchers.containsString;
@@ -192,7 +193,7 @@ public class StringEntityProvidersTestLegacy {
 
             long len = Long.parseLong(resp.header("content-length", "-1"));
             if (len > -1) {
-                assertThat((long) value.getBytes(LegacyEntityProviders.charsetFor(javax.ws.rs.core.MediaType.valueOf(mimeType))).length, is(len));
+                assertThat((long) value.getBytes(charsetFor(javax.ws.rs.core.MediaType.valueOf(mimeType))).length, is(len));
             }
         }
     }
