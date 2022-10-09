@@ -16,11 +16,11 @@ import java.util.stream.Collectors;
 
 import static io.muserver.rest.LegacyMuRuntimeDelegate.toJakarta;
 
-class LegacyJaxRSResponse extends Response implements AutoCloseable, ContainerResponseContext, WriterInterceptorContext {
+class LegacyJavaxRSResponse extends Response implements AutoCloseable, ContainerResponseContext, WriterInterceptorContext {
 
     final JaxRSResponse underlying;
 
-    LegacyJaxRSResponse(JaxRSResponse underlying) {
+    LegacyJavaxRSResponse(JaxRSResponse underlying) {
         this.underlying = underlying;
     }
 
@@ -35,8 +35,12 @@ class LegacyJaxRSResponse extends Response implements AutoCloseable, ContainerRe
 
 
     public MediaType getMediaType() {
+        jakarta.ws.rs.core.MediaType type = underlying.getMediaType();
+        if (type == null) {
+            return null;
+        }
         RuntimeDelegate.HeaderDelegate<MediaType> headerDelegate = LegacyMuRuntimeDelegate.instance().createHeaderDelegate(MediaType.class);
-        return headerDelegate.fromString(underlying.getMediaType().toString());
+        return headerDelegate.fromString(type.toString());
     }
 
 
@@ -260,12 +264,12 @@ class LegacyJaxRSResponse extends Response implements AutoCloseable, ContainerRe
         }
 
         Builder(JaxRSResponse.Builder underlying) {
-            this.underlying = underlying;
+            this.underlying = Objects.requireNonNull(underlying);
         }
 
         @Override
         public Response build() {
-            return new LegacyJaxRSResponse((JaxRSResponse) underlying.build());
+            return new LegacyJavaxRSResponse((JaxRSResponse) underlying.build());
         }
 
         @Override

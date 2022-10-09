@@ -1,19 +1,14 @@
 package io.muserver.rest;
 
-import io.muserver.HeaderNames;
 import io.muserver.MuException;
-import io.muserver.MuResponse;
 import io.muserver.Mutils;
 
-import javax.ws.rs.ServerErrorException;
 import javax.ws.rs.container.ContainerRequestContext;
 import javax.ws.rs.core.*;
 import javax.ws.rs.ext.RuntimeDelegate;
 import javax.ws.rs.sse.Sse;
 import javax.ws.rs.sse.SseBroadcaster;
-import java.net.URI;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -42,43 +37,13 @@ public class LegacyMuRuntimeDelegate extends RuntimeDelegate {
      */
     public static int connectedSinksCount(SseBroadcaster broadcaster) {
         Mutils.notNull("broadcaster", broadcaster);
-        if (broadcaster instanceof SseBroadcasterImpl) {
-            return ((SseBroadcasterImpl)broadcaster).connectedSinksCount();
+        if (broadcaster instanceof LegacySseBroadcasterImpl) {
+            return ((LegacySseBroadcasterImpl) broadcaster).connectedSinksCount();
         } else {
             throw new IllegalArgumentException("The given broadcaster was not created by MuServer. It was of type " + broadcaster.getClass());
         }
     }
 
-    /**
-     * Writes headers from a JAX-RS response to a MuResponse
-     * @param requestUri The URI of the current request
-     * @param from The JAX-RS response containing headers
-     * @param to The response to write the headers to
-     */
-    public static void writeResponseHeaders(URI requestUri, Response from, MuResponse to) {
-        for (Map.Entry<String, List<String>> entry : from.getStringHeaders().entrySet()) {
-            String key = entry.getKey();
-            List<String> values = entry.getValue();
-            if (key.equalsIgnoreCase("location")) {
-                if (values.size() != 1) {
-                    throw new ServerErrorException("A location response header must have only one value. Received " + String.join(", ", values), 500);
-                }
-
-                URI location;
-                try {
-                    location = URI.create(values.get(0));
-                } catch (IllegalArgumentException e) {
-                    throw new ServerErrorException("Invalid redirect location: " + values.get(0) + " - " + e.getMessage(), 500);
-                }
-                to.headers().add(key, requestUri.resolve(location).toString());
-            } else {
-                to.headers().add(key, values);
-            }
-        }
-        for (NewCookie cookie : from.getCookies().values()) {
-            to.headers().add(HeaderNames.SET_COOKIE, cookie.toString());
-        }
-    }
 
     static jakarta.ws.rs.core.MediaType toJakarta(MediaType mediaType) {
         if (mediaType == null) {
@@ -112,14 +77,14 @@ public class LegacyMuRuntimeDelegate extends RuntimeDelegate {
         if (variant == null) {
             return null;
         }
-        return MuRuntimeDelegate.getInstance().createHeaderDelegate(jakarta.ws.rs.core.Variant.class).fromString(variant.toString());
+        return new jakarta.ws.rs.core.Variant(toJakarta(variant.getMediaType()), variant.getLanguage(), variant.getEncoding());
     }
 
     static Variant fromJakarta(jakarta.ws.rs.core.Variant variant) {
         if (variant == null) {
             return null;
         }
-        return instance.createHeaderDelegate(Variant.class).fromString(variant.toString());
+        return new Variant(fromJakarta(variant.getMediaType()), variant.getLanguage(), variant.getEncoding());
     }
 
     static jakarta.ws.rs.core.NewCookie toJakarta(NewCookie cookie) {
@@ -162,7 +127,7 @@ public class LegacyMuRuntimeDelegate extends RuntimeDelegate {
 
     @Override
     public Response.ResponseBuilder createResponseBuilder() {
-        return new LegacyJaxRSResponse.Builder();
+        return new LegacyJavaxRSResponse.Builder();
     }
 
     @Override

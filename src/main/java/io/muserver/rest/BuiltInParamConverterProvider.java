@@ -74,8 +74,14 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
         if (PathSegment.class.isAssignableFrom(rawType)) {
             return new PathSegmentConverter();
         }
+        if (javax.ws.rs.core.PathSegment.class.isAssignableFrom(rawType)) {
+            return new LegacyPathSegmentConverter();
+        }
         if (Cookie.class.isAssignableFrom(rawType)) {
             return new DummyCookieConverter();
+        }
+        if (javax.ws.rs.core.Cookie.class.isAssignableFrom(rawType)) {
+            return new LegacyDummyCookieConverter();
         }
         if (rawType.isEnum()) {
             return new EnumConverter(rawType);
@@ -112,6 +118,16 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
             return value.toString();
         }
     }
+    private static class LegacyDummyCookieConverter implements ParamConverter<javax.ws.rs.core.Cookie> {
+        @Override
+        public javax.ws.rs.core.Cookie fromString(String value) {
+            return null;
+        }
+        @Override
+        public String toString(javax.ws.rs.core.Cookie value) {
+            return value.toString();
+        }
+    }
 
     private static class PathSegmentConverter implements ParamConverter<PathSegment> {
         @Override
@@ -123,6 +139,21 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
         }
         @Override
         public String toString(PathSegment value) {
+            if (value == null) throw new IllegalArgumentException("value cannot be null");
+            return value.toString();
+        }
+    }
+
+    private static class LegacyPathSegmentConverter implements ParamConverter<javax.ws.rs.core.PathSegment> {
+        @Override
+        public javax.ws.rs.core.PathSegment fromString(String value) {
+            if (value == null) throw new IllegalArgumentException("value cannot be null");
+            LegacyMuPathSegment seg = LegacyMuUriInfo.pathStringToSegments(value, true).findFirst().orElse(null);
+            if (seg == null) throw new IllegalArgumentException("Could not parse a path segment");
+            return seg;
+        }
+        @Override
+        public String toString(javax.ws.rs.core.PathSegment value) {
             if (value == null) throw new IllegalArgumentException("value cannot be null");
             return value.toString();
         }

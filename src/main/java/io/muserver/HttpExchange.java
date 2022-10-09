@@ -399,20 +399,8 @@ class HttpExchange implements ResponseInfo, Exchange {
                 if (cause instanceof WebApplicationException) {
                     wae = (WebApplicationException) cause;
                 } else if (cause instanceof javax.ws.rs.WebApplicationException) {
-                    javax.ws.rs.WebApplicationException oldWae = (javax.ws.rs.WebApplicationException) cause;
-                    javax.ws.rs.core.Response oldResp = oldWae.getResponse();
-                    Response.ResponseBuilder rb = Response.status(oldResp.getStatus());
-                    if (oldResp.hasEntity()) {
-                        rb.entity(oldResp.getEntity());
-                    }
-                    for (String headerName : oldResp.getHeaders().keySet()) {
-                        List<Object> headerValues = oldResp.getHeaders().get(headerName);
-                        for (Object headerValue : headerValues) {
-                            rb.header(headerName, headerValue);
-                        }
-                    }
-                    Response convertedResponse = rb.build();
-                    wae = new WebApplicationException(oldWae.getMessage(), convertedResponse);
+
+                    wae = WebApplicationExceptionConverter.toJakarta((javax.ws.rs.WebApplicationException) cause);
                 } else {
                     String errorID = "ERR-" + UUID.randomUUID();
                     log.info("Sending a 500 to the client with ErrorID=" + errorID + " for " + request, cause);

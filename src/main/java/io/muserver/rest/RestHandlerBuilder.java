@@ -365,7 +365,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
 
                 LinkHeaderDelegate linkHeaderDelegate = (LinkHeaderDelegate)MuRuntimeDelegate.getInstance().createHeaderDelegate(Link.class);
                 List<Link> links = legacyResponse.getLinks().stream().map(legacyLink -> linkHeaderDelegate.fromString(legacyLink.toString())).collect(Collectors.toList());
-                Annotation[] annotations = (legacyResponse instanceof LegacyJaxRSResponse) ? ((LegacyJaxRSResponse)legacyResponse).getAnnotations() : new Annotation[0];
+                Annotation[] annotations = (legacyResponse instanceof LegacyJavaxRSResponse) ? ((LegacyJavaxRSResponse)legacyResponse).getAnnotations() : new Annotation[0];
                 return new JaxRSResponse(Response.Status.fromStatusCode(legacyResponse.getStatus()), headers, entity, cookies, links, annotations);
             }
         });
@@ -481,10 +481,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      */
     @Deprecated
     public RestHandlerBuilder addRequestFilter(javax.ws.rs.container.ContainerRequestFilter filter) {
-        ContainerRequestFilter adapted = requestContext -> {
-            LegacyJaxRSRequestAdapter container = new LegacyJaxRSRequestAdapter((JaxRSRequest) requestContext);
-            filter.filter(container);
-        };
+        ContainerRequestFilter adapted = new LegacyContainerRequestFilterAdapter(filter);
         if (filter.getClass().getDeclaredAnnotation(javax.ws.rs.container.PreMatching.class) != null || filter.getClass().getDeclaredAnnotation(PreMatching.class) != null) {
             this.preMatchRequestFilters.add(adapted);
         } else {
@@ -507,11 +504,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      */
     @Deprecated
     public RestHandlerBuilder addResponseFilter(javax.ws.rs.container.ContainerResponseFilter filter) {
-        ContainerResponseFilter adapted = (requestContext, responseContext) -> {
-            LegacyJaxRSRequestAdapter req = new LegacyJaxRSRequestAdapter((JaxRSRequest) requestContext);
-            LegacyJaxRSResponse res = new LegacyJaxRSResponse((JaxRSResponse) responseContext);
-            filter.filter(req, res);
-        };
+        ContainerResponseFilter adapted = new LegacyContainerResponseFilterAdapter(filter);
         this.responseFilters.add(adapted);
         return this;
     }
@@ -610,7 +603,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     public RestHandlerBuilder addWriterInterceptor(javax.ws.rs.ext.WriterInterceptor writerInterceptor) {
         if (writerInterceptor != null) {
             this.writerInterceptors.add(context -> {
-                javax.ws.rs.ext.WriterInterceptorContext adapted = new LegacyJaxRSResponse((JaxRSResponse) context);
+                javax.ws.rs.ext.WriterInterceptorContext adapted = new LegacyJavaxRSResponse((JaxRSResponse) context);
                 writerInterceptor.aroundWriteTo(adapted);
             });
         }
@@ -707,7 +700,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
             for (ResourceClass root : roots) {
                 for (ResourceMethod rm : root.resourceMethods) {
                     for (ResourceMethodParam param : rm.params) {
-                        if (Collection.class.isAssignableFrom(param.parameterHandle.getType()) && (param.source == ResourceMethodParam.ValueSource.HEADER_PARAM || param.source == ResourceMethodParam.ValueSource.QUERY_PARAM)) {
+                        if (Collection.class.isAssignableFrom(param.parameterHandle.getType()) && (param.source == ResourceMethodParam.ValueSource.HEADER_PARAM || param.source == ResourceMethodParam.ValueSource.QUERY_PARAM || param.source == ResourceMethodParam.ValueSource.LEGACY_HEADER_PARAM || param.source == ResourceMethodParam.ValueSource.LEGACY_QUERY_PARAM)) {
                             throw new IllegalStateException("Please specify a string handling strategy for collections for querystring and header parameters. " +
                                 "Please note that the behaviour of these parameters have changed since Mu Server 0.70.0 to follow the JAX-RS standard. " +
                                 "Previously, a parameter values such as 'one,two,three' when passed to a collection parameter would be interpreted as 3 values, " +
@@ -725,11 +718,11 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
         return new RestHandler(entityProviders, roots, documentor, customExceptionMapper, filterManagerThing, corsConfig, paramConverterProviders, schemaObjectCustomizer, readerInterceptors, writerInterceptors, cps);
     }
 
-    private static class LegacyJaxRSMessageBodyReader<T> implements MessageBodyReader<T> {
+    static class LegacyJaxRSMessageBodyReader<T> implements MessageBodyReader<T> {
 
-        private final javax.ws.rs.ext.MessageBodyReader<T> reader;
+        final javax.ws.rs.ext.MessageBodyReader<T> reader;
 
-        private LegacyJaxRSMessageBodyReader(javax.ws.rs.ext.MessageBodyReader<T> reader) {
+        LegacyJaxRSMessageBodyReader(javax.ws.rs.ext.MessageBodyReader<T> reader) {
             this.reader = reader;
         }
 
@@ -748,8 +741,8 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
         return new javax.ws.rs.core.MediaType(mediaType.getType(), mediaType.getSubtype(), mediaType.getParameters());
     }
 
-    private static class LegacyJaxRSMessageBodyWriter<T> implements MessageBodyWriter<T> {
-        private final javax.ws.rs.ext.MessageBodyWriter<T> writer;
+    static class LegacyJaxRSMessageBodyWriter<T> implements MessageBodyWriter<T> {
+        final javax.ws.rs.ext.MessageBodyWriter<T> writer;
 
         public LegacyJaxRSMessageBodyWriter(javax.ws.rs.ext.MessageBodyWriter<T> writer) {
             this.writer = writer;
@@ -785,5 +778,6 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
         }
         return headersCopy;
     }
+
 }
 

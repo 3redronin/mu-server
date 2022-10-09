@@ -90,7 +90,7 @@ public class RestHandler implements MuHandler {
                 try {
                     Object instance = invokeResourceMethod(requestContext, muResponse, matchedMethod, onSuspended, entityProviders, collectionParameterStrategy);
                     return ResourceClass.forSubResourceLocator(rm, instance.getClass(), instance, schemaObjectCustomizer, paramConverterProviders);
-                } catch (WebApplicationException wae) {
+                } catch (WebApplicationException | javax.ws.rs.WebApplicationException wae) {
                     throw wae;
                 } catch (Exception e) {
                     throw new MuException("Error creating instance returned by sub-resource-locator " + rm.methodHandle, e);
@@ -100,7 +100,7 @@ public class RestHandler implements MuHandler {
             RequestMatcher.MatchedMethod mm;
             try {
                 mm = requestMatcher.findResourceMethod(requestContext, requestContext.getMuMethod(), acceptHeaders, subResourceLocator);
-            } catch (NotAllowedException e) {
+            } catch (NotAllowedException | javax.ws.rs.NotAllowedException e) {
                 if (requestContext.getMuMethod() == Method.HEAD) {
                     mm = requestMatcher.findResourceMethod(requestContext, Method.GET, acceptHeaders, subResourceLocator);
                 } else if (requestContext.getMuMethod() == Method.OPTIONS) {
@@ -314,14 +314,20 @@ public class RestHandler implements MuHandler {
         Class<?> type = param.parameterHandle.getType();
         if (type.equals(UriInfo.class)) {
             paramValue = createUriInfo(requestContext.relativePath(), mm, request.uri().resolve(request.contextPath() + "/"), request.uri());
+        } else if (type.equals(javax.ws.rs.core.UriInfo.class)) {
+            paramValue = createLegacyUriInfo(requestContext.relativePath(), mm, request.uri().resolve(request.contextPath() + "/"), request.uri());
         } else if (type.equals(MuResponse.class)) {
             paramValue = muResponse;
         } else if (type.equals(MuRequest.class)) {
             paramValue = request;
         } else if (type.equals(HttpHeaders.class)) {
             paramValue = new JaxRsHttpHeadersAdapter(request.headers(), request.cookies());
+        } else if (type.equals(javax.ws.rs.core.HttpHeaders.class)) {
+            paramValue = new LegacyJaxRsHttpHeadersAdapter(request.headers(), request.cookies());
         } else if (type.equals(SecurityContext.class)) {
             return requestContext.getSecurityContext();
+        } else if (type.equals(javax.ws.rs.core.SecurityContext.class)) {
+            return new LegacySecurityContextAdapter(requestContext.getSecurityContext());
         } else if (type.equals(Sse.class)) {
             return new JaxSseImpl();
         } else if (type.equals(javax.ws.rs.sse.Sse.class)) {
@@ -334,6 +340,8 @@ public class RestHandler implements MuHandler {
             return new LegacyJaxSseEventSinkImpl(pub, muResponse, providers);
         } else if (type.equals(ContainerRequestContext.class) || type.equals(Request.class)) {
             return requestContext;
+        } else if (type.equals(javax.ws.rs.container.ContainerRequestContext.class) || type.equals(javax.ws.rs.core.Request.class)) {
+            return new LegacyJaxRSRequestAdapter(requestContext);
         } else {
             throw new ServerErrorException("MuServer does not support @Context parameters with type " + type, 500);
         }
@@ -351,6 +359,20 @@ public class RestHandler implements MuHandler {
         }
         List<Object> matchedResources = rm == null ? emptyList() : singletonList(mm.resourceMethod.resourceClass.resourceInstance);
         return new MuUriInfo(baseUri, requestUri,
+            Mutils.trim(relativePath, "/"), Collections.unmodifiableList(matchedURIs),
+            matchedResources);
+    }
+    static LegacyMuUriInfo createLegacyUriInfo(String relativePath, RequestMatcher.MatchedMethod mm, URI baseUri, URI requestUri) {
+        List<String> matchedURIs = new ArrayList<>();
+        matchedURIs.add(relativePath);
+        ResourceMethod rm = null;
+        if (mm != null) {
+            String methodSpecific = mm.pathMatch.regexMatcher().group();
+            matchedURIs.add(relativePath.replace("/" + methodSpecific, ""));
+            rm = mm.resourceMethod;
+        }
+        List<Object> matchedResources = rm == null ? emptyList() : singletonList(mm.resourceMethod.resourceClass.resourceInstance);
+        return new LegacyMuUriInfo(baseUri, requestUri,
             Mutils.trim(relativePath, "/"), Collections.unmodifiableList(matchedURIs),
             matchedResources);
     }

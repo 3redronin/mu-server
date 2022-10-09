@@ -47,7 +47,7 @@ abstract class ResourceMethodParam {
 
         Pattern pattern = null;
         ValueSource source = getSource(parameterHandle);
-        boolean isRequired = source == ValueSource.PATH_PARAM || hasDeclared(parameterHandle, Required.class);
+        boolean isRequired = source == ValueSource.PATH_PARAM || source == ValueSource.LEGACY_PATH_PARAM || hasDeclared(parameterHandle, Required.class);
         if (source == ValueSource.MESSAGE_BODY) {
             DescriptionData descriptionData = DescriptionData.fromAnnotation(parameterHandle, null);
             return new MessageBodyParam(index, source, parameterHandle, descriptionData, isRequired);
@@ -212,15 +212,25 @@ abstract class ResourceMethodParam {
                 }
             }
 
-            if (paramClass.isAssignableFrom(PathSegment.class) || paramClass.isAssignableFrom(javax.ws.rs.core.PathSegment.class)) {
+            if (paramClass.isAssignableFrom(PathSegment.class)) {
                 PathSegment seg = matchedMethod.pathParams.get(key);
                 if (seg != null && encodedRequested) {
                     return ((MuPathSegment) seg).toEncoded();
                 }
                 return seg;
-            } else if (paramClass.equals(Cookie.class) || paramClass.equals(javax.ws.rs.core.Cookie.class)) {
+            }else if (paramClass.isAssignableFrom(javax.ws.rs.core.PathSegment.class)) {
+                PathSegment jakartaPS = matchedMethod.pathParams.get(key);
+                javax.ws.rs.core.PathSegment seg = jakartaPS == null ? null : new LegacyMuPathSegment(jakartaPS.getPath(), new LegacyMultivaluedMapAdapter<>(jakartaPS.getMatrixParameters()));
+                if (seg != null && encodedRequested) {
+                    return ((LegacyMuPathSegment) seg).toEncoded();
+                }
+                return seg;
+            } else if (paramClass.equals(Cookie.class)) {
                 List<String> cookieValues = cookieValue(muRequest, key);
                 return cookieValues.isEmpty() ? null : new Cookie(key, cookieValues.get(0));
+            } else if (paramClass.equals(javax.ws.rs.core.Cookie.class)) {
+                List<String> cookieValues = cookieValue(muRequest, key);
+                return cookieValues.isEmpty() ? null : new javax.ws.rs.core.Cookie(key, cookieValues.get(0));
             } else if (paramClass.equals(io.muserver.Cookie.class)) {
                 List<String> cookieValues = cookieValue(muRequest, key);
                 return cookieValues.isEmpty() ? null : new CookieBuilder().withName(key).withValue(cookieValues.get(0)).build();
@@ -373,11 +383,20 @@ abstract class ResourceMethodParam {
     }
 
     private static Object getDefaultValue(Parameter parameterHandle, ParamConverter<?> converter, boolean lazyDefaultValue) {
+        String annotationValue = null;
         DefaultValue annotation = parameterHandle.getDeclaredAnnotation(DefaultValue.class);
-        if (annotation == null) {
+        if (annotation != null) {
+            annotationValue = annotation.value();
+        } else {
+            javax.ws.rs.DefaultValue oldAnnotation = parameterHandle.getDeclaredAnnotation(javax.ws.rs.DefaultValue.class);
+            if (oldAnnotation != null) {
+                annotationValue = oldAnnotation.value();
+            }
+        }
+        if (annotationValue == null) {
             return converter instanceof HasDefaultValue ? ((HasDefaultValue) converter).getDefault() : null;
         }
-        return convertValue(parameterHandle, converter, lazyDefaultValue, annotation.value());
+        return convertValue(parameterHandle, converter, lazyDefaultValue, annotationValue);
     }
 
     private static Object convertValue(Parameter parameterHandle, ParamConverter<?> converter, boolean skipConverter, Object value) {

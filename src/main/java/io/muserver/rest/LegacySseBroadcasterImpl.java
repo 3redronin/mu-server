@@ -42,8 +42,8 @@ class LegacySseBroadcasterImpl implements SseBroadcaster {
         Mutils.notNull("sseEventSink", sseEventSink);
         throwIfClosed();
         this.sinks.add(sseEventSink);
-        if (sseEventSink instanceof JaxSseEventSinkImpl) {
-            ((JaxSseEventSinkImpl) sseEventSink).setResponseCompleteHandler(info -> {
+        if (sseEventSink instanceof LegacyJaxSseEventSinkImpl) {
+            ((LegacyJaxSseEventSinkImpl) sseEventSink).setResponseCompleteHandler(info -> {
                 if (!info.completedSuccessfully()) {
                     Exception ex;
                     switch (info.response().responseState()) {

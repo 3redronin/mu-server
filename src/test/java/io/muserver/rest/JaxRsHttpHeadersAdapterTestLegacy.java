@@ -21,7 +21,7 @@ public class JaxRsHttpHeadersAdapterTestLegacy {
 
     private final Headers reqHeaders = Headers.http1Headers();
     private final List<Cookie> cookies = new ArrayList<>();
-    private final JaxRsHttpHeadersAdapter httpHeaders = new JaxRsHttpHeadersAdapter(reqHeaders, cookies);
+    private final LegacyJaxRsHttpHeadersAdapter httpHeaders = new LegacyJaxRsHttpHeadersAdapter(reqHeaders, cookies);
 
     @Test
     public void getRequestHeader() {

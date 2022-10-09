@@ -25,7 +25,7 @@ public class JaxRSResponseTestLegacy {
 
     @Test
     public void headersCanBeGottenFromIt() {
-        Response.ResponseBuilder builder = new LegacyJaxRSResponse.Builder()
+        Response.ResponseBuilder builder = new LegacyJavaxRSResponse.Builder()
             .allow("GET", "HEAD")
             .cacheControl(cacheControl())
             .contentLocation(URI.create("http://localhost:8080"))
@@ -40,7 +40,7 @@ public class JaxRSResponseTestLegacy {
             .tag(new EntityTag("lkajsd\"fkljsklfdj", true))
             .header("X-Another", "something");
 
-        LegacyJaxRSResponse response = (LegacyJaxRSResponse) builder.build();
+        LegacyJavaxRSResponse response = (LegacyJavaxRSResponse) builder.build();
         assertThat(response.getStatus(), is(201));
 
         MultivaluedMap<String, String> actual = response.getStringHeaders();
@@ -126,7 +126,7 @@ public class JaxRSResponseTestLegacy {
     @Test
     public void usesHeaderDelegatesIfAvailable() {
         NewCookie newCookie = new NewCookie("some-name", "some value", "/path", "example.org", "comment", 32, true, true);
-        Response resp = LegacyJaxRSResponse.ok()
+        Response resp = LegacyJavaxRSResponse.ok()
             .header("cache", cacheControl())
             .header("string-val", "A string val")
             .header("int-val", 1234)
@@ -135,7 +135,7 @@ public class JaxRSResponseTestLegacy {
         assertThat(resp.getHeaderString("cache"), is("private, no-transform, must-revalidate, max-age=10"));
         assertThat(resp.getHeaderString("string-val"), is("A string val"));
         assertThat(resp.getHeaderString("int-val"), is("1234"));
-        assertThat(resp.getHeaderString("set-cookie"), is(MuRuntimeDelegate.getInstance().createHeaderDelegate(NewCookie.class).toString(newCookie)));
+        assertThat(resp.getHeaderString("set-cookie"), is(LegacyMuRuntimeDelegate.getInstance().createHeaderDelegate(NewCookie.class).toString(newCookie)));
         assertThat(resp.getHeaderString("set-cookie"), containsStringIgnoringCase("max-age=32;"));
     }
 

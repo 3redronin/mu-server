@@ -22,18 +22,26 @@ class ProviderWrapper<T> implements Comparable<ProviderWrapper<T>> {
         this.genericType = genericType;
     }
 
-    public static ProviderWrapper<MessageBodyReader<?>> reader(MessageBodyReader<?> provider) {
-        List<MediaType> mediaTypes = MediaTypeDeterminer.supportedConsumesTypes(provider.getClass());
-        return new ProviderWrapper<>(provider, mediaTypes, genericTypeOf(provider, MessageBodyReader.class));
+    public static ProviderWrapper<MessageBodyReader<?>> reader(MessageBodyReader<?> reader) {
+        Class<?> readerClass = (reader instanceof RestHandlerBuilder.LegacyJaxRSMessageBodyReader) ? ((RestHandlerBuilder.LegacyJaxRSMessageBodyReader)reader).reader.getClass() : reader.getClass();
+        List<MediaType> mediaTypes = MediaTypeDeterminer.supportedConsumesTypes(readerClass);
+        return new ProviderWrapper<>(reader, mediaTypes, genericTypeOf(reader, MessageBodyReader.class));
     }
-    public static ProviderWrapper<MessageBodyWriter<?>> writer(MessageBodyWriter<?> provider) {
-        List<MediaType> mediaTypes = MediaTypeDeterminer.supportedProducesTypes(provider.getClass());
-        return new ProviderWrapper<>(provider, mediaTypes, genericTypeOf(provider, MessageBodyWriter.class));
+    public static ProviderWrapper<MessageBodyWriter<?>> writer(MessageBodyWriter<?> writer) {
+        Class<?> writerClass = (writer instanceof RestHandlerBuilder.LegacyJaxRSMessageBodyWriter) ? ((RestHandlerBuilder.LegacyJaxRSMessageBodyWriter)writer).writer.getClass() : writer.getClass();
+        List<MediaType> mediaTypes = MediaTypeDeterminer.supportedProducesTypes(writerClass);
+        return new ProviderWrapper<>(writer, mediaTypes, genericTypeOf(writer, MessageBodyWriter.class));
     }
 
     public static Type genericTypeOf(Object instance, Class implementedInterface) {
         if (instance instanceof PrimitiveEntityProvider) {
             return ((PrimitiveEntityProvider) instance).boxedClass;
+        }
+        if (instance instanceof RestHandlerBuilder.LegacyJaxRSMessageBodyReader) {
+            return genericTypeOf(((RestHandlerBuilder.LegacyJaxRSMessageBodyReader) instance).reader, javax.ws.rs.ext.MessageBodyReader.class);
+        }
+        if (instance instanceof RestHandlerBuilder.LegacyJaxRSMessageBodyWriter) {
+            return genericTypeOf(((RestHandlerBuilder.LegacyJaxRSMessageBodyWriter) instance).writer, javax.ws.rs.ext.MessageBodyWriter.class);
         }
         for (Type type : instance.getClass().getGenericInterfaces()) {
             if (type instanceof ParameterizedType) {

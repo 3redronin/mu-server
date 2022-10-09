@@ -21,14 +21,14 @@ class FilterManagerThing {
 
     void onPreMatch(JaxRSRequest requestContext) throws IOException {
         for (ContainerRequestFilter preMatchRequestFilter : preMatchRequestFilters) {
-
             preMatchRequestFilter.filter(requestContext);
         }
     }
 
     void onPostMatch(JaxRSRequest requestContext) throws IOException {
         for (ContainerRequestFilter requestFilter : requestFilters) {
-            List<Class<? extends Annotation>> filterBindings = ResourceClass.getNameBindingAnnotations(requestFilter.getClass());
+            Class<?> filterClass = (requestFilter instanceof LegacyContainerRequestFilterAdapter) ? ((LegacyContainerRequestFilterAdapter)requestFilter).original.getClass() : requestFilter.getClass();
+            List<Class<? extends Annotation>> filterBindings = ResourceClass.getNameBindingAnnotations(filterClass);
             if (requestContext.methodHasAnnotations(filterBindings)) {
                 requestFilter.filter(requestContext);
             }
@@ -37,7 +37,8 @@ class FilterManagerThing {
 
     void onBeforeSendResponse(JaxRSRequest requestContext, ContainerResponseContext responseContext) throws IOException {
         for (ContainerResponseFilter responseFilter : responseFilters) {
-            List<Class<? extends Annotation>> filterBindings = ResourceClass.getNameBindingAnnotations(responseFilter.getClass());
+            Class<?> filterClass = (responseFilter instanceof LegacyContainerResponseFilterAdapter) ? ((LegacyContainerResponseFilterAdapter)responseFilter).original.getClass() : responseFilter.getClass();
+            List<Class<? extends Annotation>> filterBindings = ResourceClass.getNameBindingAnnotations(filterClass);
             if (requestContext.methodHasAnnotations(filterBindings)) {
                 responseFilter.filter(requestContext, responseContext);
             }

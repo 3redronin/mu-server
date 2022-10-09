@@ -1,6 +1,5 @@
 package io.muserver.rest;
 
-import io.muserver.Method;
 import jakarta.ws.rs.ext.RuntimeDelegate;
 
 import javax.ws.rs.WebApplicationException;
@@ -98,12 +97,14 @@ class LegacyJaxRSRequestAdapter implements javax.ws.rs.core.Request, javax.ws.rs
     @Override
     public Response.ResponseBuilder evaluatePreconditions(EntityTag eTag) {
         jakarta.ws.rs.core.EntityTag converted = toJakarta(eTag);
-        return new LegacyJaxRSResponse.Builder((JaxRSResponse.Builder)jaxRSRequest.evaluatePreconditions(converted));
+        JaxRSResponse.Builder underlying = (JaxRSResponse.Builder) jaxRSRequest.evaluatePreconditions(converted);
+        return underlying == null ? null : new LegacyJavaxRSResponse.Builder(underlying);
     }
 
     @Override
     public Response.ResponseBuilder evaluatePreconditions(Date lastModified) {
-        return new LegacyJaxRSResponse.Builder((JaxRSResponse.Builder)jaxRSRequest.evaluatePreconditions(lastModified));
+        JaxRSResponse.Builder underlying = (JaxRSResponse.Builder) jaxRSRequest.evaluatePreconditions(lastModified);
+        return underlying == null ? null : new LegacyJavaxRSResponse.Builder(underlying);
     }
 
 
@@ -111,23 +112,16 @@ class LegacyJaxRSRequestAdapter implements javax.ws.rs.core.Request, javax.ws.rs
         RuntimeDelegate.HeaderDelegate<jakarta.ws.rs.core.EntityTag> headerDelegate = MuRuntimeDelegate.getInstance().createHeaderDelegate(jakarta.ws.rs.core.EntityTag.class);
         jakarta.ws.rs.core.EntityTag newEtag = headerDelegate.fromString(eTag.toString());
         jakarta.ws.rs.core.Response.ResponseBuilder responseBuilder = jaxRSRequest.evaluatePreconditions(lastModified, newEtag);
-        return new LegacyJaxRSResponse.Builder((JaxRSResponse.Builder)responseBuilder);
+        return responseBuilder == null ? null : new LegacyJavaxRSResponse.Builder((JaxRSResponse.Builder)responseBuilder);
     }
 
     public Response.ResponseBuilder evaluatePreconditions() {
-        return new LegacyJaxRSResponse.Builder((JaxRSResponse.Builder)jaxRSRequest.evaluatePreconditions());
-    }
-
-    Method getMuMethod() {
-        return jaxRSRequest.getMuMethod();
+        JaxRSResponse.Builder underlying = (JaxRSResponse.Builder) jaxRSRequest.evaluatePreconditions();
+        return underlying == null ? null : new LegacyJavaxRSResponse.Builder(underlying);
     }
 
     public void setMethod(String method) {
         jaxRSRequest.setMethod(method);
-    }
-
-    Object executeInterceptors() throws IOException {
-        return jaxRSRequest.executeInterceptors();
     }
 
     public Object proceed() throws IOException, WebApplicationException {
@@ -211,7 +205,7 @@ class LegacyJaxRSRequestAdapter implements javax.ws.rs.core.Request, javax.ws.rs
 
     @Override
     public void abortWith(Response response) {
-        jaxRSRequest.abortWith(((LegacyJaxRSResponse)response).underlying);
+        jaxRSRequest.abortWith(((LegacyJavaxRSResponse)response).underlying);
     }
 
     public String toString() {

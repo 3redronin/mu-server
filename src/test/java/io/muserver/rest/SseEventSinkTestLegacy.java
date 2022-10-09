@@ -6,7 +6,10 @@ import org.junit.After;
 import org.junit.Test;
 import scaffolding.*;
 
-import javax.ws.rs.*;
+import javax.ws.rs.GET;
+import javax.ws.rs.Path;
+import javax.ws.rs.Produces;
+import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.MultivaluedMap;
@@ -161,7 +164,7 @@ public class SseEventSinkTestLegacy {
             listener.assertListenerIsClosed();
         }
         assertThat(listener.receivedMessages, equalTo(asList("open", "retryError", "closed")));
-        assertThat(error.get(), instanceOf(InternalServerErrorException.class));
+        assertThat(error.get(), instanceOf(jakarta.ws.rs.InternalServerErrorException.class));
     }
 
     @Test

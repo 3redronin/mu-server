@@ -8,14 +8,19 @@ import jakarta.ws.rs.ext.MessageBodyReader;
 import jakarta.ws.rs.ext.MessageBodyWriter;
 import org.junit.Test;
 
+import javax.ws.rs.Consumes;
 import java.io.*;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
 
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.equalTo;
 
 public class ProviderWrapperTest {
+    static {
+        MuRuntimeDelegate.ensureSet();
+    }
 
     @Test
     public void itCanFigureOutGenericReaderTypes() {
@@ -44,6 +49,27 @@ public class ProviderWrapperTest {
             assertThat(readerType(provider), equalTo(provider.boxedClass));
             assertThat(writerType(provider), equalTo(provider.boxedClass));
         }
+    }
+
+    @Test
+    public void forLegacyJaxReadersItUsesTheTypeOnTheOldProvider() {
+        class Dog { }
+        @Consumes("text/dog")
+        class DogBodyReader implements javax.ws.rs.ext.MessageBodyReader<Dog> {
+            @Override
+            public boolean isReadable(Class<?> type, Type genericType, Annotation[] annotations, javax.ws.rs.core.MediaType mediaType) {
+                return Dog.class.isAssignableFrom(type);
+            }
+            @Override
+            public Dog readFrom(Class<Dog> type, Type genericType, Annotation[] annotations, javax.ws.rs.core.MediaType mediaType, javax.ws.rs.core.MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, javax.ws.rs.WebApplicationException {
+                return new Dog();
+            }
+        }
+
+        MessageBodyReader adapted = new RestHandlerBuilder.LegacyJaxRSMessageBodyReader(new DogBodyReader());
+        ProviderWrapper<MessageBodyReader<?>> providerWrapper = ProviderWrapper.reader(adapted);
+        assertThat(readerType(adapted), equalTo(Dog.class));
+        assertThat("Actual: " + providerWrapper.mediaTypes, providerWrapper.mediaTypes, contains(MediaType.valueOf("text/dog")));
     }
 
     private static Type readerType(Object instance) {

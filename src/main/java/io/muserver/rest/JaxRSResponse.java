@@ -419,7 +419,11 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
 
         @Override
         public ResponseBuilder clone() {
-            return new Builder().status(status).entity(entity, annotations).cookie(cookies).type(type);
+            ResponseBuilder builder = new Builder().status(status).entity(entity, annotations).cookie(cookies).type(type).links(linkHeaders.toArray(new Link[0]));
+            for (Map.Entry<String, List<Object>> header : headers.entrySet()) {
+                builder.header(header.getKey(), header.getValue());
+            }
+            return builder;
         }
 
         @Override
