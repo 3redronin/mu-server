@@ -12,6 +12,7 @@ import javax.ws.rs.ext.RuntimeDelegate;
 import javax.ws.rs.sse.Sse;
 import javax.ws.rs.sse.SseBroadcaster;
 import java.net.URI;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -46,6 +47,7 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
         headerDelegates.put(Cookie.class, new CookieHeaderDelegate());
         headerDelegates.put(EntityTag.class, new EntityTagDelegate());
         headerDelegates.put(Link.class, new LinkHeaderDelegate());
+        headerDelegates.put(Date.class, new DateHeaderDelegate());
     }
 
     /**

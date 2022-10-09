@@ -131,12 +131,14 @@ public class JaxRSResponseTest {
             .header("string-val", "A string val")
             .header("int-val", 1234)
             .header("set-cookie", newCookie)
+            .header("some-date", new Date(1665326590510L))
             .build();
         assertThat(resp.getHeaderString("cache"), is("private, no-transform, must-revalidate, max-age=10"));
         assertThat(resp.getHeaderString("string-val"), is("A string val"));
         assertThat(resp.getHeaderString("int-val"), is("1234"));
         assertThat(resp.getHeaderString("set-cookie"), is(MuRuntimeDelegate.getInstance().createHeaderDelegate(NewCookie.class).toString(newCookie)));
         assertThat(resp.getHeaderString("set-cookie"), containsStringIgnoringCase("max-age=32;"));
+        assertThat(resp.getHeaderString("some-date"), is("Sun, 9 Oct 2022 14:43:10 GMT"));
     }
 
     @Test

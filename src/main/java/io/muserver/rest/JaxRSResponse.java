@@ -324,9 +324,6 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
         if (value == null || value instanceof String) {
             return (String)value;
         }
-        if (value.getClass().isAssignableFrom(Date.class)) {
-            return Mutils.toHttpDate((Date)value);
-        }
         try {
             RuntimeDelegate.HeaderDelegate headerDelegate = MuRuntimeDelegate.getInstance().createHeaderDelegate(value.getClass());
             return headerDelegate.toString(value);
