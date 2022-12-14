@@ -234,6 +234,10 @@ public class ResourceType {
      */
     public static final ResourceType AUDIO_MIDI = new ResourceType(ContentTypes.AUDIO_MIDI, shortCache(), false, asList("mid", "midi"));
     /**
+     * <code>video/mp4</code>
+     */
+    public static final ResourceType VIDEO_MP4 = new ResourceType(ContentTypes.VIDEO_MP4, shortCache(), false, singletonList("mp4"));
+    /**
      * <code>video/mpeg</code>
      */
     public static final ResourceType VIDEO_MPEG = new ResourceType(ContentTypes.VIDEO_MPEG, shortCache(), false, singletonList("mpeg"));

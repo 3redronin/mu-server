@@ -164,6 +164,11 @@ public class ContentTypes {
     public static final CharSequence AUDIO_MIDI = AsciiString.cached("audio/midi");
 
     /**
+     * MPEG Video:  {@code "video/mp4"}
+     */
+    public static final CharSequence VIDEO_MP4 = AsciiString.cached("video/mp4");
+
+    /**
      * MPEG Video:  {@code "video/mpeg"}
      */
     public static final CharSequence VIDEO_MPEG = AsciiString.cached("video/mpeg");
