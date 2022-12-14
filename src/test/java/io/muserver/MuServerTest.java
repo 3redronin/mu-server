@@ -392,7 +392,7 @@ public class MuServerTest {
                 bufferedSink.writeUtf8("Hello");
                 bufferedSink.flush();
                 try {
-                    Thread.sleep(80);
+                    Thread.sleep(200);
                 } catch (InterruptedException e) {
                     throw new RuntimeException(e);
                 }
