@@ -20,13 +20,33 @@ public interface MuWebSocketSession {
     void sendText(String message, DoneCallback doneCallback);
 
     /**
-     * Sends a message to the client
+     * Sends a full or partial message to the client asynchronously with an optional parameter allowing partial fragments to be sent
+     * @param message The message to be sent
+     * @param isLastFragment If <code>false</code> then this message will be sent as a partial fragment
+     * @param doneCallback The callback to call when the write succeeds or fails. To ignore the write result, you can
+     *                      use {@link DoneCallback#NoOp}. If using a buffer received from a {@link MuWebSocket} event,
+     *                      pass the <code>onComplete</code> received to this parameter.
+     */
+    void sendText(String message, boolean isLastFragment, DoneCallback doneCallback);
+
+    /**
+     * Sends a message to the client asynchronously
      * @param message The message to be sent
      * @param doneCallback The callback to call when the write succeeds or fails. To ignore the write result, you can
      *                      use {@link DoneCallback#NoOp}. If using a buffer received from a {@link MuWebSocket} event,
      *                      pass the <code>onComplete</code> received to this parameter.
      */
     void sendBinary(ByteBuffer message, DoneCallback doneCallback);
+
+    /**
+     * Sends a full or partial message to the client asynchronously with an optional parameter allowing partial fragments to be sent
+     * @param message The message to be sent
+     * @param isLastFragment If <code>false</code> then this message will be sent as a partial fragment
+     * @param doneCallback The callback to call when the write succeeds or fails. To ignore the write result, you can
+     *                      use {@link DoneCallback#NoOp}. If using a buffer received from a {@link MuWebSocket} event,
+     *                      pass the <code>onComplete</code> received to this parameter.
+     */
+    void sendBinary(ByteBuffer message, boolean isLastFragment, DoneCallback doneCallback);
 
     /**
      * Sends a ping message to the client, which is used for keeping sockets alive.
@@ -64,4 +84,9 @@ public interface MuWebSocketSession {
      * @return The client's address
      */
     InetSocketAddress remoteAddress();
+
+    /**
+     * @return The state of the current session
+     */
+    WebsocketSessionState state();
 }

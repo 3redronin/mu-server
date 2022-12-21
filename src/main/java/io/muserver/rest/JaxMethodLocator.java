@@ -8,7 +8,7 @@ import java.lang.reflect.Method;
 class JaxMethodLocator {
     static Method getMethodThatHasJaxRSAnnotations(Method start) {
         Class<?> clazz = start.getDeclaringClass();
-        while (clazz != Object.class) {
+        while (clazz != Object.class && clazz != null) {
             Method cur = getMethodIfGood(start, clazz);
             if (cur != null) {
                 return cur;
@@ -16,7 +16,7 @@ class JaxMethodLocator {
             clazz = clazz.getSuperclass();
         }
         clazz = start.getDeclaringClass();
-        while (clazz != Object.class) {
+        while (clazz != Object.class && clazz != null) {
             for (Class<?> interfaceClass : clazz.getInterfaces()) {
                 Method cur = getMethodIfGood(start, interfaceClass);
                 if (cur != null) {

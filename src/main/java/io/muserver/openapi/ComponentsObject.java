@@ -12,14 +12,50 @@ import static io.muserver.openapi.Jsonizer.append;
  */
 public class ComponentsObject implements JsonWriter {
 
+    /**
+     * Use {@link #schemas()} instead
+     */
+    @Deprecated
     public final Map<String, SchemaObject> schemas;
+    /**
+     * Use {@link #responses()} instead
+     */
+    @Deprecated
     public final Map<String, ResponseObject> responses;
+    /**
+     * Use {@link #parameters()} instead
+     */
+    @Deprecated
     public final Map<String, ParameterObject> parameters;
+    /**
+     * Use {@link #examples()} instead
+     */
+    @Deprecated
     public final Map<String, ExampleObject> examples;
+    /**
+     * Use {@link #requestBodies()} instead
+     */
+    @Deprecated
     public final Map<String, RequestBodyObject> requestBodies;
+    /**
+     * Use {@link #headers()} instead
+     */
+    @Deprecated
     public final Map<String, HeaderObject> headers;
+    /**
+     * Use {@link #securitySchemes()} instead
+     */
+    @Deprecated
     public final Map<String, SecuritySchemeObject> securitySchemes;
+    /**
+     * Use {@link #links()} instead
+     */
+    @Deprecated
     public final Map<String, LinkObject> links;
+    /**
+     * Use {@link #callbacks()} instead
+     */
+    @Deprecated
     public final Map<String, CallbackObject> callbacks;
 
     ComponentsObject(Map<String, SchemaObject> schemas, Map<String, ResponseObject> responses, Map<String, ParameterObject> parameters, Map<String, ExampleObject> examples, Map<String, RequestBodyObject> requestBodies, Map<String, HeaderObject> headers, Map<String, SecuritySchemeObject> securitySchemes, Map<String, LinkObject> links, Map<String, CallbackObject> callbacks) {
@@ -63,5 +99,68 @@ public class ComponentsObject implements JsonWriter {
         isFirst = append(writer, "links", links, isFirst);
         isFirst = append(writer, "callbacks", callbacks, isFirst);
         writer.write('}');
+    }
+
+    /**
+     * @return The value described by {@link ComponentsObjectBuilder#withSchemas}
+     */
+    public Map<String, SchemaObject> schemas() {
+        return schemas;
+    }
+
+    /**
+      @return The value described by {@link ComponentsObjectBuilder#withResponses}
+     */
+    public Map<String, ResponseObject> responses() {
+        return responses;
+    }
+
+    /**
+      @return The value described by {@link ComponentsObjectBuilder#withParameters}
+     */
+    public Map<String, ParameterObject> parameters() {
+        return parameters;
+    }
+
+    /**
+      @return The value described by {@link ComponentsObjectBuilder#withExamples}
+     */
+    public Map<String, ExampleObject> examples() {
+        return examples;
+    }
+
+    /**
+      @return The value described by {@link ComponentsObjectBuilder#withRequestBodies}
+     */
+    public Map<String, RequestBodyObject> requestBodies() {
+        return requestBodies;
+    }
+
+    /**
+      @return The value described by {@link ComponentsObjectBuilder#withHeaders}
+     */
+    public Map<String, HeaderObject> headers() {
+        return headers;
+    }
+
+    /**
+      @return The value described by {@link ComponentsObjectBuilder#withSecuritySchemes}
+     */
+    public Map<String, SecuritySchemeObject> securitySchemes() {
+        return securitySchemes;
+    }
+
+    /**
+      @return The value described by {@link ComponentsObjectBuilder#withLinks}
+     */
+    public Map<String, LinkObject> links() {
+        return links;
+    }
+
+    /**
+      @return The value described by {@link ComponentsObjectBuilder#withCallbacks}
+     */
+    public Map<String, CallbackObject> callbacks() {
+        return callbacks;
     }
 }

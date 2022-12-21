@@ -6,9 +6,9 @@ import javax.ws.rs.Consumes;
 import javax.ws.rs.Path;
 import java.lang.reflect.Method;
 
+import static io.muserver.rest.JaxMethodLocator.getMethodThatHasJaxRSAnnotations;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
-import static io.muserver.rest.JaxMethodLocator.getMethodThatHasJaxRSAnnotations;
 
 public class JaxMethodLocatorTest {
 
@@ -84,5 +84,6 @@ public class JaxMethodLocatorTest {
             return null;
         }
     }
+
 
 }

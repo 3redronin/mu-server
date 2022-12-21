@@ -12,7 +12,15 @@ import static io.muserver.openapi.Jsonizer.append;
  */
 public class ResponsesObject implements JsonWriter {
 
+    /**
+     * @deprecated use {@link #defaultValue()} instead
+     */
+    @Deprecated
     public final ResponseObject defaultValue;
+    /**
+      @deprecated use {@link #httpStatusCodes()} instead
+     */
+    @Deprecated
     public final Map<String, ResponseObject> httpStatusCodes;
 
     ResponsesObject(ResponseObject defaultValue, Map<String, ResponseObject> httpStatusCodes) {
@@ -33,5 +41,19 @@ public class ResponsesObject implements JsonWriter {
             isFirst = append(writer, entry.getKey(), entry.getValue(), isFirst);
         }
         writer.write('}');
+    }
+
+    /**
+     * @return the value described by {@link ResponsesObjectBuilder#withDefaultValue}
+     */
+    public ResponseObject defaultValue() {
+        return defaultValue;
+    }
+
+    /**
+      @return the value described by {@link ResponsesObjectBuilder#withHttpStatusCodes}
+     */
+    public Map<String, ResponseObject> httpStatusCodes() {
+        return httpStatusCodes;
     }
 }

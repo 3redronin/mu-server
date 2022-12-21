@@ -12,6 +12,7 @@ import io.netty.handler.codec.http.HttpRequestDecoder;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseEncoder;
 import io.netty.handler.codec.http.HttpServerKeepAliveHandler;
+import io.netty.handler.flow.FlowControlHandler;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.timeout.IdleStateHandler;
@@ -41,24 +42,29 @@ public class MuServerBuilder {
 
     private static final Logger log = LoggerFactory.getLogger(MuServerBuilder.class);
     private static final int LENGTH_OF_METHOD_AND_PROTOCOL = 17; // e.g. "OPTIONS HTTP/1.1 "
+    private static final int DEFAULT_NIO_THREADS = Math.min(16, Runtime.getRuntime().availableProcessors() * 2);
     private long minimumGzipSize = 1400;
     private int httpPort = -1;
     private int httpsPort = -1;
     private int maxHeadersSize = 8192;
     private int maxUrlSize = 8192 - LENGTH_OF_METHOD_AND_PROTOCOL;
-    private List<MuHandler> handlers = new ArrayList<>();
+    private int nioThreads = DEFAULT_NIO_THREADS;
+    private final List<MuHandler> handlers = new ArrayList<>();
     private boolean gzipEnabled = true;
     private Set<String> mimeTypesToGzip = ResourceType.gzippableMimeTypes(ResourceType.getResourceTypes());
     private boolean addShutdownHook = false;
     private String host;
     private SSLContextBuilder sslContextBuilder;
     private Http2Config http2Config;
-    private long idleTimeoutMills = TimeUnit.MINUTES.toMillis(5);
+    private long requestReadTimeoutMillis = TimeUnit.MINUTES.toMillis(2);
+    private long idleTimeoutMills = TimeUnit.MINUTES.toMillis(10);
     private ExecutorService executor;
     private long maxRequestSize = 24 * 1024 * 1024;
     private List<ResponseCompleteListener> responseCompleteListeners;
     private HashedWheelTimer wheelTimer;
-    private List<RateLimiter> rateLimiters;
+    private List<RateLimiterImpl> rateLimiters;
+    private WriteBufferWaterMark writeBufferWaterMark = WriteBufferWaterMark.DEFAULT;
+    private UnhandledExceptionHandler unhandledExceptionHandler;
 
     /**
      * @param port The HTTP port to use. A value of 0 will have a random port assigned; a value of -1 will
@@ -244,6 +250,21 @@ public class MuServerBuilder {
     }
 
     /**
+     * <p>The number of nio threads to handle requests.</p>
+     * <p>Generally only a small number is required as NIO threads are only used for non-blocking
+     * reads and writes of data. Request handlers are executed on a separate thread pool which
+     * can be specified with {@link #withHandlerExecutor(ExecutorService)}.</p>
+     * <p>Note that websocket callbacks are handled on these NIO threads.</p>
+     *
+     * @param nioThreads The nio threads. Default is 2 * processor's count but not more than 16
+     * @return The current Mu Server builder
+     */
+    public MuServerBuilder withNioThreads(int nioThreads) {
+        this.nioThreads = nioThreads;
+        return this;
+    }
+
+    /**
      * <p>Specifies the maximum size in bytes of the HTTP request headers. Defaults to 8192.</p>
      * <p>If a request has headers exceeding this value, it will be rejected and a <code>431</code>
      * status code will be returned. Large values increase the risk of Denial-of-Service attacks
@@ -283,13 +304,14 @@ public class MuServerBuilder {
     }
 
     /**
-     * Sets the idle timeout for requests and responses. If no bytes are sent or received within this time then
+     * Sets the idle timeout for connections. If no bytes are sent or received within this time then
      * the connection is closed.
      * <p>The default is 5 minutes.</p>
      *
      * @param duration The allowed timeout duration, or 0 to disable timeouts.
      * @param unit     The unit of the duration.
      * @return This builder
+     * @see #withRequestTimeout(long, TimeUnit)
      */
     public MuServerBuilder withIdleTimeout(long duration, TimeUnit unit) {
         if (duration < 0) {
@@ -297,6 +319,26 @@ public class MuServerBuilder {
         }
         Mutils.notNull("unit", unit);
         this.idleTimeoutMills = unit.toMillis(duration);
+        return this;
+    }
+
+    /**
+     * Sets the idle timeout for reading request bodies. If a slow client that is uploading a request body pauses
+     * for this amount of time, the request will be closed (if the response has not started, the client will receive
+     * a 408 error).
+     * <p>The default is 2 minutes.</p>
+     *
+     * @param duration The allowed timeout duration, or 0 to disable timeouts.
+     * @param unit     The unit of the duration.
+     * @return This builder
+     * @see #withIdleTimeout(long, TimeUnit)
+     */
+    public MuServerBuilder withRequestTimeout(long duration, TimeUnit unit) {
+        if (duration < 0) {
+            throw new IllegalArgumentException("The duration must be 0 or greater");
+        }
+        Mutils.notNull("unit", unit);
+        this.requestReadTimeoutMillis = unit.toMillis(duration);
         return this;
     }
 
@@ -395,6 +437,11 @@ public class MuServerBuilder {
         return this;
     }
 
+    MuServerBuilder withWriteBufferWaterMark(int low, int high) {
+        this.writeBufferWaterMark = new WriteBufferWaterMark(low, high);
+        return this;
+    }
+
     /**
      * <p>Adds a rate limiter to incoming requests.</p>
      * <p>The selector specified in this method allows you to control the limit buckets that are used. For
@@ -425,8 +472,31 @@ public class MuServerBuilder {
             wheelTimer.start();
             rateLimiters = new ArrayList<>();
         }
-        RateLimiter rateLimiter = new RateLimiter(selector, wheelTimer);
+        RateLimiterImpl rateLimiter = new RateLimiterImpl(selector, wheelTimer);
         this.rateLimiters.add(rateLimiter);
+        return this;
+    }
+
+
+    /**
+     * Sets the handler to use for exceptions thrown by other handlers, allowing for things such as custom error pages.
+     * <p>Note that if the response has already started sending data, you will not be able to add a custom error
+     * message. In this case, you may want to allow for the default error handling by returning <code>false</code>.</p>
+     * <p>The following shows a pattern to filter out certain errors:</p>
+     * <pre><code>
+     * muServerBuilder.withExceptionHandler((request, response, exception) -&gt; {
+     *     if (response.hasStartedSendingData()) return false; // cannot customise the response
+     *     if (exception instanceof NotAuthorizedException) return false;
+     *     response.contentType(ContentTypes.TEXT_PLAIN_UTF8);
+     *     response.write("Oh I'm worry, there was a problem");
+     *     return true;
+     * })
+     * </code></pre>
+     * @param exceptionHandler The handler to be called when an unhandled exception is encountered
+     * @return This builder
+     */
+    public MuServerBuilder withExceptionHandler(UnhandledExceptionHandler exceptionHandler) {
+        this.unhandledExceptionHandler = exceptionHandler;
         return this;
     }
 
@@ -469,17 +539,17 @@ public class MuServerBuilder {
             throw new IllegalArgumentException("No ports were configured. Please call MuServerBuilder.withHttpPort(int) or MuServerBuilder.withHttpsPort(int)");
         }
 
-        ServerSettings settings = new ServerSettings(minimumGzipSize, maxHeadersSize, idleTimeoutMills, maxRequestSize, maxUrlSize, gzipEnabled, mimeTypesToGzip, rateLimiters);
+        ServerSettings settings = new ServerSettings(minimumGzipSize, maxHeadersSize, requestReadTimeoutMillis, maxRequestSize, maxUrlSize, gzipEnabled, mimeTypesToGzip, rateLimiters);
 
         ExecutorService handlerExecutor = this.executor;
         if (handlerExecutor == null) {
             DefaultThreadFactory threadFactory = new DefaultThreadFactory("muhandler");
             handlerExecutor = new ThreadPoolExecutor(8, 400, 60, TimeUnit.SECONDS, new SynchronousQueue<>(), threadFactory);
         }
-        NettyHandlerAdapter nettyHandlerAdapter = new NettyHandlerAdapter(handlerExecutor, handlers, settings, responseCompleteListeners);
+        NettyHandlerAdapter nettyHandlerAdapter = new NettyHandlerAdapter(handlerExecutor, handlers, responseCompleteListeners);
 
         NioEventLoopGroup bossGroup = new NioEventLoopGroup(1);
-        NioEventLoopGroup workerGroup = new NioEventLoopGroup();
+        NioEventLoopGroup workerGroup = new NioEventLoopGroup(this.nioThreads);
         List<Channel> channels = new ArrayList<>();
 
         ExecutorService finalHandlerExecutor = handlerExecutor;
@@ -506,9 +576,9 @@ public class MuServerBuilder {
             SslContextProvider sslContextProvider = null;
 
             boolean http2Enabled = http2Config != null && http2Config.enabled;
-            MuServerImpl server = new MuServerImpl(stats, http2Enabled, settings);
+            MuServerImpl server = new MuServerImpl(stats, http2Enabled, settings, unhandledExceptionHandler);
 
-            Channel httpChannel = httpPort < 0 ? null : createChannel(bossGroup, workerGroup, nettyHandlerAdapter, host, httpPort, null, trafficShapingHandler, server, false, idleTimeoutMills);
+            Channel httpChannel = httpPort < 0 ? null : createChannel(bossGroup, workerGroup, nettyHandlerAdapter, host, httpPort, null, trafficShapingHandler, server, false, idleTimeoutMills, writeBufferWaterMark);
             Channel httpsChannel;
             if (httpsPort < 0) {
                 httpsChannel = null;
@@ -517,7 +587,7 @@ public class MuServerBuilder {
                 SslContext nettySslContext = toUse.toNettySslContext(http2Enabled);
                 log.debug("SSL Context is " + nettySslContext);
                 sslContextProvider = new SslContextProvider(nettySslContext);
-                httpsChannel = createChannel(bossGroup, workerGroup, nettyHandlerAdapter, host, httpsPort, sslContextProvider, trafficShapingHandler, server, http2Enabled, idleTimeoutMills);
+                httpsChannel = createChannel(bossGroup, workerGroup, nettyHandlerAdapter, host, httpsPort, sslContextProvider, trafficShapingHandler, server, http2Enabled, idleTimeoutMills, writeBufferWaterMark);
             }
             URI uri = null;
             if (httpChannel != null) {
@@ -551,10 +621,11 @@ public class MuServerBuilder {
         return URI.create(protocol + "://" + host.toLowerCase() + ":" + a.getPort());
     }
 
-    private static Channel createChannel(NioEventLoopGroup bossGroup, NioEventLoopGroup workerGroup, NettyHandlerAdapter nettyHandlerAdapter, String host, int port, SslContextProvider sslContextProvider, GlobalTrafficShapingHandler trafficShapingHandler, MuServerImpl server, final boolean http2, long idleTimeoutMills) throws InterruptedException {
+    private static Channel createChannel(NioEventLoopGroup bossGroup, NioEventLoopGroup workerGroup, NettyHandlerAdapter nettyHandlerAdapter, String host, int port, SslContextProvider sslContextProvider, GlobalTrafficShapingHandler trafficShapingHandler, MuServerImpl server, final boolean http2, long idleTimeoutMills, WriteBufferWaterMark writeBufferWaterMark) throws InterruptedException {
         boolean usesSsl = sslContextProvider != null;
         String proto = usesSsl ? "https" : "http";
         ServerBootstrap b = new ServerBootstrap();
+        b.childOption(ChannelOption.WRITE_BUFFER_WATER_MARK, writeBufferWaterMark);
         b.group(bossGroup, workerGroup)
             .channel(NioServerSocketChannel.class)
             .childHandler(new ChannelInitializer<SocketChannel>() {
@@ -572,7 +643,8 @@ public class MuServerBuilder {
                     }
                     boolean addAlpn = http2 && usesSsl;
                     if (addAlpn) {
-                        p.addLast("http1or2", new AlpnHandler(nettyHandlerAdapter, server, proto));
+                        p.addLast(BackPressureHandler.NAME, new BackPressureHandler());
+                        p.addLast("alpn", new AlpnHandler(nettyHandlerAdapter, server, proto));
                     }
                     p.addLast("conerror", new ChannelInboundHandlerAdapter() {
                         @Override
@@ -603,6 +675,35 @@ public class MuServerBuilder {
             p.addLast("compressor", new SelectiveHttpContentCompressor(server.settings()));
         }
         p.addLast("keepalive", new HttpServerKeepAliveHandler());
+        p.addLast("flowControl", new FlowControlHandler());
+        p.addLast(BackPressureHandler.NAME, new BackPressureHandler());
+        p.addLast("preread", new PreReader());
         p.addLast("muhandler", new Http1Connection(nettyHandlerAdapter, server, proto));
+    }
+
+
+    @Override
+    public String toString() {
+        return "MuServerBuilder{" +
+            "minimumGzipSize=" + minimumGzipSize +
+            ", httpPort=" + httpPort +
+            ", httpsPort=" + httpsPort +
+            ", maxHeadersSize=" + maxHeadersSize +
+            ", maxUrlSize=" + maxUrlSize +
+            ", nioThreads=" + nioThreads +
+            ", handlers=" + handlers +
+            ", gzipEnabled=" + gzipEnabled +
+            ", mimeTypesToGzip=" + mimeTypesToGzip +
+            ", addShutdownHook=" + addShutdownHook +
+            ", host='" + host + '\'' +
+            ", sslContextBuilder=" + sslContextBuilder +
+            ", http2Config=" + http2Config +
+            ", requestReadTimeoutMillis=" + requestReadTimeoutMillis +
+            ", idleTimeoutMills=" + idleTimeoutMills +
+            ", executor=" + executor +
+            ", maxRequestSize=" + maxRequestSize +
+            ", responseCompleteListeners=" + responseCompleteListeners +
+            ", rateLimiters=" + rateLimiters +
+            '}';
     }
 }

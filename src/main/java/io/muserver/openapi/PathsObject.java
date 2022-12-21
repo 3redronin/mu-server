@@ -10,6 +10,10 @@ import java.util.stream.Collectors;
  */
 public class PathsObject implements JsonWriter {
 
+    /**
+     * @deprecated use {@link #pathItemObjects()} instead
+     */
+    @Deprecated
     public final Map<String, PathItemObject> pathItemObjects;
 
     PathsObject(Map<String, PathItemObject> pathItemObjects) {
@@ -21,13 +25,13 @@ public class PathsObject implements JsonWriter {
             }
             Set<String> ids = new HashSet<>();
             for (PathItemObject pathItemObject : pathItemObjects.values()) {
-                if (pathItemObject.operations != null) {
-                    for (OperationObject oo : pathItemObject.operations.values()) {
-                        if (oo.operationId != null) {
-                            if (ids.contains(oo.operationId)) {
-                                throw new IllegalArgumentException("Cannot have duplicate operation IDs, but got " + oo.operationId);
+                if (pathItemObject.operations() != null) {
+                    for (OperationObject oo : pathItemObject.operations().values()) {
+                        if (oo.operationId() != null) {
+                            if (ids.contains(oo.operationId())) {
+                                throw new IllegalArgumentException("Cannot have duplicate operation IDs, but got " + oo.operationId());
                             }
-                            ids.add(oo.operationId);
+                            ids.add(oo.operationId());
                         }
                     }
                 }
@@ -54,5 +58,12 @@ public class PathsObject implements JsonWriter {
             }
         }
         writer.append('}');
+    }
+
+    /**
+     * @return the value described by {@link PathsObjectBuilder#withPathItemObjects}
+     */
+    public Map<String, PathItemObject> pathItemObjects() {
+        return pathItemObjects;
     }
 }

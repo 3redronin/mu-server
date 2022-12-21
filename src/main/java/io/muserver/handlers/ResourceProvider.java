@@ -41,7 +41,19 @@ interface ResourceProviderFactory {
         if (!Files.isDirectory(baseDirectory, LinkOption.NOFOLLOW_LINKS)) {
             throw new MuException(baseDirectory + " is not a directory");
         }
-        return relativePath -> new AsyncFileProvider(baseDirectory, relativePath);
+        return new ResourceProviderFactory() {
+            @Override
+            public ResourceProvider get(String relativePath) {
+                return new AsyncFileProvider(baseDirectory, relativePath);
+            }
+
+            @Override
+            public String toString() {
+                return "AsyncFileProviderFactory{" +
+                    "baseDirectory='" + baseDirectory + '\'' +
+                    '}';
+            }
+        };
     }
 
     static ResourceProviderFactory classpathBased(String classpathBase) {
@@ -57,8 +69,6 @@ interface ResourceProviderFactory {
 
 
 class ClasspathCache implements ResourceProviderFactory {
-    private static FileSystem zipFileSystem;
-
     private final String basePath;
     private final Map<String, ClasspathResourceProvider> all = new HashMap<>();
 
@@ -72,13 +82,14 @@ class ClasspathCache implements ResourceProviderFactory {
             URI uri = resource.toURI();
             Path myPath;
             if (uri.getScheme().equals("jar")) {
-                if (zipFileSystem == null) {
+                FileSystem zipFileSystem;
+                try {
+                    zipFileSystem = FileSystems.getFileSystem(uri);
+                } catch (FileSystemNotFoundException e) {
                     try {
                         zipFileSystem = FileSystems.newFileSystem(uri, Collections.emptyMap());
-                    } catch (FileSystemAlreadyExistsException e) {
-                        if (zipFileSystem == null) {
-                            throw new MuException("Cannot create the classpath handler as the Zip File System for this jar file has already been created");
-                        }
+                    } catch (FileSystemAlreadyExistsException e2) {
+                        throw new MuException("Cannot create the classpath handler as the Zip File System for this jar file has already been created");
                     }
                 }
                 myPath = zipFileSystem.getPath(basePath);
@@ -126,6 +137,12 @@ class ClasspathCache implements ResourceProviderFactory {
         return cur.newWithInputStream();
     }
 
+    @Override
+    public String toString() {
+        return "ClasspathCache{" +
+            "basePath='" + basePath + '\'' +
+            '}';
+    }
 
     private static final ResourceProvider nullProvider = new ResourceProvider() {
         public boolean exists() {
@@ -237,7 +254,7 @@ class AsyncFileProvider implements ResourceProvider, CompletionHandler<Integer, 
         } else {
 
             // for range requests, more bytes may be read than should be written, so the write is limited
-            long remaining = maxLen - bytesSent;
+            long remaining = Math.max(0, maxLen - bytesSent);
             if (remaining < buf.limit()) {
                 buf.limit((int) remaining);
             }
@@ -249,9 +266,8 @@ class AsyncFileProvider implements ResourceProvider, CompletionHandler<Integer, 
                     bytesSent += bytesRead;
                     channel.read(buf, curPos, null, AsyncFileProvider.this);
                 } else {
-                    // client probably disconnected... no big deal
                     closeChannelQuietly();
-                    handle.complete();
+                    handle.complete(error);
                 }
             });
         }

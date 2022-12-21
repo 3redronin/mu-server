@@ -1,6 +1,8 @@
 package io.muserver.rest;
 
 import java.lang.annotation.*;
+import java.lang.reflect.Method;
+import java.lang.reflect.Type;
 
 /**
  * <p>Describes a response code and description for an API method, for documentation purposes.</p>
@@ -36,7 +38,7 @@ public @interface ApiResponse {
      * The type of the response body.
      * @return The type
      */
-    Class<?> response() default Void.class;
+    Class<?> response() default ApiResponseObj.DEFAULT.class;
 
     /**
      * The content type for this code, if different from the default
@@ -49,4 +51,28 @@ public @interface ApiResponse {
      * @return An example value
      */
     String example() default "";
+
+}
+class ApiResponseObj {
+    static final class DEFAULT {}
+
+    final String code;
+    final String message;
+    final ResponseHeader[] responseHeaders;
+    final Class<?> response;
+    final Type genericReturnType;
+    final String[] contentType;
+    final String example;
+    public ApiResponseObj(String code, String message, ResponseHeader[] responseHeaders, Class<?> response, Type genericReturnType, String[] contentType, String example) {
+        this.code = code;
+        this.message = message;
+        this.responseHeaders = responseHeaders;
+        this.response = response;
+        this.genericReturnType = genericReturnType;
+        this.contentType = contentType;
+        this.example = example;
+    }
+    public static ApiResponseObj fromAnnotation(ApiResponse api, Method methodHandle) {
+        return new ApiResponseObj(api.code(), api.message(), api.responseHeaders(), api.response() == DEFAULT.class ? methodHandle.getReturnType() : api.response(), null, api.contentType(), api.example());
+    }
 }

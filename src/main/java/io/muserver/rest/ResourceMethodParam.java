@@ -1,26 +1,31 @@
 package io.muserver.rest;
 
-import io.muserver.MuRequest;
-import io.muserver.UploadedFile;
+import io.muserver.*;
 import io.muserver.openapi.ExternalDocumentationObject;
 import io.muserver.openapi.ParameterObjectBuilder;
 
 import javax.ws.rs.*;
 import javax.ws.rs.container.Suspended;
 import javax.ws.rs.core.Context;
+import javax.ws.rs.core.Cookie;
+import javax.ws.rs.core.MultivaluedMap;
+import javax.ws.rs.core.PathSegment;
 import javax.ws.rs.ext.ParamConverter;
 import javax.ws.rs.ext.ParamConverterProvider;
+import java.io.File;
 import java.io.IOException;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
-import java.util.List;
+import java.lang.reflect.WildcardType;
+import java.util.*;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
-import static io.muserver.Mutils.urlEncode;
 import static io.muserver.openapi.ParameterObjectBuilder.parameterObject;
 import static io.muserver.openapi.SchemaObjectBuilder.schemaObjectFrom;
+import static java.util.Collections.emptyList;
 
 abstract class ResourceMethodParam {
 
@@ -55,7 +60,10 @@ abstract class ResourceMethodParam {
             boolean isDeprecated = hasDeclared(parameterHandle, Deprecated.class);
             ParamConverter<?> converter = getParamConverter(parameterHandle, paramConverterProviders);
             boolean lazyDefaultValue = converter.getClass().getDeclaredAnnotation(ParamConverter.Lazy.class) != null;
+            boolean explicitDefault = hasDeclared(parameterHandle, DefaultValue.class);
             Object defaultValue = getDefaultValue(parameterHandle, converter, lazyDefaultValue);
+
+            isRequired |= (!explicitDefault && parameterHandle.getType().isPrimitive());
 
             String key = source == ValueSource.COOKIE_PARAM ? parameterHandle.getDeclaredAnnotation(CookieParam.class).value()
                 : source == ValueSource.HEADER_PARAM ? parameterHandle.getDeclaredAnnotation(HeaderParam.class).value()
@@ -75,7 +83,7 @@ abstract class ResourceMethodParam {
             }
 
             DescriptionData descriptionData = DescriptionData.fromAnnotation(parameterHandle, key);
-            return new RequestBasedParam(index, source, parameterHandle, defaultValue, encodedRequested, lazyDefaultValue, converter, descriptionData, key, isDeprecated, isRequired, pattern);
+            return new RequestBasedParam(index, source, parameterHandle, defaultValue, encodedRequested, lazyDefaultValue, converter, descriptionData, key, isDeprecated, isRequired, pattern, explicitDefault);
         }
     }
 
@@ -88,6 +96,7 @@ abstract class ResourceMethodParam {
         final String key;
         final boolean isDeprecated;
         private final Pattern pattern;
+        private final boolean explicitDefault;
 
         ParameterObjectBuilder createDocumentationBuilder() {
             ParameterObjectBuilder builder = parameterObject()
@@ -106,14 +115,14 @@ abstract class ResourceMethodParam {
             Pattern patternIfNotDefault = this.pattern == null || UriPattern.DEFAULT_CAPTURING_GROUP_PATTERN.equals(this.pattern.pattern()) ? null : this.pattern;
             return builder.withSchema(
                 schemaObjectFrom(parameterHandle.getType(), parameterHandle.getParameterizedType(), isRequired)
-                    .withDefaultValue(source == ValueSource.PATH_PARAM ? null : defaultValue())
+                    .withDefaultValue(source == ValueSource.PATH_PARAM || !hasExplicitDefault() ? null : defaultValue())
                     .withExternalDocs(externalDoc)
                     .withPattern(patternIfNotDefault)
                     .build()
             );
         }
 
-        RequestBasedParam(int index, ValueSource source, Parameter parameterHandle, Object defaultValue, boolean encodedRequested, boolean lazyDefaultValue, ParamConverter paramConverter, DescriptionData descriptionData, String key, boolean isDeprecated, boolean isRequired, Pattern pattern) {
+        RequestBasedParam(int index, ValueSource source, Parameter parameterHandle, Object defaultValue, boolean encodedRequested, boolean lazyDefaultValue, ParamConverter paramConverter, DescriptionData descriptionData, String key, boolean isDeprecated, boolean isRequired, Pattern pattern, boolean explicitDefault) {
             super(index, source, parameterHandle, descriptionData, isRequired);
             this.defaultValue = defaultValue;
             this.encodedRequested = encodedRequested;
@@ -122,44 +131,142 @@ abstract class ResourceMethodParam {
             this.key = key;
             this.isDeprecated = isDeprecated;
             this.pattern = pattern;
+            this.explicitDefault = explicitDefault;
         }
+
+        /**
+         * @return True if the API author has explicitly set a default value for the param
+         * using the {@link DefaultValue} annotation.
+         */
+        public boolean hasExplicitDefault() {
+            return explicitDefault;
+        }
+
 
         public Object defaultValue() {
             boolean skipConverter = defaultValue != null && !lazyDefaultValue;
             return convertValue(parameterHandle, paramConverter, skipConverter, defaultValue);
         }
 
-        public Object getValue(MuRequest request, RequestMatcher.MatchedMethod matchedMethod) throws IOException {
-
+        public Object getValue(JaxRSRequest jaxRequest, RequestMatcher.MatchedMethod matchedMethod, CollectionParameterStrategy cps) throws IOException {
+            MuRequest muRequest = jaxRequest.muRequest;
             Class<?> paramClass = parameterHandle.getType();
             if (UploadedFile.class.isAssignableFrom(paramClass)) {
-                return request.uploadedFile(key);
-            } else if (List.class.isAssignableFrom(paramClass)) {
+                return muRequest.uploadedFile(key);
+            } else if (File.class.isAssignableFrom(paramClass)) {
+                UploadedFile uf = muRequest.uploadedFile(key);
+                return uf == null ? null : uf.asFile();
+            } else if (Collection.class.isAssignableFrom(paramClass)) {
                 Type t = parameterHandle.getParameterizedType();
                 if (t instanceof ParameterizedType) {
                     Type[] actualTypeArguments = ((ParameterizedType) t).getActualTypeArguments();
                     if (actualTypeArguments.length == 1) {
                         Type argType = actualTypeArguments[0];
-                        if (argType instanceof Class<?> && UploadedFile.class.isAssignableFrom((Class<?>) argType)) {
-                            return request.uploadedFiles(key);
+                        boolean isUploadedFileList = (argType instanceof Class<?> && UploadedFile.class.isAssignableFrom((Class<?>) argType));
+                        if (!isUploadedFileList && argType instanceof WildcardType) {
+                            WildcardType wt = (WildcardType) argType;
+                            for (Type upperBound : wt.getUpperBounds()) {
+                                if (upperBound instanceof Class<?> && UploadedFile.class.isAssignableFrom((Class<?>) upperBound)) {
+                                    isUploadedFileList = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (isUploadedFileList) {
+                            List<UploadedFile> uploadedFiles = muRequest.uploadedFiles(key);
+                            if (Set.class.isAssignableFrom(paramClass)) {
+                                return new HashSet<>(uploadedFiles);
+                            }
+                            return uploadedFiles;
                         }
                     }
                 }
             }
 
-            String specifiedValue =
-                source == ValueSource.COOKIE_PARAM ? request.cookie(key).orElse("") // TODO make request.cookie return a string and default it
-                    : source == ValueSource.HEADER_PARAM ? String.join(",", request.headers().getAll(key))
-                    : source == ValueSource.MATRIX_PARAM ? "" // TODO support matrix params
-                    : source == ValueSource.FORM_PARAM ? String.join(",", request.form().getAll(key))
-                    : source == ValueSource.PATH_PARAM ? matchedMethod.pathParams.get(key)
-                    : source == ValueSource.QUERY_PARAM ? String.join(",", request.query().getAll(key))
-                    : null;
-            boolean isSpecified = specifiedValue != null && specifiedValue.length() > 0;
-            if (isSpecified && encodedRequested) {
-                specifiedValue = urlEncode(specifiedValue);
+            if (paramClass.isAssignableFrom(PathSegment.class)) {
+                PathSegment seg = matchedMethod.pathParams.get(key);
+                if (seg != null && encodedRequested) {
+                    return ((MuPathSegment) seg).toEncoded();
+                }
+                return seg;
+            } else if (paramClass.equals(Cookie.class)) {
+                List<String> cookieValues = cookieValue(muRequest, key);
+                return cookieValues.isEmpty() ? null : new Cookie(key, cookieValues.get(0));
+            } else if (paramClass.equals(io.muserver.Cookie.class)) {
+                List<String> cookieValues = cookieValue(muRequest, key);
+                return cookieValues.isEmpty() ? null : new CookieBuilder().withName(key).withValue(cookieValues.get(0)).build();
             }
-            return isSpecified ? ResourceMethodParam.convertValue(parameterHandle, paramConverter, false, specifiedValue) : defaultValue();
+            Collection<Object> collection = createCollection(paramClass);
+            List<String> specifiedValue =
+                source == ValueSource.PATH_PARAM ? Collections.singletonList(matchedMethod.getPathParam(key))
+                    : source == ValueSource.QUERY_PARAM ? getParamValues(jaxRequest.getUriInfo().getQueryParameters(), key, cps, collection != null)
+                    : source == ValueSource.HEADER_PARAM ? getParamValues(jaxRequest.getHeaders(), key, cps, collection != null)
+                    : source == ValueSource.FORM_PARAM ? muRequest.form().getAll(key)
+                    : source == ValueSource.COOKIE_PARAM ? cookieValue(muRequest, key)
+                    : source == ValueSource.MATRIX_PARAM ? matrixParamValue(key, jaxRequest.relativePath())
+                    : emptyList();
+            boolean isSpecified = specifiedValue != null && !specifiedValue.isEmpty();
+            if (encodedRequested && isSpecified) {
+                specifiedValue = specifiedValue.stream().map(Mutils::urlEncode).collect(Collectors.toList());
+            }
+            if (collection != null) {
+                if (isSpecified) {
+                    for (String stringValue : specifiedValue) {
+                        collection.add(ResourceMethodParam.convertValue(parameterHandle, paramConverter, false, stringValue));
+                    }
+                } else if (hasExplicitDefault()) {
+                    collection.add(defaultValue());
+                }
+                return (collection instanceof List) ? Collections.unmodifiableList((List) collection)
+                    : (collection instanceof SortedSet) ? Collections.unmodifiableSortedSet((SortedSet) collection)
+                    : (collection instanceof Set) ? Collections.unmodifiableSet((Set) collection)
+                    : Collections.unmodifiableCollection(collection);
+            } else {
+                return isSpecified ? ResourceMethodParam.convertValue(parameterHandle, paramConverter, false, specifiedValue.get(0)) : defaultValue();
+            }
+        }
+
+        private List<String> getParamValues(MultivaluedMap<String, String> queryParameters, String key, CollectionParameterStrategy cps, boolean isCollectionType) {
+            List<String> values = queryParameters.get(key);
+            if (isCollectionType && values != null && cps == CollectionParameterStrategy.SPLIT_ON_COMMA) {
+                List<String> copy = new ArrayList<>(values.size());
+                for (String value : values) {
+                    value = value.trim();
+                    if (value.contains(",")) {
+                        String[] bits = value.split("\\s*,\\s*");
+                        Collections.addAll(copy, bits);
+                    } else if (!value.isEmpty()) {
+                        copy.add(value.trim());
+                    }
+                }
+                return copy;
+            }
+            return values;
+        }
+
+        private List<String> cookieValue(MuRequest request, String key) {
+            Optional<String> cookie = request.cookie(key);
+            return cookie.map(Collections::singletonList).orElse(emptyList());
+        }
+
+        private List<String> matrixParamValue(String key, String path) {
+            MuPathSegment last = MuUriInfo.pathStringToSegments(path, false).reduce((first, second) -> second).orElse(null);
+            if (last != null && last.getMatrixParameters().containsKey(key)) {
+                return last.getMatrixParameters().get(key);
+            }
+            return emptyList();
+        }
+
+        static Collection<Object> createCollection(Class<?> collectionType) {
+            if (SortedSet.class.equals(collectionType)) {
+                return new TreeSet<>();
+            } else if (Set.class.equals(collectionType)) {
+                return new HashSet<>();
+            } else if (List.class.equals(collectionType) || Collection.class.equals(collectionType)) {
+                return new ArrayList<>();
+            } else {
+                return null;
+            }
         }
     }
 
@@ -201,14 +308,31 @@ abstract class ResourceMethodParam {
     private static ParamConverter<?> getParamConverter(Parameter parameterHandle, List<ParamConverterProvider> paramConverterProviders) {
         Class<?> paramType = parameterHandle.getType();
         Type parameterizedType = parameterHandle.getParameterizedType();
+        if (Collection.class.isAssignableFrom(paramType) && parameterizedType instanceof ParameterizedType) {
+            Type possiblyWildcardType = ((ParameterizedType) parameterizedType).getActualTypeArguments()[0];
+            Type type = (possiblyWildcardType instanceof WildcardType) ? ((WildcardType) possiblyWildcardType).getUpperBounds()[0] : possiblyWildcardType;
+            if (type instanceof Class) {
+                paramType = (Class<?>) type;
+            }
+        }
         Annotation[] declaredAnnotations = parameterHandle.getDeclaredAnnotations();
         for (ParamConverterProvider paramConverterProvider : paramConverterProviders) {
             ParamConverter<?> converter = paramConverterProvider.getConverter(paramType, parameterizedType, declaredAnnotations);
-            if (converter != null) {
-                return converter;
+            if (converter == null && RequestBasedParam.createCollection(paramType) != null && parameterizedType instanceof ParameterizedType) {
+                // Things like List<A> can be converted with just an 'A' param converter, so let's see if we have that
+                ParameterizedType pt = (ParameterizedType) parameterizedType;
+                Type[] ata = pt.getActualTypeArguments();
+                if (ata.length == 1 && ata[0] instanceof ParameterizedType) {
+                    ParameterizedType type = (ParameterizedType) ata[0];
+                    Type rawType = type.getRawType();
+                    if (rawType instanceof Class) {
+                        converter = paramConverterProvider.getConverter((Class) rawType, type, declaredAnnotations);
+                    }
+                }
             }
+            if (converter != null) return converter;
         }
-        throw new WebApplicationException("Could not find a suitable ParamConverter for " + paramType);
+        throw new MuException("Could not find a suitable ParamConverter for " + parameterizedType + " at " + parameterHandle.getDeclaringExecutable());
     }
 
     private static Object getDefaultValue(Parameter parameterHandle, ParamConverter<?> converter, boolean lazyDefaultValue) {
@@ -224,10 +348,14 @@ abstract class ResourceMethodParam {
             return value;
         } else {
             try {
+                // the value is only a non-string if a DefaultValue was specified which was converted to a non-string value already, in which case skipConverter is true
                 String valueAsString = (String) value;
-                return converter instanceof HasDefaultValue && valueAsString.isEmpty()
+                if (value != null) {
+                    return converter.fromString(valueAsString);
+                }
+                return converter instanceof HasDefaultValue
                     ? ((HasDefaultValue) converter).getDefault()
-                    : converter.fromString(valueAsString);
+                    : null;
             } catch (Exception e) {
                 throw new BadRequestException("Could not convert String value \"" + value + "\" to a " + parameterHandle.getType() + " using " + converter + " on parameter " + parameterHandle, e);
             }

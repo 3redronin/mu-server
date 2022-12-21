@@ -13,15 +13,47 @@ import static java.util.Arrays.asList;
  * @see SecuritySchemeObjectBuilder
  */
 public class SecuritySchemeObject implements JsonWriter {
-    static final List<String> validTypes = asList("apiKey", "http", "oauth2", "openIdConnect");
+    private static final List<String> validTypes = asList("apiKey", "http", "oauth2", "openIdConnect");
 
+    /**
+     * @deprecated use {@link #type()} instead
+     */
+    @Deprecated
     public final String type;
+    /**
+      @deprecated use {@link #description()} instead
+     */
+    @Deprecated
     public final String description;
+    /**
+      @deprecated use {@link #name()} instead
+     */
+    @Deprecated
     public final String name;
+    /**
+      @deprecated use {@link #in()} instead
+     */
+    @Deprecated
     public final String in;
+    /**
+      @deprecated use {@link #scheme()} instead
+     */
+    @Deprecated
     public final String scheme;
+    /**
+      @deprecated use {@link #bearerFormat()} instead
+     */
+    @Deprecated
     public final String bearerFormat;
+    /**
+      @deprecated use {@link #flows()} instead
+     */
+    @Deprecated
     public final OAuthFlowsObject flows;
+    /**
+      @deprecated use {@link #openIdConnectUrl()} instead
+     */
+    @Deprecated
     public final URI openIdConnectUrl;
 
     SecuritySchemeObject(String type, String description, String name, String in, String scheme, String bearerFormat, OAuthFlowsObject flows, URI openIdConnectUrl) {
@@ -54,7 +86,6 @@ public class SecuritySchemeObject implements JsonWriter {
         this.openIdConnectUrl = openIdConnectUrl;
     }
 
-
     @Override
     public void writeJson(Writer writer) throws IOException {
         writer.write('{');
@@ -69,4 +100,68 @@ public class SecuritySchemeObject implements JsonWriter {
         isFirst = append(writer, "openIdConnectUrl", openIdConnectUrl, isFirst);
         writer.write('}');
     }
+
+    /**
+     * @return the value described by {@link SecuritySchemeObjectBuilder#withType}
+     */
+    public String type() {
+        return type;
+    }
+
+    /**
+      @return the value described by {@link SecuritySchemeObjectBuilder#withDescription}
+     */
+    public String description() {
+        return description;
+    }
+
+    /**
+      @return the value described by {@link SecuritySchemeObjectBuilder#withName}
+     */
+    public String name() {
+        return name;
+    }
+
+    /**
+      @return the value described by {@link SecuritySchemeObjectBuilder#withIn}
+     */
+    public String in() {
+        return in;
+    }
+
+    /**
+      @return the value described by {@link SecuritySchemeObjectBuilder#withScheme}
+     */
+    public String scheme() {
+        return scheme;
+    }
+
+    /**
+      @return the value described by {@link SecuritySchemeObjectBuilder#withBearerFormat}
+     */
+    public String bearerFormat() {
+        return bearerFormat;
+    }
+
+    /**
+      @return the value described by {@link SecuritySchemeObjectBuilder#withFlows}
+     */
+    public OAuthFlowsObject flows() {
+        return flows;
+    }
+
+    /**
+      @return the value described by {@link SecuritySchemeObjectBuilder#withOpenIdConnectUrl}
+     */
+    public URI openIdConnectUrl() {
+        return openIdConnectUrl;
+    }
+
+    /**
+     * @return The types allowed to be passed to {@link SecuritySchemeObjectBuilder#withType(String)}
+     */
+    public static List<String> validTypes() {
+        return validTypes;
+    }
+
 }

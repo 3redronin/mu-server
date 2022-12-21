@@ -167,7 +167,7 @@ public class BinaryEntityProvidersTest {
     private void check(byte[] value, String mimeType) throws IOException {
         byte[] actual;
         try (Response resp = call(request()
-            .post(RequestBody.create(MediaType.parse(mimeType), value))
+            .post(RequestBody.create(value, MediaType.parse(mimeType)))
             .url(server.uri().resolve("/samples").toString())
         )) {
             assertThat(resp.code(), equalTo(200));

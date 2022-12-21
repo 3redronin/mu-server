@@ -1,6 +1,8 @@
 package io.muserver;
 
 import io.netty.handler.traffic.TrafficCounter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
 import java.util.Set;
@@ -71,9 +73,13 @@ class MuStatsImpl implements MuStats {
         activeRequests.add(request);
     }
 
+    private static final Logger log = LoggerFactory.getLogger(MuStatsImpl.class);
     void onRequestEnded(MuRequest request) {
-        activeRequests.remove(request);
-        completedRequests.incrementAndGet();
+        if (activeRequests.remove(request)) {
+            completedRequests.incrementAndGet();
+        } else {
+            log.info("Asked to remove " + request + " but it wasn't active");
+        }
     }
 
     void onRejectedDueToOverload() {

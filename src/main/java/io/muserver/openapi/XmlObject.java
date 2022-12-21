@@ -11,10 +11,30 @@ import static io.muserver.openapi.Jsonizer.append;
  */
 public class XmlObject implements JsonWriter {
 
+    /**
+     * @deprecated use {@link #name()} instead
+     */
+    @Deprecated
     public final String name;
+    /**
+      @deprecated use {@link #namespace()} instead
+     */
+    @Deprecated
     public final URI namespace;
+    /**
+      @deprecated use {@link #prefix()} instead
+     */
+    @Deprecated
     public final String prefix;
+    /**
+      @deprecated use {@link #attribute()} instead
+     */
+    @Deprecated
     public final boolean attribute;
+    /**
+      @deprecated use {@link #wrapped()} instead
+     */
+    @Deprecated
     public final boolean wrapped;
 
     XmlObject(String name, URI namespace, String prefix, boolean attribute, boolean wrapped) {
@@ -35,5 +55,40 @@ public class XmlObject implements JsonWriter {
         isFirst = append(writer, "attribute", attribute, isFirst);
         isFirst = append(writer, "wrapped", wrapped, isFirst);
         writer.write('}');
+    }
+
+    /**
+     * @return the value described by {@link XmlObjectBuilder#withName}
+     */
+    public String name() {
+        return name;
+    }
+
+    /**
+      @return the value described by {@link XmlObjectBuilder#withNamespace}
+     */
+    public URI namespace() {
+        return namespace;
+    }
+
+    /**
+      @return the value described by {@link XmlObjectBuilder#withPrefix}
+     */
+    public String prefix() {
+        return prefix;
+    }
+
+    /**
+      @return the value described by {@link XmlObjectBuilder#withAttribute}
+     */
+    public boolean attribute() {
+        return attribute;
+    }
+
+    /**
+      @return the value described by {@link XmlObjectBuilder#withWrapped}
+     */
+    public boolean wrapped() {
+        return wrapped;
     }
 }

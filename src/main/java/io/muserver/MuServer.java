@@ -5,6 +5,7 @@ import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -151,4 +152,9 @@ public interface MuServer {
      * @return A description of the actual SSL settings used, or null.
      */
     SSLInfo sslInfo();
+
+    /**
+     * @return The rate limiters added to the server with {@link MuServerBuilder#withRateLimiter(RateLimitSelector)}, in the order they are applied.
+     */
+    List<RateLimiter> rateLimiters();
 }

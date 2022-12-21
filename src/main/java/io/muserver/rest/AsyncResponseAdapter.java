@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit;
 class AsyncResponseAdapter implements AsyncResponse, ResponseCompleteListener {
     private static final Logger log = LoggerFactory.getLogger(AsyncResponseAdapter.class);
 
-    private static ScheduledExecutorService ses = Executors.newSingleThreadScheduledExecutor(new DefaultThreadFactory("mutimeoutwatcher"));
+    private static final ScheduledExecutorService ses = Executors.newSingleThreadScheduledExecutor(new DefaultThreadFactory("mutimeoutwatcher"));
 
     private final AsyncHandle asyncHandle;
     private final Consumer resultConsumer;
@@ -40,7 +40,7 @@ class AsyncResponseAdapter implements AsyncResponse, ResponseCompleteListener {
         isCancelled = false;
         isDone = false;
         this.resultConsumer = resultConsumer;
-        asyncHandle.setResponseCompleteHandler(this);
+        asyncHandle.addResponseCompleteHandler(this);
     }
 
     @Override

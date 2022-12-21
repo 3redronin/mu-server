@@ -1,16 +1,28 @@
 package io.muserver.rest;
 
+import io.muserver.MuException;
 import io.muserver.MuServer;
+import io.muserver.Mutils;
 import okhttp3.FormBody;
+import okhttp3.MediaType;
+import okhttp3.RequestBody;
 import okhttp3.Response;
+import org.json.JSONObject;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Test;
 
 import javax.ws.rs.*;
 import javax.ws.rs.ext.ParamConverter;
 import javax.ws.rs.ext.ParamConverterProvider;
 import java.io.IOException;
+import java.lang.annotation.Annotation;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -84,7 +96,7 @@ public class ResourceMethodParamTest {
             }
         }
         server = httpsServerForTest().addHandler(restHandler(new Sample())).start();
-        try (Response resp = call(request().url(server.uri().resolve("/samples?one=some%20thing%2F&three=some%20thing%2F").toString()))) {
+        try (Response resp = call(request().url(server.uri().resolve("/samples?one=some%20thing%2F&one=ignored&three=some%20thing%2F").toString()))) {
             assertThat(resp.body().string(), equalTo("some thing/ / Some default / some%20thing%2F"));
         }
     }
@@ -217,6 +229,7 @@ public class ResourceMethodParamTest {
             .post(
                 new FormBody.Builder()
                     .add("someThing", "Is here")
+                    .add("someThing", "Is ignored")
                     .add("someThings", "some things one")
                     .add("someThings", "some things two")
                     .build())
@@ -231,6 +244,47 @@ public class ResourceMethodParamTest {
         @Override
         public String toString() {
             return name().toLowerCase();
+        }
+    }
+
+    @Test
+    public void errorMessagesAreNiceForNormalTypes() {
+        class Something {}
+        try {
+            @Path("samples") class Sample {
+                @GET public void getIt(@QueryParam("something") Something something) { }
+            }
+            restHandler(new Sample()).build();
+            Assert.fail("Should have thrown");
+        } catch (MuException e) {
+            assertThat(e.getMessage(), startsWith("Could not find a suitable ParamConverter for class " + Something.class.getName()));
+        }
+    }
+
+    @Test
+    public void errorMessagesAreNiceForGenericTypes() {
+        class Something {}
+        try {
+            @Path("samples") class Sample {
+                @GET public void getIt(@QueryParam("something") List<Something> something) { }
+            }
+            restHandler(new Sample()).build();
+            Assert.fail("Should have thrown");
+        } catch (MuException e) {
+            assertThat(e.getMessage(), startsWith("Could not find a suitable ParamConverter for java.util.List<" + Something.class.getName() + ">"));
+        }
+    }
+
+    @Test
+    public void errorMessagesAreNiceForUnboundTypes() {
+        try {
+            @Path("samples") class Sample {
+                @GET public void getIt(@QueryParam("something") List<?> something) { }
+            }
+            restHandler(new Sample()).build();
+            Assert.fail("Should have thrown");
+        } catch (MuException e) {
+            assertThat(e.getMessage(), startsWith("Could not find a suitable ParamConverter for java.util.List<?>"));
         }
     }
 
@@ -261,11 +315,12 @@ public class ResourceMethodParamTest {
             public String getMultiple(@QueryParam("breeds") List<Breed> breeds) {
                 if (breeds == null) return "null";
                 if (breeds.isEmpty()) return "empty list";
-                return breeds.stream().map(Enum::name).collect(Collectors.joining(","));
+                return breeds.stream().map(breed -> breed == null ? "nullinlist" : breed.name()).collect(Collectors.joining(","));
             }
         }
-        server = httpsServerForTest().addHandler(restHandler(new Sample())).start();
-        try (Response resp = call(request().url(server.uri().resolve("/samples?breedOne=CHIHUAHUA").toString()))) {
+        server = httpsServerForTest().addHandler(restHandler(new Sample()).withCollectionParameterStrategy(CollectionParameterStrategy.NO_TRANSFORM)).start();
+        try (Response resp = call(request()
+            .url(server.uri().resolve("/samples?breedOne=CHIHUAHUA&breedOne=ignored").toString()))) {
             assertThat(resp.body().string(), equalTo("chihuahua / null / big_hairy"));
         }
         try (Response resp = call(request().url(server.uri().resolve("/samples/headers").toString())
@@ -277,21 +332,47 @@ public class ResourceMethodParamTest {
             assertThat(resp.body().string(), startsWith("<h1>400 Bad Request</h1><p>Could not convert String value &quot;BAD_DOG&quot; to a"));
         }
 
-        try (Response resp = call(request().url(server.uri().resolve("/samples/multiple?breeds=CHIHUAHUA,YELPER").toString()))) {
+        try (Response resp = call(request().url(server.uri().resolve("/samples/multiple?breeds=CHIHUAHUA&breeds=YELPER").toString()))) {
             assertThat(resp.body().string(), equalTo("CHIHUAHUA,YELPER"));
         }
         try (Response resp = call(request().url(server.uri().resolve("/samples/multiple?breeds=").toString()))) {
-            assertThat(resp.body().string(), equalTo("empty list"));
+//            assertThat(resp.body().string(), equalTo("empty list"));
         }
         try (Response resp = call(request().url(server.uri().resolve("/samples/multiple").toString()))) {
             assertThat(resp.body().string(), equalTo("empty list"));
         }
-        try (Response resp = call(request().url(server.uri().resolve("/samples/multiple?breeds=CHIHUAHUA,INVALID,YELPER").toString()))) {
+        try (Response resp = call(request().url(server.uri().resolve("/samples/multiple?breeds=CHIHUAHUA&breeds=INVALID&breeds=YELPER").toString()))) {
             assertThat(resp.code(), is(400));
             assertThat(resp.body().string(), containsString("Could not convert"));
         }
-
     }
+
+    @Test
+    public void wildcardEnumsCanBeUsed() throws IOException {
+        @Path("samples")
+        @Produces("text/plain")
+        class Sample {
+            @GET
+            public String getIt(
+                @QueryParam("breeds") List<? extends Breed> breeds) {
+                return breeds.stream().map(Enum::name).collect(Collectors.joining(", "));
+            }
+        }
+        server = httpsServerForTest().addHandler(restHandler(new Sample()).withCollectionParameterStrategy(CollectionParameterStrategy.NO_TRANSFORM).withOpenApiJsonUrl("/openapi.json")).start();
+        try (Response resp = call(request(server.uri().resolve("/samples?breeds=CHIHUAHUA&breeds=YELPER")))) {
+            assertThat(resp.body().string(), equalTo("CHIHUAHUA, YELPER"));
+        }
+        try (Response resp = call(request(server.uri().resolve("/openapi.json")))) {
+            JSONObject api = new JSONObject(resp.body().string());
+            JSONObject param = (JSONObject) api.query("/paths/~1samples/get/parameters/0/schema");
+            assertThat(param.getString("type"), is("array"));
+            JSONObject items = param.getJSONObject("items");
+            assertThat(items.getBoolean("nullable"), is(false));
+            assertThat(items.getString("type"), is("string"));
+            assertThat(items.getJSONArray("enum"), containsInAnyOrder(Stream.of(Breed.values()).map(Breed::name).toArray()));
+        }
+    }
+
 
     @SuppressWarnings("unused")
     public static class DogWithValueOf {
@@ -449,7 +530,7 @@ public class ResourceMethodParamTest {
             public String getList(
                 @QueryParam("cats") List<Cat> cats) {
                 if (cats.isEmpty()) return "(empty)";
-                return cats.stream().map(d -> d.name).collect(Collectors.joining(", "));
+                return cats.stream().map(d -> d == null ? "null in list" : d.name).collect(Collectors.joining(", "));
             }
 
             @GET
@@ -457,7 +538,7 @@ public class ResourceMethodParamTest {
             public String getSet(
                 @QueryParam("cats") Set<Cat> cats) {
                 if (cats.isEmpty()) return "(empty)";
-                return cats.stream().map(d -> d.name).sorted().collect(Collectors.joining(", "));
+                return cats.stream().map(d -> d == null ? "null in set" : d.name).sorted().collect(Collectors.joining(", "));
             }
 
             @GET
@@ -465,10 +546,18 @@ public class ResourceMethodParamTest {
             public String getSortedSet(
                 @QueryParam("cats") SortedSet<Cat> cats) {
                 if (cats.isEmpty()) return "(empty)";
-                return cats.stream().map(d -> d.name).collect(Collectors.joining(", "));
+                return cats.stream().map(d -> d == null ? "null in sorted set" : d.name).collect(Collectors.joining(", "));
+            }
+
+            @GET
+            @Path("collection")
+            public String getCollection(@QueryParam("cats") Collection<Cat> cats) {
+                if (cats.isEmpty()) return "(empty)";
+                return cats.stream().map(d -> d == null ? "null in collection" : d.name).sorted().collect(Collectors.joining(", "));
             }
         }
-        server = httpsServerForTest().addHandler(restHandler(new Cats())).start();
+        server = httpsServerForTest().addHandler(restHandler(new Cats()).withCollectionParameterStrategy(CollectionParameterStrategy.NO_TRANSFORM)).start();
+
         try (Response resp = call(request().url(server.uri().resolve("/cats/list?cats=Little&cats=Twinkle").toString()))) {
             assertThat(resp.body().string(), equalTo("Little, Twinkle"));
         }
@@ -477,6 +566,22 @@ public class ResourceMethodParamTest {
         }
         try (Response resp = call(request().url(server.uri().resolve("/cats/sortedSet?cats=Twinkle&cats=Little").toString()))) {
             assertThat(resp.body().string(), equalTo("Little, Twinkle"));
+        }
+        try (Response resp = call(request().url(server.uri().resolve("/cats/collection?cats=Twinkle&cats=Little").toString()))) {
+            assertThat(resp.body().string(), equalTo("Little, Twinkle"));
+        }
+
+        try (Response resp = call(request().url(server.uri().resolve("/cats/list?cats=").toString()))) {
+            assertThat(resp.body().string(), equalTo("null in list"));
+        }
+        try (Response resp = call(request().url(server.uri().resolve("/cats/set?cats=").toString()))) {
+            assertThat(resp.body().string(), equalTo("null in set"));
+        }
+//        try (Response resp = call(request().url(server.uri().resolve("/cats/sortedSet?cats=").toString()))) {
+//            assertThat(resp.body().string(), equalTo("null in sorted set"));
+//        }
+        try (Response resp = call(request().url(server.uri().resolve("/cats/collection?cats=").toString()))) {
+            assertThat(resp.body().string(), equalTo("null in collection"));
         }
 
         try (Response resp = call(request().url(server.uri().resolve("/cats/list").toString()))) {
@@ -488,6 +593,11 @@ public class ResourceMethodParamTest {
         try (Response resp = call(request().url(server.uri().resolve("/cats/sortedSet").toString()))) {
             assertThat(resp.body().string(), equalTo("(empty)"));
         }
+        try (Response resp = call(request().url(server.uri().resolve("/cats/collection").toString()))) {
+            assertThat(resp.body().string(), equalTo("(empty)"));
+        }
+
+
     }
 
     @Test
@@ -518,7 +628,7 @@ public class ResourceMethodParamTest {
                 return cats.stream().map(d -> d.name).collect(Collectors.joining(", "));
             }
         }
-        server = httpsServerForTest().addHandler(restHandler(new Cats())).start();
+        server = httpsServerForTest().addHandler(restHandler(new Cats()).withCollectionParameterStrategy(CollectionParameterStrategy.NO_TRANSFORM)).start();
         try (Response resp = call(request().url(server.uri().resolve("/cats/list?cats=Little&cats=Twinkle").toString()))) {
             assertThat(resp.body().string(), equalTo("Little, Twinkle"));
         }
@@ -585,23 +695,63 @@ public class ResourceMethodParamTest {
         @Path("/time")
         class TimeResource {
             @GET
-            @Produces("text/plain")
             public Instant get(@QueryParam("value") Instant value) {
                 return value;
             }
-        }
+            @POST
+            public Instant post(Instant value) {
+                return value;
+            }
 
+        }
         server = httpsServerForTest().addHandler(restHandler(new TimeResource())).start();
         Instant now = Instant.now();
         try (Response resp = call(request(server.uri().resolve("/time?value=" + now)))) {
             assertThat(resp.body().string(), equalTo(now.toString()));
+            assertThat(resp.header("content-type"), equalTo("text/plain;charset=utf-8"));
+        }
+        try (Response resp = call(request(server.uri().resolve("/time")).post(RequestBody.create(now.toString(), MediaType.get("text/plain"))))) {
+            assertThat(resp.body().string(), equalTo(now.toString()));
+            assertThat(resp.header("content-type"), equalTo("text/plain;charset=utf-8"));
+        }
+
+        try (Response resp = call(request(server.uri().resolve("/time")))) {
+            assertThat(resp.body().string(), equalTo(""));
+        }
+        try (Response resp = call(request(server.uri().resolve("/time?value=invalid-date")))) {
+            assertThat(resp.code(), is(400));
+            assertThat(resp.body().string(), containsString(Mutils.htmlEncode("Could not convert String value \"invalid-date\" to a class java.time.Instant using public static java.time.Instant java.time.Instant.parse(java.lang.CharSequence)")));
+        }
+    }
+
+    @Test
+    public void localDateParamsAllowed() throws IOException {
+        @Path("/time")
+        class TimeResource {
+            @GET
+            public LocalDate get(@QueryParam("value") LocalDate value) {
+                return value;
+            }
+            @POST
+            public LocalDate post(LocalDate value) {
+                return value;
+            }
+        }
+        server = httpsServerForTest().addHandler(restHandler(new TimeResource())).start();
+        LocalDate today = LocalDate.now();
+        try (Response resp = call(request(server.uri().resolve("/time?value=" + today)))) {
+            assertThat(resp.body().string(), equalTo(today.toString()));
+        }
+        try (Response resp = call(request(server.uri().resolve("/time")).post(RequestBody.create(today.toString(), MediaType.get("text/plain"))))) {
+            assertThat(resp.body().string(), equalTo(today.toString()));
+            assertThat(resp.header("content-type"), equalTo("text/plain;charset=utf-8"));
         }
         try (Response resp = call(request(server.uri().resolve("/time")))) {
             assertThat(resp.body().string(), equalTo(""));
         }
         try (Response resp = call(request(server.uri().resolve("/time?value=invalid-date")))) {
             assertThat(resp.code(), is(400));
-            assertThat(resp.body().string(), containsString("Instant converter, expecting ISO format dates such as &#x27;2020-03-06T04:43:00.691Z&#x27; on parameter"));
+            assertThat(resp.body().string(), containsString(Mutils.htmlEncode("Could not convert String value \"invalid-date\" to a class java.time.LocalDate using public static java.time.LocalDate java.time.LocalDate.parse(java.lang.CharSequence)")));
         }
     }
 
@@ -680,6 +830,266 @@ public class ResourceMethodParamTest {
             assertThat(called, contains("Eager eager-value", "Lazy lazy-value", "Lazy lazy-value"));
         }
     }
+
+
+
+    static class Car {
+        private final String model;
+        Car(String model) {
+            this.model = model;
+        }
+        public String toString() {
+            return "[car: " + model + "]";
+        }
+    }
+
+    @Test
+    public void customTypesSupported() throws Exception {
+
+        @Path("/cars")
+        class HolderResource {
+            @GET
+            @Path("one")
+            public String get(@QueryParam("garage") Car garage) {
+                return garage == null ? "nothing" : garage.toString();
+            }
+            @GET
+            @Path("all")
+            public String all(@QueryParam("garage") List<Car> holders) {
+                if (holders.isEmpty()) return "(empty list)";
+                return holders.stream().map(carHolder -> carHolder == null ? "null" : carHolder.toString()).collect(Collectors.joining(", "));
+            }
+
+            @GET
+            @Path("defaultOne")
+            public String getOneDefault(@QueryParam("garage") @DefaultValue("Holden") Car garage) {
+                return garage == null ? "nothing" : garage.toString();
+            }
+
+            @GET
+            @Path("defaultAll")
+            public String getAllDefault(@QueryParam("garage") @DefaultValue("Ute") List<Car> holders) {
+                if (holders.isEmpty()) return "(empty list)";
+                return holders.stream().map(carHolder -> carHolder == null ? "null" : carHolder.toString()).collect(Collectors.joining(", "));
+            }
+        }
+        server = httpsServerForTest()
+            .addHandler(restHandler(new HolderResource())
+                .withCollectionParameterStrategy(CollectionParameterStrategy.NO_TRANSFORM)
+                .addCustomParamConverterProvider(new ParamConverterProvider() {
+                    @Override
+                    public <T> ParamConverter<T> getConverter(Class<T> rawType, Type genericType, Annotation[] annotations) {
+                        if (rawType.equals(Car.class)) {
+                            return new ParamConverter<T>() {
+                                @Override
+                                public T fromString(String value) {
+                                    if (value.isEmpty()) return null;
+                                    return (T) new Car(value);
+                                }
+
+                                @Override
+                                public String toString(T value) {
+                                    return value.toString();
+                                }
+                            };
+                        }
+                        return null;
+                    }
+                })
+            )
+            .start();
+        try (Response resp = call(request(server.uri().resolve("/cars/one")))) {
+            assertThat(resp.body().string(), equalTo("nothing"));
+        }
+        try (Response resp = call(request(server.uri().resolve("/cars/one?garage=blah")))) {
+            assertThat(resp.body().string(), equalTo("[car: blah]"));
+        }
+        try (Response resp = call(request(server.uri().resolve("/cars/one?garage=blah&garage=ignored")))) {
+            assertThat(resp.body().string(), equalTo("[car: blah]"));
+        }
+        try (Response resp = call(request(server.uri().resolve("/cars/all")))) {
+            assertThat(resp.body().string(), equalTo("(empty list)"));
+        }
+        try (Response resp = call(request(server.uri().resolve("/cars/all?garage=one&garage=two")))) {
+            assertThat(resp.body().string(), equalTo("[car: one], [car: two]"));
+        }
+        try (Response resp = call(request(server.uri().resolve("/cars/all?garage=one&garage=")))) {
+            assertThat(resp.body().string(), equalTo("[car: one], null"));
+        }
+        try (Response resp = call(request(server.uri().resolve("/cars/defaultOne")))) {
+            assertThat(resp.body().string(), equalTo("[car: Holden]"));
+        }
+        try (Response resp = call(request(server.uri().resolve("/cars/defaultOne?garage=")))) {
+            assertThat(resp.body().string(), equalTo("nothing"));
+        }
+        try (Response resp = call(request(server.uri().resolve("/cars/defaultOne?garage=Ford")))) {
+            assertThat(resp.body().string(), equalTo("[car: Ford]"));
+        }
+        try (Response resp = call(request(server.uri().resolve("/cars/defaultAll")))) {
+            assertThat(resp.body().string(), equalTo("[car: Ute]"));
+        }
+        try (Response resp = call(request(server.uri().resolve("/cars/defaultAll?garage=one")))) {
+            assertThat(resp.body().string(), equalTo("[car: one]"));
+        }
+        try (Response resp = call(request(server.uri().resolve("/cars/defaultAll?garage=one&garage=two")))) {
+            assertThat(resp.body().string(), equalTo("[car: one], [car: two]"));
+        }
+    }
+
+
+    @Test
+    public void customGenericTypesSupported() throws Exception {
+        class Holder<T> {
+            private final T something;
+            Holder(T something) {
+                this.something = something;
+            }
+            public String toString() {
+                return "Holder of " + something;
+            }
+        }
+        @Path("/holders")
+        class HolderResource {
+            @GET
+            @Path("one")
+            public String get(@QueryParam("garage") Holder<Car> garage) {
+                return garage == null ? "nothing" : garage.toString();
+            }
+            @GET
+            @Path("all")
+            public String all(@QueryParam("garage") List<Holder<Car>> holders) {
+                if (holders.isEmpty()) return "(empty list)";
+                return holders.stream().map(carHolder -> carHolder == null ? "null" : carHolder.toString()).collect(Collectors.joining(", "));
+            }
+
+            @GET
+            @Path("defaultOne")
+            public String getOneDefault(@QueryParam("garage") @DefaultValue("Holden") Holder<Car> garage) {
+                return garage == null ? "nothing" : garage.toString();
+            }
+
+            @GET
+            @Path("defaultAll")
+            public String getAllDefault(@QueryParam("garage") @DefaultValue("Ute") List<Holder<Car>> holders) {
+                if (holders.isEmpty()) return "(empty list)";
+                return holders.stream().map(carHolder -> carHolder == null ? "null" : carHolder.toString()).collect(Collectors.joining(", "));
+            }
+        }
+        server = httpsServerForTest()
+            .addHandler(restHandler(new HolderResource())
+                .withCollectionParameterStrategy(CollectionParameterStrategy.NO_TRANSFORM)
+                .addCustomParamConverterProvider(new ParamConverterProvider() {
+                    @Override
+                    public <T> ParamConverter<T> getConverter(Class<T> rawType, Type genericType, Annotation[] annotations) {
+                        if (rawType.equals(Holder.class) && ((ParameterizedType)genericType).getActualTypeArguments()[0].equals(Car.class)) {
+                            ParameterizedType pt = (ParameterizedType) genericType;
+                            Class typeArg = (Class) pt.getActualTypeArguments()[0];
+                            if (typeArg.equals(Car.class)) {
+                                return new ParamConverter<T>() {
+                                    @Override
+                                    public T fromString(String value) {
+                                        if (value.isEmpty()) return null;
+                                        return (T) new Holder(new Car(value));
+                                    }
+
+                                    @Override
+                                    public String toString(T value) {
+                                        return value.toString();
+                                    }
+                                };
+                            }
+                        }
+                        return null;
+                    }
+                })
+            )
+            .start();
+        try (Response resp = call(request(server.uri().resolve("/holders/one")))) {
+            assertThat(resp.body().string(), equalTo("nothing"));
+        }
+        try (Response resp = call(request(server.uri().resolve("/holders/one?garage=blah")))) {
+            assertThat(resp.body().string(), equalTo("Holder of [car: blah]"));
+        }
+        try (Response resp = call(request(server.uri().resolve("/holders/one?garage=blah&garage=ignored")))) {
+            assertThat(resp.body().string(), equalTo("Holder of [car: blah]"));
+        }
+        try (Response resp = call(request(server.uri().resolve("/holders/all")))) {
+            assertThat(resp.body().string(), equalTo("(empty list)"));
+        }
+        try (Response resp = call(request(server.uri().resolve("/holders/all?garage=one&garage=two")))) {
+            assertThat(resp.body().string(), equalTo("Holder of [car: one], Holder of [car: two]"));
+        }
+        try (Response resp = call(request(server.uri().resolve("/holders/all?garage=one&garage=")))) {
+            assertThat(resp.body().string(), equalTo("Holder of [car: one], null"));
+        }
+        try (Response resp = call(request(server.uri().resolve("/holders/defaultOne")))) {
+            assertThat(resp.body().string(), equalTo("Holder of [car: Holden]"));
+        }
+        try (Response resp = call(request(server.uri().resolve("/holders/defaultOne?garage=")))) {
+            assertThat(resp.body().string(), equalTo("nothing"));
+        }
+        try (Response resp = call(request(server.uri().resolve("/holders/defaultOne?garage=Ford")))) {
+            assertThat(resp.body().string(), equalTo("Holder of [car: Ford]"));
+        }
+        try (Response resp = call(request(server.uri().resolve("/holders/defaultAll")))) {
+            assertThat(resp.body().string(), equalTo("Holder of [car: Ute]"));
+        }
+        try (Response resp = call(request(server.uri().resolve("/holders/defaultAll?garage=one")))) {
+            assertThat(resp.body().string(), equalTo("Holder of [car: one]"));
+        }
+        try (Response resp = call(request(server.uri().resolve("/holders/defaultAll?garage=one&garage=two")))) {
+            assertThat(resp.body().string(), equalTo("Holder of [car: one], Holder of [car: two]"));
+        }
+    }
+
+    @Retention(RetentionPolicy.RUNTIME)
+    private @interface ChangeCase {
+        String value();
+    }
+
+    @Test
+    public void paramConvertsHaveAccessToTheParamAnnotations() throws Exception {
+        @Path("/thing")
+        class ThingResource {
+            @GET
+            public String get(@ChangeCase("upper") @QueryParam("one") String one, @ChangeCase("lower") @QueryParam("two") String two, @QueryParam("three") String three) {
+                return one + " " + two + " " + three;
+            }
+        }
+        server = httpsServerForTest()
+            .addHandler(restHandler(new ThingResource())
+                .addCustomParamConverterProvider(new ParamConverterProvider() {
+                    @Override
+                    public <T> ParamConverter<T> getConverter(Class<T> rawType, Type genericType, Annotation[] annotations) {
+                        if (rawType.equals(String.class)) {
+                            return new ParamConverter<T>() {
+                                @Override
+                                public T fromString(String value) {
+                                    ChangeCase changer = Arrays.stream(annotations)
+                                        .filter(a -> a.annotationType().equals(ChangeCase.class))
+                                        .map(a -> (ChangeCase)a)
+                                        .findFirst().orElse(null);
+                                    if (changer != null) {
+                                        value = (changer.value().equals("upper")) ? value.toUpperCase() : changer.value().equals("lower") ? value.toLowerCase() : value;
+                                    }
+                                    return (T) value;
+                                }
+                                @Override
+                                public String toString(T value) {
+                                    return value.toString();
+                                }
+                            };
+                        }
+                        return null;
+                    }
+                })
+            )
+            .start();
+        try (Response resp = call(request(server.uri().resolve("/thing?one=ValueOne&two=ValueTwo&three=ValueThree")))) {
+            assertThat(resp.body().string(), equalTo("VALUEONE valuetwo ValueThree"));
+        }
+    }
+
 
 
     @After

@@ -4,6 +4,7 @@ import org.junit.Test;
 
 import java.net.URI;
 
+import static io.muserver.rest.UriPattern.MATRIX_PARAMETERS_PATTERN;
 import static io.muserver.rest.UriPattern.uriTemplateToRegex;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
@@ -34,11 +35,14 @@ public class UriPatternTest {
 
     @Test
     public void uriTemplatesCanBeConvertedToRegexes() {
-        assertThat(pattern("/fruit"), equalTo("\\Qfruit\\E(/.*)?"));
-        assertThat(pattern("/fruit/{name}"), equalTo("\\Qfruit\\E/(?<name>[^/]+?)(/.*)?"));
-        assertThat(pattern("/fruit/{version : v[12]}"), equalTo("\\Qfruit\\E/(?<version>v[12])(/.*)?"));
-        assertThat(pattern("/fruit/{version:v[12]}"), equalTo("\\Qfruit\\E/(?<version>v[12])(/.*)?"));
-        assertThat(pattern("/fruit/{version: v[12]}/{name}/eat"), equalTo("\\Qfruit\\E/(?<version>v[12])/(?<name>[^/]+?)/\\Qeat\\E(/.*)?"));
+        String mp = MATRIX_PARAMETERS_PATTERN;
+        assertThat(pattern("/"), equalTo("(/.*)?"));
+        assertThat(pattern("/fruit"), equalTo("\\Qfruit\\E" + mp + "(/.*)?"));
+        assertThat(pattern("/fruit/orange"), equalTo("\\Qfruit\\E" + mp + "/\\Qorange\\E" + mp + "(/.*)?"));
+        assertThat(pattern("/fruit/{name}"), equalTo("\\Qfruit\\E" + mp + "/(?<name>[^/]+?" + mp + ")(/.*)?"));
+        assertThat(pattern("/fruit/{version : v[12]}"), equalTo("\\Qfruit\\E" + mp + "/(?<version>v[12]" + mp + ")(/.*)?"));
+        assertThat(pattern("/fruit/{version:v[12]}"), equalTo("\\Qfruit\\E" + mp + "/(?<version>v[12]" + mp + ")(/.*)?"));
+        assertThat(pattern("/fruit/{version: v[12]}/{name}/eat"), equalTo("\\Qfruit\\E" + mp + "/(?<version>v[12]" + mp + ")/(?<name>[^/]+?" + mp + ")/\\Qeat\\E" + mp + "(/.*)?"));
     }
 
     @Test

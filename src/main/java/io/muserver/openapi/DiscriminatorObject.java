@@ -11,7 +11,15 @@ import static io.muserver.openapi.Jsonizer.append;
  * @see DiscriminatorObjectBuilder
  */
 public class DiscriminatorObject implements JsonWriter {
+    /**
+     * Use {@link #propertyName()} instead
+     */
+    @Deprecated
     public final String propertyName;
+    /**
+     * Use {@link #mapping()} instead
+     */
+    @Deprecated
     public final Map<String, String> mapping;
 
     DiscriminatorObject(String propertyName, Map<String, String> mapping) {
@@ -27,5 +35,19 @@ public class DiscriminatorObject implements JsonWriter {
         isFirst = append(writer, "propertyName", propertyName, isFirst);
         isFirst = append(writer, "mapping", mapping, isFirst);
         writer.write('}');
+    }
+
+    /**
+     * @return The value described by {@link DiscriminatorObjectBuilder#withPropertyName}
+     */
+    public String propertyName() {
+        return propertyName;
+    }
+
+    /**
+      @return The value described by {@link DiscriminatorObjectBuilder#withMapping}
+     */
+    public Map<String, String> mapping() {
+        return mapping;
     }
 }

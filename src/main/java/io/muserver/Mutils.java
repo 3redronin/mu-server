@@ -14,6 +14,9 @@ import java.util.stream.Stream;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
+/**
+ * Utility methods
+ */
 public class Mutils {
 
     /**
@@ -27,7 +30,10 @@ public class Mutils {
      */
     public static String urlEncode(String value) {
         try {
-            return URLEncoder.encode(value, "UTF-8").replace("+", "%20");
+            return URLEncoder.encode(value, "UTF-8")
+                .replace("+", "%20")
+                .replace("%7E", "~") // as per https://www.ietf.org/rfc/rfc3986.html ~ doesn't need encoding
+                ;
         } catch (UnsupportedEncodingException e) {
             throw new MuException("Error encoding " + value, e);
         }
@@ -60,7 +66,9 @@ public class Mutils {
         byte[] buffer = new byte[bufferSize];
         int read;
         while ((read = from.read(buffer)) > -1) {
-            to.write(buffer, 0, read);
+            if (read > 0) {
+                to.write(buffer, 0, read);
+            }
         }
     }
 
@@ -252,8 +260,10 @@ public class Mutils {
     public static ByteBuffer toByteBuffer(String text) {
         notNull("text", text);
         if (text.isEmpty()) {
-            return ByteBuffer.allocate(0);
+            return EMPTY_BUFFER;
         }
         return ByteBuffer.wrap(text.getBytes(UTF_8));
     }
+
+    private static final ByteBuffer EMPTY_BUFFER = ByteBuffer.allocate(0);
 }

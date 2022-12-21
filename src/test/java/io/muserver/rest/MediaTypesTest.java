@@ -17,8 +17,7 @@ import java.util.List;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static java.util.Arrays.asList;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 
@@ -118,7 +117,7 @@ public class MediaTypesTest {
     }
 
     @Test
-    public void invalidAcceptHeadersReturn400() {
+    public void invalidAcceptHeadersReturn400() throws IOException {
         @Path("things")
         class Widget {
             @GET
@@ -132,7 +131,8 @@ public class MediaTypesTest {
         .header("accept", "text")
         )) {
             assertThat(resp.code(), is(400));
-            assertThat(resp.header("Content-Type"), is("text/plain;charset=utf-8"));
+            assertThat(resp.header("Content-Type"), is("text/html;charset=utf-8"));
+            assertThat(resp.body().string(), containsString("Media types must be in the format &#x27;type&#x2F;subtype&#x27;; this is inavlid: &#x27;text&#x27;"));
         }
 
     }

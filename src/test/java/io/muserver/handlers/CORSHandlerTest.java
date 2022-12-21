@@ -10,8 +10,8 @@ import scaffolding.ServerUtils;
 import scaffolding.StringUtils;
 
 import static io.muserver.handlers.CORSHandlerBuilder.corsHandler;
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
-import static org.junit.Assert.assertThat;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 
@@ -34,6 +34,18 @@ public class CORSHandlerTest {
             assertThat(resp.header("Access-Control-Allow-Headers"), is(nullValue()));
             assertThat(resp.header("Access-Control-Expose-Headers"), is(nullValue()));
             assertThat(resp.header("Access-Control-Allow-Credentials"), is(nullValue()));
+        }
+    }
+
+    @Test
+    public void aHandlerCanBeCreatedFromConfig() {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(CORSHandlerBuilder.config().withAllOriginsAllowed().toHandler(Method.GET, Method.HEAD))
+            .start();
+        try (Response resp = call(request(server.uri()).header("Origin", "http://example.org"))) {
+            assertThat(resp.headers("Vary"), contains("origin"));
+            assertThat(resp.header("Access-Control-Allow-Origin"), is("http://example.org"));
+            assertThat(resp.header("Access-Control-Allow-Methods"), is("GET, HEAD, OPTIONS"));
         }
     }
 

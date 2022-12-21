@@ -2,6 +2,8 @@ package io.muserver.openapi;
 
 import java.util.Map;
 
+import static io.muserver.openapi.OpenApiUtils.immutable;
+
 /**
  * <p>Describes a single operation parameter.</p>
  * <p>A unique parameter is defined by a combination of a name and {@link ParameterObjectBuilder#withIn(String)} (location).</p>
@@ -109,7 +111,8 @@ public class ParameterObjectBuilder {
      *              for <code>path</code> - <code>simple</code>; for <code>header</code> - <code>simple</code>;
      *              for <code>cookie</code> - <code>form</code>.</p>
      *              <p>In order to support common ways of serializing simple parameters, a set of <code>style</code> values are defined.</p>
-     *              <table summary="Style values">
+     *              <table>
+     *              <caption>Style values</caption>
      *              <thead>
      *              <tr>
      *              <th><code>style</code></th>
@@ -241,10 +244,14 @@ public class ParameterObjectBuilder {
         return this;
     }
 
+    /**
+     * @return A new object
+     */
     public ParameterObject build() {
-        Boolean explodeVal = this.explode == null ? "form".equals(style) : this.explode;
-        Boolean requiredVal = this.required == null ? "path".equals(in) : this.required;
-        return new ParameterObject(name, in, description, requiredVal, deprecated, allowEmptyValue, style, explodeVal, allowReserved, schema, example, examples, content);
+        boolean explodeVal = this.explode == null ? "form".equals(style) : this.explode;
+        boolean requiredVal = this.required == null ? "path".equals(in) : this.required;
+        return new ParameterObject(name, in, description, requiredVal, deprecated, allowEmptyValue, style, explodeVal,
+            allowReserved, schema, example, immutable(examples), immutable(content));
     }
 
     /**

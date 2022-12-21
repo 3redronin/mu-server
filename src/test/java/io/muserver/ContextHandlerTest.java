@@ -2,7 +2,6 @@ package io.muserver;
 
 import io.muserver.rest.RestHandlerBuilder;
 import okhttp3.Response;
-import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.ServerUtils;
@@ -13,9 +12,9 @@ import java.io.IOException;
 import java.net.URL;
 
 import static io.muserver.ContextHandlerBuilder.context;
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.is;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 
@@ -107,9 +106,9 @@ public class ContextHandlerTest {
 
         URL url = server.uri().resolve("/my-app").toURL();
         try (Response resp = call(request().get().url(url))) {
-            assertThat(resp.code(), Matchers.equalTo(302));
-            assertThat(resp.header("location"), Matchers.equalTo(server.uri().resolve("/my-app/").toString()));
-            assertThat(resp.body().contentLength(), Matchers.equalTo(0L));
+            assertThat(resp.code(), equalTo(302));
+            assertThat(resp.header("location"), equalTo(server.uri().resolve("/my-app/").toString()));
+            assertThat(resp.body().contentLength(), equalTo(0L));
         }
     }
 
@@ -165,6 +164,25 @@ public class ContextHandlerTest {
         }
         try (Response resp = call(request(server.uri().resolve("/a/b")))) {
             assertThat(resp.code(), is(404));
+        }
+    }
+
+    @Test
+    public void unreservedCharactersComeThroughUnencoded() throws Exception {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(context("~.-_")
+                .addHandler(Method.GET, "~.-_", (request, response, pathParams) -> {
+                    response.write(request.contextPath() + " - " + request.relativePath());
+                })
+            )
+            .start();
+        try (Response resp = call(request(server.uri().resolve("/~.-_/~.-_")))) {
+            assertThat(resp.body().string(), is("/~.-_ - /~.-_"));
+            assertThat(resp.code(), is(200));
+        }
+        try (Response resp = call(request(server.uri().resolve("/%7E%2E%2D%5F/%7E%2E%2D%5F")))) {
+            assertThat(resp.body().string(), is("/~.-_ - /~.-_"));
+            assertThat(resp.code(), is(200));
         }
     }
 

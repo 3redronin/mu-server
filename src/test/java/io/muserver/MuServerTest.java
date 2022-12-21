@@ -1,22 +1,29 @@
 package io.muserver;
 
+import io.netty.util.concurrent.DefaultThreadFactory;
+import okhttp3.MediaType;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import okhttp3.internal.http2.ErrorCode;
 import okhttp3.internal.http2.StreamResetException;
+import okio.BufferedSink;
 import org.junit.*;
-import scaffolding.MuAssert;
-import scaffolding.RawClient;
-import scaffolding.ServerUtils;
+import scaffolding.*;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadInfo;
+import java.lang.management.ThreadMXBean;
+import java.lang.reflect.Field;
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static io.muserver.MuServerBuilder.httpServer;
 import static io.muserver.MuServerBuilder.muServer;
@@ -26,6 +33,7 @@ import static org.hamcrest.Matchers.*;
 import static org.hamcrest.core.IsEqual.equalTo;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
+import static scaffolding.MuAssert.assertEventually;
 
 public class MuServerTest {
 
@@ -62,7 +70,45 @@ public class MuServerTest {
     }
 
     @Test
-    public void unhandledExceptionsAreJustLoggedIfResponsesAreAlreadyStarted() {
+    public void statsAreAvailableAfterResponseFinished() throws Exception {
+        server = ServerUtils.httpsServerForTest()
+            .addResponseCompleteListener(info -> {
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    throw new RuntimeException("Hmm");
+                }
+            })
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.write("X");
+            })
+            .start();
+        try (Response resp = call(request(server.uri()))) {
+            assertThat(resp.body().string(), is("X"));
+        }
+        assertEventually(() -> server.stats().activeRequests(), empty());
+        assertThat(server.stats().completedRequests(), equalTo(1L));
+    }
+
+    @Test
+    public void multipleWritesWorkRight() throws Exception {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.write("Hello");
+            })
+            .start();
+        for (int i = 0; i < 5000; i++) {
+            try (Response resp = call(request(server.uri().resolve("/?i=" + i)))) {
+                assertThat("Error on i=" + i, resp.body().string(), is("Hello"));
+            }
+        }
+        assertEventually(() -> server.stats().completedRequests(), equalTo(5000L));
+        assertThat(server.stats().completedConnections(), lessThan(1000L)); // just make sure it's not one connection per request
+    }
+
+
+    @Test
+    public void unhandledExceptionsAreLoggedAndTheResponseIsKilledEarly() {
         server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
@@ -72,6 +118,8 @@ public class MuServerTest {
             .start();
         try (Response resp = call(request().url(server.uri().toString()))) {
             assertThat(resp.code(), is(200));
+        } catch (Exception ex) {
+            MuAssert.assertIOException(ex);
         }
     }
 
@@ -268,8 +316,7 @@ public class MuServerTest {
 
     @Test
     public void nonUTF8IsSupported() throws IOException {
-        File warAndPeaceInRussian = new File("src/test/resources/sample-static/war-and-peace-in-ISO-8859-5.txt");
-        assertThat("Couldn't find " + Mutils.fullPath(warAndPeaceInRussian), warAndPeaceInRussian.isFile(), is(true));
+        File warAndPeaceInRussian = FileUtils.warAndPeaceInRussian();
 
         server = ServerUtils.httpsServerForTest()
             .addHandler((req, resp) -> {
@@ -281,7 +328,7 @@ public class MuServerTest {
             .start();
 
         try (Response resp = call(request(server.uri())
-            .post(RequestBody.create(okhttp3.MediaType.get("text/plain; charset=ISO-8859-5"), warAndPeaceInRussian))
+            .post(RequestBody.create(warAndPeaceInRussian, okhttp3.MediaType.get("text/plain; charset=ISO-8859-5")))
         )) {
             assertThat(resp.header("Content-Type"), is("text/plain;charset=ISO-8859-5"));
             String body = resp.body().string();
@@ -326,12 +373,51 @@ public class MuServerTest {
     }
 
     @Test
-    public void idleTimeoutCanBeConfiguredAnd408ReturnedIfResponseNotStarted() throws Exception {
+    public void idleTimeoutCanBeConfiguredAnd408ReturnedIfRequestUploadIsSlow() throws Exception {
+        server = ServerUtils.httpsServerForTest()
+            .withRequestTimeout(50, TimeUnit.MILLISECONDS)
+            .addHandler(Method.POST, "/", (request, response, pathParams) -> {
+                String text = request.readBodyAsString();
+                response.sendChunk(text);
+            })
+            .start();
+        try (Response resp = call(request(server.uri()).post(new RequestBody() {
+            @Override
+            public MediaType contentType() {
+                return MediaType.get("text/plain");
+            }
+
+            @Override
+            public void writeTo(BufferedSink bufferedSink) throws IOException {
+                bufferedSink.writeUtf8("Hello");
+                bufferedSink.flush();
+                try {
+                    Thread.sleep(200);
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        }))) {
+            assertThat(resp.code(), is(408)); // HTTP1
+            assertThat(resp.body().string(), containsString("408 Request Timeout"));
+            if (!ClientUtils.isHttp2(resp)) {
+                assertThat(resp.header("connection"), equalTo("close"));
+            }
+        } catch (StreamResetException sre) {
+            // HTTP2 will through these
+        } catch (RuntimeException re) {
+            // HTTP 1 will have killed connections
+            assertThat(re.getCause(), instanceOf(IOException.class));
+        }
+    }
+
+    @Test
+    public void idleTimeoutCanBeConfiguredAndConnectionClosedEvenIfNotAlreadyStarted() throws Exception {
         CompletableFuture<Throwable> exceptionFromServer = new CompletableFuture<>();
         server = ServerUtils.httpsServerForTest()
-            .withIdleTimeout(100, TimeUnit.MILLISECONDS)
+            .withIdleTimeout(50, TimeUnit.MILLISECONDS)
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
-                Thread.sleep(200);
+                Thread.sleep(80);
                 try {
                     response.write("Hmmm");
                 } catch (Throwable e) {
@@ -340,25 +426,83 @@ public class MuServerTest {
             })
             .start();
         try (Response resp = call(request(server.uri()))) {
-            assertThat(resp.code(), is(408)); // HTTP1
-        } catch (Exception e) {
-            // HTTP2 will result in a canceled stream
-            assertThat(e.getCause(), instanceOf(StreamResetException.class));
-            assertThat(((StreamResetException)e.getCause()).errorCode, is(ErrorCode.CANCEL));
+            Assert.fail("Should not succeed but got " + resp.code());
+        } catch (RuntimeException re) {
+            if (re.getCause() instanceof StreamResetException) {
+                assertThat(((StreamResetException) re.getCause()).errorCode, is(ErrorCode.INTERNAL_ERROR));
+            } else {
+                // expected on HTTP1
+                assertThat(re.getCause(), instanceOf(IOException.class));
+            }
         }
         assertThat(exceptionFromServer.get(20, TimeUnit.SECONDS), instanceOf(Exception.class));
     }
 
+
     @Test
+    public void idleTimeoutCanBeConfiguredAndTimeoutHappensWhenItDoes() throws Exception {
+        server = MuServerBuilder.httpServer()
+            .withIdleTimeout(50, TimeUnit.MILLISECONDS)
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.write("Hi");
+            })
+            .start();
+        RawClient client = RawClient.create(server.uri())
+            .sendStartLine("GET", "/")
+            .sendHeader("host", server.uri().getAuthority())
+            .endHeaders().flushRequest();
+
+        assertEventually(client::isConnected, equalTo(false));
+    }
+
+    @Test
+    public void unclosedOutputStreamsGetFlushed() throws IOException {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.contentType("text/plain;charset=utf-8");
+                response.headers().set(HeaderNames.CONTENT_LENGTH, 5);
+                response.outputStream(8192).write("Hello".getBytes(StandardCharsets.UTF_8));
+            })
+            .start();
+        try (Response resp = call(request(server.uri()))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), equalTo("Hello"));
+            assertThat(resp.header("content-type"), is("text/plain;charset=utf-8"));
+            assertThat(resp.header("transfer-encoding"), is(nullValue()));
+            assertThat(resp.header("content-length"), is("5"));
+        }
+    }
+
+    @Test
+    public void unclosedWriterGetFlushed() throws IOException {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.contentType("text/plain;charset=utf-8");
+                response.headers().set(HeaderNames.CONTENT_LENGTH, 5);
+                response.writer().write("Hello");
+            })
+            .start();
+        try (Response resp = call(request(server.uri()))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), equalTo("Hello"));
+            assertThat(resp.header("content-type"), is("text/plain;charset=utf-8"));
+            assertThat(resp.header("transfer-encoding"), is(nullValue()));
+            assertThat(resp.header("content-length"), is("5"));
+        }
+    }
+
+    @Test(timeout = 30000)
     public void idleTimeoutCanBeConfiguredAndConnectionClosedIfAlreadyStarted() throws Exception {
         CompletableFuture<Throwable> exceptionFromServer = new CompletableFuture<>();
+        CompletableFuture<ResponseInfo> received = new CompletableFuture<>();
         server = ServerUtils.httpsServerForTest()
-            .withIdleTimeout(200, TimeUnit.MILLISECONDS)
+            .withIdleTimeout(50, TimeUnit.MILLISECONDS)
+            .addResponseCompleteListener(received::complete)
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.sendChunk("Hi");
                 try {
                     while (true) {
-                        Thread.sleep(210);
+                        Thread.sleep(120);
                         response.sendChunk("Hi");
                     }
                 } catch (Throwable e) {
@@ -371,12 +515,16 @@ public class MuServerTest {
             resp.body().string();
             Assert.fail("Body should not be readable");
         } catch (StreamResetException e) {
-            // HTTP2 will result in a canceled stream
-            assertThat(e.errorCode, is(ErrorCode.CANCEL));
+            assertThat(e.errorCode, is(ErrorCode.INTERNAL_ERROR));
         } catch (IOException e) {
             // expected on HTTP1
         }
         assertThat(exceptionFromServer.get(10, TimeUnit.SECONDS), instanceOf(Exception.class));
+        ResponseInfo info = received.get(10, TimeUnit.SECONDS);
+        assertThat(info, notNullValue());
+        assertThat(info.completedSuccessfully(), is(false));
+        assertThat(info.duration(), greaterThan(-1L));
+
     }
 
 
@@ -415,15 +563,79 @@ public class MuServerTest {
         MuAssert.assertNotTimedOut("firstRequestStartedLatch", firstRequestStartedLatch);
         try (Response resp = call(request(server.uri().resolve("/?count=last")))) {
             assertThat(resp.code(), is(503));
-            assertThat(resp.body().string(), is("503 Service Unavailable"));
+            assertThat(resp.body().string(), containsString("503 Service Unavailable"));
         }
         thirdRequestFinishedLatch.countDown();
         MuAssert.assertNotTimedOut("responseLatch", responseFinishedLatch);
         assertThat(responses, containsInAnyOrder("First bit of first and second bit of first"));
+        assertEventually(() -> server.stats().completedRequests(), is(2L)); // should be 1, but due to some race conditions an extra completed request is added
         assertThat(server.stats().rejectedDueToOverload(), is(1L));
         assertThat(executor.shutdownNow(), hasSize(0));
     }
 
+    @Test(timeout = 10000)
+    public void nioThreadsCanBeSetToASpecificValue() throws Exception {
+        int expectWorkerPoolSize = 10;
+        nioThreadsPoolVerification(true, expectWorkerPoolSize);
+    }
+
+    @Test(timeout = 10000)
+    public void nioThreadsDefaultIs2TimesOfProcessNumberButNotMoreThan16() throws Exception {
+        final int processors = Runtime.getRuntime().availableProcessors();
+        int expectPoolSize;
+        if (processors > 8) {
+            expectPoolSize = 16;
+        } else {
+            expectPoolSize = Runtime.getRuntime().availableProcessors() * 2;
+        }
+        nioThreadsPoolVerification(false, expectPoolSize);
+    }
+
+    private void nioThreadsPoolVerification(boolean needToSet, int expectNioThreadsPoolSize) throws IOException {
+        final MuServerBuilder muServerBuilder = httpServer();
+        if (needToSet) {
+            muServerBuilder.withNioThreads(expectNioThreadsPoolSize);
+        }
+        server = muServerBuilder
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> TimeUnit.SECONDS.sleep(1))
+            .addHandler(Method.GET, "/threads", (request, response, pathParams) -> {
+                // Get the last pool ID
+                final Field poolId = DefaultThreadFactory.class.getDeclaredField("poolId");
+                poolId.setAccessible(true);
+                final int lastPoolId = ((AtomicInteger) poolId.get(null)).get();
+
+                ThreadMXBean threads = ManagementFactory.getThreadMXBean();
+                final List<String> collect = Stream.of(threads.dumpAllThreads(true, true))
+                    .map(ThreadInfo::getThreadName)
+                    .filter(n -> n.contains("nioEventLoopGroup-" + lastPoolId + "-"))
+                    .collect(Collectors.toList());
+                response.sendChunk("" + collect.size());
+            })
+            .start();
+
+        // Try to request and let the pool full
+        final int taskCount = 50;
+        Deque<Future> taskStack = new ArrayDeque<>(taskCount);
+        final ExecutorService executorService = Executors.newCachedThreadPool();
+        for (int i = 0; i < taskCount; i++) {
+            taskStack.push(executorService.submit(() -> {
+                call(request(server.uri()));
+            }));
+        }
+
+        // wait all tasks done
+        while (!taskStack.isEmpty()) {
+            if (taskStack.peek().isDone()) {
+                taskStack.pop();
+            }
+        }
+
+        executorService.shutdown();
+        try (Response resp = call(request(server.uri().resolve("/threads")))) {
+            assertThat(resp.code(), is(200));
+            assertThat("Worker thread pool size is not expected", resp.body().string(), is(String.valueOf(expectNioThreadsPoolSize)));
+        }
+    }
 
     @Test
     public void versionIsAvailable() {

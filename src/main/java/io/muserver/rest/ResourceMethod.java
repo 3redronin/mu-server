@@ -1,16 +1,13 @@
 package io.muserver.rest;
 
 import io.muserver.Method;
-import io.muserver.Mutils;
-import io.muserver.openapi.OperationObjectBuilder;
-import io.muserver.openapi.RequestBodyObject;
-import io.muserver.openapi.ResponseObject;
-import io.muserver.openapi.SchemaObjectBuilder;
+import io.muserver.openapi.*;
 
 import javax.ws.rs.HttpMethod;
 import javax.ws.rs.core.MediaType;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Type;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -24,7 +21,6 @@ import static io.muserver.openapi.ResponseObjectBuilder.responseObject;
 import static io.muserver.openapi.ResponsesObjectBuilder.responsesObject;
 import static io.muserver.openapi.SchemaObjectBuilder.schemaObject;
 import static io.muserver.openapi.SchemaObjectBuilder.schemaObjectFrom;
-import static io.muserver.rest.MethodMapping.jaxToMu;
 import static java.util.Collections.singletonMap;
 import static java.util.stream.Collectors.toMap;
 
@@ -35,14 +31,17 @@ class ResourceMethod {
     final Method httpMethod;
     final String pathTemplate;
     final List<MediaType> effectiveConsumes;
+    final List<MediaType> directlyConsumes;
     final List<MediaType> directlyProduces;
     final List<MediaType> effectiveProduces;
     final List<ResourceMethodParam> params;
+    private final SchemaObjectCustomizer schemaObjectCustomizer;
     private final DescriptionData descriptionData;
     private final boolean isDeprecated;
     private final List<Class<? extends Annotation>> nameBindingAnnotations;
+    final Annotation[] methodAnnotations; // the annotations defined on the method to be passed to the message body writers
 
-    ResourceMethod(ResourceClass resourceClass, UriPattern pathPattern, java.lang.reflect.Method methodHandle, List<ResourceMethodParam> params, Method httpMethod, String pathTemplate, List<MediaType> produces, List<MediaType> consumes, DescriptionData descriptionData, boolean isDeprecated, List<Class<? extends Annotation>> nameBindingAnnotations) {
+    ResourceMethod(ResourceClass resourceClass, UriPattern pathPattern, java.lang.reflect.Method methodHandle, List<ResourceMethodParam> params, Method httpMethod, String pathTemplate, List<MediaType> produces, List<MediaType> consumes, SchemaObjectCustomizer schemaObjectCustomizer, DescriptionData descriptionData, boolean isDeprecated, List<Class<? extends Annotation>> nameBindingAnnotations, Annotation[] methodAnnotations) {
         this.resourceClass = resourceClass;
         this.pathPattern = pathPattern;
         this.methodHandle = methodHandle;
@@ -50,9 +49,12 @@ class ResourceMethod {
         this.httpMethod = httpMethod;
         this.pathTemplate = pathTemplate;
         this.directlyProduces = produces;
+        this.directlyConsumes = consumes;
+        this.schemaObjectCustomizer = schemaObjectCustomizer;
         this.descriptionData = descriptionData;
         this.isDeprecated = isDeprecated;
         this.nameBindingAnnotations = nameBindingAnnotations;
+        this.methodAnnotations = methodAnnotations;
         this.effectiveProduces = !produces.isEmpty() ? produces : (!resourceClass.produces.isEmpty() ? resourceClass.produces : RequestMatcher.WILDCARD_AS_LIST);
         this.effectiveConsumes = !consumes.isEmpty() ? consumes : (!resourceClass.consumes.isEmpty() ? resourceClass.consumes : RequestMatcher.WILDCARD_AS_LIST);
     }
@@ -64,6 +66,15 @@ class ResourceMethod {
             }
         }
         return true;
+    }
+
+    List<ResourceMethodParam> paramsIncludingLocators() {
+        if (resourceClass.locatorMethod == null) {
+            return params;
+        }
+        List<ResourceMethodParam> all = new ArrayList<>(resourceClass.locatorMethod.paramsIncludingLocators());
+        all.addAll(params);
+        return all;
     }
 
     boolean isSubResource() {
@@ -86,58 +97,79 @@ class ResourceMethod {
         }
     }
 
-    OperationObjectBuilder createOperationBuilder() {
-        List<ApiResponse> apiResponseList = getApiResponses(methodHandle);
+    OperationObjectBuilder createOperationBuilder(List<SchemaReference> customSchemas) {
+        List<ApiResponseObj> apiResponseList = getApiResponses(methodHandle);
 
         Map<String, ResponseObject> httpStatusCodes = new HashMap<>();
-        if (apiResponseList.isEmpty()) {
-            httpStatusCodes.put("200", responseObject()
-                .withDescription("Success")
-                .withContent(effectiveProduces.stream().collect(toMap(MediaType::toString,
-                    mt -> mediaTypeObject().build()))
-                )
+
+        for (ApiResponseObj apiResponse : apiResponseList) {
+            Class<?> responseClass = apiResponse.response;
+
+            Stream<MediaType> responseTypesStream = apiResponse.contentType.length != 0 ?
+                Stream.of(apiResponse.contentType).map(MediaType::valueOf)
+                : "204".equals(apiResponse.code) ? null : effectiveProduces.stream();
+
+            Map<String, MediaTypeObject> content = responseTypesStream == null ? null : responseTypesStream.collect(toMap(MediaType::toString,
+                mt -> {
+                    SchemaObject responseSchema;
+                    Object example = nullOrEmpty(apiResponse.example) ? null : apiResponse.example;
+
+                    if (void.class.isAssignableFrom(responseClass)) {
+                        responseSchema = null;
+                    } else {
+                        SchemaReference schemaReference = SchemaReference.find(customSchemas, responseClass, apiResponse.genericReturnType);
+                        SchemaObjectBuilder builder = schemaReference == null ? schemaObjectFrom(responseClass) : schemaReference.schema.toBuilder();
+                        responseSchema = schemaObjectCustomizer.customize(builder,
+                            schemaContext(SchemaObjectCustomizerTarget.RESPONSE_BODY, null, responseClass, apiResponse.genericReturnType, mt)).build();
+                        if (responseSchema.example() != null) {
+                            example = responseSchema.example();
+                        }
+                    }
+                    return mediaTypeObject()
+                        .withSchema(responseSchema)
+                        .withExample(example)
+                        .build();
+                }));
+            httpStatusCodes.put(apiResponse.code, responseObject()
+                .withContent(content)
+                .withDescription(apiResponse.message)
+                .withHeaders(
+                    apiResponse.responseHeaders.length == 0 ? null :
+                        Stream.of(apiResponse.responseHeaders).collect(
+                            toMap(ResponseHeader::name,
+                                rh -> headerObject().withDescription(rh.description())
+                                    .withDeprecated(rh.deprecated() ? true : null)
+                                    .withExample(nullOrEmpty(rh.example()) ? null : rh.example()).build()
+                            )))
                 .build());
-        } else {
-            for (ApiResponse apiResponse : apiResponseList) {
-                Stream<MediaType> responseTypes = apiResponse.contentType().length != 0 ?
-                    Stream.of(apiResponse.contentType()).map(MediaType::valueOf)
-                    : "204".equals(apiResponse.code()) ? null : effectiveProduces.stream();
-                httpStatusCodes.put(apiResponse.code(), responseObject()
-                    .withContent(responseTypes == null ? null : responseTypes.collect(toMap(MediaType::toString,
-                        mt -> mediaTypeObject()
-                            .withSchema(Void.class.equals(apiResponse.response()) ? null : schemaObjectFrom(apiResponse.response()).build())
-                            .withExample(Mutils.nullOrEmpty(apiResponse.example()) ? null : apiResponse.example())
-                            .build()))
-                    )
-                    .withDescription(apiResponse.message())
-                    .withHeaders(
-                        apiResponse.responseHeaders().length == 0 ? null :
-                        Stream.of(apiResponse.responseHeaders()).collect(
-                        toMap(ResponseHeader::name,
-                            rh -> headerObject().withDescription(rh.description())
-                                .withDeprecated(rh.deprecated() ? true : null)
-                                .withExample(nullOrEmpty(rh.example()) ? null : rh.example()).build()
-                        )))
-                    .build());
-            }
         }
 
-        String requestBodyMimeType = effectiveConsumes.get(0).toString();
+        MediaType requestBodyMediaType = effectiveConsumes.get(0);
+        String requestBodyMimeType = requestBodyMediaType.toString();
         RequestBodyObject requestBody = params.stream()
             .filter(p -> p instanceof ResourceMethodParam.MessageBodyParam)
             .map(ResourceMethodParam.MessageBodyParam.class::cast)
-            .map(messageBodyParam -> requestBodyObject()
-                .withContent(singletonMap(requestBodyMimeType,
-                    mediaTypeObject()
-                        .withSchema(SchemaObjectBuilder.schemaObjectFrom(messageBodyParam.parameterHandle.getType(), messageBodyParam.parameterHandle.getParameterizedType(), messageBodyParam.isRequired)
-                            .withTitle(messageBodyParam.descriptionData.summary)
-                            .withDescription(messageBodyParam.descriptionData.description)
-                            .build())
-                        .withExample(messageBodyParam.descriptionData.example)
-                        .build()))
-                .withDescription(messageBodyParam.descriptionData.summaryAndDescription())
-                .withRequired(messageBodyParam.isRequired)
-                .build())
+            .map(messageBodyParam -> {
+                Class<?> bodyType = messageBodyParam.parameterHandle.getType();
+                Type bodyParameterizedType = messageBodyParam.parameterHandle.getParameterizedType();
+                SchemaReference schemaReference = SchemaReference.find(customSchemas, bodyType, bodyParameterizedType);
+                SchemaObjectBuilder builder = schemaReference != null ? schemaReference.schema.toBuilder() :
+                    schemaObjectFrom(bodyType, bodyParameterizedType, messageBodyParam.isRequired)
+                        .withTitle(messageBodyParam.descriptionData.summary)
+                        .withDescription(messageBodyParam.descriptionData.description);
+                return requestBodyObject()
+                    .withContent(singletonMap(requestBodyMimeType,
+                        mediaTypeObject()
+                            .withSchema(
+                                schemaObjectCustomizer.customize(builder,
+                                    schemaContext(SchemaObjectCustomizerTarget.REQUEST_BODY, null, bodyType, bodyParameterizedType, requestBodyMediaType))
+                                    .build())
+                            .withExample(messageBodyParam.descriptionData.example)
+                            .build()))
+                    .withDescription(messageBodyParam.descriptionData.summaryAndDescription())
+                    .withRequired(messageBodyParam.isRequired)
+                    .build();
+            })
             .findFirst().orElse(null);
 
         if (requestBody == null) {
@@ -162,15 +194,23 @@ class ResourceMethod {
                                                     if (n.isRequired) {
                                                         required.add(n.key);
                                                     }
-                                                    SchemaObjectBuilder schemaObjectBuilder = schemaObjectFrom(n.parameterHandle.getType(), n.parameterHandle.getParameterizedType(), n.isRequired)
-                                                        .withDeprecated(n.isDeprecated ? true : null)
-                                                        .withDefaultValue(n.defaultValue());
+                                                    Class<?> paramType = n.parameterHandle.getType();
+                                                    Type paramParameterizedType = n.parameterHandle.getParameterizedType();
+
+                                                    SchemaReference schemaReference = SchemaReference.find(customSchemas, paramType, paramParameterizedType);
+                                                    SchemaObjectBuilder schemaObjectBuilder = schemaReference != null ? schemaReference.schema.toBuilder() : schemaObjectFrom(paramType, paramParameterizedType, n.isRequired);
+                                                    schemaObjectBuilder.withDeprecated(n.isDeprecated ? true : null);
+                                                    if (n.hasExplicitDefault()) {
+                                                        schemaObjectBuilder.withDefaultValue(n.defaultValue());
+                                                    }
                                                     if (n.descriptionData != null) {
                                                         String desc = n.descriptionData.summaryAndDescription();
                                                         schemaObjectBuilder.withExample(n.descriptionData.example)
                                                             .withDescription(n.key.equals(desc) ? null : desc);
                                                     }
-                                                    return schemaObjectBuilder.build();
+                                                    return schemaObjectCustomizer
+                                                        .customize(schemaObjectBuilder, schemaContext(SchemaObjectCustomizerTarget.FORM_PARAM, n.key, paramType, paramParameterizedType, requestBodyMediaType))
+                                                        .build();
                                                 }))
                                     )
                                     .build()
@@ -194,19 +234,29 @@ class ResourceMethod {
             ;
     }
 
-    private static List<ApiResponse> getApiResponses(java.lang.reflect.Method methodHandle) {
+    private SchemaObjectCustomizerContext schemaContext(SchemaObjectCustomizerTarget target, String parameter, Class<?> type, Type parameterizedType, MediaType mediaType) {
+        return new SchemaObjectCustomizerContext(target, type, parameterizedType, resourceClass.resourceInstance, methodHandle, parameter, mediaType);
+    }
+
+    private static List<ApiResponseObj> getApiResponses(java.lang.reflect.Method methodHandle) {
         ApiResponses apiResponses = methodHandle.getDeclaredAnnotation(ApiResponses.class);
-        List<ApiResponse> apiResponseList;
+        List<ApiResponseObj> result = new ArrayList<>();
         if (apiResponses != null) {
-            apiResponseList = new ArrayList<>(Arrays.asList(apiResponses.value()));
-        } else {
-            apiResponseList = new ArrayList<>();
+            for (ApiResponse ar : apiResponses.value()) {
+                result.add(ApiResponseObj.fromAnnotation(ar, methodHandle));
+            }
         }
-        ApiResponse apiResponse = methodHandle.getDeclaredAnnotation(ApiResponse.class);
-        if (apiResponse != null) {
-            apiResponseList.add(apiResponse);
+        ApiResponse single = methodHandle.getDeclaredAnnotation(ApiResponse.class);
+        if (single != null) {
+            result.add(ApiResponseObj.fromAnnotation(single, methodHandle));
         }
-        return apiResponseList;
+        if (result.isEmpty()) {
+            Class<?> returnType = methodHandle.getReturnType();
+            Type genericReturnType = methodHandle.getGenericReturnType();
+            String code = void.class.isAssignableFrom(returnType) ? "204" : "200";
+            result.add(new ApiResponseObj(code, "Success", new ResponseHeader[0], returnType, genericReturnType, new String[0], null));
+        }
+        return result;
     }
 
     static Method getMuMethod(java.lang.reflect.Method restMethod) {
@@ -214,11 +264,12 @@ class ResourceMethod {
         Method value = null;
         for (Annotation annotation : annotations) {
             Class<? extends Annotation> anno = annotation.annotationType();
-            if (anno.getAnnotation(HttpMethod.class) != null) {
+            HttpMethod httpMethodAnno = anno.getAnnotation(HttpMethod.class);
+            if (httpMethodAnno != null) {
                 if (value != null) {
                     throw new IllegalArgumentException("The method " + restMethod + " has multiple HttpMethod annotations. Only one is allowed per method.");
                 }
-                value = jaxToMu(anno);
+                value = Method.valueOf(httpMethodAnno.value());
             }
         }
         return value;
@@ -230,10 +281,10 @@ class ResourceMethod {
     }
 
     boolean canProduceFor(List<MediaType> clientAccepts) {
-        return MediaTypeHeaderDelegate.atLeastOneCompatible(effectiveProduces, clientAccepts);
+        return MediaTypeHeaderDelegate.atLeastOneCompatible(effectiveProduces, clientAccepts, null);
     }
 
     boolean canConsume(MediaType requestBodyMediaType) {
-        return MediaTypeHeaderDelegate.atLeastOneCompatible(effectiveConsumes, Collections.singletonList(requestBodyMediaType));
+        return MediaTypeHeaderDelegate.atLeastOneCompatible(effectiveConsumes, Collections.singletonList(requestBodyMediaType), null);
     }
 }

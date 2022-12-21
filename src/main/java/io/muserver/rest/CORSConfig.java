@@ -2,10 +2,7 @@ package io.muserver.rest;
 
 import io.muserver.*;
 
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.regex.Pattern;
 
 import static java.util.stream.Collectors.joining;
@@ -16,11 +13,35 @@ import static java.util.stream.Collectors.toSet;
  */
 public class CORSConfig {
 
+    /**
+     * @deprecated use {@link #allowCredentials()} instead
+     */
+    @Deprecated
     public final boolean allowCredentials;
+    /**
+      @deprecated use {@link #allowedOrigins()} instead
+     */
+    @Deprecated
     public final Collection<String> allowedOrigins;
+    /**
+      @deprecated use {@link #allowedOriginRegex()} instead
+     */
+    @Deprecated
     public final List<Pattern> allowedOriginRegex;
+    /**
+      @deprecated use {@link #exposedHeaders()} instead
+     */
+    @Deprecated
     public final Collection<String> exposedHeaders;
+    /**
+      @deprecated use {@link #maxAge()} instead
+     */
+    @Deprecated
     public final long maxAge;
+    /**
+      @deprecated use {@link #allowedHeaders()} instead
+     */
+    @Deprecated
     public final Collection<String> allowedHeaders;
     private final String exposedHeadersCSV;
     private final String allowedHeadersCSV;
@@ -38,7 +59,7 @@ public class CORSConfig {
     }
 
     /**
-     * Adds CORS headers to the response, if neeeded.
+     * Adds CORS headers to the response, if needed.
      *
      * @param request        The request
      * @param response       The response to add headers to
@@ -55,14 +76,16 @@ public class CORSConfig {
 
     boolean writeHeadersInternal(MuRequest request, MuResponse response, Set<RequestMatcher.MatchedMethod> matchedMethodsForPath) {
 
-        response.headers().add(HeaderNames.VARY, HeaderNames.ORIGIN);
+        Headers respHeaders = response.headers();
+        if (!respHeaders.containsValue(HeaderNames.VARY, HeaderNames.ORIGIN, true)) {
+            respHeaders.add(HeaderNames.VARY, HeaderNames.ORIGIN);
+        }
 
         String origin = request.headers().get(HeaderNames.ORIGIN);
         if (Mutils.nullOrEmpty(origin)) {
             return false;
         }
 
-        Headers respHeaders = response.headers();
         if (allowCors(origin)) {
             respHeaders.set(HeaderNames.ACCESS_CONTROL_ALLOW_ORIGIN, origin);
             if (matchedMethodsForPath != null) {
@@ -115,4 +138,72 @@ public class CORSConfig {
         return false;
     }
 
+    /**
+     * @return the value described by {@link CORSConfigBuilder#withAllowCredentials}
+     */
+    public boolean allowCredentials() {
+        return allowCredentials;
+    }
+
+    /**
+      @return the value described by {@link CORSConfigBuilder#withAllowedOrigins}
+     */
+    public Collection<String> allowedOrigins() {
+        return allowedOrigins;
+    }
+
+    /**
+      @return the value described by {@link CORSConfigBuilder#withAllowedOriginRegex}
+     */
+    public List<Pattern> allowedOriginRegex() {
+        return allowedOriginRegex;
+    }
+
+    /**
+      @return the value described by {@link CORSConfigBuilder#withExposedHeaders}
+     */
+    public Collection<String> exposedHeaders() {
+        return exposedHeaders;
+    }
+
+    /**
+      @return the value described by {@link CORSConfigBuilder#withMaxAge}
+     */
+    public long maxAge() {
+        return maxAge;
+    }
+
+    /**
+      @return the value described by {@link CORSConfigBuilder#withAllowedHeaders}
+     */
+    public Collection<String> allowedHeaders() {
+        return allowedHeaders;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        CORSConfig that = (CORSConfig) o;
+        return allowCredentials == that.allowCredentials && maxAge == that.maxAge && Objects.equals(allowedOrigins, that.allowedOrigins) && Objects.equals(allowedOriginRegex, that.allowedOriginRegex) && Objects.equals(exposedHeaders, that.exposedHeaders) && Objects.equals(allowedHeaders, that.allowedHeaders) && Objects.equals(exposedHeadersCSV, that.exposedHeadersCSV) && Objects.equals(allowedHeadersCSV, that.allowedHeadersCSV);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(allowCredentials, allowedOrigins, allowedOriginRegex, exposedHeaders, maxAge, allowedHeaders, exposedHeadersCSV, allowedHeadersCSV);
+    }
+
+    @Override
+    public String toString() {
+        return "CORSConfig{" +
+            "allowCredentials=" + allowCredentials +
+            ", allowedOrigins=" + allowedOrigins +
+            ", allowedOriginRegex=" + allowedOriginRegex +
+            ", exposedHeaders=" + exposedHeaders +
+            ", maxAge=" + maxAge +
+            ", allowedHeaders=" + allowedHeaders +
+            ", exposedHeadersCSV='" + exposedHeadersCSV + '\'' +
+            ", allowedHeadersCSV='" + allowedHeadersCSV + '\'' +
+            '}';
+    }
 }

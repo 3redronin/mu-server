@@ -3,6 +3,8 @@ package io.muserver.openapi;
 import java.util.HashMap;
 import java.util.Map;
 
+import static io.muserver.openapi.OpenApiUtils.immutable;
+
 /**
  * <p>Describes a single response from an API Operation, including design-time, static <code>links</code> to operations
  * based on the response.</p>
@@ -55,8 +57,11 @@ public class ResponseObjectBuilder {
         return this;
     }
 
+    /**
+     * @return A new object
+     */
     public ResponseObject build() {
-        return new ResponseObject(description, headers, content, links);
+        return new ResponseObject(description, immutable(headers), immutable(content), immutable(links));
     }
 
     /**
@@ -91,15 +96,15 @@ public class ResponseObjectBuilder {
         addLinks(mergedLinks, secondary);
 
         return responseObject()
-            .withDescription(primary != null ? primary.description : secondary != null ? secondary.description : null)
+            .withDescription(primary != null ? primary.description() : secondary != null ? secondary.description() : null)
             .withHeaders(mergedHeaders.isEmpty() ? null : mergedHeaders)
             .withContent(mergedContent.isEmpty() ? null : mergedContent)
             .withLinks(mergedLinks.isEmpty() ? null : mergedLinks);
     }
 
     private static void addLinks(Map<String, LinkObject> dest, ResponseObject source) {
-        if (source != null && source.links != null) {
-            for (Map.Entry<String, LinkObject> entry : source.links.entrySet()) {
+        if (source != null && source.links() != null) {
+            for (Map.Entry<String, LinkObject> entry : source.links().entrySet()) {
                 String name = entry.getKey();
                 if (!dest.containsKey(name)) {
                     dest.put(name, entry.getValue());
@@ -109,8 +114,8 @@ public class ResponseObjectBuilder {
     }
 
     private static void addContent(Map<String, MediaTypeObject> dest, ResponseObject source) {
-        if (source != null && source.content != null) {
-            for (Map.Entry<String, MediaTypeObject> entry : source.content.entrySet()) {
+        if (source != null && source.content() != null) {
+            for (Map.Entry<String, MediaTypeObject> entry : source.content().entrySet()) {
                 String name = entry.getKey();
                 if (!dest.containsKey(name)) {
                     dest.put(name, entry.getValue());
@@ -120,8 +125,8 @@ public class ResponseObjectBuilder {
     }
 
     private static void addHeaders(Map<String, HeaderObject> dest, ResponseObject source) {
-        if (source != null && source.headers != null) {
-            for (Map.Entry<String, HeaderObject> entry : source.headers.entrySet()) {
+        if (source != null && source.headers() != null) {
+            for (Map.Entry<String, HeaderObject> entry : source.headers().entrySet()) {
                 String name = entry.getKey();
                 if (!dest.containsKey(name)) {
                     dest.put(name, entry.getValue()); // merging headers is too complicated so just add missing headers

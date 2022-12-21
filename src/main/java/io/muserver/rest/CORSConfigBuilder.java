@@ -1,6 +1,9 @@
 package io.muserver.rest;
 
+import io.muserver.Method;
+import io.muserver.MuServerBuilder;
 import io.muserver.Mutils;
+import io.muserver.handlers.CORSHandlerBuilder;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -188,6 +191,20 @@ public class CORSConfigBuilder {
      */
     public static CORSConfigBuilder disabled() {
         return new CORSConfigBuilder();
+    }
+
+
+    /**
+     * Creates a CORS handler from this config.
+     * <p>This can be used when CORS configuration is needed outside of JAX-RS. Add the created handler to
+     * a {@link MuServerBuilder} before any other handlers that require CORS config.</p>
+     * <p>Note that if you only need CORS config for JAX-RS then instead of this method you should pass
+     * this config to {@link RestHandlerBuilder#withCORS(CORSConfigBuilder)}</p>
+     * @param allowedMethods The allowed methods for CORS calls
+     * @return A handler that can be added.
+     */
+    public CORSHandlerBuilder toHandler(Method... allowedMethods) {
+        return CORSHandlerBuilder.corsHandler().withCORSConfig(this).withAllowedMethods(allowedMethods);
     }
 
     /**

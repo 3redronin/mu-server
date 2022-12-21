@@ -66,12 +66,12 @@ public class FlakyClientTest {
                 public void onResponse(Call call, Response response) {
                     latch.countDown();
                     response.close();
-
                 }
             };
-            shortReader.newCall(request(server.uri().resolve("/full")).build()).enqueue(responseCallback);
-            shortReader.newCall(request(server.uri().resolve("/chunks")).build()).enqueue(responseCallback);
+            shortReader.newCall(request(server.uri().resolve("/full?i=" + i)).build()).enqueue(responseCallback);
+            shortReader.newCall(request(server.uri().resolve("/chunks?i=" + i)).build()).enqueue(responseCallback);
         }
+
 
         assertThat(latch.await(2, TimeUnit.MINUTES), is(true));
 

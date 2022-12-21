@@ -65,9 +65,9 @@ public interface MuRequest {
     Headers headers();
 
     /**
-     * The input stream of the request, if there was a request body.
-     * <p>
-     * Note: this can only be read once and cannot be used with {@link #readBodyAsString()} or {@link #form()}.
+     * <p>The input stream of the request, if there was a request body.</p>
+     * <p>If you call this method and an input stream is available, then <strong>you must close the input stream</strong>.</p>
+     * <p>Also note that this can only be read once and cannot be used with {@link #readBodyAsString()} or {@link #form()}.</p>
      *
      * @return {@link Optional#empty()} if there is no request body; otherwise the input stream of the request body.
      */
@@ -251,7 +251,8 @@ public interface MuRequest {
     /**
      * <p>Specifies that you want to handle this response asynchronously.</p>
      * <p>When finished, call {@link AsyncHandle#complete()}</p>
-     * @return AsyncHandle An object that you can use to mark the response as complete.
+     * <p>If called more than once, then the async handle created from the first call is returned.</p>
+     * @return An object that you can use to mark the response as complete.
      */
     AsyncHandle handleAsync();
 
@@ -259,9 +260,22 @@ public interface MuRequest {
      * Gets the address that the request came from. Warning: this may not be the client's address and instead
      * may be an intermediary such as a network gateway.
      * <p>This is a convenience method that returns <code>connection().remoteAddress().getHostString()</code></p>
+     * <p>If you want to know the client's IP address when reverse proxies are used, consider using {@link #clientIP()}</p>
      * @return The IP address of the client, or of a gateway with NAT, etc, or null if the client has already disconnected.
      */
     String remoteAddress();
+
+    /**
+     * Makes a best-effort guess at the client's IP address, taking into account any <code>Forwarded</code> or <code>X-Forwarded-*</code> headers.
+     * <p><strong>Warning:</strong> <code>Forwarded</code> headers supplied from outside the perimeter of your network
+     * should not be trusted at it is trivial for clients to specify arbitrary <code>Forwarded</code> headers when
+     * making requests. Therefore it may be advisable for reverse proxies at the perimeter of your network to drop
+     * any <code>Forwarded</code> headers from untrusted networks before added their own headers.</p>
+     * <p>If there are no forwarded headers then the IP address of the socket connection is used (i.e.
+     * <code>connection().remoteAddress().getHostString()</code>).</p>
+     * @return A string containing an IP address.
+     */
+    String clientIP();
 
     /**
      * @return Returns a reference to the mu server instance.
@@ -276,9 +290,7 @@ public interface MuRequest {
     /**
      * The protocol for the request.
      * @return A string such as <code>HTTP/1.1</code> or <code>HTTP/2</code>
-     * @deprecated Call {@link #connection()} to get the connection and then use {@link HttpConnection#protocol()}
      */
-    @Deprecated
     String protocol();
 
     /**

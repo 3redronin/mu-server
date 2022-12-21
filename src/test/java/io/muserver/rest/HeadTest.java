@@ -5,16 +5,14 @@ import org.junit.After;
 import org.junit.Test;
 import scaffolding.ServerUtils;
 
-import javax.ws.rs.GET;
-import javax.ws.rs.HEAD;
-import javax.ws.rs.POST;
-import javax.ws.rs.Path;
+import javax.ws.rs.*;
 import javax.ws.rs.core.Response;
+import javax.ws.rs.core.StreamingOutput;
 import java.io.IOException;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 import static scaffolding.MuAssert.stopAndCheck;
@@ -47,6 +45,48 @@ public class HeadTest {
         }
 
     }
+
+    @Test
+    public void headWorksAgainstGetMethodsWithFixedLength() {
+        @Path("/things")
+        class Thing {
+            @GET
+            @Produces("text/custom;charset=utf-8")
+            public String get() {
+                return "Hello!";
+            }
+        }
+        server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Thing())).start();
+        try (okhttp3.Response resp = call(request(server.uri().resolve("/things"))
+            .head())) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.headers("Content-Type"), contains("text/custom;charset=utf-8"));
+            assertThat(resp.headers("Content-Length"), contains("6"));
+        }
+
+    }
+
+    @Test
+    public void headWorksAgainstGetMethodsWithUnknownLength() {
+        @Path("/things")
+        class Thing {
+            @GET
+            @Produces("application/custom")
+            public StreamingOutput get() {
+                return output -> {};
+            }
+        }
+        server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Thing())).start();
+        try (okhttp3.Response resp = call(request(server.uri().resolve("/things"))
+            .head())) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.headers("Content-Type"), contains("application/custom"));
+            assertThat(resp.headers("Content-Length"), empty());
+        }
+
+    }
+
+
 
     @Test
     public void ifNoHeadAvailableThenUseGetIfAvailableButDiscardBody() throws IOException {

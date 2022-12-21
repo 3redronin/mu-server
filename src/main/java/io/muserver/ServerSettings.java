@@ -11,9 +11,9 @@ class ServerSettings {
     final int maxUrlSize;
     final boolean gzipEnabled;
     final Set<String> mimeTypesToGzip;
-    final List<RateLimiter> rateLimiters;
+    final List<RateLimiterImpl> rateLimiters;
 
-    ServerSettings(long minimumGzipSize, int maxHeadersSize, long requestReadTimeoutMillis, long maxRequestSize, int maxUrlSize, boolean gzipEnabled, Set<String> mimeTypesToGzip, List<RateLimiter> rateLimiters) {
+    ServerSettings(long minimumGzipSize, int maxHeadersSize, long requestReadTimeoutMillis, long maxRequestSize, int maxUrlSize, boolean gzipEnabled, Set<String> mimeTypesToGzip, List<RateLimiterImpl> rateLimiters) {
         this.minimumGzipSize = minimumGzipSize;
         this.maxHeadersSize = maxHeadersSize;
         this.requestReadTimeoutMillis = requestReadTimeoutMillis;
@@ -44,10 +44,23 @@ class ServerSettings {
     public boolean block(MuRequest request) {
         boolean allowed = true;
         if (rateLimiters != null) {
-            for (RateLimiter limiter : rateLimiters) {
+            for (RateLimiterImpl limiter : rateLimiters) {
                 allowed &= limiter.record(request);
             }
         }
         return !allowed;
+    }
+
+    @Override
+    public String toString() {
+        return "ServerSettings{" +
+            "minimumGzipSize=" + minimumGzipSize +
+            ", maxHeadersSize=" + maxHeadersSize +
+            ", requestReadTimeoutMillis=" + requestReadTimeoutMillis +
+            ", maxRequestSize=" + maxRequestSize +
+            ", maxUrlSize=" + maxUrlSize +
+            ", gzipEnabled=" + gzipEnabled +
+            ", rateLimiters=" + rateLimiters +
+            '}';
     }
 }

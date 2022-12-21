@@ -1,6 +1,7 @@
 package io.muserver.rest;
 
 import javax.ws.rs.container.ContainerRequestFilter;
+import javax.ws.rs.container.ContainerResponseContext;
 import javax.ws.rs.container.ContainerResponseFilter;
 import java.io.IOException;
 import java.lang.annotation.Annotation;
@@ -17,14 +18,14 @@ class FilterManagerThing {
         this.responseFilters = responseFilters;
     }
 
-    void onPreMatch(MuContainerRequestContext requestContext) throws IOException {
+    void onPreMatch(JaxRSRequest requestContext) throws IOException {
         for (ContainerRequestFilter preMatchRequestFilter : preMatchRequestFilters) {
 
             preMatchRequestFilter.filter(requestContext);
         }
     }
 
-    void onPostMatch(MuContainerRequestContext requestContext) throws IOException {
+    void onPostMatch(JaxRSRequest requestContext) throws IOException {
         for (ContainerRequestFilter requestFilter : requestFilters) {
             List<Class<? extends Annotation>> filterBindings = ResourceClass.getNameBindingAnnotations(requestFilter.getClass());
             if (requestContext.methodHasAnnotations(filterBindings)) {
@@ -33,7 +34,7 @@ class FilterManagerThing {
         }
     }
 
-    public void onBeforeSendResponse(MuContainerRequestContext requestContext, MuResponseContext responseContext) throws IOException {
+    void onBeforeSendResponse(JaxRSRequest requestContext, ContainerResponseContext responseContext) throws IOException {
         for (ContainerResponseFilter responseFilter : responseFilters) {
             List<Class<? extends Annotation>> filterBindings = ResourceClass.getNameBindingAnnotations(responseFilter.getClass());
             if (requestContext.methodHasAnnotations(filterBindings)) {

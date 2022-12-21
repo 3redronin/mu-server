@@ -2,6 +2,9 @@ package io.muserver.openapi;
 
 import java.net.URI;
 
+/**
+ * A builder for {@link ExampleObject} objects
+ */
 public class ExampleObjectBuilder {
     private String summary;
     private String description;
@@ -49,6 +52,9 @@ public class ExampleObjectBuilder {
         return this;
     }
 
+    /**
+     * @return A new object
+     */
     public ExampleObject build() {
         return new ExampleObject(summary, description, value, externalValue);
     }

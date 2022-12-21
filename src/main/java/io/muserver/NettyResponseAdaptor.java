@@ -3,13 +3,14 @@ package io.muserver;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http.cookie.ServerCookieEncoder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import javax.ws.rs.core.MediaType;
 import java.io.BufferedOutputStream;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
@@ -19,33 +20,82 @@ import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Future;
 
 import static io.muserver.ContentTypes.TEXT_PLAIN_UTF8;
 
 abstract class NettyResponseAdaptor implements MuResponse {
+    private static final Logger log = LoggerFactory.getLogger(NettyResponseAdaptor.class);
     protected final boolean isHead;
-    protected OutputState outputState = OutputState.NOTHING;
+    private volatile ResponseState state = ResponseState.NOTHING;
     protected final NettyRequestAdapter request;
-    protected ChannelFuture lastAction;
     private final Headers headers;
     protected int status = 200;
-    private PrintWriter writer;
-    private OutputStream outputStream;
+    private volatile PrintWriter writer;
+    private volatile OutputStream outputStream;
     protected long bytesStreamed = 0;
     protected long declaredLength = -1;
+    private final List<ResponseStateChangeListener> listeners = new CopyOnWriteArrayList<>();
+    protected HttpExchange httpExchange;
 
-    protected enum OutputState {
-        NOTHING, FULL_SENT, STREAMING, STREAMING_COMPLETE, FINISHED, DISCONNECTED, WEBSOCKET
+    public void setExchange(HttpExchange httpExchange) {
+        this.httpExchange = httpExchange;
+    }
+
+    protected void outputState(ResponseState state) {
+        assert request.ctx.executor().inEventLoop() : "Status change to " + state + " not in event loop";
+        ResponseState oldStatus = this.state;
+        if (oldStatus.endState()) {
+            throw new IllegalStateException("Didn't expect to get a status update to " + state + " when the current status is " + oldStatus);
+        }
+        this.state = state;
+        for (ResponseStateChangeListener listener : listeners) {
+            listener.onStateChange(httpExchange, state);
+        }
+    }
+
+    /**
+     * Sets the output state to the given value after the given future is completed if all goes well, otherwise sets
+     * it to ERRORED
+     *
+     * @param future       A future to wait for, or null to set the state now
+     * @param successState The state to set if the future completes successfully
+     */
+    protected void outputState(io.netty.util.concurrent.Future<? super Void> future, ResponseState successState) {
+        if (future == null) {
+            outputState(successState);
+            return;
+        }
+
+        future.addListener(result -> {
+            if (result.isSuccess()) {
+                outputState(successState);
+            } else {
+                if (!state.endState()) {
+                    outputState(ResponseState.ERRORED);
+                }
+            }
+        });
+    }
+
+
+    protected ResponseState outputState() {
+        return state;
+    }
+
+    void addChangeListener(ResponseStateChangeListener responseStateChangeListener) {
+        this.listeners.add(responseStateChangeListener);
     }
 
     void setWebsocket() {
-        outputState = OutputState.WEBSOCKET;
+        outputState(ResponseState.UPGRADED);
     }
 
-    void onCancelled() {
-        if (outputState != OutputState.FINISHED) {
-            outputState = OutputState.DISCONNECTED;
+    void onCancelled(ResponseState reason) {
+        if (!state.endState()) {
+            outputState(reason);
         }
     }
 
@@ -61,20 +111,22 @@ abstract class NettyResponseAdaptor implements MuResponse {
     }
 
     public void status(int value) {
-        if (outputState != OutputState.NOTHING) {
+        if (state != ResponseState.NOTHING) {
             throw new IllegalStateException("Cannot set the status after the headers have already been sent");
         }
         status = value;
     }
 
-    protected void startStreaming() {
-        if (outputState != OutputState.NOTHING) {
-            throw new IllegalStateException("Cannot start streaming when state is " + outputState);
+    protected ChannelFuture startStreaming() {
+        assert httpExchange.inLoop() : "Not in event loop";
+        if (state != ResponseState.NOTHING) {
+            throw new IllegalStateException("Cannot start streaming when state is " + state);
         }
         declaredLength = headers.contains(HeaderNames.CONTENT_LENGTH)
             ? Long.parseLong(headers.get(HeaderNames.CONTENT_LENGTH))
             : -1;
-        outputState = OutputState.STREAMING;
+        outputState(ResponseState.STREAMING);
+        return null;
     }
 
     static CharSequence getVaryWithAE(String curValue) {
@@ -90,28 +142,47 @@ abstract class NettyResponseAdaptor implements MuResponse {
     }
 
     private void throwIfFinished() {
-        if (outputState == OutputState.FULL_SENT || outputState == OutputState.FINISHED || outputState == OutputState.DISCONNECTED) {
+        if (state.endState()) {
             throw new IllegalStateException("Cannot write data as response has already completed");
         }
     }
 
+    @Deprecated
     public Future<Void> writeAsync(String text) {
-        return write(textToBuffer(text), false);
+        return writeAndFlush(textToBuffer(text));
     }
 
-    ChannelFuture write(ByteBuffer data) {
-        if (outputState == OutputState.NOTHING) {
-            startStreaming();
+    ChannelFuture writeAndFlush(ByteBuffer data) {
+        if (!httpExchange.inLoop()) {
+            ChannelPromise promise = httpExchange.ctx.newPromise();
+            httpExchange.ctx.executor().submit(() -> writeAndFlush(data).addListener(f -> {
+                if (f.isSuccess()) {
+                    promise.setSuccess();
+                } else {
+                    promise.setFailure(f.cause());
+                }
+            }));
+            return promise;
+        } else {
+            try {
+                if (state.endState()) {
+                    throw new IllegalStateException("Cannot write when response state is " + state);
+                }
+                if (state == ResponseState.NOTHING) {
+                    startStreaming();
+                }
+                return writeAndFlush(Unpooled.wrappedBuffer(data));
+            } catch (Throwable e) {
+                return httpExchange.ctx.newFailedFuture(e);
+            }
         }
-        return write(Unpooled.wrappedBuffer(data), false);
     }
 
-    protected final ChannelFuture write(ByteBuf data, boolean sync) {
+    protected final ChannelFuture writeAndFlush(ByteBuf data) {
         throwIfFinished();
         int size = data.writerIndex();
 
         bytesStreamed += size;
-        ChannelFuture lastAction;
         boolean isLast = bytesStreamed == declaredLength;
 
         if (declaredLength > -1 && bytesStreamed > declaredLength) {
@@ -119,49 +190,44 @@ abstract class NettyResponseAdaptor implements MuResponse {
             isLast = true;
         }
 
-        if (isLast) {
-            outputState = OutputState.FULL_SENT;
-        }
-
         ByteBuf content = Unpooled.wrappedBuffer(data);
-        lastAction = writeToChannel(isLast, content);
-        if (sync) {
-            // force exception if writes fail
-            lastAction = lastAction.syncUninterruptibly();
+        ChannelFuture future = writeAndFlushToChannel(isLast, content);
+        if (isLast) {
+            future.addListener(wf -> {
+                if (wf.isSuccess()) {
+                    outputState(ResponseState.FULL_SENT);
+                } else if (!this.state.endState()) {
+                    outputState(ResponseState.ERRORED);
+                }
+            });
         }
-        this.lastAction = lastAction;
-        return lastAction;
+        return future;
     }
 
     protected abstract void onContentLengthMismatch();
 
-    abstract ChannelFuture writeToChannel(boolean isLast, ByteBuf content);
+    abstract ChannelFuture writeAndFlushToChannel(boolean isLast, ByteBuf content);
 
     public void sendChunk(String text) {
-        throwIfFinished();
-        if (outputState == OutputState.NOTHING) {
-            startStreaming();
-        }
-        lastAction = write(textToBuffer(text), true);
+        throwIfAsync();
+        httpExchange.block(() -> {
+            throwIfFinished();
+            if (state == ResponseState.NOTHING) {
+                startStreaming();
+            }
+            return writeAndFlush(textToBuffer(text));
+        });
     }
 
     private ByteBuf textToBuffer(String text) {
         if (text == null) text = "";
-        Charset charset = StandardCharsets.UTF_8;
-        MediaType type = headers().contentType();
-        if (type != null) {
-            String encoding = type.getParameters().get("charset");
-            if (!Mutils.nullOrEmpty(encoding)) {
-                charset = Charset.forName(encoding);
-            }
-        }
+        Charset charset = NettyRequestAdapter.bodyCharset(headers, false);
         return Unpooled.copiedBuffer(text, charset);
     }
 
     public void redirect(String newLocation) {
         redirect(URI.create(newLocation));
     }
-
 
     public Headers headers() {
         return headers;
@@ -175,16 +241,35 @@ abstract class NettyResponseAdaptor implements MuResponse {
         headers.add(HeaderNames.SET_COOKIE, ServerCookieEncoder.LAX.encode(cookie.nettyCookie));
     }
 
+    @Override
     public OutputStream outputStream() {
+        return outputStream(4096);
+    }
+
+    @Override
+    public OutputStream outputStream(int bufferSize) {
         if (this.outputStream == null) {
-            startStreaming();
-            this.outputStream = new BufferedOutputStream(new ChunkedHttpOutputStream(this), 4096);
+            ChunkedHttpOutputStream nonBuffered = new ChunkedHttpOutputStream(this);
+            httpExchange.block(() -> {
+                startStreaming();
+                outputStream = bufferSize > 0 ? new BufferedOutputStream(nonBuffered, bufferSize) : nonBuffered;
+            });
         }
         return this.outputStream;
     }
 
+    private void throwIfAsync() {
+        if (request.isAsync()) {
+            throw new IllegalStateException("Cannot use blocking methods when in async mode");
+        }
+    }
+
     public PrintWriter writer() {
+        throwIfAsync();
         if (this.writer == null) {
+            if (!headers.contains(HeaderNames.CONTENT_TYPE)) {
+                headers.set(HeaderNames.CONTENT_TYPE, TEXT_PLAIN_UTF8);
+            }
             OutputStreamWriter os = new OutputStreamWriter(outputStream(), StandardCharsets.UTF_8);
             this.writer = new PrintWriter(os);
         }
@@ -193,63 +278,60 @@ abstract class NettyResponseAdaptor implements MuResponse {
 
     @Override
     public boolean hasStartedSendingData() {
-        return outputState != OutputState.NOTHING;
+        return state != ResponseState.NOTHING;
     }
 
-    boolean clientDisconnected() {
-        return outputState == OutputState.DISCONNECTED;
+    @Override
+    public ResponseState responseState() {
+        return state;
     }
 
-    ChannelFuture complete(boolean forceDisconnect) {
-        if (outputState == OutputState.FINISHED) {
-            return lastAction;
+    void flushAndCloseOutputStream() {
+        Mutils.closeSilently(writer);
+        Mutils.closeSilently(outputStream);
+    }
+
+    void complete() {
+        assert httpExchange.inLoop() : "Not in event loop";
+
+        ResponseState finalState = ResponseState.FINISHED;
+
+        ResponseState state = this.state;
+        if (state.endState()) {
+            return;
         }
-        boolean shouldDisconnect = forceDisconnect || !request.isKeepAliveRequested();
+        outputState(ResponseState.FINISHING);
         boolean isFixedLength = headers.contains(HeaderNames.CONTENT_LENGTH);
-        if (outputState == OutputState.NOTHING) {
-            boolean addContentLengthHeader = ((!isHead || !isFixedLength) && status != 204 && status != 205 && status != 304);
-            sendEmptyResponse(addContentLengthHeader);
-        } else if (outputState == OutputState.STREAMING) {
-
-            if (!isHead) {
-                Mutils.closeSilently(writer);
-                Mutils.closeSilently(outputStream);
-            }
+        ChannelFuture finishedFuture = null;
+        if (state == ResponseState.NOTHING) {
+            boolean addContentLengthHeader = !isHead && !isFixedLength && status != 204 && status != 205 && status != 304;
+            finishedFuture = sendEmptyResponse(addContentLengthHeader);
+        } else if (state == ResponseState.STREAMING) {
             boolean badFixedLength = !isHead && isFixedLength && declaredLength != bytesStreamed && status != 304;
             if (badFixedLength) {
-                shouldDisconnect = onBadRequestSent();
+                log.warn("Invalid response for " + request + " because " + declaredLength + " bytes was the " +
+                    "expected length, however " + bytesStreamed + " bytes were sent.");
+                finalState = ResponseState.ERRORED;
             }
-            lastAction = writeLastContentMarker();
-        }
-
-        if (shouldDisconnect) {
-            if (lastAction == null) {
-                lastAction = closeConnection();
-            } else {
-                lastAction = lastAction.addListener(ChannelFutureListener.CLOSE);
+            if (finalState == ResponseState.FINISHED) {
+                finishedFuture = writeLastContentMarker();
             }
         }
-        if (this.outputState != OutputState.DISCONNECTED) {
-            this.outputState = OutputState.FINISHED;
-        }
-        return lastAction;
+        outputState(finishedFuture, finalState);
     }
-
-    /**
-     * Called when the number of bytes declared is different from the number sent
-     *
-     * @return True to disconnect the connection; otherwise false
-     */
-    protected abstract boolean onBadRequestSent();
 
     @Override
     public void write(String text) {
+        throwIfAsync();
+        httpExchange.block(() -> writeOnLoop(text).addListener(f -> outputState(f, ResponseState.FULL_SENT)));
+    }
+
+    ChannelFuture writeOnLoop(String text) {
         throwIfFinished();
-        if (outputState != OutputState.NOTHING) {
-            String what = outputState == OutputState.FULL_SENT ? "twice for one response" : "after sending chunks";
+        if (state != ResponseState.NOTHING) {
+            String what = state == ResponseState.FULL_SENT ? "twice for one response" : "after sending chunks";
             throw new IllegalStateException("You cannot call write " + what + ". If you want to send text in multiple chunks, use sendChunk instead.");
         }
-        outputState = OutputState.FULL_SENT;
         ByteBuf body = textToBuffer(text);
         long bodyLength = body.writerIndex();
 
@@ -257,34 +339,26 @@ abstract class NettyResponseAdaptor implements MuResponse {
             headers.set(HeaderNames.CONTENT_TYPE, TEXT_PLAIN_UTF8);
         }
         headers.set(HeaderNames.CONTENT_LENGTH, bodyLength);
-
-        writeFullResponse(body);
+        return writeFullResponse(body);
     }
 
-    protected abstract void writeFullResponse(ByteBuf body);
-
-    protected abstract ChannelFuture closeConnection();
-
-    protected abstract boolean connectionOpen();
+    protected abstract ChannelFuture writeFullResponse(ByteBuf body);
 
     protected abstract ChannelFuture writeLastContentMarker();
 
     public final void redirect(URI newLocation) {
-        URI absoluteUrl = request.uri().resolve(newLocation);
-        if (status < 300 || status > 303) {
-            status(302);
+        if (!httpExchange.inLoop()) {
+            httpExchange.ctx.executor().execute(() -> redirect(newLocation));
+        } else {
+            URI absoluteUrl = request.uri().resolve(newLocation).normalize();
+            if (status < 300 || status > 303) {
+                status(302);
+            }
+            headers.set(HeaderNames.LOCATION, absoluteUrl.toString());
         }
-        headers.set(HeaderNames.LOCATION, absoluteUrl.toString());
-        headers.set(HeaderNames.CONTENT_LENGTH, HeaderValues.ZERO);
-
-        writeRedirectResponse();
-
-        outputState = OutputState.FULL_SENT;
     }
 
-    protected abstract void writeRedirectResponse();
-
-    protected abstract void sendEmptyResponse(boolean addContentLengthHeader);
+    protected abstract ChannelFuture sendEmptyResponse(boolean addContentLengthHeader);
 
     HttpResponseStatus httpStatus() {
         return HttpResponseStatus.valueOf(status());

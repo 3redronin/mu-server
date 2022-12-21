@@ -12,7 +12,15 @@ import static io.muserver.openapi.Jsonizer.append;
  */
 public class LicenseObject implements JsonWriter {
 
+    /**
+     * @deprecated use {@link #name()} instead
+     */
+    @Deprecated
     public final String name;
+    /**
+      @deprecated use {@link #url()} instead
+     */
+    @Deprecated
     public final URI url;
 
     LicenseObject(String name, URI url) {
@@ -28,5 +36,19 @@ public class LicenseObject implements JsonWriter {
         isFirst = append(writer, "name", name, isFirst);
         isFirst = append(writer, "url", url, isFirst);
         writer.write('}');
+    }
+
+    /**
+     * @return the value described by {@link LicenseObjectBuilder#withName}
+     */
+    public String name() {
+        return name;
+    }
+
+    /**
+      @return the value described by {@link LicenseObjectBuilder#withUrl}
+     */
+    public URI url() {
+        return url;
     }
 }

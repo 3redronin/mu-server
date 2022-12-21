@@ -11,7 +11,6 @@ import javax.ws.rs.ext.MessageBodyWriter;
 import javax.ws.rs.sse.OutboundSseEvent;
 import javax.ws.rs.sse.SseEventSink;
 import java.io.ByteArrayOutputStream;
-import java.lang.annotation.Annotation;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.TimeUnit;
@@ -25,7 +24,6 @@ class JaxSseEventSinkImpl implements SseEventSink {
     private final AsyncSsePublisher ssePublisher;
     private final MuResponse response;
     private final EntityProviders entityProviders;
-    private volatile boolean isClosed = false;
 
     public JaxSseEventSinkImpl(AsyncSsePublisher ssePublisher, MuResponse response, EntityProviders entityProviders) {
         this.ssePublisher = ssePublisher;
@@ -39,7 +37,7 @@ class JaxSseEventSinkImpl implements SseEventSink {
 
     @Override
     public boolean isClosed() {
-        return isClosed;
+        return ssePublisher.isClosed();
     }
 
     @Override
@@ -56,9 +54,9 @@ class JaxSseEventSinkImpl implements SseEventSink {
             }
             if (event.getData() != null) {
                 MessageBodyWriter messageBodyWriter = entityProviders.selectWriter(event.getType(), event.getGenericType(),
-                    new Annotation[0], event.getMediaType());
+                    JaxRSResponse.Builder.EMPTY_ANNOTATIONS, event.getMediaType());
                 try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-                    messageBodyWriter.writeTo(event.getData(), event.getType(), event.getGenericType(), new Annotation[0],
+                    messageBodyWriter.writeTo(event.getData(), event.getType(), event.getGenericType(), JaxRSResponse.Builder.EMPTY_ANNOTATIONS,
                         event.getMediaType(), muHeadersToJaxObj(response.headers()), out);
                     String data = new String(out.toByteArray(), UTF_8);
                     stage = ssePublisher.send(data, event.getName(), event.getId());
@@ -80,9 +78,6 @@ class JaxSseEventSinkImpl implements SseEventSink {
 
     @Override
     public void close() {
-        if (!isClosed) {
-            isClosed = true;
-            ssePublisher.close();
-        }
+        ssePublisher.close();
     }
 }

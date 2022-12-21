@@ -45,6 +45,9 @@ public class OAuthFlowsObjectBuilder {
         return this;
     }
 
+    /**
+     * @return A new object
+     */
     public OAuthFlowsObject build() {
         return new OAuthFlowsObject(implicit, password, clientCredentials, authorizationCode);
     }

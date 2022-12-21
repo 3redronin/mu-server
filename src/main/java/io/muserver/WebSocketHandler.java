@@ -32,8 +32,7 @@ public class WebSocketHandler implements MuHandler {
             return false;
         }
 
-        boolean isUpgradeRequest = isWebSocketUpgrade(request);
-        if (!isUpgradeRequest) {
+        if (!isWebSocketUpgrade(request)) {
             return false;
         }
         HttpHeaders nettyHeaders = new DefaultHttpHeaders();
@@ -51,9 +50,6 @@ public class WebSocketHandler implements MuHandler {
             response.headers().set(HeaderNames.SEC_WEBSOCKET_VERSION, "13");
             return true;
         }
-        if (upgraded) {
-            ((NettyResponseAdaptor) response).setWebsocket();
-        }
         return upgraded;
     }
 
@@ -61,5 +57,14 @@ public class WebSocketHandler implements MuHandler {
         return request.headers().contains(HeaderNames.UPGRADE, HeaderValues.WEBSOCKET, true);
     }
 
+    @Override
+    public String toString() {
+        return "WebSocketHandler{" +
+            "path='" + path + '\'' +
+            ", idleReadTimeoutMills=" + idleReadTimeoutMills +
+            ", pingAfterWriteMillis=" + pingAfterWriteMillis +
+            ", maxFramePayloadLength=" + maxFramePayloadLength +
+            '}';
+    }
 }
 

@@ -2,6 +2,8 @@ package io.muserver.openapi;
 
 import java.util.Map;
 
+import static io.muserver.openapi.OpenApiUtils.immutable;
+
 /**
  * Describes a single request body.
  */
@@ -40,8 +42,11 @@ public class RequestBodyObjectBuilder {
         return this;
     }
 
+    /**
+     * @return A new object
+     */
     public RequestBodyObject build() {
-        return new RequestBodyObject(description, content, required);
+        return new RequestBodyObject(description, immutable(content), required);
     }
 
     /**

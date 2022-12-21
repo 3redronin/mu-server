@@ -8,11 +8,14 @@ import org.example.petstore.resource.UserResource;
 import org.example.petstore.resource.VehicleResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import scaffolding.StringUtils;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 import static io.muserver.ContextHandlerBuilder.context;
@@ -24,9 +27,11 @@ import static io.muserver.handlers.ResourceHandlerBuilder.fileOrClasspath;
 
 public class RunLocal {
     private static final Logger log = LoggerFactory.getLogger(RunLocal.class);
+    private static final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
 
     public static void main(String[] args) {
-        MuServer server = muServer()
+
+        MuServerBuilder builder = muServer()
             .withHttpPort(18080)
             .withHttpsPort(18443)
             .withHttp2Config(http2EnabledIfAvailable())
@@ -37,7 +42,7 @@ public class RunLocal {
                 .build())
             .addHandler(ResourceHandlerBuilder.fileHandler(BIG_FILE_DIR))
             .addHandler(fileOrClasspath("src/test/resources/sample-static", "/sample-static"))
-            .addHandler(Method.GET, "/connections",(request, response, pathParams) -> {
+            .addHandler(Method.GET, "/connections", (request, response, pathParams) -> {
                 response.contentType("text/plain;charset=utf8");
                 PrintWriter writer = response.writer();
                 for (HttpConnection connection : request.server().activeConnections()) {
@@ -60,10 +65,17 @@ public class RunLocal {
                 response.contentType(ContentTypes.APPLICATION_JSON);
                 response.write("{ \"hello\": \"world                    this is something           to be gzipped\" }");
             })
+            .addHandler(Method.GET, "/lotsa-chunks", (request, response, pathParams) -> {
+                response.contentType("text/plain;charset=utf-8");
+                String thing = StringUtils.randomAsciiStringOfLength(1000) + "\n\n";
+                for (int i = 0; i < 1000000; i++) {
+                    response.sendChunk(thing);
+                }
+            })
             .addHandler(
                 RestHandlerBuilder.restHandler(
-                    new PetResource(), new PetStoreResource(), new UserResource(), new VehicleResource()
-                )
+                        new PetResource(), new PetStoreResource(), new UserResource(), new VehicleResource()
+                    )
                     .withOpenApiJsonUrl("/openapi.json")
                     .withOpenApiHtmlUrl("/api.html")
                     .withCORS(CORSConfigBuilder.corsConfig()
@@ -90,7 +102,7 @@ public class RunLocal {
             .addHandler(webSocketHandler()
                 .withPath("/websocket-echo")
                 .withWebSocketFactory((request, responseHeaders) -> new BaseWebSocket() {
-                    public void onText(String message, DoneCallback onComplete) throws IOException {
+                    public void onText(String message, boolean isLast, DoneCallback onComplete) throws IOException {
                         session().sendText(message, onComplete);
                         if (message.equalsIgnoreCase("close")) {
                             session().close(1000, "Finished");
@@ -135,7 +147,20 @@ public class RunLocal {
                     response.sendChunk(muRequest + "\r\n");
                 }
             })
-            .start();
+            .addHandler(Method.GET, "/sleep", (req, resp, pp) -> {
+                AsyncHandle asyncHandle = req.handleAsync();
+                executor.schedule((Runnable) asyncHandle::complete,
+                    req.query().getLong("millis", 5000), TimeUnit.MILLISECONDS);
+                asyncHandle.addResponseCompleteHandler(info -> log.info("Woke up: " + info));
+            })
+            .addHandler(Method.GET, "/throw-exception", (request, response, pathParams) -> { throw new RuntimeException("A runtime exception"); })
+            .withExceptionHandler((request, response, cause) -> {
+                if (response.hasStartedSendingData()) return false;
+                response.writer().write("Oops, something went wrong: " + cause);
+                return true;
+            });
+        log.info("Builder: " + builder);
+        MuServer server = builder.start();
 
 
         log.info("Started at " + server.httpUri() + " and " + server.httpsUri());

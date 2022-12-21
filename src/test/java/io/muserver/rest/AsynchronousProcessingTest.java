@@ -1,16 +1,19 @@
 package io.muserver.rest;
 
 import io.muserver.MuServer;
+import io.muserver.Mutils;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.RequestBody;
 import okhttp3.Response;
+import okio.BufferedSink;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 import scaffolding.ClientUtils;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
+import scaffolding.StringUtils;
 
 import javax.ws.rs.*;
 import javax.ws.rs.container.AsyncResponse;
@@ -19,7 +22,9 @@ import javax.ws.rs.container.ConnectionCallback;
 import javax.ws.rs.container.Suspended;
 import javax.ws.rs.core.MultivaluedMap;
 import javax.ws.rs.ext.MessageBodyWriter;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
@@ -78,20 +83,42 @@ public class AsynchronousProcessingTest {
     public void returningACompletionStageIsAlsoPossible() throws Exception {
         @Path("samples")
         class Sample {
-            @GET
-            public CompletionStage<javax.ws.rs.core.Response> go() {
+            @POST
+            public CompletionStage<javax.ws.rs.core.Response> go(InputStream requestBody) {
                 CompletableFuture<javax.ws.rs.core.Response> cs = new CompletableFuture<>();
                 executor.submit(() -> {
-                    MuAssert.sleep(100);
-                    cs.complete(javax.ws.rs.core.Response.status(202).entity("The response body").build());
+                    String entity;
+                    try (ByteArrayOutputStream os = new ByteArrayOutputStream()) {
+                        MuAssert.sleep(50);
+                        Mutils.copy(requestBody, os, 8192);
+                        entity = os.toString("utf-8");
+                    } catch (Exception ex) {
+                        entity = "Error: " + ex;
+                    }
+                    cs.complete(javax.ws.rs.core.Response.status(200).entity(entity).build());
                 });
                 return cs;
             }
         }
         this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Sample())).start();
-        try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
-            assertThat(resp.code(), is(202));
-            assertThat(resp.body().string(), equalTo("The response body"));
+        String body = StringUtils.randomStringOfLength(68000);
+        try (Response resp = call(request(server.uri().resolve("/samples")).post(
+            new RequestBody() {
+                @Override
+                public MediaType contentType() {
+                    return MediaType.get("text/plain;charset=utf-8");
+                }
+
+                @Override
+                public void writeTo(BufferedSink bufferedSink) throws IOException {
+                    bufferedSink.writeUtf8(body);
+                    bufferedSink.flush();
+                    bufferedSink.close();
+                }
+            }
+        ))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), equalTo(body));
         }
     }
 
@@ -227,7 +254,9 @@ public class AsynchronousProcessingTest {
             }
         }
         this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Sample())).start();
-        OkHttpClient impatientClient = ClientUtils.client.newBuilder().readTimeout(200, TimeUnit.MILLISECONDS).build();
+        OkHttpClient impatientClient = ClientUtils.client.newBuilder()
+            .readTimeout(200, TimeUnit.MILLISECONDS)
+            .build();
         try (Response ignored = impatientClient.newCall(request().url(server.uri().resolve("/samples").toString()).build()).execute()) {
             Assert.fail("This test expected a client timeout");
         } catch (SocketTimeoutException te) {
@@ -251,7 +280,7 @@ public class AsynchronousProcessingTest {
         }
         this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Sample())).start();
         try (Response resp = call(request()
-            .post(RequestBody.create(MediaType.parse("text/plain"), ""))
+            .post(RequestBody.create("", MediaType.parse("text/plain")))
             .url(server.uri().resolve("/samples").toString())
         )) {
             assertThat(resp.code(), equalTo(400));

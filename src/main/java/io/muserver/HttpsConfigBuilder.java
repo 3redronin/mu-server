@@ -17,26 +17,51 @@ public class HttpsConfigBuilder extends SSLContextBuilder {
         return new HttpsConfigBuilder();
     }
 
+    /**
+     * The type of keystore, such as JKS, JCEKS, PKCS12, etc
+     * @param keystoreType The type of keystore to load
+     * @return This builder
+     */
     @Override
     public HttpsConfigBuilder withKeystoreType(String keystoreType) {
         return (HttpsConfigBuilder) super.withKeystoreType(keystoreType);
     }
 
+    /**
+     * The password to use to get the key from the keystore
+     * @param keyPassword The password
+     * @return This builder
+     */
     @Override
     public HttpsConfigBuilder withKeyPassword(String keyPassword) {
         return (HttpsConfigBuilder) super.withKeyPassword(keyPassword);
     }
 
+    /**
+     * The password to use to access the keystore
+     * @param keystorePassword The password
+     * @return This builder
+     */
     @Override
     public HttpsConfigBuilder withKeystorePassword(String keystorePassword) {
         return (HttpsConfigBuilder) super.withKeystorePassword(keystorePassword);
     }
 
+    /**
+     * The password to use to get the key from the keystore
+     * @param keyPassword The password
+     * @return This builder
+     */
     @Override
     public HttpsConfigBuilder withKeyPassword(char[] keyPassword) {
         return (HttpsConfigBuilder) super.withKeyPassword(keyPassword);
     }
 
+    /**
+     * The password to use to access the keystore
+     * @param keystorePassword The password
+     * @return This builder
+     */
     @Override
     public HttpsConfigBuilder withKeystorePassword(char[] keystorePassword) {
         return (HttpsConfigBuilder) super.withKeystorePassword(keystorePassword);
@@ -54,6 +79,11 @@ public class HttpsConfigBuilder extends SSLContextBuilder {
         return (HttpsConfigBuilder) super.withKeystore(keystoreStream);
     }
 
+    /**
+     * Specifies the keystore to use
+     * @param file A file object pointing to the keystore
+     * @return This builder
+     */
     @Override
     public HttpsConfigBuilder withKeystore(File file) {
         return (HttpsConfigBuilder) super.withKeystore(file);

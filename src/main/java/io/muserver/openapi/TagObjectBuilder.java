@@ -36,6 +36,9 @@ public class TagObjectBuilder {
         return this;
     }
 
+    /**
+     * @return A new object
+     */
     public TagObject build() {
         return new TagObject(name, description, externalDocs);
     }

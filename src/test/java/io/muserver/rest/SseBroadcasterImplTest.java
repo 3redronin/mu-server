@@ -194,7 +194,7 @@ public class SseBroadcasterImplTest {
         streamer.sendMessages(new Message(2));
         streamer.endBroadcast();
 
-        assertThat(errors, contains("Simulating IO exception"));
+        assertThat(errors.toString(), errors, contains("Simulating IO exception"));
 
         int numWithErrors = 0;
         for (TestSseClient listener : listeners) {

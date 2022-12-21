@@ -21,6 +21,7 @@ class Http2To1RequestAdapter implements HttpRequest {
     }
 
     @Override
+    @Deprecated
     public HttpMethod getMethod() {
         return nettyMeth;
     }
@@ -36,6 +37,7 @@ class Http2To1RequestAdapter implements HttpRequest {
     }
 
     @Override
+    @Deprecated
     public String getUri() {
         return uri;
     }
@@ -56,6 +58,7 @@ class Http2To1RequestAdapter implements HttpRequest {
     }
 
     @Override
+    @Deprecated
     public HttpVersion getProtocolVersion() {
         return HttpVersion.valueOf("HTTP/2.0");
     }
@@ -80,6 +83,7 @@ class Http2To1RequestAdapter implements HttpRequest {
     }
 
     @Override
+    @Deprecated
     public DecoderResult getDecoderResult() {
         return DecoderResult.SUCCESS;
     }

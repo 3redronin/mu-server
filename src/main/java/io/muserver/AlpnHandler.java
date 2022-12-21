@@ -17,6 +17,11 @@ class AlpnHandler extends ApplicationProtocolNegotiationHandler {
     }
 
     @Override
+    public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
+        super.handlerAdded(ctx);
+    }
+
+    @Override
     protected void configurePipeline(ChannelHandlerContext ctx, String protocol) {
         if (ApplicationProtocolNames.HTTP_2.equals(protocol)) {
             ctx.pipeline().addLast(new Http2ConnectionBuilder(server, nettyHandlerAdapter).build());
@@ -24,6 +29,7 @@ class AlpnHandler extends ApplicationProtocolNegotiationHandler {
         }
 
         if (ApplicationProtocolNames.HTTP_1_1.equals(protocol)) {
+            ctx.pipeline().remove(BackPressureHandler.NAME); // because the http1 pipeline adds it in the right place
             MuServerBuilder.setupHttp1Pipeline(ctx.pipeline(), nettyHandlerAdapter, server, proto);
             return;
         }
@@ -38,6 +44,8 @@ class AlpnHandler extends ApplicationProtocolNegotiationHandler {
 
     @Override
     protected void handshakeFailure(ChannelHandlerContext ctx, Throwable cause) {
-        ctx.close(); // don't call super as it logs an unwanted warning
+        // don't call super as it logs an unwanted warning
+        ctx.fireExceptionCaught(cause);
+        ctx.close();
     }
 }

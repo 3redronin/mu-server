@@ -3,6 +3,9 @@ package io.muserver;
 import io.netty.handler.codec.http.HttpHeaderValues;
 import io.netty.util.AsciiString;
 
+/**
+ * String constants for content-types
+ */
 public class ContentTypes {
 
     /**
@@ -161,6 +164,11 @@ public class ContentTypes {
     public static final CharSequence AUDIO_MIDI = AsciiString.cached("audio/midi");
 
     /**
+     * MPEG Video:  {@code "video/mp4"}
+     */
+    public static final CharSequence VIDEO_MP4 = AsciiString.cached("video/mp4");
+
+    /**
      * MPEG Video:  {@code "video/mpeg"}
      */
     public static final CharSequence VIDEO_MPEG = AsciiString.cached("video/mpeg");
@@ -289,6 +297,11 @@ public class ContentTypes {
      * WEBP image:  {@code "image/webp"}
      */
     public static final CharSequence IMAGE_WEBP = AsciiString.cached("image/webp");
+
+    /**
+     * AVIF image:  {@code "image/avif"}
+     */
+    public static final CharSequence IMAGE_AVIF = AsciiString.cached("image/avif");
 
     /**
      * Web Open Font Format (WOFF):  {@code "font/woff"}

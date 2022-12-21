@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/3redronin/mu-server.svg?branch=master)](https://travis-ci.org/3redronin/mu-server)
+![](https://github.com/3redronin/mu-server/workflows/Build%20and%20test/badge.svg)
  ![GitHub](https://img.shields.io/github/license/3redronin/mu-server)
 
 # mu-server

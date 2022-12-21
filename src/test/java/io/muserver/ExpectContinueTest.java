@@ -6,6 +6,7 @@ import org.junit.Test;
 import scaffolding.MuAssert;
 import scaffolding.RawClient;
 import scaffolding.ServerUtils;
+import scaffolding.StringUtils;
 
 import java.io.IOException;
 
@@ -14,6 +15,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
+import static scaffolding.MuAssert.assertEventually;
 
 public class ExpectContinueTest {
 
@@ -22,10 +24,10 @@ public class ExpectContinueTest {
     @Test(timeout = 20000)
     public void continueIsReturnedIfExpectIsSent() throws IOException, InterruptedException {
         server = httpServer()
-            .addHandler(Method.GET, "/", (request, response, pathParams) -> response.write("Hi there"))
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> response.write(request.readBodyAsString()))
             .start();
 
-        String body;
+        String toSend = StringUtils.randomAsciiStringOfLength(1024);
 
         try (RawClient rawClient = RawClient.create(server.uri())) {
             rawClient.sendStartLine("GET", "/")
@@ -35,14 +37,17 @@ public class ExpectContinueTest {
                 .endHeaders()
                 .flushRequest();
 
-            while (!(body = rawClient.responseString()).contains("Hi there")) {
-                Thread.sleep(20);
-            }
+            assertEventually(rawClient::responseString, containsString("HTTP/1.1 100 Continue\r\n"));
+
+            rawClient
+                .sendUTF8(toSend)
+                .flushRequest();
+
+            assertEventually(rawClient::responseString, startsWith("HTTP/1.1 100 Continue\r\n" +
+                "\r\nHTTP/1.1 200 OK\r\n"));
+            assertEventually(rawClient::responseString, endsWith(toSend));
         }
 
-        assertThat(body, startsWith("HTTP/1.1 100 Continue\r\n" +
-            "\r\nHTTP/1.1 200 OK\r\n"));
-        assertThat(body, endsWith("Hi there"));
     }
 
     @Test

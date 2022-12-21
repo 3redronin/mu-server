@@ -1,15 +1,19 @@
 package io.muserver;
 
+import io.muserver.rest.PathMatch;
+import io.muserver.rest.UriPattern;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.ClientUtils;
 import scaffolding.ServerUtils;
 
+import javax.ws.rs.core.PathSegment;
 import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static io.muserver.ContextHandlerBuilder.context;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -73,6 +77,22 @@ public class RoutesTest {
             .start();
         assertThat(respBody(Method.GET, "/blah%20ha/hello%20goodbye/ha"),
             equalTo("hello goodbye"));
+    }
+
+    @Test
+    public void matrixParametersAreIgnoredButCanBeRetrieved() throws IOException {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(context("context")
+                .addHandler(Method.GET, "/blah ha/{name}/{ha}",
+                    (request, response, pathParams) -> {
+                        PathMatch matcher = UriPattern.uriTemplateToRegex("/context/blah%20ha/{name}/{ha}").matcher(request.uri());
+                        PathSegment lastSegment = matcher.segments().get("ha");
+                        response.write(lastSegment.getPath() + " - " + lastSegment.getMatrixParameters().getFirst("h i"));
+                    })
+            )
+            .start();
+        assertThat(respBody(Method.GET, "/context/blah%20ha;h%20i=h%20i;a=b/hello%20goodbye/ha%20ha;h%20i=h%20i;a=b"),
+            equalTo("ha ha - h i"));
     }
 
     private int call(Method method, String path) {

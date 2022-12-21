@@ -1,6 +1,5 @@
 package io.muserver;
 
-import io.netty.handler.codec.HeadersUtils;
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
 
 import javax.ws.rs.core.MediaType;
@@ -14,7 +13,7 @@ import static io.netty.util.internal.ObjectUtil.checkNotNull;
 class Http2Headers implements Headers {
 
     final io.netty.handler.codec.http2.Http2Headers entries;
-    private boolean hasRequestBody;
+    private final boolean hasRequestBody;
 
     Http2Headers() {
         this(new DefaultHttp2Headers(), false);
@@ -319,16 +318,19 @@ class Http2Headers implements Headers {
     }
 
     @Override
+    @Deprecated
     public String getAsString(CharSequence name) {
         return get(name);
     }
 
     @Override
+    @Deprecated
     public List<String> getAllAsString(CharSequence name) {
         return getAll(name);
     }
 
     @Override
+    @Deprecated
     public Iterator<Map.Entry<String, String>> iteratorAsString() {
         return iterator();
     }
@@ -343,12 +345,15 @@ class Http2Headers implements Headers {
         return entries.hashCode();
     }
 
-
     @Override
     public String toString() {
-        return HeadersUtils.toString(getClass(), entries.iterator(), size());
+        return Headtils.toString(this, null);
     }
 
+    @Override
+    public String toString(Collection<String> toSuppress) {
+        return Headtils.toString(this, toSuppress);
+    }
 
     @Override
     public boolean hasBody() {

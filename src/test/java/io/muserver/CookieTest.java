@@ -1,5 +1,6 @@
 package io.muserver;
 
+import io.muserver.rest.MuRuntimeDelegate;
 import okhttp3.CookieJar;
 import okhttp3.HttpUrl;
 import okhttp3.OkHttpClient;
@@ -16,6 +17,7 @@ import javax.ws.rs.CookieParam;
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
 import javax.ws.rs.core.NewCookie;
+import javax.ws.rs.ext.RuntimeDelegate;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
@@ -74,13 +76,44 @@ public class CookieTest {
             @GET
             @Path("set")
             public javax.ws.rs.core.Response setCookie() {
-                return javax.ws.rs.core.Response.noContent().cookie(new NewCookie("Something", Mutils.urlEncode("This is a cookie value"))).build();
+                NewCookie cookie = new NewCookie("Something", "123456", "/", null, "some comment", 360, false);
+                return javax.ws.rs.core.Response.noContent().cookie(cookie).build();
             }
 
             @GET
-            @Path("get")
-            public String getCookieValue(@CookieParam("Something") String cookieValue) {
+            @Path("getString")
+            public String getCookieStringValue(@CookieParam("Something") String cookieValue) {
                 return cookieValue;
+            }
+
+            @GET
+            @Path("getInt")
+            public int getCookieIntValue(@CookieParam("Something") int cookieValue) {
+                return cookieValue;
+            }
+
+            @GET
+            @Path("getCookie")
+            public String getCookie(@CookieParam("Something") javax.ws.rs.core.Cookie cookie) {
+                return cookie.getName() + "=" + cookie.getValue();
+            }
+
+            @GET
+            @Path("nullCookie")
+            public String getNullCookie(@CookieParam("SomethingElse") javax.ws.rs.core.Cookie cookie) {
+                return "cookie=" + cookie;
+            }
+
+            @GET
+            @Path("getMuCookie")
+            public String getCookie(@CookieParam("Something") Cookie cookie) {
+                return cookie.name() + "=" + cookie.value();
+            }
+
+            @GET
+            @Path("nullMuCookie")
+            public String getNullCookie(@CookieParam("SomethingElse") Cookie cookie) {
+                return "cookie=" + cookie;
             }
         }
 
@@ -89,10 +122,30 @@ public class CookieTest {
 
         try (Response setResp = client.newCall(request().url(server.uri().resolve("/biscuits/set").toString()).build()).execute()) {
             assertThat(setResp.code(), equalTo(204));
+            String setCookie = setResp.headers().get("set-cookie");
+            RuntimeDelegate.HeaderDelegate<NewCookie> headerDelegate = MuRuntimeDelegate.getInstance().createHeaderDelegate(NewCookie.class);
+            NewCookie newCookie = headerDelegate.fromString(setCookie);
+            assertThat(newCookie.getMaxAge(), equalTo(360));
+            assertThat(newCookie.getPath(), equalTo("/"));
         }
-        try (Response getResp = client.newCall(request().url(server.uri().resolve("/biscuits/get").toString()).build()).execute()) {
+        try (Response getResp = client.newCall(request().url(server.uri().resolve("/biscuits/getString").toString()).build()).execute()) {
             assertThat(getResp.code(), equalTo(200));
-            assertThat(getResp.body().string(), equalTo("This%20is%20a%20cookie%20value"));
+            assertThat(getResp.body().string(), equalTo("123456"));
+        }
+        try (Response getResp = client.newCall(request().url(server.uri().resolve("/biscuits/getInt").toString()).build()).execute()) {
+            assertThat(getResp.body().string(), equalTo("123456"));
+        }
+        try (Response getResp = client.newCall(request().url(server.uri().resolve("/biscuits/getCookie").toString()).build()).execute()) {
+            assertThat(getResp.body().string(), equalTo("Something=123456"));
+        }
+        try (Response getResp = client.newCall(request().url(server.uri().resolve("/biscuits/nullCookie").toString()).build()).execute()) {
+            assertThat(getResp.body().string(), equalTo("cookie=null"));
+        }
+        try (Response getResp = client.newCall(request().url(server.uri().resolve("/biscuits/getMuCookie").toString()).build()).execute()) {
+            assertThat(getResp.body().string(), equalTo("Something=123456"));
+        }
+        try (Response getResp = client.newCall(request().url(server.uri().resolve("/biscuits/nullMuCookie").toString()).build()).execute()) {
+            assertThat(getResp.body().string(), equalTo("cookie=null"));
         }
     }
 
@@ -135,6 +188,7 @@ public class CookieTest {
     public void ifCookiesAreSentAsSeparateHeadersItWorks() throws IOException {
         server = MuServerBuilder.httpServer()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.addCookie(CookieBuilder.newSecureCookie().withName("hi").withValue("bal").build());
                 response.write("START; " + request.cookies().stream().map(Cookie::toString)
                     .collect(Collectors.joining("; "))
                 + "; END");
@@ -148,8 +202,8 @@ public class CookieTest {
             .sendHeader("cookie", "cookie2=somethingelse")
             .endHeaders()
             .flushRequest()) {
-
             assertEventually(rawClient::responseString, endsWith("END"));
+            assertThat(rawClient.responseString(), containsString("set-cookie: hi=bal; Secure; HTTPOnly; SameSite=Strict"));
             assertThat(rawClient.responseString(), endsWith("START; cookie1=something; cookie2=somethingelse; END"));
         }
     }

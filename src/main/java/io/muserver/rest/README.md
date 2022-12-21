@@ -38,7 +38,7 @@ N/A Not applicable as only singletons supported
 ### 3.3 Resource Methods 
 
 - [x] Resource methods implemented with GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD support
-- [ ] Sub-resource Locators not implemented
+- [x] Sub-resource Locators (only supports returning of instantiated objects rather than classes, as MuServer does not instantiate classes for the API user)
 - [ ] Custom HTTP methods not supported.
 
 #### 3.3.1 Visibility 
@@ -84,7 +84,7 @@ N/A Not applicable as only singletons supported
 #### 3.4.1 Sub Resources 
 
 - [x] Sub Resources supported
-- [ ] Sub-resource locators not yet implemented.
+- [x] Sub-resource locators
 
 ### 3.5 Declaring Media Type Capabilities 
 
@@ -215,13 +215,16 @@ Only server-based filters and interceptors are being implemented as there is no 
 
 ### 6.3 Entity Interceptors 
 
-- [ ] Not yet implemented.
+- [x] Reader interceptors can be added to a `RestHandlerBuilder`.
+- [x] Writer interceptors can be added to a `RestHandlerBuilder`.
 
 ### 6.4 Lifecycle 
 
 N/A as Mu Server does not control the lifecycle of your objects.
 
-### 6.5 Binding 
+### 6.5 Binding
+
+Filters and interceptors are registered on an `RestHandlerBuilder` instance (regardless of binding used).
 
 #### 6.5.1 Global Binding 
 
@@ -241,7 +244,7 @@ N/A
 
 ### 6.6 Priorities 
 
-No plan to implement as it would add another dependency. The order filters are added are the order they are run in.
+No plan to implement as it would add another dependency. The order filters and interceptors are added are the order they are run in.
 
 ### 6.7 Exceptions 
 
@@ -346,7 +349,8 @@ N/A. Will not implement, as there is no support for `Application`.
 
 #### 10.2.4 Content Negotiation and Preconditions 
 
-- [ ] Not yet implemented.
+- [x] Content Negotiation
+- [x] Preconditions
 
 #### 10.2.5 Security Context 
 
@@ -379,4 +383,5 @@ The following are not described by the spec but are interfaces defined in the ja
 
 - [x] `UriBuilder`
 - [x] `Link`
-- [ ] `VariantListBuilder`
+- [x] `VariantListBuilder`
+- [x] `ResourceInfo` (this is available in a filter by calling `ResourceInfo resourceInfo = (ResourceInfo) requestContext.getProperty(MuRuntimeDelegate.RESOURCE_INFO_PROPERTY);`)

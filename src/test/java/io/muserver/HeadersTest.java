@@ -2,6 +2,7 @@ package io.muserver;
 
 import okhttp3.Request;
 import okhttp3.Response;
+import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.ClientUtils;
@@ -11,13 +12,15 @@ import scaffolding.ServerUtils;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.URI;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.MuServerBuilder.httpServer;
-import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.CoreMatchers.nullValue;
+import static org.hamcrest.CoreMatchers.*;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.IsEqual.equalTo;
 import static scaffolding.ClientUtils.*;
@@ -175,36 +178,41 @@ public class HeadersTest {
                 return true;
             }).start();
 
-        try (Response ignored = call(request(server.httpUri().resolve("/blah?query=value"))
+        call(request(server.httpUri().resolve("/blah?query=value"))
             .header("X-Forwarded-Proto", "https")
             .header("X-Forwarded-Host", "www.example.org")
             .header("X-Forwarded-Port", "443")
-        )) {
-        }
+        ).close();
         assertThat(actual[1].toString(), equalTo("http://localhost:12752/blah?query=value"));
         assertThat(actual[0].toString(), equalTo("https://www.example.org/blah?query=value"));
     }
 
     @Test
     public void ifMultipleXForwardedHeadersAreSpecifiedThenRequestUriUsesTheFirst() {
+        AtomicReference<List<ForwardedHeader>> forwardedHeaders = new AtomicReference<>();
         URI[] actual = new URI[2];
         server = ServerUtils.httpsServerForTest()
             .withHttpPort(12753)
             .addHandler((request, response) -> {
                 actual[0] = request.uri();
                 actual[1] = request.serverURI();
+                forwardedHeaders.set(request.headers().forwarded());
                 return true;
             }).start();
 
-        try (Response ignored = call(request(server.httpUri().resolve("/blah?query=value"))
-            .header("X-Forwarded-Proto", "https")
+        call(request(server.httpUri().resolve("/blah?query=value"))
+            .header("X-Forwarded-Proto", "https, ftp")
             .addHeader("X-Forwarded-Proto", "http")
-            .header("X-Forwarded-Host", "www.example.org:12000")
+            .header("X-Forwarded-Host", "www.example.org:12000, second.example.org")
             .addHeader("X-Forwarded-Host", "localhost:8192")
-        )) {
-        }
+        ).close();
         assertThat(actual[1].toString(), equalTo("http://localhost:12753/blah?query=value"));
         assertThat(actual[0].toString(), equalTo("https://www.example.org:12000/blah?query=value"));
+        assertThat(forwardedHeaders.get(), Matchers.contains(
+            ForwardedHeader.fromString("host=\"www.example.org:12000\";proto=https").get(0),
+            ForwardedHeader.fromString("host=second.example.org;proto=ftp").get(0),
+            ForwardedHeader.fromString("host=\"localhost:8192\";proto=http").get(0)
+        ));
     }
 
     @Test
@@ -318,6 +326,32 @@ public class HeadersTest {
         }
     }
 
+
+    @Test
+    public void clientIPUsesForwardedValueIfSpecified() throws IOException {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.status(200);
+                response.write(request.clientIP());
+            })
+            .start();
+        try (Response resp = call(request(server.uri())
+            .header(HeaderNames.X_FORWARDED_FOR.toString(), "10.10.0.10")
+        )) {
+            assertThat(resp.body().string(), equalTo("10.10.0.10"));
+        }
+        try (Response resp = call(request(server.uri())
+            .header(HeaderNames.FORWARDED.toString(), ForwardedHeader.fromString("by=10.10.0.12").get(0).toString()) // should be ignored because no 'for' value
+            .addHeader(HeaderNames.FORWARDED.toString(), ForwardedHeader.fromString("for=10.10.0.11").get(0).toString())
+        )) {
+            assertThat(resp.body().string(), equalTo("10.10.0.11"));
+        }
+        try (Response resp = call(request(server.uri()))) {
+            assertThat(resp.body().string(), equalTo("127.0.0.1"));
+        }
+    }
+
+
     @Test
     public void aRquestWithErrorXForwardHostHeaderDontThrowException() throws IOException {
         server = ServerUtils.httpsServerForTest()
@@ -401,4 +435,49 @@ public class HeadersTest {
         return request().header("X-Something", value).url(server.uri().toString());
     }
 
+    @Test
+    public void http1HeadersToStringDoesNotLogSensitiveHeaders() {
+        httpHeadersToStringDoesNotLogSensitiveHeaders(new Http1Headers());
+    }
+
+    @Test
+    public void http2HeadersToStringDoesNotLogSensitiveHeaders() {
+        httpHeadersToStringDoesNotLogSensitiveHeaders(new Http2Headers());
+    }
+
+    private void httpHeadersToStringDoesNotLogSensitiveHeaders(Headers headers) {
+        headers.add("some-header", "value 1");
+        headers.add("some-header", "value 2");
+        headers.set(HeaderNames.AUTHORIZATION.toString().toUpperCase(), "shouldnotprint");
+        headers.set(HeaderNames.SET_COOKIE, "shouldnotprint");
+        headers.set(HeaderNames.COOKIE, "shouldnotprint 1");
+        headers.add(HeaderNames.COOKIE.toString().toUpperCase(), "shouldnotprint 2");
+        assertThat(headers.toString(), allOf(
+            not(containsStringIgnoringCase("shouldnotprint")),
+            containsStringIgnoringCase("some-header: value 1"),
+            containsStringIgnoringCase("some-header: value 2"),
+            containsStringIgnoringCase("cookie: (hidden)"),
+            containsStringIgnoringCase("set-cookie: (hidden)"),
+            containsStringIgnoringCase("authorization: (hidden)")
+        ));
+        assertThat(headers.toString(Collections.emptyList()), allOf(
+            not(containsStringIgnoringCase("(hidden)")),
+            containsStringIgnoringCase("some-header: value 1"),
+            containsStringIgnoringCase("some-header: value 2"),
+            containsStringIgnoringCase("cookie: shouldnotprint"),
+            containsStringIgnoringCase("cookie: shouldnotprint 2"),
+            containsStringIgnoringCase("set-cookie: shouldnotprint"),
+            containsStringIgnoringCase("authorization: shouldnotprint")
+        ));
+        assertThat(headers.toString(Collections.singleton("SOME-header")), allOf(
+            not(containsStringIgnoringCase("value 1")),
+            not(containsStringIgnoringCase("value 2")),
+            containsStringIgnoringCase("some-header: (hidden)"),
+            containsStringIgnoringCase("some-header: (hidden)"),
+            containsStringIgnoringCase("cookie: shouldnotprint"),
+            containsStringIgnoringCase("cookie: shouldnotprint 2"),
+            containsStringIgnoringCase("set-cookie: shouldnotprint"),
+            containsStringIgnoringCase("authorization: shouldnotprint")
+        ));
+    }
 }

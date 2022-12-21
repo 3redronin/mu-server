@@ -41,10 +41,16 @@ public class Cookie {
         nettyCookie = new DefaultCookie(name, value);
     }
 
+    /**
+     * @return The cookie name
+     */
     public String name() {
         return nettyCookie.name();
     }
 
+    /**
+     * @return The cookie value
+     */
     public String value() {
         return nettyCookie.value();
     }
@@ -59,6 +65,9 @@ public class Cookie {
         nettyCookie.setValue(value);
     }
 
+    /**
+     * @return The domain this cookie is valid for
+     */
     public String domain() {
         return nettyCookie.domain();
     }
@@ -73,6 +82,9 @@ public class Cookie {
         nettyCookie.setDomain(domain);
     }
 
+    /**
+     * @return The path this cookie applies to
+     */
     public String path() {
         return nettyCookie.path();
     }
@@ -87,8 +99,18 @@ public class Cookie {
         nettyCookie.setPath(path);
     }
 
+    /**
+     * @return The max age in seconds of this cookie
+     */
     public long maxAge() {
         return nettyCookie.maxAge();
+    }
+
+    /**
+     * @return The SameSite value of the cookie, for example "Strict", "Lax", or "None"
+     */
+    public String sameSite() {
+        return nettyCookie.sameSite().name();
     }
 
     /**
@@ -101,6 +123,9 @@ public class Cookie {
         nettyCookie.setMaxAge(maxAgeInSeconds);
     }
 
+    /**
+     * @return True if this cookie is only readable over https
+     */
     public boolean isSecure() {
         return nettyCookie.isSecure();
     }
@@ -116,7 +141,7 @@ public class Cookie {
     }
 
     /**
-     * @return Returns the HTTPOnly value
+     * @return True if this cookie is only available via HTTP. If false, client side script will not be able to read the cookie (if the client supports this).
      */
     public boolean isHttpOnly() {
         return nettyCookie.isHttpOnly();
@@ -149,7 +174,7 @@ public class Cookie {
     }
 
     /**
-     * Creates a new cookie builder with secure and httpOnly selected.
+     * Creates a new cookie builder with secure, Strict SameSite and httpOnly selected.
      * @return A new builder
      */
     public static CookieBuilder builder() {

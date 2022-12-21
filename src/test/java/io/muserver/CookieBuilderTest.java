@@ -4,10 +4,26 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import static io.muserver.CookieBuilder.newCookie;
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
-import static org.junit.Assert.assertThat;
 
 public class CookieBuilderTest {
+
+    @Test
+    public void secureBuilderDefaultsToSecureHttpOnlyStrictSameSite() {
+        Cookie cookie = CookieBuilder.newSecureCookie().withName("dummy").withValue("wummy").build();
+        assertThat(cookie.isSecure(), is(true));
+        assertThat(cookie.isHttpOnly(), is(true));
+        assertThat(cookie.sameSite(), is("Strict"));
+    }
+
+    @Test
+    public void sameSiteDefaultsToNone() {
+        Cookie cookie = CookieBuilder.newCookie().withName("dummy").withValue("wummy").build();
+        assertThat(cookie.isSecure(), is(false));
+        assertThat(cookie.isHttpOnly(), is(false));
+        assertThat(cookie.sameSite(), is("None"));
+    }
 
     @Test
     public void throwsWithNoName() {
@@ -16,6 +32,16 @@ public class CookieBuilderTest {
             Assert.fail("Should throw");
         } catch (IllegalStateException e) {
             assertThat(e.getMessage(), is("A cookie name must be specified"));
+        }
+    }
+
+    @Test
+    public void throwsWithInvalidSameSite() {
+        try {
+            newCookie().withSameSite("something-invalid");
+            Assert.fail("Should throw");
+        } catch (IllegalArgumentException e) {
+            assertThat(e.getMessage(), is("Invalid SameSite value. It should be one of: Lax, Strict, None"));
         }
     }
 

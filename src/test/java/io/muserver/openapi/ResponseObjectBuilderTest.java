@@ -37,17 +37,17 @@ public class ResponseObjectBuilderTest {
         };
 
         for (ResponseObject merged : mergeds) {
-            assertThat(merged.description, is("Desc"));
-            assertThat(merged.headers.keySet(), contains("x-header"));
-            assertThat(merged.headers.get("x-header").description, is("A header"));
+            assertThat(merged.description(), is("Desc"));
+            assertThat(merged.headers().keySet(), contains("x-header"));
+            assertThat(merged.headers().get("x-header").description(), is("A header"));
 
-            assertThat(merged.content.keySet(), contains("text/plain"));
-            assertThat(merged.content.get("text/plain").example, is("An example"));
-            assertThat(merged.content.get("text/plain").schema.description, is("scheming"));
-            assertThat(merged.content.get("text/plain").encoding.get("form").style, is("form"));
+            assertThat(merged.content().keySet(), contains("text/plain"));
+            assertThat(merged.content().get("text/plain").example(), is("An example"));
+            assertThat(merged.content().get("text/plain").schema().description(), is("scheming"));
+            assertThat(merged.content().get("text/plain").encoding().get("form").style(), is("form"));
 
-            assertThat(merged.links.keySet(), contains("something"));
-            assertThat(merged.links.get("something").description, is("a link"));
+            assertThat(merged.links().keySet(), contains("something"));
+            assertThat(merged.links().get("something").description(), is("a link"));
         }
     }
 
@@ -56,10 +56,10 @@ public class ResponseObjectBuilderTest {
         ResponseObject a = responseObject().withDescription("primary").build();
         ResponseObject b = responseObject().withDescription("secondary").build();
         ResponseObject merged = mergeResponses(a, b).build();
-        assertThat(merged.description, is("primary"));
-        assertThat(merged.content, is(nullValue()));
-        assertThat(merged.links, is(nullValue()));
-        assertThat(merged.headers, is(nullValue()));
+        assertThat(merged.description(), is("primary"));
+        assertThat(merged.content(), is(nullValue()));
+        assertThat(merged.links(), is(nullValue()));
+        assertThat(merged.headers(), is(nullValue()));
     }
 
     @Test
@@ -90,18 +90,18 @@ public class ResponseObjectBuilderTest {
 
         ResponseObject merged = mergeResponses(primary, secondary).build();
 
-        assertThat(merged.description, is("Desc"));
-        assertThat(merged.headers.keySet(), containsInAnyOrder("x-header", "x-sec"));
-        assertThat(merged.headers.get("x-header").description, is("A header"));
-        assertThat(merged.headers.get("x-sec").description, is("second something"));
+        assertThat(merged.description(), is("Desc"));
+        assertThat(merged.headers().keySet(), containsInAnyOrder("x-header", "x-sec"));
+        assertThat(merged.headers().get("x-header").description(), is("A header"));
+        assertThat(merged.headers().get("x-sec").description(), is("second something"));
 
-        assertThat(merged.content.keySet(), containsInAnyOrder("text/plain", "application/json"));
-        assertThat(merged.content.get("text/plain").example, is("An example"));
-        assertThat(merged.content.get("application/json").example, is("second example"));
+        assertThat(merged.content().keySet(), containsInAnyOrder("text/plain", "application/json"));
+        assertThat(merged.content().get("text/plain").example(), is("An example"));
+        assertThat(merged.content().get("application/json").example(), is("second example"));
 
-        assertThat(merged.links.keySet(), containsInAnyOrder("something", "something-else"));
-        assertThat(merged.links.get("something").description, is("a link"));
-        assertThat(merged.links.get("something-else").description, is("second link"));
+        assertThat(merged.links().keySet(), containsInAnyOrder("something", "something-else"));
+        assertThat(merged.links().get("something").description(), is("a link"));
+        assertThat(merged.links().get("something-else").description(), is("second link"));
     }
 
 

@@ -6,13 +6,14 @@ import io.muserver.MuServer;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
-import scaffolding.ServerUtils;
 
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.HttpHeaders;
+import javax.ws.rs.core.Request;
 import javax.ws.rs.core.UriInfo;
+import java.net.URI;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -22,10 +23,10 @@ import static io.muserver.ContextHandlerBuilder.context;
 import static io.muserver.MuServerBuilder.muServer;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
+import static scaffolding.ServerUtils.httpsServerForTest;
 
 public class ContextTest {
     private MuServer server;
@@ -82,15 +83,16 @@ public class ContextTest {
             }
         }
         this.server = muServer()
-            .withHttpsPort(50378)
+            .withHttpsPort(0)
             .addHandler(
                 context("/api/ha ha/").addHandler(restHandler(new Sample()))
             )
             .start();
+        int port = server.uri().getPort();
         try (Response resp = call(request().url(server.uri().resolve("/api/ha%20ha/samples/zample/barmpit?hoo=har%20har").toString()))) {
-            assertThat(resp.body().string(), equalTo("https://localhost:50378/api/ha%20ha/\nsamples/zample/barmpit\n" +
-                "https://localhost:50378/api/ha%20ha/samples/zample/barmpit\n" +
-                "https://localhost:50378/api/ha%20ha/samples/zample/barmpit?hoo=har%20har\nhar har\nhar%20har\n" +
+            assertThat(resp.body().string(), equalTo("https://localhost:" + port + "/api/ha%20ha/\nsamples/zample/barmpit\n" +
+                "https://localhost:" + port + "/api/ha%20ha/samples/zample/barmpit\n" +
+                "https://localhost:" + port + "/api/ha%20ha/samples/zample/barmpit?hoo=har%20har\nhar har\nhar%20har\n" +
                 "Sample Resource Class\nsamples/zample/barmpit:samples"));
         }
     }
@@ -105,7 +107,7 @@ public class ContextTest {
                 resp.sendChunk(" world");
             }
         }
-        this.server = ServerUtils.httpsServerForTest()
+        this.server = httpsServerForTest()
             .addHandler(restHandler(new Sample()))
             .start();
         try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
@@ -131,7 +133,7 @@ public class ContextTest {
                 return sb.toString();
             }
         }
-        this.server = ServerUtils.httpsServerForTest()
+        this.server = httpsServerForTest()
             .addHandler(restHandler(new Sample()))
             .start();
         try (Response resp = call(request()
@@ -141,6 +143,103 @@ public class ContextTest {
         )) {
             assertThat(resp.code(), is(200));
             assertThat(resp.body().string(), equalTo("x-something=Blah x-something-else=Another blah "));
+        }
+    }
+
+    @Test
+    public void acceptableLanguagesCanBeGottenInPreferredOrder() throws Exception {
+        @Path("samples")
+        class Sample {
+            @GET
+            public String get(@Context HttpHeaders headers) {
+                return headers.getAcceptableLanguages().stream()
+                    .map(l -> l.getLanguage() + " " + l.getCountry())
+                    .collect(Collectors.joining(", "));
+            }
+        }
+        this.server = httpsServerForTest().addHandler(restHandler(new Sample())).start();
+        try (Response resp = call(request(server.uri().resolve("/samples"))
+            .header("Accept-Language", "fr;q=0.3, es, en-US;q=0.1")
+        )) {
+            assertThat(resp.body().string(), equalTo("es , fr , en US"));
+        }
+        try (Response resp = call(request(server.uri().resolve("/samples")))) {
+            assertThat(resp.body().string(), equalTo("* "));
+        }
+        try (Response resp = call(request(server.uri().resolve("/samples"))
+            .header("Accept-Language", "fr;invalid-param=true")
+        )) {
+            assertThat(resp.code(), equalTo(400));
+            assertThat(resp.body().string(), containsString("Invalid accept-language header"));
+        }
+    }
+
+    @Test
+    public void acceptableMediaTypesCanBeGotten() throws Exception {
+        @Path("samples")
+        class Sample {
+            @GET
+            public String get(@Context HttpHeaders headers) {
+                return headers.getAcceptableMediaTypes().stream()
+                    .map(mt -> mt.getType() + "/" + mt.getSubtype() + ";" + mt.getParameters().entrySet().stream().map(p -> p.getKey() + "=" + p.getValue()).sorted().collect(Collectors.joining("; ")))
+                    .collect(Collectors.joining(", "));
+            }
+        }
+        this.server = httpsServerForTest().addHandler(restHandler(new Sample())).start();
+        try (Response resp = call(request(server.uri().resolve("/samples"))
+            .header("Accept", "text/html, application/vnd.mu.customer+xml;q=0.9, image/webp;level=1, */*;q=0.8;umm=hey, application/*")
+        )) {
+            assertThat(resp.body().string(), equalTo("image/webp;level=1, text/html;, application/*;, application/vnd.mu.customer+xml;q=0.9, */*;q=0.8; umm=hey"));
+        }
+        try (Response resp = call(request(server.uri().resolve("/samples")))) {
+            assertThat(resp.body().string(), equalTo("*/*;"));
+        }
+        try (Response resp = call(request(server.uri().resolve("/samples"))
+            .header("Accept", "invalid-type!!")
+        )) {
+            assertThat(resp.code(), equalTo(400));
+            assertThat(resp.body().string(), containsString("Media types must be in the format"));
+        }
+    }
+
+
+    @Test
+    public void jaxRSRequestObjectCanBeInjected() throws Exception {
+        @Path("samples")
+        class Sample {
+            @GET
+            public String get(@Context Request jaxRequest) {
+                return jaxRequest.toString();
+            }
+        }
+        this.server = httpsServerForTest().addHandler(restHandler(new Sample())).start();
+        URI url = server.uri().resolve("/samples");
+        try (Response resp = call(request(url))) {
+            assertThat(resp.body().string(), equalTo("GET " + url));
+        }
+    }
+
+    @Test
+    public void unreservedCharactersComeThroughUnencoded() throws Exception {
+        @Path("~.-_")
+        class Sample {
+            @GET
+            @Path("~.-_")
+            public String get(@Context UriInfo uriInfo) {
+                return uriInfo.getRequestUri().getPath();
+            }
+        }
+        this.server = httpsServerForTest()
+            .addHandler(restHandler(new Sample()))
+            .start();
+
+        try (Response resp = call(request(server.uri().resolve("/~.-_/~.-_")))) {
+            assertThat(resp.body().string(), is("/~.-_/~.-_"));
+            assertThat(resp.code(), is(200));
+        }
+        try (Response resp = call(request(server.uri().resolve("/%7E%2E%2D%5F/%7E%2E%2D%5F")))) {
+            assertThat(resp.body().string(), is("/~.-_/~.-_"));
+            assertThat(resp.code(), is(200));
         }
     }
 

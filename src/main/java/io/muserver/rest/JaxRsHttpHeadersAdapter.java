@@ -3,6 +3,7 @@ package io.muserver.rest;
 import io.muserver.HeaderNames;
 import io.muserver.Headers;
 
+import javax.ws.rs.BadRequestException;
 import javax.ws.rs.core.Cookie;
 import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.MediaType;
@@ -12,8 +13,8 @@ import java.util.*;
 import static java.util.stream.Collectors.toList;
 
 class JaxRsHttpHeadersAdapter implements HttpHeaders {
-    private static final List<Locale> WILDCARD_LOCALES = Collections.unmodifiableList(Collections.singletonList(new Locale("*")));
-    private static final List<MediaType> WILDCARD_MEDIA_TYPES = Collections.unmodifiableList(Collections.singletonList(MediaType.WILDCARD_TYPE));
+    private static final List<Locale> WILDCARD_LOCALES = Collections.singletonList(new Locale("*"));
+    private static final List<MediaType> WILDCARD_MEDIA_TYPES = Collections.singletonList(MediaType.WILDCARD_TYPE);
     private final Headers muHeaders;
     private final List<io.muserver.Cookie> muCookies;
     private MultivaluedMap<String, String> copy;
@@ -26,7 +27,7 @@ class JaxRsHttpHeadersAdapter implements HttpHeaders {
 
     @Override
     public List<String> getRequestHeader(String name) {
-        return getRequestHeaders().get(name);
+        return getMutableRequestHeaders().get(name);
     }
 
     @Override
@@ -40,12 +41,16 @@ class JaxRsHttpHeadersAdapter implements HttpHeaders {
 
     @Override
     public MultivaluedMap<String, String> getRequestHeaders() {
+        return ReadOnlyMultivaluedMap.readOnly(getMutableRequestHeaders());
+    }
+
+    MultivaluedMap<String, String> getMutableRequestHeaders() {
         if (copy == null) {
             MultivaluedMap<String, String> c = new LowercasedMultivaluedHashMap<>();
             for (Map.Entry<String, String> entry : muHeaders) {
                 c.add(entry.getKey(), entry.getValue());
             }
-            copy = ReadOnlyMultivaluedMap.readOnly(c);
+            copy = c;
         }
         return copy;
     }
@@ -53,12 +58,19 @@ class JaxRsHttpHeadersAdapter implements HttpHeaders {
     @Override
     public List<MediaType> getAcceptableMediaTypes() {
         List<MediaType> mediaTypes = MediaTypeDeterminer.parseAcceptHeaders(muHeaders.getAll(HeaderNames.ACCEPT));
-        return mediaTypes.isEmpty() ? WILDCARD_MEDIA_TYPES : mediaTypes;
+        if (mediaTypes.isEmpty()) {
+            return WILDCARD_MEDIA_TYPES;
+        }
+        return mediaTypes.stream().sorted(MediaTypeDeterminer::compareQValues).collect(toList());
     }
 
     @Override
     public List<Locale> getAcceptableLanguages() {
-        return getLocalesFromHeader(HeaderNames.ACCEPT_LANGUAGE, WILDCARD_LOCALES);
+        try {
+            return getLocalesFromHeader(HeaderNames.ACCEPT_LANGUAGE, WILDCARD_LOCALES);
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestException("Invalid accept-language header");
+        }
     }
 
     private List<Locale> getLocalesFromHeader(CharSequence headerName, List<Locale> defaultLocales) {

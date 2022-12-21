@@ -1,26 +1,29 @@
 package scaffolding;
 
 import io.netty.util.concurrent.DefaultThreadFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.*;
 import java.net.Socket;
 import java.net.URI;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 public class RawClient implements Closeable {
+    private static final Logger log = LoggerFactory.getLogger(RawClient.class);
     private static final ExecutorService executorService = Executors.newCachedThreadPool(new DefaultThreadFactory("raw-client"));
 
     private final ByteArrayOutputStream baos = new ByteArrayOutputStream();
     private BufferedOutputStream request;
     private Socket socket;
     private InputStream response;
-    private final AtomicBoolean isConnected = new AtomicBoolean(false);
     private final AtomicReference<Exception> exception = new AtomicReference<>();
+    private final CountDownLatch responseCompleteLatch = new CountDownLatch(1);
 
     public static RawClient create(URI uri) throws IOException {
         RawClient rawClient = new RawClient();
@@ -28,28 +31,34 @@ public class RawClient implements Closeable {
         return rawClient;
     }
 
+    public void waitForFullResponse() {
+        MuAssert.assertNotTimedOut("Raw client response waiter", responseCompleteLatch);
+    }
+
     private void start(URI uri) throws IOException {
         this.socket = new Socket(uri.getHost(), uri.getPort());
         this.request = new BufferedOutputStream(socket.getOutputStream(), 2048);
         this.response = socket.getInputStream();
-        isConnected.set(true);
 
         executorService.submit(() -> {
             byte[] buffer = new byte[8192];
             int read;
             try {
                 while ((read = response.read(buffer)) > -1) {
-//                    System.out.println("Got " + read + " bytes: " + new String(buffer, 0, read, UTF_8));
+//                    log.info("Got " + read + " bytes: " + new String(buffer, 0, read, UTF_8));
                     if (read > 0) {
                         baos.write(buffer, 0, read);
                     }
                 }
             } catch (IOException e) {
-//                System.out.println("Got exception " + e);
                 exception.set(e);
-                isConnected.set(false);
+            } finally {
+                try {
+                    response.close();
+                    responseCompleteLatch.countDown();
+                } catch (IOException ignored) {
+                }
             }
-
         });
     }
 
@@ -69,7 +78,7 @@ public class RawClient implements Closeable {
     }
 
     public boolean isConnected() {
-        return isConnected.get();
+        return !socket.isClosed();
     }
 
     public RawClient sendStartLine(String method, String target) throws IOException {
@@ -119,10 +128,9 @@ public class RawClient implements Closeable {
 
     @Override
     public void close() {
-        close(request);
         close(response);
+        close(request);
         close(socket);
-        isConnected.set(false);
     }
 
     private static void close(Closeable closeable) {

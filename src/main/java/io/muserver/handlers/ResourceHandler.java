@@ -101,7 +101,7 @@ public class ResourceHandler implements MuHandler {
             }
 
             String rh = request.headers().get("range");
-            long maxAmountToSend = Long.MAX_VALUE;
+            long maxAmountToSend = totalSize != null ? totalSize : Long.MAX_VALUE;
             if (rh != null && totalSize != null && response.status() != 304) {
                 try {
                     List<BytesRange> requestedRanges = BytesRange.parse(totalSize, rh);
@@ -150,7 +150,7 @@ public class ResourceHandler implements MuHandler {
             String extension = fileName.substring(ind + 1).toLowerCase();
             type = extensionToResourceType.getOrDefault(extension, ResourceType.DEFAULT);
         }
-        response.contentType(type.mimeType);
+        response.contentType(type.mimeType());
         Headers headers = response.headers();
         headers.set(HeaderNames.ACCEPT_RANGES, HeaderValues.BYTES);
         if (fileSize != null) {
@@ -159,7 +159,7 @@ public class ResourceHandler implements MuHandler {
         if (lastModified != null) {
             headers.set(HeaderNames.LAST_MODIFIED, Mutils.toHttpDate(lastModified));
         }
-        headers.add(type.headers);
+        headers.add(type.headers());
         if (this.resourceCustomizer != null) {
             this.resourceCustomizer.beforeHeadersSent(request, headers);
         }
@@ -284,7 +284,6 @@ public class ResourceHandler implements MuHandler {
         return new Builder().withResourceProviderFactory(ResourceProviderFactory.fileBased(path));
     }
 
-
     /**
      * Creates a handler that serves files from the classpath..
      *
@@ -318,4 +317,12 @@ public class ResourceHandler implements MuHandler {
         }
     }
 
+    @Override
+    public String toString() {
+        return "ResourceHandler{" +
+            "defaultFile='" + defaultFile + '\'' +
+            ", directoryListingEnabled=" + directoryListingEnabled +
+            ", resourceProviderFactory=" + resourceProviderFactory +
+            '}';
+    }
 }

@@ -8,6 +8,7 @@ import scaffolding.MuAssert;
 import scaffolding.RawClient;
 import scaffolding.ServerUtils;
 
+import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
@@ -23,43 +24,63 @@ import static scaffolding.ClientUtils.request;
 
 public class ParametersTest {
 
-	private MuServer server;
+    private MuServer server;
 
-	@Test public void queryStringsCanBeGot() throws MalformedURLException {
-		Object[] actual = new Object[4];
+    @Test
+    public void queryStringsCanBeGot() throws MalformedURLException {
+        Object[] actual = new Object[4];
         server = ServerUtils.httpsServerForTest().addHandler((request, response) -> {
-			actual[0] = request.query().get("value1");
-			actual[1] = request.query().get("value2");
-			actual[2] = request.query().get("unspecified");
-			actual[3] = request.uri().getPath();
-			return true;
-		}).start();
+            actual[0] = request.query().get("value1");
+            actual[1] = request.query().get("value2");
+            actual[2] = request.query().get("unspecified");
+            actual[3] = request.uri().getPath();
+            return true;
+        }).start();
 
         try (Response ignored = call(request().url(http("/something/here.html?value1=something&value1=somethingAgain&value2=something%20else+i+think")))) {
         }
         assertThat(actual[0], equalTo("something"));
-		assertThat(actual[1], equalTo("something else i think"));
-		assertThat(actual[2], is(nullValue()));
-		assertThat(actual[3], equalTo("/something/here.html"));
-	}
+        assertThat(actual[1], equalTo("something else i think"));
+        assertThat(actual[2], is(nullValue()));
+        assertThat(actual[3], equalTo("/something/here.html"));
+    }
 
-	@Test public void queryStringParametersCanAppearMultipleTimes() throws MalformedURLException {
-		Object[] actual = new Object[3];
+    @Test
+    public void queryStringParametersCanAppearMultipleTimes() throws MalformedURLException {
+        Object[] actual = new Object[3];
         server = ServerUtils.httpsServerForTest().addHandler((request, response) -> {
-			actual[0] = request.query().getAll("value1");
-			actual[1] = request.query().getAll("value2");
-			actual[2] = request.query().getAll("unspecified");
-			return true;
-		}).start();
+            actual[0] = request.query().getAll("value1");
+            actual[1] = request.query().getAll("value2");
+            actual[2] = request.query().getAll("unspecified");
+            return true;
+        }).start();
 
         try (Response ignored = call(request().url(http("/something/here.html?value1=something&value1=somethingAgain&value2=something%20else+i+think")))) {
         }
-		assertThat(actual[0], equalTo(asList("something", "somethingAgain")));
-		assertThat(actual[1], equalTo(asList("something else i think")));
-		assertThat(actual[2], equalTo(Collections.<String>emptyList()));
-	}
+        assertThat(actual[0], equalTo(asList("something", "somethingAgain")));
+        assertThat(actual[1], equalTo(asList("something else i think")));
+        assertThat(actual[2], equalTo(Collections.<String>emptyList()));
+    }
 
-    @Test public void formParametersCanBeGot() throws MalformedURLException {
+    @Test
+    public void emptyListParametersResultInEmptyList() throws IOException {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(Method.POST, "/", (request, response, pathParams) -> {
+                response.write("query: " + request.query().getAll("query").isEmpty() + " form: "
+                    + request.form().getAll("noForm").isEmpty() + " / " + request.form().getAll("forma").size());
+            })
+            .start();
+        try (Response resp = call(request(server.uri())
+        .post(new FormBody.Builder()
+            .add("forma", "")
+            .build())
+        )) {
+            assertThat(resp.body().string(), equalTo("query: true form: true / 1"));
+        }
+    }
+
+    @Test
+    public void formParametersCanBeGot() throws MalformedURLException {
 
         List<String> vals = new ArrayList<>();
         for (int i = 0; i < 2000; i++) {
@@ -89,7 +110,8 @@ public class ParametersTest {
         assertThat(actual, equalTo(vals));
     }
 
-    @Test public void formParametersWithMultipleValuesCanBeGot() throws MalformedURLException {
+    @Test
+    public void formParametersWithMultipleValuesCanBeGot() throws MalformedURLException {
         Object[] actual = new Object[3];
         server = ServerUtils.httpsServerForTest().addHandler((request, response) -> {
             actual[0] = request.form().getAll("value1");
@@ -112,7 +134,8 @@ public class ParametersTest {
         assertThat(actual[2], equalTo(Collections.<String>emptyList()));
     }
 
-    @Test public void exceptionsThrownWhenTryingToReadBodyAfterReadingFormData() {
+    @Test
+    public void exceptionsThrownWhenTryingToReadBodyAfterReadingFormData() {
         Throwable[] actual = new Throwable[1];
         server = ServerUtils.httpsServerForTest().addHandler((request, response) -> {
             request.form().get("blah");
@@ -197,9 +220,10 @@ public class ParametersTest {
         assertThat(r, containsString("|rawQS=a%20space=a%20value&a+space=a+value2&a%2Bplus=a%2Bplus|"));
     }
 
-	@After public void stopIt() {
+    @After
+    public void stopIt() {
         MuAssert.stopAndCheck(server);
-	}
+    }
 
     URL http(String str) throws MalformedURLException {
         return server.uri().resolve(str).toURL();

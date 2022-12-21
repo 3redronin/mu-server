@@ -1,13 +1,18 @@
 package io.muserver.rest;
 
+import io.muserver.HeaderNames;
 import io.muserver.Method;
+import io.muserver.MuRequest;
 
 import javax.ws.rs.NotAcceptableException;
 import javax.ws.rs.NotAllowedException;
 import javax.ws.rs.NotSupportedException;
+import javax.ws.rs.ServerErrorException;
 import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.PathSegment;
 import java.net.URI;
 import java.util.*;
+import java.util.function.Function;
 
 import static java.util.Collections.singletonList;
 import static java.util.stream.Collectors.toList;
@@ -16,10 +21,6 @@ import static java.util.stream.Collectors.toSet;
 /**
  * <p>
  * An implementation of section 3.7.2 of the JAX-RS 2.0 spec.
- * </p>
- * <p>
- * Note that some of part 2 of this section, i.e. "Obtain the object that will handle the request and a set of candidate methods"
- * is skipped due to the fact that sub-resource locators are not supported in this implementation.
  * </p>
  */
 class RequestMatcher {
@@ -37,15 +38,18 @@ class RequestMatcher {
         this.roots = roots;
     }
 
-    MatchedMethod findResourceMethod(Method httpMethod, String path, List<MediaType> acceptHeaders, String requestBodyContentType) throws NotAllowedException, NotAcceptableException, NotSupportedException, NotMatchedException {
-        Set<MatchedMethod> candidateMethods = getMatchedMethodsForPath(path);
+    MatchedMethod findResourceMethod(JaxRSRequest requestContext, Method httpMethod, List<MediaType> acceptHeaders, Function<MatchedMethod, ResourceClass> subResourceLocator) throws NotAllowedException, NotAcceptableException, NotSupportedException, NotMatchedException {
+        String path = requestContext.relativePath();
+        Set<MatchedMethod> candidateMethods = getMatchedMethodsForPath(path, subResourceLocator);
+        MuRequest req = requestContext.muRequest;
+        String requestBodyContentType = req.headers().get(HeaderNames.CONTENT_TYPE);
         return stepThreeIdentifyTheMethodThatWillHandleTheRequest(httpMethod, candidateMethods, requestBodyContentType, acceptHeaders);
     }
 
-    Set<MatchedMethod> getMatchedMethodsForPath(String path) throws NotMatchedException {
+    Set<MatchedMethod> getMatchedMethodsForPath(String path, Function<MatchedMethod, ResourceClass> subResourceLocator) throws NotMatchedException {
         StepOneOutput stepOneOutput = stepOneIdentifyASetOfCandidateRootResourceClassesMatchingTheRequest(path);
         URI methodURI = stepOneOutput.unmatchedGroup == null ? null : URI.create(UriPattern.trimSlashes(stepOneOutput.unmatchedGroup));
-        return stepTwoObtainASetOfCandidateResourceMethodsForTheRequest(methodURI, stepOneOutput.candidates);
+        return stepTwoObtainASetOfCandidateResourceMethodsForTheRequest(methodURI, stepOneOutput.candidates, subResourceLocator);
     }
 
     StepOneOutput stepOneIdentifyASetOfCandidateRootResourceClassesMatchingTheRequest(String uri) throws NotMatchedException {
@@ -88,39 +92,39 @@ class RequestMatcher {
         return new StepOneOutput(u, c0);
     }
 
-    private Set<MatchedMethod> stepTwoObtainASetOfCandidateResourceMethodsForTheRequest(URI relativeUri, List<MatchedClass> candidateClasses) throws NotMatchedException {
+    private Set<MatchedMethod> stepTwoObtainASetOfCandidateResourceMethodsForTheRequest(URI relativeUri, List<MatchedClass> candidateClasses, Function<MatchedMethod, ResourceClass> subResourceLocator) throws NotMatchedException {
         if (relativeUri == null) {
             // handle section 3.7.2 - 2(a)
-            Set<MatchedMethod> candidates = new HashSet<>();
-            for (MatchedClass mc : candidateClasses) {
-                for (ResourceMethod resourceMethod : mc.resourceClass.resourceMethods) {
-                    if (!resourceMethod.isSubResource() && !resourceMethod.isSubResourceLocator()) {
-                        MatchedMethod matchedMethod = new MatchedMethod(mc, resourceMethod, true, mc.pathMatch.params(), mc.pathMatch);
-                        candidates.add(matchedMethod);
-                    }
-                }
-            }
+            Set<MatchedMethod> candidates = getNonLocatorMethods(candidateClasses, false);
             if (!candidates.isEmpty()) {
                 return candidates;
             }
         }
 
+        // 2(b)  SetE={}
         List<MatchedMethod> candidates = new ArrayList<>();
         for (MatchedClass candidateClass : candidateClasses) {
             for (ResourceMethod resourceMethod : candidateClass.resourceClass.resourceMethods) {
                 if (resourceMethod.isSubResource() || resourceMethod.isSubResourceLocator()) {
                     if (relativeUri != null) {
                         PathMatch matcher = resourceMethod.pathPattern.matcher(relativeUri);
-                        if (matcher.prefixMatches()) {
-                            Map<String, String> combinedParams = new HashMap<>(candidateClass.pathMatch.params());
-                            combinedParams.putAll(matcher.params());
-                            candidates.add(new MatchedMethod(candidateClass, resourceMethod, true, combinedParams, matcher));
+                        // 2(c) add and 2(d) filter out
+                        if (matcher.fullyMatches() || (resourceMethod.isSubResourceLocator() && matcher.prefixMatches())) {
+                            Map<String, PathSegment> combinedParams = new HashMap<>(candidateClass.pathMatch.segments());
+                            combinedParams.putAll(matcher.segments());
+                            candidates.add(new MatchedMethod(candidateClass, resourceMethod, combinedParams, matcher));
                         }
                     }
                 }
             }
         }
 
+        // 2(e): If E is empty, then no matching resource can be found
+        if (candidates.isEmpty()) {
+            throw new NotMatchedException();
+        }
+
+        // 2(f): sort them
         candidates.sort((o1, o2) -> {
             ResourceMethod rm1 = o1.resourceMethod;
             ResourceMethod rm2 = o2.resourceMethod;
@@ -142,16 +146,52 @@ class RequestMatcher {
             return c;
         });
 
-        if (candidates.isEmpty()) {
-            throw new NotMatchedException();
-        }
-
+        // 2(g) Set Rmatch to be the first member of E
         UriPattern matcher = candidates.get(0).resourceMethod.pathPattern;
-        Set<MatchedMethod> m = candidates.stream().filter(rm -> rm.resourceMethod.pathPattern.equals(matcher)).collect(toSet());
+
+        // 2(h) M = { subresource methods of all classes in C′ where R(T_method) = R_match (excluding sub-resource locators) }
+        Set<MatchedMethod> m = candidates.stream()
+            .filter(rm -> !rm.resourceMethod.isSubResourceLocator() && rm.resourceMethod.pathPattern.equals(matcher))
+            .collect(toSet());
         if (!m.isEmpty()) {
             return m;
         }
-        throw new NotMatchedException();
+
+        // 2(i) Let L be a sub-resource locator such that Rmatch = R(TL)
+        Set<MatchedMethod> l = candidates.stream()
+            .filter(rm -> rm.resourceMethod.isSubResourceLocator() && rm.resourceMethod.pathPattern.equals(matcher))
+            .collect(toSet());
+        if (l.isEmpty()) {
+            throw new NotMatchedException();
+        }
+        if (l.size() == 1) {
+            MatchedMethod mm = l.stream().findFirst().get();
+
+            MatchedClass mc = new MatchedClass(subResourceLocator.apply(mm), mm.pathMatch);
+
+            String remainingUrl = mm.pathMatch.lastGroup();
+            //Set U to be the value of the final capturing group of R(TL) when matched against U, and set C0 to be the
+            //singleton set containing only the class that defines L.
+            return stepTwoObtainASetOfCandidateResourceMethodsForTheRequest(
+                remainingUrl == null ? null : URI.create(remainingUrl), Collections.singletonList(mc), subResourceLocator
+            );
+        }
+
+        // Implementations SHOULD report an error if there is more than one sub-resource locator that satisfies this condition
+        throw new ServerErrorException("Multiple resource locators matched", 500);
+    }
+
+    private static Set<MatchedMethod> getNonLocatorMethods(List<MatchedClass> candidateClasses, boolean isSubResource) {
+        Set<MatchedMethod> candidates = new HashSet<>();
+        for (MatchedClass mc : candidateClasses) {
+            for (ResourceMethod resourceMethod : mc.resourceClass.resourceMethods) {
+                if (resourceMethod.isSubResource() == isSubResource && !resourceMethod.isSubResourceLocator()) {
+                    MatchedMethod matchedMethod = new MatchedMethod(mc, resourceMethod, mc.pathMatch.segments(), mc.pathMatch);
+                    candidates.add(matchedMethod);
+                }
+            }
+        }
+        return candidates;
     }
 
     static class MatchedClass {
@@ -167,14 +207,12 @@ class RequestMatcher {
     static class MatchedMethod {
         final MatchedClass matchedClass;
         final ResourceMethod resourceMethod;
-        final boolean isMatch;
-        final Map<String, String> pathParams;
+        final Map<String, PathSegment> pathParams;
         final PathMatch pathMatch;
 
-        MatchedMethod(MatchedClass matchedClass, ResourceMethod resourceMethod, boolean isMatch, Map<String,String> pathParams, PathMatch pathMatch) {
+        MatchedMethod(MatchedClass matchedClass, ResourceMethod resourceMethod, Map<String, PathSegment> pathParams, PathMatch pathMatch) {
             this.matchedClass = matchedClass;
             this.resourceMethod = resourceMethod;
-            this.isMatch = isMatch;
             this.pathParams = pathParams;
             this.pathMatch = pathMatch;
         }
@@ -183,9 +221,13 @@ class RequestMatcher {
         public String toString() {
             return "MatchedMethod{" +
                 "resourceMethod=" + resourceMethod +
-                ", isMatch=" + isMatch +
                 ", pathParams=" + pathParams +
                 '}';
+        }
+
+        public String getPathParam(String key) {
+            PathSegment segment = pathParams.get(key);
+            return segment == null ? null : segment.getPath();
         }
     }
 
@@ -220,21 +262,17 @@ class RequestMatcher {
 
         List<MediaType> requestBodyTypeAsList = Collections.singletonList(requestBodyMediaType);
         return result.stream()
-            .max((o1, o2) -> {
-                int compare = bestMediaType(requestBodyTypeAsList, o1.resourceMethod.effectiveConsumes).compareTo(bestMediaType(requestBodyTypeAsList, o2.resourceMethod.effectiveConsumes));
-                if (compare != 0) {
-                    return compare;
-                }
-                return bestMediaType(clientAccepts, o1.resourceMethod.effectiveProduces).compareTo(bestMediaType(clientAccepts, o2.resourceMethod.effectiveProduces));
-            }).get();
+            .max(Comparator.comparing((MatchedMethod o) -> bestMediaType(requestBodyTypeAsList, o.resourceMethod.effectiveConsumes))
+                .thenComparing(o -> bestMediaType(clientAccepts, o.resourceMethod.effectiveProduces))).get();
 
     }
 
 
     private static CombinedMediaType bestMediaType(List<MediaType> requestedTypes, List<MediaType> serverProvided) {
         return serverProvided.stream()
-            .map(serverType -> requestedTypes.stream().map(clientType -> CombinedMediaType.s(clientType, serverType)).max(Comparator.reverseOrder()).get())
-            .max(Comparator.reverseOrder()).get();
+            .map(serverType -> requestedTypes.stream().map(clientType -> CombinedMediaType.s(clientType, serverType))
+                .min(Comparator.naturalOrder()).get())
+            .min(Comparator.naturalOrder()).get();
     }
 
     static class StepOneOutput {

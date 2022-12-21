@@ -1,6 +1,7 @@
 package io.muserver;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -104,18 +105,16 @@ public interface SsePublisher {
     static SsePublisher start(MuRequest request, MuResponse response) {
         response.contentType(ContentTypes.TEXT_EVENT_STREAM);
         response.headers().set(HeaderNames.CACHE_CONTROL, "no-cache, no-transform");
-        return new SsePublisherImpl(request.handleAsync(), response);
+        return new SsePublisherImpl(request.handleAsync());
     }
 }
 
 class SsePublisherImpl implements SsePublisher {
 
     private final AsyncHandle asyncHandle;
-    private final MuResponse response;
 
-    SsePublisherImpl(AsyncHandle asyncHandle, MuResponse response) {
+    SsePublisherImpl(AsyncHandle asyncHandle) {
         this.asyncHandle = asyncHandle;
-        this.response = response;
     }
 
     @Override
@@ -150,13 +149,11 @@ class SsePublisherImpl implements SsePublisher {
 
     private void sendChunk(String text) throws IOException {
         try {
-            response.sendChunk(text);
+            ByteBuffer buf = Mutils.toByteBuffer(text);
+            asyncHandle.write(buf).get();
         } catch (Throwable e) {
             close();
-            if (e instanceof IllegalStateException) {
-                throw new IOException(e);
-            }
-            throw e;
+            throw new IOException("Error while publishing SSE message", e);
         }
     }
 

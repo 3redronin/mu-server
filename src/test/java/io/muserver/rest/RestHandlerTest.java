@@ -7,9 +7,14 @@ import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 
 import javax.ws.rs.GET;
+import javax.ws.rs.HttpMethod;
 import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
 import java.io.IOException;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.nullValue;
@@ -58,6 +63,14 @@ public class RestHandlerTest {
         }
     }
 
+    @Test
+    public void canDefineOwnMethodTypes() throws IOException {
+        try (okhttp3.Response resp = call(request(server.uri().resolve("/api/fruit%20bits/custom-get")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), is("got"));
+        }
+    }
+
     @Test(expected = IllegalArgumentException.class)
     public void throwsIfObjectDoesNotHavePathAnnotation() {
         RestHandlerBuilder.restHandler(new Object()).build();
@@ -93,6 +106,12 @@ public class RestHandlerTest {
             return null;
         }
 
+        @CustomGET
+        @Path("custom-get")
+        public String hi() {
+            return "got";
+        }
+
     }
 
     @After
@@ -100,5 +119,10 @@ public class RestHandlerTest {
         MuAssert.stopAndCheck(server);
     }
 
+    @Target({ElementType.METHOD})
+    @Retention(RetentionPolicy.RUNTIME)
+    @HttpMethod(HttpMethod.GET)
+    @interface CustomGET {
+    }
 
 }

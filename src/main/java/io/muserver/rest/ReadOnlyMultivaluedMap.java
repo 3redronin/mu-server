@@ -8,6 +8,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * A read only version of the multi-valued map
+ * @param <K> The key type
+ * @param <V> The value type
+ */
 class ReadOnlyMultivaluedMap<K, V> implements MultivaluedMap<K, V>, Serializable {
     private static final MultivaluedMap EMPTY = readOnly(new MultivaluedHashMap<>());
     private final MultivaluedMap<K, V> actual;

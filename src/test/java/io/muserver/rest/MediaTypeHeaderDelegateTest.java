@@ -57,23 +57,23 @@ public class MediaTypeHeaderDelegateTest {
 
     @Test
     public void ifClientAcceptsWildcardThenAnythingGoes() {
-        MatcherAssert.assertThat(MediaTypeHeaderDelegate.atLeastOneCompatible(types("image/jpeg"), types("*/*")), is(true));
-        MatcherAssert.assertThat(MediaTypeHeaderDelegate.atLeastOneCompatible(types("image/*", "text/plain"), types("*/*")), is(true));
+        MatcherAssert.assertThat(MediaTypeHeaderDelegate.atLeastOneCompatible(types("image/jpeg"), types("*/*"), null), is(true));
+        MatcherAssert.assertThat(MediaTypeHeaderDelegate.atLeastOneCompatible(types("image/*", "text/plain"), types("*/*"), null), is(true));
     }
 
     @Test
     public void ifClientAcceptsSubTypeWildcardsThenThoseCanBeServiced() {
-        MatcherAssert.assertThat(MediaTypeHeaderDelegate.atLeastOneCompatible(types("image/jpeg"), types("image/*")), is(true));
-        MatcherAssert.assertThat(MediaTypeHeaderDelegate.atLeastOneCompatible(types("image/*", "text/plain"), types("image/*")), is(true));
-        MatcherAssert.assertThat(MediaTypeHeaderDelegate.atLeastOneCompatible(types("text/*"), types("image/*")), is(false));
+        MatcherAssert.assertThat(MediaTypeHeaderDelegate.atLeastOneCompatible(types("image/jpeg"), types("image/*"), null), is(true));
+        MatcherAssert.assertThat(MediaTypeHeaderDelegate.atLeastOneCompatible(types("image/*", "text/plain"), types("image/*"), null), is(true));
+        MatcherAssert.assertThat(MediaTypeHeaderDelegate.atLeastOneCompatible(types("text/*"), types("image/*"), null), is(false));
     }
 
     @Test
     public void wildcardsCannotProvideForSpecificTypes() {
-        MatcherAssert.assertThat(MediaTypeHeaderDelegate.atLeastOneCompatible(types("*/*"), types("image/svg+xml", "image/jpeg")), is(true));
-        MatcherAssert.assertThat(MediaTypeHeaderDelegate.atLeastOneCompatible(types("image/*"), types("image/svg+xml", "image/jpeg")), is(true));
-        MatcherAssert.assertThat(MediaTypeHeaderDelegate.atLeastOneCompatible(types("image/*"), types("*/*")), is(true));
-        MatcherAssert.assertThat(MediaTypeHeaderDelegate.atLeastOneCompatible(types("image/*"), types("text/*")), is(false));
+        MatcherAssert.assertThat(MediaTypeHeaderDelegate.atLeastOneCompatible(types("*/*"), types("image/svg+xml", "image/jpeg"), null), is(true));
+        MatcherAssert.assertThat(MediaTypeHeaderDelegate.atLeastOneCompatible(types("image/*"), types("image/svg+xml", "image/jpeg"), null), is(true));
+        MatcherAssert.assertThat(MediaTypeHeaderDelegate.atLeastOneCompatible(types("image/*"), types("*/*"), null), is(true));
+        MatcherAssert.assertThat(MediaTypeHeaderDelegate.atLeastOneCompatible(types("image/*"), types("text/*"), null), is(false));
     }
 
 

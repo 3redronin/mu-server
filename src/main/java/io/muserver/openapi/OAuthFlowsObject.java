@@ -10,9 +10,25 @@ import static io.muserver.openapi.Jsonizer.append;
  */
 public class OAuthFlowsObject implements JsonWriter {
 
+    /**
+     * @deprecated use {@link #implicit()} instead
+     */
+    @Deprecated
     public final OAuthFlowObject implicit;
+    /**
+      @deprecated use {@link #password()} instead
+     */
+    @Deprecated
     public final OAuthFlowObject password;
+    /**
+      @deprecated use {@link #clientCredentials()} instead
+     */
+    @Deprecated
     public final OAuthFlowObject clientCredentials;
+    /**
+      @deprecated use {@link #authorizationCode()} instead
+     */
+    @Deprecated
     public final OAuthFlowObject authorizationCode;
 
     OAuthFlowsObject(OAuthFlowObject implicit, OAuthFlowObject password, OAuthFlowObject clientCredentials, OAuthFlowObject authorizationCode) {
@@ -32,5 +48,33 @@ public class OAuthFlowsObject implements JsonWriter {
         isFirst = append(writer, "authorizationCode", authorizationCode, isFirst);
         writer.write('}');
 
+    }
+
+    /**
+     * @return the value described by {@link OAuthFlowsObjectBuilder#withImplicit}
+     */
+    public OAuthFlowObject implicit() {
+        return implicit;
+    }
+
+    /**
+      @return the value described by {@link OAuthFlowsObjectBuilder#withPassword}
+     */
+    public OAuthFlowObject password() {
+        return password;
+    }
+
+    /**
+      @return the value described by {@link OAuthFlowsObjectBuilder#withClientCredentials}
+     */
+    public OAuthFlowObject clientCredentials() {
+        return clientCredentials;
+    }
+
+    /**
+      @return the value described by {@link OAuthFlowsObjectBuilder#withAuthorizationCode}
+     */
+    public OAuthFlowObject authorizationCode() {
+        return authorizationCode;
     }
 }

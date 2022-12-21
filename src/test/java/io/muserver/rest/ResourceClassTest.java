@@ -8,15 +8,18 @@ import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
 
 import static java.net.URI.create;
+import static java.util.Collections.emptyList;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasSize;
 
 public class ResourceClassTest {
 
+    private final SchemaObjectCustomizer customizer = new CompositeSchemaObjectCustomizer(emptyList());
+
     @Test
     public void canCreate() {
-        ResourceClass rc = ResourceClass.fromObject(new Fruit(), ResourceMethodParamTest.BUILT_IN_PARAM_PROVIDERS);
+        ResourceClass rc = ResourceClass.fromObject(new Fruit(), ResourceMethodParamTest.BUILT_IN_PARAM_PROVIDERS, customizer);
         assertThat(rc.matches(create("api/fruit")), equalTo(false));
         assertThat(rc.matches(create("api/fruits")), equalTo(true));
         assertThat(rc.matches(create("api/fruits?yeah=yeah")), equalTo(true));
@@ -25,7 +28,7 @@ public class ResourceClassTest {
 
     @Test
     public void pathParamsCanBeInheritedIfThereAreNoJaxAnnotations() {
-        ResourceClass rc = ResourceClass.fromObject(new ConcreteWidget(), ResourceMethodParamTest.BUILT_IN_PARAM_PROVIDERS);
+        ResourceClass rc = ResourceClass.fromObject(new ConcreteWidget(), ResourceMethodParamTest.BUILT_IN_PARAM_PROVIDERS, customizer);
         assertThat(rc.matches(create("api/widgets")), equalTo(true));
     }
 
@@ -42,7 +45,7 @@ public class ResourceClassTest {
             public String more() { return ""; }
         }
 
-        ResourceClass resourceClass = ResourceClass.fromObject(new Optionsy(), ResourceMethodParamTest.BUILT_IN_PARAM_PROVIDERS);
+        ResourceClass resourceClass = ResourceClass.fromObject(new Optionsy(), ResourceMethodParamTest.BUILT_IN_PARAM_PROVIDERS, customizer);
         assertThat(resourceClass.resourceMethods, hasSize(3));
         assertThat(resourceClass.nonSubResourceMethods(), hasSize(2));
         assertThat(resourceClass.subResourceMethods(), hasSize(1));

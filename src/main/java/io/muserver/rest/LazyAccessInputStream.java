@@ -51,7 +51,9 @@ class LazyAccessInputStream extends InputStream {
 
     @Override
     public void close() throws IOException {
-        in().close();
+        if (inputStream != null) {
+            inputStream.close();
+        }
     }
 
     @Override

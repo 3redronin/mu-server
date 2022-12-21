@@ -1,18 +1,19 @@
 package io.muserver.rest;
 
+import io.muserver.Cookie;
 import io.muserver.Mutils;
 import io.muserver.UploadedFile;
 
-import javax.ws.rs.InternalServerErrorException;
+import javax.ws.rs.core.PathSegment;
 import javax.ws.rs.ext.ParamConverter;
 import javax.ws.rs.ext.ParamConverterProvider;
 import java.lang.annotation.Annotation;
-import java.lang.reflect.*;
-import java.time.Instant;
-import java.time.format.DateTimeParseException;
-import java.util.*;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.lang.reflect.Type;
+import java.util.List;
 import java.util.function.Function;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -54,7 +55,6 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
     @Override
     public <T> ParamConverter getConverter(Class<T> rawType, Type genericType, Annotation[] annotations) {
 
-
         if (String.class.isAssignableFrom(rawType)) {
             return stringParamConverter;
         }
@@ -71,12 +71,14 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
         if (UploadedFile.class.isAssignableFrom(rawType)) {
             return new UploadedFileConverter();
         }
+        if (PathSegment.class.isAssignableFrom(rawType)) {
+            return new PathSegmentConverter();
+        }
+        if (Cookie.class.isAssignableFrom(rawType)) {
+            return new DummyCookieConverter();
+        }
         if (rawType.isEnum()) {
             return new EnumConverter(rawType);
-        }
-
-        if (rawType.equals(Instant.class)) {
-            return new InstantConverter();
         }
 
         ConstructorConverter<T> cc = ConstructorConverter.tryToCreate(rawType);
@@ -84,24 +86,8 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
             return cc;
         }
         StaticMethodConverter<T> smc = StaticMethodConverter.tryToCreate(rawType);
-        if (smc != null) {
-            return smc;
-        }
-
-        if (Collection.class.isAssignableFrom(rawType) && genericType instanceof ParameterizedType) {
-            Type type = ((ParameterizedType) genericType).getActualTypeArguments()[0];
-            if (type instanceof Class) {
-                Class genericClass = (Class) type;
-                ParamConverter genericTypeConverter = getConverter(genericClass, type, annotations);
-                if (genericTypeConverter != null) {
-                    CollectionConverter collectionConverter = CollectionConverter.create(rawType, genericClass, genericTypeConverter);
-                    if (collectionConverter != null) {
-                        return collectionConverter;
-                    }
-                }
-            }
-        }
-        return null;
+        // may be null
+        return smc;
     }
 
     private static class UploadedFileConverter implements ParamConverter<UploadedFile> {
@@ -115,44 +101,30 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
         }
     }
 
-    private static class CollectionConverter implements ParamConverter {
-        private final ParamConverter genericTypeConverter;
-        private final Supplier collectionSupplier;
-        private CollectionConverter(ParamConverter genericTypeConverter, Supplier collectionSupplier) {
-            this.genericTypeConverter = genericTypeConverter;
-            this.collectionSupplier = collectionSupplier;
+    // Not actually used because it is handled specially in ResourceMethodParam but needs to exist during parameter setup
+    private static class DummyCookieConverter implements ParamConverter<Cookie> {
+        @Override
+        public Cookie fromString(String value) {
+            return null;
         }
-        public Object fromString(String value) {
-            Collection values = (Collection)collectionSupplier.get();
-            if (!Mutils.nullOrEmpty(value)) {
-                String[] parts = value.split("\\s*,\\s*");
-                Stream.of(parts).map(v -> genericTypeConverter.fromString(v))
-                    .forEach(values::add);
-            }
-            return values;
+        @Override
+        public String toString(Cookie value) {
+            return value.toString();
         }
-        public String toString(Object value) {
-            Collection<?> collection = (Collection) value;
-            return collection.stream().map(genericTypeConverter::toString).collect(Collectors.joining(""));
+    }
+
+    private static class PathSegmentConverter implements ParamConverter<PathSegment> {
+        @Override
+        public PathSegment fromString(String value) {
+            if (value == null) throw new IllegalArgumentException("value cannot be null");
+            MuPathSegment seg = MuUriInfo.pathStringToSegments(value, true).findFirst().orElse(null);
+            if (seg == null) throw new IllegalArgumentException("Could not parse a path segment");
+            return seg;
         }
-        public static CollectionConverter create(Class collectionType, Class genericClass, ParamConverter genericTypeConverter) {
-            Supplier supplier;
-            if (SortedSet.class.equals(collectionType)) {
-                if (!Comparable.class.isAssignableFrom(genericClass)) {
-                    throw new InternalServerErrorException("The class " + genericClass + " does not implement Comparable so cannot be used in a SortedSet");
-                }
-                supplier = TreeSet::new;
-            } else if (Set.class.equals(collectionType)) {
-                supplier = HashSet::new;
-            } else if (List.class.equals(collectionType)) {
-                supplier = ArrayList::new;
-            } else {
-                return null;
-            }
-            return new CollectionConverter(genericTypeConverter, supplier);
-        }
-        public String toString() {
-            return "CollectionConverter<" + genericTypeConverter + '>';
+        @Override
+        public String toString(PathSegment value) {
+            if (value == null) throw new IllegalArgumentException("value cannot be null");
+            return value.toString();
         }
     }
 
@@ -271,14 +243,17 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
             return String.valueOf(value);
         }
         public String toString() {
-            return "StaticMethodConverter{" + staticMethod + '}';
+            return staticMethod.toString();
         }
 
         static <T> StaticMethodConverter<T> tryToCreate(Class clazz) {
             Method[] declaredMethods = clazz.getDeclaredMethods();
-            Method staticMethod = getPublicStaticMethodNamed(clazz, declaredMethods, "valueOf");
+            Method staticMethod = getSingleParamPublicStaticMethodNamed(clazz, declaredMethods, "valueOf");
             if (staticMethod == null) {
-                staticMethod = getPublicStaticMethodNamed(clazz, declaredMethods, "fromString");
+                staticMethod = getSingleParamPublicStaticMethodNamed(clazz, declaredMethods, "fromString");
+            }
+            if (staticMethod == null) {
+                staticMethod = getSingleParamPublicStaticMethodNamed(clazz, declaredMethods, "parse");
             }
             if (staticMethod == null) {
                 return null;
@@ -287,12 +262,12 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
             return new StaticMethodConverter<>(staticMethod);
         }
 
-        private static Method getPublicStaticMethodNamed(Class clazz, Method[] declaredMethods, String name) {
+        private static Method getSingleParamPublicStaticMethodNamed(Class clazz, Method[] declaredMethods, String name) {
             Method staticMethod = null;
             for (Method method : declaredMethods) {
                 int modifiers = method.getModifiers();
                 if (Modifier.isStatic(modifiers) && Modifier.isPublic(modifiers) && method.getReturnType().equals(clazz)) {
-                    if (method.getName().equals(name)) {
+                    if (method.getName().equals(name) && method.getParameterCount() == 1 && CharSequence.class.isAssignableFrom(method.getParameterTypes()[0])) {
                         staticMethod = method;
                         break;
                     }
@@ -302,24 +277,4 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
         }
     }
 
-    private static class InstantConverter implements ParamConverter<Instant> {
-        @Override
-        public Instant fromString(String value) {
-            try {
-                return Mutils.nullOrEmpty(value) ? null : Instant.parse(value);
-            } catch (DateTimeParseException e) {
-                throw new IllegalArgumentException("The value was not a valid Instant", e);
-            }
-        }
-
-        @Override
-        public String toString(Instant value) {
-            return value == null ? null : value.toString();
-        }
-
-        @Override
-        public String toString() {
-            return "Instant converter, expecting ISO format dates such as '2020-03-06T04:43:00.691Z'";
-        }
-    }
 }

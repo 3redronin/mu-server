@@ -7,14 +7,16 @@ import okhttp3.MediaType;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import okio.BufferedSink;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
-import scaffolding.ServerUtils;
 
 import javax.ws.rs.*;
 import javax.ws.rs.container.*;
 import javax.ws.rs.core.Context;
+import javax.ws.rs.core.MultivaluedMap;
 import javax.ws.rs.core.NewCookie;
+import javax.ws.rs.core.UriBuilder;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -22,19 +24,25 @@ import java.io.InputStream;
 import java.lang.annotation.Annotation;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 import static io.muserver.ContextHandlerBuilder.context;
+import static io.muserver.rest.MuRuntimeDelegate.MU_REQUEST_PROPERTY;
+import static io.muserver.rest.MuRuntimeDelegate.RESOURCE_INFO_PROPERTY;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static java.util.Arrays.asList;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
+import static scaffolding.ServerUtils.httpsServerForTest;
 
 public class FilterTest {
 
+    private MuServer server;
     private final List<String> received = new ArrayList<>();
 
     @Path("something")
@@ -73,7 +81,7 @@ public class FilterTest {
     @Test
     public void requestUrisAndMethodsCanBeChangedSoThatThingsCanMatch() throws IOException {
         LoggingFilter loggingFilter = new LoggingFilter();
-        MuServer server = ServerUtils.httpsServerForTest()
+        server = httpsServerForTest()
             .addHandler(
                 restHandler(new TheWay())
                     .addRequestFilter(loggingFilter)
@@ -81,7 +89,7 @@ public class FilterTest {
                     .addRequestFilter(new MethodChangingFilter())
             ).start();
 
-        try (Response resp = call(request().url(server.uri().resolve("/blah").toString()))) {
+        try (Response resp = call(request(server.uri().resolve("/blah")))) {
             assertThat(resp.body().string(), is("Hello"));
         }
         assertThat(received, contains(
@@ -108,7 +116,7 @@ public class FilterTest {
         }
 
         AtomicReference<Throwable> error = new AtomicReference<>();
-        MuServer server = ServerUtils.httpsServerForTest()
+        server = httpsServerForTest()
             .addHandler((request, response) -> {
                 request.attribute("murequest", request);
                 request.attribute("hello", "world");
@@ -125,7 +133,7 @@ public class FilterTest {
                             } catch (UnsupportedOperationException e) {
                                 // expected
                             }
-                            assertThat(requestContext.getPropertyNames(), containsInAnyOrder("murequest", "hello", "hello2"));
+                            assertThat(requestContext.getPropertyNames(), containsInAnyOrder("murequest", "hello", "hello2", MU_REQUEST_PROPERTY, RESOURCE_INFO_PROPERTY));
                             requestContext.removeProperty("hello");
                             requestContext.setProperty("hello2", null);
                             requestContext.setProperty("hello3", "temp");
@@ -134,9 +142,10 @@ public class FilterTest {
                             error.set(e);
                         }
                     })
-                .addResource(new Blah())
+                    .addResource(new Blah())
             ).start();
 
+        assertThat(error.get(), is(nullValue()));
         try (Response resp = call(request(server.uri().resolve("/blah")))) {
             assertThat(resp.body().string(), is("MUR: GET null null hello3 CRC: GET null null hello3"));
         }
@@ -146,7 +155,7 @@ public class FilterTest {
     @Test
     public void itWorksWithContextsToo() throws IOException {
         LoggingFilter loggingFilter = new LoggingFilter();
-        MuServer server = ServerUtils.httpsServerForTest()
+        server = httpsServerForTest()
             .addHandler(context("in a context")
                 .addHandler(
                     restHandler(new TheWay())
@@ -188,7 +197,7 @@ public class FilterTest {
             }
         }
 
-        MuServer server = ServerUtils.httpsServerForTest()
+        server = httpsServerForTest()
             .addHandler(
                 restHandler(new Something())
                     .addRequestFilter(new RequestInputChanger())
@@ -226,7 +235,7 @@ public class FilterTest {
                 requestContext.abortWith(javax.ws.rs.core.Response.status(409).entity("Blocked!").build());
             }
         }
-        MuServer server = ServerUtils.httpsServerForTest()
+        server = httpsServerForTest()
             .addHandler(
                 restHandler(new TheWay())
                     .addRequestFilter(new MethodChangingFilter())
@@ -234,6 +243,7 @@ public class FilterTest {
         try (Response resp = call(request().url(server.uri().resolve("/something").toString()))) {
             assertThat(resp.code(), is(409));
             assertThat(resp.body().string(), is("Blocked!"));
+            assertThat(resp.header("content-type"), is("text/plain;charset=utf-8"));
         }
     }
 
@@ -254,7 +264,7 @@ public class FilterTest {
                 throw new BadRequestException("Bad!!!");
             }
         }
-        MuServer server = ServerUtils.httpsServerForTest()
+        server = httpsServerForTest()
             .addHandler(
                 restHandler(new TheWay())
                     .addRequestFilter(new MethodChangingFilter())
@@ -262,6 +272,35 @@ public class FilterTest {
         try (Response resp = call(request().url(server.uri().resolve("/something").toString()))) {
             assertThat(resp.code(), is(400));
             assertThat(resp.body().string(), is("<h1>400 Bad Request</h1><p>Bad!!!</p>"));
+        }
+    }
+
+    @Test
+    public void exceptionMappersDoNotCatchAFiltersAbortWithResponse() throws IOException {
+        @Path("something")
+        class TheWay {
+            @GET
+            public String itMoves() {
+                return "Not called";
+            }
+        }
+        class AbortFilter implements ContainerRequestFilter {
+            @Override
+            public void filter(ContainerRequestContext requestContext) throws IOException {
+                requestContext.abortWith(javax.ws.rs.core.Response.status(401).entity("No auth!!").build());
+            }
+        }
+        server = httpsServerForTest()
+            .addHandler(
+                restHandler(new TheWay())
+                    .addRequestFilter(new AbortFilter())
+                    .addExceptionMapper(Exception.class, exception -> javax.ws.rs.core.Response.serverError().entity("Server error").build())
+            )
+            .start();
+        try (Response resp = call(request().url(server.uri().resolve("/something").toString()))) {
+            assertThat(resp.body().string(), is("No auth!!"));
+            assertThat(resp.code(), is(401));
+            assertThat(resp.header("content-type"), is("text/plain;charset=utf-8"));
         }
     }
 
@@ -282,7 +321,7 @@ public class FilterTest {
         }
 
 
-        MuServer server = ServerUtils.httpsServerForTest()
+        server = httpsServerForTest()
             .addHandler(
                 restHandler(new TheWay())
                     .addResponseFilter(new ContainerResponseFilter() {
@@ -314,7 +353,7 @@ public class FilterTest {
             }
         }
 
-        MuServer server = ServerUtils.httpsServerForTest()
+        server = httpsServerForTest()
             .addHandler(
                 restHandler(new TheWay())
                     .addRequestFilter(requestContext -> {
@@ -331,5 +370,245 @@ public class FilterTest {
         }
     }
 
+    @Test
+    public void resourceInfoAndMuRequestCanBeFoundOnPreMatchingFilters() throws IOException {
+
+        @Path("/blah")
+        class Blah {
+            @GET
+            public void hello() {
+            }
+        }
+
+        @PreMatching
+        class PreMatchingFilter implements ContainerRequestFilter {
+
+            @Override
+            public void filter(ContainerRequestContext requestContext) throws IOException {
+                MuRequest muRequest = (MuRequest) requestContext.getProperty(MU_REQUEST_PROPERTY);
+                ResourceInfo resourceInfo = (ResourceInfo) requestContext.getProperty(MuRuntimeDelegate.RESOURCE_INFO_PROPERTY);
+                requestContext.abortWith(javax.ws.rs.core.Response.ok()
+                    .entity(
+                        "properties=" + requestContext.getPropertyNames().stream().sorted().collect(Collectors.joining(", ")) +
+                            " and method=" + muRequest.method() + " and "
+                            + resourceInfo.getResourceClass() + " / " + resourceInfo.getResourceMethod())
+                    .build());
+            }
+        }
+
+        server = httpsServerForTest()
+            .addHandler(
+                restHandler(new Blah())
+                    .addRequestFilter(new PreMatchingFilter())
+            ).start();
+
+        try (Response resp = call(request(server.uri().resolve("/blah")))) {
+            assertThat(resp.body().string(), is("properties=" + MU_REQUEST_PROPERTY + ", " + RESOURCE_INFO_PROPERTY + " and method=GET and null / null"));
+        }
+    }
+
+    @Test
+    public void resourceInfoAndMuRequestCanBeFoundOnPostMatchingFilters() throws IOException {
+
+        @Path("/blah")
+        class Blah {
+            @GET
+            public void hello() {
+            }
+        }
+
+        class PostMatchingFilter implements ContainerRequestFilter {
+
+            @Override
+            public void filter(ContainerRequestContext requestContext) throws IOException {
+                MuRequest muRequest = (MuRequest) requestContext.getProperty(MU_REQUEST_PROPERTY);
+                ResourceInfo resourceInfo = (ResourceInfo) requestContext.getProperty(MuRuntimeDelegate.RESOURCE_INFO_PROPERTY);
+                requestContext.abortWith(javax.ws.rs.core.Response.ok()
+                    .entity(
+                        "properties=" + requestContext.getPropertyNames().stream().sorted().collect(Collectors.joining(", ")) +
+                            " and method=" + muRequest.method() + " and "
+                            + resourceInfo.getResourceClass() + " / " + resourceInfo.getResourceMethod().getName())
+                    .build());
+            }
+        }
+
+        server = httpsServerForTest()
+            .addHandler(
+                restHandler(new Blah())
+                    .addRequestFilter(new PostMatchingFilter())
+            ).start();
+
+        try (Response resp = call(request(server.uri().resolve("/blah")))) {
+            assertThat(resp.body().string(), is("properties=" + MU_REQUEST_PROPERTY + ", " + RESOURCE_INFO_PROPERTY + " and method=GET and " + Blah.class + " / hello"));
+        }
+    }
+
+    @Test
+    public void resourceInfoAndMuRequestCanBeFoundOnResponseFilters() throws IOException {
+
+        @Path("/blah")
+        class Blah {
+            @GET
+            public void hello() {
+            }
+        }
+        StringBuilder result = new StringBuilder();
+
+        class ResponseFilter implements ContainerResponseFilter {
+
+            @Override
+            public void filter(ContainerRequestContext requestContext, ContainerResponseContext responseContext) throws IOException {
+                MuRequest muRequest = (MuRequest) requestContext.getProperty(MU_REQUEST_PROPERTY);
+                ResourceInfo resourceInfo = (ResourceInfo) requestContext.getProperty(MuRuntimeDelegate.RESOURCE_INFO_PROPERTY);
+                result.append("properties=").append(requestContext.getPropertyNames().stream().sorted().collect(Collectors.joining(", "))).append(" and method=").append(muRequest.method()).append(" and ").append(resourceInfo.getResourceClass()).append(" / ").append(resourceInfo.getResourceMethod().getName());
+            }
+        }
+
+        server = httpsServerForTest()
+            .addHandler(
+                restHandler(new Blah())
+                    .addResponseFilter(new ResponseFilter())
+            ).start();
+
+        call(request(server.uri().resolve("/blah"))).close();
+        assertThat(result.toString(), is("properties=" + MU_REQUEST_PROPERTY + ", " + RESOURCE_INFO_PROPERTY + " and method=GET and " + Blah.class + " / hello"));
+    }
+
+    @Test
+    public void queryParamsCanBeChangedInPreFilters() throws Exception {
+
+        @Path("blah")
+        class Blah {
+            @GET
+            public String query(@QueryParam("unchanged") String unchanged, @QueryParam("removed") String removed, @QueryParam("added") String added, @QueryParam("changed") String changed, @QueryParam("list") List<String> list) {
+                return unchanged + " " + removed + " " + added + " " + changed + " and list: " + String.join(", ", list);
+            }
+        }
+
+        @PreMatching
+        class QueryChanger implements ContainerRequestFilter {
+            @Override
+            public void filter(ContainerRequestContext requestContext) throws IOException {
+                UriBuilder builder = requestContext.getUriInfo().getRequestUriBuilder();
+                builder.replaceQueryParam("changed", "a changed value");
+                builder.replaceQueryParam("removed");
+                builder.queryParam("added", "something new");
+                builder.replaceQueryParam("list", requestContext.getUriInfo().getQueryParameters().get("list").stream().map(String::toUpperCase).toArray());
+                requestContext.setRequestUri(builder.build());
+            }
+        }
+
+        server = httpsServerForTest()
+            .addHandler(
+                context("api").addHandler(
+                    restHandler(new Blah())
+                        .withCollectionParameterStrategy(CollectionParameterStrategy.NO_TRANSFORM)
+                        .addRequestFilter(new QueryChanger())
+                )
+            ).start();
+        try (Response resp = call(request(server.uri().resolve("/api/blah?unchanged=original%20value&removed=bye&changed=another%20original&list=value%20one&list=value%20two")))) {
+            assertThat(resp.body().string(), is("original value null something new a changed value and list: VALUE ONE, VALUE TWO"));
+        }
+    }
+
+    @Test
+    public void headerParamsCanBeChangedInPreFilters() throws Exception {
+
+        @Path("blah")
+        class Blah {
+            @GET
+            public String header(@HeaderParam("unchanged") String unchanged,
+                                 @HeaderParam("removed") String removed,
+                                 @HeaderParam("added") String added,
+                                 @HeaderParam("changed") String changed,
+                                 @HeaderParam("list") List<String> list) {
+                return unchanged + " " + removed + " " + added + " " + changed + " and list: " + String.join(", ", list);
+            }
+        }
+
+        @PreMatching
+        class HeaderChanger implements ContainerRequestFilter {
+            @Override
+            public void filter(ContainerRequestContext requestContext) {
+                MultivaluedMap<String, String> headers = requestContext.getHeaders();
+                headers.replace("changed", Collections.singletonList("a changed value"));
+                headers.remove("removed");
+                headers.add("added", "something new");
+                List<String> uppercasedList = headers.get("list").stream().map(String::toUpperCase).collect(Collectors.toList());
+                headers.put("list", uppercasedList);
+            }
+        }
+
+        server = httpsServerForTest()
+            .addHandler(
+                context("api").addHandler(
+                    restHandler(new Blah())
+                        .withCollectionParameterStrategy(CollectionParameterStrategy.NO_TRANSFORM)
+                        .addRequestFilter(new HeaderChanger())
+                )
+            ).start();
+        try (Response resp = call(request(server.uri().resolve("/api/blah"))
+            .header("unchanged", "original value")
+            .header("removed", "bye")
+            .header("changed", "another original")
+            .header("list", "value one")
+            .addHeader("list", "value two")
+        )) {
+            assertThat(resp.body().string(), is("original value null something new a changed value and list: VALUE ONE, VALUE TWO"));
+        }
+    }
+
+
+    @Test
+    public void headerParamsCanBeChangedInPostFilters() throws Exception {
+
+        @Path("blah")
+        class Blah {
+            @GET
+            public String header(@HeaderParam("unchanged") String unchanged,
+                                 @HeaderParam("removed") String removed,
+                                 @HeaderParam("added") String added,
+                                 @HeaderParam("changed") String changed,
+                                 @HeaderParam("list") List<String> list) {
+                return unchanged + " " + removed + " " + added + " " + changed + " and list: " + String.join(", ", list);
+            }
+        }
+
+        class HeaderChanger implements ContainerRequestFilter {
+            @Override
+            public void filter(ContainerRequestContext requestContext) {
+                MultivaluedMap<String, String> headers = requestContext.getHeaders();
+                headers.replace("changed", Collections.singletonList("a changed value"));
+                headers.remove("removed");
+                headers.add("added", "something new");
+                List<String> uppercasedList = headers.get("list").stream().map(String::toUpperCase).collect(Collectors.toList());
+                headers.put("list", uppercasedList);
+            }
+        }
+
+        server = httpsServerForTest()
+            .addHandler(
+                context("api").addHandler(
+                    restHandler(new Blah())
+                        .withCollectionParameterStrategy(CollectionParameterStrategy.NO_TRANSFORM)
+                        .addRequestFilter(new HeaderChanger())
+                )
+            ).start();
+        try (Response resp = call(request(server.uri().resolve("/api/blah"))
+            .header("unchanged", "original value")
+            .header("removed", "bye")
+            .header("changed", "another original")
+            .header("list", "value one")
+            .addHeader("list", "value two")
+        )) {
+            assertThat(resp.body().string(), is("original value null something new a changed value and list: VALUE ONE, VALUE TWO"));
+        }
+    }
+
+
+    @After
+    public void stopIt() {
+        scaffolding.MuAssert.stopAndCheck(server);
+    }
 
 }

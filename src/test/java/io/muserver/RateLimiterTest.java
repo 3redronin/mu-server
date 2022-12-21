@@ -2,58 +2,59 @@ package io.muserver;
 
 import io.netty.util.HashedWheelTimer;
 import okhttp3.Response;
+import org.junit.After;
 import org.junit.Test;
 import scaffolding.ServerUtils;
 
-import java.io.IOException;
 import java.util.concurrent.TimeUnit;
 
 import static io.muserver.RateLimitBuilder.rateLimit;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.empty;
-import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 import static scaffolding.MuAssert.assertEventually;
 
 public class RateLimiterTest {
 
+    private final HashedWheelTimer timer = new HashedWheelTimer();
+
     @Test
     public void returnsFalseIfLimitExceeded() throws InterruptedException {
-        RateLimiter limiter = new RateLimiter(
+        RateLimiterImpl limiter = new RateLimiterImpl(
             request -> rateLimit().withBucket("blah").withRate(3).withWindow(100, TimeUnit.MILLISECONDS).build(),
-            new HashedWheelTimer());
+            timer);
         assertThat(limiter.record(null), is(true));
         assertThat(limiter.record(null), is(true));
         assertThat(limiter.record(null), is(true));
         assertThat(limiter.record(null), is(false));
         Thread.sleep(250);
         assertThat(limiter.record(null), is(true));
-        assertEventually(() -> limiter.snapshot().keySet(), is(empty()));
+        assertEventually(() -> limiter.currentBuckets().keySet(), is(empty()));
     }
 
     @Test
     public void returningNullMeansAlwaysAllow() throws InterruptedException {
-        RateLimiter limiter = new RateLimiter(request -> null, new HashedWheelTimer());
+        RateLimiterImpl limiter = new RateLimiterImpl(request -> null, timer);
         for (int i = 0; i < 10; i++) {
             assertThat(limiter.record(null), is(true));
         }
-        assertThat(limiter.snapshot().keySet(), is(empty()));
+        assertThat(limiter.currentBuckets().keySet(), is(empty()));
     }
 
     @Test
     public void ignoreActionDoesNotBlock() throws InterruptedException {
-        RateLimiter limiter = new RateLimiter(request -> rateLimit().withBucket("blah")
+        RateLimiterImpl limiter = new RateLimiterImpl(request -> rateLimit().withBucket("blah")
             .withRate(1).withRejectionAction(RateLimitRejectionAction.IGNORE)
-            .build(), new HashedWheelTimer());
+            .build(), timer);
         for (int i = 0; i < 10; i++) {
             assertThat(limiter.record(null), is(true));
         }
-        assertEventually(() -> limiter.snapshot().keySet(), is(empty()));
+        assertEventually(() -> limiter.currentBuckets().keySet(), is(empty()));
     }
 
     @Test
-    public void multipleLimitersCanBeAddedToTheServer() throws IOException {
+    public void multipleLimitersCanBeAddedToTheServer() throws Exception {
         MuServer server = ServerUtils.httpsServerForTest()
             .withRateLimiter(request -> rateLimit()
                 .withBucket(request.remoteAddress())
@@ -86,6 +87,17 @@ public class RateLimiterTest {
             }
         }
         assertThat(server.stats().rejectedDueToOverload(), is(3L));
+        assertThat(server.rateLimiters().size(), is(3));
+        assertEventually(() -> server.rateLimiters().get(0).currentBuckets(), anEmptyMap());
+        assertThat(server.rateLimiters().get(1).currentBuckets(), aMapWithSize(1));
+        assertThat(server.rateLimiters().get(1).currentBuckets().get("127.0.0.1"), equalTo(2L));
+        assertThat(server.rateLimiters().get(2).currentBuckets(), aMapWithSize(1));
+        assertThat(server.rateLimiters().get(2).currentBuckets().get("127.0.0.1"), equalTo(1L));
+    }
+
+    @After
+    public void cleanup() {
+        timer.stop();
     }
 
 }
