@@ -202,10 +202,9 @@ class MuWebSocketSessionImpl implements MuWebSocketSession, Exchange {
                 receivingState = (frame.isFinalFragment()) ? ContinuationState.NONE : ContinuationState.BINARY;
                 ByteBuf content = frame.content();
                 retained = content.retain();
-                muWebSocket.onBinary(content.nioBuffer(), frame.isFinalFragment(), error -> {
-                    content.release();
-                    onComplete.onComplete(error);
-                });
+                muWebSocket.onBinary(content.nioBuffer(), frame.isFinalFragment(),
+                    onComplete,
+                    content::release);
             } else if (frame instanceof PingWebSocketFrame) {
                 ByteBuf content = frame.content();
                 retained = content.retain();

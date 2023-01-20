@@ -77,6 +77,24 @@ public interface MuWebSocket {
     }
 
     /**
+     * Called when a message is received from the client. Consider using this API when separation of control for pulling data and releasing buffer are required.
+     * Otherwise, please use {@link #onBinary(ByteBuffer, boolean, DoneCallback)} instead.
+     *
+     * @param buffer     The message as a byte buffer.
+     * @param isLast     Returns <code>true</code> if this message is the last part of the complete message. This is only <code>false</code>
+     *                   when clients send fragmented messages in which case only the last part of the fragmented message will return <code>true</code>.
+     * @param doneAndPullData A callback that must be run with <code>doneAndPullData.onComplete()</code> when ready to pull more data from websocket.
+     * @param releaseBuffer A callback that must be run with <code>releaseBuffer.run()</code> when the byte buffer is no longer needed. Failure to call this will result in memory leaks.
+     * @throws Exception Any exceptions thrown will result in the onError method being called with the thrown exception being used as the <code>cause</code> parameter.
+     */
+    default void onBinary(ByteBuffer buffer, boolean isLast, DoneCallback doneAndPullData, Runnable releaseBuffer) throws Exception {
+        onBinary(buffer, isLast, error -> {
+            releaseBuffer.run();
+            doneAndPullData.onComplete(error);
+        });
+    }
+
+    /**
      * Called when the client has closed the connection.
      * <p>The connection should be closed on the server side when this is received. If overriding {@link BaseWebSocket} this occurs automatically.</p>
      *
