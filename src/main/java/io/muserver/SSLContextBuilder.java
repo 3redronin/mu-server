@@ -297,7 +297,7 @@ public class SSLContextBuilder {
                 .map(objects -> (String) objects.get(1))
                 .collect(Collectors.toList());
         } catch (CertificateParsingException e) {
-            log.warn("can't get subject alternative names from cert {}", cert.toString());
+            log.warn("Can't get subject alternative names from cert {}", cert.toString());
             return Collections.emptyList();
         }
     }
