@@ -83,6 +83,19 @@ public class HttpsConfigBuilderTest {
     }
 
     @Test
+    public void canUsePreConstructedKeystore() throws Exception {
+        KeyStore ks;
+        char[] keystorePassword = "Very5ecure".toCharArray();
+        try (InputStream keystoreStream = getClass().getResourceAsStream("/io/muserver/resources/localhost.p12")) {
+            ks = KeyStore.getInstance("PKCS12");
+            ks.load(keystoreStream, keystorePassword);
+        }
+        HttpsConfigBuilder sslContextBuilder = HttpsConfigBuilder.httpsConfig()
+            .withKeystore(ks, keystorePassword);
+        test(sslContextBuilder);
+    }
+
+    @Test
     public void protocolsCanBeSpecified() throws Exception {
         AtomicReference<SSLInfo> initialSSLInfo = new AtomicReference<>();
         AtomicReference<SSLInfo> eventualSSLInfo = new AtomicReference<>();

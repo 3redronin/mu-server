@@ -1,6 +1,7 @@
 package io.muserver;
 
 import java.io.*;
+import java.net.URI;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.ByteBuffer;
@@ -263,6 +264,21 @@ public class Mutils {
             return EMPTY_BUFFER;
         }
         return ByteBuffer.wrap(text.getBytes(UTF_8));
+    }
+
+    /**
+     * <p>Given a gets the raw path and (if present) querystring portion of a URI.</p>
+     * <p>Note: paths and querystrings are not URL decoded.</p>
+     * @param uri The URI to get the info from
+     * @return A string such as <code>/path?query=something</code>
+     */
+    public static String pathAndQuery(URI uri) {
+        String pathAndQuery = uri.getRawPath();
+        String rawQuery = uri.getRawQuery();
+        if (rawQuery != null) {
+            pathAndQuery += "?" + rawQuery;
+        }
+        return pathAndQuery;
     }
 
     private static final ByteBuffer EMPTY_BUFFER = ByteBuffer.allocate(0);

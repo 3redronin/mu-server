@@ -2,6 +2,7 @@ package io.muserver;
 
 import org.junit.Test;
 
+import java.net.URI;
 import java.nio.ByteBuffer;
 import java.time.format.DateTimeParseException;
 import java.util.Date;
@@ -76,6 +77,26 @@ public class MutilsTest {
     public void toByteBufferWithNonEmptyStringWorks() {
         ByteBuffer bb = Mutils.toByteBuffer("Hello world");
         assertThat(bb.remaining(), is(11));
+    }
+
+    @Test
+    public void pathAndQueryWorks() {
+        URI base = URI.create("https://example.org");
+        assertThat(Mutils.pathAndQuery(base), equalTo(""));
+        assertThat(Mutils.pathAndQuery(base.resolve("/")), equalTo("/"));
+        assertThat(Mutils.pathAndQuery(base.resolve("/blah%20%2Fblah")), equalTo("/blah%20%2Fblah"));
+        assertThat(Mutils.pathAndQuery(base.resolve("/~blah+blah/")), equalTo("/~blah+blah/"));
+        assertThat(Mutils.pathAndQuery(base.resolve("/~blah+blah;matrix=yeah/blah")), equalTo("/~blah+blah;matrix=yeah/blah"));
+        assertThat(Mutils.pathAndQuery(base.resolve("?")), equalTo("?"));
+        assertThat(Mutils.pathAndQuery(base.resolve("/?")), equalTo("/?"));
+        assertThat(Mutils.pathAndQuery(base.resolve("/blah%20%2Fblah?")), equalTo("/blah%20%2Fblah?"));
+        assertThat(Mutils.pathAndQuery(base.resolve("/~blah+blah/?")), equalTo("/~blah+blah/?"));
+        assertThat(Mutils.pathAndQuery(base.resolve("/~blah+blah;matrix=yeah/blah?")), equalTo("/~blah+blah;matrix=yeah/blah?"));
+        assertThat(Mutils.pathAndQuery(base.resolve("?a%20key=a%20value&another=something%20else")), equalTo("?a%20key=a%20value&another=something%20else"));
+        assertThat(Mutils.pathAndQuery(base.resolve("/?a%20key=a%20value&another=something%20else")), equalTo("/?a%20key=a%20value&another=something%20else"));
+        assertThat(Mutils.pathAndQuery(base.resolve("/blah%20%2Fblah?a%20key=a%20value&another=something%20else")), equalTo("/blah%20%2Fblah?a%20key=a%20value&another=something%20else"));
+        assertThat(Mutils.pathAndQuery(base.resolve("/~blah+blah/?a%20key=a%20value&another=something%20else")), equalTo("/~blah+blah/?a%20key=a%20value&another=something%20else"));
+        assertThat(Mutils.pathAndQuery(base.resolve("/~blah+blah;matrix=yeah/blah?a%20key=a%20value&another=something%20else")), equalTo("/~blah+blah;matrix=yeah/blah?a%20key=a%20value&another=something%20else"));
     }
 
 }

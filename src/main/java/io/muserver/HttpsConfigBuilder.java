@@ -1,8 +1,11 @@
 package io.muserver;
 
 import javax.net.ssl.KeyManagerFactory;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.InputStream;
+import java.security.KeyStore;
 
 /**
  * A builder for specifying HTTPS config.
@@ -69,7 +72,7 @@ public class HttpsConfigBuilder extends SSLContextBuilder {
 
     /**
      * Loads a keystore from the given stream.
-     * <p>Does not close the keystore afterwards.</p>
+     * <p>Does not close the input stream afterwards.</p>
      *
      * @param keystoreStream A stream to a keystore
      * @return This builder
@@ -77,6 +80,26 @@ public class HttpsConfigBuilder extends SSLContextBuilder {
     @Override
     public HttpsConfigBuilder withKeystore(InputStream keystoreStream) {
         return (HttpsConfigBuilder) super.withKeystore(keystoreStream);
+    }
+
+    /**
+     * Uses the given KeyStore for TLS.
+     *
+     * @param keystore The keystore to use
+     * @param password The keystore password.
+     * @return This builder
+     */
+    public HttpsConfigBuilder withKeystore(KeyStore keystore, char[] password) {
+        try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+            keystore.store(baos, password);
+            try (ByteArrayInputStream inputStream = new ByteArrayInputStream(baos.toByteArray())) {
+                return withKeystore(inputStream)
+                    .withKeystorePassword(password)
+                    .withKeyPassword(password);
+            }
+        } catch (Exception e) {
+            throw new MuException("Error loading KeyStore into memory", e);
+        }
     }
 
     /**
