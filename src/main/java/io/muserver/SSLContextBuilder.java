@@ -32,6 +32,10 @@ public class SSLContextBuilder {
     private CipherSuiteFilter nettyCipherSuiteFilter;
     private KeyManagerFactory keyManagerFactory;
     private String defaultAlias;
+
+    /**
+     * Only used by HttpsConfigBuilder
+     */
     protected TrustManager trustManager;
 
     /**
