@@ -1,8 +1,8 @@
 package io.muserver;
 
 import javax.net.ssl.TrustManager;
-import javax.security.cert.X509Certificate;
 import java.net.InetSocketAddress;
+import java.security.cert.Certificate;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.Set;
@@ -90,5 +90,5 @@ public interface HttpConnection {
      * </ul>
      * @return The client certificate, or <code>empty</code> if no certificate is available
      */
-    Optional<X509Certificate> clientCertificate();
+    Optional<Certificate> clientCertificate();
 }

@@ -10,8 +10,8 @@ import io.netty.handler.timeout.IdleStateEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.security.cert.X509Certificate;
 import java.net.InetSocketAddress;
+import java.security.cert.Certificate;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -536,7 +536,7 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
     }
 
     @Override
-    public Optional<X509Certificate> clientCertificate() {
+    public Optional<Certificate> clientCertificate() {
         return Http1Connection.fromContext(nettyContext);
     }
 

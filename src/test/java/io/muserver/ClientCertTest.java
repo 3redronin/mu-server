@@ -11,9 +11,10 @@ import scaffolding.ServerUtils;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManagerFactory;
-import javax.security.cert.CertificateExpiredException;
-import javax.security.cert.X509Certificate;
 import java.security.KeyStore;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateExpiredException;
+import java.security.cert.X509Certificate;
 import java.util.Optional;
 
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -31,7 +32,7 @@ public class ClientCertTest {
         server = ServerUtils.httpsServerForTest()
             .withHttpsConfig(HttpsConfigBuilder.unsignedLocalhost().withClientCertificateTrustManager(veryTrustingTrustManager))
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
-                X509Certificate cert = request.connection().clientCertificate().get();
+                X509Certificate cert = (X509Certificate) request.connection().clientCertificate().get();
                 cert.checkValidity();
                 response.write("The client cert is " + cert.getSubjectDN().getName());
             })
@@ -48,7 +49,7 @@ public class ClientCertTest {
         server = ServerUtils.httpsServerForTest()
             .withHttpsConfig(HttpsConfigBuilder.unsignedLocalhost().withClientCertificateTrustManager(veryTrustingTrustManager))
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
-                X509Certificate cert = request.connection().clientCertificate().get();
+                X509Certificate cert = (X509Certificate) request.connection().clientCertificate().get();
                 try {
                     cert.checkValidity();
                 } catch (CertificateExpiredException e) {
@@ -67,7 +68,7 @@ public class ClientCertTest {
         server = ServerUtils.httpsServerForTest()
             .withHttpsConfig(HttpsConfigBuilder.unsignedLocalhost().withClientCertificateTrustManager(veryTrustingTrustManager))
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
-                Optional<X509Certificate> cert = request.connection().clientCertificate();
+                Optional<Certificate> cert = request.connection().clientCertificate();
                 response.write("The client cert is present? " + cert.isPresent());
             })
             .start();

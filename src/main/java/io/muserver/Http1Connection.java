@@ -12,8 +12,8 @@ import org.slf4j.LoggerFactory;
 
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
-import javax.security.cert.X509Certificate;
 import java.net.InetSocketAddress;
+import java.security.cert.Certificate;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.Optional;
@@ -263,17 +263,18 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
     }
 
     @Override
-    public Optional<X509Certificate> clientCertificate() {
+    public Optional<Certificate> clientCertificate() {
         return fromContext(nettyCtx);
     }
 
-    static Optional<X509Certificate> fromContext(ChannelHandlerContext channelHandlerContext) {
+    static Optional<Certificate> fromContext(ChannelHandlerContext channelHandlerContext) {
         try {
             SslHandler sslhandler = (SslHandler) channelHandlerContext.channel().pipeline().get("ssl");
             if (sslhandler == null) {
                 return Optional.empty();
             }
-            return Optional.of(sslhandler.engine().getSession().getPeerCertificateChain()[0]);
+            SSLSession session = sslhandler.engine().getSession();
+            return Optional.of(session.getPeerCertificates()[0]);
         } catch (SSLPeerUnverifiedException e) {
             return Optional.empty();
         }
