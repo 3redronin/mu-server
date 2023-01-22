@@ -1,6 +1,7 @@
 package io.muserver;
 
 import javax.net.ssl.KeyManagerFactory;
+import javax.net.ssl.TrustManager;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -176,6 +177,23 @@ public class HttpsConfigBuilder extends SSLContextBuilder {
     @Override
     public HttpsConfigBuilder withProtocols(String... protocols) {
         return (HttpsConfigBuilder) super.withProtocols(protocols);
+    }
+
+    /**
+     * Sets the trust manager that is used to validate client certificates.
+     * <p>Setting the trust manager will make client certificates optional. The trust manager should
+     * contain the public keys of certificate authorities that you want to allow client certificates
+     * from.
+     * Certificates will be available for request handlers at {@link HttpConnection#clientCertificate()}
+     * (note that the connection of a request is available on {@link MuRequest#connection()}).</p>
+     * <p><strong>Important note:</strong> if no certificate is set then the client certificate will be
+     * <code>null</code>. If an invalid certificate is sent then the TLS connection will be rejected.</p>
+     * @param trustManager The trust manager to use to validate client certificates
+     * @return This builder.
+     */
+    public HttpsConfigBuilder withClientCertificateTrustManager(TrustManager trustManager) {
+        this.trustManager = trustManager;
+        return this;
     }
 
     /**

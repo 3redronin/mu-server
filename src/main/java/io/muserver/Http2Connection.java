@@ -10,6 +10,7 @@ import io.netty.handler.timeout.IdleStateEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.security.cert.X509Certificate;
 import java.net.InetSocketAddress;
 import java.time.Instant;
 import java.util.*;
@@ -532,6 +533,11 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
     @Override
     public MuServer server() {
         return server;
+    }
+
+    @Override
+    public Optional<X509Certificate> clientCertificate() {
+        return Http1Connection.fromContext(nettyContext);
     }
 
 }

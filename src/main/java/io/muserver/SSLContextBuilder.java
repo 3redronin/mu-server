@@ -4,10 +4,7 @@ import io.netty.handler.ssl.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.net.ssl.KeyManager;
-import javax.net.ssl.KeyManagerFactory;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.X509ExtendedKeyManager;
+import javax.net.ssl.*;
 import java.io.*;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
@@ -35,6 +32,7 @@ public class SSLContextBuilder {
     private CipherSuiteFilter nettyCipherSuiteFilter;
     private KeyManagerFactory keyManagerFactory;
     private String defaultAlias;
+    protected TrustManager trustManager;
 
     /**
      * The type of keystore, such as JKS, JCEKS, PKCS12, etc
@@ -303,9 +301,12 @@ public class SSLContextBuilder {
     }
 
     SslContext toNettySslContext(boolean http2) throws Exception {
+        CipherSuiteFilter cipherFilter = nettyCipherSuiteFilter != null ? nettyCipherSuiteFilter : IdentityCipherSuiteFilter.INSTANCE;
+
         SslContextBuilder builder;
+        ClientAuth clientAuthSetting = trustManager == null ? ClientAuth.NONE : ClientAuth.OPTIONAL;
         if (sslContext != null) {
-            return new JdkSslContext(sslContext, false, ClientAuth.NONE);
+            return new JdkSslContext(sslContext, false, null, cipherFilter, ApplicationProtocolConfig.DISABLED, clientAuthSetting, getHttpsProtocolsArray(), false);
         } else if (keystoreBytes != null) {
             ByteArrayInputStream keystoreStream = new ByteArrayInputStream(keystoreBytes);
             KeyManagerFactory kmf;
@@ -356,8 +357,19 @@ public class SSLContextBuilder {
             ));
         }
 
-        CipherSuiteFilter cipherFilter = nettyCipherSuiteFilter != null ? nettyCipherSuiteFilter : IdentityCipherSuiteFilter.INSTANCE;
+        String[] protocolsArray = getHttpsProtocolsArray();
 
+        if (trustManager != null) {
+            builder.trustManager(trustManager);
+        }
+        return builder
+            .clientAuth(clientAuthSetting)
+            .protocols(protocolsArray)
+            .ciphers(null, cipherFilter)
+            .build();
+    }
+
+    private String[] getHttpsProtocolsArray() throws NoSuchAlgorithmException {
         List<String> supportedProtocols = asList(SSLContext.getDefault().getSupportedSSLParameters().getProtocols());
         List<String> protocolsToUse = new ArrayList<>();
         for (String protocol : Mutils.coalesce(this.protocols, new String[]{"TLSv1.2", "TLSv1.3"})) {
@@ -371,12 +383,8 @@ public class SSLContextBuilder {
             throw new MuException("Cannot start up as none of the requested SSL protocols " + Arrays.toString(this.protocols)
                 + " are supported by the current JDK " + supportedProtocols);
         }
-
-        return builder
-            .clientAuth(ClientAuth.NONE)
-            .protocols(protocolsToUse.toArray(new String[0]))
-            .ciphers(null, cipherFilter)
-            .build();
+        String[] protocolsArray = protocolsToUse.toArray(new String[0]);
+        return protocolsArray;
     }
 
     /**

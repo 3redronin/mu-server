@@ -6,13 +6,16 @@ import okio.BufferedSink;
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
 
+import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.lang.management.ManagementFactory;
 import java.net.URI;
+import java.security.KeyStore;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -20,7 +23,7 @@ import java.util.logging.Logger;
 public class ClientUtils {
 
     public static final OkHttpClient client;
-    private static final X509TrustManager veryTrustingTrustManager = veryTrustingTrustManager();
+    public static final X509TrustManager veryTrustingTrustManager = veryTrustingTrustManager();
     private static volatile HttpClient jettyClient;
 
     static {
@@ -116,5 +119,24 @@ public class ClientUtils {
             }
         }
         return jettyClient;
+    }
+
+    public static SSLContext getPKCS12Context(String classpathToKeystore, String password) throws Exception {
+        try (InputStream keystoreInputStream = ClientUtils.class.getResourceAsStream(classpathToKeystore)) {
+            KeyStore keyStore = KeyStore.getInstance("PKCS12");
+            keyStore.load(keystoreInputStream, password.toCharArray());
+            SSLContext sslContext = SSLContext.getInstance("TLS");
+//            String tmfAlgorithm = TrustManagerFactory.getDefaultAlgorithm();
+//            TrustManagerFactory tmf = TrustManagerFactory.getInstance(tmfAlgorithm);
+//            tmf.init(keyStore);
+//            TrustManager[] trustManagers = tmf.getTrustManagers();
+            TrustManager[] trustManagers = new TrustManager[] { ClientUtils.veryTrustingTrustManager };
+
+
+            KeyManagerFactory keyManagerFactory = KeyManagerFactory.getInstance("PKIX");
+            keyManagerFactory.init(keyStore, password.toCharArray());
+            sslContext.init(keyManagerFactory.getKeyManagers(), trustManagers, null);
+            return sslContext;
+        }
     }
 }

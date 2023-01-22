@@ -10,10 +10,13 @@ import io.netty.handler.timeout.IdleStateEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
+import javax.security.cert.X509Certificate;
 import java.net.InetSocketAddress;
 import java.time.Instant;
 import java.util.Collections;
+import java.util.Optional;
 import java.util.Set;
 
 import static io.netty.buffer.Unpooled.copiedBuffer;
@@ -257,6 +260,23 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
     @Override
     public MuServer server() {
         return server;
+    }
+
+    @Override
+    public Optional<X509Certificate> clientCertificate() {
+        return fromContext(nettyCtx);
+    }
+
+    static Optional<X509Certificate> fromContext(ChannelHandlerContext channelHandlerContext) {
+        try {
+            SslHandler sslhandler = (SslHandler) channelHandlerContext.channel().pipeline().get("ssl");
+            if (sslhandler == null) {
+                return Optional.empty();
+            }
+            return Optional.of(sslhandler.engine().getSession().getPeerCertificateChain()[0]);
+        } catch (SSLPeerUnverifiedException e) {
+            return Optional.empty();
+        }
     }
 
 }

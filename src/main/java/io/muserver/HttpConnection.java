@@ -1,7 +1,10 @@
 package io.muserver;
 
+import javax.net.ssl.TrustManager;
+import javax.security.cert.X509Certificate;
 import java.net.InetSocketAddress;
 import java.time.Instant;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 
@@ -75,4 +78,17 @@ public interface HttpConnection {
      * @return The server that this connection belongs to
      */
     MuServer server();
+
+    /**
+     * Gets the TLS certificate the client sent.
+     * <p>The returned certificate will be {@link Optional#empty()} when:</p>
+     * <ul>
+     *     <li>The client did not send a certificate, or</li>
+     *     <li>The client sent a certificate that failed verification with the client trust manager, or</li>
+     *     <li>No client trust manager was set with {@link HttpsConfigBuilder#withClientCertificateTrustManager(TrustManager)}, or</li>
+     *     <li>The request was not sent over HTTPS</li>
+     * </ul>
+     * @return The client certificate, or <code>empty</code> if no certificate is available
+     */
+    Optional<X509Certificate> clientCertificate();
 }
