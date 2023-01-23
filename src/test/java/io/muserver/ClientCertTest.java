@@ -3,7 +3,6 @@ package io.muserver;
 import okhttp3.OkHttpClient;
 import okhttp3.Response;
 import org.junit.After;
-import org.junit.Ignore;
 import org.junit.Test;
 import scaffolding.ClientUtils;
 import scaffolding.MuAssert;
@@ -44,7 +43,6 @@ public class ClientCertTest {
     }
 
     @Test
-    @Ignore("the cert hasn't expired yet!")
     public void expiredCertsAreAvailable() throws Exception {
         server = ServerUtils.httpsServerForTest()
             .withHttpsConfig(HttpsConfigBuilder.unsignedLocalhost().withClientCertificateTrustManager(veryTrustingTrustManager))
@@ -52,6 +50,7 @@ public class ClientCertTest {
                 X509Certificate cert = (X509Certificate) request.connection().clientCertificate().get();
                 try {
                     cert.checkValidity();
+                    response.write("Expires " + cert.getNotAfter());
                 } catch (CertificateExpiredException e) {
                     response.write("It has expired!");
                 }
