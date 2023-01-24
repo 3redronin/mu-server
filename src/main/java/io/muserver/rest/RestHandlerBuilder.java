@@ -16,6 +16,7 @@ import java.io.InputStream;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import static io.muserver.openapi.PathsObjectBuilder.pathsObject;
 import static java.util.Arrays.asList;
@@ -429,6 +430,132 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
             this.readerInterceptors.add(0, readerInterceptor);
         }
         return this;
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public List<Object> resources() {
+        return Collections.unmodifiableList(resources);
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public List<MessageBodyWriter<?>> customWriters() {
+        return customWriters.stream().map(w -> (MessageBodyWriter<?>)w).collect(Collectors.toList());
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public List<WriterInterceptor> writerInterceptors() {
+        return Collections.unmodifiableList(writerInterceptors);
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public List<MessageBodyReader<?>> customReaders() {
+        return customReaders.stream().map(r -> (MessageBodyReader<?>)r).collect(Collectors.toList());
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public List<ReaderInterceptor> readerInterceptors() {
+        return Collections.unmodifiableList(readerInterceptors);
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public List<ParamConverterProvider> customParamConverterProviders() {
+        return Collections.unmodifiableList(customParamConverterProviders);
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public Map<Class<?>, SchemaObject> customSchemas() {
+        return customSchemas.stream().collect(Collectors.toMap(ref -> ref.type, ref -> ref.schema));
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public String openApiJsonUrl() {
+        return openApiJsonUrl;
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public String openApiHtmlUrl() {
+        return openApiHtmlUrl;
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public OpenAPIObjectBuilder openAPIObject() {
+        return openAPIObject;
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public String openApiHtmlCss() {
+        return openApiHtmlCss;
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public Map<Class<? extends Throwable>, ExceptionMapper<? extends Throwable>> exceptionMappers() {
+        return Collections.unmodifiableMap(exceptionMappers);
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public List<ContainerRequestFilter> preMatchRequestFilters() {
+        return Collections.unmodifiableList(preMatchRequestFilters);
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public List<ContainerRequestFilter> requestFilters() {
+        return Collections.unmodifiableList(requestFilters);
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public List<ContainerResponseFilter> responseFilters() {
+        return Collections.unmodifiableList(responseFilters);
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public CORSConfig corsConfig() {
+        return corsConfig;
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public List<SchemaObjectCustomizer> schemaObjectCustomizers() {
+        return Collections.unmodifiableList(schemaObjectCustomizers);
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public CollectionParameterStrategy collectionParameterStrategy() {
+        return collectionParameterStrategy;
     }
 
     /**

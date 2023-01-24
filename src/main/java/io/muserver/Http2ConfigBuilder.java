@@ -18,6 +18,13 @@ public class Http2ConfigBuilder {
     }
 
     /**
+     * @return The current value of this property
+     */
+    public boolean enabled() {
+        return enabled;
+    }
+
+    /**
      * Creates the HTTP2 settings object
      * @return A new Http2Config object
      */

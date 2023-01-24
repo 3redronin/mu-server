@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.Collections;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Scanner;
@@ -111,6 +112,48 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
     public ResourceHandlerBuilder withResourceCustomizer(ResourceCustomizer resourceCustomizer) {
         this.resourceCustomizer = resourceCustomizer;
         return this;
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public DateTimeFormatter directoryListingDateFormatter() {
+        return directoryListingDateFormatter;
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public Map<String, ResourceType> extensionToResourceType() {
+        return Collections.unmodifiableMap(extensionToResourceType);
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public String defaultFile() {
+        return defaultFile;
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public boolean directoryListingEnabled() {
+        return directoryListingEnabled;
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public String directoryListingCss() {
+        return directoryListingCss;
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public ResourceCustomizer resourceCustomizer() {
+        return resourceCustomizer;
     }
 
     /**

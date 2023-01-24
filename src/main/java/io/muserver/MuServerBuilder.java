@@ -27,9 +27,11 @@ import javax.net.ssl.SSLParameters;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.*;
+import java.util.stream.Collectors;
 
 /**
  * <p>A builder for creating a web server.</p>
@@ -111,7 +113,7 @@ public class MuServerBuilder {
     /**
      * Enables gzip for certain resource types. The default is <code>true</code>. By default, the
      * gzippable resource types are taken from {@link ResourceType#getResourceTypes()} where
-     * {@link ResourceType#gzip} is <code>true</code>.
+     * {@link ResourceType#gzip()} is <code>true</code>.
      *
      * @param enabled True to enable; false to disable
      * @return The current Mu Server builder
@@ -498,6 +500,149 @@ public class MuServerBuilder {
     public MuServerBuilder withExceptionHandler(UnhandledExceptionHandler exceptionHandler) {
         this.unhandledExceptionHandler = exceptionHandler;
         return this;
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public long minimumGzipSize() {
+        return minimumGzipSize;
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public int httpPort() {
+        return httpPort;
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public int httpsPort() {
+        return httpsPort;
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public int maxHeadersSize() {
+        return maxHeadersSize;
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public int maxUrlSize() {
+        return maxUrlSize;
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public int nioThreads() {
+        return nioThreads;
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public List<MuHandler> handlers() {
+        return Collections.unmodifiableList(handlers);
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public boolean gzipEnabled() {
+        return gzipEnabled;
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public Set<String> mimeTypesToGzip() {
+        return Collections.unmodifiableSet(mimeTypesToGzip);
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public boolean addShutdownHook() {
+        return addShutdownHook;
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public String interfaceHost() {
+        return host;
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public HttpsConfigBuilder httpsConfigBuilder() {
+        if (sslContextBuilder != null && !(sslContextBuilder instanceof HttpsConfigBuilder)) {
+            throw new IllegalStateException("Please switch to using HttpsConfigBuilder to set HTTPS config");
+        }
+        return (HttpsConfigBuilder) sslContextBuilder;
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public Http2Config http2Config() {
+        return http2Config;
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public long requestReadTimeoutMillis() {
+        return requestReadTimeoutMillis;
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public long idleTimeoutMills() {
+        return idleTimeoutMills;
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public ExecutorService executor() {
+        return executor;
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public long maxRequestSize() {
+        return maxRequestSize;
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public List<ResponseCompleteListener> responseCompleteListeners() {
+        return Collections.unmodifiableList(responseCompleteListeners);
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public List<RateLimiter> rateLimiters() {
+        return rateLimiters.stream().map(RateLimiter.class::cast).collect(Collectors.toList());
+    }
+
+    /**
+     * @return The current value of this property
+     */
+    public UnhandledExceptionHandler unhandledExceptionHandler() {
+        return unhandledExceptionHandler;
     }
 
     /**

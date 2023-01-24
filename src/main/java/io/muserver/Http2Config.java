@@ -17,4 +17,12 @@ public class Http2Config {
             "enabled=" + enabled +
             '}';
     }
+
+    /**
+     * @return A new HTTP2 config builder based on the current settings
+     */
+    public Http2ConfigBuilder toBuilder() {
+        return new Http2ConfigBuilder()
+            .enabled(enabled);
+    }
 }
