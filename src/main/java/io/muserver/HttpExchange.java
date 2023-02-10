@@ -412,8 +412,9 @@ class HttpExchange implements ResponseInfo, Exchange {
                     streamUnrecoverable = true;
                 }
                 response.status(status);
-                MuRuntimeDelegate.writeResponseHeaders(request.uri(), exResp, response);
-                if (streamUnrecoverable) {
+                boolean isHttp1 = request.protocol().equals("HTTP/1.1");
+                MuRuntimeDelegate.writeResponseHeaders(request.uri(), exResp, response, isHttp1);
+                if (streamUnrecoverable && isHttp1) {
                     response.headers().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
                 }
                 response.contentType(ContentTypes.TEXT_HTML_UTF8);

@@ -68,25 +68,28 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
      * @param requestUri The URI of the current request
      * @param from The JAX-RS response containing headers
      * @param to The response to write the headers to
+     * @param isHttp1 The response is an HTTP-1 response
      */
-    public static void writeResponseHeaders(URI requestUri, Response from, MuResponse to) {
+    public static void writeResponseHeaders(URI requestUri, Response from, MuResponse to, boolean isHttp1) {
         for (Map.Entry<String, List<String>> entry : from.getStringHeaders().entrySet()) {
             String key = entry.getKey();
-            List<String> values = entry.getValue();
-            if (key.equalsIgnoreCase("location")) {
-                if (values.size() != 1) {
-                    throw new ServerErrorException("A location response header must have only one value. Received " + String.join(", ", values), 500);
-                }
+            if (!isHttp1 && !key.equalsIgnoreCase("connection")) {
+                List<String> values = entry.getValue();
+                if (key.equalsIgnoreCase("location")) {
+                    if (values.size() != 1) {
+                        throw new ServerErrorException("A location response header must have only one value. Received " + String.join(", ", values), 500);
+                    }
 
-                URI location;
-                try {
-                    location = URI.create(values.get(0));
-                } catch (IllegalArgumentException e) {
-                    throw new ServerErrorException("Invalid redirect location: " + values.get(0) + " - " + e.getMessage(), 500);
+                    URI location;
+                    try {
+                        location = URI.create(values.get(0));
+                    } catch (IllegalArgumentException e) {
+                        throw new ServerErrorException("Invalid redirect location: " + values.get(0) + " - " + e.getMessage(), 500);
+                    }
+                    to.headers().add(key, requestUri.resolve(location).toString());
+                } else {
+                    to.headers().add(key, values);
                 }
-                to.headers().add(key, requestUri.resolve(location).toString());
-            } else {
-                to.headers().add(key, values);
             }
         }
         for (NewCookie cookie : from.getCookies().values()) {
