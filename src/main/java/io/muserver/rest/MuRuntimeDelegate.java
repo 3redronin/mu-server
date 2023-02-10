@@ -73,7 +73,7 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
     public static void writeResponseHeaders(URI requestUri, Response from, MuResponse to, boolean isHttp1) {
         for (Map.Entry<String, List<String>> entry : from.getStringHeaders().entrySet()) {
             String key = entry.getKey();
-            if (!isHttp1 && !key.equalsIgnoreCase("connection")) {
+            if (isHttp1 || !key.equalsIgnoreCase("connection")) {
                 List<String> values = entry.getValue();
                 if (key.equalsIgnoreCase("location")) {
                     if (values.size() != 1) {
