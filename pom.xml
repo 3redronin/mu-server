@@ -21,7 +21,7 @@
 
     <scm>
         <url>https://github.com/3redronin/mu-server</url>
-        <connection>scm:git:git@github.com:3redronin/mu-server.git</connection>
+        <connection>scm:git:https://github.com/3redronin/mu-server.git</connection>
     </scm>
 
     <issueManagement>
@@ -214,16 +214,11 @@
             <plugin>
                 <groupId>com.github.danielflower.mavenplugins</groupId>
                 <artifactId>multi-module-maven-release-plugin</artifactId>
-                <version>3.6.1</version>
+                <version>3.6.4</version>
                 <configuration>
                     <releaseProfiles>
                         <releaseProfile>release</releaseProfile>
-                        <releaseProfile>gpg</releaseProfile>
                     </releaseProfiles>
-                    <goals>
-                        <goal>clean</goal>
-                        <goal>deploy</goal>
-                    </goals>
                 </configuration>
             </plugin>
             <plugin>
@@ -348,7 +343,13 @@
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-gpg-plugin</artifactId>
-                        <version>1.6</version>
+                        <version>3.0.1</version>
+                        <configuration>
+                            <gpgArguments>
+                                <arg>--pinentry-mode</arg>
+                                <arg>loopback</arg>
+                            </gpgArguments>
+                        </configuration>
                         <executions>
                             <execution>
                                 <id>sign-artifacts</id>
@@ -356,12 +357,6 @@
                                 <goals>
                                     <goal>sign</goal>
                                 </goals>
-                                <configuration>
-                                    <gpgArguments>
-                                        <arg>--pinentry-mode</arg>
-                                        <arg>loopback</arg>
-                                    </gpgArguments>
-                                </configuration>
                             </execution>
                         </executions>
                     </plugin>
