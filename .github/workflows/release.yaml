@@ -15,6 +15,7 @@ jobs:
         with:
           java-version: '11'
           distribution: 'temurin'
+          cache: 'maven'
       - name: Set up maven settings
         uses: s4u/maven-settings-action@v2.8.0
         with:

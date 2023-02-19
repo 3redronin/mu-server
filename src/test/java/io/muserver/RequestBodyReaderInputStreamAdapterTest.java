@@ -34,9 +34,9 @@ public class RequestBodyReaderInputStreamAdapterTest {
     private MuServer server;
 
     @Test
-    public void hugeBodiesCanBeStreamed() throws IOException {
+    public void largeBodiesCanBeStreamed() throws IOException {
         int chunkSize = 10000;
-        int loops = 6400;
+        int loops = 640; // want this to be larger, but GitHub Actions runs this too slow
 
         server = ServerUtils.httpsServerForTest()
             .withMaxRequestSize(loops * (long) chunkSize)

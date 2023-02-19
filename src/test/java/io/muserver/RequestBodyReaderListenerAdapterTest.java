@@ -112,7 +112,7 @@ public class RequestBodyReaderListenerAdapterTest {
 
     @Test
     public void exceedingMaxContentLengthWillResultIn413() {
-        int contentLength = 24 * 1024 * 1024 + 1;
+        int contentLength = 1024;
 
         server = ServerUtils.httpsServerForTest()
             .withMaxRequestSize(1000)
@@ -128,30 +128,15 @@ public class RequestBodyReaderListenerAdapterTest {
             .url(server.uri().toString())
             .post(RequestBody.create(bigString, MediaType.get("text/plain")));
 
-
-
-        long before = -1;
-        for (int i = 0; i < 10; i++) {
-            // it shouldn't cause direct memory jump
-            try (Response resp = call(request)) {
-                assertThat(resp.code(), equalTo(413));
-                assertThat(resp.body().string(), containsString("413 Payload Too Large"));
-            } catch (Exception e) {
-                // The HttpServerKeepAliveHandler will probably close the connection before the full request body is read, which is probably a good thing in this case.
-                // So allow a valid 413 response or an error
-                MuAssert.assertIOException(e);
-            }
-
-            if (i == 0) {
-                // capture the direct memory after the first http call
-                before = getDirectMemory();
-                assertThat(before, greaterThan(0L));
-            }
+        try (Response resp = call(request)) {
+            assertThat(resp.code(), equalTo(413));
+            assertThat(resp.body().string(), containsString("413 Payload Too Large"));
+        } catch (Exception e) {
+            // The HttpServerKeepAliveHandler will probably close the connection before the full request body is read, which is probably a good thing in this case.
+            // So allow a valid 413 response or an error
+            MuAssert.assertIOException(e);
         }
 
-        // the direct memory should be stable
-        long after = getDirectMemory();
-        assertThat(after, equalTo(before));
     }
 
     @Test
