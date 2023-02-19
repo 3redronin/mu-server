@@ -87,7 +87,7 @@ public class RequestBodyReaderListenerAdapterTest {
 
         Request.Builder request = request()
             .url(server.uri().toString())
-            .post(new SlowBodySender(2, 200));
+            .post(new SlowBodySender(100, 200));
 
         try (Response resp = call(request)) {
             assertThat(resp.code(), equalTo(408));
@@ -95,8 +95,8 @@ public class RequestBodyReaderListenerAdapterTest {
             MuAssert.assertIOException(ex);
         }
 
-        assertThat(readListener.events.toString(), readListener.events, contains(
-            "data received: 7 bytes", "data written", "Error for onError: TimeoutException"
+        assertEventually(() -> readListener.events, allOf(
+            hasItems("data received: 7 bytes", "data written", "Error for onError: TimeoutException")
         ));
     }
 
