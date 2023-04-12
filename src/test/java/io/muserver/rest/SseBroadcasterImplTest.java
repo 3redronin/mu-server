@@ -33,6 +33,7 @@ import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.request;
+import static scaffolding.MuAssert.assertEventually;
 
 public class SseBroadcasterImplTest {
 
@@ -111,6 +112,46 @@ public class SseBroadcasterImplTest {
             assertThat(listener.receivedMessages, equalTo(expected));
         }
     }
+
+    @Test
+    public void whenSinksAreClosedFromTheServerTheOnCloseMethodIsCalled() throws InterruptedException {
+
+        @Path("/streamer")
+        class Streamer {
+
+            private final Sse sse = MuRuntimeDelegate.createSseFactory();
+            private final SseBroadcaster broadcaster = sse.newBroadcaster();
+            public final List<SseEventSink> closedSinks = new ArrayList<>();
+
+            public Streamer() {
+                broadcaster.onClose(closedSinks::add);
+            }
+
+            @GET
+            @Path("register")
+            @Produces(MediaType.SERVER_SENT_EVENTS)
+            public void eventStream(@Context SseEventSink eventSink) {
+                broadcaster.register(eventSink);
+                eventSink.close();
+                broadcaster.broadcast(sse.newEvent("Hello"));
+            }
+
+            public void endBroadcast() {
+                broadcaster.close();
+            }
+        }
+
+        Streamer streamer = new Streamer();
+        server = ServerUtils.httpsServerForTest().addHandler(restHandler(streamer)).start();
+
+        TestSseClient listener = new TestSseClient();
+        SseClient.ServerSentEvent sse = sseClient.newServerSentEvent(request().url(server.uri().resolve("/streamer/register").toString()).build(), listener);
+        assertEventually(() -> streamer.closedSinks, hasSize(1));
+        sse.close();
+        streamer.endBroadcast();
+        listener.assertListenerIsClosed();
+    }
+
 
     @Test
     public void badSinksAreRemoved() throws Exception {
