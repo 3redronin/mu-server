@@ -1,5 +1,7 @@
 package io.muserver;
 
+import java.net.URI;
+
 /**
  * A generic exception raised by mu-server
  */
@@ -31,6 +33,13 @@ class InvalidHttpRequestException extends Exception {
     InvalidHttpRequestException(int code, String clientMessage) {
         super(clientMessage);
         this.code = code;
+    }
+}
+
+class RedirectException extends Exception {
+    final URI location;
+    RedirectException(URI location) {
+        this.location = location;
     }
 }
 

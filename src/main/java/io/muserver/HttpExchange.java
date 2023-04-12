@@ -267,7 +267,7 @@ class HttpExchange implements ResponseInfo, Exchange {
 
     static HttpExchange create(MuServerImpl server, String proto, ChannelHandlerContext ctx, Http1Connection connection,
                                HttpRequest nettyRequest, NettyHandlerAdapter nettyHandlerAdapter, MuStatsImpl connectionStats,
-                               RequestStateChangeListener requestStateChangeListener, HttpExchangeStateChangeListener stateChangeListener) throws InvalidHttpRequestException {
+                               RequestStateChangeListener requestStateChangeListener, HttpExchangeStateChangeListener stateChangeListener) throws InvalidHttpRequestException, RedirectException {
         ServerSettings settings = server.settings();
         throwIfInvalid(settings, ctx, nettyRequest);
 
@@ -305,9 +305,13 @@ class HttpExchange implements ResponseInfo, Exchange {
         return httpExchange;
     }
 
-    static String getRelativeUrl(String nettyUri) throws InvalidHttpRequestException {
+    static String getRelativeUrl(String nettyUri) throws InvalidHttpRequestException, RedirectException {
         try {
             URI requestUri = new URI(nettyUri).normalize();
+            if (requestUri.getScheme() == null && requestUri.getHost() != null) {
+                throw new RedirectException(new URI(nettyUri.substring(1)).normalize());
+            }
+
             String s = requestUri.getRawPath();
             if (Mutils.nullOrEmpty(s)) {
                 s = "/";
@@ -324,6 +328,8 @@ class HttpExchange implements ResponseInfo, Exchange {
                 s += "?" + q;
             }
             return s;
+        } catch (RedirectException re) {
+            throw re;
         } catch (Exception e) {
             if (log.isDebugEnabled()) log.debug("Invalid request URL " + nettyUri);
             throw new InvalidHttpRequestException(400, "400 Bad Request");

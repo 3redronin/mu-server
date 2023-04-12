@@ -13,9 +13,11 @@ import org.slf4j.LoggerFactory;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
 import java.net.InetSocketAddress;
+import java.net.URI;
 import java.security.cert.Certificate;
 import java.time.Instant;
 import java.util.Collections;
+import java.util.Date;
 import java.util.Optional;
 import java.util.Set;
 
@@ -118,6 +120,8 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
                 }
                 sendSimpleResponse(ctx, ihr.getMessage(), ihr.code);
                 ctx.channel().read();
+            } catch (RedirectException e) {
+                sendRedirect(ctx, e.location);
             }
         } else if (currentExchange != null) {
             currentExchange.onMessage(ctx, msg, error -> {
@@ -138,10 +142,18 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
     private static ChannelFuture sendSimpleResponse(ChannelHandlerContext ctx, String message, int code) {
         byte[] bytes = message.getBytes(UTF_8);
         FullHttpResponse response = new DefaultFullHttpResponse(HTTP_1_1, HttpResponseStatus.valueOf(code), copiedBuffer(bytes));
+        response.headers().set(HeaderNames.DATE, Mutils.toHttpDate(new Date()));
         response.headers().set(HeaderNames.CONTENT_TYPE, ContentTypes.TEXT_PLAIN_UTF8);
         response.headers().set(HeaderNames.CONTENT_LENGTH, bytes.length);
         return ctx.writeAndFlush(response);
     }
+    private static ChannelFuture sendRedirect(ChannelHandlerContext ctx, URI location) {
+        FullHttpResponse response = new DefaultFullHttpResponse(HTTP_1_1, HttpResponseStatus.valueOf(302));
+        response.headers().set(HeaderNames.DATE, Mutils.toHttpDate(new Date()));
+        response.headers().set(HeaderNames.LOCATION, location.toString());
+        return ctx.writeAndFlush(response);
+    }
+
 
     @Override
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {

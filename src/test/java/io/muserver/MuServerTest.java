@@ -260,7 +260,15 @@ public class MuServerTest {
         runUriTest("localhost:443", server.uri().resolve("/") + " path=/ and query=null");
     }
 
-    private void runUriTest(String requestLineUri, String expectedBody) throws InterruptedException, IOException {
+    @Test
+    public void doubleSlashesAreIgnored() throws Exception {
+        server = httpServer().start();
+        String body = runUriTest("//hello/wor%20ld?hello=wo%20rld&two=three", "");
+        assertThat(body, startsWith("HTTP/1.1 302 Found"));
+        assertThat(body, containsString("location: /hello/wor%20ld?hello=wo%20rld&two=three"));
+    }
+
+    private String runUriTest(String requestLineUri, String expectedBody) throws InterruptedException, IOException {
         try (RawClient client = RawClient.create(server.uri())
             .sendStartLine("GET", requestLineUri)
             .sendHeader("Host", server.uri().getAuthority())
@@ -269,7 +277,9 @@ public class MuServerTest {
             while (client.responseString().isEmpty()) {
                 Thread.sleep(100);
             }
-            assertThat(client.responseString(), endsWith("\r\n\r\n" + expectedBody));
+            String body = client.responseString();
+            assertThat(body, endsWith("\r\n\r\n" + expectedBody));
+            return body;
         }
     }
 

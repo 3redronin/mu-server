@@ -11,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.InetSocketAddress;
+import java.net.URI;
 import java.security.cert.Certificate;
 import java.time.Instant;
 import java.util.*;
@@ -173,15 +174,25 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
     }
 
     private ChannelFuture sendSimpleResponse(ChannelHandlerContext ctx, int streamId, String message, int code) {
-        byte[] bytes = message.getBytes(UTF_8);
-        ByteBuf content = copiedBuffer(bytes);
-
         io.netty.handler.codec.http2.Http2Headers headers = new DefaultHttp2Headers();
         headers.status(String.valueOf(code));
+        byte[] bytes = message.getBytes(UTF_8);
+        ByteBuf content = copiedBuffer(bytes);
+        headers.set(HeaderNames.DATE, Mutils.toHttpDate(new Date()));
         headers.set(HeaderNames.CONTENT_TYPE, ContentTypes.TEXT_PLAIN_UTF8);
         headers.set(HeaderNames.CONTENT_LENGTH, String.valueOf(bytes.length));
         encoder().writeHeaders(ctx, streamId, headers, 0, false, ctx.voidPromise());
         return Http2Response.writeAndFlushToChannel(ctx, encoder(), streamId, content, true);
+    }
+
+    private ChannelFuture sendRedirect(ChannelHandlerContext ctx, int streamId, URI locationHeader) {
+        io.netty.handler.codec.http2.Http2Headers headers = new DefaultHttp2Headers();
+        headers.status(String.valueOf(302));
+        headers.set(HeaderNames.DATE, Mutils.toHttpDate(new Date()));
+        headers.set(HeaderNames.LOCATION, locationHeader.toString());
+        ChannelFuture future = encoder().writeHeaders(ctx, streamId, headers, 0, true, ctx.voidPromise());
+        ctx.channel().flush();
+        return future;
     }
 
     @Override
@@ -298,6 +309,8 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
                 server.stats.onInvalidRequest();
             }
             sendSimpleResponse(ctx, streamId, ihr.getMessage(), ihr.code);
+        } catch (RedirectException e) {
+            sendRedirect(ctx, streamId, e.location);
         }
     }
 
