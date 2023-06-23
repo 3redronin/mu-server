@@ -54,6 +54,28 @@ public class RateLimiterTest {
     }
 
     @Test
+    public void emptyListReturnedWhenNoLimiters() throws Exception {
+        MuServer server = ServerUtils.httpsServerForTest()
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> response.write("hi"))
+            .start();
+        for (int i = 0; i < 2; i++) {
+            try (Response resp = call(request(server.uri()))) {
+                assertThat("req " + i, resp.code(), is(200));
+                assertThat("req " + i, resp.body().string(), is("hi"));
+            }
+        }
+        for (int i = 0; i < 3; i++) {
+            try (Response resp = call(request(server.uri()))) {
+                assertThat(resp.code(), is(200));
+                assertThat(resp.body().string(), is("hi"));
+            }
+        }
+        assertThat(server.stats().rejectedDueToOverload(), is(0L));
+        assertThat(server.rateLimiters().size(), is(0));
+    }
+
+
+    @Test
     public void multipleLimitersCanBeAddedToTheServer() throws Exception {
         MuServer server = ServerUtils.httpsServerForTest()
             .withRateLimiter(request -> rateLimit()

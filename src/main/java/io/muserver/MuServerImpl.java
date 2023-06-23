@@ -139,7 +139,8 @@ class MuServerImpl implements MuServer {
 
     @Override
     public List<RateLimiter> rateLimiters() {
-        return settings.rateLimiters.stream().map(RateLimiter.class::cast).collect(Collectors.toList());
+        List<RateLimiterImpl> rateLimiters = settings.rateLimiters;
+        return rateLimiters == null ? Collections.emptyList() : rateLimiters.stream().map(RateLimiter.class::cast).collect(Collectors.toList());
     }
 
     @Override
