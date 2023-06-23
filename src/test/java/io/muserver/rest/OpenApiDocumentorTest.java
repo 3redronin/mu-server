@@ -421,14 +421,12 @@ public class OpenApiDocumentorTest {
             assertThat(image.getString("format"), is("binary"));
 
             JSONObject appJson = content.getJSONObject("application/json").getJSONObject("schema");
-            assertThat(appJson.keySet(), hasSize(3));
-            assertThat(appJson.getBoolean("nullable"), is(false));
+            assertThat(appJson.keySet(), hasSize(2));
             assertThat(appJson.getString("title"), is("An json in a format"));
             assertThat(appJson.getString("type"), is("string"));
 
             JSONObject textPlain = content.getJSONObject("text/plain").getJSONObject("schema");
-            assertThat(textPlain.keySet(), hasSize(3));
-            assertThat(textPlain.getBoolean("nullable"), is(false));
+            assertThat(textPlain.keySet(), hasSize(2));
             assertThat(textPlain.getString("type"), is("integer"));
             assertThat(textPlain.getString("format"), is("int32"));
 
@@ -616,9 +614,9 @@ public class OpenApiDocumentorTest {
                 assertThat(things.getBoolean("required"), is(true));
                 JSONObject thingsSchema = things.getJSONObject("schema");
                 assertThat(thingsSchema.getString("type"), is("array"));
-                assertThat(thingsSchema.getBoolean("nullable"), is(false));
+                assertThat(thingsSchema.opt("nullable"), is(nullValue()));
                 JSONObject thingsItems = thingsSchema.getJSONObject("items");
-                assertThat(thingsItems.getBoolean("nullable"), is(false));
+                assertThat(thingsItems.opt("nullable"), is(nullValue()));
                 assertThat(thingsItems.getString("type"), is("string"));
                 assertThat(thingsItems.getJSONArray("enum").toList(), contains("THING_ONE", "THING_TWO"));
 
@@ -628,7 +626,7 @@ public class OpenApiDocumentorTest {
                 assertThat(optThingsSchema.getString("type"), is("array"));
                 assertThat(optThingsSchema.getBoolean("nullable"), is(true));
                 JSONObject optThingsItems = optThingsSchema.getJSONObject("items");
-                assertThat(optThingsItems.getBoolean("nullable"), is(false));
+                assertThat(optThingsItems.opt("nullable"), is(nullValue()));
                 assertThat(optThingsItems.getString("type"), is("string"));
                 assertThat(optThingsItems.getJSONArray("enum").toList(), contains("THING_ONE", "THING_TWO"));
             }

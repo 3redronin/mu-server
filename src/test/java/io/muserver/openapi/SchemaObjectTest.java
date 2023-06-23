@@ -58,7 +58,7 @@ public class SchemaObjectTest {
         SchemaObject schema = schemaObjectFrom(boolean.class).build();
         assertThat(schema.type(), equalTo("boolean"));
         assertThat(schema.format(), is(nullValue()));
-        assertThat(schema.nullable(), is(false));
+        assertThat(schema.nullable(), is(nullValue()));
     }
 
     @Test
@@ -74,7 +74,7 @@ public class SchemaObjectTest {
         SchemaObject schema = schemaObjectFrom(int.class).build();
         assertThat(schema.type(), equalTo("integer"));
         assertThat(schema.format(), equalTo("int32"));
-        assertThat(schema.nullable(), is(false));
+        assertThat(schema.nullable(), is(nullValue()));
     }
 
     @Test
@@ -90,7 +90,7 @@ public class SchemaObjectTest {
         SchemaObject schema = schemaObjectFrom(long.class).build();
         assertThat(schema.type(), equalTo("integer"));
         assertThat(schema.format(), equalTo("int64"));
-        assertThat(schema.nullable(), is(false));
+        assertThat(schema.nullable(), is(nullValue()));
     }
 
     @Test
@@ -106,7 +106,7 @@ public class SchemaObjectTest {
         SchemaObject schema = schemaObjectFrom(float.class).build();
         assertThat(schema.type(), equalTo("number"));
         assertThat(schema.format(), equalTo("float"));
-        assertThat(schema.nullable(), is(false));
+        assertThat(schema.nullable(), is(nullValue()));
     }
 
     @Test
@@ -122,7 +122,7 @@ public class SchemaObjectTest {
         SchemaObject schema = schemaObjectFrom(double.class).build();
         assertThat(schema.type(), equalTo("number"));
         assertThat(schema.format(), equalTo("double"));
-        assertThat(schema.nullable(), is(false));
+        assertThat(schema.nullable(), is(nullValue()));
     }
 
     @Test
@@ -156,7 +156,7 @@ public class SchemaObjectTest {
         SchemaObject schema = schemaObjectFrom(byte.class).build();
         assertThat(schema.type(), equalTo("string"));
         assertThat(schema.format(), equalTo("byte"));
-        assertThat(schema.nullable(), is(false));
+        assertThat(schema.nullable(), is(nullValue()));
     }
 
     @Test

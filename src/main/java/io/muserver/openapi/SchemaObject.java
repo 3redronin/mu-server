@@ -277,7 +277,7 @@ public class SchemaObject implements JsonWriter {
         isFirst = append(writer, "required", required, isFirst);
         if (this.enumValue != null) {
             List<String> enums = new ArrayList<>();
-            if (nullable) {
+            if (nullable != null && nullable) {
                 enums.add(null);
             }
             for (Object o : this.enumValue) {

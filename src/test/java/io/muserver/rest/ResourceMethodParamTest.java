@@ -367,7 +367,7 @@ public class ResourceMethodParamTest {
             JSONObject param = (JSONObject) api.query("/paths/~1samples/get/parameters/0/schema");
             assertThat(param.getString("type"), is("array"));
             JSONObject items = param.getJSONObject("items");
-            assertThat(items.getBoolean("nullable"), is(false));
+            assertThat(items.opt("nullable"), is(nullValue()));
             assertThat(items.getString("type"), is("string"));
             assertThat(items.getJSONArray("enum"), containsInAnyOrder(Stream.of(Breed.values()).map(Breed::name).toArray()));
         }
