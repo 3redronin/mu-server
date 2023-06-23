@@ -6,25 +6,32 @@ import java.io.IOException;
 import java.io.StringWriter;
 
 import static io.muserver.openapi.EncodingObjectBuilder.encodingObject;
+import static java.util.Arrays.asList;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.is;
 
 public class EncodingObjectTest {
-    private final StringWriter writer = new StringWriter();
 
     @Test
     public void defaultsSetCorrectlyForQuery() throws IOException {
-        EncodingObject obj = encodingObject().build();
+        StringWriter writer = new StringWriter();
+        EncodingObject obj = encodingObject().withStyle("label").build();
         obj.writeJson(writer);
-        assertThat(writer.toString(), equalTo("{\"explode\":false,\"allowReserved\":false}"));
+        assertThat(obj.explode(), is(false));
+        assertThat(obj.allowReserved(), is(false));
+        assertThat(writer.toString(), equalTo("{\"style\":\"label\"}"));
     }
 
     @Test
-    public void explodeIsTrueForForm() throws IOException {
-        EncodingObject obj = encodingObject().withStyle("form").build();
-        obj.writeJson(writer);
-        assertThat(writer.toString(), containsString("\"explode\":true"));
+    public void explodeIsTrueForFormOrDefaultStyle() throws IOException {
+        for (String style : asList("form", null)) {
+            StringWriter writer = new StringWriter();
+            EncodingObject obj = encodingObject().withStyle(style).build();
+            obj.writeJson(writer);
+            assertThat(obj.explode(), is(true));
+            assertThat(writer.toString(), equalTo(style == null ? "{}" : "{\"style\":\"form\"}"));
+        }
     }
 
 }

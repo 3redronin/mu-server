@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.Writer;
 import java.util.Map;
 
+import static io.muserver.openapi.ParameterObject.actualValue;
 import static io.muserver.openapi.ParameterObject.allowedStyles;
 
 /**
@@ -30,14 +31,14 @@ public class EncodingObject implements JsonWriter {
       @deprecated Use {@link #explode()} instead
      */
     @Deprecated
-    public final boolean explode;
+    public final Boolean explode;
     /**
       @deprecated Use {@link #allowReserved()} instead
      */
     @Deprecated
-    public final boolean allowReserved;
+    public final Boolean allowReserved;
 
-    EncodingObject(String contentType, Map<String, HeaderObject> headers, String style, boolean explode, boolean allowReserved) {
+    EncodingObject(String contentType, Map<String, HeaderObject> headers, String style, Boolean explode, Boolean allowReserved) {
         if (style != null && !allowedStyles().contains(style)) {
             throw new IllegalArgumentException("'style' must be one of " + allowedStyles() + " but was " + style);
         }
@@ -85,13 +86,13 @@ public class EncodingObject implements JsonWriter {
      * @return The value described by {@link EncodingObjectBuilder#withExplode}
      */
     public boolean explode() {
-        return explode;
+        return actualValue(explode, style == null || "form".equals(style));
     }
 
     /**
      * @return The value described by {@link EncodingObjectBuilder#withAllowReserved}
      */
     public boolean allowReserved() {
-        return allowReserved;
+        return actualValue(allowReserved, false);
     }
 }

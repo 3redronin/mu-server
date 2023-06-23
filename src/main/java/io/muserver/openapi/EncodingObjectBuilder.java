@@ -12,7 +12,7 @@ public class EncodingObjectBuilder {
     private Map<String, HeaderObject> headers;
     private String style;
     private Boolean explode;
-    private boolean allowReserved;
+    private Boolean allowReserved;
 
     /**
      * @param contentType The Content-Type for encoding a specific property. Default value depends on the property type:
@@ -59,7 +59,7 @@ public class EncodingObjectBuilder {
      *                body media type is not <code>application/x-www-form-urlencoded</code>.
      * @return The current builder
      */
-    public EncodingObjectBuilder withExplode(boolean explode) {
+    public EncodingObjectBuilder withExplode(Boolean explode) {
         this.explode = explode;
         return this;
     }
@@ -71,7 +71,7 @@ public class EncodingObjectBuilder {
      *                      SHALL be ignored if the request body media type is not <code>application/x-www-form-urlencoded</code>.
      * @return The current builder
      */
-    public EncodingObjectBuilder withAllowReserved(boolean allowReserved) {
+    public EncodingObjectBuilder withAllowReserved(Boolean allowReserved) {
         this.allowReserved = allowReserved;
         return this;
     }
@@ -80,8 +80,7 @@ public class EncodingObjectBuilder {
      * @return A new object
      */
     public EncodingObject build() {
-        boolean explodeVal = this.explode == null ? "form".equals(style) : this.explode;
-        return new EncodingObject(contentType, immutable(headers), style, explodeVal, allowReserved);
+        return new EncodingObject(contentType, immutable(headers), style, explode, allowReserved);
     }
 
     /**

@@ -5,6 +5,7 @@ import java.io.Writer;
 import java.util.Map;
 
 import static io.muserver.openapi.Jsonizer.append;
+import static io.muserver.openapi.ParameterObject.actualValue;
 import static io.muserver.openapi.ParameterObject.allowedStyles;
 
 /**
@@ -13,17 +14,17 @@ import static io.muserver.openapi.ParameterObject.allowedStyles;
 public class HeaderObject implements JsonWriter {
 
     private final String description;
-    private final boolean required;
+    private final Boolean required;
     private final Boolean deprecated;
     private final String style;
-    private final String explode;
+    private final Boolean explode;
     private final SchemaObject schema;
     private final Object example;
     private final Map<String, ExampleObject> examples;
     private final Map<String, MediaTypeObject> content;
 
-    HeaderObject(String description, boolean required, Boolean deprecated,
-                    String style, String explode, SchemaObject schema, Object example,
+    HeaderObject(String description, Boolean required, Boolean deprecated,
+                    String style, Boolean explode, SchemaObject schema, Object example,
                     Map<String, ExampleObject> examples, Map<String, MediaTypeObject> content) {
 
         if (style != null && !allowedStyles().contains(style)) {
@@ -73,14 +74,14 @@ public class HeaderObject implements JsonWriter {
      * @return the value described by {@link HeaderObjectBuilder#withRequired}
      */
     public boolean required() {
-        return required;
+        return actualValue(required, false);
     }
 
     /**
      * @return the value described by {@link HeaderObjectBuilder#withDeprecated}
      */
-    public Boolean deprecated() {
-        return deprecated;
+    public boolean deprecated() {
+        return actualValue(deprecated, false);
     }
 
     /**
@@ -93,8 +94,8 @@ public class HeaderObject implements JsonWriter {
     /**
      * @return the value described by {@link HeaderObjectBuilder#withExplode}
      */
-    public String explode() {
-        return explode;
+    public boolean explode() {
+        return actualValue(explode, style == null || "form".equals(style));
     }
 
     /**

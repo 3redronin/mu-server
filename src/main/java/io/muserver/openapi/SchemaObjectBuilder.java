@@ -801,7 +801,7 @@ public class SchemaObjectBuilder {
             .withType(jsonType)
             .withFormat(jsonFormat(from))
             .withExample(example(from))
-            .withNullable(!from.isPrimitive() && !required)
+            .withNullable((!from.isPrimitive() && !required) ? true : null)
             .withItems(itemsFor(from, parameterizedType, "array".equals(jsonType)));
         if (from.equals(UUID.class)) {
             schemaObjectBuilder

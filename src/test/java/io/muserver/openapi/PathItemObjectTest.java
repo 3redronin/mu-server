@@ -55,7 +55,7 @@ public class PathItemObjectTest {
 
         try (StringWriter writer = new StringWriter()) {
             pio.writeJson(writer);
-            assertThat(writer.toString(), equalTo("{\"summary\":\"This is the summary\\nIt's \\\"great\\\".\",\"description\":\"And oh the description\",\"get\":{\"tags\":[\"pets\"],\"summary\":\"Find pets by ID\",\"description\":\"Returns pets based on ID\",\"externalDocs\":{\"description\":\"The docs on the web\",\"url\":\"http://muserver.io\"},\"operationId\":\"some.unique.id\",\"responses\":{\"200\":{\"description\":\"Success\"}}},\"post\":{\"parameters\":[{\"name\":\"id\",\"in\":\"path\",\"description\":\"the description\",\"required\":true,\"deprecated\":false,\"allowEmptyValue\":false,\"explode\":false,\"allowReserved\":false,\"schema\":{}}],\"responses\":{\"200\":{\"description\":\"Success\"}}}}"));
+            assertThat(writer.toString(), equalTo("{\"summary\":\"This is the summary\\nIt's \\\"great\\\".\",\"description\":\"And oh the description\",\"get\":{\"tags\":[\"pets\"],\"summary\":\"Find pets by ID\",\"description\":\"Returns pets based on ID\",\"externalDocs\":{\"description\":\"The docs on the web\",\"url\":\"http://muserver.io\"},\"operationId\":\"some.unique.id\",\"responses\":{\"200\":{\"description\":\"Success\"}}},\"post\":{\"parameters\":[{\"name\":\"id\",\"in\":\"path\",\"description\":\"the description\",\"required\":true,\"schema\":{}}],\"responses\":{\"200\":{\"description\":\"Success\"}}}}"));
         }
 
     }

@@ -25,11 +25,11 @@ public class ParameterObjectBuilder {
     private String in;
     private String description;
     private Boolean required;
-    private boolean deprecated;
-    private boolean allowEmptyValue;
+    private Boolean deprecated;
+    private Boolean allowEmptyValue;
     private String style;
     private Boolean explode;
-    private boolean allowReserved;
+    private Boolean allowReserved;
     private SchemaObject schema;
     private Object example;
     private Map<String, ExampleObject> examples;
@@ -87,7 +87,7 @@ public class ParameterObjectBuilder {
      * @param deprecated Specifies that a parameter is deprecated and SHOULD be transitioned out of usage.
      * @return The current builder
      */
-    public ParameterObjectBuilder withDeprecated(boolean deprecated) {
+    public ParameterObjectBuilder withDeprecated(Boolean deprecated) {
         this.deprecated = deprecated;
         return this;
     }
@@ -100,7 +100,7 @@ public class ParameterObjectBuilder {
      *                        SHALL be ignored.
      * @return The current builder
      */
-    public ParameterObjectBuilder withAllowEmptyValue(boolean allowEmptyValue) {
+    public ParameterObjectBuilder withAllowEmptyValue(Boolean allowEmptyValue) {
         this.allowEmptyValue = allowEmptyValue;
         return this;
     }
@@ -193,7 +193,7 @@ public class ParameterObjectBuilder {
      *                      default value is <code>false</code>.
      * @return The current builder
      */
-    public ParameterObjectBuilder withAllowReserved(boolean allowReserved) {
+    public ParameterObjectBuilder withAllowReserved(Boolean allowReserved) {
         this.allowReserved = allowReserved;
         return this;
     }
@@ -248,9 +248,8 @@ public class ParameterObjectBuilder {
      * @return A new object
      */
     public ParameterObject build() {
-        boolean explodeVal = this.explode == null ? "form".equals(style) : this.explode;
         boolean requiredVal = this.required == null ? "path".equals(in) : this.required;
-        return new ParameterObject(name, in, description, requiredVal, deprecated, allowEmptyValue, style, explodeVal,
+        return new ParameterObject(name, in, description, requiredVal, deprecated, allowEmptyValue, style, explode,
             allowReserved, schema, example, immutable(examples), immutable(content));
     }
 

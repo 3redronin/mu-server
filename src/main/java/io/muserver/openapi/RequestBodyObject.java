@@ -6,6 +6,7 @@ import java.util.Map;
 
 import static io.muserver.Mutils.notNull;
 import static io.muserver.openapi.Jsonizer.append;
+import static io.muserver.openapi.ParameterObject.actualValue;
 
 /**
  * @see RequestBodyObjectBuilder
@@ -26,9 +27,9 @@ public class RequestBodyObject implements JsonWriter {
       @deprecated use {@link #required()} instead
      */
     @Deprecated
-    public final boolean required;
+    public final Boolean required;
 
-    RequestBodyObject(String description, Map<String, MediaTypeObject> content, boolean required) {
+    RequestBodyObject(String description, Map<String, MediaTypeObject> content, Boolean required) {
         notNull("content", content);
         this.description = description;
         this.content = content;
@@ -63,6 +64,6 @@ public class RequestBodyObject implements JsonWriter {
       @return the value described by {@link RequestBodyObjectBuilder#withRequired}
      */
     public boolean required() {
-        return required;
+        return actualValue(required, false);
     }
 }

@@ -37,7 +37,7 @@ public class RequestBodyObjectBuilder {
      * @param required Determines if the request body is required in the request. Defaults to <code>false</code>.
      * @return The current builder
      */
-    public RequestBodyObjectBuilder withRequired(boolean required) {
+    public RequestBodyObjectBuilder withRequired(Boolean required) {
         this.required = required;
         return this;
     }

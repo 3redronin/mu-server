@@ -9,10 +9,10 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  */
 public class HeaderObjectBuilder {
     private String description;
-    private boolean required;
+    private Boolean required;
     private Boolean deprecated;
     private String style;
-    private String explode;
+    private Boolean explode;
     private SchemaObject schema;
     private Object example;
     private Map<String, ExampleObject> examples;
@@ -32,7 +32,7 @@ public class HeaderObjectBuilder {
      * @param required Determines whether this header is mandatory. The default value is <code>false</code>.
      * @return The current builder
      */
-    public HeaderObjectBuilder withRequired(boolean required) {
+    public HeaderObjectBuilder withRequired(Boolean required) {
         this.required = required;
         return this;
     }
@@ -81,7 +81,7 @@ public class HeaderObjectBuilder {
      *                default value is <code>true</code>. For all other styles, the default value is <code>false</code>.
      * @return The current builder
      */
-    public HeaderObjectBuilder withExplode(String explode) {
+    public HeaderObjectBuilder withExplode(Boolean explode) {
         this.explode = explode;
         return this;
     }

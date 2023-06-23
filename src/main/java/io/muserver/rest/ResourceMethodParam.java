@@ -102,7 +102,7 @@ abstract class ResourceMethodParam {
             ParameterObjectBuilder builder = parameterObject()
                 .withIn(source.openAPIIn)
                 .withRequired(isRequired)
-                .withDeprecated(isDeprecated)
+                .withDeprecated(isDeprecated ? true : null)
                 .withName(key);
             ExternalDocumentationObject externalDoc = null;
             if (descriptionData != null) {

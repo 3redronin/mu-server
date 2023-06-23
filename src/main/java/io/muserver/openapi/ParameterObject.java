@@ -41,12 +41,12 @@ public class ParameterObject implements JsonWriter {
      * Use {@link #deprecated()} instead
      */
     @Deprecated
-    public final boolean deprecated;
+    public final Boolean deprecated;
     /**
      * Use {@link #allowEmptyValue()} instead
      */
     @Deprecated
-    public final boolean allowEmptyValue;
+    public final Boolean allowEmptyValue;
     /**
      * Use {@link #style()} instead
      */
@@ -56,12 +56,12 @@ public class ParameterObject implements JsonWriter {
      * Use {@link #explode()} instead
      */
     @Deprecated
-    public final boolean explode;
+    public final Boolean explode;
     /**
      * Use {@link #allowReserved()} instead
      */
     @Deprecated
-    public final boolean allowReserved;
+    public final Boolean allowReserved;
     /**
      * Use {@link #schema()} instead
      */
@@ -83,8 +83,8 @@ public class ParameterObject implements JsonWriter {
     @Deprecated
     public final Map<String, MediaTypeObject> content;
 
-    ParameterObject(String name, String in, String description, boolean required, boolean deprecated, boolean allowEmptyValue,
-                    String style, boolean explode, boolean allowReserved, SchemaObject schema, Object example,
+    ParameterObject(String name, String in, String description, Boolean required, Boolean deprecated, Boolean allowEmptyValue,
+                    String style, Boolean explode, Boolean allowReserved, SchemaObject schema, Object example,
                     Map<String, ExampleObject> examples, Map<String, MediaTypeObject> content) {
         notNull("name", name);
         notNull("in", in);
@@ -198,14 +198,14 @@ public class ParameterObject implements JsonWriter {
       @return the value described by {@link ParameterObjectBuilder#withDeprecated}
      */
     public boolean deprecated() {
-        return deprecated;
+        return actualValue(deprecated, false);
     }
 
     /**
       @return the value described by {@link ParameterObjectBuilder#withAllowEmptyValue}
      */
     public boolean allowEmptyValue() {
-        return allowEmptyValue;
+        return actualValue(allowEmptyValue, false);
     }
 
     /**
@@ -219,14 +219,14 @@ public class ParameterObject implements JsonWriter {
       @return the value described by {@link ParameterObjectBuilder#withExplode}
      */
     public boolean explode() {
-        return explode;
+        return actualValue(explode, style == null || "form".equals(style));
     }
 
     /**
       @return the value described by {@link ParameterObjectBuilder#withAllowReserved}
      */
     public boolean allowReserved() {
-        return allowReserved;
+        return actualValue(allowReserved, false);
     }
 
     /**
@@ -255,5 +255,9 @@ public class ParameterObject implements JsonWriter {
      */
     public Map<String, MediaTypeObject> content() {
         return content;
+    }
+
+    static boolean actualValue(Boolean value, boolean defaultValue) {
+        return value == null ? defaultValue : value;
     }
 }
