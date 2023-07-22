@@ -28,7 +28,8 @@ class BinaryEntityProviders {
     static final List<MessageBodyWriter> binaryEntityWriters = asList(
         new StreamingOutputWriter(),
         new ByteArrayReaderWriter(),
-        new FileReaderWriter()
+        new FileReaderWriter(),
+        new InputStreamPiper()
     );
 
     @Produces("*/*")
@@ -75,6 +76,20 @@ class BinaryEntityProviders {
 
         public InputStream readFrom(Class<InputStream> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
             return entityStream;
+        }
+    }
+
+    @Consumes("*/*")
+    static class InputStreamPiper implements MessageBodyWriter<InputStream> {
+
+        @Override
+        public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
+            return InputStream.class.isAssignableFrom(type);
+        }
+
+        @Override
+        public void writeTo(InputStream inputStream, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException, WebApplicationException {
+            Mutils.copy(inputStream, entityStream, 8192);
         }
     }
 

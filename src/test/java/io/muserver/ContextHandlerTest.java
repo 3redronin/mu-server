@@ -101,13 +101,13 @@ public class ContextHandlerTest {
     @Test
     public void callsToContextNamesWithoutTrailingSlashesResultIn302() throws Exception {
         server = ServerUtils.httpsServerForTest()
-            .addHandler(context("my-app"))
+            .addHandler(context("my app"))
             .start();
 
-        URL url = server.uri().resolve("/my-app").toURL();
+        URL url = server.uri().resolve("/my%20app").toURL();
         try (Response resp = call(request().get().url(url))) {
             assertThat(resp.code(), equalTo(302));
-            assertThat(resp.header("location"), equalTo(server.uri().resolve("/my-app/").toString()));
+            assertThat(resp.header("location"), equalTo(server.uri().resolve("/my%20app/").toString()));
             assertThat(resp.body().contentLength(), equalTo(0L));
         }
     }

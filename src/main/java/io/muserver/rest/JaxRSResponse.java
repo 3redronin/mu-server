@@ -3,15 +3,16 @@ package io.muserver.rest;
 import io.muserver.*;
 import io.netty.handler.codec.http.HttpHeaderNames;
 
+import javax.ws.rs.ProcessingException;
 import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.container.ContainerResponseContext;
 import javax.ws.rs.core.Cookie;
 import javax.ws.rs.core.*;
+import javax.ws.rs.ext.MessageBodyReader;
 import javax.ws.rs.ext.RuntimeDelegate;
 import javax.ws.rs.ext.WriterInterceptor;
 import javax.ws.rs.ext.WriterInterceptorContext;
-import java.io.IOException;
-import java.io.OutputStream;
+import java.io.*;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
 import java.net.URI;
@@ -39,6 +40,10 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
     private JaxRSRequest requestContext;
     private List<WriterInterceptor> writerInterceptors;
     private int nextWriter = 0;
+
+    private boolean isClosed = false;
+
+    private ByteArrayInputStream inputStreamBuffer;
 
     JaxRSResponse(StatusType status, MultivaluedMap<String, Object> headers, ObjWithType entity, NewCookie[] cookies, List<Link> links, Annotation[] annotations) {
         this.status = status;
@@ -159,22 +164,48 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
 
     @Override
     public <T> T readEntity(Class<T> entityType) {
-        throw NotImplementedException.willNot();
+        return readEntity0(entityType, null, new Annotation[0]);
+    }
+
+    private <T> T readEntity0(Class<T> entityType, Type genericType, Annotation[] annotations) {
+        if (inputStreamBuffer == null && !(InputStream.class.isAssignableFrom(getEntity().getClass()))) {
+            throw new IllegalStateException("The entity is not an input stream, it is " + getEntity().getClass());
+        }
+        if (isClosed) throw new IllegalStateException("Cannot read entity; the response is closed");
+        InputStream toRead = inputStreamBuffer != null ? inputStreamBuffer : (InputStream) getEntity();
+        EntityProviders ep = new EntityProviders(EntityProviders.builtInReaders(), emptyList());
+        MessageBodyReader<T> reader = (MessageBodyReader<T>) ep.selectReader(entityType, genericType, annotations, getMediaType());
+        if (reader == null) {
+            throw new ProcessingException("Cannot read this entity type");
+        }
+        try {
+            T result = reader.readFrom(entityType, genericType, annotations, getMediaType(), getStringHeaders(), toRead);
+            if (inputStreamBuffer != null) {
+                inputStreamBuffer.reset();
+            } else {
+                toRead.close();
+            }
+
+            setEntity(result);
+            return result;
+        } catch (IOException e) {
+            throw new ProcessingException("Error while reading entity input stream", e);
+        }
     }
 
     @Override
     public <T> T readEntity(GenericType<T> entityType) {
-        throw NotImplementedException.willNot();
+        return (T) readEntity0(entityType.getRawType(), entityType.getType(), new Annotation[0]);
     }
 
     @Override
     public <T> T readEntity(Class<T> entityType, Annotation[] annotations) {
-        throw NotImplementedException.willNot();
+        return readEntity0(entityType, null, annotations);
     }
 
     @Override
     public <T> T readEntity(GenericType<T> entityType, Annotation[] annotations) {
-        throw NotImplementedException.willNot();
+        return (T) readEntity0(entityType.getRawType(), entityType.getType(), annotations);
     }
 
     @Override
@@ -184,12 +215,46 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
 
     @Override
     public boolean bufferEntity() {
-        throw NotImplementedException.willNot();
+        if (inputStreamBuffer != null) {
+            return true;
+        }
+        Object entity = getEntity();
+        if (entity instanceof InputStream) {
+            try (InputStream in = (InputStream)entity;
+                ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+                Mutils.copy(in, baos, 8192);
+                inputStreamBuffer = new ByteArrayInputStream(baos.toByteArray());
+                setEntity(inputStreamBuffer);
+            } catch (IOException e) {
+                throw new ProcessingException("Could not buffer entity input stream", e);
+            }
+            return true;
+        } else {
+            return false;
+        }
     }
 
     @Override
     public void close() {
-        throw NotImplementedException.notYet();
+        if (!isClosed) {
+            isClosed = true;
+            if (inputStreamBuffer != null) {
+                try {
+                    inputStreamBuffer.close();
+                } catch (IOException e) {
+                    throw new ProcessingException("Error while closing entity input stream", e);
+                }
+                inputStreamBuffer = null;
+            }
+            Object entity = getEntity();
+            if (entity instanceof InputStream) {
+                try {
+                    ((InputStream) entity).close();
+                } catch (IOException e) {
+                    throw new ProcessingException("Could not close input stream entity", e);
+                }
+            }
+        }
     }
 
     @Override

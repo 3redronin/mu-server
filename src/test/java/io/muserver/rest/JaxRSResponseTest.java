@@ -2,15 +2,23 @@ package io.muserver.rest;
 
 import io.muserver.MuServer;
 import io.muserver.Mutils;
+import org.junit.After;
+import org.junit.Assert;
 import org.junit.Test;
+import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
+import javax.ws.rs.Produces;
 import javax.ws.rs.core.*;
+import java.io.*;
+import java.lang.annotation.Annotation;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.Locale;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -22,6 +30,7 @@ public class JaxRSResponseTest {
     static {
         MuRuntimeDelegate.ensureSet();
     }
+    private MuServer server;
 
     @Test
     public void headersCanBeGottenFromIt() {
@@ -148,12 +157,130 @@ public class JaxRSResponseTest {
         assertThat(JaxRSResponse.ok().header("date", now).build().getDate(), is(now));
     }
 
+    @Test
+    public void canBufferInputStreams() throws IOException {
+        AtomicInteger closeCount = new AtomicInteger(0);
+        try (InputStream inputStream = new ByteArrayInputStream("Hello world".getBytes(StandardCharsets.UTF_8)) {
+            @Override
+            public void close() throws IOException {
+                closeCount.incrementAndGet();
+                super.close();
+            }
+        };
+             Response resp = JaxRSResponse.ok(inputStream, "text/plain").build()) {
+            assertThat(resp.bufferEntity(), equalTo(true));
+            assertThat(resp.bufferEntity(), equalTo(true));
+            assertThat(inputStream.available(), equalTo(0));
+            assertThat(closeCount.get(), equalTo(1));
+
+            assertThat(resp.readEntity(String.class), equalTo("Hello world"));
+            assertThat(resp.readEntity(String.class), equalTo("Hello world"));
+            assertThat(resp.readEntity(String.class, new Annotation[0]), equalTo("Hello world"));
+            assertThat(resp.readEntity(new GenericType(String.class), new Annotation[0]), equalTo("Hello world"));
+            assertThat(resp.readEntity(new GenericType(String.class)), equalTo("Hello world"));
+            assertThat(resp.readEntity(new GenericType(String.class)), equalTo("Hello world"));
+        }
+    }
+
+    @Test
+    public void canReadResponseEntitiesWithBuiltinReaders() throws IOException {
+        try (InputStream inputStream = new ByteArrayInputStream("Hello world".getBytes(StandardCharsets.UTF_8));
+            Response resp = JaxRSResponse.ok(inputStream, "text/plain").build()) {
+            String entity = resp.readEntity(String.class);
+            assertThat(entity, equalTo("Hello world"));
+            assertThat(resp.getEntity(), equalTo("Hello world"));
+            try {
+                resp.readEntity(String.class);
+                Assert.fail("Should fail because it wasn't buffered before being read");
+            } catch (IllegalStateException e) {
+                // expected
+            }
+        }
+    }
+
+    @Test
+    public void inputStreamsCanBeUsedAsEntities() throws IOException {
+        @Path("/files")
+        class FileResource {
+            @GET
+            @Produces("text/html;charset=utf-8")
+            public Response get() throws FileNotFoundException {
+                return Response.ok().entity(new FileInputStream("src/test/resources/sample-static/index.html")).build();
+            }
+        }
+        server = ServerUtils.httpsServerForTest().addHandler(restHandler(new FileResource())).start();
+        try (okhttp3.Response resp = call(request().url(server.uri().resolve("/files").toString()))) {
+            assertThat(resp.header("Content-Type"), is("text/html;charset=utf-8"));
+            assertThat(resp.body().string(), containsString("</html>"));
+        }
+    }
+
+    @Test
+    public void inputStreamsCanBeUsedAsEntitiesAndCanBeBufferedAllowingOriginalStreamToBeClosedEarly() throws IOException {
+        @Path("/files")
+        class FileResource {
+            @GET
+            @Produces("text/html;charset=utf-8")
+            public Response getBuffered() throws IOException {
+                Response response;
+                try (FileInputStream fis = new FileInputStream("src/test/resources/sample-static/index.html")) {
+                    response = Response.ok().entity(fis).build();
+                    response.bufferEntity();
+                }
+                return response;
+            }
+        }
+        server = ServerUtils.httpsServerForTest().addHandler(restHandler(new FileResource())).start();
+        try (okhttp3.Response resp = call(request().url(server.uri().resolve("/files").toString()))) {
+            assertThat(resp.header("Content-Type"), is("text/html;charset=utf-8"));
+            assertThat(resp.body().string(), containsString("</html>"));
+        }
+    }
+
+    @Test
+    public void inputStreamsCanBeUsedAsEntitiesAndCanBeRead() throws IOException {
+        @Path("/files")
+        class FileResource {
+            @GET
+            public Response getBuffered() throws IOException {
+                Response response;
+                try (FileInputStream fis = new FileInputStream("src/test/resources/sample-static/index.html")) {
+                    response = Response.ok().entity(fis)
+                        .type("text/html;charset=utf-8") // needs to be here so that readEntity knows it is a text input stream
+                        .build();
+                    String html = response.readEntity(String.class);
+                    if (!html.contains("</html")) throw new RuntimeException("No HTML! " + html);
+                }
+                return response;
+            }
+        }
+        server = ServerUtils.httpsServerForTest().addHandler(restHandler(new FileResource())).start();
+        try (okhttp3.Response resp = call(request().url(server.uri().resolve("/files").toString()))) {
+            assertThat(resp.header("Content-Type"), is("text/html;charset=utf-8"));
+            assertThat(resp.body().string(), containsString("</html>"));
+        }
+    }
+
+
+    @Test
+    public void nonInputStreamBufferingIsIgnored() throws IOException {
+        try (Response resp = JaxRSResponse.ok("Hello world", "text/plain").build()) {
+            assertThat(resp.bufferEntity(), equalTo(false));
+            assertThat(resp.bufferEntity(), equalTo(false));
+        }
+    }
+
     private static CacheControl cacheControl() {
         CacheControl cc = new CacheControl();
         cc.setMustRevalidate(true);
         cc.setPrivate(true);
         cc.setMaxAge(10);
         return cc;
+    }
+
+    @After
+    public void stop() {
+        MuAssert.stopAndCheck(server);
     }
 
 }
