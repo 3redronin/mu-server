@@ -22,7 +22,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.Future;
 
 import static io.muserver.ContentTypes.TEXT_PLAIN_UTF8;
 
@@ -145,11 +144,6 @@ abstract class NettyResponseAdaptor implements MuResponse {
         if (state.endState()) {
             throw new IllegalStateException("Cannot write data as response has already completed");
         }
-    }
-
-    @Deprecated
-    public Future<Void> writeAsync(String text) {
-        return writeAndFlush(textToBuffer(text));
     }
 
     ChannelFuture writeAndFlush(ByteBuffer data) {

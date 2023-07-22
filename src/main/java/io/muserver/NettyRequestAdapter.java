@@ -230,11 +230,6 @@ class NettyRequestAdapter implements MuRequest {
     }
 
 
-    @Deprecated
-    public String parameter(String name) {
-        return query().get(name);
-    }
-
     @Override
     public RequestParameters query() {
         return query;
@@ -244,21 +239,6 @@ class NettyRequestAdapter implements MuRequest {
     public RequestParameters form() throws IOException {
         ensureFormDataLoaded();
         return ((FormRequestBodyReader) requestBodyReader).params();
-    }
-
-    @Deprecated
-    public List<String> parameters(String name) {
-        return query.getAll(name);
-    }
-
-    @Deprecated
-    public String formValue(String name) throws IOException {
-        return form().get(name);
-    }
-
-    @Deprecated
-    public List<String> formValues(String name) throws IOException {
-        return form().getAll(name);
     }
 
     @Override
@@ -297,18 +277,6 @@ class NettyRequestAdapter implements MuRequest {
     @Override
     public String relativePath() {
         return relativePath;
-    }
-
-    @Override
-    @Deprecated
-    public Object state() {
-        return attribute("_value_");
-    }
-
-    @Override
-    @Deprecated
-    public void state(Object value) {
-        attribute("_value_", value);
     }
 
     @Override
@@ -557,18 +525,6 @@ class NettyRequestAdapter implements MuRequest {
         }
 
         @Override
-        @Deprecated
-        public void write(ByteBuffer data, WriteCallback callback) {
-            write(data, error -> {
-                if (error == null) {
-                    callback.onSuccess();
-                } else {
-                    callback.onFailure(error);
-                }
-            });
-        }
-
-        @Override
         public Future<Void> write(ByteBuffer data) {
             NettyResponseAdaptor response = request.httpExchange.response;
             try {
@@ -579,28 +535,12 @@ class NettyRequestAdapter implements MuRequest {
         }
 
         @Override
-        @Deprecated
-        public void setResponseCompleteHandler(ResponseCompleteListener responseCompleteListener) {
-            if (responseCompleteListener != null) {
-                addResponseCompleteHandler(responseCompleteListener);
-            }
-        }
-
-        @Override
         public void addResponseCompleteHandler(ResponseCompleteListener responseCompleteListener) {
             this.httpExchange.addChangeListener((exchange, newState) -> {
                 if (newState.endState()) {
                     responseCompleteListener.onComplete(exchange);
                 }
             });
-        }
-
-        @Override
-        @Deprecated
-        public void setResponseCompletedHandler(ResponseCompletedListener responseCompletedListener) {
-            if (responseCompletedListener != null) {
-                addResponseCompleteHandler(info -> responseCompletedListener.onComplete(info.completedSuccessfully()));
-            }
         }
 
     }

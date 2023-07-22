@@ -11,31 +11,11 @@ import static io.muserver.openapi.Jsonizer.append;
  */
 public class LinkObject implements JsonWriter {
 
-    /**
-     * @deprecated use {@link #operationId()} instead
-     */
-    @Deprecated
-    public final String operationId;
-    /**
-      @deprecated use {@link #parameters()} instead
-     */
-    @Deprecated
-    public final Map<String, Object> parameters;
-    /**
-      @deprecated use {@link #requestBody()} instead
-     */
-    @Deprecated
-    public final Object requestBody;
-    /**
-      @deprecated use {@link #description()} instead
-     */
-    @Deprecated
-    public final String description;
-    /**
-      @deprecated use {@link #server()} instead
-     */
-    @Deprecated
-    public final ServerObject server;
+    private final String operationId;
+    private final Map<String, Object> parameters;
+    private final Object requestBody;
+    private final String description;
+    private final ServerObject server;
 
     LinkObject(String operationId, Map<String, Object> parameters, Object requestBody, String description, ServerObject server) {
         this.operationId = operationId;

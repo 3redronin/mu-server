@@ -13,21 +13,9 @@ import static io.muserver.openapi.ParameterObject.actualValue;
  */
 public class RequestBodyObject implements JsonWriter {
 
-    /**
-     * @deprecated use {@link #description()} instead
-     */
-    @Deprecated
-    public final String description;
-    /**
-      @deprecated use {@link #content()} instead
-     */
-    @Deprecated
-    public final Map<String, MediaTypeObject> content;
-    /**
-      @deprecated use {@link #required()} instead
-     */
-    @Deprecated
-    public final Boolean required;
+    private final String description;
+    private final Map<String, MediaTypeObject> content;
+    private final Boolean required;
 
     RequestBodyObject(String description, Map<String, MediaTypeObject> content, Boolean required) {
         notNull("content", content);

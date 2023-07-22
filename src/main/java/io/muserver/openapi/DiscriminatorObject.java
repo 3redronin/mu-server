@@ -11,16 +11,8 @@ import static io.muserver.openapi.Jsonizer.append;
  * @see DiscriminatorObjectBuilder
  */
 public class DiscriminatorObject implements JsonWriter {
-    /**
-     * Use {@link #propertyName()} instead
-     */
-    @Deprecated
-    public final String propertyName;
-    /**
-     * Use {@link #mapping()} instead
-     */
-    @Deprecated
-    public final Map<String, String> mapping;
+    private final String propertyName;
+    private final Map<String, String> mapping;
 
     DiscriminatorObject(String propertyName, Map<String, String> mapping) {
         notNull("propertyName", propertyName);

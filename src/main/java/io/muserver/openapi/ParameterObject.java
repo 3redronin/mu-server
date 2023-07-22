@@ -17,71 +17,19 @@ public class ParameterObject implements JsonWriter {
     private static final List<String> allowedIns = asList("query", "header", "path", "cookie");
     private static final List<String> allowedStyles = asList("matrix", "label", "form", "simple", "spaceDelimited", "pipeDelimited", "deepObject");
 
-    /**
-     * Use {@link #name()} instead
-     */
-    @Deprecated
-    public final String name;
-    /**
-     * Use {@link #in()} instead
-     */
-    @Deprecated
-    public final String in;
-    /**
-     * Use {@link #description()} instead
-     */
-    @Deprecated
-    public final String description;
-    /**
-     * Use {@link #required()} instead
-     */
-    @Deprecated
-    public final boolean required;
-    /**
-     * Use {@link #deprecated()} instead
-     */
-    @Deprecated
-    public final Boolean deprecated;
-    /**
-     * Use {@link #allowEmptyValue()} instead
-     */
-    @Deprecated
-    public final Boolean allowEmptyValue;
-    /**
-     * Use {@link #style()} instead
-     */
-    @Deprecated
-    public final String style;
-    /**
-     * Use {@link #explode()} instead
-     */
-    @Deprecated
-    public final Boolean explode;
-    /**
-     * Use {@link #allowReserved()} instead
-     */
-    @Deprecated
-    public final Boolean allowReserved;
-    /**
-     * Use {@link #schema()} instead
-     */
-    @Deprecated
-    public final SchemaObject schema;
-    /**
-     * Use {@link #example()} instead
-     */
-    @Deprecated
-    public final Object example;
-    /**
-     * Use {@link #examples()} instead
-     */
-    @Deprecated
-    public final Map<String, ExampleObject> examples;
-    /**
-     * Use {@link #content()} instead
-     */
-    @Deprecated
-    public final Map<String, MediaTypeObject> content;
+    private final String name;
+    private final String in;
+    private final String description;
+    private final boolean required;
+    private final Boolean deprecated;
+    private final Boolean allowEmptyValue;
+    private final String style;
+    private final Boolean explode;
+    private final Boolean allowReserved;
+    private final SchemaObject schema;
+    private final Object example;
+    private final Map<String, ExampleObject> examples;
+    private final Map<String, MediaTypeObject> content;
 
     ParameterObject(String name, String in, String description, Boolean required, Boolean deprecated, Boolean allowEmptyValue,
                     String style, Boolean explode, Boolean allowReserved, SchemaObject schema, Object example,

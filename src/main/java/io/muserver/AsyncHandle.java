@@ -37,17 +37,6 @@ public interface AsyncHandle {
      * <p>See {@link #write(ByteBuffer)} for an alternative that returns a future.</p>
      * @param data The data to write
      * @param callback The callback when the write succeeds or fails
-     * @deprecated Use {@link #write(ByteBuffer, DoneCallback)} instead
-     */
-    @Deprecated
-    void write(ByteBuffer data, WriteCallback callback);
-
-    /**
-     * <p>Writes data to the response asynchronously.</p>
-     * <p>Note that even in async mode it is possible to use the blocking write methods on the {@link MuResponse}</p>
-     * <p>See {@link #write(ByteBuffer)} for an alternative that returns a future.</p>
-     * @param data The data to write
-     * @param callback The callback when the write succeeds or fails
      */
     void write(ByteBuffer data, DoneCallback callback);
 
@@ -64,38 +53,7 @@ public interface AsyncHandle {
      * Add a listener for when request processing is complete. One use of this is to detect early client disconnects
      * so that expensive operations can be cancelled.
      * @param responseCompleteListener The handler to invoke when the request is complete.
-     * @deprecated Use {@link #addResponseCompleteHandler(ResponseCompleteListener)} instead
-     */
-    @Deprecated
-    void setResponseCompleteHandler(ResponseCompleteListener responseCompleteListener);
-
-    /**
-     * Add a listener for when request processing is complete. One use of this is to detect early client disconnects
-     * so that expensive operations can be cancelled.
-     * @param responseCompleteListener The handler to invoke when the request is complete.
      */
     void addResponseCompleteHandler(ResponseCompleteListener responseCompleteListener);
 
-    /**
-     * Add a listener for when request processing is complete. One use of this is to detect early client disconnects
-     * so that expensive operations can be cancelled.
-     * @param responseCompletedListener The handler to invoke when the request is complete.
-     * @deprecated Use {@link #addResponseCompleteHandler(ResponseCompleteListener)} instead
-     */
-    @Deprecated
-    void setResponseCompletedHandler(ResponseCompletedListener responseCompletedListener);
-
-    /**
-     * Replaced with {@link ResponseCompleteListener}
-     */
-    @Deprecated
-    interface ResponseCompletedListener {
-        /**
-         * <p>Called when it is detected that the client request is completed.</p>
-         * <p>Note that this may be called if the client disconnects early, however it many cases network disconnects will not be detected.</p>
-         * @param responseWasCompleted True if the response was fully processed; false if it wasn't (for example if the
-         *                            request was closed by the client before completing).
-         */
-        void onComplete(boolean responseWasCompleted);
-    }
 }

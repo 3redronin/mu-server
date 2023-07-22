@@ -130,10 +130,8 @@ public class ResourceHandlerTest {
             .addHandler(context("/a")
                 .addHandler(context("/b")
                     .addHandler(classpathHandler("/sample-static"))
-                    .addHandler(context("/c")
-                        .addHandler(classpathHandler("/sample-static")
-                            .withPathToServeFrom("/d")
-                        ))))
+                    .addHandler(context("/c/d")
+                        .addHandler(classpathHandler("/sample-static")))))
             .start();
 
         Map<String, List<String>> headersFromGET;
@@ -247,19 +245,21 @@ public class ResourceHandlerTest {
     @Test
     public void canServeFromPath() throws Exception {
         server = ServerUtils.httpsServerForTest()
-            .addHandler(fileHandler("src/test/resources/sample-static")
-                .withPathToServeFrom("/blah")
-                .build())
+            .addHandler(
+                context("bl ah").addHandler(
+                fileHandler("src/test/resources/sample-static/a, tricky - dir Name")
+                )
+            )
             .start();
 
-        try (Response badOne = call(request().url(server.httpsUri().resolve("/index.html").toURL()))) {
+        try (Response badOne = call(request().url(server.httpsUri().resolve("/bl%20ah/not-there.html").toURL()))) {
             assertThat(badOne.code(), is(404));
         }
 
-        try (Response resp = call(request().url(server.httpsUri().resolve("/blah/index.html").toURL()))) {
+        try (Response resp = call(request().url(server.httpsUri().resolve("/bl%20ah/areallylongfilenamewithnonaturalplacestoaddlinebreakslikenohypensoranythingandobviouslynospacesofcourse.txt").toURL()))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.header("Content-Type"), is("text/html;charset=utf-8"));
-            assertThat(resp.body().string(), is(readResource("/sample-static/index.html")));
+            assertThat(resp.header("Content-Type"), is("text/plain;charset=utf-8"));
+            assertThat(resp.body().string(), is(readResource("/sample-static/a, tricky - dir Name/areallylongfilenamewithnonaturalplacestoaddlinebreakslikenohypensoranythingandobviouslynospacesofcourse.txt")));
         }
     }
 

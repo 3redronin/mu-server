@@ -15,66 +15,18 @@ import static java.util.stream.Collectors.toSet;
  */
 public class OperationObject implements JsonWriter {
 
-    /**
-     * @deprecated use {@link #tags()} instead
-     */
-    @Deprecated
-    public final List<String> tags;
-    /**
-      @deprecated use {@link #summary()} instead
-     */
-    @Deprecated
-    public final String summary;
-    /**
-      @deprecated use {@link #description()} instead
-     */
-    @Deprecated
-    public final String description;
-    /**
-      @deprecated use {@link #externalDocs()} instead
-     */
-    @Deprecated
-    public final ExternalDocumentationObject externalDocs;
-    /**
-      @deprecated use {@link #operationId()} instead
-     */
-    @Deprecated
-    public final String operationId;
-    /**
-      @deprecated use {@link #parameters()} instead
-     */
-    @Deprecated
-    public final List<ParameterObject> parameters;
-    /**
-      @deprecated use {@link #requestBody()} instead
-     */
-    @Deprecated
-    public final RequestBodyObject requestBody;
-    /**
-      @deprecated use {@link #responses()} instead
-     */
-    @Deprecated
-    public final ResponsesObject responses;
-    /**
-      @deprecated use {@link #callbacks()} instead
-     */
-    @Deprecated
-    public final Map<String, CallbackObject> callbacks;
-    /**
-      @deprecated use {@link #deprecated()} instead
-     */
-    @Deprecated
-    public final Boolean deprecated;
-    /**
-      @deprecated use {@link #security()} instead
-     */
-    @Deprecated
-    public final List<SecurityRequirementObject> security;
-    /**
-      @deprecated use {@link #servers()} instead
-     */
-    @Deprecated
-    public final List<ServerObject> servers;
+    private final List<String> tags;
+    private final String summary;
+    private final String description;
+    private final ExternalDocumentationObject externalDocs;
+    private final String operationId;
+    private final List<ParameterObject> parameters;
+    private final RequestBodyObject requestBody;
+    private final ResponsesObject responses;
+    private final Map<String, CallbackObject> callbacks;
+    private final Boolean deprecated;
+    private final List<SecurityRequirementObject> security;
+    private final List<ServerObject> servers;
 
     OperationObject(List<String> tags, String summary, String description, ExternalDocumentationObject externalDocs,
                            String operationId, List<ParameterObject> parameters, RequestBodyObject requestBody, ResponsesObject responses,

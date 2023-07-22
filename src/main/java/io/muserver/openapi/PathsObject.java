@@ -10,11 +10,7 @@ import java.util.stream.Collectors;
  */
 public class PathsObject implements JsonWriter {
 
-    /**
-     * @deprecated use {@link #pathItemObjects()} instead
-     */
-    @Deprecated
-    public final Map<String, PathItemObject> pathItemObjects;
+    private final Map<String, PathItemObject> pathItemObjects;
 
     PathsObject(Map<String, PathItemObject> pathItemObjects) {
         if (pathItemObjects != null) {

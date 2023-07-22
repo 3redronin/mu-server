@@ -26,7 +26,6 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
 
     private DateTimeFormatter directoryListingDateFormatter;
     private Map<String, ResourceType> extensionToResourceType = DEFAULT_EXTENSION_MAPPINGS;
-    private String pathToServeFrom = "/";
     private String defaultFile = "index.html";
     private ResourceProviderFactory resourceProviderFactory;
     private boolean directoryListingEnabled = false;
@@ -41,18 +40,6 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
      */
     public ResourceHandlerBuilder withExtensionToResourceType(Map<String, ResourceType> extensionToResourceType) {
         this.extensionToResourceType = extensionToResourceType;
-        return this;
-    }
-
-    /**
-     * Specifies the path to serve the static from.
-     * @param pathToServeFrom A path that static data should be served from. Defaults to <code>/</code>
-     * @return This builder
-     * @deprecated Please use <code>ContextHandlerBuilder.context(pathToServeFrom).addHandler(resourceHandler)</code> instead.
-     */
-    @Deprecated
-    public ResourceHandlerBuilder withPathToServeFrom(String pathToServeFrom) {
-        this.pathToServeFrom = pathToServeFrom;
         return this;
     }
 
@@ -179,7 +166,7 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
                 .withZone(ZoneId.systemDefault());
         }
 
-        return new ResourceHandler(resourceProviderFactory, pathToServeFrom, defaultFile, extensionToResourceType, directoryListingEnabled, css, formatterToUse, this.resourceCustomizer);
+        return new ResourceHandler(resourceProviderFactory, defaultFile, extensionToResourceType, directoryListingEnabled, css, formatterToUse, this.resourceCustomizer);
     }
 
 

@@ -56,23 +56,6 @@ public class HttpsRedirector implements MuHandler {
         return true;
     }
 
-    /**
-     * @param port The port to redirect to
-     * @return A builder
-     * @deprecated Use {@link HttpsRedirectorBuilder#toHttpsPort(int)}
-     */
-    @Deprecated
-    public static HttpsRedirectorBuilder toHttpsPort(int port) {
-        return HttpsRedirectorBuilder.toHttpsPort(port);
-    }
-
-    /**
-     * @deprecated Use {@link HttpsRedirectorBuilder}
-     */
-    @Deprecated
-    public static class Builder extends HttpsRedirectorBuilder {
-    }
-
     @Override
     public String toString() {
         return "HttpsRedirector{" +

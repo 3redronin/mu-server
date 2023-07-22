@@ -15,46 +15,14 @@ import static java.util.Arrays.asList;
 public class SecuritySchemeObject implements JsonWriter {
     private static final List<String> validTypes = asList("apiKey", "http", "oauth2", "openIdConnect");
 
-    /**
-     * @deprecated use {@link #type()} instead
-     */
-    @Deprecated
-    public final String type;
-    /**
-      @deprecated use {@link #description()} instead
-     */
-    @Deprecated
-    public final String description;
-    /**
-      @deprecated use {@link #name()} instead
-     */
-    @Deprecated
-    public final String name;
-    /**
-      @deprecated use {@link #in()} instead
-     */
-    @Deprecated
-    public final String in;
-    /**
-      @deprecated use {@link #scheme()} instead
-     */
-    @Deprecated
-    public final String scheme;
-    /**
-      @deprecated use {@link #bearerFormat()} instead
-     */
-    @Deprecated
-    public final String bearerFormat;
-    /**
-      @deprecated use {@link #flows()} instead
-     */
-    @Deprecated
-    public final OAuthFlowsObject flows;
-    /**
-      @deprecated use {@link #openIdConnectUrl()} instead
-     */
-    @Deprecated
-    public final URI openIdConnectUrl;
+    private final String type;
+    private final String description;
+    private final String name;
+    private final String in;
+    private final String scheme;
+    private final String bearerFormat;
+    private final OAuthFlowsObject flows;
+    private final URI openIdConnectUrl;
 
     SecuritySchemeObject(String type, String description, String name, String in, String scheme, String bearerFormat, OAuthFlowsObject flows, URI openIdConnectUrl) {
         notNull("type", type);

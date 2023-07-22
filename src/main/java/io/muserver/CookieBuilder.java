@@ -191,11 +191,11 @@ public class CookieBuilder {
         if (Mutils.nullOrEmpty(name)) throw new IllegalStateException("A cookie name must be specified");
         if (value == null) throw new IllegalStateException("A cookie value must be specified");
         Cookie c = new Cookie(name, value);
-        c.setDomain(domain);
-        c.setPath(path);
-        c.setMaxAge(maxAge);
-        c.setSecure(secure);
-        c.setHttpOnly(httpOnly);
+        c.nettyCookie.setDomain(domain);
+        c.nettyCookie.setPath(path);
+        c.nettyCookie.setMaxAge(maxAge);
+        c.nettyCookie.setSecure(secure);
+        c.nettyCookie.setHttpOnly(httpOnly);
         c.nettyCookie.setSameSite(sameSite);
         return c;
     }

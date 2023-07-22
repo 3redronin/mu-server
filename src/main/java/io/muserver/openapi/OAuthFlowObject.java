@@ -13,26 +13,10 @@ import static io.muserver.openapi.Jsonizer.append;
  */
 public class OAuthFlowObject implements JsonWriter {
 
-    /**
-     * @deprecated use {@link #authorizationUrl()} instead
-     */
-    @Deprecated
-    public final URI authorizationUrl;
-    /**
-      @deprecated use {@link #tokenUrl()} instead
-     */
-    @Deprecated
-    public final URI tokenUrl;
-    /**
-      @deprecated use {@link #refreshUrl()} instead
-     */
-    @Deprecated
-    public final URI refreshUrl;
-    /**
-      @deprecated use {@link #scopes()} instead
-     */
-    @Deprecated
-    public final Map<String, String> scopes;
+    private final URI authorizationUrl;
+    private final URI tokenUrl;
+    private final URI refreshUrl;
+    private final Map<String, String> scopes;
 
     OAuthFlowObject(URI authorizationUrl, URI tokenUrl, URI refreshUrl, Map<String, String> scopes) {
         notNull("authorizationUrl", authorizationUrl);

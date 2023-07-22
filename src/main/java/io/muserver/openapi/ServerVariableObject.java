@@ -11,21 +11,9 @@ import static io.muserver.openapi.Jsonizer.append;
  * @see ServerVariableObjectBuilder
  */
 public class ServerVariableObject implements JsonWriter {
-    /**
-     * @deprecated use {@link #enumValues()} instead
-     */
-    @Deprecated
-    public final List<String> enumValues;
-    /**
-      @deprecated use {@link #defaultValue()} instead
-     */
-    @Deprecated
-    public final String defaultValue;
-    /**
-      @deprecated use {@link #description()} instead
-     */
-    @Deprecated
-    public final String description;
+    private final List<String> enumValues;
+    private final String defaultValue;
+    private final String description;
 
     ServerVariableObject(List<String> enumValues, String defaultValue, String description) {
         notNull("defaultValue", defaultValue);

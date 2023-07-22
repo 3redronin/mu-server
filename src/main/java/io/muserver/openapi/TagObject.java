@@ -12,21 +12,9 @@ import static io.muserver.openapi.Jsonizer.append;
  */
 public class TagObject implements JsonWriter {
 
-    /**
-     * @deprecated use {@link #name()} instead
-     */
-    @Deprecated
-    public final String name;
-    /**
-      @deprecated use {@link #description()} instead
-     */
-    @Deprecated
-    public final String description;
-    /**
-      @deprecated use {@link #externalDocs()} instead
-     */
-    @Deprecated
-    public final ExternalDocumentationObject externalDocs;
+    private final String name;
+    private final String description;
+    private final ExternalDocumentationObject externalDocs;
 
     TagObject(String name, String description, ExternalDocumentationObject externalDocs) {
         notNull("name", name);

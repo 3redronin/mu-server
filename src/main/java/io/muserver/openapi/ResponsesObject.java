@@ -12,16 +12,8 @@ import static io.muserver.openapi.Jsonizer.append;
  */
 public class ResponsesObject implements JsonWriter {
 
-    /**
-     * @deprecated use {@link #defaultValue()} instead
-     */
-    @Deprecated
-    public final ResponseObject defaultValue;
-    /**
-      @deprecated use {@link #httpStatusCodes()} instead
-     */
-    @Deprecated
-    public final Map<String, ResponseObject> httpStatusCodes;
+    private final ResponseObject defaultValue;
+    private final Map<String, ResponseObject> httpStatusCodes;
 
     ResponsesObject(ResponseObject defaultValue, Map<String, ResponseObject> httpStatusCodes) {
         notNull("httpStatusCodes", httpStatusCodes);

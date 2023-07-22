@@ -11,31 +11,11 @@ import static io.muserver.openapi.Jsonizer.append;
  */
 public class XmlObject implements JsonWriter {
 
-    /**
-     * @deprecated use {@link #name()} instead
-     */
-    @Deprecated
-    public final String name;
-    /**
-      @deprecated use {@link #namespace()} instead
-     */
-    @Deprecated
-    public final URI namespace;
-    /**
-      @deprecated use {@link #prefix()} instead
-     */
-    @Deprecated
-    public final String prefix;
-    /**
-      @deprecated use {@link #attribute()} instead
-     */
-    @Deprecated
-    public final boolean attribute;
-    /**
-      @deprecated use {@link #wrapped()} instead
-     */
-    @Deprecated
-    public final boolean wrapped;
+    private final String name;
+    private final URI namespace;
+    private final String prefix;
+    private final boolean attribute;
+    private final boolean wrapped;
 
     XmlObject(String name, URI namespace, String prefix, boolean attribute, boolean wrapped) {
         this.name = name;

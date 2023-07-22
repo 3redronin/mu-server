@@ -21,29 +21,13 @@ public class ResourceType {
      */
     public static final Map<String, ResourceType> DEFAULT_EXTENSION_MAPPINGS;
 
-    /**
-     * @deprecated use {@link #mimeType()} instead
-     */
-    @Deprecated
-    public final CharSequence mimeType;
+    private final CharSequence mimeType;
 
-    /**
-     * @deprecated use {@link #headers()} instead
-     */
-    @Deprecated
-    public final Headers headers;
+    private final Headers headers;
 
-    /**
-     * @deprecated use {@link #extensions()} instead
-     */
-    @Deprecated
-    public final List<String> extensions;
+    private final List<String> extensions;
 
-    /**
-     * @deprecated use {@link #gzip()} instead
-     */
-    @Deprecated
-    public final boolean gzip;
+    private final boolean gzip;
 
     /**
      * @return The mime type of this resource, such as <code>image/jpeg</code>
@@ -203,15 +187,6 @@ public class ResourceType {
      */
     public static final ResourceType IMAGE_JPEG = new ResourceType(ContentTypes.IMAGE_JPEG, shortCache(), false, asList("jpg", "jpeg"));
 
-    /**
-     * @deprecated use {@link #APPLICATION_JAVASCRIPT} instead
-     */
-    @Deprecated
-    public static final ResourceType TEXT_JAVASCRIPT = new ResourceType(ContentTypes.APPLICATION_JAVASCRIPT,
-        Headers.http2Headers()
-            .add(HeaderNames.CACHE_CONTROL, "max-age=86400")
-            .add(HeaderNames.X_CONTENT_TYPE_OPTIONS, HeaderValues.NOSNIFF),
-        true, asList("js", "mjs"));
     /**
      * <code>application/javascript</code>
      */

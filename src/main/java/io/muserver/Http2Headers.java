@@ -50,12 +50,6 @@ class Http2Headers implements Headers {
     }
 
     @Override
-    @Deprecated
-    public Integer getInt(CharSequence name) {
-        return entries.getInt(toLower(name));
-    }
-
-    @Override
     public int getInt(CharSequence name, int defaultValue) {
         return entries.getInt(toLower(name), defaultValue);
     }
@@ -103,18 +97,6 @@ class Http2Headers implements Headers {
     public boolean getBoolean(String name) {
         String val = get(name, "").toLowerCase();
         return isTruthy(val);
-    }
-
-    @Override
-    @Deprecated
-    public Short getShort(CharSequence name) {
-        return entries.getShort(toLower(name));
-    }
-
-    @Override
-    @Deprecated
-    public short getShort(CharSequence name, short defaultValue) {
-        return entries.getShort(toLower(name), defaultValue);
     }
 
     @Override
@@ -224,13 +206,6 @@ class Http2Headers implements Headers {
     }
 
     @Override
-    @Deprecated
-    public Headers addShort(CharSequence name, short value) {
-        entries.addShort(toLower(name), value);
-        return this;
-    }
-
-    @Override
     public Headers set(String name, Object value) {
         return set((CharSequence) name, value);
     }
@@ -279,13 +254,6 @@ class Http2Headers implements Headers {
     }
 
     @Override
-    @Deprecated
-    public Headers setShort(CharSequence name, short value) {
-        entries.setShort(toLower(name), value);
-        return this;
-    }
-
-    @Override
     public Headers remove(String name) {
         return remove((CharSequence) name);
     }
@@ -315,24 +283,6 @@ class Http2Headers implements Headers {
     @Override
     public boolean containsValue(CharSequence name, CharSequence value, boolean ignoreCase) {
         return entries.contains(toLower(name), value, ignoreCase);
-    }
-
-    @Override
-    @Deprecated
-    public String getAsString(CharSequence name) {
-        return get(name);
-    }
-
-    @Override
-    @Deprecated
-    public List<String> getAllAsString(CharSequence name) {
-        return getAll(name);
-    }
-
-    @Override
-    @Deprecated
-    public Iterator<Map.Entry<String, String>> iteratorAsString() {
-        return iterator();
     }
 
     @Override

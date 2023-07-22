@@ -28,38 +28,12 @@ public interface MuWebSocket {
      * Called when a message is received from the client.
      *
      * @param message    The message as a string.
-     * @param onComplete A callback that must be run with <code>onComplete.run()</code> when the byte buffer is no longer needed.
-     * @throws Exception Any exceptions thrown will result in the onError method being called with the thrown exception being used as the <code>cause</code> parameter.
-     * @deprecated use {@link #onText(String, boolean, DoneCallback)} instead
-     */
-    @Deprecated
-    default void onText(String message, DoneCallback onComplete) throws Exception {
-        onComplete.onComplete(null);
-    }
-
-    /**
-     * Called when a message is received from the client.
-     *
-     * @param message    The message as a string.
      * @param isLast     Returns <code>true</code> if this message is the last part of the complete message. This is only <code>false</code>
      *                   when clients send fragmented messages in which case only the last part of the fragmented message will return <code>true</code>.
      * @param onComplete A callback that must be run with <code>onComplete.run()</code> when the byte buffer is no longer needed.
      * @throws Exception Any exceptions thrown will result in the onError method being called with the thrown exception being used as the <code>cause</code> parameter.
      */
     default void onText(String message, boolean isLast, DoneCallback onComplete) throws Exception {
-        onText(message, onComplete);
-    }
-
-    /**
-     * Called when a message is received from the client.
-     *
-     * @param buffer     The message as a byte buffer.
-     * @param onComplete A callback that must be run with <code>onComplete.run()</code> when the byte buffer is no longer needed. Failure to call this will result in memory leaks.
-     * @throws Exception Any exceptions thrown will result in the onError method being called with the thrown exception being used as the <code>cause</code> parameter.
-     * @deprecated use {@link #onBinary(ByteBuffer, boolean, DoneCallback)} instead
-     */
-    @Deprecated
-    default void onBinary(ByteBuffer buffer, DoneCallback onComplete) throws Exception {
         onComplete.onComplete(null);
     }
 
@@ -73,7 +47,7 @@ public interface MuWebSocket {
      * @throws Exception Any exceptions thrown will result in the onError method being called with the thrown exception being used as the <code>cause</code> parameter.
      */
     default void onBinary(ByteBuffer buffer, boolean isLast, DoneCallback onComplete) throws Exception {
-        onBinary(buffer, onComplete);
+        onComplete.onComplete(null);
     }
 
     /**
@@ -132,7 +106,7 @@ public interface MuWebSocket {
      *     <li>No messages have been received within the time specified by {@link WebSocketHandlerBuilder#withIdleReadTimeout(long, TimeUnit)},
      *     in which case the cause will be a {@link java.util.concurrent.TimeoutException}</li>
      *     <li>An Exception is thrown by any of the methods that implement this interface, such as
-     *     {@link #onText(String, DoneCallback)} etc (but not onError itself).</li>
+     *     {@link #onText(String, boolean, DoneCallback)} etc (but not onError itself).</li>
      *     <li>The client sends an invalid frame</li>
      * </ul>
      *

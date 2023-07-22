@@ -48,15 +48,6 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     private CollectionParameterStrategy collectionParameterStrategy;
 
     /**
-     * @deprecated Use {@link #restHandler(Object...)} instead
-     * @param resources The resources to use
-     */
-    @Deprecated
-    public RestHandlerBuilder(Object... resources) {
-        addResource(resources);
-    }
-
-    /**
      * Adds one or more rest resources to this handler
      *
      * @param resources One or more instances of classes that are decorated with {@link javax.ws.rs.Path} annotations.
@@ -258,15 +249,6 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     }
 
     /**
-     * @return The current Rest Handler Builder
-     * @deprecated This does nothing. To expose API endpoints, use {@link #withOpenApiJsonUrl(String)} and/or {@link #withOpenApiHtmlUrl(String)}
-     */
-    @Deprecated
-    public RestHandlerBuilder withDocumentation() {
-        return this;
-    }
-
-    /**
      * <p>Creates a handler builder for JAX-RS REST services.</p>
      * <p>Note that CORS is disabled by default.</p>
      *
@@ -274,7 +256,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * @return Returns a builder that can be used to specify more config
      */
     public static RestHandlerBuilder restHandler(Object... resources) {
-        return new RestHandlerBuilder(resources);
+        return new RestHandlerBuilder().addResource(resources);
     }
 
     /**
@@ -302,16 +284,6 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      */
     public RestHandlerBuilder withCORS(CORSConfigBuilder corsConfig) {
         return withCORS(corsConfig.build());
-    }
-
-    /**
-     * @param resources Resources to register
-     * @return Returns a rest handler with the given resources.
-     * @deprecated Use restHandler(resources).build() instead.
-     */
-    @Deprecated
-    public static RestHandler create(Object... resources) {
-        return restHandler(resources).build();
     }
 
     /**

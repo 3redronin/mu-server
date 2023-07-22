@@ -13,36 +13,12 @@ import static java.util.stream.Collectors.toSet;
  */
 public class CORSConfig {
 
-    /**
-     * @deprecated use {@link #allowCredentials()} instead
-     */
-    @Deprecated
-    public final boolean allowCredentials;
-    /**
-      @deprecated use {@link #allowedOrigins()} instead
-     */
-    @Deprecated
-    public final Collection<String> allowedOrigins;
-    /**
-      @deprecated use {@link #allowedOriginRegex()} instead
-     */
-    @Deprecated
-    public final List<Pattern> allowedOriginRegex;
-    /**
-      @deprecated use {@link #exposedHeaders()} instead
-     */
-    @Deprecated
-    public final Collection<String> exposedHeaders;
-    /**
-      @deprecated use {@link #maxAge()} instead
-     */
-    @Deprecated
-    public final long maxAge;
-    /**
-      @deprecated use {@link #allowedHeaders()} instead
-     */
-    @Deprecated
-    public final Collection<String> allowedHeaders;
+    private final boolean allowCredentials;
+    private final Collection<String> allowedOrigins;
+    private final List<Pattern> allowedOriginRegex;
+    private final Collection<String> exposedHeaders;
+    private final long maxAge;
+    private final Collection<String> allowedHeaders;
     private final String exposedHeadersCSV;
     private final String allowedHeadersCSV;
 
