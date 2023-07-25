@@ -2,10 +2,16 @@ package io.muserver;
 
 import io.netty.handler.codec.http.multipart.DiskFileUpload;
 import io.netty.handler.codec.http.multipart.FileUpload;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 
+import static io.muserver.Mutils.fullPath;
 import static io.muserver.Mutils.notNull;
 
 /**
@@ -157,6 +163,96 @@ class MuUploadedFile implements UploadedFile {
             return new ByteArrayInputStream(fu.get());
         } else {
             return new FileInputStream(fu.getFile());
+        }
+    }
+}
+
+class MuUploadedFile2 implements UploadedFile {
+    private static final Logger log = LoggerFactory.getLogger(MuUploadedFile2.class);
+    private File file;
+    private boolean shouldDeleteOnClean = true;
+    private final String contentType;
+    private final String filename;
+
+    MuUploadedFile2(File file, String contentType, String filename) {
+        this.file = file;
+        this.contentType = contentType;
+        this.filename = filename;
+    }
+
+
+    @Override
+    public File asFile() throws IOException {
+        return file;
+    }
+
+    @Override
+    public String asString() throws IOException {
+        return new String(asBytes(), StandardCharsets.UTF_8);
+    }
+
+    @Override
+    public byte[] asBytes() throws IOException {
+        try (FileInputStream fis = new FileInputStream(file)) {
+            return Mutils.toByteArray(fis, 8192);
+        }
+    }
+
+    @Override
+    public String contentType() {
+        return contentType;
+    }
+
+    @Override
+    public String filename() {
+        String n = this.filename;
+        int i = n.lastIndexOf('/');
+        if (i > -1) {
+            n = n.substring(i + 1);
+        }
+        i = n.lastIndexOf('\\');
+        if (i > -1) {
+            n = n.substring(i + 1);
+        }
+        return n;
+    }
+
+    @Override
+    public String extension() {
+        String n = filename();
+        int i = n.lastIndexOf('.');
+        if (i > -1) {
+            return n.substring(i + 1);
+        }
+        return "";
+    }
+
+    @Override
+    public void saveTo(File dest) throws IOException {
+        notNull("dest", dest);
+        dest.getParentFile().mkdirs();
+        Path moved = Files.move(file.toPath(), dest.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        shouldDeleteOnClean = false;
+        System.out.println("Moved to " + moved);
+        this.file = moved.toFile();
+    }
+
+    @Override
+    public long size() {
+        return file.length();
+    }
+
+    @Override
+    public InputStream asStream() throws IOException {
+        return new FileInputStream(file);
+    }
+
+    void deleteFile() {
+        if (shouldDeleteOnClean) {
+            boolean deleted = file.delete();
+            if (!deleted) {
+                log.info("Failed to delete " + fullPath(file));
+            }
         }
     }
 }

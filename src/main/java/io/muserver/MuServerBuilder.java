@@ -762,4 +762,12 @@ public class MuServerBuilder {
             ", rateLimiters=" + rateLimiters +
             '}';
     }
+
+
+
+    public MuServer start2() throws Exception {
+        return MuServer2.start(this);
+    }
+
+
 }

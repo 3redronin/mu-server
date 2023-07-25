@@ -47,7 +47,11 @@
             <version>${slf4j.version}</version>
             <scope>test</scope>
         </dependency>
-
+        <dependency>
+            <groupId>com.github.marianobarrios</groupId>
+            <artifactId>tls-channel</artifactId>
+            <version>0.7.0</version>
+        </dependency>
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-transport</artifactId>
@@ -226,8 +230,8 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.10.1</version>
                 <configuration>
-                    <source>1.8</source>
-                    <target>1.8</target>
+                    <source>17</source>
+                    <target>17</target>
                     <failOnWarning>true</failOnWarning>
                     <showWarnings>true</showWarnings>
                     <compilerArgs>
@@ -258,7 +262,7 @@
                 <artifactId>maven-javadoc-plugin</artifactId>
                 <version>3.3.1</version>
                 <configuration>
-                    <source>8</source>
+                    <source>17</source>
                     <detectJavaApiLink>false</detectJavaApiLink>
                 </configuration>
                 <executions>
@@ -359,23 +363,6 @@
                                 </goals>
                             </execution>
                         </executions>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
-        <profile>
-            <id>java-8-api</id>
-            <activation>
-                <jdk>[9,)</jdk>
-            </activation>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-compiler-plugin</artifactId>
-                        <configuration>
-                            <release>8</release>
-                        </configuration>
                     </plugin>
                 </plugins>
             </build>
