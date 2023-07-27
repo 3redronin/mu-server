@@ -12,6 +12,11 @@ public enum ResponseState {
     NOTHING(false, false),
 
     /**
+     * The headers have been sent but not the body which is expected
+     */
+    HEADERS_SENT(false, false),
+
+    /**
      * A non-chunked response has been successfully sent to the client
      */
     FULL_SENT(true, true),

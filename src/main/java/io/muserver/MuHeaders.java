@@ -473,36 +473,36 @@ public class MuHeaders extends Http1Headers implements RequestParameters {
 
     @Override
     public List<ParameterizedHeaderWithValue> accept() {
-        return null;
+        return Headtils.getParameterizedHeaderWithValues(this, HeaderNames.ACCEPT);
     }
 
     @Override
     public List<ParameterizedHeaderWithValue> acceptCharset() {
-        return null;
+        return Headtils.getParameterizedHeaderWithValues(this, HeaderNames.ACCEPT_CHARSET);
     }
 
     @Override
     public List<ParameterizedHeaderWithValue> acceptEncoding() {
-        return null;
+        return Headtils.getParameterizedHeaderWithValues(this, HeaderNames.ACCEPT_ENCODING);
     }
 
     @Override
     public List<ForwardedHeader> forwarded() {
-        return null;
+        return Headtils.getForwardedHeaders(this);
     }
 
     @Override
     public List<ParameterizedHeaderWithValue> acceptLanguage() {
-        return null;
+        return Headtils.getParameterizedHeaderWithValues(this, HeaderNames.ACCEPT_LANGUAGE);
     }
 
     @Override
     public ParameterizedHeader cacheControl() {
-        return null;
+        return ParameterizedHeader.fromString(get(HeaderNames.CACHE_CONTROL));
     }
 
     @Override
     public MediaType contentType() {
-        return null;
+        return Headtils.getMediaType(this);
     }
 }

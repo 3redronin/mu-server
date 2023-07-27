@@ -8,6 +8,7 @@ import tlschannel.async.AsynchronousTlsChannel;
 import tlschannel.async.AsynchronousTlsChannelGroup;
 
 import javax.net.ssl.SSLContext;
+import javax.ws.rs.NotFoundException;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -15,13 +16,10 @@ import java.nio.ByteBuffer;
 import java.nio.channels.CompletionHandler;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
-import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Set;
 
 class MuServer2 implements MuServer {
-    private static final Charset utf8 = StandardCharsets.UTF_8;
     private static final Logger log = LoggerFactory.getLogger(MuServer2.class);
     private final ServerSocketChannel socketChannel;
     private final Thread accepterThread;
@@ -58,10 +56,7 @@ class MuServer2 implements MuServer {
 
                         // create TlsChannel builder, combining the raw channel and the SSLEngine, using minimal
                         // options
-                        ServerTlsChannel.Builder builder = ServerTlsChannel.newBuilder(rawChannel, sslContext);
-
-                        // instantiate TlsChannel
-                        TlsChannel tlsChannel = builder.build();
+                        TlsChannel tlsChannel = ServerTlsChannel.newBuilder(rawChannel, sslContext).build();
 
                         // build asynchronous channel, based in the TLS channel and associated with the global
                         // group.
@@ -71,22 +66,34 @@ class MuServer2 implements MuServer {
                         var requestParser = new RequestParser(new RequestParser.Options(8192, 8192), new RequestParser.RequestListener() {
                             @Override
                             public void onHeaders(Method method, URI uri, HttpVersion httpProtocolVersion, MuHeaders headers, GrowableByteBufferInputStream body) {
-                                log.info("Got " + method + " " + uri + " " + httpProtocolVersion + " with headers + " + headers);
+                                var data = new MuExchangeData(null, httpProtocolVersion);
+                                var req = new MuRequestImpl(data,method, uri, uri, headers);
+                                var resp = new MuResponseImpl(data, asyncTlsChannel);
+                                var exchange = new MuExchange(data, req, resp);
+
+                                try {
+                                    boolean handled = false;
+                                    for (MuHandler muHandler : builder.handlers()) {
+                                        handled = muHandler.handle(req, resp);
+                                        if (handled) {
+                                            break;
+                                        }
+                                        if (req.isAsync()) {
+                                            throw new IllegalStateException(muHandler.getClass() + " returned false however this is not allowed after starting to handle a request asynchronously.");
+                                        }
+                                    }
+                                    if (!handled) {
+                                        throw new NotFoundException();
+                                    }
+                                } catch (Exception e) {
+                                    log.error("Unhandled exception", e);
+                                    throw new RuntimeException(e);
+                                }
                             }
 
                             @Override
                             public void onRequestComplete(MuHeaders trailers) {
-                                log.info("Got trailers " + trailers);
-                                asyncTlsChannel.write(Mutils.toByteBuffer("""
-HTTP/1.1 200 OK
-Date: Mon, 27 Jul 2009 12:28:53 GMT
-Server: Apache/2.2.14 (Win32)
-Last-Modified: Wed, 22 Jul 2009 19:15:56 GMT
-Content-Length: 5
-Content-Type: text/html
-Connection: Closed
-
-Hello""".replace("\n", "\r\n")));
+                                log.info("Request complete. Trailers=" + trailers);
                             }
                         });
 

@@ -74,6 +74,11 @@ class NettyRequestAdapter implements MuRequest {
         return this.httpExchange.connection();
     }
 
+    @Override
+    public Headers trailers() {
+        return null;
+    }
+
     private static URI getUri(Headers h, String scheme, String hostHeader, String requestUri, URI serverUri) {
         try {
             List<ForwardedHeader> forwarded = h.forwarded();

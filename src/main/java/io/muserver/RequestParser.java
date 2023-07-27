@@ -147,7 +147,6 @@ class RequestParser {
                     }
                     this.state = State.H_NAME;
                     cur.setLength(0);
-                    state = State.H_NAME;
                 } else {
                     append(c);
                 }

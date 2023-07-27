@@ -144,4 +144,9 @@ public class NotImplementedMuRequest implements MuRequest {
     public HttpConnection connection() {
         return throwIt();
     }
+
+    @Override
+    public Headers trailers() {
+        return throwIt();
+    }
 }

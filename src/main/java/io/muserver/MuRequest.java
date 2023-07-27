@@ -234,4 +234,6 @@ public interface MuRequest {
      * @return The HTTP connection that this request is sent over.
      */
     HttpConnection connection();
+
+    Headers trailers();
 }
