@@ -270,6 +270,11 @@ public final class HeaderNames {
      */
     public static final CharSequence SERVER = HttpHeaderNames.SERVER;
     /**
+     * {@code "server-timing"}
+     */
+    public static final CharSequence SERVER_TIMING = AsciiString.cached("server-timing");
+
+    /**
      * {@code "set-cookie"}
      */
     public static final CharSequence SET_COOKIE = HttpHeaderNames.SET_COOKIE;

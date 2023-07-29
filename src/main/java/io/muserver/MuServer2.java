@@ -66,7 +66,7 @@ class MuServer2 implements MuServer {
                         var requestParser = new RequestParser(new RequestParser.Options(8192, 8192), new RequestParser.RequestListener() {
                             @Override
                             public void onHeaders(Method method, URI uri, HttpVersion httpProtocolVersion, MuHeaders headers, GrowableByteBufferInputStream body) {
-                                var data = new MuExchangeData(null, httpProtocolVersion);
+                                var data = new MuExchangeData(null, httpProtocolVersion, headers);
                                 var req = new MuRequestImpl(data,method, uri, uri, headers);
                                 var resp = new MuResponseImpl(data, asyncTlsChannel);
                                 var exchange = new MuExchange(data, req, resp);
@@ -84,6 +84,9 @@ class MuServer2 implements MuServer {
                                     }
                                     if (!handled) {
                                         throw new NotFoundException();
+                                    }
+                                    if (resp.responseState() == ResponseState.STREAMING) {
+                                        resp.endStreaming();
                                     }
                                 } catch (Exception e) {
                                     log.error("Unhandled exception", e);

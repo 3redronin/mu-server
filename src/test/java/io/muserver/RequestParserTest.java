@@ -456,4 +456,18 @@ A server MUST respond with a 400 (Bad Request) status code to any
 
      */
 
+    /*
+    A server that receives a request message with a transfer coding it does not understand SHOULD respond with 501 (Not Implemented).
+
+     */
+
+    /*
+    A server or client that receives an HTTP/1.0 message containing a Transfer-Encoding header field MUST treat the message as if the framing is faulty, even if a Content-Length is present, and close the connection after processing the message.
+     */
+
+    /*
+    If a Transfer-Encoding header field is present in a request and the chunked transfer coding is not the final encoding, the message body length cannot be determined reliably; the server MUST respond with the 400 (Bad Request) status code and then close the connection.
+     */
+
+
 }

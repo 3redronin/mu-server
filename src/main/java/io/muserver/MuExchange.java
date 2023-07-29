@@ -16,9 +16,11 @@ class MuExchange {
 class MuExchangeData {
     final MuServer2 server;
     final HttpVersion httpVersion;
+    final MuHeaders requestHeaders;
 
-    MuExchangeData(MuServer2 server, HttpVersion httpVersion) {
+    MuExchangeData(MuServer2 server, HttpVersion httpVersion, MuHeaders requestHeaders) {
         this.server = server;
         this.httpVersion = httpVersion;
+        this.requestHeaders = requestHeaders;
     }
 }

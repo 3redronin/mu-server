@@ -5,8 +5,11 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Map;
+
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.nullValue;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 
@@ -26,6 +29,36 @@ public class MuServer2Test {
         try (var resp = call(request(server.uri().resolve("/blah")))) {
             assertThat(resp.code(), equalTo(200));
             assertThat(resp.body().string(), equalTo("Hello"));
+        }
+
+    }
+
+    @Test
+    public void canChunk() throws Exception {
+        server = MuServerBuilder.muServer()
+            .withHttpsPort(10100)
+            .addHandler(Method.GET, "/blah", (request, response, pathParams) -> {
+                response.headers().set(HeaderNames.TRAILER, "server-timing");
+                response.sendChunk("Hello");
+                response.sendChunk(" ");
+                response.sendChunk("world");
+                response.trailers().set(HeaderNames.SERVER_TIMING, new ParameterizedHeaderWithValue("total", Map.of("dur", "123.4")));
+            })
+            .start2();
+        log.info("Started at " + server.uri());
+
+        try (var resp = call(request(server.uri().resolve("/blah")))) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.body().string(), equalTo("Hello world"));
+            assertThat(resp.trailers().get("server-timing"), nullValue());
+        }
+
+        try (var resp = call(request(server.uri().resolve("/blah"))
+            .header("TE", "trailers")
+        )) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.body().string(), equalTo("Hello world"));
+            assertThat(resp.trailers().get("server-timing"), equalTo("total;dur=123.4"));
         }
 
     }

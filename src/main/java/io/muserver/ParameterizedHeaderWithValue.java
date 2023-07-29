@@ -21,7 +21,7 @@ public class ParameterizedHeaderWithValue {
      * @param value The value such as <code>text/plain</code>
      * @param parameters A map of parameters, such as <code>charset: UTF-8</code>
      */
-    ParameterizedHeaderWithValue(String value, Map<String, String> parameters) {
+    public ParameterizedHeaderWithValue(String value, Map<String, String> parameters) {
         notNull("value", value);
         notNull("parameters", parameters);
         this.value = value;

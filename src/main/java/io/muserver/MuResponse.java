@@ -118,4 +118,12 @@ public interface MuResponse {
      * @return The current state of this response
      */
     ResponseState responseState();
+
+    /**
+     * Used to send trailer values such as {@link HeaderNames#SERVER_TIMING} to the client. Note that trailers will
+     * only be sent if the client has specified that they can support trailers in the {@link HeaderNames#TE} request
+     * header, and on HTTP 1.1 responses they will only be sent for chunked responses.
+     * @return The trailers for this response
+     */
+    Headers trailers();
 }
