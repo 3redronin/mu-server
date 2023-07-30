@@ -1,13 +1,11 @@
 package io.muserver;
 
-import tlschannel.async.AsynchronousTlsChannel;
-
 import javax.ws.rs.RedirectionException;
 import javax.ws.rs.core.Response;
-import java.io.OutputStream;
-import java.io.PrintWriter;
+import java.io.*;
 import java.net.URI;
 import java.nio.ByteBuffer;
+import java.nio.channels.AsynchronousByteChannel;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -16,16 +14,20 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import static io.muserver.ContentTypes.TEXT_PLAIN_UTF8;
+
 public class MuResponseImpl implements MuResponse {
 
     private final MuExchangeData data;
-    private final AsynchronousTlsChannel tlsChannel;
+    private final AsynchronousByteChannel tlsChannel;
     private int status = 200;
     private final MuHeaders headers = new MuHeaders();
     private MuHeaders trailers = null;
     private ResponseState state = ResponseState.NOTHING;
+    private OutputStream outputStream;
+    private PrintWriter writer;
 
-    public MuResponseImpl(MuExchangeData data, AsynchronousTlsChannel tlsChannel) {
+    public MuResponseImpl(MuExchangeData data, AsynchronousByteChannel tlsChannel) {
         this.data = data;
         this.tlsChannel = tlsChannel;
     }
@@ -41,34 +43,36 @@ public class MuResponseImpl implements MuResponse {
     }
 
     @Override
-    public void write(String text) {
+    public void write(String text) throws IOException {
         if (state != ResponseState.NOTHING) throw new IllegalStateException("Cannot write text");
         Charset charset = setDefaultContentType();
         ByteBuffer body = charset.encode(text);
         headers.set(HeaderNames.CONTENT_LENGTH, body.remaining());
         ByteBuffer headerBuf = headersBuffer(true, headers);
-        blockingWrite(body, headerBuf);
+        blockingWrite(headerBuf, body);
         state = ResponseState.FULL_SENT;
     }
 
-    private void blockingWrite(ByteBuffer... buffers) {
+    private void blockingWrite(ByteBuffer... buffers) throws IOException {
         try {
             for (ByteBuffer buffer : buffers) {
-                String s = new String(buffer.array());
+                String s = new String(buffer.array(), buffer.position(), buffer.limit());
                 System.out.print(">>" + s.replace("\r", "\\r").replace("\n", "\\n\r\n"));
 
                 // TODO use scattering write
                 tlsChannel.write(buffer).get(10, TimeUnit.SECONDS);
             }
         } catch (InterruptedException e) {
-            e.printStackTrace();
             state = ResponseState.ERRORED;
+            throw new InterruptedIOException();
         } catch (ExecutionException e) {
-            e.printStackTrace();
             state = ResponseState.ERRORED;
+            Throwable cause = e.getCause();
+            if (cause instanceof IOException) throw (IOException) cause;
+            throw new IOException(cause);
         } catch (TimeoutException e) {
-            e.printStackTrace();
             state = ResponseState.TIMED_OUT;
+            throw new IOException("Timed out writing response", e);
         }
     }
 
@@ -88,47 +92,52 @@ public class MuResponseImpl implements MuResponse {
     }
 
     @Override
-    public void sendChunk(String text) {
-        Charset charset;
-        ByteBuffer headersBuffer;
-        if (state == ResponseState.NOTHING) {
-            charset = setDefaultContentType();
-            headers.set(HeaderNames.TRANSFER_ENCODING, HeaderValues.CHUNKED);
-            headersBuffer = headersBuffer(true, headers);
-            state = ResponseState.STREAMING;
-        } else if (state == ResponseState.STREAMING) {
-            charset = NettyRequestAdapter.bodyCharset(headers, false);
-            headersBuffer = null;
-        } else {
-            throw new IllegalStateException("Cannot send chunks when response state is " + state);
-        }
-        ByteBuffer body = charset.encode(text);
-        var chunkStart = StandardCharsets.US_ASCII.encode(Integer.toHexString(body.remaining()) + "\r\n");
+    public void sendChunk(String text) throws IOException {
+        PrintWriter w = writer();
+        w.write(text);
+        w.flush();
+    }
+
+    private void sendChunk(ByteBuffer headersBuffer, ByteBuffer chunk) throws IOException {
+        var chunkStart = StandardCharsets.US_ASCII.encode(Integer.toHexString(chunk.remaining()) + "\r\n");
         var chunkEnd = StandardCharsets.US_ASCII.encode("\r\n");
         if (headersBuffer != null) {
-            blockingWrite(headersBuffer, chunkStart, body, chunkEnd);
+            blockingWrite(headersBuffer, chunkStart, chunk, chunkEnd);
         } else {
-            blockingWrite(chunkStart, body, chunkEnd);
+            blockingWrite(chunkStart, chunk, chunkEnd);
         }
     }
 
-    public void endStreaming() {
-        boolean sendTrailers = trailers != null && Headtils.getParameterizedHeaderWithValues(data.requestHeaders, HeaderNames.TE)
-            .stream().anyMatch(v -> v.value().equalsIgnoreCase("trailers"));
-        if (sendTrailers) {
-            var trailersBuffer = headersBuffer(false, trailers);
-            blockingWrite(StandardCharsets.US_ASCII.encode("0\r\n"), trailersBuffer);
-        } else {
-            blockingWrite(StandardCharsets.US_ASCII.encode("0\r\n\r\n"));
+    public void endStreaming() throws IOException {
+        if (state == ResponseState.STREAMING) {
+            state = ResponseState.FINISHING;
+            if (writer != null) {
+                writer.close();
+                writer = null;
+            }
+            if (outputStream != null) {
+                outputStream.close();
+                outputStream = null;
+            }
+            if (headers.containsValue(HeaderNames.TRANSFER_ENCODING, HeaderValues.CHUNKED, true)) {
+                boolean sendTrailers = trailers != null && Headtils.getParameterizedHeaderWithValues(data.requestHeaders, HeaderNames.TE)
+                    .stream().anyMatch(v -> v.value().equalsIgnoreCase("trailers"));
+                if (sendTrailers) {
+                    var trailersBuffer = headersBuffer(false, trailers);
+                    blockingWrite(StandardCharsets.US_ASCII.encode("0\r\n"), trailersBuffer);
+                } else {
+                    blockingWrite(StandardCharsets.US_ASCII.encode("0\r\n\r\n"));
+                }
+            }
+            state = ResponseState.FINISHED;
         }
-        state = ResponseState.FINISHED;
     }
 
 
     private Charset setDefaultContentType() {
         Charset charset = NettyRequestAdapter.bodyCharset(headers, false);
         if (!headers.contains(HeaderNames.CONTENT_TYPE)) {
-            headers.set(HeaderNames.CONTENT_TYPE, "text/plain;charset=" + charset.name());
+            headers.set(HeaderNames.CONTENT_TYPE, charset == StandardCharsets.UTF_8 ? TEXT_PLAIN_UTF8 : "text/plain;charset=" + charset.name());
         }
         return charset;
     }
@@ -160,18 +169,78 @@ public class MuResponseImpl implements MuResponse {
 
     @Override
     public OutputStream outputStream() {
-        return null;
+        return outputStream(4096);
     }
 
     @Override
     public OutputStream outputStream(int bufferSize) {
-        return null;
+        throwIfAsync();
+        OutputStream adapter = new OutputStream() {
+            private int state = 0;
+            private boolean chunked = false;
+            @Override
+            public void write(int b) throws IOException {
+                write(new byte[] { (byte) b }, 0, 1);
+            }
+
+            @Override
+            public void write(byte[] b, int off, int len) throws IOException {
+                System.out.println("Sending " + (len - off) + " bytes");
+                if (state == 2) throw new IOException("Writing to a closed stream");
+                ByteBuffer hb;
+                if (state == 0) {
+                    MuResponseImpl.this.state = ResponseState.STREAMING;
+                    state = 1;
+                    if (!headers.contains(HeaderNames.CONTENT_TYPE)) {
+                        headers.set(HeaderNames.CONTENT_TYPE, ContentTypes.APPLICATION_OCTET_STREAM);
+                    }
+                    if (!headers.contains(HeaderNames.CONTENT_LENGTH)) {
+                        chunked = true;
+                        headers.set(HeaderNames.TRANSFER_ENCODING, HeaderValues.CHUNKED);
+                    }
+                    hb = headersBuffer(true, headers);
+                } else {
+                    hb = null;
+                }
+                if (chunked) {
+                    sendChunk(hb, ByteBuffer.wrap(b, off, len));
+                } else if (hb != null) {
+                    blockingWrite(hb, ByteBuffer.wrap(b, off, len));
+                } else {
+                    blockingWrite(ByteBuffer.wrap(b, off, len));
+                }
+            }
+
+            @Override
+            public void close() throws IOException {
+                if (state != 2) {
+                    System.out.println("Closed");
+                    state = 2;
+                    endStreaming();
+                }
+            }
+        };
+        this.outputStream = bufferSize == 0 ? adapter : new BufferedOutputStream(adapter, bufferSize);
+        return adapter;
     }
 
     @Override
     public PrintWriter writer() {
-        return null;
+        if (this.writer == null) {
+            Charset charset = setDefaultContentType();
+            OutputStreamWriter os = new OutputStreamWriter(outputStream(), charset);
+            this.writer = new PrintWriter(os);
+        }
+        return this.writer;
     }
+
+    private void throwIfAsync() {
+        //TODO
+//        if (data.isAsync()) {
+//            throw new IllegalStateException("Cannot use blocking methods when in async mode");
+//        }
+    }
+
 
     @Override
     public boolean hasStartedSendingData() {

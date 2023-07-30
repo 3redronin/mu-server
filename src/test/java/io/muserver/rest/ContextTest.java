@@ -13,6 +13,7 @@ import javax.ws.rs.core.Context;
 import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.Request;
 import javax.ws.rs.core.UriInfo;
+import java.io.IOException;
 import java.net.URI;
 import java.util.Comparator;
 import java.util.List;
@@ -102,7 +103,7 @@ public class ContextTest {
         @Path("samples")
         class Sample {
             @GET
-            public void get(@Context MuRequest req, @Context MuResponse resp) {
+            public void get(@Context MuRequest req, @Context MuResponse resp) throws IOException {
                 resp.sendChunk("Hello");
                 resp.sendChunk(" world");
             }

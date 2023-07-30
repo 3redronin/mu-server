@@ -28,7 +28,7 @@ class RequestParser {
     private final RequestListener requestListener;
 
     private State state = State.RL_METHOD;
-    private StringBuffer cur = new StringBuffer();
+    private final StringBuffer cur = new StringBuffer();
     private Method method;
     private URI requestUri;
     private HttpVersion protocol;

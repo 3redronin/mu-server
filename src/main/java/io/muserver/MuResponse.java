@@ -1,5 +1,6 @@
 package io.muserver;
 
+import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.URI;
@@ -37,7 +38,7 @@ public interface MuResponse {
      * @param text The full response body to send to the client.
      * @throws IllegalStateException Thrown if this is called twice, or this is called after any other body-writing methods.
      */
-    void write(String text);
+    void write(String text) throws IOException;
 
     /**
      * Immediately sends the given text to the client as a chunk.
@@ -45,7 +46,7 @@ public interface MuResponse {
      * @throws IllegalStateException Thrown if {@link #write(String)} or {@link #outputStream()} or {@link #writer()} was
      * already called.
      */
-    void sendChunk(String text);
+    void sendChunk(String text) throws IOException;
 
     /**
      * <p>Redirects to the given URL. If relative, it will be converted to an absolute URL.</p>
