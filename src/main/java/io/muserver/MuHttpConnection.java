@@ -2,11 +2,10 @@ package io.muserver;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import tlschannel.async.ExtendedAsynchronousByteChannel;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.nio.channels.AsynchronousByteChannel;
+import java.nio.channels.AsynchronousSocketChannel;
 import java.security.cert.Certificate;
 import java.time.Instant;
 import java.util.Optional;
@@ -14,11 +13,15 @@ import java.util.Set;
 
 class MuHttpConnection implements HttpConnection {
     private static final Logger log = LoggerFactory.getLogger(MuHttpConnection.class);
-    private final AsynchronousByteChannel channel;
+    private final MuServer2 server;
+    private final AsynchronousSocketChannel channel;
+    private final InetSocketAddress remoteAddress;
     private final Instant startTime = Instant.now();
 
-    public MuHttpConnection(AsynchronousByteChannel channel) {
+    public MuHttpConnection(MuServer2 server, AsynchronousSocketChannel channel, InetSocketAddress remoteAddress) {
+        this.server = server;
         this.channel = channel;
+        this.remoteAddress = remoteAddress;
     }
 
     @Override
@@ -28,7 +31,7 @@ class MuHttpConnection implements HttpConnection {
 
     @Override
     public boolean isHttps() {
-        return ExtendedAsynchronousByteChannel.class.isAssignableFrom(channel.getClass());
+        throw new RuntimeException("not implemented");
     }
 
     @Override
@@ -48,7 +51,7 @@ class MuHttpConnection implements HttpConnection {
 
     @Override
     public InetSocketAddress remoteAddress() {
-        return null;
+        return remoteAddress;
     }
 
     @Override
@@ -78,7 +81,7 @@ class MuHttpConnection implements HttpConnection {
 
     @Override
     public MuServer server() {
-        return null;
+        return server;
     }
 
     @Override
@@ -88,7 +91,11 @@ class MuHttpConnection implements HttpConnection {
 
     void shutdown() throws IOException {
         log.info("Connection closing - " + channel.isOpen());
-        channel.close();
+        if (channel.isOpen()) {
+            channel.shutdownInput();
+            channel.shutdownOutput();
+            channel.close();
+        }
         log.info("Connection closed: " + channel.isOpen());
     }
 }

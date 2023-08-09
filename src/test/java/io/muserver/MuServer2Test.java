@@ -19,19 +19,20 @@ public class MuServer2Test {
 
     @Test
     public void canStartAndStopHttp() throws Exception {
-        for (int i = 0; i < 2; i++) {
+        var s = "Hello ".repeat(1000);
+        for (int i = 0; i < 10; i++) {
             int finalI = i;
             var server = MuServerBuilder.muServer()
-                .withHttpPort(10110)
+                .withHttpPort(0)
                 .addHandler(Method.GET, "/blah", (request, response, pathParams) -> {
-                    response.write("Hello " + finalI);
+                    response.write("Hello " + s + finalI);
                 })
                 .start2();
             log.info("Started at " + server.uri());
 
             try (var resp = call(request(server.uri().resolve("/blah")))) {
                 assertThat(resp.code(), equalTo(200));
-                assertThat(resp.body().string(), equalTo("Hello " + i));
+                assertThat(resp.body().string(), equalTo("Hello " + s + i));
             }
             server.stop();
         }
@@ -42,7 +43,7 @@ public class MuServer2Test {
         for (int i = 0; i < 2; i++) {
             int finalI = i;
             var server = MuServerBuilder.muServer()
-                .withHttpsPort(10100)
+                .withHttpsPort(0)
                 .addHandler(Method.GET, "/blah", (request, response, pathParams) -> {
                     response.write("Hello " + finalI);
                 })

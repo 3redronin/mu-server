@@ -1,7 +1,10 @@
 package io.muserver;
 
 import io.netty.handler.codec.DecoderResult;
-import io.netty.handler.codec.http.*;
+import io.netty.handler.codec.http.DefaultHttpHeaders;
+import io.netty.handler.codec.http.HttpHeaders;
+import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.handler.codec.http2.HttpConversionUtil;
@@ -53,19 +56,19 @@ class Http2To1RequestAdapter implements HttpRequest {
     }
 
     @Override
-    public HttpRequest setProtocolVersion(HttpVersion version) {
+    public HttpRequest setProtocolVersion(io.netty.handler.codec.http.HttpVersion version) {
         throw new IllegalStateException("Can't set stuff");
     }
 
     @Override
     @Deprecated
-    public HttpVersion getProtocolVersion() {
-        return HttpVersion.valueOf("HTTP/2.0");
+    public io.netty.handler.codec.http.HttpVersion getProtocolVersion() {
+        return io.netty.handler.codec.http.HttpVersion.valueOf("HTTP/2.0");
     }
 
     @Override
-    public HttpVersion protocolVersion() {
-        return new HttpVersion("HTTP/2.0", true);
+    public io.netty.handler.codec.http.HttpVersion protocolVersion() {
+        return new io.netty.handler.codec.http.HttpVersion("HTTP/2.0", true);
     }
 
     @Override
@@ -73,7 +76,7 @@ class Http2To1RequestAdapter implements HttpRequest {
         if (http1Headers == null) {
             HttpHeaders adapter = new DefaultHttpHeaders();
             try {
-                HttpConversionUtil.addHttp2ToHttpHeaders(streamId, headers, adapter, HttpVersion.HTTP_1_1, false, true);
+                HttpConversionUtil.addHttp2ToHttpHeaders(streamId, headers, adapter, io.netty.handler.codec.http.HttpVersion.HTTP_1_1, false, true);
             } catch (Http2Exception e) {
                 throw new MuException("Error while preparing headers for multipart form upload");
             }

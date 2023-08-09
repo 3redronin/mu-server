@@ -1,11 +1,14 @@
 package io.muserver;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import javax.ws.rs.RedirectionException;
 import javax.ws.rs.core.Response;
 import java.io.*;
 import java.net.URI;
 import java.nio.ByteBuffer;
-import java.nio.channels.AsynchronousByteChannel;
+import java.nio.channels.AsynchronousSocketChannel;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -17,9 +20,10 @@ import java.util.concurrent.TimeoutException;
 import static io.muserver.ContentTypes.TEXT_PLAIN_UTF8;
 
 public class MuResponseImpl implements MuResponse {
+    private static final Logger log = LoggerFactory.getLogger(MuResponseImpl.class);
 
     private final MuExchangeData data;
-    private final AsynchronousByteChannel tlsChannel;
+    private final AsynchronousSocketChannel tlsChannel;
     private int status = 200;
     private final MuHeaders headers = new MuHeaders();
     private MuHeaders trailers = null;
@@ -27,7 +31,7 @@ public class MuResponseImpl implements MuResponse {
     private OutputStream outputStream;
     private PrintWriter writer;
 
-    public MuResponseImpl(MuExchangeData data, AsynchronousByteChannel tlsChannel) {
+    public MuResponseImpl(MuExchangeData data, AsynchronousSocketChannel tlsChannel) {
         this.data = data;
         this.tlsChannel = tlsChannel;
     }
@@ -57,7 +61,7 @@ public class MuResponseImpl implements MuResponse {
         try {
             for (ByteBuffer buffer : buffers) {
                 String s = new String(buffer.array(), buffer.position(), buffer.limit());
-                System.out.print(">>" + s.replace("\r", "\\r").replace("\n", "\\n\r\n"));
+                log.info(">>\n" + s.replace("\r", "\\r").replace("\n", "\\n\r\n"));
 
                 // TODO use scattering write
                 tlsChannel.write(buffer).get(10, TimeUnit.SECONDS);
