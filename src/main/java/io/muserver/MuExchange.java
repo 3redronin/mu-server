@@ -2,7 +2,7 @@ package io.muserver;
 
 class MuExchange {
 
-    private HttpExchangeState state = HttpExchangeState.IN_PROGRESS;
+    HttpExchangeState state = HttpExchangeState.IN_PROGRESS;
     final MuExchangeData data;
     final MuRequestImpl request;
     final MuResponseImpl response;
@@ -12,14 +12,30 @@ class MuExchange {
         this.request = request;
         this.response = response;
     }
+
+    void onRequestCompleted() {
+        if (response.responseState().endState()) onCompleted();
+    }
+
+    void onResponseCompleted() {
+        if (request.requestState().endState()) onCompleted();
+    }
+
+    private void onCompleted() {
+        boolean good = response.responseState().completedSuccessfully() && request.requestState() == RequestState.COMPLETE;
+        this.state = good ? HttpExchangeState.COMPLETE : HttpExchangeState.ERRORED;
+        this.data.server.stats.onRequestEnded(request);
+    }
 }
 class MuExchangeData {
     final MuServer2 server;
+    final MuHttp1Connection connection;
     final HttpVersion httpVersion;
     final MuHeaders requestHeaders;
 
-    MuExchangeData(MuServer2 server, HttpVersion httpVersion, MuHeaders requestHeaders) {
+    MuExchangeData(MuServer2 server, MuHttp1Connection connection, HttpVersion httpVersion, MuHeaders requestHeaders) {
         this.server = server;
+        this.connection = connection;
         this.httpVersion = httpVersion;
         this.requestHeaders = requestHeaders;
     }

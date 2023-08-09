@@ -14,6 +14,7 @@ public class MuRequestImpl implements MuRequest {
     private final Method method;
     private final URI uri;
     private final URI serverUri;
+    private RequestState state = RequestState.HEADERS_RECEIVED;
     private String contextPath = "";
     private String relativePath;
     private final Headers headers;
@@ -26,6 +27,10 @@ public class MuRequestImpl implements MuRequest {
         this.relativePath = serverUri.getRawPath();
         this.serverUri = serverUri;
         this.headers = headers;
+    }
+
+    public RequestState requestState() {
+        return state;
     }
 
     @Override
@@ -155,7 +160,7 @@ public class MuRequestImpl implements MuRequest {
 
     @Override
     public HttpConnection connection() {
-        return null;
+        return data.connection;
     }
 
     @Override

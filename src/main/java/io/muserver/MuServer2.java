@@ -4,14 +4,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.net.ssl.SSLContext;
-import javax.ws.rs.NotFoundException;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.*;
-import java.nio.ByteBuffer;
 import java.nio.channels.AsynchronousServerSocketChannel;
 import java.nio.channels.AsynchronousSocketChannel;
-import java.nio.channels.ClosedChannelException;
 import java.nio.channels.CompletionHandler;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -19,9 +16,10 @@ import java.util.stream.Collectors;
 
 class MuServer2 implements MuServer {
     private static final Logger log = LoggerFactory.getLogger(MuServer2.class);
-    private final ConcurrentHashMap.KeySetView<MuHttpConnection,Boolean> connections = ConcurrentHashMap.newKeySet();
+    private final ConcurrentHashMap.KeySetView<MuHttp1Connection,Boolean> connections = ConcurrentHashMap.newKeySet();
     private final List<ConnectionAcceptor> acceptors = new LinkedList<>();
     final List<MuHandler> handlers;
+    final MuStats2Impl stats = new MuStats2Impl();
 
     MuServer2(List<MuHandler> handlers) {
         this.handlers = handlers;
@@ -93,7 +91,7 @@ class MuServer2 implements MuServer {
         log.info("Acceptors stopped");
 
 
-        for (MuHttpConnection connection : connections) {
+        for (MuHttp1Connection connection : connections) {
             try {
                 log.info("Closing " + connection);
                 connection.shutdown();
@@ -136,7 +134,7 @@ class MuServer2 implements MuServer {
 
     @Override
     public MuStats stats() {
-        return null;
+        return stats;
     }
 
     @Override
@@ -146,7 +144,7 @@ class MuServer2 implements MuServer {
 
     @Override
     public InetSocketAddress address() {
-        return null;
+        return connections.stream().map(MuHttp1Connection::remoteAddress).findFirst().get();
     }
 
     @Override
@@ -199,12 +197,14 @@ class MuServer2 implements MuServer {
         return null;
     }
 
-    public void onConnectionAccepted(MuHttpConnection connection) {
+    public void onConnectionAccepted(MuHttp1Connection connection) {
         log.info("New connection from " + connection.remoteAddress());
+        stats.onConnectionOpened();
         connections.add(connection);
     }
 
     public void onConnectionAcceptFailure(AsynchronousServerSocketChannel channel, Throwable exc) {
+        stats.onFailedToConnect();
         if (channel.isOpen()) {
             SocketAddress localAddress;
             try {
@@ -218,7 +218,7 @@ class MuServer2 implements MuServer {
         }
     }
 
-    public void onConnectionFailed(MuHttpConnection connection, Throwable exc) {
+    public void onConnectionFailed(MuHttp1Connection connection, Throwable exc) {
         log.info("Connection failed: " + exc.getMessage());
         connections.remove(connection);
     }
@@ -226,7 +226,6 @@ class MuServer2 implements MuServer {
 
 
 class ConnectionAcceptor implements CompletionHandler<AsynchronousSocketChannel, MuServer2> {
-    private static final Logger log = LoggerFactory.getLogger(ConnectionAcceptor.class);
     private final AsynchronousServerSocketChannel channel;
 
     final InetSocketAddress address;
@@ -255,6 +254,9 @@ class ConnectionAcceptor implements CompletionHandler<AsynchronousSocketChannel,
         }
     }
 
+    /**
+     * A new connection has been accepted
+     */
     @Override
     public void completed(AsynchronousSocketChannel channel, MuServer2 muServer) {
         readyToAccept(muServer);
@@ -264,87 +266,10 @@ class ConnectionAcceptor implements CompletionHandler<AsynchronousSocketChannel,
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-        var requestParser = new RequestParser(new RequestParser.Options(8192, 8192), new RequestParser.RequestListener() {
-            @Override
-            public void onHeaders(Method method, URI uri, HttpVersion httpProtocolVersion, MuHeaders headers, GrowableByteBufferInputStream body) {
-                var data = new MuExchangeData(null, httpProtocolVersion, headers);
-                var req = new MuRequestImpl(data, method, uri, uri, headers);
-                var resp = new MuResponseImpl(data, channel);
-                var exchange = new MuExchange(data, req, resp);
 
-                try {
-                    boolean handled = false;
-                    for (MuHandler muHandler : muServer.handlers) {
-                        handled = muHandler.handle(req, resp);
-                        if (handled) {
-                            break;
-                        }
-                        if (req.isAsync()) {
-                            throw new IllegalStateException(muHandler.getClass() + " returned false however this is not allowed after starting to handle a request asynchronously.");
-                        }
-                    }
-                    if (!handled) {
-                        throw new NotFoundException();
-                    }
-                    if (resp.responseState() == ResponseState.STREAMING) {
-                        resp.endStreaming();
-                    }
-                } catch (Exception e) {
-                    log.error("Unhandled exception", e);
-                    throw new RuntimeException(e);
-                }
-            }
-
-            @Override
-            public void onRequestComplete(MuHeaders trailers) {
-                log.info("Request complete. Trailers=" + trailers);
-            }
-        });
-
-        MuHttpConnection connection = new MuHttpConnection(muServer, channel, remoteAddress);
-        ByteBuffer res = ByteBuffer.allocate(10000);
-        channel.read(res, channel, new CompletionHandler<>() {
-            @Override
-            public void completed(Integer result, AsynchronousSocketChannel channel) {
-                if (result != -1) {
-                    res.flip();
-                    try {
-                        requestParser.offer(res);
-                    } catch (InvalidRequestException e) {
-                        log.error("Invalid request", e);
-                        throw new RuntimeException(e);
-                    }
-                    res.compact();
-                    // repeat
-                    channel.read(res, null, this);
-                } else {
-                    try {
-                        channel.close();
-                    } catch (IOException e) {
-                        log.error("What to do here", e);
-                        throw new RuntimeException(e);
-                    }
-                }
-            }
-
-            @Override
-            public void failed(Throwable exc, AsynchronousSocketChannel channel) {
-                muServer.onConnectionFailed(connection, exc);
-                var logIt = !(exc instanceof ClosedChannelException);
-                if (logIt) { // TODO also log if requests are in progress
-                    log.error("Read failed", exc);
-                }
-                if (channel != null) {
-                    try {
-                        channel.close();
-                    } catch (IOException e) {
-                        log.error("Error closing", e);
-                        throw new RuntimeException(e);
-                    }
-                }
-            }
-        });
-        muServer.onConnectionAccepted(new MuHttpConnection(muServer, channel, remoteAddress));
+        MuHttp1Connection connection = new MuHttp1Connection(muServer, channel, remoteAddress);
+        muServer.onConnectionAccepted(connection);
+        connection.readyToRead();
     }
 
     @Override

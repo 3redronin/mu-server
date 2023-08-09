@@ -55,6 +55,7 @@ public class MuResponseImpl implements MuResponse {
         ByteBuffer headerBuf = headersBuffer(true, headers);
         blockingWrite(headerBuf, body);
         state = ResponseState.FULL_SENT;
+        data.connection.onResponseCompleted(this);
     }
 
     private void blockingWrite(ByteBuffer... buffers) throws IOException {
@@ -63,8 +64,16 @@ public class MuResponseImpl implements MuResponse {
                 String s = new String(buffer.array(), buffer.position(), buffer.limit());
                 log.info(">>\n" + s.replace("\r", "\\r").replace("\n", "\\n\r\n"));
 
+
                 // TODO use scattering write
-                tlsChannel.write(buffer).get(10, TimeUnit.SECONDS);
+                while (buffer.hasRemaining()) {
+                    int written = tlsChannel.write(buffer).get(10, TimeUnit.SECONDS).intValue();
+                    if (written > 0) {
+                        data.server.stats.onBytesSent(written);
+                    } else if (written == -1) {
+                        throw new IOException("Write failed");
+                    }
+                }
             }
         } catch (InterruptedException e) {
             state = ResponseState.ERRORED;
