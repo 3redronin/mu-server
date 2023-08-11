@@ -23,10 +23,10 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
     private final InetSocketAddress remoteAddress;
     private final Instant startTime = Instant.now();
     private final RequestParser requestParser;
-    private final ByteBuffer readBuffer = ByteBuffer.allocate(10000);
+    private final ByteBuffer readBuffer;
     volatile MuExchange exchange;
 
-    public MuHttp1Connection(MuServer2 server, AsynchronousSocketChannel channel, InetSocketAddress remoteAddress) {
+    public MuHttp1Connection(MuServer2 server, AsynchronousSocketChannel channel, InetSocketAddress remoteAddress, ByteBuffer readBuffer) {
         this.server = server;
         this.channel = channel;
         this.remoteAddress = remoteAddress;
@@ -72,9 +72,11 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
             }
         });
 
+        this.readBuffer = readBuffer;
     }
 
     void readyToRead() {
+        log.info("HTTP1Connection reading");
         channel.read(readBuffer, null, this);
     }
 
@@ -198,7 +200,7 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
         if (channel != null) {
             if (channel.isOpen()) {
                 try {
-                    channel.close();
+                    channel.close(); // TODO just close outgoing?
                 } catch (IOException e) {
                     log.error("Error closing", e);
                 }

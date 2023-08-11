@@ -40,7 +40,7 @@ public class MuServer2Test {
 
     @Test
     public void canStartAndStopHttps() throws Exception {
-        for (int i = 0; i < 2; i++) {
+        for (int i = 0; i < 10; i++) {
             int finalI = i;
             var server = MuServerBuilder.muServer()
                 .withHttpsPort(0)

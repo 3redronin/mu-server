@@ -4,9 +4,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLException;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.*;
+import java.nio.ByteBuffer;
 import java.nio.channels.AsynchronousServerSocketChannel;
 import java.nio.channels.AsynchronousSocketChannel;
 import java.nio.channels.CompletionHandler;
@@ -259,7 +262,7 @@ class ConnectionAcceptor implements CompletionHandler<AsynchronousSocketChannel,
      */
     @Override
     public void completed(AsynchronousSocketChannel channel, MuServer2 muServer) {
-        readyToAccept(muServer);
+        readyToAccept(muServer); // todo Will a thrown exception cause this to be called in the failed callback too?
         InetSocketAddress remoteAddress;
         try {
             remoteAddress = (InetSocketAddress) channel.getRemoteAddress();
@@ -267,9 +270,24 @@ class ConnectionAcceptor implements CompletionHandler<AsynchronousSocketChannel,
             throw new UncheckedIOException(e);
         }
 
-        MuHttp1Connection connection = new MuHttp1Connection(muServer, channel, remoteAddress);
-        muServer.onConnectionAccepted(connection);
-        connection.readyToRead();
+        if (sslContext == null) {
+            MuHttp1Connection connection = new MuHttp1Connection(muServer, channel, remoteAddress, ByteBuffer.allocate(10000));
+            muServer.onConnectionAccepted(connection);
+            connection.readyToRead();
+        } else {
+            try {
+                SSLEngine engine = sslContext.createSSLEngine();
+                engine.setUseClientMode(false);
+                var appBuffer = ByteBuffer.allocate(engine.getSession().getApplicationBufferSize());
+                var netBuffer = ByteBuffer.allocate(engine.getSession().getPacketBufferSize());
+                var tlsChannel = new MuTlsAsynchronousSocketChannel(channel, engine, appBuffer, netBuffer);
+                MuHttp1Connection connection = new MuHttp1Connection(muServer, tlsChannel, remoteAddress, appBuffer);
+                tlsChannel.beginHandshake(connection);
+            } catch (SSLException e) {
+                throw new RuntimeException("Error beginning handshake", e);
+            }
+        }
+
     }
 
     @Override
