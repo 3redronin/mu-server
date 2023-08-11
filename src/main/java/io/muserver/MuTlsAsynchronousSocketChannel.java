@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLEngineResult;
 import javax.net.ssl.SSLException;
+import javax.net.ssl.SSLSession;
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.net.SocketOption;
@@ -93,7 +94,8 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
             }
 
             case NOT_HANDSHAKING -> {
-                muConnection.readyToRead();
+                SSLSession session = sslEngine.getSession();
+                muConnection.handshakeComplete(session.getProtocol(), session.getCipherSuite());
             }
             case FINISHED -> {
                 log.info("Finished");

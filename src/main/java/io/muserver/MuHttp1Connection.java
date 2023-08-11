@@ -25,6 +25,8 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
     private final RequestParser requestParser;
     private final ByteBuffer readBuffer;
     volatile MuExchange exchange;
+    private String httpsProtocol;
+    private String cipher;
 
     public MuHttp1Connection(MuServer2 server, AsynchronousSocketChannel channel, InetSocketAddress remoteAddress, ByteBuffer readBuffer) {
         this.server = server;
@@ -75,8 +77,13 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
         this.readBuffer = readBuffer;
     }
 
+    void handshakeComplete(String protocol, String cipher) {
+        this.httpsProtocol = protocol;
+        this.cipher = cipher;
+        readyToRead();
+    }
+
     void readyToRead() {
-        log.info("HTTP1Connection reading");
         channel.read(readBuffer, null, this);
     }
 
@@ -94,17 +101,17 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
 
     @Override
     public boolean isHttps() {
-        throw new RuntimeException("not implemented");
+        return channel instanceof MuTlsAsynchronousSocketChannel;
     }
 
     @Override
     public String httpsProtocol() {
-        return null;
+        return httpsProtocol;
     }
 
     @Override
     public String cipher() {
-        return null;
+        return cipher;
     }
 
     @Override

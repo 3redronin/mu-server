@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.*;
 import java.nio.ByteBuffer;
+import java.nio.channels.AsynchronousCloseException;
 import java.nio.channels.AsynchronousServerSocketChannel;
 import java.nio.channels.AsynchronousSocketChannel;
 import java.nio.channels.CompletionHandler;
@@ -216,8 +217,8 @@ class MuServer2 implements MuServer {
                 localAddress = null;
             }
             log.error("Error accepting on " + localAddress, exc);
-        } else {
-            log.info("Error on closed channel: " + exc.getMessage());
+        } else if (!(exc instanceof AsynchronousCloseException)) {
+            log.info("Error on closed channel: ", exc);
         }
     }
 

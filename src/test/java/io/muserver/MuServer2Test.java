@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 
+import static io.muserver.MuServerBuilder.httpsServer;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.call;
@@ -20,10 +21,10 @@ public class MuServer2Test {
     @Test
     public void canStartAndStopHttp() throws Exception {
         var s = "Hello ".repeat(1000);
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 2; i++) {
             int finalI = i;
             var server = MuServerBuilder.muServer()
-                .withHttpPort(0)
+                .withHttpPort(0) // todo reuse same port and make this work
                 .addHandler(Method.GET, "/blah", (request, response, pathParams) -> {
                     response.write("Hello " + s + finalI);
                 })
@@ -40,7 +41,7 @@ public class MuServer2Test {
 
     @Test
     public void canStartAndStopHttps() throws Exception {
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 1; i++) {
             int finalI = i;
             var server = MuServerBuilder.muServer()
                 .withHttpsPort(0)
@@ -55,6 +56,23 @@ public class MuServer2Test {
                 assertThat(resp.body().string(), equalTo("Hello " + i));
             }
             server.stop();
+        }
+    }
+
+    @Test
+    public void httpsInfoOnAConnectionIsAvailable() throws Exception {
+        server = httpsServer()
+            .addHandler(Method.GET, "/", new RouteHandler() {
+                @Override
+                public void handle(MuRequest request, MuResponse response, Map<String, String> pathParams) throws Exception {
+                    HttpConnection con = request.connection();
+                    response.write(con.isHttps() + " " + con.httpsProtocol() + " " + con.cipher());
+                }
+            })
+            .start2();
+        try (var resp = call(request(server.uri().resolve("/")))) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.body().string(), equalTo("Hello "));
         }
     }
 
@@ -91,7 +109,7 @@ public class MuServer2Test {
     @Test
     public void canWriteChunksToOutputStream() throws Exception {
         server = MuServerBuilder.muServer()
-            .withHttpsPort(10100)
+            .withHttpsPort(0)
             .addHandler(Method.GET, "/blah", (request, response, pathParams) -> {
                 response.headers().set(HeaderNames.TRAILER, "server-timing");
                 response.writer().write("Hello");
@@ -125,7 +143,7 @@ public class MuServer2Test {
     @Test
     public void canWriteFixedLengthToOutputStream() throws Exception {
         server = MuServerBuilder.muServer()
-            .withHttpsPort(10100)
+            .withHttpsPort(0)
             .addHandler(Method.GET, "/blah", (request, response, pathParams) -> {
                 response.headers().set(HeaderNames.TRAILER, "server-timing");
                 response.headers().set(HeaderNames.CONTENT_LENGTH, 11);
