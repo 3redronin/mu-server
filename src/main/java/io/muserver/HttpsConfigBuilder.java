@@ -31,6 +31,7 @@ public class HttpsConfigBuilder {
     private byte[] keystoreBytes;
     private SSLContext sslContext;
     private CipherSuiteFilter nettyCipherSuiteFilter;
+    private SSLCipherFilter sslCipherFilter;
     private KeyManagerFactory keyManagerFactory;
     private String defaultAlias;
 
@@ -213,6 +214,7 @@ public class HttpsConfigBuilder {
      * @return This builder
      */
     public HttpsConfigBuilder withCipherFilter(SSLCipherFilter cipherFilter) {
+        this.sslCipherFilter = cipherFilter;
         if (cipherFilter == null) {
             this.nettyCipherSuiteFilter = null;
         } else {
@@ -262,18 +264,29 @@ public class HttpsConfigBuilder {
      * @deprecated Pass this builder itself to the HttpsConfig rather than building an SSLContext
      */
     SSLContext build() {
+        byte[] keystoreBytes = this.keystoreBytes;
+        String keystoreTypeToUse = keystoreType;
+        char[] keystorePasswordToUse = keystorePassword;
+        char[] keyPasswordToUse = keyPassword;
         if (keystoreBytes == null) {
-            throw new MuException("No keystore has been set");
+            var local = unsignedLocalhost();
+            keystoreBytes = local.keystoreBytes;
+            keystoreTypeToUse = local.keystoreType;
+            keystorePasswordToUse = local.keystorePassword;
+            keyPasswordToUse = local.keyPassword;
         }
         ByteArrayInputStream keystoreStream = new ByteArrayInputStream(keystoreBytes);
         try {
             SSLContext serverContext = SSLContext.getInstance("TLS");
 
-            final KeyStore ks = KeyStore.getInstance(keystoreType);
-            ks.load(keystoreStream, keystorePassword);
+            KeyStore ks = KeyStore.getInstance(keystoreTypeToUse);
+            ks.load(keystoreStream, keystorePasswordToUse);
 
-            final KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-            kmf.init(ks, keyPassword);
+            KeyManagerFactory kmf = keyManagerFactory;
+            if (kmf == null) {
+                kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+                kmf.init(ks, keyPasswordToUse);
+            }
 
             serverContext.init(kmf.getKeyManagers(), null, null);
             return serverContext;
@@ -394,7 +407,11 @@ public class HttpsConfigBuilder {
     }
 
     private String[] getHttpsProtocolsArray() throws NoSuchAlgorithmException {
-        List<String> supportedProtocols = asList(SSLContext.getDefault().getSupportedSSLParameters().getProtocols());
+        return getHttpsProtocolsArray(SSLContext.getDefault());
+
+    }
+    private String[] getHttpsProtocolsArray(SSLContext sslContext) {
+        List<String> supportedProtocols = asList(sslContext.getSupportedSSLParameters().getProtocols());
         List<String> protocolsToUse = new ArrayList<>();
         for (String protocol : Mutils.coalesce(this.protocols, new String[]{"TLSv1.2", "TLSv1.3"})) {
             if (supportedProtocols.contains(protocol)) {
@@ -410,6 +427,7 @@ public class HttpsConfigBuilder {
         String[] protocolsArray = protocolsToUse.toArray(new String[0]);
         return protocolsArray;
     }
+
 
 
     /**
@@ -451,6 +469,19 @@ public class HttpsConfigBuilder {
             .withKeystorePassword("Very5ecure")
             .withKeyPassword("Very5ecure")
             .withKeystoreFromClasspath("/io/muserver/resources/localhost.p12");
+    }
+
+    public HttpsConfig build2() throws NoSuchAlgorithmException {
+        SSLContext context = build();
+        context.getSupportedSSLParameters().setUseCipherSuitesOrder(true);
+        String[] supportedCiphers = context.getSupportedSSLParameters().getCipherSuites();
+
+        if (sslCipherFilter != null) {
+            List<String> selected = sslCipherFilter.selectCiphers(Set.of(supportedCiphers), List.of(supportedCiphers));
+            supportedCiphers = selected.toArray(new String[0]);
+        }
+
+        return new HttpsConfig(context, getHttpsProtocolsArray(), supportedCiphers);
     }
 
 }

@@ -5,11 +5,15 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.MuServerBuilder.httpsServer;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
+import static org.junit.Assert.assertThrows;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 
@@ -60,8 +64,53 @@ public class MuServer2Test {
     }
 
     @Test
-    public void httpsInfoOnAConnectionIsAvailable() throws Exception {
+    public void tls12Available() throws Exception {
+        var theCipher = "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384";
         server = httpsServer()
+            .withHttpsConfig(HttpsConfigBuilder.httpsConfig()
+                .withProtocols("TLSv1.2")
+                .withCipherFilter((supportedCiphers, defaultCiphers) -> {
+                    return List.of(theCipher);
+                })
+            )
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                HttpConnection con = request.connection();
+                response.write(con.isHttps() + " " + con.httpsProtocol() + " " + con.cipher());
+            })
+            .start2();
+        try (var resp = call(request(server.uri().resolve("/")))) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.body().string(), equalTo("true TLSv1.2 " + theCipher));
+        }
+    }
+
+    @Test
+    public void ifNoCommonCiphersThenItDoesNotLoad() throws Exception {
+        var theCipher = "TLS_AES_128_GCM_SHA256";
+        server = httpsServer()
+            .withHttpsConfig(HttpsConfigBuilder.httpsConfig()
+                .withProtocols("TLSv1.2")
+                .withCipherFilter((supportedCiphers, defaultCiphers) -> List.of(theCipher))
+            )
+            .start2();
+        assertThrows(IOException.class, () -> {
+            try (var ignored = call(request(server.uri().resolve("/")))){}
+        });
+        assertThat(server.stats().failedToConnect(), equalTo(1L));
+    }
+
+
+    @Test
+    public void tls13Available() throws Exception {
+        AtomicReference<String> theCipher = new AtomicReference<>();
+        server = httpsServer()
+            .withHttpsConfig(HttpsConfigBuilder.httpsConfig()
+                .withProtocols("TLSv1.2", "TLSv1.3")
+                .withCipherFilter((supportedCiphers, defaultCiphers) -> {
+                    theCipher.set(defaultCiphers.get(0));
+                    return List.of(theCipher.get());
+                })
+            )
             .addHandler(Method.GET, "/", new RouteHandler() {
                 @Override
                 public void handle(MuRequest request, MuResponse response, Map<String, String> pathParams) throws Exception {
@@ -72,9 +121,10 @@ public class MuServer2Test {
             .start2();
         try (var resp = call(request(server.uri().resolve("/")))) {
             assertThat(resp.code(), equalTo(200));
-            assertThat(resp.body().string(), equalTo("Hello "));
+            assertThat(resp.body().string(), equalTo("true TLSv1.3 " + theCipher.get()));
         }
     }
+
 
     @Test
     public void canChunk() throws Exception {

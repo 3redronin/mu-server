@@ -3,17 +3,10 @@ package io.muserver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLEngine;
-import javax.net.ssl.SSLException;
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.net.*;
-import java.nio.ByteBuffer;
 import java.nio.channels.AsynchronousCloseException;
 import java.nio.channels.AsynchronousServerSocketChannel;
-import java.nio.channels.AsynchronousSocketChannel;
-import java.nio.channels.CompletionHandler;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -47,14 +40,18 @@ class MuServer2 implements MuServer {
             server.addAcceptor(createAcceptor(server, null, endpoint));
         } else {
             // initialize the SSLContext, a configuration holder, reusable object
-            SSLContext sslContext = ContextFactory.authenticatedContext("TLSv1.3");
-            server.addAcceptor(createAcceptor(server, sslContext, endpoint));
+            HttpsConfigBuilder httpsConfigBuilder = builder.httpsConfigBuilder();
+            if (httpsConfigBuilder == null) {
+                httpsConfigBuilder = HttpsConfigBuilder.unsignedLocalhost();
+            }
+            HttpsConfig httpsConfig = httpsConfigBuilder.build2();
+            server.addAcceptor(createAcceptor(server, httpsConfig, endpoint));
         }
 
         return server;
     }
 
-    private static ConnectionAcceptor createAcceptor(MuServer2 muServer, SSLContext sslContext, InetSocketAddress bindAddress) throws IOException {
+    private static ConnectionAcceptor createAcceptor(MuServer2 muServer, HttpsConfig httpsConfig, InetSocketAddress bindAddress) throws IOException {
 
         var serverSocketChannel = AsynchronousServerSocketChannel.open();
         var supportedOptions = serverSocketChannel.supportedOptions();
@@ -74,7 +71,7 @@ class MuServer2 implements MuServer {
 
         serverSocketChannel.bind(bindAddress);
         InetSocketAddress boundAddress = (InetSocketAddress) serverSocketChannel.getLocalAddress();
-        ConnectionAcceptor acceptor = new ConnectionAcceptor(serverSocketChannel, boundAddress, sslContext);
+        ConnectionAcceptor acceptor = new ConnectionAcceptor(serverSocketChannel, boundAddress, httpsConfig);
         acceptor.readyToAccept(muServer);
 
         return acceptor;
@@ -225,80 +222,5 @@ class MuServer2 implements MuServer {
     public void onConnectionFailed(MuHttp1Connection connection, Throwable exc) {
         log.info("Connection failed: " + exc.getMessage());
         connections.remove(connection);
-    }
-}
-
-
-class ConnectionAcceptor implements CompletionHandler<AsynchronousSocketChannel, MuServer2> {
-    private final AsynchronousServerSocketChannel channel;
-
-    final InetSocketAddress address;
-    final SSLContext sslContext;
-    final URI uri;
-    private volatile boolean stopped = false;
-
-    ConnectionAcceptor(AsynchronousServerSocketChannel channel, InetSocketAddress address, SSLContext sslContext) {
-        this.channel = channel;
-        this.address = address;
-        this.sslContext = sslContext;
-        this.uri = URI.create("http" + (sslContext == null ? "" : "s") + "://localhost:" + address.getPort());
-    }
-
-    boolean acceptsHttp() {
-        return sslContext == null;
-    }
-
-    boolean acceptsHttps() {
-        return sslContext != null;
-    }
-
-    public void readyToAccept(MuServer2 muServer) {
-        if (!stopped) {
-            channel.accept(muServer, this);
-        }
-    }
-
-    /**
-     * A new connection has been accepted
-     */
-    @Override
-    public void completed(AsynchronousSocketChannel channel, MuServer2 muServer) {
-        readyToAccept(muServer); // todo Will a thrown exception cause this to be called in the failed callback too?
-        InetSocketAddress remoteAddress;
-        try {
-            remoteAddress = (InetSocketAddress) channel.getRemoteAddress();
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-
-        if (sslContext == null) {
-            MuHttp1Connection connection = new MuHttp1Connection(muServer, channel, remoteAddress, ByteBuffer.allocate(10000));
-            muServer.onConnectionAccepted(connection);
-            connection.readyToRead();
-        } else {
-            try {
-                SSLEngine engine = sslContext.createSSLEngine();
-                engine.setUseClientMode(false);
-                var appBuffer = ByteBuffer.allocate(engine.getSession().getApplicationBufferSize());
-                var netBuffer = ByteBuffer.allocate(engine.getSession().getPacketBufferSize());
-                var tlsChannel = new MuTlsAsynchronousSocketChannel(channel, engine, appBuffer, netBuffer);
-                MuHttp1Connection connection = new MuHttp1Connection(muServer, tlsChannel, remoteAddress, appBuffer);
-                tlsChannel.beginHandshake(connection);
-            } catch (SSLException e) {
-                throw new RuntimeException("Error beginning handshake", e);
-            }
-        }
-
-    }
-
-    @Override
-    public void failed(Throwable exc, MuServer2 server) {
-        readyToAccept(server);
-        server.onConnectionAcceptFailure(channel, exc);
-    }
-
-    public void stop() throws IOException {
-        stopped = true;
-        channel.close();
     }
 }

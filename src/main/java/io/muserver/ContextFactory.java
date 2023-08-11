@@ -12,7 +12,8 @@ class ContextFactory {
 
     public static SSLContext authenticatedContext(String protocol) throws GeneralSecurityException, IOException {
         SSLContext sslContext = SSLContext.getInstance(protocol);
-        KeyStore ks = KeyStore.getInstance("JKS");
+
+        KeyStore ks = KeyStore.getInstance("TLS");
         try (InputStream keystoreFile =
                  ContextFactory.class.getClassLoader().getResourceAsStream("keystore.jks")) {
             ks.load(keystoreFile, "password".toCharArray());
