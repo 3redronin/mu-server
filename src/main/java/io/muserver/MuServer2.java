@@ -86,6 +86,7 @@ class MuServer2 implements MuServer {
         stop(0, TimeUnit.SECONDS);
     }
 
+    @Override
     public void stop(long timeout, TimeUnit unit) {
         log.info("Stopping acceptors");
 

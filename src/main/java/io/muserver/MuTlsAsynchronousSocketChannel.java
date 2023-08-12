@@ -16,6 +16,7 @@ import java.nio.channels.CompletionHandler;
 import java.nio.channels.spi.AsynchronousChannelProvider;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
@@ -28,7 +29,7 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
     private final ByteBuffer appBuffer;
     private final ByteBuffer netBuffer;
     private MuHttp1Connection muConnection;
-    private CompletionHandler<Integer, ?> pendingHandler;
+    private final ConcurrentLinkedQueue<Runnable> pendingTasks = new ConcurrentLinkedQueue<>();
 
     public MuTlsAsynchronousSocketChannel(AsynchronousSocketChannel socketChannel, SSLEngine sslEngine, ByteBuffer appBuffer, ByteBuffer netBuffer) {
         super(socketChannel.provider());
@@ -46,6 +47,11 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
 
     public void beginHandshake(MuHttp1Connection connection) throws SSLException {
         this.muConnection = connection;
+        pendingTasks.add(() -> {
+            SSLSession session = sslEngine.getSession();
+            muConnection.handshakeComplete(session.getProtocol(), session.getCipherSuite());
+            ((MuServer2)muConnection.server()).onConnectionAccepted(muConnection);
+        });
         sslEngine.beginHandshake();
         handshakeStatus = sslEngine.getHandshakeStatus();
         doHandshake();
@@ -93,17 +99,14 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
                 });
             }
 
-            case NOT_HANDSHAKING -> {
+
+            case NOT_HANDSHAKING, FINISHED -> {
                 log.info("Not handshaking! ");
-                if (pendingHandler != null) {
-                    pendingHandler.completed(-1, null);
+                Runnable toDo = pendingTasks.poll();
+                while (toDo != null) {
+                    toDo.run();
+                    toDo = pendingTasks.poll();
                 }
-            }
-            case FINISHED -> {
-                log.info("Finished handshake");
-                SSLSession session = sslEngine.getSession();
-                muConnection.handshakeComplete(session.getProtocol(), session.getCipherSuite());
-                ((MuServer2)muConnection.server()).onConnectionAccepted(muConnection);
             }
             case NEED_TASK -> {
                 Runnable task;
@@ -191,7 +194,23 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
     public AsynchronousSocketChannel shutdownOutput() throws IOException {
         log.info("Closing sslEngine outbound");
         sslEngine.closeOutbound();
-        return socketChannel.shutdownOutput();
+        handshakeStatus = sslEngine.getHandshakeStatus();
+        pendingTasks.add(() -> {
+            log.info("Graceful TLS shutdown complete so closing output");
+            try {
+                socketChannel.shutdownOutput();
+
+                check inpbound and outbound must shut do
+                if (sslEngine.isInboundDone()) {
+                    log.info("Really closing TLS channel");
+                    socketChannel.close();
+                }
+            } catch (IOException e) {
+                log.error("Error shutting down output", e);
+            }
+        });
+        doHandshake();
+        return this;
     }
 
     @Override
@@ -227,7 +246,12 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
                 if (unwrapResult.getStatus() == SSLEngineResult.Status.CLOSED) {
                     try {
                         handshakeStatus = unwrapResult.getHandshakeStatus();
-                        pendingHandler = handler;
+                        pendingTasks.add(new Runnable() {
+                            @Override
+                            public void run() {
+                                handler.completed(-1, attachment);
+                            }
+                        });
                         doHandshake();
                     } catch (SSLException e) {
                         handler.failed(e, attachment);

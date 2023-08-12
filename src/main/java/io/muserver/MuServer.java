@@ -20,6 +20,8 @@ public interface MuServer {
      */
     void stop();
 
+    void stop(long timeout, TimeUnit unit);
+
     /**
      * @return The HTTPS (or if unavailable the HTTP) URI of the web server.
      */

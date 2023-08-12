@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.MuServerBuilder.httpsServer;
@@ -108,7 +109,7 @@ public class MuServer2Test {
         assertEventually(server::activeConnections, hasSize(1));
 
 
-        server.stop();
+        server.stop(5, TimeUnit.SECONDS);
         InputStream inputStream = conn.getInputStream();
         inputStream.read();
 

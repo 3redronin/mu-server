@@ -6,6 +6,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 class MuServerImpl implements MuServer {
@@ -42,6 +43,11 @@ class MuServerImpl implements MuServer {
     @Override
     public void stop() {
         shutdown.run();
+    }
+
+    @Override
+    public void stop(long timeout, TimeUnit unit) {
+        throw new RuntimeException("Nope");
     }
 
     @Override
