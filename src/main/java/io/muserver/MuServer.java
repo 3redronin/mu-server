@@ -126,14 +126,30 @@ public interface MuServer {
     /**
      * Changes the HTTPS certificate. This can be changed without restarting the server.
      * @param newHttpsConfig The new SSL Context to use.
+     * @deprecated use {@link #changeHttpsConfig(HttpsConfig)} instead
      */
+    @Deprecated
     void changeHttpsConfig(HttpsConfigBuilder newHttpsConfig);
+
+    /**
+     * Changes the HTTPS certificate. This can be changed without restarting the server.
+     * @param newHttpsConfig The new SSL Context to use.
+     */
+    void changeHttpsConfig(HttpsConfig newHttpsConfig);
+
+    /**
+     * Gets the SSL info of the server, or null if SSL is not enabled.
+     * @return A description of the actual SSL settings used, or null.
+     * @deprecated Use {@link #httpsConfig()} instead
+     */
+    @Deprecated()
+    SSLInfo sslInfo();
 
     /**
      * Gets the SSL info of the server, or null if SSL is not enabled.
      * @return A description of the actual SSL settings used, or null.
      */
-    SSLInfo sslInfo();
+    HttpsConfig httpsConfig();
 
     /**
      * @return The rate limiters added to the server with {@link MuServerBuilder#withRateLimiter(RateLimitSelector)}, in the order they are applied.

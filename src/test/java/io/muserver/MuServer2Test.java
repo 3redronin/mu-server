@@ -1,13 +1,21 @@
 package io.muserver;
 
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import scaffolding.MuAssert;
 
-import java.io.UncheckedIOException;
+import javax.net.ssl.*;
+import java.io.*;
+import java.net.Socket;
+import java.security.SecureRandom;
+import java.security.cert.X509Certificate;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.MuServerBuilder.httpsServer;
@@ -16,6 +24,7 @@ import static org.hamcrest.Matchers.*;
 import static org.junit.Assert.assertThrows;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
+import static scaffolding.MuAssert.assertEventually;
 
 public class MuServer2Test {
 
@@ -28,7 +37,7 @@ public class MuServer2Test {
         for (int i = 0; i < 2; i++) {
             int finalI = i;
             var server = MuServerBuilder.muServer()
-                .withHttpPort(0) // todo reuse same port and make this work
+                .withHttpPort(10000) // todo reuse same port and make this work
                 .addHandler(Method.GET, "/blah", (request, response, pathParams) -> {
                     response.write("Hello " + s + finalI);
                 })
@@ -40,8 +49,199 @@ public class MuServer2Test {
                 assertThat(resp.body().string(), equalTo("Hello " + s + i));
             }
             server.stop();
+            try (var resp = call(request(server.uri().resolve("/blah")))) {
+                Assert.fail("Should not work");
+            } catch (Exception ex) {
+            }
         }
     }
+
+    @Test
+    public void clientsCanInitiateTlsShutdowns() throws Exception {
+        server = httpsServer()
+            .start2();
+        SSLContext ctx = SSLContext.getInstance("TLS");
+        ctx.init(new KeyManager[0], new TrustManager[] {new X509TrustManager() {
+                public void checkClientTrusted(X509Certificate[] x509Certificates, String s) {
+                }
+                public void checkServerTrusted(X509Certificate[] x509Certificates, String s) {
+                }
+                public X509Certificate[] getAcceptedIssuers() {
+                    return null;
+                }
+            }},
+            new SecureRandom());
+        HttpsURLConnection conn = (HttpsURLConnection) server.uri().toURL().openConnection();
+        conn.setSSLSocketFactory(ctx.getSocketFactory());
+        conn.setHostnameVerifier((arg0, arg1) -> true);
+        conn.setConnectTimeout(5000);
+        conn.connect();
+        assertEventually(() -> server.activeConnections(), hasSize(1));
+        HttpConnection httpConnection = server.activeConnections().stream().findAny().get();
+        System.out.println("httpConnection = " + httpConnection);
+        conn.disconnect();
+        assertEventually(() -> server.activeConnections(), empty());
+
+    }
+
+    @Test
+    public void serverCanIntitiateShutdownOnTLS() throws Exception {
+        var server = httpsServer()
+            .addHandler((request, response) -> true)
+            .start2();
+        SSLContext ctx = SSLContext.getInstance("TLS");
+        ctx.init(new KeyManager[0], new TrustManager[] {new X509TrustManager() {
+                public void checkClientTrusted(X509Certificate[] x509Certificates, String s) {
+                }
+                public void checkServerTrusted(X509Certificate[] x509Certificates, String s) {
+                }
+                public X509Certificate[] getAcceptedIssuers() {
+                    return null;
+                }
+            }},
+            new SecureRandom());
+        HttpsURLConnection conn = (HttpsURLConnection) server.uri().toURL().openConnection();
+        conn.setSSLSocketFactory(ctx.getSocketFactory());
+        conn.setHostnameVerifier((arg0, arg1) -> true);
+        conn.setConnectTimeout(5000);
+        conn.connect();
+        assertEventually(server::activeConnections, hasSize(1));
+
+
+        server.stop();
+        InputStream inputStream = conn.getInputStream();
+        inputStream.read();
+
+        assertEventually(server::activeConnections, empty());
+
+    }
+
+
+    @Test
+    public void serverCanInitiateGracefulShutdown() throws Exception {
+        var events = new ConcurrentLinkedQueue<String>() {
+            @Override
+            public boolean add(String s) {
+                log.info("Test event: " + s);
+                return super.add(s);
+            }
+        };
+        var serverStoppedLatch = new CountDownLatch(1);
+
+        var server = MuServerBuilder.muServer()
+            .withHttpPort(0)
+            .addHandler(Method.GET, "/blah", (request, response, pathParams) -> {
+                events.add("Writing response");
+                response.write("Hello\r\n");
+            })
+            .start2();
+
+        Socket clientConnection = new Socket(server.uri().getHost(), server.uri().getPort());
+        // Get the input and output streams
+        PrintWriter out = new PrintWriter(clientConnection.getOutputStream(), true);
+        out.print("GET /blah HTTP/1.1\r\n");
+        out.print("Host: " + server.uri().getAuthority() + "\r\n");
+        out.print("\r\n");
+        out.flush();
+
+        var latch = new CountDownLatch(1);
+
+        new Thread(() -> {
+            try {
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(clientConnection.getInputStream()))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        log.info("Client read line = " + line);
+                        if (line.equals("Hello")) {
+                            events.add("Got line: " + line);
+                            new Thread(() -> {
+                                try {
+                                    Thread.sleep(500);
+                                } catch (InterruptedException e) {
+                                }
+                                events.add("Stop initiated");
+                                server.stop();
+                                serverStoppedLatch.countDown();
+                            }).start();
+                        }
+                    }
+                    events.add("Got EOF");
+                }
+                out.close();
+                clientConnection.close();
+                events.add("Closed reader");
+            } catch (IOException e) {
+                events.add("Exception reading: " + e.getMessage());
+            } finally {
+                latch.countDown();
+            }
+        }).start();
+
+
+        MuAssert.assertNotTimedOut("Waiting for client EOF", latch);
+        MuAssert.assertNotTimedOut("Waiting for server stop", serverStoppedLatch);
+        assertThat("Actual events: " + events, events, contains("Writing response", "Got line: Hello", "Stop initiated", "Got EOF", "Closed reader"));
+        assertThat(server.activeConnections(), empty());
+    }
+
+    @Test
+    public void clientCanInitiateGracefulShutdown() throws Exception {
+        var events = new ConcurrentLinkedQueue<String>() {
+            @Override
+            public boolean add(String s) {
+                log.info("Test event: " + s);
+                return super.add(s);
+            }
+        };
+
+        server = MuServerBuilder.muServer()
+            .withHttpPort(0)
+            .addHandler(Method.GET, "/blah", (request, response, pathParams) -> {
+                events.add("Writing response");
+                response.write("Hello\r\n");
+            })
+            .start2();
+
+        Socket clientConnection = new Socket(server.uri().getHost(), server.uri().getPort());
+        // Get the input and output streams
+        PrintWriter out = new PrintWriter(clientConnection.getOutputStream(), true);
+        out.print("GET /blah HTTP/1.1\r\n");
+        out.print("Host: " + server.uri().getAuthority() + "\r\n");
+        out.print("\r\n");
+        out.flush();
+
+        var latch = new CountDownLatch(1);
+
+        new Thread(() -> {
+            try {
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(clientConnection.getInputStream()))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        log.info("Client read line = " + line);
+                        if (line.equals("Hello")) {
+                            events.add("Got line: " + line);
+                            out.close();
+                            events.add("Closed output stream");
+                        }
+                    }
+                    events.add("Got EOF");
+                }
+                clientConnection.close();
+                events.add("Closed reader");
+            } catch (IOException e) {
+                events.add("Exception reading");
+            } finally {
+                latch.countDown();
+            }
+        }).start();
+
+
+        assertEventually(server::activeConnections, empty());
+        MuAssert.assertNotTimedOut("Waiting for client EOF", latch);
+        assertThat("Actual events: " + events, events, contains("Writing response", "Got line: Hello", "Closed output stream", "Exception reading"));
+        assertThat(server.activeConnections(), empty());
+    }
+
 
     @Test
     public void canStartAndStopHttps() throws Exception {
@@ -240,7 +440,6 @@ public class MuServer2Test {
         }
 
     }
-
 
 
     @After

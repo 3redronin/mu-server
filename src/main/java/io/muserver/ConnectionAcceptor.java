@@ -18,7 +18,7 @@ class ConnectionAcceptor implements CompletionHandler<AsynchronousSocketChannel,
 
     final InetSocketAddress address;
 
-    private final HttpsConfig httpsConfig;
+    private volatile HttpsConfig httpsConfig;
 
     final URI uri;
     private volatile boolean stopped = false;
@@ -104,5 +104,9 @@ class ConnectionAcceptor implements CompletionHandler<AsynchronousSocketChannel,
     public void stop() throws IOException {
         stopped = true;
         acceptChannel.close();
+    }
+
+    public void changeHttpsConfig(HttpsConfig newHttpsConfig) {
+        this.httpsConfig = newHttpsConfig;
     }
 }

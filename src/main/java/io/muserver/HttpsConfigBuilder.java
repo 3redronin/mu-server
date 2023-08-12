@@ -470,7 +470,7 @@ public class HttpsConfigBuilder {
             .withKeystoreFromClasspath("/io/muserver/resources/localhost.p12");
     }
 
-    public HttpsConfig build2() throws NoSuchAlgorithmException {
+    public HttpsConfig build2() {
         SSLContext context = build();
 
         SSLParameters params = context.getDefaultSSLParameters();

@@ -69,8 +69,10 @@ public class MuResponseImpl implements MuResponse {
                 while (buffer.hasRemaining()) {
                     int written = tlsChannel.write(buffer).get(10, TimeUnit.SECONDS).intValue();
                     if (written > 0) {
+                        log.info("Wrote " + written + " bytes");
                         data.server.stats.onBytesSent(written);
                     } else if (written == -1) {
+                        state = ResponseState.ERRORED;
                         throw new IOException("Write failed");
                     }
                 }

@@ -11,6 +11,7 @@ import java.net.URI;
 import java.nio.channels.AsynchronousServerSocketChannel;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 class MuServer2 implements MuServer {
@@ -48,6 +49,7 @@ class MuServer2 implements MuServer {
             }
             HttpsConfig httpsConfig = httpsConfigBuilder.build2();
             server.addAcceptor(createAcceptor(server, httpsConfig, endpoint));
+            httpsConfig.setHttpsUri(server.httpsUri());
         }
 
         return server;
@@ -81,6 +83,10 @@ class MuServer2 implements MuServer {
 
     @Override
     public void stop() {
+        stop(0, TimeUnit.SECONDS);
+    }
+
+    public void stop(long timeout, TimeUnit unit) {
         log.info("Stopping acceptors");
 
         for (ConnectionAcceptor acceptor : acceptors) {
@@ -95,12 +101,27 @@ class MuServer2 implements MuServer {
 
 
         for (MuHttp1Connection connection : connections) {
+            log.info("Closing " + connection);
+            connection.initiateShutdown();
+        }
+
+        var now = System.currentTimeMillis();
+        long timeoutMillis = unit.toMillis(timeout);
+        while (!connections.isEmpty()) {
+            if (!((System.currentTimeMillis() - now) < timeoutMillis)) break;
             try {
-                log.info("Closing " + connection);
-                connection.shutdown();
-            } catch (IOException e) {
-                log.warn("Error shutting down " + connection, e);
+                log.info("Waiting for " + connections.size() + " connections to finish");
+                for (MuHttp1Connection connection : connections) {
+                    log.info(" > " + connection);
+                }
+                Thread.sleep(50);
+            } catch (InterruptedException e) {
+                break;
             }
+        }
+        for (MuHttp1Connection connection : connections) {
+            log.warn("Killing connection " + connection);
+            connection.forceShutdown();
         }
 
         log.info("Stop completed");
@@ -187,11 +208,24 @@ class MuServer2 implements MuServer {
 
     @Override
     public void changeHttpsConfig(HttpsConfigBuilder newHttpsConfig) {
-        throw new RuntimeException("Not implemented");
+        changeHttpsConfig(newHttpsConfig.build2());
+    }
+    @Override
+    public void changeHttpsConfig(HttpsConfig newHttpsConfig) {
+        for (ConnectionAcceptor acceptor : acceptors) {
+            if (acceptor.acceptsHttps()) {
+                acceptor.changeHttpsConfig(newHttpsConfig);
+            }
+        }
     }
 
     @Override
     public SSLInfo sslInfo() {
+        return httpsConfig();
+    }
+
+    @Override
+    public HttpsConfig httpsConfig() {
         return acceptors.stream().map(ConnectionAcceptor::httpsConfig).filter(Objects::nonNull).findFirst().orElse(null);
     }
 
@@ -210,5 +244,11 @@ class MuServer2 implements MuServer {
     void onConnectionFailed(MuHttp1Connection connection, Throwable exc) {
         log.info("Connection failed: " + exc.getMessage());
         connections.remove(connection);
+    }
+
+    void onConnectionEnded(MuHttp1Connection connection) {
+        if (connections.remove(connection)) {
+            log.info("Connection ended: " + connection);
+        }
     }
 }

@@ -13,6 +13,7 @@ import java.nio.channels.ClosedChannelException;
 import java.nio.channels.CompletionHandler;
 import java.security.cert.Certificate;
 import java.time.Instant;
+import java.util.Collections;
 import java.util.Optional;
 import java.util.Set;
 
@@ -27,6 +28,8 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
     volatile MuExchange exchange;
     private String httpsProtocol;
     private String cipher;
+    private boolean inputClosed = false;
+    private boolean outputClosed = false;
 
     public MuHttp1Connection(MuServer2 server, AsynchronousSocketChannel channel, InetSocketAddress remoteAddress, ByteBuffer readBuffer) {
         this.server = server;
@@ -70,6 +73,9 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
                 MuExchange e = exchange;
                 if (e != null) {
                     e.onRequestCompleted();
+                    if (e.state.endState()) {
+                        exchange = null;
+                    }
                 }
             }
         });
@@ -91,6 +97,10 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
         MuExchange e = exchange;
         if (e != null) {
             e.onResponseCompleted();
+            if (e.state.endState()) {
+                exchange = null;
+            }
+            completeGracefulShutdownMaybe();
         }
     }
 
@@ -141,7 +151,8 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
 
     @Override
     public Set<MuRequest> activeRequests() {
-        return null;
+        MuExchange cur = this.exchange;
+        return cur == null ? Collections.emptySet() : Set.of(cur.request);
     }
 
     @Override
@@ -159,21 +170,12 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
         return Optional.empty();
     }
 
-    void shutdown() throws IOException {
-        log.info("Connection closing - " + channel.isOpen());
-        if (channel.isOpen()) {
-            channel.shutdownInput();
-            channel.shutdownOutput();
-            channel.close();
-        }
-        log.info("Connection closed: " + channel.isOpen());
-    }
-
     /**
      * Read from socket completed
      */
     @Override
     public void completed(Integer result, Object attachment) {
+        log.info("Con read completed: " + result);
         if (result != -1) {
             readBuffer.flip();
             server.stats.onBytesRead(result);
@@ -183,10 +185,12 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
                 readyToRead();
             } catch (InvalidRequestException e) {
                 server.stats.onInvalidRequest();
-                closeQuietly();
+                forceShutdown();
             }
         } else {
-            closeQuietly();
+            log.info("Got EOF from client");
+            inputClosed = true;
+            completeGracefulShutdownMaybe();
         }
     }
 
@@ -200,18 +204,51 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
         if (logIt) { // TODO also log if requests are in progress
             log.error("Read failed", exc);
         }
-        closeQuietly();
+        forceShutdown();
     }
 
-    private void closeQuietly() {
-        if (channel != null) {
+    public void forceShutdown() {
+        try {
             if (channel.isOpen()) {
-                try {
-                    channel.close(); // TODO just close outgoing?
-                } catch (IOException e) {
-                    log.error("Error closing", e);
-                }
+                log.info("Server closing " + this);
+                channel.close();
+            }
+        } catch (IOException e) {
+            log.info("Error while closing channel: " + e.getMessage());
+        } finally {
+            server.onConnectionEnded(this);
+        }
+    }
+
+    private void completeGracefulShutdownMaybe() {
+        if (inputClosed && outputClosed) {
+            forceShutdown();
+        } else if (inputClosed && exchange == null) {
+            log.info("No current exchange");
+            initiateShutdown();
+        }
+    }
+
+    public boolean initiateShutdown() {
+        // Todo wait for active exchange
+        if (!outputClosed) {
+            outputClosed = true;
+            try {
+                log.info("Shutting down output stream");
+                channel.shutdownOutput();
+            } catch (IOException e) {
+                forceShutdown();
+                return false;
             }
         }
+        completeGracefulShutdownMaybe();
+        return true;
+    }
+
+    @Override
+    public String toString() {
+        String protocol = isHttps() ? "HTTPS" : "HTTP";
+        String status = channel.isOpen() ? "Open" : "Closed";
+        return status + " " + protocol + " 1.1 connection from " + remoteAddress;
     }
 }

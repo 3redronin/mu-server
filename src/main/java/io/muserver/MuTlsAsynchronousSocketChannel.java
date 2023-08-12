@@ -28,7 +28,7 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
     private final ByteBuffer appBuffer;
     private final ByteBuffer netBuffer;
     private MuHttp1Connection muConnection;
-
+    private CompletionHandler<Integer, ?> pendingHandler;
 
     public MuTlsAsynchronousSocketChannel(AsynchronousSocketChannel socketChannel, SSLEngine sslEngine, ByteBuffer appBuffer, ByteBuffer netBuffer) {
         super(socketChannel.provider());
@@ -75,9 +75,9 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
                         try {
                             appBuffer.clear();
                             var sslResult = sslEngine.unwrap(netBuffer, appBuffer);
-                            if (sslResult.getStatus() != SSLEngineResult.Status.OK)
+                            if (sslResult.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW || sslResult.getStatus() == SSLEngineResult.Status.BUFFER_UNDERFLOW)
                                 throw new RuntimeException("Unwrapping not complete: " + sslResult);
-                            handshakeStatus = sslEngine.getHandshakeStatus();
+                            handshakeStatus = sslResult.getHandshakeStatus();
                             log.info("sslResult = " + sslResult);
                             doHandshake();
                         } catch (SSLException e) {
@@ -94,11 +94,16 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
             }
 
             case NOT_HANDSHAKING -> {
-                SSLSession session = sslEngine.getSession();
-                muConnection.handshakeComplete(session.getProtocol(), session.getCipherSuite());
+                log.info("Not handshaking! ");
+                if (pendingHandler != null) {
+                    pendingHandler.completed(-1, null);
+                }
             }
             case FINISHED -> {
-                log.info("Finished");
+                log.info("Finished handshake");
+                SSLSession session = sslEngine.getSession();
+                muConnection.handshakeComplete(session.getProtocol(), session.getCipherSuite());
+                ((MuServer2)muConnection.server()).onConnectionAccepted(muConnection);
             }
             case NEED_TASK -> {
                 Runnable task;
@@ -113,29 +118,11 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
                 netBuffer.clear();
                 appBuffer.clear();
                 var wrapResult = sslEngine.wrap(appBuffer, netBuffer);
-                if (wrapResult.getStatus() != SSLEngineResult.Status.OK)
+                if (wrapResult.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW || wrapResult.getStatus() == SSLEngineResult.Status.BUFFER_UNDERFLOW)
                     throw new RuntimeException("Unwrapping not complete: " + wrapResult);
                 netBuffer.flip();
-                socketChannel.write(netBuffer, null, new CompletionHandler<Integer, Object>() {
-                    @Override
-                    public void completed(Integer result, Object attachment) {
-                        if (result < 0) throw new RuntimeException("Got " + result + " while writing encrypted data");
-                        if (netBuffer.hasRemaining()) throw new RuntimeException("Did not write all"); // Todo: write again
-                        handshakeStatus = sslEngine.getHandshakeStatus();
-                        try {
-                            doHandshake();
-                        } catch (SSLException e) {
-                            throw new RuntimeException("Error continuing handshake after wrapping", e);
-                        }
-                    }
-
-                    @Override
-                    public void failed(Throwable exc, Object attachment) {
-                        log.error("Error while writing during handshake", exc);
-                        closeNow();
-                    }
-                });
-
+                handshakeStatus = wrapResult.getHandshakeStatus();
+                writeNetbuffer();
             }
             case NEED_UNWRAP_AGAIN -> {
                 log.info("Need unwrap again");
@@ -143,153 +130,35 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
         }
     }
 
-//    private void doHandshake() throws SSLException {
-//        SSLEngineResult.Status status;
-//        SSLEngineResult.HandshakeStatus handshakeStatus = sslEngine.getHandshakeStatus();
-//        log.info("handshakeStatus = " + handshakeStatus);
-//
-//        if (handshakeStatus != SSLEngineResult.HandshakeStatus.FINISHED && handshakeStatus != SSLEngineResult.HandshakeStatus.NOT_HANDSHAKING) {
-//
-//            if (handshakeStatus == SSLEngineResult.HandshakeStatus.NEED_TASK) {
-//                // TODO: put this on another thread
-//                Runnable task;
-//                while ((task = sslEngine.getDelegatedTask()) != null) {
-//                    log.info("Executing task " + task);
-//                    task.run();
-//                }
-//            }
-//
-//            if (handshakeStatus == SSLEngineResult.HandshakeStatus.NEED_WRAP) {
-//                netBuffer.clear();
-//                SSLEngineResult result = sslEngine.wrap(appBuffer, netBuffer);
-//                status = result.getStatus();
-//                handshakeStatus = result.getHandshakeStatus();
-//                netBuffer.flip();
-//                if (status == SSLEngineResult.Status.OK) {
-//                    writeNetBuffer();
-//                }
-//            }
-//
-//            if (handshakeStatus == SSLEngineResult.HandshakeStatus.NEED_UNWRAP) {
-//                if (netBuffer.hasRemaining()) {
-//                    doUnwrap();
-//                } else {
-//                    // Read data into netBuffer
-//                    socketChannel.read(netBuffer, null, new CompletionHandler<Integer, Void>() {
-//                        @Override
-//                        public void completed(Integer bytesRead, Void attachment) {
-//                            if (bytesRead > 0) {
-//                                netBuffer.flip();
-//                                try {
-//                                    doUnwrap();
-//                                } catch (SSLException e) {
-//                                    throw new RuntimeException("Error reading into netbuffer", e);
-//                                }
-//                            }
-//                        }
-//
-//                        @Override
-//                        public void failed(Throwable exc, Void attachment) {
-//                            log.error("Failed reading netBuffer", exc);
-//                            // TODO close stuff
-//                        }
-//                    });
-//                }
-//            }
-//        }
-//    }
-//
-//    private void writeNetBuffer() {
-//        socketChannel.write(netBuffer, null, new CompletionHandler<Integer, Void>() {
-//            @Override
-//            public void completed(Integer bytesWritten, Void attachment) {
-//                if (netBuffer.hasRemaining()) {
-//                    writeNetBuffer();
-//                } else {
-//                    if (sslEngine.isOutboundDone()) {
-//                        try {
-//                            close();
-//                        } catch (IOException e) {
-//                            throw new UncheckedIOException("Error closing", e);
-//                        }
-//                    } else {
-//                        try {
-//                            doUnwrap();
-//                        } catch (SSLException e) {
-//                            throw new RuntimeException("Error unwrapping netbuffer", e);
-//                        }
-//                    }
-//                }
-//            }
-//
-//            @Override
-//            public void failed(Throwable exc, Void attachment) {
-//                log.error("Failed writing netBuffer", exc);
-//            }
-//        });
-//    }
-//
-//    private void doUnwrap() throws SSLException {
-//        SSLEngineResult result;
-//        do {
-//            appBuffer.clear();
-//            result = sslEngine.unwrap(netBuffer, appBuffer);
-//            netBuffer.compact();
-//        } while (result.getStatus() == SSLEngineResult.Status.OK &&
-//            result.getHandshakeStatus() == SSLEngineResult.HandshakeStatus.NEED_UNWRAP);
-//
-//        if (result.getStatus() == SSLEngineResult.Status.OK) {
-//            appBuffer.flip();
-//            // Process the decrypted data in appBuffer
-//            // ...
-//
-//            // Prepare for the next read
-//            netBuffer.flip();
-//            socketChannel.read(netBuffer, null, new CompletionHandler<Integer, Void>() {
-//                @Override
-//                public void completed(Integer bytesRead, Void attachment) {
-//                    if (bytesRead > 0) {
-//                        netBuffer.flip();
-//                        try {
-//                            doUnwrap();
-//                        } catch (SSLException e) {
-//                            throw new RuntimeException("Error reading for status OK", e);
-//                        }
-//                    }
-//                }
-//
-//                @Override
-//                public void failed(Throwable exc, Void attachment) {
-//                    log.error("Error reading in OK", exc);
-//                }
-//            });
-//        } else if (result.getStatus() == SSLEngineResult.Status.BUFFER_UNDERFLOW) {
-//            socketChannel.read(netBuffer, null, new CompletionHandler<Integer, Void>() {
-//                @Override
-//                public void completed(Integer bytesRead, Void attachment) {
-//                    if (bytesRead > 0) {
-//                        netBuffer.flip();
-//                        try {
-//                            doUnwrap();
-//                        } catch (SSLException e) {
-//                            throw new RuntimeException("Error reading while BUFFER_UNDERFLOW", e);
-//                        }
-//                    }
-//                }
-//
-//                @Override
-//                public void failed(Throwable exc, Void attachment) {
-//                    log.info("Error reading in underflow", exc);
-//                }
-//            });
-//        } else if (result.getStatus() == SSLEngineResult.Status.CLOSED) {
-//            try {
-//                close();
-//            } catch (IOException e) {
-//                throw new UncheckedIOException("Error closing", e);
-//            }
-//        }
-//    }
+    private void writeNetbuffer() {
+        socketChannel.write(netBuffer, null, new CompletionHandler<>() {
+            @Override
+            public void completed(Integer result, Object attachment) {
+                if (result < 0) throw new RuntimeException("Got " + result + " while writing encrypted data");
+                if (netBuffer.hasRemaining()) {
+                    log.info("Still " + netBuffer.remaining() + " netBuffer to send");
+                    writeNetbuffer();
+                } else {
+                    try {
+                        doHandshake();
+                    } catch (SSLException e) {
+                        handleSSLException(e);
+                    }
+                }
+            }
+
+            @Override
+            public void failed(Throwable exc, Object attachment) {
+                log.error("Error while writing during handshake", exc);
+                closeNow();
+            }
+        });
+    }
+
+    private void handleSSLException(SSLException e) {
+        log.error("SSLException", e);
+        closeNow();
+    }
 
     @Override
     public AsynchronousSocketChannel bind(SocketAddress local) throws IOException {
@@ -313,11 +182,15 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
 
     @Override
     public AsynchronousSocketChannel shutdownInput() throws IOException {
+        log.info("Closing sslEngine inbound");
+        sslEngine.closeInbound();
         return socketChannel.shutdownInput();
     }
 
     @Override
     public AsynchronousSocketChannel shutdownOutput() throws IOException {
+        log.info("Closing sslEngine outbound");
+        sslEngine.closeOutbound();
         return socketChannel.shutdownOutput();
     }
 
@@ -338,9 +211,9 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
 
     @Override
     public <A> void read(ByteBuffer dst, long timeout, TimeUnit unit, A attachment, CompletionHandler<Integer, ? super A> handler) {
-        log.info("TLS channel read: " + dst.remaining());
+        log.info("TLS channel read with position=" + dst.position() + " and limit=" + dst.limit());
         netBuffer.clear();
-        socketChannel.read(netBuffer, timeout, unit, attachment, new CompletionHandler<Integer, A>() {
+        socketChannel.read(netBuffer, timeout, unit, attachment, new CompletionHandler<>() {
             @Override
             public void completed(Integer result, A attachment) {
                 netBuffer.flip();
@@ -351,10 +224,19 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
                     handler.failed(e, attachment);
                     return;
                 }
-                if (unwrapResult.getStatus() != SSLEngineResult.Status.OK) {
+                if (unwrapResult.getStatus() == SSLEngineResult.Status.CLOSED) {
+                    try {
+                        handshakeStatus = unwrapResult.getHandshakeStatus();
+                        pendingHandler = handler;
+                        doHandshake();
+                    } catch (SSLException e) {
+                        handler.failed(e, attachment);
+                    }
+                } else if (unwrapResult.getStatus() != SSLEngineResult.Status.OK) {
                     handler.failed(new SSLException("Result from decrypting: " + unwrapResult), attachment); // TODO: handle states where more reading needed
+                } else {
+                    handler.completed(result, attachment);
                 }
-                handler.completed(result, attachment);
 
             }
 
@@ -434,4 +316,5 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
     public void close() throws IOException {
         sslEngine.closeOutbound();
     }
+
 }
