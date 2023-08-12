@@ -4,8 +4,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.net.*;
-import java.nio.channels.AsynchronousCloseException;
+import java.net.InetSocketAddress;
+import java.net.SocketOption;
+import java.net.StandardSocketOptions;
+import java.net.URI;
 import java.nio.channels.AsynchronousServerSocketChannel;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -185,12 +187,12 @@ class MuServer2 implements MuServer {
 
     @Override
     public void changeHttpsConfig(HttpsConfigBuilder newHttpsConfig) {
-
+        throw new RuntimeException("Not implemented");
     }
 
     @Override
     public SSLInfo sslInfo() {
-        return null;
+        return acceptors.stream().map(ConnectionAcceptor::httpsConfig).filter(Objects::nonNull).findFirst().orElse(null);
     }
 
     @Override
@@ -204,22 +206,8 @@ class MuServer2 implements MuServer {
         connections.add(connection);
     }
 
-    public void onConnectionAcceptFailure(AsynchronousServerSocketChannel channel, Throwable exc) {
-        stats.onFailedToConnect();
-        if (channel.isOpen()) {
-            SocketAddress localAddress;
-            try {
-                localAddress = channel.getLocalAddress();
-            } catch (IOException e) {
-                localAddress = null;
-            }
-            log.error("Error accepting on " + localAddress, exc);
-        } else if (!(exc instanceof AsynchronousCloseException)) {
-            log.info("Error on closed channel: ", exc);
-        }
-    }
 
-    public void onConnectionFailed(MuHttp1Connection connection, Throwable exc) {
+    void onConnectionFailed(MuHttp1Connection connection, Throwable exc) {
         log.info("Connection failed: " + exc.getMessage());
         connections.remove(connection);
     }

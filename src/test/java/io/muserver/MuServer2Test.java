@@ -5,7 +5,7 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
@@ -85,6 +85,22 @@ public class MuServer2Test {
     }
 
     @Test
+    public void canGetServerInfo() throws Exception {
+        var theCipher = "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384";
+        server = httpsServer()
+            .withHttpsConfig(HttpsConfigBuilder.httpsConfig()
+                .withProtocols("TLSv1.2")
+                .withCipherFilter((supportedCiphers, defaultCiphers) -> List.of(theCipher))
+            )
+            .start2();
+        assertThat(server.sslInfo().providerName(), not(nullValue()));
+        assertThat(server.sslInfo().ciphers(), contains(theCipher));
+        assertThat(server.sslInfo().protocols(), contains("TLSv1.2"));
+        assertThat(server.sslInfo().certificates(), hasSize(1));
+    }
+
+
+    @Test
     public void ifNoCommonCiphersThenItDoesNotLoad() throws Exception {
         var theCipher = "TLS_AES_128_GCM_SHA256";
         server = httpsServer()
@@ -93,12 +109,12 @@ public class MuServer2Test {
                 .withCipherFilter((supportedCiphers, defaultCiphers) -> List.of(theCipher))
             )
             .start2();
-        assertThrows(IOException.class, () -> {
-            try (var ignored = call(request(server.uri().resolve("/")))){}
+        assertThrows(UncheckedIOException.class, () -> {
+            try (var ignored = call(request(server.uri().resolve("/")))) {
+            }
         });
         assertThat(server.stats().failedToConnect(), equalTo(1L));
     }
-
 
     @Test
     public void tls13Available() throws Exception {

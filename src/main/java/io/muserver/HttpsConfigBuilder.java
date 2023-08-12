@@ -417,15 +417,14 @@ public class HttpsConfigBuilder {
             if (supportedProtocols.contains(protocol)) {
                 protocolsToUse.add(protocol);
             } else {
-                log.warn("Will not use " + protocol + " as it is not supported by the current JDK");
+                log.warn("Will not use " + protocol + " as it is not supported by the current SSLContext");
             }
         }
         if (protocolsToUse.isEmpty()) {
             throw new MuException("Cannot start up as none of the requested SSL protocols " + Arrays.toString(this.protocols)
-                + " are supported by the current JDK " + supportedProtocols);
+                + " are supported by the current SSLContext " + supportedProtocols);
         }
-        String[] protocolsArray = protocolsToUse.toArray(new String[0]);
-        return protocolsArray;
+        return protocolsToUse.toArray(new String[0]);
     }
 
 
@@ -473,15 +472,20 @@ public class HttpsConfigBuilder {
 
     public HttpsConfig build2() throws NoSuchAlgorithmException {
         SSLContext context = build();
-        context.getSupportedSSLParameters().setUseCipherSuitesOrder(true);
-        String[] supportedCiphers = context.getSupportedSSLParameters().getCipherSuites();
+
+        SSLParameters params = context.getDefaultSSLParameters();
+        params.setUseCipherSuitesOrder(true);
 
         if (sslCipherFilter != null) {
-            List<String> selected = sslCipherFilter.selectCiphers(Set.of(supportedCiphers), List.of(supportedCiphers));
-            supportedCiphers = selected.toArray(new String[0]);
+            SSLServerSocketFactory ssf = context.getServerSocketFactory();
+            List<String> selected = sslCipherFilter.selectCiphers(Set.of(ssf.getSupportedCipherSuites()), List.of(ssf.getDefaultCipherSuites()));
+            String[] ciphersToUse = selected.toArray(new String[0]);
+            params.setCipherSuites(ciphersToUse);
         }
 
-        return new HttpsConfig(context, getHttpsProtocolsArray(), supportedCiphers);
+        String[] protocolsToUse = getHttpsProtocolsArray(context);
+        params.setProtocols(protocolsToUse);
+        return new HttpsConfig(context, params);
     }
 
 }

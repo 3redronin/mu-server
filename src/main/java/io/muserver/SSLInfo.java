@@ -19,7 +19,7 @@ public interface SSLInfo {
     List<String> protocols();
 
     /**
-     * @return Gets the SSL provider, e.g. <code>JDK</code> or <code>OpenSSL</code>
+     * @return Gets the SSL provider, e.g. <code>SunJSSE</code>
      */
     String providerName();
 

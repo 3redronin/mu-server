@@ -1,9 +1,10 @@
 package io.muserver;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import javax.net.ssl.SSLEngine;
-import javax.net.ssl.SSLException;
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.ByteBuffer;
@@ -12,18 +13,25 @@ import java.nio.channels.AsynchronousSocketChannel;
 import java.nio.channels.CompletionHandler;
 
 class ConnectionAcceptor implements CompletionHandler<AsynchronousSocketChannel, MuServer2> {
-    private final AsynchronousServerSocketChannel channel;
+    private static final Logger log = LoggerFactory.getLogger(ConnectionAcceptor.class);
+    private final AsynchronousServerSocketChannel acceptChannel;
 
     final InetSocketAddress address;
+
     private final HttpsConfig httpsConfig;
+
     final URI uri;
     private volatile boolean stopped = false;
 
     ConnectionAcceptor(AsynchronousServerSocketChannel channel, InetSocketAddress address, HttpsConfig httpsConfig) {
-        this.channel = channel;
+        this.acceptChannel = channel;
         this.address = address;
         this.httpsConfig = httpsConfig;
         this.uri = URI.create("http" + (httpsConfig == null ? "" : "s") + "://localhost:" + address.getPort());
+    }
+
+    public HttpsConfig httpsConfig() {
+        return httpsConfig;
     }
 
     boolean acceptsHttp() {
@@ -36,7 +44,7 @@ class ConnectionAcceptor implements CompletionHandler<AsynchronousSocketChannel,
 
     public void readyToAccept(MuServer2 muServer) {
         if (!stopped) {
-            channel.accept(muServer, this);
+            acceptChannel.accept(muServer, this);
         }
     }
 
@@ -45,45 +53,56 @@ class ConnectionAcceptor implements CompletionHandler<AsynchronousSocketChannel,
      */
     @Override
     public void completed(AsynchronousSocketChannel channel, MuServer2 muServer) {
-        readyToAccept(muServer); // todo Will a thrown exception cause this to be called in the failed callback too?
-        InetSocketAddress remoteAddress;
+        readyToAccept(muServer);
+        InetSocketAddress remoteAddress = null;
         try {
             remoteAddress = (InetSocketAddress) channel.getRemoteAddress();
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
 
-        var sslContext = httpsConfig == null ? null : httpsConfig.sslContext();
-        if (sslContext == null) {
-            MuHttp1Connection connection = new MuHttp1Connection(muServer, channel, remoteAddress, ByteBuffer.allocate(10000));
-            muServer.onConnectionAccepted(connection);
-            connection.readyToRead();
-        } else {
-            try {
+            if (httpsConfig == null) {
+                MuHttp1Connection connection = new MuHttp1Connection(muServer, channel, remoteAddress, ByteBuffer.allocate(10000));
+                muServer.onConnectionAccepted(connection);
+                connection.readyToRead();
+            } else {
+                var sslContext = httpsConfig.sslContext();
                 SSLEngine engine = sslContext.createSSLEngine();
-                engine.setEnabledProtocols(httpsConfig.protocolsArray());
-                engine.setEnabledCipherSuites(httpsConfig.cipherSuitesArray());
+                engine.setSSLParameters(httpsConfig.sslParameters());
                 engine.setUseClientMode(false);
+
                 var appBuffer = ByteBuffer.allocate(engine.getSession().getApplicationBufferSize());
                 var netBuffer = ByteBuffer.allocate(engine.getSession().getPacketBufferSize());
                 var tlsChannel = new MuTlsAsynchronousSocketChannel(channel, engine, appBuffer, netBuffer);
+
                 MuHttp1Connection connection = new MuHttp1Connection(muServer, tlsChannel, remoteAddress, appBuffer);
                 tlsChannel.beginHandshake(connection);
-            } catch (SSLException e) {
-                throw new RuntimeException("Error beginning handshake", e);
             }
+        } catch (Exception e) {
+            if (channel.isOpen()) {
+                log.info("Error accepting connection from " + (Mutils.coalesce(remoteAddress, "unknown client")) + ": " + e.getMessage());
+                try {
+                    channel.close();
+                } catch (IOException ex) {
+                    log.info("Error closing channel: " + ex.getMessage());
+                }
+            } else {
+                log.warn("Error accepting socket; stopped=" + stopped, e);
+            }
+            muServer.stats.onFailedToConnect();
         }
 
     }
 
+
     @Override
     public void failed(Throwable exc, MuServer2 server) {
-        readyToAccept(server);
-        server.onConnectionAcceptFailure(channel, exc);
+        if (!stopped) {
+            readyToAccept(server);
+            log.warn("Error while accepting socket", exc);
+            server.stats.onFailedToConnect();
+        }
     }
 
     public void stop() throws IOException {
         stopped = true;
-        channel.close();
+        acceptChannel.close();
     }
 }

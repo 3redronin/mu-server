@@ -1,34 +1,55 @@
 package io.muserver;
 
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLParameters;
+import java.security.cert.X509Certificate;
 import java.util.List;
 
-public class HttpsConfig {
+public class HttpsConfig implements SSLInfo {
     private final SSLContext sslContext;
-    private final String[] protocols;
-    private final String[] cipherSuites;
+    private final SSLParameters sslParameters;
+    private List<X509Certificate> certificates;
 
-    public HttpsConfig(SSLContext sslContext, String[] protocols, String[] cipherSuites) {
+    HttpsConfig(SSLContext sslContext, SSLParameters sslParameters) {
         this.sslContext = sslContext;
-        this.protocols = protocols;
-        this.cipherSuites = cipherSuites;
+        this.sslParameters = sslParameters;
     }
 
     public SSLContext sslContext() {
         return sslContext;
     }
+    public SSLParameters sslParameters() { return sslParameters; };
 
     String[] protocolsArray() {
-        return protocols;
+        return sslParameters.getProtocols();
     }
+
+    @Override
+    public List<String> ciphers() {
+        return List.of(cipherSuitesArray());
+    }
+
     public List<String> protocols() {
-        return List.of(protocols);
+        return List.of(protocolsArray());
+    }
+
+    @Override
+    public String providerName() {
+        return sslContext.getProvider().getName();
+    }
+
+    @Override
+    public List<X509Certificate> certificates() {
+        return certificates;
     }
 
     String[] cipherSuitesArray() {
-        return cipherSuites;
+        return sslParameters.getCipherSuites();
     }
-    public List<String> cipherSuites() {
-        return List.of(cipherSuites);
+
+
+    void setCertificates(List<X509Certificate> certificates) {
+        this.certificates = certificates;
     }
+
 }
