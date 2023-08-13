@@ -1,3 +1,4 @@
+import io.muserver.MuServerBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -8,7 +9,7 @@ import static io.muserver.MuServerBuilder.httpsServer;
 public class Mu2RunLocal {
     private static final Logger log = LoggerFactory.getLogger(Mu2RunLocal.class);
     public static void main(String[] args) throws Exception {
-        var server = httpsServer()
+        MuServerBuilder muServerBuilder = httpsServer()
             .withHttpsPort(10000)
             .addHandler((request, response) -> {
                 response.sendChunk("Ah!!!!!!");
@@ -18,8 +19,9 @@ public class Mu2RunLocal {
                 response.sendChunk(" done.");
                 log.info("Handler ending");
                 return true;
-            })
-            .start2();
+            });
+        //                new Thread(() -> request.server().stop(5, TimeUnit.SECONDS)).start();
+        var server = muServerBuilder.start();
         log.info("server.uri() = " + server.uri());
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {

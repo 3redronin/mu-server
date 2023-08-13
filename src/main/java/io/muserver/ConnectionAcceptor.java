@@ -58,8 +58,9 @@ class ConnectionAcceptor implements CompletionHandler<AsynchronousSocketChannel,
         try {
             remoteAddress = (InetSocketAddress) channel.getRemoteAddress();
 
+
             if (httpsConfig == null) {
-                MuHttp1Connection connection = new MuHttp1Connection(muServer, channel, remoteAddress, ByteBuffer.allocate(10000));
+                MuHttp1Connection connection = new MuHttp1Connection(muServer, channel, remoteAddress, address, ByteBuffer.allocate(10000));
                 muServer.onConnectionAccepted(connection);
                 connection.readyToRead();
             } else {
@@ -72,7 +73,7 @@ class ConnectionAcceptor implements CompletionHandler<AsynchronousSocketChannel,
                 var netBuffer = ByteBuffer.allocate(engine.getSession().getPacketBufferSize());
                 var tlsChannel = new MuTlsAsynchronousSocketChannel(channel, engine, appBuffer, netBuffer);
 
-                MuHttp1Connection connection = new MuHttp1Connection(muServer, tlsChannel, remoteAddress, appBuffer);
+                MuHttp1Connection connection = new MuHttp1Connection(muServer, tlsChannel, remoteAddress, address, appBuffer);
                 tlsChannel.beginHandshake(connection);
             }
         } catch (Exception e) {

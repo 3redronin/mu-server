@@ -102,8 +102,7 @@ public class MuResponseImpl implements MuResponse {
             }
         }
         sb.append("\r\n");
-        var headerBuf = StandardCharsets.US_ASCII.encode(sb.toString());
-        return headerBuf;
+        return StandardCharsets.US_ASCII.encode(sb.toString());
     }
 
     @Override
@@ -123,7 +122,7 @@ public class MuResponseImpl implements MuResponse {
         }
     }
 
-    public void endStreaming() throws IOException {
+    public void end() throws IOException {
         if (state == ResponseState.STREAMING) {
             state = ResponseState.FINISHING;
             if (writer != null) {
@@ -145,6 +144,10 @@ public class MuResponseImpl implements MuResponse {
                 }
             }
             state = ResponseState.FINISHED;
+        } else if (state == ResponseState.NOTHING) {
+            ByteBuffer headerBuf = headersBuffer(true, headers);
+            blockingWrite(headerBuf);
+            state = ResponseState.FINISHED;
         }
     }
 
@@ -164,7 +167,7 @@ public class MuResponseImpl implements MuResponse {
 
     @Override
     public void redirect(URI uri) {
-        throw new RedirectionException(Response.Status.NOT_FOUND, uri);
+        throw new RedirectionException(Response.Status.FOUND, uri);
     }
 
     @Override
@@ -231,7 +234,7 @@ public class MuResponseImpl implements MuResponse {
                 if (state != 2) {
                     System.out.println("Closed");
                     state = 2;
-                    endStreaming();
+                    end();
                 }
             }
         };
@@ -275,4 +278,7 @@ public class MuResponseImpl implements MuResponse {
         return trailers;
     }
 
+    public void onCancelled(ResponseState responseState) {
+        state = responseState;
+    }
 }

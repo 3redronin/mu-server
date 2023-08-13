@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.ws.rs.NotFoundException;
+import javax.ws.rs.RedirectionException;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -22,6 +23,7 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
     private final MuServer2 server;
     private final AsynchronousSocketChannel channel;
     private final InetSocketAddress remoteAddress;
+    private final InetSocketAddress localAddress;
     private final Instant startTime = Instant.now();
     private final RequestParser requestParser;
     private final ByteBuffer readBuffer;
@@ -31,15 +33,58 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
     private boolean inputClosed = false;
     private boolean outputClosed = false;
 
-    public MuHttp1Connection(MuServer2 server, AsynchronousSocketChannel channel, InetSocketAddress remoteAddress, ByteBuffer readBuffer) {
+
+    static String getRelativeUrl(URI uriInHeaderLine) throws InvalidHttpRequestException, RedirectException {
+        try {
+            URI requestUri = uriInHeaderLine.normalize();
+            if (requestUri.getScheme() == null && requestUri.getHost() != null) {
+                throw new RedirectException(new URI(uriInHeaderLine.toString().substring(1)).normalize());
+            }
+
+            String s = requestUri.getRawPath();
+            if (Mutils.nullOrEmpty(s)) {
+                s = "/";
+            } else {
+                // TODO: consider a redirect if the URL is changed? Handle other percent-encoded characters?
+                s = s.replace("%7E", "~")
+                    .replace("%5F", "_")
+                    .replace("%2E", ".")
+                    .replace("%2D", "-")
+                ;
+            }
+            String q = requestUri.getRawQuery();
+            if (q != null) {
+                s += "?" + q;
+            }
+            return s;
+        } catch (RedirectException re) {
+            throw re;
+        } catch (Exception e) {
+            if (log.isDebugEnabled()) log.debug("Invalid request URL " + uriInHeaderLine);
+            throw new InvalidHttpRequestException(400, "400 Bad Request");
+        }
+    }
+
+    public MuHttp1Connection(MuServer2 server, AsynchronousSocketChannel channel, InetSocketAddress remoteAddress, InetSocketAddress localAddress, ByteBuffer readBuffer) {
         this.server = server;
         this.channel = channel;
         this.remoteAddress = remoteAddress;
+        this.localAddress = localAddress;
         this.requestParser = new RequestParser(new RequestParser.Options(8192, 8192), new RequestParser.RequestListener() {
             @Override
             public void onHeaders(Method method, URI uri, HttpVersion httpProtocolVersion, MuHeaders headers, boolean hasBody) {
                 var data = new MuExchangeData(server, MuHttp1Connection.this, httpProtocolVersion, headers);
-                var req = new MuRequestImpl(data, method, uri, uri, headers, hasBody);
+                String relativeUri = null;
+                try {
+                    relativeUri = getRelativeUrl(uri);
+                } catch (InvalidHttpRequestException e) {
+                    // TODO handle this
+                    throw new RuntimeException(e);
+                } catch (RedirectException e) {
+                    // TODO redirect it
+                    throw new RuntimeException(e);
+                }
+                var req = new MuRequestImpl(data, method, relativeUri, headers, hasBody);
                 var resp = new MuResponseImpl(data, channel);
                 exchange = new MuExchange(data, req, resp);
                 server.stats.onRequestStarted(req);
@@ -58,12 +103,9 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
                     if (!handled) {
                         throw new NotFoundException();
                     }
-                    if (resp.responseState() == ResponseState.STREAMING) {
-                        resp.endStreaming();
-                    }
-                } catch (Exception e) {
-                    log.error("Unhandled exception", e);
-                    throw new RuntimeException(e);
+                    resp.end();
+                } catch (Throwable e) {
+                    useCustomExceptionHandlerOrFireIt(exchange, e);
                 }
             }
 
@@ -87,6 +129,21 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
 
         this.readBuffer = readBuffer;
     }
+
+    static void useCustomExceptionHandlerOrFireIt(MuExchange exchange, Throwable ex) {
+        var server = (MuServer2) exchange.request.server();
+        try {
+            if (server.unhandledExceptionHandler != null && !(ex instanceof RedirectionException) && server.unhandledExceptionHandler.handle(exchange.request, exchange.response, ex)) {
+                exchange.response.end();
+                exchange.onResponseCompleted();
+            } else {
+                exchange.onException(ex);
+            }
+        } catch (Throwable handlerException) {
+            exchange.onException(handlerException);
+        }
+    }
+
 
     void handshakeComplete(String protocol, String cipher) {
         this.httpsProtocol = protocol;
@@ -140,6 +197,11 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
     }
 
     @Override
+    public InetSocketAddress localAddress() {
+        return localAddress;
+    }
+
+    @Override
     public long completedRequests() {
         return 0;
     }
@@ -168,6 +230,22 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
     @Override
     public MuServer server() {
         return server;
+    }
+
+    public URI serverUri() {
+        int port = localAddress.getPort();
+        String proto;
+        if (isHttps()) {
+            proto = "https";
+            if (port == 443) port = -1;
+        } else {
+            proto = "http";
+            if (port == 80) port = -1;
+        }
+
+        String s = proto + "://localhost";
+        if (port != -1) s += ":" + port;
+        return URI.create(s);
     }
 
     @Override

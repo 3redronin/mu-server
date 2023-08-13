@@ -239,6 +239,11 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
     }
 
     @Override
+    public InetSocketAddress localAddress() {
+        throw new RuntimeException("nope");
+    }
+
+    @Override
     public long completedRequests() {
         return connectionStats.completedRequests();
     }

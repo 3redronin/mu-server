@@ -20,16 +20,18 @@ class MuServer2 implements MuServer {
     private final List<ConnectionAcceptor> acceptors = new LinkedList<>();
     final List<MuHandler> handlers;
     final MuStats2Impl stats = new MuStats2Impl();
+    final UnhandledExceptionHandler unhandledExceptionHandler;
 
-    MuServer2(List<MuHandler> handlers) {
+    MuServer2(List<MuHandler> handlers, UnhandledExceptionHandler unhandledExceptionHandler) {
         this.handlers = handlers;
+        this.unhandledExceptionHandler = unhandledExceptionHandler;
     }
 
     void addAcceptor(ConnectionAcceptor acceptor) {
         acceptors.add(acceptor);
     }
 
-    static MuServer start(MuServerBuilder builder) throws Exception {
+    static MuServer start(MuServerBuilder builder) throws IOException {
 
         boolean hasHttps = builder.httpsPort() >= 0;
 
@@ -38,7 +40,7 @@ class MuServer2 implements MuServer {
         InetSocketAddress endpoint = builder.interfaceHost() == null ? new InetSocketAddress(bindPort) : new InetSocketAddress(builder.interfaceHost(), bindPort);
 
 
-        MuServer2 server = new MuServer2(builder.handlers());
+        MuServer2 server = new MuServer2(builder.handlers(), builder.unhandledExceptionHandler());
         if (!hasHttps) {
             server.addAcceptor(createAcceptor(server, null, endpoint));
         } else {

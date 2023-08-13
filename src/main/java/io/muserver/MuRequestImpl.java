@@ -1,5 +1,8 @@
 package io.muserver;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -7,10 +10,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+
 public class MuRequestImpl implements MuRequest {
+    private static final Logger log = LoggerFactory.getLogger(MuRequestImpl.class);
 
     private final long startTime = System.currentTimeMillis();
-    private final MuExchangeData data;
+    final MuExchangeData data;
     private final Method method;
     private final URI uri;
     private final URI serverUri;
@@ -21,16 +26,35 @@ public class MuRequestImpl implements MuRequest {
     private final boolean hasBody;
     private Headers trailers;
 
-    public MuRequestImpl(MuExchangeData data, Method method, URI uri, URI serverUri, Headers headers, boolean hasBody) {
+    public MuRequestImpl(MuExchangeData data, Method method, String relativeUri, Headers headers, boolean hasBody) {
         this.data = data;
         this.method = method;
-        this.uri = uri;
+        this.serverUri = data.connection.serverUri().resolve(relativeUri);
         this.relativePath = serverUri.getRawPath();
-        this.serverUri = serverUri;
+        var host = headers.get("host");
+        this.uri = getUri(headers, serverUri.getScheme(), host, relativeUri, serverUri);
         this.headers = headers;
         this.hasBody = hasBody;
         this.state = hasBody ? RequestState.COMPLETE : RequestState.RECEIVING_BODY;
     }
+
+    private static URI getUri(Headers h, String scheme, String hostHeader, String requestUri, URI defaultValue) {
+        try {
+            List<ForwardedHeader> forwarded = h.forwarded();
+            if (forwarded.isEmpty()) {
+                return defaultValue;
+            }
+            ForwardedHeader f = forwarded.get(0);
+            String originalScheme = Mutils.coalesce(f.proto(), scheme);
+            String host = Mutils.coalesce(f.host(), hostHeader, "localhost");
+            return URI.create(originalScheme + "://" + host).resolve(requestUri);
+        } catch (Exception e) {
+            log.warn("Could not create a URI object using header values " + h
+                + " so using local server URI. URL generation (including in redirects) may be incorrect.");
+            return defaultValue;
+        }
+    }
+
 
     public RequestState requestState() {
         return state;
@@ -210,4 +234,10 @@ public class MuRequestImpl implements MuRequest {
         this.state = RequestState.ERRORED;
     }
 
+    public void onCancelled(ResponseState responseState, Throwable cause) {
+        if (!state.endState()) {
+            // todo: what to do with reader / thread that is blocking
+            state = RequestState.ERRORED;
+        }
+    }
 }

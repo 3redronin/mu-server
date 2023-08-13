@@ -45,6 +45,8 @@ public interface HttpConnection {
      */
     InetSocketAddress remoteAddress();
 
+    InetSocketAddress localAddress();
+
     /**
      * @return The number of completed requests on this connection.
      */

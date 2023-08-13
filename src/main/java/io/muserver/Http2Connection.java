@@ -519,6 +519,11 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
     }
 
     @Override
+    public InetSocketAddress localAddress() {
+        throw new RuntimeException("Nope");
+    }
+
+    @Override
     public long completedRequests() {
         return connectionStats.completedRequests();
     }

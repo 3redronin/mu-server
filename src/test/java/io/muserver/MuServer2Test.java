@@ -37,12 +37,13 @@ public class MuServer2Test {
         var s = "Hello ".repeat(1000);
         for (int i = 0; i < 2; i++) {
             int finalI = i;
-            var server = MuServerBuilder.muServer()
+            MuServerBuilder muServerBuilder = MuServerBuilder.muServer()
                 .withHttpPort(10000) // todo reuse same port and make this work
                 .addHandler(Method.GET, "/blah", (request, response, pathParams) -> {
                     response.write("Hello " + s + finalI);
-                })
-                .start2();
+                });
+            // todo reuse same port and make this work
+            var server = muServerBuilder.start();
             log.info("Started at " + server.uri());
 
             try (var resp = call(request(server.uri().resolve("/blah")))) {
@@ -59,8 +60,8 @@ public class MuServer2Test {
 
     @Test
     public void clientsCanInitiateTlsShutdowns() throws Exception {
-        server = httpsServer()
-            .start2();
+        MuServerBuilder muServerBuilder = httpsServer();
+        server = muServerBuilder.start();
         SSLContext ctx = SSLContext.getInstance("TLS");
         ctx.init(new KeyManager[0], new TrustManager[] {new X509TrustManager() {
                 public void checkClientTrusted(X509Certificate[] x509Certificates, String s) {
@@ -89,10 +90,10 @@ public class MuServer2Test {
 
     @Test
     public void serverCanIntitiateShutdownOnTLS() throws Exception {
-        var server = httpsServer()
+        MuServerBuilder muServerBuilder = httpsServer()
             .withHttpsPort(0)
-            .addHandler((request, response) -> true)
-            .start2();
+            .addHandler((request, response) -> true);
+        var server = muServerBuilder.start();
         SSLContext ctx = SSLContext.getInstance("TLS");
         ctx.init(new KeyManager[0], new TrustManager[] {new X509TrustManager() {
                 public void checkClientTrusted(X509Certificate[] x509Certificates, String s) {
@@ -132,13 +133,13 @@ public class MuServer2Test {
         };
         var serverStoppedLatch = new CountDownLatch(1);
 
-        var server = MuServerBuilder.muServer()
+        MuServerBuilder muServerBuilder = MuServerBuilder.muServer()
             .withHttpPort(0)
             .addHandler(Method.GET, "/blah", (request, response, pathParams) -> {
                 events.add("Writing response");
                 response.write("Hello\r\n");
-            })
-            .start2();
+            });
+        var server = muServerBuilder.start();
 
         Socket clientConnection = new Socket(server.uri().getHost(), server.uri().getPort());
         // Get the input and output streams
@@ -198,13 +199,13 @@ public class MuServer2Test {
             }
         };
 
-        server = MuServerBuilder.muServer()
+        MuServerBuilder muServerBuilder = MuServerBuilder.muServer()
             .withHttpPort(0)
             .addHandler(Method.GET, "/blah", (request, response, pathParams) -> {
                 events.add("Writing response");
                 response.write("Hello\r\n");
-            })
-            .start2();
+            });
+        server = muServerBuilder.start();
 
         Socket clientConnection = new Socket(server.uri().getHost(), server.uri().getPort());
         // Get the input and output streams
@@ -251,12 +252,12 @@ public class MuServer2Test {
     public void canStartAndStopHttps() throws Exception {
         for (int i = 0; i < 1; i++) {
             int finalI = i;
-            var server = MuServerBuilder.muServer()
+            MuServerBuilder muServerBuilder = MuServerBuilder.muServer()
                 .withHttpsPort(0)
                 .addHandler(Method.GET, "/blah", (request, response, pathParams) -> {
                     response.write("Hello " + finalI);
-                })
-                .start2();
+                });
+            var server = muServerBuilder.start();
             log.info("Started at " + server.uri());
 
             try (var resp = call(request(server.uri().resolve("/blah")))) {
@@ -270,7 +271,7 @@ public class MuServer2Test {
     @Test
     public void tls12Available() throws Exception {
         var theCipher = "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384";
-        server = httpsServer()
+        MuServerBuilder muServerBuilder = httpsServer()
             .withHttpsConfig(HttpsConfigBuilder.httpsConfig()
                 .withProtocols("TLSv1.2")
                 .withCipherFilter((supportedCiphers, defaultCiphers) -> {
@@ -280,8 +281,8 @@ public class MuServer2Test {
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 HttpConnection con = request.connection();
                 response.write(con.isHttps() + " " + con.httpsProtocol() + " " + con.cipher());
-            })
-            .start2();
+            });
+        server = muServerBuilder.start();
         try (var resp = call(request(server.uri().resolve("/")))) {
             assertThat(resp.code(), equalTo(200));
             assertThat(resp.body().string(), equalTo("true TLSv1.2 " + theCipher));
@@ -291,12 +292,12 @@ public class MuServer2Test {
     @Test
     public void canGetServerInfo() throws Exception {
         var theCipher = "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384";
-        server = httpsServer()
+        MuServerBuilder muServerBuilder = httpsServer()
             .withHttpsConfig(HttpsConfigBuilder.httpsConfig()
                 .withProtocols("TLSv1.2")
                 .withCipherFilter((supportedCiphers, defaultCiphers) -> List.of(theCipher))
-            )
-            .start2();
+            );
+        server = muServerBuilder.start();
         assertThat(server.sslInfo().providerName(), not(nullValue()));
         assertThat(server.sslInfo().ciphers(), contains(theCipher));
         assertThat(server.sslInfo().protocols(), contains("TLSv1.2"));
@@ -307,12 +308,12 @@ public class MuServer2Test {
     @Test
     public void ifNoCommonCiphersThenItDoesNotLoad() throws Exception {
         var theCipher = "TLS_AES_128_GCM_SHA256";
-        server = httpsServer()
+        MuServerBuilder muServerBuilder = httpsServer()
             .withHttpsConfig(HttpsConfigBuilder.httpsConfig()
                 .withProtocols("TLSv1.2")
                 .withCipherFilter((supportedCiphers, defaultCiphers) -> List.of(theCipher))
-            )
-            .start2();
+            );
+        server = muServerBuilder.start();
         assertThrows(UncheckedIOException.class, () -> {
             try (var ignored = call(request(server.uri().resolve("/")))) {
             }
@@ -323,7 +324,7 @@ public class MuServer2Test {
     @Test
     public void tls13Available() throws Exception {
         AtomicReference<String> theCipher = new AtomicReference<>();
-        server = httpsServer()
+        MuServerBuilder muServerBuilder = httpsServer()
             .withHttpsConfig(HttpsConfigBuilder.httpsConfig()
                 .withProtocols("TLSv1.2", "TLSv1.3")
                 .withCipherFilter((supportedCiphers, defaultCiphers) -> {
@@ -337,8 +338,8 @@ public class MuServer2Test {
                     HttpConnection con = request.connection();
                     response.write(con.isHttps() + " " + con.httpsProtocol() + " " + con.cipher());
                 }
-            })
-            .start2();
+            });
+        server = muServerBuilder.start();
         try (var resp = call(request(server.uri().resolve("/")))) {
             assertThat(resp.code(), equalTo(200));
             assertThat(resp.body().string(), equalTo("true TLSv1.3 " + theCipher.get()));
@@ -348,7 +349,7 @@ public class MuServer2Test {
 
     @Test
     public void canChunk() throws Exception {
-        server = MuServerBuilder.muServer()
+        MuServerBuilder muServerBuilder = MuServerBuilder.muServer()
             .withHttpsPort(0)
             .addHandler(Method.GET, "/blah", (request, response, pathParams) -> {
                 response.headers().set(HeaderNames.TRAILER, "server-timing");
@@ -356,8 +357,8 @@ public class MuServer2Test {
                 response.sendChunk(" ");
                 response.sendChunk("world");
                 response.trailers().set(HeaderNames.SERVER_TIMING, new ParameterizedHeaderWithValue("total", Map.of("dur", "123.4")));
-            })
-            .start2();
+            });
+        server = muServerBuilder.start();
         log.info("Started at " + server.uri());
 
         try (var resp = call(request(server.uri().resolve("/blah")))) {
@@ -378,7 +379,7 @@ public class MuServer2Test {
 
     @Test
     public void canWriteChunksToOutputStream() throws Exception {
-        server = MuServerBuilder.muServer()
+        MuServerBuilder muServerBuilder = MuServerBuilder.muServer()
             .withHttpsPort(0)
             .addHandler(Method.GET, "/blah", (request, response, pathParams) -> {
                 response.headers().set(HeaderNames.TRAILER, "server-timing");
@@ -388,8 +389,8 @@ public class MuServer2Test {
                 response.writer().flush();
                 response.writer().write("world");
                 response.trailers().set(HeaderNames.SERVER_TIMING, new ParameterizedHeaderWithValue("total", Map.of("dur", "123.4")));
-            })
-            .start2();
+            });
+        server = muServerBuilder.start();
         log.info("Started at " + server.uri());
 
         try (var resp = call(request(server.uri().resolve("/blah")))) {
@@ -412,7 +413,7 @@ public class MuServer2Test {
 
     @Test
     public void canWriteFixedLengthToOutputStream() throws Exception {
-        server = MuServerBuilder.muServer()
+        MuServerBuilder muServerBuilder = MuServerBuilder.muServer()
             .withHttpsPort(0)
             .addHandler(Method.GET, "/blah", (request, response, pathParams) -> {
                 response.headers().set(HeaderNames.TRAILER, "server-timing");
@@ -423,8 +424,8 @@ public class MuServer2Test {
                 response.writer().flush();
                 response.writer().write("world");
                 response.trailers().set(HeaderNames.SERVER_TIMING, new ParameterizedHeaderWithValue("total", Map.of("dur", "123.4")));
-            })
-            .start2();
+            });
+        server = muServerBuilder.start();
         log.info("Started at " + server.uri());
 
         try (var resp = call(request(server.uri().resolve("/blah")))) {
