@@ -85,9 +85,12 @@ public class MuServer2Test {
 
     }
 
+
+
     @Test
     public void serverCanIntitiateShutdownOnTLS() throws Exception {
         var server = httpsServer()
+            .withHttpsPort(0)
             .addHandler((request, response) -> true)
             .start2();
         SSLContext ctx = SSLContext.getInstance("TLS");

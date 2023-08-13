@@ -222,6 +222,7 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
 
     private void completeGracefulShutdownMaybe() {
         if (inputClosed && outputClosed) {
+            log.info("This is a graceful shutdown");
             forceShutdown();
         } else if (inputClosed && exchange == null) {
             log.info("No current exchange");
@@ -229,20 +230,37 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
         }
     }
 
-    public boolean initiateShutdown() {
+    public void initiateShutdown() {
         // Todo wait for active exchange
         if (!outputClosed) {
             outputClosed = true;
             try {
-                log.info("Shutting down output stream");
-                channel.shutdownOutput();
+                if (channel instanceof MuTlsAsynchronousSocketChannel) {
+                    var tlsC = (MuTlsAsynchronousSocketChannel) channel;
+                    log.info("Initiating graceful shutdown");
+                    tlsC.shutdownOutputAsync(new CompletionHandler<Void, Void>() {
+                        @Override
+                        public void completed(Void result, Void attachment) {
+                            log.info("Outbound is closed and inputClosed=" + inputClosed);
+                            completeGracefulShutdownMaybe();
+                        }
+
+                        @Override
+                        public void failed(Throwable exc, Void attachment) {
+                            log.info("Graceful shutdown failed; closing: " + exc.getClass());
+                            tlsC.closeQuietly();
+                        }
+                    }, null);
+                } else {
+                    log.info("Shutting down output stream now");
+                    channel.shutdownOutput();
+                    completeGracefulShutdownMaybe();
+                }
+
             } catch (IOException e) {
                 forceShutdown();
-                return false;
             }
         }
-        completeGracefulShutdownMaybe();
-        return true;
     }
 
     @Override
