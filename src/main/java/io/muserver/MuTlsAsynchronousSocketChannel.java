@@ -131,6 +131,8 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
     private void abortHandshake(Throwable exc) {
         log.error("Error while handshaking", exc);
         closeQuietly();
+        // todo: what to do with pending items?
+        // e.g. if TLS-close handshaking is aborted then it should remove the connection from the server connections still
     }
 
     private void writeNetbuffer() {

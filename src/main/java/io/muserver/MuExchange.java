@@ -13,7 +13,8 @@ class MuExchange {
         this.response = response;
     }
 
-    void onRequestCompleted() {
+    void onRequestCompleted(Headers trailers) {
+        this.request.onComplete(trailers);
         if (response.responseState().endState()) onCompleted();
     }
 

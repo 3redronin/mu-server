@@ -14,7 +14,12 @@ public class NotImplementedMuRequest implements MuRequest {
     private <T> T throwIt() {
         throw new RuntimeException("Not implemented");
     }
-    
+
+    @Override
+    public boolean hasBody() {
+        return throwIt();
+    }
+
     @Override
     public String contentType() {
         return throwIt();

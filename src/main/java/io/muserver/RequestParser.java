@@ -36,7 +36,6 @@ class RequestParser {
     private MuHeaders trailers;
     private String curHeader;
     private List<String> curVals;
-    private GrowableByteBufferInputStream body;
     private long bodyLength = -1; // -2 is chunked
     private long bodyBytesRead;
     private ChunkState chunkState;
@@ -53,7 +52,6 @@ class RequestParser {
         trailers = null;
         curHeader = null;
         curVals = null;
-        body = null;
         bodyLength = -1;
         bodyBytesRead = 0;
         chunkState = null;
@@ -76,16 +74,18 @@ class RequestParser {
 
     void offer(ByteBuffer bb) throws InvalidRequestException {
         while (bb.hasRemaining()) {
-            if (state == State.COMPLETE) {
-                throw new InvalidRequestException(400, "Request body too long", "More request was found even though no more was expected.");
-            } else if (state == State.FIXED_BODY) {
+            if (state == State.FIXED_BODY) {
                 parseFixedLengthBody(bb);
             } else if (state == State.CHUNKED_BODY) {
                 parseChunkedBody(bb);
             } else {
                 parseReqLineAndHeaders(bb);
             }
+            maybeRaiseRequestComplete();
         }
+    }
+
+    void maybeRaiseRequestComplete() {
         if (state == State.COMPLETE) {
             requestListener.onRequestComplete(trailers);
             reset();
@@ -121,7 +121,6 @@ class RequestParser {
                     throw new InvalidRequestException(400, "Invalid character in request line", "Got a " + c + " character in the request line");
                 }
             } else if (state == State.RL_URI) {
-
                 if (c == ' ') {
                     String uriStr = cur.toString();
                     if (uriStr.charAt(0) != '/') {
@@ -142,7 +141,7 @@ class RequestParser {
             } else if (state == State.RL_PROTO) {
                 if (c == '\n') {
                     this.protocol = HttpVersion.fromRequestLine(cur.toString());
-                    if (this.protocol == null) {
+                    if (this.protocol == null || this.protocol == HttpVersion.HTTP_1_0) { // TODO bother supporting 1.0?
                         throw new InvalidRequestException(505, "HTTP Version Not Supported", "Http version was " + protocol);
                     }
                     this.state = State.H_NAME;
@@ -170,13 +169,10 @@ class RequestParser {
                         if (hasContentLength) {
                             if (bodyLength == 0) {
                                 state = State.COMPLETE;
-                                body = null;
                             } else {
-                                body = new GrowableByteBufferInputStream();
                                 state = State.FIXED_BODY;
                             }
                         } else {
-                            body = new GrowableByteBufferInputStream();
                             chunkState = ChunkState.SIZE;
                             state = State.CHUNKED_BODY;
                         }
@@ -184,7 +180,7 @@ class RequestParser {
                         state = State.COMPLETE;
                     }
 
-                    requestListener.onHeaders(method, requestUri, protocol, headers, body);
+                    requestListener.onHeaders(method, requestUri, protocol, headers, state != State.COMPLETE);
                     return; // jump out of this method to parse the body (if there is one)
                 } else if (c == ':') {
 
@@ -250,19 +246,17 @@ class RequestParser {
         }
     }
 
-    private void parseFixedLengthBody(ByteBuffer bb) throws InvalidRequestException {
-        int size = bb.limit() - bb.position();
-        bodyBytesRead += size;
-        ByteBuffer copy = ByteBuffer.allocate(size);
-        copy.put(bb);
-        copy.flip();
-        body.handOff(copy);
+    private void parseFixedLengthBody(ByteBuffer bb) {
+        long expectedRemaining = bodyLength - bodyBytesRead;
+        int toRead = (int)Math.min(expectedRemaining, bb.remaining());
+        bodyBytesRead += toRead;
+
+        var view = bb.slice(bb.position(), toRead);
+        bb.position(bb.position() + toRead);
+        requestListener.onBody(view);
 
         if (bodyBytesRead == bodyLength) {
-            body.close();
             state = State.COMPLETE;
-        } else if (bodyBytesRead > bodyLength) {
-            throw new InvalidRequestException(400, "Request body too long", "The client declared a body length of " + bodyLength + " but has already sent " + bodyBytesRead);
         }
     }
 
@@ -282,7 +276,6 @@ class RequestParser {
                         if (trailers == null) {
                             trailers = MuHeaders.EMPTY;
                         }
-                        body.close();
                         state = State.COMPLETE;
                         break;
                     } else if (c == ':') {
@@ -354,13 +347,14 @@ class RequestParser {
 
         if (chunkState == ChunkState.DATA) {
             while (bb.hasRemaining()) {
-                int size = (int) Math.min(curChunkSize, bb.limit() - bb.position());
-                bodyBytesRead += size;
-                curChunkSize -= size;
-                byte[] copy = new byte[size];
-                bb.get(copy, 0, size);
-                body.handOff(ByteBuffer.wrap(copy));
-                if (curChunkSize == 0) {
+                if (curChunkSize > 0) {
+                    int size = (int) Math.min(curChunkSize, bb.remaining());
+                    bodyBytesRead += size;
+                    curChunkSize -= size;
+                    var view = bb.slice(bb.position(), size);
+                    requestListener.onBody(view);
+                    bb.position(bb.position() + size);
+                } else {
                     chunkState = ChunkState.DATA_DONE;
                     break;
                 }
@@ -373,7 +367,9 @@ class RequestParser {
     }
 
     interface RequestListener {
-        void onHeaders(Method method, URI uri, HttpVersion httpProtocolVersion, MuHeaders headers, GrowableByteBufferInputStream body);
+        void onHeaders(Method method, URI uri, HttpVersion httpProtocolVersion, MuHeaders headers, boolean hasBody);
+
+        void onBody(ByteBuffer buffer);
 
         void onRequestComplete(MuHeaders trailers);
     }

@@ -37,9 +37,9 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
         this.remoteAddress = remoteAddress;
         this.requestParser = new RequestParser(new RequestParser.Options(8192, 8192), new RequestParser.RequestListener() {
             @Override
-            public void onHeaders(Method method, URI uri, HttpVersion httpProtocolVersion, MuHeaders headers, GrowableByteBufferInputStream body) {
+            public void onHeaders(Method method, URI uri, HttpVersion httpProtocolVersion, MuHeaders headers, boolean hasBody) {
                 var data = new MuExchangeData(server, MuHttp1Connection.this, httpProtocolVersion, headers);
-                var req = new MuRequestImpl(data, method, uri, uri, headers);
+                var req = new MuRequestImpl(data, method, uri, uri, headers, hasBody);
                 var resp = new MuResponseImpl(data, channel);
                 exchange = new MuExchange(data, req, resp);
                 server.stats.onRequestStarted(req);
@@ -68,11 +68,16 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
             }
 
             @Override
+            public void onBody(ByteBuffer buffer) {
+                log.info("Ignoring body bit of size " + buffer.remaining());
+            }
+
+            @Override
             public void onRequestComplete(MuHeaders trailers) {
                 log.info("Request complete. Trailers=" + trailers);
                 MuExchange e = exchange;
                 if (e != null) {
-                    e.onRequestCompleted();
+                    e.onRequestCompleted(trailers);
                     if (e.state.endState()) {
                         exchange = null;
                     }

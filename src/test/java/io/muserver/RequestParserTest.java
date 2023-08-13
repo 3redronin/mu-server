@@ -5,11 +5,12 @@ import org.junit.Assert;
 import org.junit.Test;
 import scaffolding.StringUtils;
 
+import javax.ws.rs.core.MediaType;
 import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
 import java.net.URI;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -20,7 +21,8 @@ import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.contains;
-import static org.hamcrest.Matchers.nullValue;
+import static org.hamcrest.Matchers.empty;
+import static org.junit.Assert.assertThrows;
 
 public class RequestParserTest {
 
@@ -33,18 +35,27 @@ public class RequestParserTest {
         parser.offer(wrap("G"));
         parser.offer(wrap("ET"));
         parser.offer(wrap(" /"));
-        parser.offer(wrap("a%20link HTTP/1.0\r"));
+        parser.offer(wrap("a%20link HTTP/1.1\r"));
         parser.offer(wrap("\n\r\n"));
         assertThat(listener.isComplete, is(true));
         assertThat(listener.method, is(Method.GET));
         assertThat(listener.uri.toString(), is("/a%20link"));
-        assertThat(listener.proto, is(HttpVersion.HTTP_1_0));
+        assertThat(listener.proto, is(HttpVersion.HTTP_1_1));
         assertThat(listener.headers.size(), is(0));
 
         MyRequestListener anotherListener = new MyRequestListener();
         RequestParser another = new RequestParser(RequestParser.Options.defaultOptions, anotherListener);
-        another.offer(wrap("GET /a%20link HTTP/1.0\r\n\r\n"));
+        another.offer(wrap("GET /a%20link HTTP/1.1\r\n\r\n"));
         assertThat(anotherListener, equalTo(listener));
+    }
+
+    @Test
+    public void http1_0NotSupported() throws InvalidRequestException {
+        parser.offer(wrap("G"));
+        parser.offer(wrap("ET"));
+        parser.offer(wrap(" /"));
+        parser.offer(wrap("a%20link HTTP/1.0\r"));
+        assertThrows(InvalidRequestException.class, () -> parser.offer(wrap("\n\r\n")));
     }
 
     @Test
@@ -83,26 +94,22 @@ public class RequestParserTest {
         parser.offer(ByteBuffer.wrap(messageBytes));
         parser.offer(ByteBuffer.wrap(messageBytes));
 
-        ByteArrayOutputStream to = new ByteArrayOutputStream();
-        Mutils.copy(listener.body, to, 8192);
-        assertThat(to.toString("UTF-8"), is(message + message));
+        assertThat(listener.bodyAsString(), is(message + message));
     }
 
     @Test
     public void wholeRequestCanComeInAtOnce() throws Exception {
         String message = "Hello, there";
         parser.offer(wrap("POST / HTTP/1.1\r\ncontent-length:" + (message.getBytes(UTF_8).length) + "\r\n\r\n" + message));
-        ByteArrayOutputStream to = new ByteArrayOutputStream();
-        Mutils.copy(listener.body, to, 8192);
-        assertThat(to.toString("UTF-8"), is(message));
+        assertThat(listener.bodyAsString(), is(message));
     }
 
     @Test
     public void zeroLengthBodiesAreFine() throws Exception {
         parser.offer(wrap("POST / HTTP/1.1\r\ncontent-length: 0\r\n\r\n"));
         parser.offer(ByteBuffer.allocate(0));
-        ByteArrayOutputStream to = new ByteArrayOutputStream();
-        assertThat(listener.body, is(nullValue()));
+        assertThat(listener.hasBody, is(false));
+        assertThat(listener.body, empty());
     }
 
     @Test
@@ -126,7 +133,7 @@ public class RequestParserTest {
             "0\r\n\r\n";
         parser.offer(wrap(in));
         assertThat(listener.isComplete, is(true));
-        assertThat(bodyAsUTF8(listener), is("Hello Hello Hello "));
+        assertThat(listener.bodyAsString(), is("Hello Hello Hello "));
     }
 
     @Test
@@ -144,7 +151,7 @@ public class RequestParserTest {
             "\r\n";
         parser.offer(wrap(in));
         assertThat(listener.isComplete, is(true));
-        assertThat(bodyAsUTF8(listener), is("Hello Hello "));
+        assertThat(listener.bodyAsString(), is("Hello Hello "));
         assertThat(listener.trailers.getAll("X-Trailer-One"), contains("blart"));
         assertThat(listener.trailers.getAll("X-Trailer-Two"), contains("blart2", "and another value"));
     }
@@ -161,7 +168,7 @@ public class RequestParserTest {
             "\r\n";
         parser.offer(wrap(in));
         assertThat(listener.isComplete, is(true));
-        assertThat(bodyAsUTF8(listener), is("Hello Hello "));
+        assertThat(listener.bodyAsString(), is("Hello Hello "));
 
         MyRequestListener listener2 = new MyRequestListener();
         RequestParser p2 = new RequestParser(RequestParser.Options.defaultOptions, listener2);
@@ -171,12 +178,6 @@ public class RequestParserTest {
         }
         assertThat(listener2, equalTo(listener));
         assertThat(listener2.trailers, equalTo(listener.trailers));
-    }
-
-    private static String bodyAsUTF8(MyRequestListener listener) throws IOException {
-        ByteArrayOutputStream to = new ByteArrayOutputStream();
-        Mutils.copy(listener.body, to, 8192);
-        return to.toString("UTF-8");
     }
 
     @Test
@@ -198,7 +199,11 @@ public class RequestParserTest {
         parser.offer(wrap("\r\n"));
         assertThat(listener.isComplete, is(true));
         ByteArrayOutputStream to = new ByteArrayOutputStream();
-        Mutils.copy(listener.body, to, 8192);
+        for (ByteBuffer buf : listener.body) {
+            byte[] dest = new byte[buf.remaining()];
+            buf.get(dest);
+            to.write(dest);
+        }
 
         byte[] actual = to.toByteArray();
         assertThat(actual.length, is(allSent.size()));
@@ -221,22 +226,18 @@ public class RequestParserTest {
         parser.offer(ByteBuffer.wrap(messageBytes));
         parser.offer(ByteBuffer.wrap(messageBytes));
 
-        ByteArrayOutputStream to = new ByteArrayOutputStream();
-        Mutils.copy(listener.body, to, 8192);
-        assertThat(to.toString("UTF-8"), is(message + message));
-
+        assertThat(listener.bodyAsString(), is(message + message));
+        listener.reset();
 
         message = "Hello, there";
         parser.offer(wrap("POST / HTTP/1.1\r\ncontent-length:" + (message.getBytes(UTF_8).length) + "\r\n\r\n" + message));
-        to = new ByteArrayOutputStream();
-        Mutils.copy(listener.body, to, 8192);
-        assertThat(to.toString("UTF-8"), is(message));
+        assertThat(listener.bodyAsString(), is(message));
 
-
+        listener.reset();
         parser.offer(wrap("POST / HTTP/1.1\r\ncontent-length: 0\r\n\r\n"));
         parser.offer(ByteBuffer.allocate(0));
 
-        assertThat(listener.body, is(nullValue()));
+        assertThat(listener.body, empty());
     }
 
 
@@ -250,12 +251,24 @@ public class RequestParserTest {
         URI uri;
         Method method;
         MuHeaders trailers;
-        InputStream body;
         boolean isComplete;
+        boolean hasBody;
+        List<ByteBuffer> body = new ArrayList<>();
+
+        public void reset() {
+            headers = null;
+            proto = null;
+            uri = null;
+            method = null;
+            trailers = null;
+            isComplete = false;
+            hasBody = false;
+            body.clear();
+        }
 
         @Override
-        public void onHeaders(Method method, URI uri, HttpVersion httpProtocolVersion, MuHeaders headers, GrowableByteBufferInputStream body) {
-            this.body = body;
+        public void onHeaders(Method method, URI uri, HttpVersion httpProtocolVersion, MuHeaders headers, boolean hasBody) {
+            this.hasBody = hasBody;
             this.method = method;
             this.uri = uri;
             this.proto = httpProtocolVersion;
@@ -263,9 +276,37 @@ public class RequestParserTest {
         }
 
         @Override
+        public void onBody(ByteBuffer buffer) {
+            var copy = ByteBuffer.allocate(buffer.remaining());
+            copy.put(buffer);
+            copy.flip();
+            body.add(copy);
+        }
+
+        @Override
         public void onRequestComplete(MuHeaders trailers) {
             this.trailers = trailers;
             this.isComplete = true;
+        }
+
+        public ByteBuffer fullBody() {
+            int totalSize = body.stream().map(Buffer::remaining).reduce(0, Integer::sum);
+            var copy = ByteBuffer.allocate(totalSize);
+            for (ByteBuffer byteBuffer : body) {
+                byteBuffer.mark();
+                copy.put(byteBuffer);
+                byteBuffer.reset();
+            }
+            copy.flip();
+            return copy;
+        }
+
+        public String bodyAsString() {
+            ByteBuffer bb = fullBody();
+            MediaType contentType = headers.contentType();
+            Charset bodyCharset = contentType == null ? UTF_8 : Charset.forName(contentType.getParameters().getOrDefault("charset", "utf8"));
+            var cb = bodyCharset.decode(bb);
+            return cb.toString();
         }
 
         @Override
@@ -295,6 +336,7 @@ public class RequestParserTest {
                 ", method=" + method +
                 '}';
         }
+
     }
 
 

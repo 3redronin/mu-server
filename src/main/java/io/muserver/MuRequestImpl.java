@@ -14,23 +14,31 @@ public class MuRequestImpl implements MuRequest {
     private final Method method;
     private final URI uri;
     private final URI serverUri;
-    private RequestState state = RequestState.HEADERS_RECEIVED;
+    private RequestState state;
     private String contextPath = "";
     private String relativePath;
     private final Headers headers;
+    private final boolean hasBody;
     private Headers trailers;
 
-    public MuRequestImpl(MuExchangeData data, Method method, URI uri, URI serverUri, Headers headers) {
+    public MuRequestImpl(MuExchangeData data, Method method, URI uri, URI serverUri, Headers headers, boolean hasBody) {
         this.data = data;
         this.method = method;
         this.uri = uri;
         this.relativePath = serverUri.getRawPath();
         this.serverUri = serverUri;
         this.headers = headers;
+        this.hasBody = hasBody;
+        this.state = hasBody ? RequestState.COMPLETE : RequestState.RECEIVING_BODY;
     }
 
     public RequestState requestState() {
         return state;
+    }
+
+    @Override
+    public boolean hasBody() {
+        return hasBody;
     }
 
     @Override
@@ -192,6 +200,14 @@ public class MuRequestImpl implements MuRequest {
             contextToAdd = "/" + contextToAdd;
         }
         return contextToAdd;
+    }
+
+    void onComplete(Headers trailers) {
+        state = RequestState.COMPLETE;
+        this.trailers = trailers;
+    }
+    void onError() {
+        this.state = RequestState.ERRORED;
     }
 
 }

@@ -20,6 +20,11 @@ import java.util.Optional;
 public interface MuRequest {
 
     /**
+     * @return <code>true</code> if there is a request body
+     */
+    boolean hasBody();
+
+    /**
      * <p>Gets the content type of the request body, for example <code>application/json</code> or <code>null</code>
      * if there is no body.</p>
      * <p>Note: If the Content-Type header included a charset, then this will NOT be returned by this method. In order
@@ -235,5 +240,8 @@ public interface MuRequest {
      */
     HttpConnection connection();
 
+    /**
+     * @return The trailers, or <code>null</code> if there are no trailers.
+     */
     Headers trailers();
 }

@@ -98,6 +98,11 @@ class NettyRequestAdapter implements MuRequest {
     }
 
     @Override
+    public boolean hasBody() {
+        return inputStream().isPresent();
+    }
+
+    @Override
     public String contentType() {
         String c = headers.get(HttpHeaderNames.CONTENT_TYPE);
         if (c == null) return null;
