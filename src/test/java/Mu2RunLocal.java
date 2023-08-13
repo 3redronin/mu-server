@@ -15,6 +15,7 @@ public class Mu2RunLocal {
                 log.info("Chunk sent");
 //                new Thread(() -> request.server().stop(5, TimeUnit.SECONDS)).start();
                 Thread.sleep(1000);
+                response.sendChunk(" done.");
                 log.info("Handler ending");
                 return true;
             })

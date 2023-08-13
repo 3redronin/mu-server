@@ -59,72 +59,78 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
 
     private void doHandshake() {
         log.info("handshakeStatus=" + handshakeStatus);
-        switch (handshakeStatus) {
-            case NEED_UNWRAP -> {
-                netBuffer.clear();
-                socketChannel.read(netBuffer, null, new CompletionHandler<Integer, Void>() {
-                    @Override
-                    public void completed(Integer result, Void attachment) {
-                        netBuffer.flip();
-                        log.info("Read " + result + " bytes and remaining " + netBuffer.remaining());
-                        try {
-                            appBuffer.clear();
-                            while (netBuffer.hasRemaining()) {
-                                var sslResult = sslEngine.unwrap(netBuffer, appBuffer);
-                                if (sslResult.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW || sslResult.getStatus() == SSLEngineResult.Status.BUFFER_UNDERFLOW)
-                                    throw new RuntimeException("Unwrapping not complete: " + sslResult);
-                                handshakeStatus = sslResult.getHandshakeStatus();
-                                log.info("sslResult = " + sslResult + " ; netbuffer remaining=" + netBuffer.remaining());
+        try {
+            switch (handshakeStatus) {
+                case NEED_UNWRAP -> {
+                    netBuffer.clear();
+                    socketChannel.read(netBuffer, null, new CompletionHandler<Integer, Void>() {
+                        @Override
+                        public void completed(Integer result, Void attachment) {
+                            netBuffer.flip();
+                            log.info("Read " + result + " bytes and remaining " + netBuffer.remaining());
+                            try {
+                                appBuffer.clear();
+                                while (netBuffer.hasRemaining()) {
+                                    var unwrapResult = sslEngine.unwrap(netBuffer, appBuffer);
+                                    if (unwrapResult.getStatus() != SSLEngineResult.Status.OK && unwrapResult.getStatus() != SSLEngineResult.Status.CLOSED)
+                                        throw new RuntimeException("Unwrapping not complete: " + unwrapResult);
+                                    handshakeStatus = unwrapResult.getHandshakeStatus();
+                                    log.info("sslResult = " + unwrapResult + " ; netbuffer remaining=" + netBuffer.remaining());
+                                }
+                                doHandshake();
+                            } catch (Throwable e) {
+                                abortHandshake(e);
                             }
-                            doHandshake();
-                        } catch (SSLException e) {
-                            throw new RuntimeException("Error unwrapping data", e);
                         }
-                    }
 
-                    @Override
-                    public void failed(Throwable exc, Void attachment) {
-                        log.error("Error while unwrapping", exc);
-                        closeQuietly();
-                    }
-                });
-            }
+                        @Override
+                        public void failed(Throwable exc, Void attachment) {
+                            abortHandshake(exc);
+                        }
 
-
-            case NOT_HANDSHAKING, FINISHED -> {
-                log.info("Not handshaking! ");
-                Runnable toDo = pendingTasks.poll();
-                while (toDo != null) {
-                    toDo.run();
-                    toDo = pendingTasks.poll();
+                    });
                 }
-            }
-            case NEED_TASK -> {
-                Runnable task;
-                while ((task = sslEngine.getDelegatedTask()) != null) {
-                    log.info("Running " + task);
-                    task.run(); // TODO run async
+                case NOT_HANDSHAKING, FINISHED -> {
+                    log.info("Not handshaking! ");
+                    Runnable toDo = pendingTasks.poll();
+                    while (toDo != null) {
+                        toDo.run();
+                        toDo = pendingTasks.poll();
+                    }
                 }
-                handshakeStatus = sslEngine.getHandshakeStatus();
-                doHandshake();
-            }
-            case NEED_WRAP -> {
-                netBuffer.clear();
-                appBuffer.clear();
-                try {
+                case NEED_TASK -> {
+                    Runnable task;
+                    while ((task = sslEngine.getDelegatedTask()) != null) {
+                        log.info("Running " + task);
+                        task.run(); // TODO run async
+                    }
+                    handshakeStatus = sslEngine.getHandshakeStatus();
+                    doHandshake();
+                }
+                case NEED_WRAP -> {
+                    netBuffer.clear();
+                    appBuffer.clear();
                     SSLEngineResult wrapResult = sslEngine.wrap(appBuffer, netBuffer);
-                    if (wrapResult.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW || wrapResult.getStatus() == SSLEngineResult.Status.BUFFER_UNDERFLOW)
-                        throw new RuntimeException("Unwrapping not complete: " + wrapResult);
+                    log.info("Wrap result: " + wrapResult);
+                    // TODO: handle status=closed and buffer overflow for TLS handshake error
+                    if (wrapResult.getStatus() != SSLEngineResult.Status.OK && wrapResult.getStatus() != SSLEngineResult.Status.CLOSED) {
+                        throw new RuntimeException("Got " + wrapResult + " while wrapping");
+                    }
                     netBuffer.flip();
                     handshakeStatus = wrapResult.getHandshakeStatus();
                     writeNetbuffer();
-                } catch (SSLException e) {
-                    closeQuietly();
                 }
-            }
 
-            default -> log.info("Unexpected TLS handshake status: " + handshakeStatus);
+                default -> log.info("Unexpected TLS handshake status: " + handshakeStatus);
+            }
+        } catch (Throwable e) {
+            abortHandshake(e);
         }
+    }
+
+    private void abortHandshake(Throwable exc) {
+        log.error("Error while handshaking", exc);
+        closeQuietly();
     }
 
     private void writeNetbuffer() {
