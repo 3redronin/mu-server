@@ -188,9 +188,21 @@ public class Mutils {
      */
     public static String toHttpDate(Date date) {
         notNull("date", date);
+        return toHttpDate(date.toInstant());
+    }
+
+    /**
+     * Converts an Instant into a date string as used in HTTP headers (defined in RFC 7321), for example <code>Tue, 15 Nov 1994 08:12:31 GMT</code>
+     *
+     * @param instant A date to format
+     * @return The date as a formatted string
+     * @throws IllegalArgumentException If the date is null
+     */
+    public static String toHttpDate(Instant instant) {
+        notNull("instant", instant);
         return DateTimeFormatter.RFC_1123_DATE_TIME
             .withZone(ZoneOffset.UTC)
-            .format(Instant.ofEpochMilli(date.getTime()));
+            .format(instant);
     }
 
     /**

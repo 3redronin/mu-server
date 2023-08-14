@@ -16,6 +16,8 @@ public class ParameterizedHeaderTest {
         assertThat(v.parameter("no-cache"), is(nullValue()));
         assertThat(v.hasParameter("no-cache"), is(true));
         assertThat(v.parameterNames(), contains("no-cache"));
+
+        assertThat(v.hasParameter("something-else"), is(false));
     }
 
     @Test

@@ -4,6 +4,7 @@ import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.ClientUtils;
+import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 
 import java.io.IOException;
@@ -29,8 +30,23 @@ public class EmptyResponseTest {
         }
     }
 
+
+    @Test
+    public void a204HasNoBody() throws IOException {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> response.status(204))
+            .start();
+
+        try (Response resp = ClientUtils.call(request(server.uri()))) {
+            assertThat(resp.code(), is(204));
+            assertThat(resp.header("Date"), is(notNullValue()));
+            assertThat(resp.header("Content-Length"), is(nullValue()));
+            assertThat(resp.body().bytes().length, is(0));
+        }
+    }
+
     @After
     public void destroy() {
-        scaffolding.MuAssert.stopAndCheck(server);
+        MuAssert.stopAndCheck(server);
     }
 }

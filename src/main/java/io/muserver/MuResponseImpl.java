@@ -11,6 +11,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.AsynchronousSocketChannel;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
@@ -34,6 +35,7 @@ public class MuResponseImpl implements MuResponse {
     public MuResponseImpl(MuExchangeData data, AsynchronousSocketChannel tlsChannel) {
         this.data = data;
         this.tlsChannel = tlsChannel;
+        headers.set(HeaderNames.DATE, Mutils.toHttpDate(Instant.now()));
     }
 
     @Override
@@ -144,10 +146,12 @@ public class MuResponseImpl implements MuResponse {
                 }
             }
             state = ResponseState.FINISHED;
+            data.connection.onResponseCompleted(this);
         } else if (state == ResponseState.NOTHING) {
             ByteBuffer headerBuf = headersBuffer(true, headers);
             blockingWrite(headerBuf);
             state = ResponseState.FINISHED;
+            data.connection.onResponseCompleted(this);
         }
     }
 
@@ -182,7 +186,7 @@ public class MuResponseImpl implements MuResponse {
 
     @Override
     public void addCookie(Cookie cookie) {
-
+        throw new RuntimeException("todo");
     }
 
     @Override

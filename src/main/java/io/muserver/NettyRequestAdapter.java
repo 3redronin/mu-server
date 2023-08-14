@@ -5,7 +5,6 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.*;
-import io.netty.handler.codec.http.cookie.ServerCookieDecoder;
 import io.netty.handler.codec.http.websocketx.WebSocketServerHandshaker;
 import io.netty.handler.codec.http.websocketx.WebSocketServerHandshakerFactory;
 import io.netty.handler.timeout.IdleStateHandler;
@@ -25,7 +24,6 @@ import java.nio.charset.UnsupportedCharsetException;
 import java.util.*;
 import java.util.concurrent.*;
 
-import static io.muserver.Cookie.nettyToMu;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Collections.emptyList;
 
@@ -260,7 +258,6 @@ class NettyRequestAdapter implements MuRequest {
             } else {
                 List<Cookie> theList = new ArrayList<>();
                 for (String val : encoded) {
-                    theList.addAll(nettyToMu(ServerCookieDecoder.STRICT.decode(val)));
                 }
                 this.cookies = Collections.unmodifiableList(theList);
             }

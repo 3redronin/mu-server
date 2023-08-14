@@ -5,7 +5,7 @@ import org.junit.Test;
 
 import static io.muserver.CookieBuilder.newCookie;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.*;
 
 public class CookieBuilderTest {
 
@@ -14,15 +14,15 @@ public class CookieBuilderTest {
         Cookie cookie = CookieBuilder.newSecureCookie().withName("dummy").withValue("wummy").build();
         assertThat(cookie.isSecure(), is(true));
         assertThat(cookie.isHttpOnly(), is(true));
-        assertThat(cookie.sameSite(), is("Strict"));
+        assertThat(cookie.sameSite(), is(Cookie.SameSite.STRICT));
     }
 
     @Test
-    public void sameSiteDefaultsToNone() {
+    public void sameSiteDefaultsToNull() {
         Cookie cookie = CookieBuilder.newCookie().withName("dummy").withValue("wummy").build();
         assertThat(cookie.isSecure(), is(false));
         assertThat(cookie.isHttpOnly(), is(false));
-        assertThat(cookie.sameSite(), is("None"));
+        assertThat(cookie.sameSite(), is(nullValue()));
     }
 
     @Test
@@ -51,14 +51,14 @@ public class CookieBuilderTest {
             newCookie().withName("cookiename").build();
             Assert.fail("Should throw");
         } catch (IllegalStateException e) {
-            assertThat(e.getMessage(), is("A cookie value must be specified"));
+            assertThat(e.getMessage(), is("A cookie value cannot be null"));
         }
     }
 
     @Test
     public void invalidValuesAreRejected() {
         try {
-            newCookie().withValue("an invalid value because of the spaces");
+            newCookie().withValue("你好");
             Assert.fail("Should throw");
         } catch (IllegalArgumentException e) {
             assertThat(e.getMessage(), is("A cookie value can only be ASCII characters excluding control " +
@@ -83,7 +83,7 @@ public class CookieBuilderTest {
         Cookie cookie = newCookie()
             .withName("Name0123456789!#$%&'*+-.^_`|~")
             .withValue("Value0123456789!#$%&'()*+-./:<=>?@[]^_`{|}~")
-            .withMaxAgeInSeconds(20)
+            .withMaxAgeInSeconds(20L)
             .withDomain("example.org")
             .withPath("/static")
             .secure(true)
@@ -104,4 +104,45 @@ public class CookieBuilderTest {
         Cookie blah = newCookie().withName("Blah").withUrlEncodedValue("a / umm... yeah?").build();
         assertThat(blah.value(), is("a%20%2F%20umm...%20yeah%3F"));
     }
+
+
+    private final String allowedCookieNameChars = "!#$%&'*+-.0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz|^~_";
+    private final String allowedCookieValueChars = "!#$%&'()*+-./0123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz|^~`";
+
+    @Test
+    public void itCanParseThings() {
+        for (char allowedCookieNameChar : allowedCookieNameChars.toCharArray()) {
+            if (!Parser.isTChar(allowedCookieNameChar)) {
+                System.out.println("not allowedCookieNameChar = " + allowedCookieNameChar);
+            }
+        }
+        assertThat(CookieBuilder.fromString("sessionId=38afes7a8"), contains(cook("sessionId", "38afes7a8")));
+        assertThat(CookieBuilder.fromString("sessionId="), contains(cook("sessionId", "")));
+        assertThat(CookieBuilder.fromString("__Host-example=34d8g; SameSite=None; Secure; Path=/; Partitioned;"), contains(cook("__Host-example", "34d8g").secure(true).withSameSite(Cookie.SameSite.NONE).withPath("/")));
+        assertThat(CookieBuilder.fromString(allowedCookieNameChars + "=" + allowedCookieValueChars), contains(cook(allowedCookieNameChars, allowedCookieValueChars)));
+    }
+
+    @Test
+    public void itCanParseMultipleValues() {
+        assertThat(CookieBuilder.fromString("cookie1=value1, cookie2=value2"), contains(cook("cookie1", "value1"), cook("cookie2", "value2")));
+        assertThat(CookieBuilder.fromString(" cookie1=value1,cookie2=value2 "), contains(cook("cookie1", "value1"), cook("cookie2", "value2")));
+        assertThat(CookieBuilder.fromString(" cookie1=value1;httponly,cookie2=value2 "), contains(cook("cookie1", "value1").httpOnly(true), cook("cookie2", "value2")));
+    }
+
+    @Test
+    public void valuesCanBeQuotedStrings() {
+        assertThat(CookieBuilder.fromString(
+            "cookie1=\"value_1\";secure, " +
+                "cookie2=\"value+-/_2\""),
+            contains(
+                cook("cookie1", "value_1").secure(true),
+                cook("cookie2", "value+-/_2")
+            ));
+
+    }
+
+    private static CookieBuilder cook(String name, String value) {
+        return newCookie().withName(name).withValue(value);
+    }
+
 }

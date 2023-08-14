@@ -1,33 +1,31 @@
 package io.muserver.rest;
 
-import io.netty.handler.codec.http.cookie.ClientCookieEncoder;
-import io.netty.handler.codec.http.cookie.DefaultCookie;
-import io.netty.handler.codec.http.cookie.ServerCookieDecoder;
+import io.muserver.CookieBuilder;
 
 import javax.ws.rs.core.Cookie;
 import javax.ws.rs.ext.RuntimeDelegate;
-import java.util.Set;
+import java.util.List;
 
 class CookieHeaderDelegate implements RuntimeDelegate.HeaderDelegate<Cookie> {
     static {
         MuRuntimeDelegate.ensureSet();
     }
 
-    private final ClientCookieEncoder encoder = ClientCookieEncoder.STRICT;
-    private final ServerCookieDecoder decoder = ServerCookieDecoder.STRICT;
-
     @Override
     public Cookie fromString(String value) {
-        Set<io.netty.handler.codec.http.cookie.Cookie> decoded = decoder.decode(value);
-        io.netty.handler.codec.http.cookie.Cookie nv = decoded.iterator().next();
-        return new Cookie(nv.name(), nv.value());
+        if (value == null) throw new IllegalArgumentException("Cookie value was null");
+        List<CookieBuilder> builders = CookieBuilder.fromString(value);
+        if (builders.isEmpty()) throw new IllegalArgumentException("No cookie value was specified");
+        io.muserver.Cookie muc = builders.get(0).build();
+        return new Cookie(muc.name(), muc.value());
     }
 
     @Override
     public String toString(Cookie cookie) {
-        DefaultCookie nettyCookie = new DefaultCookie(cookie.getName(), cookie.getValue());
-        nettyCookie.setPath(cookie.getPath());
-        nettyCookie.setDomain(cookie.getDomain());
-        return encoder.encode(nettyCookie);
+        io.muserver.Cookie muc = CookieBuilder.newCookie()
+            .withName(cookie.getName())
+            .withValue(cookie.getValue())
+            .build();
+        return muc.toString();
     }
 }
