@@ -112,6 +112,7 @@ class MuExchange {
             if (streamUnrecoverable) {
                 response.onCancelled(ResponseState.ERRORED);
                 request.onCancelled(ResponseState.ERRORED, cause);
+                data.connection.initiateShutdown();
             }
             onCompleted();
         }

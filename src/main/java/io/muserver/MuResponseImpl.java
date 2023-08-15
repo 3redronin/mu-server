@@ -90,6 +90,8 @@ public class MuResponseImpl implements MuResponse {
         } catch (TimeoutException e) {
             state = ResponseState.TIMED_OUT;
             throw new IOException("Timed out writing response", e);
+        } catch (Throwable t) {
+            throw t;
         }
     }
 
@@ -125,16 +127,16 @@ public class MuResponseImpl implements MuResponse {
     }
 
     public void end() throws IOException {
+        if (writer != null) {
+            writer.close();
+            writer = null;
+        }
+        if (outputStream != null) {
+            outputStream.close();
+            outputStream = null;
+        }
         if (state == ResponseState.STREAMING) {
             state = ResponseState.FINISHING;
-            if (writer != null) {
-                writer.close();
-                writer = null;
-            }
-            if (outputStream != null) {
-                outputStream.close();
-                outputStream = null;
-            }
             if (headers.containsValue(HeaderNames.TRANSFER_ENCODING, HeaderValues.CHUNKED, true)) {
                 boolean sendTrailers = trailers != null && Headtils.getParameterizedHeaderWithValues(data.requestHeaders, HeaderNames.TE)
                     .stream().anyMatch(v -> v.value().equalsIgnoreCase("trailers"));
@@ -197,61 +199,66 @@ public class MuResponseImpl implements MuResponse {
     @Override
     public OutputStream outputStream(int bufferSize) {
         throwIfAsync();
-        OutputStream adapter = new OutputStream() {
-            private int state = 0;
-            private boolean chunked = false;
-            @Override
-            public void write(int b) throws IOException {
-                write(new byte[] { (byte) b }, 0, 1);
-            }
+        if (this.outputStream == null) {
+            if (this.state != ResponseState.NOTHING)
+                throw new IllegalStateException("Cannot write to response with state " + state);
 
-            @Override
-            public void write(byte[] b, int off, int len) throws IOException {
-                System.out.println("Sending " + (len - off) + " bytes");
-                if (state == 2) throw new IOException("Writing to a closed stream");
-                ByteBuffer hb;
-                if (state == 0) {
-                    MuResponseImpl.this.state = ResponseState.STREAMING;
-                    state = 1;
-                    if (!headers.contains(HeaderNames.CONTENT_TYPE)) {
-                        headers.set(HeaderNames.CONTENT_TYPE, ContentTypes.APPLICATION_OCTET_STREAM);
-                    }
-                    if (!headers.contains(HeaderNames.CONTENT_LENGTH)) {
-                        chunked = true;
-                        headers.set(HeaderNames.TRANSFER_ENCODING, HeaderValues.CHUNKED);
-                    }
-                    hb = headersBuffer(true, headers);
-                } else {
-                    hb = null;
-                }
-                if (chunked) {
-                    sendChunk(hb, ByteBuffer.wrap(b, off, len));
-                } else if (hb != null) {
-                    blockingWrite(hb, ByteBuffer.wrap(b, off, len));
-                } else {
-                    blockingWrite(ByteBuffer.wrap(b, off, len));
-                }
-            }
+            OutputStream adapter = new OutputStream() {
+                private int state = 0;
+                private boolean chunked = false;
 
-            @Override
-            public void close() throws IOException {
-                if (state != 2) {
-                    System.out.println("Closed");
-                    state = 2;
-                    end();
+                @Override
+                public void write(int b) throws IOException {
+                    write(new byte[]{(byte) b}, 0, 1);
                 }
-            }
-        };
-        this.outputStream = bufferSize == 0 ? adapter : new BufferedOutputStream(adapter, bufferSize);
-        return adapter;
+
+                @Override
+                public void write(byte[] b, int off, int len) throws IOException {
+                    System.out.println("Sending " + (len - off) + " bytes");
+                    if (state == 2) throw new IOException("Writing to a closed stream");
+                    ByteBuffer hb;
+                    if (state == 0) {
+                        MuResponseImpl.this.state = ResponseState.STREAMING;
+                        state = 1;
+                        if (!headers.contains(HeaderNames.CONTENT_TYPE)) {
+                            headers.set(HeaderNames.CONTENT_TYPE, ContentTypes.APPLICATION_OCTET_STREAM);
+                        }
+                        if (!headers.contains(HeaderNames.CONTENT_LENGTH)) {
+                            chunked = true;
+                            headers.set(HeaderNames.TRANSFER_ENCODING, HeaderValues.CHUNKED);
+                        }
+                        hb = headersBuffer(true, headers);
+                    } else {
+                        hb = null;
+                    }
+                    if (chunked) {
+                        sendChunk(hb, ByteBuffer.wrap(b, off, len));
+                    } else if (hb != null) {
+                        blockingWrite(hb, ByteBuffer.wrap(b, off, len));
+                    } else {
+                        blockingWrite(ByteBuffer.wrap(b, off, len));
+                    }
+                }
+
+                @Override
+                public void close() throws IOException {
+                    if (state != 2) {
+                        System.out.println("Closed");
+                        state = 2;
+                        end();
+                    }
+                }
+            };
+            this.outputStream = bufferSize == 0 ? adapter : new BufferedOutputStream(adapter, bufferSize);
+        }
+        return this.outputStream;
     }
 
     @Override
     public PrintWriter writer() {
         if (this.writer == null) {
             Charset charset = setDefaultContentType();
-            OutputStreamWriter os = new OutputStreamWriter(outputStream(), charset);
-            this.writer = new PrintWriter(os);
+            this.writer = new PrintWriter(outputStream(), false, charset);
         }
         return this.writer;
     }

@@ -26,6 +26,7 @@ public class MuRequestImpl implements MuRequest {
     private final boolean hasBody;
     private Headers trailers;
     private List<Cookie> cookies;
+    private QueryString query;
 
     public MuRequestImpl(MuExchangeData data, Method method, String relativeUri, Headers headers, boolean hasBody) {
         this.data = data;
@@ -118,7 +119,10 @@ public class MuRequestImpl implements MuRequest {
 
     @Override
     public RequestParameters query() {
-        return null;
+        if (this.query == null) {
+            this.query = QueryString.parse(serverUri.getRawQuery());
+        }
+        return query;
     }
 
     @Override
