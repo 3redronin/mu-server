@@ -203,7 +203,7 @@ public class CookieTest {
             .endHeaders()
             .flushRequest()) {
             assertEventually(rawClient::responseString, endsWith("END"));
-            assertThat(rawClient.responseString(), containsString("set-cookie: hi=bal; Secure; HTTPOnly; SameSite=Strict"));
+            assertThat(rawClient.responseString(), containsString("set-cookie: hi=bal; SameSite=Strict; Secure; HttpOnly"));
             assertThat(rawClient.responseString(), endsWith("START; cookie1=something; cookie2=somethingelse; END"));
         }
     }

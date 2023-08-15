@@ -373,6 +373,21 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
     MediaType contentType();
 
     /**
+     * Gets the parsed <code>cookie</code> value.
+     * <p>This is only relevant for request cookies</p>
+     * @return The cookies sent on a request
+     */
+    default List<Cookie> cookies() {
+        var list = new ArrayList<Cookie>();
+        for (String headerString : getAll(HeaderNames.COOKIE)) {
+            for (CookieBuilder cookieBuilder : CookieBuilder.fromCookieHeader(headerString)) {
+                list.add(cookieBuilder.build());
+            }
+        }
+        return list;
+    }
+
+    /**
      * Returns a string representation of the headers.
      *
      * <strong>Note:</strong> The following headers will have their actual values replaced with the string <code>(hidden)</code>

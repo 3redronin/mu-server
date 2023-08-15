@@ -1,9 +1,6 @@
 package io.muserver;
 
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 
 import static java.util.Collections.emptyList;
 
@@ -217,7 +214,7 @@ public class CookieBuilder {
      * @return A cookie builder
      * @throws IllegalArgumentException if the value is not a valid cookie string
      */
-    public static List<CookieBuilder> fromString(String input) {
+    public static List<CookieBuilder> fromCookieHeader(String input) {
         if (input == null || input.trim().isEmpty()) {
             return emptyList();
         }
@@ -227,6 +224,109 @@ public class CookieBuilder {
 
         int i = 0;
         while (i < input.length()) {
+
+            String name = null;
+            String value = null;
+            State state = State.NAME;
+            boolean isQuotedString = false;
+
+            headerValueLoop:
+            for (; i < input.length(); i++) {
+                char c = input.charAt(i);
+
+                if (state == State.NAME) {
+                    if (c == '=') {
+                        name = buffer.toString().trim();
+                        buffer.setLength(0);
+                        state = State.VALUE;
+                    } else if (c == ';') {
+                        i++;
+                        break headerValueLoop;
+                    } else if (ParseUtils.isVChar(c) || ParseUtils.isOWS(c)) {
+                        buffer.append(c);
+                    } else {
+                        throw new IllegalArgumentException("Got ascii " + ((int) c) + " while in " + state + " at position " + i);
+                    }
+                } else if (state == State.VALUE) {
+
+                    boolean isFirst = !isQuotedString && buffer.length() == 0;
+                    if (isFirst && ParseUtils.isOWS(c)) {
+                        // ignore it
+                    } else if (isFirst && c == '"') {
+                        isQuotedString = true;
+                    } else {
+
+                        if (isQuotedString) {
+                            char lastChar = input.charAt(i - 1);
+                            if (c == '\\' && lastChar != '\\') {
+                                // don't append
+                            } else if (c == '"') {
+                                // this is the end, but we'll update on the next go
+                                isQuotedString = false;
+                            } else if (isCookieOctet(c)) {
+                                buffer.append(c);
+                            } else {
+                                throw new IllegalArgumentException("Got ascii " + ((int) c) + " while in " + state + " at position " + i);
+                            }
+                        } else {
+                            if (ParseUtils.isOWS(c)) {
+                                // ignore it
+                            } else if (c == ';') {
+                                i++;
+                                break headerValueLoop;
+                            } else if (isCookieOctet(c)) {
+                                buffer.append(c);
+                            } else {
+                                throw new IllegalArgumentException("Got character code " + ((int) c) + " (" + c + ") while parsing parameter value");
+                            }
+                        }
+                    }
+                }
+            }
+            switch (state) {
+                case NAME:
+                    name = buffer.toString().trim();
+                    buffer.setLength(0);
+                    break;
+                case VALUE:
+                    value = buffer.toString().trim();
+                    buffer.setLength(0);
+                    break;
+                default:
+                    if (buffer.length() > 0) {
+                        throw new IllegalArgumentException("Unexpected ending point at state " + state + " for " + input);
+                    }
+            }
+
+            CookieBuilder builder = CookieBuilder.newCookie()
+                .withName(name)
+                .withValue(value);
+            results.add(builder);
+        }
+        return results;
+    }
+
+
+
+    /**
+     * Converts a string used in the <code>set-cookie</code> response header into a <code>CookieBuilder</code>.
+     * @param input A header value, such as <code>name=value; Secure</code>
+     * @return A cookie builder
+     * @throws IllegalArgumentException if the value is not a valid set-cookie string
+     */
+    public static Optional<CookieBuilder> fromSetCookieHeader(String input) {
+        if (input == null || input.trim().isEmpty()) {
+            return Optional.empty();
+        }
+        StringBuilder buffer = new StringBuilder();
+
+        CookieBuilder builder = null;
+
+        int i = 0;
+        while (i < input.length()) {
+            if (builder != null) {
+                throw new IllegalArgumentException("Only one set-cookie value is allowed");
+            }
 
             String name = null;
             String value = null;
@@ -244,9 +344,6 @@ public class CookieBuilder {
                         name = buffer.toString().trim();
                         buffer.setLength(0);
                         state = State.VALUE;
-                    } else if (c == ',') {
-                        i++;
-                        break headerValueLoop;
                     } else if (ParseUtils.isVChar(c) || ParseUtils.isOWS(c)) {
                         buffer.append(c);
                     } else {
@@ -280,9 +377,6 @@ public class CookieBuilder {
                                 state = State.PARAM_NAME;
                             } else if (ParseUtils.isOWS(c)) {
                                 // ignore it
-                            } else if (c == ',') {
-                                i++;
-                                break headerValueLoop;
                             } else if (isCookieOctet(c)) {
                                 buffer.append(c);
                             } else {
@@ -292,10 +386,7 @@ public class CookieBuilder {
                     }
 
                 } else if (state == State.PARAM_NAME) {
-                    if (c == ',' && buffer.isEmpty()) {
-                        i++;
-                        break headerValueLoop;
-                    } else if (c == ';' || c == ',') {
+                    if (c == ';') {
                         // a semi-colon without a parameter, like "something;"
                         paramName = buffer.toString();
                         buffer.setLength(0);
@@ -347,9 +438,6 @@ public class CookieBuilder {
                                 state = State.PARAM_NAME;
                             } else if (ParseUtils.isOWS(c)) {
                                 // ignore it
-                            } else if (c == ',') {
-                                i++;
-                                break headerValueLoop;
                             } else {
                                 throw new IllegalArgumentException("Got character code " + ((int) c) + " (" + c + ") while parsing parameter value");
                             }
@@ -388,7 +476,7 @@ public class CookieBuilder {
                     }
             }
 
-            CookieBuilder builder = CookieBuilder.newCookie()
+            builder = CookieBuilder.newCookie()
                 .withName(name)
                 .withValue(value);
             if (parameters != null) {
@@ -399,10 +487,11 @@ public class CookieBuilder {
                 if (parameters.containsKey("secure")) builder.secure(true);
                 if (parameters.containsKey("samesite")) builder.withSameSite(parameters.get("samesite"));
             }
-            results.add(builder);
         }
-        return results;
+        return Optional.ofNullable(builder);
     }
+
+
     private enum State {NAME, VALUE, PARAM_NAME, PARAM_VALUE}
 
     private static boolean isCookieOctet(char c) {

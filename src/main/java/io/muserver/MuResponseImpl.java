@@ -186,7 +186,7 @@ public class MuResponseImpl implements MuResponse {
 
     @Override
     public void addCookie(Cookie cookie) {
-        throw new RuntimeException("todo");
+        headers.add(HeaderNames.SET_COOKIE, cookie.toString());
     }
 
     @Override

@@ -116,29 +116,53 @@ public class CookieBuilderTest {
                 System.out.println("not allowedCookieNameChar = " + allowedCookieNameChar);
             }
         }
-        assertThat(CookieBuilder.fromString("sessionId=38afes7a8"), contains(cook("sessionId", "38afes7a8")));
-        assertThat(CookieBuilder.fromString("sessionId="), contains(cook("sessionId", "")));
-        assertThat(CookieBuilder.fromString("__Host-example=34d8g; SameSite=None; Secure; Path=/; Partitioned;"), contains(cook("__Host-example", "34d8g").secure(true).withSameSite(Cookie.SameSite.NONE).withPath("/")));
-        assertThat(CookieBuilder.fromString(allowedCookieNameChars + "=" + allowedCookieValueChars), contains(cook(allowedCookieNameChars, allowedCookieValueChars)));
+        assertThat(setCookieFrom("sessionId=38afes7a8"), equalTo(cook("sessionId", "38afes7a8")));
+        assertThat(setCookieFrom("sessionId="), equalTo(cook("sessionId", "")));
+        assertThat(setCookieFrom("__Host-example=34d8g; SameSite=None; Secure; Path=/; Partitioned;"), equalTo(cook("__Host-example", "34d8g").secure(true).withSameSite(Cookie.SameSite.NONE).withPath("/")));
+        assertThat(setCookieFrom(allowedCookieNameChars + "=" + allowedCookieValueChars), equalTo(cook(allowedCookieNameChars, allowedCookieValueChars)));
+    }
+
+    @Test
+    public void setCookieDoesNotAllowMultipleValues() {
+        for (String headerValue : new String[]{
+            "cookie1=value1, cookie2=value2",
+            " cookie1=value1,cookie2=value2 ",
+            " cookie1=value1;httponly,cookie2=value2 "}) {
+            try {
+                setCookieFrom(headerValue);
+                Assert.fail(headerValue + " did not throw exception");
+            } catch (IllegalArgumentException e) {
+                // good
+            }
+        }
+    }
+
+    private static CookieBuilder setCookieFrom(String headerValue) {
+        return CookieBuilder.fromSetCookieHeader(headerValue).orElse(null);
     }
 
     @Test
     public void itCanParseMultipleValues() {
-        assertThat(CookieBuilder.fromString("cookie1=value1, cookie2=value2"), contains(cook("cookie1", "value1"), cook("cookie2", "value2")));
-        assertThat(CookieBuilder.fromString(" cookie1=value1,cookie2=value2 "), contains(cook("cookie1", "value1"), cook("cookie2", "value2")));
-        assertThat(CookieBuilder.fromString(" cookie1=value1;httponly,cookie2=value2 "), contains(cook("cookie1", "value1").httpOnly(true), cook("cookie2", "value2")));
+        assertThat(CookieBuilder.fromCookieHeader("cookie1=value1; cookie2=value2"), contains(cook("cookie1", "value1"), cook("cookie2", "value2")));
+        assertThat(CookieBuilder.fromCookieHeader(" cookie1=value1;cookie2=value2 "), contains(cook("cookie1", "value1"), cook("cookie2", "value2")));
+        assertThat(CookieBuilder.fromCookieHeader(" cookie1=value1 ; cookie2= value2 "), contains(cook("cookie1", "value1"), cook("cookie2", "value2")));
     }
 
     @Test
     public void valuesCanBeQuotedStrings() {
-        assertThat(CookieBuilder.fromString(
-            "cookie1=\"value_1\";secure, " +
+        assertThat(CookieBuilder.fromCookieHeader(
+            "cookie1=\"value_1\"; " +
                 "cookie2=\"value+-/_2\""),
             contains(
-                cook("cookie1", "value_1").secure(true),
+                cook("cookie1", "value_1"),
                 cook("cookie2", "value+-/_2")
             ));
+    }
 
+    @Test
+    public void setCookieValueCanBeQuotedStrings() {
+        assertThat(setCookieFrom("cookie1=\"value_1\";secure"), equalTo(cook("cookie1", "value_1").secure(true)));
+        assertThat(setCookieFrom("cookie2=\"value+-/_2\""), equalTo(cook("cookie2", "value+-/_2")));
     }
 
     private static CookieBuilder cook(String name, String value) {

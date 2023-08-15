@@ -1,5 +1,8 @@
 package io.muserver;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -72,7 +75,17 @@ class RequestParser {
         SIZE, EXTENSION, DATA, DATA_DONE, TRAILER_NAME, TRAILER_VALUE
     }
 
+    private static final Logger log = LoggerFactory.getLogger(RequestParser.class);
+
     void offer(ByteBuffer bb) throws InvalidRequestException {
+
+        if (state == State.RL_METHOD) {
+            String s = new String(bb.array(), bb.position(), bb.limit());
+            log.info("<<\n" + s.replace("\r", "\\r").replace("\n", "\\n\r\n"));
+        } else {
+            log.info("<<\n<request body> " + bb.remaining() + " bytes");
+        }
+
         while (bb.hasRemaining()) {
             if (state == State.FIXED_BODY) {
                 parseFixedLengthBody(bb);

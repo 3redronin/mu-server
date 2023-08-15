@@ -25,6 +25,7 @@ public class MuRequestImpl implements MuRequest {
     private final Headers headers;
     private final boolean hasBody;
     private Headers trailers;
+    private List<Cookie> cookies;
 
     public MuRequestImpl(MuExchangeData data, Method method, String relativeUri, Headers headers, boolean hasBody) {
         this.data = data;
@@ -127,12 +128,15 @@ public class MuRequestImpl implements MuRequest {
 
     @Override
     public List<Cookie> cookies() {
-        return null;
+        if (this.cookies == null) {
+            cookies = headers.cookies();
+        }
+        return this.cookies;
     }
 
     @Override
     public Optional<String> cookie(String name) {
-        return Optional.empty();
+        return cookies().stream().filter(c -> c.name().equals(name)).map(Cookie::value).findFirst();
     }
 
     @Override

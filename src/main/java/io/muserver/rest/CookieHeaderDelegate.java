@@ -14,7 +14,7 @@ class CookieHeaderDelegate implements RuntimeDelegate.HeaderDelegate<Cookie> {
     @Override
     public Cookie fromString(String value) {
         if (value == null) throw new IllegalArgumentException("Cookie value was null");
-        List<CookieBuilder> builders = CookieBuilder.fromString(value);
+        List<CookieBuilder> builders = CookieBuilder.fromCookieHeader(value);
         if (builders.isEmpty()) throw new IllegalArgumentException("No cookie value was specified");
         io.muserver.Cookie muc = builders.get(0).build();
         return new Cookie(muc.name(), muc.value());

@@ -58,7 +58,6 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
     }
 
     private void doHandshake() {
-        log.info("handshakeStatus=" + handshakeStatus);
         try {
             switch (handshakeStatus) {
                 case NEED_UNWRAP -> {
@@ -67,7 +66,6 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
                         @Override
                         public void completed(Integer result, Void attachment) {
                             netBuffer.flip();
-                            log.info("Read " + result + " bytes and remaining " + netBuffer.remaining());
                             try {
                                 appBuffer.clear();
                                 while (netBuffer.hasRemaining()) {
@@ -75,7 +73,7 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
                                     if (unwrapResult.getStatus() != SSLEngineResult.Status.OK && unwrapResult.getStatus() != SSLEngineResult.Status.CLOSED)
                                         throw new RuntimeException("Unwrapping not complete: " + unwrapResult);
                                     handshakeStatus = unwrapResult.getHandshakeStatus();
-                                    log.info("sslResult = " + unwrapResult + " ; netbuffer remaining=" + netBuffer.remaining());
+//                                    log.info("sslResult = " + unwrapResult + " ; netbuffer remaining=" + netBuffer.remaining());
                                 }
                                 doHandshake();
                             } catch (Throwable e) {
@@ -111,7 +109,7 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
                     netBuffer.clear();
                     appBuffer.clear();
                     SSLEngineResult wrapResult = sslEngine.wrap(appBuffer, netBuffer);
-                    log.info("Wrap result: " + wrapResult);
+//                    log.info("Wrap result: " + wrapResult);
                     // TODO: handle status=closed and buffer overflow for TLS handshake error
                     if (wrapResult.getStatus() != SSLEngineResult.Status.OK && wrapResult.getStatus() != SSLEngineResult.Status.CLOSED) {
                         throw new RuntimeException("Got " + wrapResult + " while wrapping");
@@ -222,7 +220,6 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
 
     @Override
     public <A> void read(ByteBuffer dst, long timeout, TimeUnit unit, A attachment, CompletionHandler<Integer, ? super A> handler) {
-        log.info("TLS channel read with position=" + dst.position() + " and limit=" + dst.limit());
         netBuffer.clear();
         socketChannel.read(netBuffer, timeout, unit, attachment, new CompletionHandler<>() {
             @Override
