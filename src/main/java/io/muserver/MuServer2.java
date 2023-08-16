@@ -21,12 +21,12 @@ class MuServer2 implements MuServer {
     final List<MuHandler> handlers;
     final MuStats2Impl stats = new MuStats2Impl();
     final UnhandledExceptionHandler unhandledExceptionHandler;
-    private final long maxRequestSize;
+    final MuServerSettings settings;
 
-    MuServer2(List<MuHandler> handlers, UnhandledExceptionHandler unhandledExceptionHandler, long maxRequestSize) {
+    MuServer2(List<MuHandler> handlers, UnhandledExceptionHandler unhandledExceptionHandler, MuServerSettings settings) {
         this.handlers = handlers;
         this.unhandledExceptionHandler = unhandledExceptionHandler;
-        this.maxRequestSize = maxRequestSize;
+        this.settings = settings;
     }
 
     void addAcceptor(ConnectionAcceptor acceptor) {
@@ -41,8 +41,9 @@ class MuServer2 implements MuServer {
         var bindPort = hasHttps ? builder.httpsPort() : builder.httpPort();
         InetSocketAddress endpoint = builder.interfaceHost() == null ? new InetSocketAddress(bindPort) : new InetSocketAddress(builder.interfaceHost(), bindPort);
 
+        var settings = new MuServerSettings(builder.gzipEnabled(), builder.minimumGzipSize(), builder.mimeTypesToGzip(), builder.maxRequestSize(), builder.maxHeadersSize(), builder.maxUrlSize(), builder.idleTimeoutMills(), builder.requestReadTimeoutMillis());
 
-        MuServer2 server = new MuServer2(builder.handlers(), builder.unhandledExceptionHandler(), builder.maxRequestSize());
+        MuServer2 server = new MuServer2(builder.handlers(), builder.unhandledExceptionHandler(), settings);
         if (!hasHttps) {
             server.addAcceptor(createAcceptor(server, null, endpoint));
         } else {
@@ -178,37 +179,37 @@ class MuServer2 implements MuServer {
 
     @Override
     public long minimumGzipSize() {
-        return 0;
+        return settings.minGzipSize();
     }
 
     @Override
     public int maxRequestHeadersSize() {
-        return 0;
+        return settings.maxHeadersSize();
     }
 
     @Override
     public long requestIdleTimeoutMillis() {
-        return 0;
+        return settings.requestReadTimeoutMillis();
     }
 
     @Override
     public long maxRequestSize() {
-        return maxRequestSize;
+        return settings.maxRequestSize();
     }
 
     @Override
     public int maxUrlSize() {
-        return 0;
+        return settings.maxUrlSize();
     }
 
     @Override
     public boolean gzipEnabled() {
-        return false;
+        return settings.gzipEnabled();
     }
 
     @Override
     public Set<String> mimeTypesToGzip() {
-        return null;
+        return settings.mimeTypesToGzip();
     }
 
     @Override
@@ -257,3 +258,7 @@ class MuServer2 implements MuServer {
         }
     }
 }
+
+
+record MuServerSettings(boolean gzipEnabled, long minGzipSize, Set<String> mimeTypesToGzip, long maxRequestSize, int maxHeadersSize, int maxUrlSize,
+                        long idleTimeoutMills, long requestReadTimeoutMillis) {}

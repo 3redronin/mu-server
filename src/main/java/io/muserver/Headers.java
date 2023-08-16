@@ -366,7 +366,7 @@ public interface Headers extends Iterable<Map.Entry<String, String>>, RequestPar
      * @return An empty headers object.
      */
     static Headers http1Headers() {
-        return new Http1Headers();
+        return new MuHeaders();
     }
 
     /**
@@ -374,6 +374,6 @@ public interface Headers extends Iterable<Map.Entry<String, String>>, RequestPar
      * @return An empty headers object.
      */
     static Headers http2Headers() {
-        return new Http2Headers();
+        return new MuHeaders();
     }
 }

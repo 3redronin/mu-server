@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.zip.GZIPOutputStream;
 
 import static io.muserver.ContentTypes.TEXT_PLAIN_UTF8;
 
@@ -56,6 +57,34 @@ public class MuResponseImpl implements MuResponse {
         blockingWrite(headerBuf, body);
         state = ResponseState.FULL_SENT;
         data.connection.onResponseCompleted(this);
+    }
+
+    private boolean prepareForGzip() {
+        var settings = data.server.settings;
+        if (!settings.gzipEnabled()) return false;
+        if (headers.contains(HeaderNames.CONTENT_ENCODING)) return false; // don't re-encode something
+
+        var responseType = headers.contentType();
+        if (responseType == null) return false;
+        var mime = responseType.getType() + "/" + responseType.getSubtype();
+        boolean mimeTypeOk = settings.mimeTypesToGzip().contains(mime);
+        if (!mimeTypeOk) return false;
+
+        headers.add(HeaderNames.VARY, HeaderNames.ACCEPT_ENCODING); // TODO change to add if not already there
+
+        boolean clientSupports = false;
+        for (ParameterizedHeaderWithValue acceptEncoding : data.requestHeaders.acceptEncoding()) {
+            if (acceptEncoding.value().equalsIgnoreCase("gzip")) {
+                clientSupports = true;
+                break;
+            }
+        }
+        if (!clientSupports) return false;
+        long contentSize = headers.getLong(HeaderNames.CONTENT_LENGTH.toString(), Long.MAX_VALUE);
+        if (contentSize < settings.minGzipSize()) return false;
+
+        headers.set(HeaderNames.CONTENT_ENCODING, HeaderValues.GZIP);
+        return true;
     }
 
     private void blockingWrite(ByteBuffer... buffers) throws IOException {
@@ -251,6 +280,13 @@ public class MuResponseImpl implements MuResponse {
                     }
                 }
             };
+            if (prepareForGzip()) {
+                try {
+                    adapter = new GZIPOutputStream(adapter);
+                } catch (IOException e) {
+                    throw new UncheckedIOException("Error while starting GZIP compression", e);
+                }
+            }
             this.outputStream = bufferSize == 0 ? adapter : new BufferedOutputStream(adapter, bufferSize);
         }
         return this.outputStream;
