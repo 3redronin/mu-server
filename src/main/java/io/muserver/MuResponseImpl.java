@@ -11,7 +11,6 @@ import java.nio.ByteBuffer;
 import java.nio.channels.AsynchronousSocketChannel;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
@@ -26,7 +25,7 @@ public class MuResponseImpl implements MuResponse {
     private final MuExchangeData data;
     private final AsynchronousSocketChannel tlsChannel;
     private int status = 200;
-    private final MuHeaders headers = new MuHeaders();
+    private final MuHeaders headers = MuHeaders.responseHeaders();
     private MuHeaders trailers = null;
     private ResponseState state = ResponseState.NOTHING;
     private OutputStream outputStream;
@@ -35,7 +34,6 @@ public class MuResponseImpl implements MuResponse {
     public MuResponseImpl(MuExchangeData data, AsynchronousSocketChannel tlsChannel) {
         this.data = data;
         this.tlsChannel = tlsChannel;
-        headers.set(HeaderNames.DATE, Mutils.toHttpDate(Instant.now()));
     }
 
     @Override
@@ -52,7 +50,7 @@ public class MuResponseImpl implements MuResponse {
     public void write(String text) throws IOException {
         if (state != ResponseState.NOTHING) throw new IllegalStateException("Cannot write text");
         Charset charset = setDefaultContentType();
-        ByteBuffer body = charset.encode(text);
+        ByteBuffer body = charset.encode(text != null ? text : "");
         headers.set(HeaderNames.CONTENT_LENGTH, body.remaining());
         ByteBuffer headerBuf = headersBuffer(true, headers);
         blockingWrite(headerBuf, body);
@@ -94,9 +92,13 @@ public class MuResponseImpl implements MuResponse {
     }
 
     private ByteBuffer headersBuffer(boolean reqLine, MuHeaders headers) {
+        return http1HeadersBuffer(headers, reqLine ? data.httpVersion : null, status, "OK");
+    }
+
+    static ByteBuffer http1HeadersBuffer(MuHeaders headers, HttpVersion httpVersion, int status, String statusString) {
         var sb = new StringBuilder();
-        if (reqLine) {
-            sb.append(data.httpVersion.version()).append(' ').append(status).append(' ').append("OK").append("\r\n");
+        if (httpVersion != null) {
+            sb.append(httpVersion.version()).append(' ').append(status).append(' ').append(statusString).append("\r\n");
         }
         for (Map.Entry<String, List<String>> entry : headers.all().entrySet()) {
             for (String value : entry.getValue()) {

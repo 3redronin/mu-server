@@ -12,6 +12,12 @@ class MuHeaders implements Headers {
 
     private final TreeMap<String, List<String>> all = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
 
+    static MuHeaders responseHeaders() {
+        var headers = new MuHeaders();
+        headers.set(HeaderNames.DATE, Mutils.toHttpDate(Instant.now()));
+        return headers;
+    }
+
     @Override
     public Map<String, List<String>> all() {
         return all;

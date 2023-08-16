@@ -50,6 +50,27 @@ public class ExpectContinueTest {
 
     }
 
+    @Test(timeout = 20000)
+    public void rejectionIsReturnedIfExpectIsSentAndItIsTooBig() throws IOException, InterruptedException {
+        server = httpServer()
+            .withMaxRequestSize(1000)
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> response.write(request.readBodyAsString()))
+            .start();
+
+        try (RawClient rawClient = RawClient.create(server.uri())) {
+            rawClient.sendStartLine("GET", "/")
+                .sendHeader("host", server.uri().getAuthority())
+                .sendHeader("expect", "100-continue")
+                .sendHeader("content-length", "1024")
+                .endHeaders()
+                .flushRequest();
+
+            assertEventually(rawClient::responseString, startsWith("HTTP/1.1 417 Expectation Failed\r\n"));
+            assertEventually(rawClient::responseString, endsWith("\r\n\r\n"));
+        }
+
+    }
+
     @Test
     public void expectContinueWorksOverHttpsWithoutContentLength() throws IOException {
         server = ServerUtils.httpsServerForTest()

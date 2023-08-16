@@ -17,6 +17,7 @@ import java.time.Instant;
 import java.util.Collections;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
 
 class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Object> {
     private static final Logger log = LoggerFactory.getLogger(MuHttp1Connection.class);
@@ -74,7 +75,7 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
             @Override
             public void onHeaders(Method method, URI uri, HttpVersion httpProtocolVersion, MuHeaders headers, boolean hasBody) {
                 var data = new MuExchangeData(server, MuHttp1Connection.this, httpProtocolVersion, headers);
-                String relativeUri = null;
+                String relativeUri;
                 try {
                     relativeUri = getRelativeUrl(uri);
                 } catch (InvalidHttpRequestException e) {
@@ -84,6 +85,27 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
                     // TODO redirect it
                     throw new RuntimeException(e);
                 }
+
+                if (headers.containsValue(HeaderNames.EXPECT, HeaderValues.CONTINUE, true)) {
+                    long proposedLength = headers.getLong(HeaderNames.CONTENT_LENGTH.toString(), -1L);
+                    // TODO don't block and handle timeouts
+                    try {
+                        if (proposedLength > server.maxRequestSize()) {
+                            var responseHeaders = MuHeaders.responseHeaders();
+                            responseHeaders.set(HeaderNames.CONTENT_LENGTH, 0);
+                            channel.write(MuResponseImpl.http1HeadersBuffer(responseHeaders, HttpVersion.HTTP_1_1, 417, "Expectation Failed")).get();
+                            return;
+                        } else {
+                            channel.write(Mutils.toByteBuffer("HTTP/1.1 100 Continue\r\n\r\n")).get();
+                        }
+                    } catch (InterruptedException e) {
+                        throw new RuntimeException(e);
+                    } catch (ExecutionException e) {
+                        throw new RuntimeException(e.getCause());
+                    }
+
+                }
+
                 var req = new MuRequestImpl(data, method, relativeUri, headers, hasBody);
                 var resp = new MuResponseImpl(data, channel);
                 exchange = new MuExchange(data, req, resp);

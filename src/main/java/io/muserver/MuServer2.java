@@ -21,10 +21,12 @@ class MuServer2 implements MuServer {
     final List<MuHandler> handlers;
     final MuStats2Impl stats = new MuStats2Impl();
     final UnhandledExceptionHandler unhandledExceptionHandler;
+    private final long maxRequestSize;
 
-    MuServer2(List<MuHandler> handlers, UnhandledExceptionHandler unhandledExceptionHandler) {
+    MuServer2(List<MuHandler> handlers, UnhandledExceptionHandler unhandledExceptionHandler, long maxRequestSize) {
         this.handlers = handlers;
         this.unhandledExceptionHandler = unhandledExceptionHandler;
+        this.maxRequestSize = maxRequestSize;
     }
 
     void addAcceptor(ConnectionAcceptor acceptor) {
@@ -40,7 +42,7 @@ class MuServer2 implements MuServer {
         InetSocketAddress endpoint = builder.interfaceHost() == null ? new InetSocketAddress(bindPort) : new InetSocketAddress(builder.interfaceHost(), bindPort);
 
 
-        MuServer2 server = new MuServer2(builder.handlers(), builder.unhandledExceptionHandler());
+        MuServer2 server = new MuServer2(builder.handlers(), builder.unhandledExceptionHandler(), builder.maxRequestSize());
         if (!hasHttps) {
             server.addAcceptor(createAcceptor(server, null, endpoint));
         } else {
@@ -191,7 +193,7 @@ class MuServer2 implements MuServer {
 
     @Override
     public long maxRequestSize() {
-        return 0;
+        return maxRequestSize;
     }
 
     @Override
