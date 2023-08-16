@@ -30,13 +30,16 @@ public class ClientUtils {
         System.setProperty("io.netty.leakDetection.targetRecords", "1000");
         Logger.getLogger(OkHttpClient.class.getName()).setLevel(Level.FINE);
         boolean isDebug = ManagementFactory.getRuntimeMXBean().getInputArguments().toString().contains("jdwp");
+        int timeoutSeconds = isDebug ? 300 : 20;
         client = new OkHttpClient.Builder()
             .retryOnConnectionFailure(false)
 //            .protocols(Collections.singletonList(Protocol.HTTP_1_1))
             .followRedirects(false)
             .followSslRedirects(false)
             .hostnameVerifier((hostname, session) -> true)
-            .readTimeout(isDebug ? 180 : 20, TimeUnit.SECONDS)
+            .callTimeout(timeoutSeconds, TimeUnit.SECONDS)
+            .writeTimeout(timeoutSeconds, TimeUnit.SECONDS)
+            .readTimeout(timeoutSeconds, TimeUnit.SECONDS)
             .sslSocketFactory(sslContextForTesting(veryTrustingTrustManager).getSocketFactory(), veryTrustingTrustManager).build();
         ResourceLeakDetector.setLevel(ResourceLeakDetector.Level.PARANOID);
     }

@@ -84,7 +84,7 @@ class Headtils {
         return HeadersUtils.toString(headers.getClass(), new RedactorIterator(headers.iterator(), toSuppress), headers.size());
     }
 
-    private static class RedactorIterator implements Iterator<Map.Entry<String, String>> {
+    static class RedactorIterator implements Iterator<Map.Entry<String, String>> {
         static final List<String> sensitiveOnes = asList(HeaderNames.COOKIE.toString(), HeaderNames.SET_COOKIE.toString(), HeaderNames.AUTHORIZATION.toString());
         private final Iterator<Map.Entry<String, String>> iterator;
         private final Collection<String> toSuppress;

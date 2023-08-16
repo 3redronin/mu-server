@@ -10,6 +10,8 @@ import scaffolding.MuAssert;
 import javax.net.ssl.*;
 import java.io.*;
 import java.net.Socket;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
 import java.util.List;
@@ -378,6 +380,36 @@ public class MuServer2Test {
     }
 
     @Test
+    public void hmm() {
+        Charset charset = StandardCharsets.UTF_8;
+        var os = new ByteArrayOutputStream();
+        OutputStreamWriter osw = new OutputStreamWriter(os, charset);
+        var writer = new PrintWriter(osw, false);
+        writer.write("Hello");
+        writer.close();
+
+    }
+
+    @Test
+    public void canWriteChunksToOutputStreamWithoutFlushing() throws Exception {
+        MuServerBuilder muServerBuilder = MuServerBuilder.muServer()
+            .withHttpsPort(0)
+            .addHandler(Method.GET, "/blah", (request, response, pathParams) -> {
+                response.writer().write("Hello");
+            });
+        server = muServerBuilder.start();
+        log.info("Started at " + server.uri());
+
+        try (var resp = call(request(server.uri().resolve("/blah")))) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.headers("content-type"), contains("text/plain;charset=utf-8"));
+            assertThat(resp.body().string(), equalTo("Hello"));
+        }
+
+    }
+
+
+    @Test
     public void canWriteChunksToOutputStream() throws Exception {
         MuServerBuilder muServerBuilder = MuServerBuilder.muServer()
             .withHttpsPort(0)
@@ -445,6 +477,8 @@ public class MuServer2Test {
         }
 
     }
+
+    @Test
 
 
     @After

@@ -130,5 +130,21 @@ public interface RequestParameters {
     default boolean contains(String name) {
         return all().containsKey(name);
     }
+
+    /**
+     * @return True if there are no values
+     */
+    default boolean isEmpty() {
+        return size() == 0;
+    }
+
+    /**
+     * @return The number of parameters.
+     * <p>Where one parameter has multiple values it is only counted once.</p>
+     */
+    default int size() {
+        return all().size();
+    }
+
 }
 

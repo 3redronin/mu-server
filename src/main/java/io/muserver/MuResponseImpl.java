@@ -90,8 +90,6 @@ public class MuResponseImpl implements MuResponse {
         } catch (TimeoutException e) {
             state = ResponseState.TIMED_OUT;
             throw new IOException("Timed out writing response", e);
-        } catch (Throwable t) {
-            throw t;
         }
     }
 
@@ -127,13 +125,16 @@ public class MuResponseImpl implements MuResponse {
     }
 
     public void end() throws IOException {
-        if (writer != null) {
-            writer.close();
+
+        PrintWriter w = writer;
+        if (w != null) {
             writer = null;
+            w.close();
         }
-        if (outputStream != null) {
-            outputStream.close();
+        OutputStream os = outputStream;
+        if (os != null) {
             outputStream = null;
+            os.close();
         }
         if (state == ResponseState.STREAMING) {
             state = ResponseState.FINISHING;
@@ -245,7 +246,6 @@ public class MuResponseImpl implements MuResponse {
                     if (state != 2) {
                         System.out.println("Closed");
                         state = 2;
-                        end();
                     }
                 }
             };
@@ -258,7 +258,8 @@ public class MuResponseImpl implements MuResponse {
     public PrintWriter writer() {
         if (this.writer == null) {
             Charset charset = setDefaultContentType();
-            this.writer = new PrintWriter(outputStream(), false, charset);
+            OutputStreamWriter os = new OutputStreamWriter(outputStream(), charset);
+            this.writer = new PrintWriter(os, false);
         }
         return this.writer;
     }

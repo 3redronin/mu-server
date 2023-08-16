@@ -33,6 +33,11 @@ class Http2Headers implements Headers {
     }
 
     @Override
+    public Map<String, List<String>> all() {
+        return null;
+    }
+
+    @Override
     public String get(String name) {
         return get((CharSequence) name);
     }

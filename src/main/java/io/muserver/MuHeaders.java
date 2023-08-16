@@ -8,9 +8,9 @@ import java.util.*;
 
 import static io.muserver.Mutils.notNull;
 
-public class MuHeaders extends Http1Headers implements RequestParameters {
+class MuHeaders implements Headers {
 
-    private final Map<String, List<String>> all = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+    private final TreeMap<String, List<String>> all = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
 
     @Override
     public Map<String, List<String>> all() {
@@ -35,9 +35,6 @@ public class MuHeaders extends Http1Headers implements RequestParameters {
         return this;
     }
 
-    public int size() {
-        return all.size();
-    }
 
     @Override
     public boolean equals(Object o) {
@@ -54,13 +51,9 @@ public class MuHeaders extends Http1Headers implements RequestParameters {
 
     @Override
     public String toString() {
-        return all.toString();
+        return toString(null);
     }
 
-    @Override
-    public String toString(Collection<String> toSuppress) {
-        return null;
-    }
 
 
     public static final MuHeaders EMPTY = new MuHeaders() {
@@ -203,17 +196,15 @@ public class MuHeaders extends Http1Headers implements RequestParameters {
             return Collections.emptyList();
         }
         List<Map.Entry<String, String>> entriesConverted = new ArrayList<>(all.size());
-        for (Map.Entry<String, String> entry : this) {
-            entriesConverted.add(entry);
+        for (Map.Entry<String, List<String>> entry : all.entrySet()) {
+            for (String value : entry.getValue()) {
+                entriesConverted.add(Map.entry(entry.getKey(), value));
+            }
         }
         return entriesConverted;
     }
 
-    @Override
-    @Deprecated
-    public Iterator<Map.Entry<String, String>> iterator() {
-        throw new MuException("Not implemented");
-    }
+
 
 
     @Override
@@ -222,10 +213,6 @@ public class MuHeaders extends Http1Headers implements RequestParameters {
         return contains(name.toString());
     }
 
-    @Override
-    public boolean isEmpty() {
-        return all.isEmpty();
-    }
 
     @Override
     @Deprecated

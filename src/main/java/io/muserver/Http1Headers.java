@@ -22,6 +22,11 @@ class Http1Headers implements Headers {
     }
 
     @Override
+    public Map<String, List<String>> all() {
+        return null;
+    }
+
+    @Override
     public String get(String name) {
         return entries.get(name);
     }
