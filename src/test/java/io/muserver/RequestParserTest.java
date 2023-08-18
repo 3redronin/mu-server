@@ -1,78 +1,69 @@
 package io.muserver;
 
 
-import org.junit.Assert;
+import org.hamcrest.Matcher;
 import org.junit.Test;
 import scaffolding.StringUtils;
 
-import javax.ws.rs.core.MediaType;
-import java.io.ByteArrayOutputStream;
 import java.net.URI;
-import java.nio.Buffer;
 import java.nio.ByteBuffer;
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
+import java.util.stream.Stream;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.contains;
-import static org.hamcrest.Matchers.empty;
+import static org.hamcrest.Matchers.*;
 import static org.junit.Assert.assertThrows;
 
 public class RequestParserTest {
 
-    private final MyRequestListener listener = new MyRequestListener();
-    private final RequestParser parser = new RequestParser(RequestParser.Options.defaultOptions, listener);
+    private final RequestParser parser = new RequestParser(RequestParser.Options.defaultOptions);
 
 
     @Test
     public void noHeadersAndNoBodySupported() throws InvalidRequestException {
-        parser.offer(wrap("G"));
-        parser.offer(wrap("ET"));
-        parser.offer(wrap(" /"));
-        parser.offer(wrap("a%20link HTTP/1.1\r"));
-        parser.offer(wrap("\n\r\n"));
-        assertThat(listener.isComplete, is(true));
-        assertThat(listener.method, is(Method.GET));
-        assertThat(listener.uri.toString(), is("/a%20link"));
-        assertThat(listener.proto, is(HttpVersion.HTTP_1_1));
-        assertThat(listener.headers.size(), is(0));
+        assertThat(parser.offer(wrap("G")), nullValue());
+        assertThat(parser.offer(wrap("ET")), nullValue());
+        assertThat(parser.offer(wrap(" /")), nullValue());
+        assertThat(parser.offer(wrap("a%20link HTTP/1.1\r")), nullValue());
+        assertThat(parser.offer(wrap("\n\r\n")), equalTo(
+            new NewRequest(HttpVersion.HTTP_1_1, Method.GET, URI.create("/a%20link"), new MuHeaders(), false)
+            ));
 
-        MyRequestListener anotherListener = new MyRequestListener();
-        RequestParser another = new RequestParser(RequestParser.Options.defaultOptions, anotherListener);
-        another.offer(wrap("GET /a%20link HTTP/1.1\r\n\r\n"));
-        assertThat(anotherListener, equalTo(listener));
+        assertThat(parser.offer(wrap("GET /a%20link HTTP/1.1\r\n\r\n")), equalTo(
+            new NewRequest(HttpVersion.HTTP_1_1, Method.GET, URI.create("/a%20link"), new MuHeaders(), false)
+        ));
     }
 
     @Test
     public void http1_0NotSupported() throws InvalidRequestException {
-        parser.offer(wrap("G"));
-        parser.offer(wrap("ET"));
-        parser.offer(wrap(" /"));
-        parser.offer(wrap("a%20link HTTP/1.0\r"));
+        assertThat(parser.offer(wrap("G")), nullValue());
+        assertThat(parser.offer(wrap("ET")), nullValue());
+        assertThat(parser.offer(wrap(" /")), nullValue());
+        assertThat(parser.offer(wrap("a%20link HTTP/1.0\r")), nullValue());
         assertThrows(InvalidRequestException.class, () -> parser.offer(wrap("\n\r\n")));
     }
 
     @Test
     public void headersComeOutAsHeaders() throws InvalidRequestException {
         parser.offer(wrap("GET / HTTP/1.1\r\n"));
-        parser.offer(wrap("Host:localhost:1234\r\nx-blah: haha\r\nSOME-Length: 0\r\nX-BLAH: \t something else\t \r\n\r\n"));
-        assertThat(listener.headers.getAll("Host"), contains("localhost:1234"));
-        assertThat(listener.headers.getAll("Host"), contains("localhost:1234"));
-        assertThat(listener.headers.getAll("some-length"), contains("0"));
-        assertThat(listener.headers.getAll("X-Blah"), contains("haha", "something else"));
-        assertThat(listener.isComplete, is(true));
+        var obj = parser.offer(wrap("Host:localhost:1234\r\nx-blah: haha\r\nSOME-Length: 0\r\nX-BLAH: \t something else\t \r\n\r\n"));
+        assertThat(obj, instanceOf(NewRequest.class));
+        NewRequest req = (NewRequest) obj;
+        var headers = req.headers();
+        assertThat(headers.getAll("Host"), contains("localhost:1234"));
+        assertThat(headers.getAll("Host"), contains("localhost:1234"));
+        assertThat(headers.getAll("some-length"), contains("0"));
+        assertThat(headers.getAll("X-Blah"), contains("haha", "something else"));
+        assertThat(req.hasBody(), is(false));
     }
 
     @Test
     public void urisAreNormalised() throws InvalidRequestException {
-        parser.offer(wrap("GET /a/./b/../c//d HTTP/1.1\r\n\r\n"));
-        assertThat(listener.uri.toString(), is("/a/c/d"));
+        var req = parser.offer(wrap("GET /a/./b/../c//d HTTP/1.1\r\n\r\n"));
+        assertThat(((NewRequest)req).uri().toString(), is("/a/c/d"));
     }
 
     @Test(expected = InvalidRequestException.class)
@@ -90,26 +81,57 @@ public class RequestParserTest {
         String message = StringUtils.randomStringOfLength(20000) + "This & that I'm afraid is my message\r\n";
         byte[] messageBytes = message.getBytes(UTF_8);
 
-        parser.offer(wrap("POST / HTTP/1.1\r\ncontent-length: " + (messageBytes.length * 2) + "\r\n\r\n"));
-        parser.offer(ByteBuffer.wrap(messageBytes));
-        parser.offer(ByteBuffer.wrap(messageBytes));
+        var requestHeaderBytes = ("POST / HTTP/1.1\r\ncontent-length: " + (messageBytes.length * 2) + "\r\n\r\n").getBytes(StandardCharsets.US_ASCII);
+        ByteBuffer headersAndFirstBody = ByteBuffer.allocate(requestHeaderBytes.length + messageBytes.length);
+        headersAndFirstBody.put(requestHeaderBytes);
+        headersAndFirstBody.put(messageBytes);
+        headersAndFirstBody.flip();
 
-        assertThat(listener.bodyAsString(), is(message + message));
+        var req = (NewRequest)parser.offer(headersAndFirstBody);
+        assertThat(req.hasBody(), equalTo(true));
+        assertThat(headersAndFirstBody.remaining(), equalTo(messageBytes.length));
+
+
+        var body1 = (RequestBodyData)parser.offer(headersAndFirstBody);
+        assertThat(body1.last(), equalTo(false));
+        assertThat(body1.buffer().remaining(), equalTo(messageBytes.length));
+
+        assertThat(headersAndFirstBody.remaining(), is(0));
+        assertThat(parser.offer(headersAndFirstBody), nullValue());
+
+        var body2 = (RequestBodyData)parser.offer(ByteBuffer.wrap(messageBytes));
+        assertThat(body2.last(), equalTo(true));
+        assertThat(body2.buffer().remaining(), equalTo(messageBytes.length));
+
+        assertThat(toString(body1.buffer(), body2.buffer()), equalTo(message + message));
+    }
+
+    private String toString(ByteBuffer... buffers) {
+        int totalSize = Stream.of(buffers).mapToInt(ByteBuffer::remaining).sum();
+        ByteBuffer combinedByteBuffer = ByteBuffer.allocate(totalSize);
+        for (ByteBuffer byteBuffer : buffers) {
+            combinedByteBuffer.put(byteBuffer);
+        }
+        byte[] byteArray = combinedByteBuffer.array();
+        return new String(byteArray, UTF_8);
     }
 
     @Test
     public void wholeRequestCanComeInAtOnce() throws Exception {
         String message = "Hello, there";
-        parser.offer(wrap("POST / HTTP/1.1\r\ncontent-length:" + (message.getBytes(UTF_8).length) + "\r\n\r\n" + message));
-        assertThat(listener.bodyAsString(), is(message));
+        ByteBuffer input = wrap("POST / HTTP/1.1\r\ncontent-length:" + (message.getBytes(UTF_8).length) + "\r\n\r\n" + message);
+        var newReq = (NewRequest) parser.offer(input);
+        assertThat(newReq.hasBody(), is(true));
+        var body = (RequestBodyData) parser.offer(input);
+        assertThat(body.last(), is(true));
+        assertThat(toString(body.buffer()), equalTo("Hello, there"));
     }
 
     @Test
     public void zeroLengthBodiesAreFine() throws Exception {
-        parser.offer(wrap("POST / HTTP/1.1\r\ncontent-length: 0\r\n\r\n"));
-        parser.offer(ByteBuffer.allocate(0));
-        assertThat(listener.hasBody, is(false));
-        assertThat(listener.body, empty());
+        var req = (NewRequest) parser.offer(wrap("POST / HTTP/1.1\r\ncontent-length: 0\r\n\r\n"));
+        assertThat(req.hasBody(), is(false));
+        assertThat(req.method(), is(Method.POST));
     }
 
     @Test
@@ -128,17 +150,31 @@ public class RequestParserTest {
     public void chunkExtensionsAreIgnored() throws Exception {
         String in = "POST / HTTP/1.1\r\ntransfer-encoding: chunked\r\n\r\n" +
             "6;ignore\r\nHello \r\n" +
-            "6;ignore;some=value;another=\"I'm \"good\" or something\"\r\nHello \r\n" +
-            "6\r\nHello \r\n" +
+            "D;ignore;some=value;another=\"I'm \"good\" or something\"\r\n Hello again \r\n" +
+            "17\r\nHello for the last time\r\n" +
             "0\r\n\r\n";
-        parser.offer(wrap(in));
-        assertThat(listener.isComplete, is(true));
-        assertThat(listener.bodyAsString(), is("Hello Hello Hello "));
+        ByteBuffer input = wrap(in);
+        var newReq = (NewRequest)parser.offer(input);
+        assertThat(newReq.hasBody(), equalTo(true));
+        var chunk1 = (RequestBodyData) parser.offer(input);
+        assertThat(chunk1.last(), is(false));
+        assertThat(toString(chunk1.buffer()), equalTo("Hello "));
+
+        var chunk2 = (RequestBodyData) parser.offer(input);
+        assertThat(chunk2.last(), is(false));
+        assertThat(toString(chunk2.buffer()), equalTo(" Hello again "));
+
+        var chunk3 = (RequestBodyData) parser.offer(input);
+        assertThat(chunk3.last(), is(false));
+        assertThat(toString(chunk3.buffer()), equalTo("Hello for the last time"));
+
+        var eos = (EndOfChunks) parser.offer(input);
+        assertThat(eos.trailers(), sameInstance(MuHeaders.EMPTY));
     }
 
     @Test
     public void trailersCanBeSpecified() throws Exception {
-        String in = "POST / HTTP/1.1\r\n" +
+        var in = wrap("POST / HTTP/1.1\r\n" +
             "transfer-encoding: chunked\r\n" +
             "x-header: blah\r\n" +
             "\r\n" +
@@ -148,12 +184,15 @@ public class RequestParserTest {
             "x-trailer-one: blart\r\n" +
             "X-Trailer-TWO: blart2\r\n" +
             "x-trailer-two: and another value\r\n" +
-            "\r\n";
-        parser.offer(wrap(in));
-        assertThat(listener.isComplete, is(true));
-        assertThat(listener.bodyAsString(), is("Hello Hello "));
-        assertThat(listener.trailers.getAll("X-Trailer-One"), contains("blart"));
-        assertThat(listener.trailers.getAll("X-Trailer-Two"), contains("blart2", "and another value"));
+            "\r\n");
+        assertThat(parser.offer(in), instanceOf(NewRequest.class));
+        assertThat(parser.offer(in), instanceOf(RequestBodyData.class));
+        assertThat(parser.offer(in), instanceOf(RequestBodyData.class));
+        ConMessage last = parser.offer(in);
+        assertThat(last, instanceOf(EndOfChunks.class));
+        var eoc = (EndOfChunks) last;
+        assertThat(eoc.trailers().getAll("X-Trailer-One"), contains("blart"));
+        assertThat(eoc.trailers().getAll("X-Trailer-Two"), contains("blart2", "and another value"));
     }
 
     @Test
@@ -166,55 +205,51 @@ public class RequestParserTest {
             "X-Trailer-TWO: blart2\r\n" +
             "x-trailer-two: and another value\r\n" +
             "\r\n";
-        parser.offer(wrap(in));
-        assertThat(listener.isComplete, is(true));
-        assertThat(listener.bodyAsString(), is("Hello Hello "));
+        ByteBuffer req1Input = wrap(in);
+        assertThat(parser.offer(req1Input), instanceOf(NewRequest.class));
+        assertThat(toString(
+            ((RequestBodyData)parser.offer(req1Input)).buffer(),
+            ((RequestBodyData)parser.offer(req1Input)).buffer()
+        ), is("Hello Hello "));
+        assertThat(parser.offer(req1Input), instanceOf(EndOfChunks.class));
 
-        MyRequestListener listener2 = new MyRequestListener();
-        RequestParser p2 = new RequestParser(RequestParser.Options.defaultOptions, listener2);
         byte[] inBytes = in.getBytes(UTF_8);
+        var receivedBody = new StringBuilder();
+        Class<? extends ConMessage> expectedMsgType = null;
         for (int i = 0; i < inBytes.length; i++) {
-            p2.offer(ByteBuffer.wrap(inBytes, i, 1));
+            var msg = parser.offer(ByteBuffer.wrap(inBytes, i, 1));
+            if (msg instanceof RequestBodyData) {
+                receivedBody.append(toString(((RequestBodyData) msg).buffer()));
+            }
+            if (i == 46) expectedMsgType = NewRequest.class;
+            if (i == 47) expectedMsgType = null;
+            if (i == 50) expectedMsgType = RequestBodyData.class;
+            if (i == 56) expectedMsgType = null;
+            if (i == 61) expectedMsgType = RequestBodyData.class;
+            if (i == 67) expectedMsgType = null;
+            if (i == 152) expectedMsgType = EndOfChunks.class;
+
+            Matcher<ConMessage> matcher = expectedMsgType == null ? nullValue(ConMessage.class) : instanceOf(expectedMsgType);
+            assertThat("i=" + i, msg, matcher);
         }
-        assertThat(listener2, equalTo(listener));
-        assertThat(listener2.trailers, equalTo(listener.trailers));
+        assertThat(receivedBody.toString(), equalTo("Hello Hello "));
     }
 
     @Test
     public void requestBodiesCanBeChunked() throws Exception {
-        List<Byte> allSent = new ArrayList<>();
-        parser.offer(wrap("POST / HTTP/1.1\r\ntransfer-encoding: chunked\r\n\r\n"));
+        var newReq = (NewRequest) parser.offer(wrap("POST / HTTP/1.1\r\ntransfer-encoding: chunked\r\n\r\n"));
+        assertThat(newReq.hasBody(), equalTo(true));
         for (int i = 1; i < 10; i++) {
             byte[] chunk = StringUtils.randomBytes(777 * i);
-            for (byte b : chunk) {
-                allSent.add(b);
-            }
-            parser.offer(wrap(Integer.toHexString(chunk.length) + "\r\n"));
-            parser.offer(ByteBuffer.wrap(chunk));
-            parser.offer(wrap("\r\n"));
+            assertThat(parser.offer(wrap(Integer.toHexString(chunk.length) + "\r\n")), nullValue());
+            var body = (RequestBodyData) parser.offer(ByteBuffer.wrap(chunk));
+            assertThat(body.last(), equalTo(false));
+            assertThat(body.buffer().array(), equalTo(chunk));
+            assertThat(parser.offer(wrap("\r\n")), nullValue());
         }
-        parser.offer(wrap("0\r\n"));
-
-        // todo: trailer
-        parser.offer(wrap("\r\n"));
-        assertThat(listener.isComplete, is(true));
-        ByteArrayOutputStream to = new ByteArrayOutputStream();
-        for (ByteBuffer buf : listener.body) {
-            byte[] dest = new byte[buf.remaining()];
-            buf.get(dest);
-            to.write(dest);
-        }
-
-        byte[] actual = to.toByteArray();
-        assertThat(actual.length, is(allSent.size()));
-        int i = 0;
-        for (byte aByte : allSent) {
-            byte a = actual[i];
-            if (a != aByte) {
-                Assert.fail("Error at index " + i);
-            }
-            i++;
-        }
+        assertThat(parser.offer(wrap("0\r\n")), nullValue());
+        var eod = (EndOfChunks)parser.offer(wrap("\r\n"));
+        assertThat(eod.trailers(), sameInstance(MuHeaders.EMPTY));
     }
 
     @Test
@@ -222,22 +257,16 @@ public class RequestParserTest {
         String message = StringUtils.randomStringOfLength(200) + "This & that I'm afraid is my message\r\n";
         byte[] messageBytes = message.getBytes(UTF_8);
 
-        parser.offer(wrap("POST / HTTP/1.1\r\ncontent-length: " + (messageBytes.length * 2) + "\r\n\r\n"));
-        parser.offer(ByteBuffer.wrap(messageBytes));
-        parser.offer(ByteBuffer.wrap(messageBytes));
-
-        assertThat(listener.bodyAsString(), is(message + message));
-        listener.reset();
+        assertThat(parser.offer(wrap("POST / HTTP/1.1\r\ncontent-length: " + (messageBytes.length * 2) + "\r\n\r\n")), instanceOf(NewRequest.class));
+        assertThat(parser.offer(ByteBuffer.wrap(messageBytes)), instanceOf(RequestBodyData.class));
+        assertThat(parser.offer(ByteBuffer.wrap(messageBytes)), instanceOf(RequestBodyData.class));
 
         message = "Hello, there";
-        parser.offer(wrap("POST / HTTP/1.1\r\ncontent-length:" + (message.getBytes(UTF_8).length) + "\r\n\r\n" + message));
-        assertThat(listener.bodyAsString(), is(message));
+        ByteBuffer req2 = wrap("POST / HTTP/1.1\r\ncontent-length:" + (message.getBytes(UTF_8).length) + "\r\n\r\n" + message);
+        assertThat(parser.offer(req2), instanceOf(NewRequest.class));
+        assertThat(parser.offer(req2), instanceOf(RequestBodyData.class));
 
-        listener.reset();
-        parser.offer(wrap("POST / HTTP/1.1\r\ncontent-length: 0\r\n\r\n"));
-        parser.offer(ByteBuffer.allocate(0));
-
-        assertThat(listener.body, empty());
+        assertThat(parser.offer(wrap("POST / HTTP/1.1\r\ncontent-length: 0\r\n\r\n")), instanceOf(NewRequest.class));
     }
 
 
@@ -245,99 +274,7 @@ public class RequestParserTest {
         return ByteBuffer.wrap(in.getBytes(StandardCharsets.US_ASCII));
     }
 
-    private static class MyRequestListener implements RequestParser.RequestListener {
-        MuHeaders headers;
-        HttpVersion proto;
-        URI uri;
-        Method method;
-        MuHeaders trailers;
-        boolean isComplete;
-        boolean hasBody;
-        List<ByteBuffer> body = new ArrayList<>();
 
-        public void reset() {
-            headers = null;
-            proto = null;
-            uri = null;
-            method = null;
-            trailers = null;
-            isComplete = false;
-            hasBody = false;
-            body.clear();
-        }
-
-        @Override
-        public void onHeaders(Method method, URI uri, HttpVersion httpProtocolVersion, MuHeaders headers, boolean hasBody) {
-            this.hasBody = hasBody;
-            this.method = method;
-            this.uri = uri;
-            this.proto = httpProtocolVersion;
-            this.headers = headers;
-        }
-
-        @Override
-        public void onBody(ByteBuffer buffer) {
-            var copy = ByteBuffer.allocate(buffer.remaining());
-            copy.put(buffer);
-            copy.flip();
-            body.add(copy);
-        }
-
-        @Override
-        public void onRequestComplete(MuHeaders trailers) {
-            this.trailers = trailers;
-            this.isComplete = true;
-        }
-
-        public ByteBuffer fullBody() {
-            int totalSize = body.stream().map(Buffer::remaining).reduce(0, Integer::sum);
-            var copy = ByteBuffer.allocate(totalSize);
-            for (ByteBuffer byteBuffer : body) {
-                byteBuffer.mark();
-                copy.put(byteBuffer);
-                byteBuffer.reset();
-            }
-            copy.flip();
-            return copy;
-        }
-
-        public String bodyAsString() {
-            ByteBuffer bb = fullBody();
-            MediaType contentType = headers.contentType();
-            Charset bodyCharset = contentType == null ? UTF_8 : Charset.forName(contentType.getParameters().getOrDefault("charset", "utf8"));
-            var cb = bodyCharset.decode(bb);
-            return cb.toString();
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            MyRequestListener that = (MyRequestListener) o;
-            return Objects.equals(headers, that.headers) &&
-                Objects.equals(proto, that.proto) &&
-                Objects.equals(uri, that.uri) &&
-                Objects.equals(trailers, that.trailers) &&
-                method == that.method;
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(headers, proto, uri, trailers, method);
-        }
-
-        @Override
-        public String toString() {
-            return "MyRequestListener{" +
-                "headers=" + headers +
-                ", proto='" + proto + '\'' +
-                ", uri=" + uri +
-                ", method=" + trailers +
-                ", method=" + method +
-                '}';
-        }
-
-    }
 
 
     /*

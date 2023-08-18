@@ -28,7 +28,6 @@ class RequestParser {
     }
 
     private final Options options;
-    private final RequestListener requestListener;
 
     private State state = State.RL_METHOD;
     private final StringBuffer cur = new StringBuffer();
@@ -62,9 +61,8 @@ class RequestParser {
         headerSize = 0;
     }
 
-    RequestParser(Options options, RequestListener requestListener) {
+    RequestParser(Options options) {
         this.options = options;
-        this.requestListener = requestListener;
     }
 
     private enum State {
@@ -77,35 +75,37 @@ class RequestParser {
 
     private static final Logger log = LoggerFactory.getLogger(RequestParser.class);
 
-    void offer(ByteBuffer bb) throws InvalidRequestException {
+    ConMessage offer(ByteBuffer bb) throws InvalidRequestException {
 
         if (state == State.RL_METHOD) {
             String s = new String(bb.array(), bb.position(), bb.limit());
-            log.info("<<\n" + s.replace("\r", "\\r").replace("\n", "\\n\r\n"));
+            if (s.length() > 200) {
+                log.info("<<\n" + s.substring(0, 200).replace("\r", "\\r").replace("\n", "\\n\r\n") + "...(" + s.length() + " total)");
+            } else {
+                log.info("<<\n" + s.replace("\r", "\\r").replace("\n", "\\n\r\n"));
+            }
         } else {
             log.info("<<\n<request body> " + bb.remaining() + " bytes");
         }
 
         while (bb.hasRemaining()) {
+            ConMessage msg;
             if (state == State.FIXED_BODY) {
-                parseFixedLengthBody(bb);
+                msg = parseFixedLengthBody(bb);
             } else if (state == State.CHUNKED_BODY) {
-                parseChunkedBody(bb);
+                msg = parseChunkedBody(bb);
             } else {
-                parseReqLineAndHeaders(bb);
+                msg = parseReqLineAndHeaders(bb);
             }
-            maybeRaiseRequestComplete();
+            if (msg != null) {
+                return msg;
+            }
         }
+        return null;
     }
 
-    void maybeRaiseRequestComplete() {
-        if (state == State.COMPLETE) {
-            requestListener.onRequestComplete(trailers);
-            reset();
-        }
-    }
-
-    private void parseReqLineAndHeaders(ByteBuffer bb) throws InvalidRequestException {
+    private ConMessage parseReqLineAndHeaders(ByteBuffer bb) throws InvalidRequestException {
+        if (state == State.COMPLETE) reset();
         while (bb.hasRemaining()) {
 
             byte c = bb.get();
@@ -193,8 +193,7 @@ class RequestParser {
                         state = State.COMPLETE;
                     }
 
-                    requestListener.onHeaders(method, requestUri, protocol, headers, state != State.COMPLETE);
-                    return; // jump out of this method to parse the body (if there is one)
+                    return new NewRequest(protocol, method, requestUri, headers, state != State.COMPLETE);
                 } else if (c == ':') {
 
                     String header = cur.toString();
@@ -257,23 +256,21 @@ class RequestParser {
                 throw new IllegalStateException("Should not be processing headers at state " + state);
             }
         }
+        return null;
     }
 
-    private void parseFixedLengthBody(ByteBuffer bb) {
+    private ConMessage parseFixedLengthBody(ByteBuffer bb) {
         long expectedRemaining = bodyLength - bodyBytesRead;
         int toRead = (int)Math.min(expectedRemaining, bb.remaining());
         bodyBytesRead += toRead;
-
         var view = bb.slice(bb.position(), toRead);
         bb.position(bb.position() + toRead);
-        requestListener.onBody(view);
-
-        if (bodyBytesRead == bodyLength) {
-            state = State.COMPLETE;
-        }
+        boolean last = bodyBytesRead == bodyLength;
+        if (last) state = State.COMPLETE;
+        return new RequestBodyData(view, last);
     }
 
-    private void parseChunkedBody(ByteBuffer bb) throws InvalidRequestException {
+    private ConMessage parseChunkedBody(ByteBuffer bb) throws InvalidRequestException {
         if (chunkState != ChunkState.DATA) {
             while (bb.hasRemaining()) {
                 byte c = bb.get();
@@ -290,7 +287,7 @@ class RequestParser {
                             trailers = MuHeaders.EMPTY;
                         }
                         state = State.COMPLETE;
-                        break;
+                        return new EndOfChunks(trailers);
                     } else if (c == ':') {
                         String header = cur.toString();
                         this.curHeader = header;
@@ -358,21 +355,19 @@ class RequestParser {
             }
         }
 
-        if (chunkState == ChunkState.DATA) {
-            while (bb.hasRemaining()) {
-                if (curChunkSize > 0) {
-                    int size = (int) Math.min(curChunkSize, bb.remaining());
-                    bodyBytesRead += size;
-                    curChunkSize -= size;
-                    var view = bb.slice(bb.position(), size);
-                    requestListener.onBody(view);
-                    bb.position(bb.position() + size);
-                } else {
-                    chunkState = ChunkState.DATA_DONE;
-                    break;
-                }
+        if (chunkState == ChunkState.DATA && bb.hasRemaining()) {
+            if (curChunkSize > 0) {
+                int size = (int) Math.min(curChunkSize, bb.remaining());
+                bodyBytesRead += size;
+                curChunkSize -= size;
+                var view = bb.slice(bb.position(), size);
+                bb.position(bb.position() + size);
+                return new RequestBodyData(view, false);
+            } else {
+                chunkState = ChunkState.DATA_DONE;
             }
         }
+        return null;
     }
 
     private void append(byte c) {
@@ -388,3 +383,10 @@ class RequestParser {
     }
 
 }
+
+
+interface ConMessage {
+}
+record NewRequest(HttpVersion version, Method method, URI uri, MuHeaders headers, boolean hasBody) implements ConMessage {}
+record RequestBodyData(ByteBuffer buffer, boolean last) implements ConMessage {}
+record EndOfChunks(MuHeaders trailers) implements ConMessage {}

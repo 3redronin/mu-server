@@ -212,6 +212,11 @@ public class MuServerBuilder {
      * @return The current Mu Server builder
      */
     public MuServerBuilder withMaxUrlSize(int size) {
+        if (size < 30) {
+            throw new IllegalArgumentException("The Max URL length must be at least 30 characters, however " + size
+                + " was specified. It is recommended that a much larger value, such as 8192 is used to cater for URLs with long " +
+                "paths or many querystring parameters.");
+        }
         this.maxUrlSize = size;
         return this;
     }
