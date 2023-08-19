@@ -56,11 +56,11 @@ public class MuResponseImpl implements MuResponse {
         ByteBuffer headerBuf = headersBuffer(true, headers);
         blockingWrite(headerBuf, body);
         state = ResponseState.FULL_SENT;
-        data.connection.onResponseCompleted(this);
+        data.exchange.onResponseCompleted();
     }
 
     private boolean prepareForGzip() {
-        var settings = data.server.settings;
+        var settings = data.acceptor().muServer.settings;
         if (!settings.gzipEnabled()) return false;
         if (headers.contains(HeaderNames.CONTENT_ENCODING)) return false; // don't re-encode something
 
@@ -73,7 +73,7 @@ public class MuResponseImpl implements MuResponse {
         headers.add(HeaderNames.VARY, HeaderNames.ACCEPT_ENCODING); // TODO change to add if not already there
 
         boolean clientSupports = false;
-        for (ParameterizedHeaderWithValue acceptEncoding : data.requestHeaders.acceptEncoding()) {
+        for (ParameterizedHeaderWithValue acceptEncoding : data.requestHeaders().acceptEncoding()) {
             if (acceptEncoding.value().equalsIgnoreCase("gzip")) {
                 clientSupports = true;
                 break;
@@ -99,7 +99,7 @@ public class MuResponseImpl implements MuResponse {
                     int written = tlsChannel.write(buffer).get(10, TimeUnit.SECONDS).intValue();
                     if (written > 0) {
                         log.info("Wrote " + written + " bytes");
-                        data.server.stats.onBytesSent(written);
+                        data.acceptor().muServer.stats.onBytesSent(written); // TODO do this somewhere else?
                     } else if (written == -1) {
                         state = ResponseState.ERRORED;
                         throw new IOException("Write failed");
@@ -121,7 +121,7 @@ public class MuResponseImpl implements MuResponse {
     }
 
     private ByteBuffer headersBuffer(boolean reqLine, MuHeaders headers) {
-        return http1HeadersBuffer(headers, reqLine ? data.httpVersion : null, status, "OK");
+        return http1HeadersBuffer(headers, reqLine ? data.newRequest.version() : null, status, "OK");
     }
 
     static ByteBuffer http1HeadersBuffer(MuHeaders headers, HttpVersion httpVersion, int status, String statusString) {
@@ -170,7 +170,7 @@ public class MuResponseImpl implements MuResponse {
         if (state == ResponseState.STREAMING) {
             state = ResponseState.FINISHING;
             if (headers.containsValue(HeaderNames.TRANSFER_ENCODING, HeaderValues.CHUNKED, true)) {
-                boolean sendTrailers = trailers != null && Headtils.getParameterizedHeaderWithValues(data.requestHeaders, HeaderNames.TE)
+                boolean sendTrailers = trailers != null && Headtils.getParameterizedHeaderWithValues(data.requestHeaders(), HeaderNames.TE)
                     .stream().anyMatch(v -> v.value().equalsIgnoreCase("trailers"));
                 if (sendTrailers) {
                     var trailersBuffer = headersBuffer(false, trailers);
@@ -180,12 +180,12 @@ public class MuResponseImpl implements MuResponse {
                 }
             }
             state = ResponseState.FINISHED;
-            data.connection.onResponseCompleted(this);
+            data.exchange.onResponseCompleted();
         } else if (state == ResponseState.NOTHING) {
             ByteBuffer headerBuf = headersBuffer(true, headers);
             blockingWrite(headerBuf);
             state = ResponseState.FINISHED;
-            data.connection.onResponseCompleted(this);
+            data.exchange.onResponseCompleted();
         }
     }
 

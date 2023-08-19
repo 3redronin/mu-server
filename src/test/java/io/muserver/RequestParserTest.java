@@ -19,7 +19,7 @@ import static org.junit.Assert.assertThrows;
 
 public class RequestParserTest {
 
-    private final RequestParser parser = new RequestParser(RequestParser.Options.defaultOptions);
+    private final RequestParser parser = new RequestParser(8192, 1024 * 24);
 
 
     @Test

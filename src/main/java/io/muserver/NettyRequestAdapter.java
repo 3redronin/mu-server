@@ -68,6 +68,11 @@ class NettyRequestAdapter implements MuRequest {
     }
 
     @Override
+    public HttpVersion httpVersion() {
+        throw new RuntimeException("Not implemented");
+    }
+
+    @Override
     public HttpConnection connection() {
         return this.httpExchange.connection();
     }

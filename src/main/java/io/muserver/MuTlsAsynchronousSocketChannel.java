@@ -50,7 +50,6 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
         pendingTasks.add(() -> {
             SSLSession session = sslEngine.getSession();
             muConnection.handshakeComplete(session.getProtocol(), session.getCipherSuite());
-            ((MuServer2)muConnection.server()).onConnectionAccepted(muConnection);
         });
         sslEngine.beginHandshake();
         handshakeStatus = sslEngine.getHandshakeStatus();

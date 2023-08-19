@@ -16,6 +16,8 @@ import java.util.stream.Collectors;
 
 class MuServer2 implements MuServer {
     private static final Logger log = LoggerFactory.getLogger(MuServer2.class);
+
+    // todo delete this and just get it from the acceptor
     private final ConcurrentHashMap.KeySetView<MuHttp1Connection,Boolean> connections = ConcurrentHashMap.newKeySet();
     private final List<ConnectionAcceptor> acceptors = new LinkedList<>();
     final List<MuHandler> handlers;
@@ -256,6 +258,18 @@ class MuServer2 implements MuServer {
         if (connections.remove(connection)) {
             log.info("Connection ended: " + connection);
         }
+    }
+
+    public void onExchangeStarted(MuExchange exchange) {
+        stats.onRequestStarted(exchange.request);
+    }
+
+    public void onExchangeComplete(MuExchange exchange) {
+        stats.onRequestEnded(exchange.request);
+    }
+
+    public void onInvalidRequest(InvalidRequestException e) {
+        stats.onInvalidRequest();
     }
 }
 

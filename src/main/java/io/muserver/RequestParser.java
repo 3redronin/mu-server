@@ -10,25 +10,8 @@ import java.util.List;
 
 class RequestParser {
 
-    static class Options {
-        final int maxUrlLength;
-        final int maxHeaderSize;
-
-        Options(int maxUrlLength, int maxHeaderSize) {
-            this.maxHeaderSize = maxHeaderSize;
-            if (maxUrlLength < 30) {
-                throw new IllegalArgumentException("The Max URL length must be at least 30 characters, however " + maxUrlLength
-                    + " was specified. It is recommended that a much larger value, such as 4096 is used to cater for URLs with long " +
-                    "paths or many querystring parameters.");
-            }
-            this.maxUrlLength = maxUrlLength;
-        }
-
-        final static Options defaultOptions = new Options(16 * 1024, 16 * 1024);
-    }
-
-    private final Options options;
-
+    final int maxUrlLength;
+    final int maxHeaderSize;
     private State state = State.RL_METHOD;
     private final StringBuffer cur = new StringBuffer();
     private Method method;
@@ -61,8 +44,9 @@ class RequestParser {
         headerSize = 0;
     }
 
-    RequestParser(Options options) {
-        this.options = options;
+    RequestParser(int maxUrlLength, int maxHeaderSize) {
+        this.maxUrlLength = maxUrlLength;
+        this.maxHeaderSize = maxHeaderSize;
     }
 
     private enum State {
@@ -111,7 +95,7 @@ class RequestParser {
             byte c = bb.get();
 
             headerSize++;
-            if (headerSize > options.maxHeaderSize) {
+            if (headerSize > maxHeaderSize) {
                 throw new InvalidRequestException(431, "Request Header Fields Too Large", "Header length (including all white space) reached " + headerSize + " bytes.");
             }
 
@@ -147,8 +131,8 @@ class RequestParser {
                     cur.setLength(0);
                 } else {
                     append(c);
-                    if (cur.length() > options.maxUrlLength) {
-                        throw new InvalidRequestException(414, "URI Too Long", "The URL " + cur + " exceeded the maximum URL length allowed, which is " + options.maxUrlLength);
+                    if (cur.length() > maxUrlLength) {
+                        throw new InvalidRequestException(414, "URI Too Long", "The URL " + cur + " exceeded the maximum URL length allowed, which is " + maxUrlLength);
                     }
                 }
             } else if (state == State.RL_PROTO) {
@@ -373,15 +357,6 @@ class RequestParser {
     private void append(byte c) {
         cur.append((char) c);
     }
-
-    interface RequestListener {
-        void onHeaders(Method method, URI uri, HttpVersion httpProtocolVersion, MuHeaders headers, boolean hasBody);
-
-        void onBody(ByteBuffer buffer);
-
-        void onRequestComplete(MuHeaders trailers);
-    }
-
 }
 
 

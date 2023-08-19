@@ -37,7 +37,7 @@ public class MuRequestImpl implements MuRequest {
         this.uri = getUri(headers, serverUri.getScheme(), host, relativeUri, serverUri);
         this.headers = headers;
         this.hasBody = hasBody;
-        this.state = hasBody ? RequestState.COMPLETE : RequestState.RECEIVING_BODY;
+        this.state = hasBody ? RequestState.RECEIVING_BODY : RequestState.COMPLETE;
     }
 
     private static URI getUri(Headers h, String scheme, String hostHeader, String requestUri, URI defaultValue) {
@@ -185,7 +185,7 @@ public class MuRequestImpl implements MuRequest {
 
     @Override
     public MuServer server() {
-        return data.server;
+        return data.acceptor().muServer;
     }
 
     @Override
@@ -195,7 +195,12 @@ public class MuRequestImpl implements MuRequest {
 
     @Override
     public String protocol() {
-        return data.httpVersion.version();
+        return httpVersion().version();
+    }
+
+    @Override
+    public HttpVersion httpVersion() {
+        return data.newRequest.version();
     }
 
     @Override
@@ -210,7 +215,7 @@ public class MuRequestImpl implements MuRequest {
 
     @Override
     public String toString() {
-        return "MuRequest " + data.httpVersion.version() + " " + method + " " + serverUri;
+        return "MuRequest " + data.newRequest.version().version() + " " + method + " " + serverUri;
     }
 
     void addContext(String contextToAdd) {

@@ -232,8 +232,16 @@ public interface MuRequest {
     /**
      * The protocol for the request.
      * @return A string such as <code>HTTP/1.1</code> or <code>HTTP/2</code>
+     * @deprecated use @{link {@link #httpVersion()}} instead
      */
+    @Deprecated
     String protocol();
+
+    /**
+     * The HTTP protocol version used
+     * @return THe protocol used
+     */
+    HttpVersion httpVersion();
 
     /**
      * @return The HTTP connection that this request is sent over.

@@ -11,6 +11,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.AsynchronousServerSocketChannel;
 import java.nio.channels.AsynchronousSocketChannel;
 import java.nio.channels.CompletionHandler;
+import java.util.concurrent.ConcurrentHashMap;
 
 class ConnectionAcceptor implements CompletionHandler<AsynchronousSocketChannel, MuServer2> {
     private static final Logger log = LoggerFactory.getLogger(ConnectionAcceptor.class);
@@ -19,9 +20,11 @@ class ConnectionAcceptor implements CompletionHandler<AsynchronousSocketChannel,
     final InetSocketAddress address;
 
     private volatile HttpsConfig httpsConfig;
+    private final ConcurrentHashMap.KeySetView<MuHttp1Connection, Boolean> connections = ConcurrentHashMap.newKeySet();
 
     final URI uri;
     private volatile boolean stopped = false;
+    MuServer2 muServer;
 
     ConnectionAcceptor(AsynchronousServerSocketChannel channel, InetSocketAddress address, HttpsConfig httpsConfig) {
         this.acceptChannel = channel;
@@ -43,6 +46,9 @@ class ConnectionAcceptor implements CompletionHandler<AsynchronousSocketChannel,
     }
 
     public void readyToAccept(MuServer2 muServer) {
+        if (this.muServer == null) {
+            this.muServer = muServer;
+        }
         if (!stopped) {
             acceptChannel.accept(muServer, this);
         }
@@ -60,8 +66,8 @@ class ConnectionAcceptor implements CompletionHandler<AsynchronousSocketChannel,
 
 
             if (httpsConfig == null) {
-                MuHttp1Connection connection = new MuHttp1Connection(muServer, channel, remoteAddress, address, ByteBuffer.allocate(10000));
-                muServer.onConnectionAccepted(connection);
+                MuHttp1Connection connection = new MuHttp1Connection(this, channel, remoteAddress, address, ByteBuffer.allocate(10000));
+                onConnectionEstablished(connection);
                 connection.readyToRead();
             } else {
                 var sslContext = httpsConfig.sslContext();
@@ -73,7 +79,7 @@ class ConnectionAcceptor implements CompletionHandler<AsynchronousSocketChannel,
                 var netBuffer = ByteBuffer.allocate(engine.getSession().getPacketBufferSize());
                 var tlsChannel = new MuTlsAsynchronousSocketChannel(channel, engine, appBuffer, netBuffer);
 
-                MuHttp1Connection connection = new MuHttp1Connection(muServer, tlsChannel, remoteAddress, address, appBuffer);
+                MuHttp1Connection connection = new MuHttp1Connection(this, tlsChannel, remoteAddress, address, appBuffer);
                 tlsChannel.beginHandshake(connection);
             }
         } catch (Exception e) {
@@ -90,6 +96,11 @@ class ConnectionAcceptor implements CompletionHandler<AsynchronousSocketChannel,
             muServer.stats.onFailedToConnect();
         }
 
+    }
+
+    void onConnectionEstablished(MuHttp1Connection connection) {
+        connections.add(connection);
+        muServer.onConnectionAccepted(connection);
     }
 
 
@@ -109,5 +120,25 @@ class ConnectionAcceptor implements CompletionHandler<AsynchronousSocketChannel,
 
     public void changeHttpsConfig(HttpsConfig newHttpsConfig) {
         this.httpsConfig = newHttpsConfig;
+    }
+
+    public void onExchangeStarted(MuExchange exchange) {
+        muServer.onExchangeStarted(exchange);
+    }
+
+    public void onExchangeComplete(MuExchange exchange) {
+        muServer.onExchangeComplete(exchange);
+    }
+
+    public void onInvalidRequest(InvalidRequestException e) {
+        muServer.onInvalidRequest(e);
+    }
+
+    public void onConnectionEnded(MuHttp1Connection connection, Throwable exc) {
+        if (connections.remove(connection)) {
+            muServer.onConnectionEnded(connection);
+        } else {
+            log.warn("onConnectionEnded called again for " + connection, exc);
+        }
     }
 }

@@ -21,7 +21,7 @@ import java.util.concurrent.ExecutionException;
 
 class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Object> {
     private static final Logger log = LoggerFactory.getLogger(MuHttp1Connection.class);
-    private final MuServer2 server;
+    final ConnectionAcceptor acceptor;
     private final AsynchronousSocketChannel channel;
     private final InetSocketAddress remoteAddress;
     private final InetSocketAddress localAddress;
@@ -66,89 +66,12 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
         }
     }
 
-    public MuHttp1Connection(MuServer2 server, AsynchronousSocketChannel channel, InetSocketAddress remoteAddress, InetSocketAddress localAddress, ByteBuffer readBuffer) {
-        this.server = server;
+    public MuHttp1Connection(ConnectionAcceptor acceptor, AsynchronousSocketChannel channel, InetSocketAddress remoteAddress, InetSocketAddress localAddress, ByteBuffer readBuffer) {
+        this.acceptor = acceptor;
         this.channel = channel;
         this.remoteAddress = remoteAddress;
         this.localAddress = localAddress;
-        this.requestParser = new RequestParser(new RequestParser.Options(8192, 8192), new RequestParser.RequestListener() {
-            @Override
-            public void onHeaders(Method method, URI uri, HttpVersion httpProtocolVersion, MuHeaders headers, boolean hasBody) {
-                var data = new MuExchangeData(server, MuHttp1Connection.this, httpProtocolVersion, headers);
-                String relativeUri;
-                try {
-                    relativeUri = getRelativeUrl(uri);
-                } catch (InvalidHttpRequestException e) {
-                    // TODO handle this
-                    throw new RuntimeException(e);
-                } catch (RedirectException e) {
-                    // TODO redirect it
-                    throw new RuntimeException(e);
-                }
-
-                if (headers.containsValue(HeaderNames.EXPECT, HeaderValues.CONTINUE, true)) {
-                    long proposedLength = headers.getLong(HeaderNames.CONTENT_LENGTH.toString(), -1L);
-                    // TODO don't block and handle timeouts
-                    try {
-                        if (proposedLength > server.maxRequestSize()) {
-                            var responseHeaders = MuHeaders.responseHeaders();
-                            responseHeaders.set(HeaderNames.CONTENT_LENGTH, 0);
-                            channel.write(MuResponseImpl.http1HeadersBuffer(responseHeaders, HttpVersion.HTTP_1_1, 417, "Expectation Failed")).get();
-                            return;
-                        } else {
-                            channel.write(Mutils.toByteBuffer("HTTP/1.1 100 Continue\r\n\r\n")).get();
-                        }
-                    } catch (InterruptedException e) {
-                        throw new RuntimeException(e);
-                    } catch (ExecutionException e) {
-                        throw new RuntimeException(e.getCause());
-                    }
-
-                }
-
-                var req = new MuRequestImpl(data, method, relativeUri, headers, hasBody);
-                var resp = new MuResponseImpl(data, channel);
-                exchange = new MuExchange(data, req, resp);
-                server.stats.onRequestStarted(req);
-
-                try {
-                    boolean handled = false;
-                    for (MuHandler muHandler : server.handlers) {
-                        handled = muHandler.handle(req, resp);
-                        if (handled) {
-                            break;
-                        }
-                        if (req.isAsync()) {
-                            throw new IllegalStateException(muHandler.getClass() + " returned false however this is not allowed after starting to handle a request asynchronously.");
-                        }
-                    }
-                    if (!handled) {
-                        throw new NotFoundException();
-                    }
-                    resp.end();
-                } catch (Throwable e) {
-                    useCustomExceptionHandlerOrFireIt(exchange, e);
-                }
-            }
-
-            @Override
-            public void onBody(ByteBuffer buffer) {
-                log.info("Ignoring body bit of size " + buffer.remaining());
-            }
-
-            @Override
-            public void onRequestComplete(MuHeaders trailers) {
-                log.info("Request complete. Trailers=" + trailers);
-                MuExchange e = exchange;
-                if (e != null) {
-                    e.onRequestCompleted(trailers);
-                    if (e.state.endState()) {
-                        exchange = null;
-                    }
-                }
-            }
-        });
-
+        this.requestParser = new RequestParser(acceptor.muServer.maxUrlSize(), acceptor.muServer.maxRequestHeadersSize());
         this.readBuffer = readBuffer;
     }
 
@@ -170,6 +93,7 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
     void handshakeComplete(String protocol, String cipher) {
         this.httpsProtocol = protocol;
         this.cipher = cipher;
+        acceptor.onConnectionEstablished(this);
         readyToRead();
     }
 
@@ -177,16 +101,16 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
         channel.read(readBuffer, null, this);
     }
 
-    void onResponseCompleted(MuResponseImpl muResponse) {
-        MuExchange e = exchange;
-        if (e != null) {
-            e.onResponseCompleted();
-            if (e.state.endState()) {
-                exchange = null;
-            }
-            completeGracefulShutdownMaybe();
-        }
-    }
+//    void onResponseCompleted(MuResponseImpl muResponse) {
+//        MuExchange e = exchange;
+//        if (e != null) {
+//            e.onResponseCompleted();
+//            if (e.state.endState()) {
+//                exchange = null;
+//            }
+//            completeGracefulShutdownMaybe();
+//        }
+//    }
 
     @Override
     public String protocol() {
@@ -251,7 +175,7 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
 
     @Override
     public MuServer server() {
-        return server;
+        return acceptor.muServer;
     }
 
     public URI serverUri() {
@@ -275,6 +199,68 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
         return Optional.empty();
     }
 
+    private void handleNewRequest(NewRequest newRequest) {
+        var data = new MuExchangeData(MuHttp1Connection.this, newRequest);
+        String relativeUri;
+        try {
+            relativeUri = getRelativeUrl(newRequest.uri());
+        } catch (InvalidHttpRequestException e) {
+            // TODO handle this
+            throw new RuntimeException(e);
+        } catch (RedirectException e) {
+            // TODO redirect it
+            throw new RuntimeException(e);
+        }
+
+        var headers = newRequest.headers();
+
+        if (headers.containsValue(HeaderNames.EXPECT, HeaderValues.CONTINUE, true)) {
+            long proposedLength = headers.getLong(HeaderNames.CONTENT_LENGTH.toString(), -1L);
+            // TODO don't block and handle timeouts
+            try {
+                if (proposedLength > acceptor.muServer.maxRequestSize()) {
+                    var responseHeaders = MuHeaders.responseHeaders();
+                    responseHeaders.set(HeaderNames.CONTENT_LENGTH, 0);
+                    channel.write(MuResponseImpl.http1HeadersBuffer(responseHeaders, HttpVersion.HTTP_1_1, 417, "Expectation Failed")).get();
+                    return;
+                } else {
+                    channel.write(Mutils.toByteBuffer("HTTP/1.1 100 Continue\r\n\r\n")).get();
+                }
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            } catch (ExecutionException e) {
+                throw new RuntimeException(e.getCause());
+            }
+
+        }
+
+        var req = new MuRequestImpl(data, newRequest.method(), relativeUri, headers, newRequest.hasBody());
+        var resp = new MuResponseImpl(data, channel);
+        exchange = new MuExchange(data, req, resp);
+        data.exchange = exchange;
+        onExchangeStarted(exchange);
+
+        try {
+            boolean handled = false;
+            for (MuHandler muHandler : acceptor.muServer.handlers) {
+                handled = muHandler.handle(req, resp);
+                if (handled) {
+                    break;
+                }
+                if (req.isAsync()) {
+                    throw new IllegalStateException(muHandler.getClass() + " returned false however this is not allowed after starting to handle a request asynchronously.");
+                }
+            }
+            if (!handled) {
+                throw new NotFoundException();
+            }
+            resp.end();
+        } catch (Throwable e) {
+            useCustomExceptionHandlerOrFireIt(exchange, e);
+        }
+    }
+
+
     /**
      * Read from socket completed
      */
@@ -283,13 +269,29 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
         log.info("Con read completed: " + result);
         if (result != -1) {
             readBuffer.flip();
-            server.stats.onBytesRead(result);
+            acceptor.muServer.stats.onBytesRead(result); // TODO handle this differently?
             try {
-                requestParser.offer(readBuffer);
-                readBuffer.compact();
-                readyToRead();
+                var msg = requestParser.offer(readBuffer);
+                if (msg instanceof NewRequest nr) {
+                    handleNewRequest(nr);
+                } else if (msg == null) {
+                    readBuffer.compact();
+                    if (readBuffer.hasRemaining()) {
+                        log.info("Going to read into the remaining " + readBuffer.remaining() + " in the hope of getting a full message");
+                    } else {
+                        // TODO get a  bigger buffer
+                        throw new RuntimeException("Buffer is full and there is no message!");
+                    }
+                    readyToRead();
+                } else {
+                    MuExchange e = exchange;
+                    if (e != null) {
+                        e.onMessage(msg);
+                    }
+                }
             } catch (InvalidRequestException e) {
-                server.stats.onInvalidRequest();
+                // todo write it back
+                acceptor.onInvalidRequest(e);
                 forceShutdown();
             }
         } else {
@@ -304,7 +306,7 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
      */
     @Override
     public void failed(Throwable exc, Object attachment) {
-        server.onConnectionFailed(this, exc);
+        acceptor.onConnectionEnded(this, exc);
         var logIt = !(exc instanceof ClosedChannelException);
         if (logIt) { // TODO also log if requests are in progress
             log.error("Read failed", exc);
@@ -321,7 +323,7 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
         } catch (IOException e) {
             log.info("Error while closing channel: " + e.getMessage());
         } finally {
-            server.onConnectionEnded(this);
+            acceptor.onConnectionEnded(this, null);
         }
     }
 
@@ -354,6 +356,7 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
                         public void failed(Throwable exc, Void attachment) {
                             log.info("Graceful shutdown failed; closing: " + exc.getClass());
                             tlsC.closeQuietly();
+                            acceptor.onConnectionEnded(MuHttp1Connection.this, exc); // TODO confirm this
                         }
                     }, null);
                 } else {
@@ -373,5 +376,17 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
         String protocol = isHttps() ? "HTTPS" : "HTTP";
         String status = channel.isOpen() ? "Open" : "Closed";
         return status + " " + protocol + " 1.1 connection from " + remoteAddress;
+    }
+
+    private void onExchangeStarted(MuExchange exchange) {
+        this.exchange = exchange;
+        acceptor.onExchangeStarted(exchange);
+    }
+
+    public void onExchangeComplete(MuExchange muExchange) {
+        this.exchange = null;
+        acceptor.onExchangeComplete(muExchange);
+        readBuffer.clear();
+        readyToRead();
     }
 }

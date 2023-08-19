@@ -36,7 +36,7 @@ class MuExchange {
         this.response = response;
     }
 
-    void onRequestCompleted(Headers trailers) {
+    private void onRequestCompleted(Headers trailers) {
         this.request.onComplete(trailers);
         if (response.responseState().endState()) onCompleted();
     }
@@ -48,7 +48,7 @@ class MuExchange {
     private void onCompleted() {
         boolean good = response.responseState().completedSuccessfully() && request.requestState() == RequestState.COMPLETE;
         this.state = good ? HttpExchangeState.COMPLETE : HttpExchangeState.ERRORED;
-        this.data.server.stats.onRequestEnded(request);
+        this.data.connection.onExchangeComplete(this);
     }
 
     public boolean onException(Throwable cause) {
@@ -105,32 +105,52 @@ class MuExchange {
             } else {
                 log.info(cause.getClass().getName() + " while handling " + request + " - note a " + response.status() +
                     " was already sent and the client may have received an incomplete response. Exception was " + cause.getMessage());
+                onCompleted();
             }
         } catch (Exception e) {
             log.warn("Error while processing processing " + cause + " for " + request, e);
+            onCompleted();
         } finally {
             if (streamUnrecoverable) {
                 response.onCancelled(ResponseState.ERRORED);
                 request.onCancelled(ResponseState.ERRORED, cause);
                 data.connection.initiateShutdown();
             }
-            onCompleted();
         }
         return streamUnrecoverable;
     }
 
 
+    public void onMessage(ConMessage msg) {
+        if (msg instanceof RequestBodyData rbd) {
+            if (rbd.last()) {
+                onRequestCompleted(MuHeaders.EMPTY);
+            }
+        } else if (msg instanceof EndOfChunks eoc) {
+            onRequestCompleted(eoc.trailers());
+        }
+    }
 }
 class MuExchangeData {
-    final MuServer2 server;
     final MuHttp1Connection connection;
-    final HttpVersion httpVersion;
-    final MuHeaders requestHeaders;
+    final NewRequest newRequest;
+    MuExchange exchange;
 
-    MuExchangeData(MuServer2 server, MuHttp1Connection connection, HttpVersion httpVersion, MuHeaders requestHeaders) {
-        this.server = server;
+    MuExchangeData(MuHttp1Connection connection, NewRequest newRequest) {
         this.connection = connection;
-        this.httpVersion = httpVersion;
-        this.requestHeaders = requestHeaders;
+        this.newRequest = newRequest;
     }
+
+    Headers requestHeaders() {
+        return newRequest.headers();
+    }
+
+    MuServer2 server() {
+        return connection.acceptor.muServer;
+    }
+
+    ConnectionAcceptor acceptor() {
+        return connection.acceptor;
+    }
+
 }
