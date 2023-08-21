@@ -12,6 +12,7 @@ import java.nio.channels.AsynchronousServerSocketChannel;
 import java.nio.channels.AsynchronousSocketChannel;
 import java.nio.channels.CompletionHandler;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 class ConnectionAcceptor implements CompletionHandler<AsynchronousSocketChannel, MuServer2> {
     private static final Logger log = LoggerFactory.getLogger(ConnectionAcceptor.class);
@@ -23,7 +24,7 @@ class ConnectionAcceptor implements CompletionHandler<AsynchronousSocketChannel,
     private final ConcurrentHashMap.KeySetView<MuHttp1Connection, Boolean> connections = ConcurrentHashMap.newKeySet();
 
     final URI uri;
-    private volatile boolean stopped = false;
+    private final AtomicBoolean stopped = new AtomicBoolean(false);
     MuServer2 muServer;
 
     ConnectionAcceptor(AsynchronousServerSocketChannel channel, InetSocketAddress address, HttpsConfig httpsConfig) {
@@ -31,6 +32,10 @@ class ConnectionAcceptor implements CompletionHandler<AsynchronousSocketChannel,
         this.address = address;
         this.httpsConfig = httpsConfig;
         this.uri = URI.create("http" + (httpsConfig == null ? "" : "s") + "://localhost:" + address.getPort());
+    }
+
+    public int connectionCount() {
+        return connections.size();
     }
 
     public HttpsConfig httpsConfig() {
@@ -49,7 +54,7 @@ class ConnectionAcceptor implements CompletionHandler<AsynchronousSocketChannel,
         if (this.muServer == null) {
             this.muServer = muServer;
         }
-        if (!stopped) {
+        if (!stopped.get()) {
             acceptChannel.accept(muServer, this);
         }
     }
@@ -63,7 +68,6 @@ class ConnectionAcceptor implements CompletionHandler<AsynchronousSocketChannel,
         InetSocketAddress remoteAddress = null;
         try {
             remoteAddress = (InetSocketAddress) channel.getRemoteAddress();
-
 
             if (httpsConfig == null) {
                 MuHttp1Connection connection = new MuHttp1Connection(this, channel, remoteAddress, address, ByteBuffer.allocate(10000));
@@ -106,16 +110,23 @@ class ConnectionAcceptor implements CompletionHandler<AsynchronousSocketChannel,
 
     @Override
     public void failed(Throwable exc, MuServer2 server) {
-        if (!stopped) {
+        if (!stopped.get()) {
             readyToAccept(server);
             log.warn("Error while accepting socket", exc);
             server.stats.onFailedToConnect();
         }
     }
 
-    public void stop() throws IOException {
-        stopped = true;
-        acceptChannel.close();
+    public void stopAccepting() throws IOException {
+        if (stopped.compareAndSet(false, true)) {
+            acceptChannel.close();
+            for (MuHttp1Connection connection : connections) {
+                if (connection.activeRequests().isEmpty()) {
+                    log.info("Initiating graceful shutdown of " + connection);
+                    connection.initiateShutdown();
+                }
+            }
+        }
     }
 
     public void changeHttpsConfig(HttpsConfig newHttpsConfig) {
@@ -127,6 +138,9 @@ class ConnectionAcceptor implements CompletionHandler<AsynchronousSocketChannel,
     }
 
     public void onExchangeComplete(MuExchange exchange) {
+        if (stopped.get()) {
+            exchange.data.connection.initiateShutdown();
+        }
         muServer.onExchangeComplete(exchange);
     }
 
@@ -137,8 +151,14 @@ class ConnectionAcceptor implements CompletionHandler<AsynchronousSocketChannel,
     public void onConnectionEnded(MuHttp1Connection connection, Throwable exc) {
         if (connections.remove(connection)) {
             muServer.onConnectionEnded(connection);
-        } else {
-            log.warn("onConnectionEnded called again for " + connection, exc);
+        } else if (log.isDebugEnabled()) {
+            log.debug("onConnectionEnded called again for " + connection, exc);
+        }
+    }
+
+    public void killConnections() {
+        for (MuHttp1Connection connection : connections) {
+            connection.forceShutdown();
         }
     }
 }

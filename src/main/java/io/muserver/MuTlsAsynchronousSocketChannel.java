@@ -19,6 +19,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
     private static final Logger log = LoggerFactory.getLogger(MuTlsAsynchronousSocketChannel.class);
@@ -30,6 +31,7 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
     private final ByteBuffer netBuffer;
     private MuHttp1Connection muConnection;
     private final ConcurrentLinkedQueue<Runnable> pendingTasks = new ConcurrentLinkedQueue<>();
+    private final AtomicBoolean shutdownInitiated = new AtomicBoolean(false);
 
     public MuTlsAsynchronousSocketChannel(AsynchronousSocketChannel socketChannel, SSLEngine sslEngine, ByteBuffer appBuffer, ByteBuffer netBuffer) {
         super(socketChannel.provider());
@@ -128,7 +130,7 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
     private void abortHandshake(Throwable exc) {
         log.error("Error while handshaking", exc);
         closeQuietly();
-        // todo: what to do with pending items?
+        // todo what to do with pending items?
         // e.g. if TLS-close handshaking is aborted then it should remove the connection from the server connections still
     }
 
@@ -177,7 +179,7 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
     @Override
     public AsynchronousSocketChannel shutdownInput() throws IOException {
         log.info("Closing sslEngine inbound");
-        sslEngine.closeInbound();
+        sslEngine.closeInbound(); // todo handshake? or not because this type is initiated from the client?
         return socketChannel.shutdownInput();
     }
 
@@ -187,13 +189,21 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
     }
 
     public <A> void shutdownOutputAsync(CompletionHandler<Void, A> handler, A attachment) {
+        boolean shuttingDown = shutdownInitiated.compareAndSet(false, true);
+        if (!shuttingDown) {
+            log.info("Already was shut down so doing nothing");
+            handler.failed(new RuntimeException("already closing"), attachment);
+            return;
+        }
         log.info("Closing sslEngine outbound");
         sslEngine.closeOutbound();
         handshakeStatus = sslEngine.getHandshakeStatus();
+        log.info("hs=" + handshakeStatus);
         pendingTasks.add(() -> {
             log.info("Graceful TLS shutdown complete so closing output. Inbound done=" + sslEngine.isInboundDone());
             try {
                 socketChannel.shutdownOutput();
+                socketChannel.shutdownInput();
                 handler.completed(null, attachment);
             } catch (IOException e) {
                 handler.failed(e, attachment);
@@ -332,6 +342,7 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
 
     @Override
     public void close() throws IOException {
+        log.info("Closig tls channel when " + handshakeStatus);
         socketChannel.close();
     }
 

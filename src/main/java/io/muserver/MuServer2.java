@@ -90,7 +90,7 @@ class MuServer2 implements MuServer {
 
     @Override
     public void stop() {
-        stop(0, TimeUnit.SECONDS);
+        stop(5, TimeUnit.SECONDS);
     }
 
     @Override
@@ -99,37 +99,26 @@ class MuServer2 implements MuServer {
 
         for (ConnectionAcceptor acceptor : acceptors) {
             try {
-                acceptor.stop();
+                acceptor.stopAccepting();
             } catch (IOException e) {
                 log.warn("Error stopping " + acceptor + ": " + e.getMessage());
             }
         }
-
         log.info("Acceptors stopped");
-
-
-        for (MuHttp1Connection connection : connections) {
-            log.info("Closing " + connection);
-            connection.initiateShutdown();
-        }
 
         var now = System.currentTimeMillis();
         long timeoutMillis = unit.toMillis(timeout);
-        while (!connections.isEmpty()) {
+        while (stats.activeConnections() > 0) {
             if (!((System.currentTimeMillis() - now) < timeoutMillis)) break;
             try {
-                log.info("Waiting for " + connections.size() + " connections to finish");
-                for (MuHttp1Connection connection : connections) {
-                    log.info(" > " + connection);
-                }
+                log.info("Waiting for " + stats.activeConnections() + " connections to finish");
                 Thread.sleep(50);
             } catch (InterruptedException e) {
                 break;
             }
         }
-        for (MuHttp1Connection connection : connections) {
-            log.warn("Killing connection " + connection);
-            connection.forceShutdown();
+        for (ConnectionAcceptor acceptor : acceptors) {
+            acceptor.killConnections();
         }
 
         log.info("Stop completed");
@@ -251,12 +240,13 @@ class MuServer2 implements MuServer {
 
     void onConnectionFailed(MuHttp1Connection connection, Throwable exc) {
         log.info("Connection failed: " + exc.getMessage());
-        connections.remove(connection);
+        onConnectionEnded(connection);
     }
 
     void onConnectionEnded(MuHttp1Connection connection) {
         if (connections.remove(connection)) {
             log.info("Connection ended: " + connection);
+            stats.onConnectionClosed();
         }
     }
 

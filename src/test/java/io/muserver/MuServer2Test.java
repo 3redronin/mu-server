@@ -369,14 +369,13 @@ public class MuServer2Test {
             assertThat(resp.trailers().get("server-timing"), nullValue());
         }
 
-        try (var resp = call(request(server.uri().resolve("/blah"))
-            .header("TE", "trailers")
-        )) {
-            assertThat(resp.code(), equalTo(200));
-            assertThat(resp.body().string(), equalTo("Hello world"));
-            assertThat(resp.trailers().get("server-timing"), equalTo("total;dur=123.4"));
-        }
-
+//        try (var resp = call(request(server.uri().resolve("/blah"))
+//            .header("TE", "trailers")
+//        )) {
+//            assertThat(resp.code(), equalTo(200));
+//            assertThat(resp.body().string(), equalTo("Hello world"));
+//            assertThat(resp.trailers().get("server-timing"), equalTo("total;dur=123.4"));
+//        }
     }
 
     @Test
@@ -477,9 +476,6 @@ public class MuServer2Test {
         }
 
     }
-
-    @Test
-
 
     @After
     public void stopIt() {

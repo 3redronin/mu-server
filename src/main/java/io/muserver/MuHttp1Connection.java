@@ -342,13 +342,13 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
         if (!outputClosed) {
             outputClosed = true;
             try {
-                if (channel instanceof MuTlsAsynchronousSocketChannel) {
-                    var tlsC = (MuTlsAsynchronousSocketChannel) channel;
+                if (channel instanceof MuTlsAsynchronousSocketChannel tlsC) {
                     log.info("Initiating graceful shutdown");
                     tlsC.shutdownOutputAsync(new CompletionHandler<Void, Void>() {
                         @Override
                         public void completed(Void result, Void attachment) {
                             log.info("Outbound is closed and inputClosed=" + inputClosed);
+                            inputClosed = true;
                             completeGracefulShutdownMaybe();
                         }
 
