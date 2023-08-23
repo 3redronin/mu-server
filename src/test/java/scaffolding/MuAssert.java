@@ -78,7 +78,8 @@ public class MuAssert {
             }
         }
         try {
-            assertThat(actual.apply(), matcher);
+            T result = actual.apply();
+            assertThat("Actual: " + result, result, matcher);
         } catch (Exception e) {
             Assert.fail("Lambda threw exception: " + e);
         }

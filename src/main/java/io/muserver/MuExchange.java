@@ -4,6 +4,7 @@ import io.muserver.rest.MuRuntimeDelegate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.ws.rs.ClientErrorException;
 import javax.ws.rs.InternalServerErrorException;
 import javax.ws.rs.NotFoundException;
 import javax.ws.rs.WebApplicationException;
@@ -11,6 +12,7 @@ import javax.ws.rs.core.Response;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static io.muserver.Mutils.htmlEncode;
 
@@ -31,6 +33,7 @@ class MuExchange {
     final MuResponseImpl response;
     private volatile RequestBodyListener requestBodyListener;
     private volatile MuAsyncHandle asyncHandle;
+    private final AtomicLong requestBodySize = new AtomicLong(0);
 
     MuExchange(MuExchangeData data, MuRequestImpl request, MuResponseImpl response) {
         this.data = data;
@@ -97,8 +100,8 @@ class MuExchange {
                     message = exceptionMessageMap.getOrDefault(message, message);
                     String html = "<h1>" + status + " " + exResp.getStatusInfo().getReasonPhrase() + "</h1><p>" + htmlEncode(message) + "</p>";
                     if (request.isAsync()) {
-                        // todo: write async
-                        throw new RuntimeException("Not implemented");
+                        // todo: write async?
+                        response.write(html);
                     } else {
                         response.write(html);
                     }
@@ -128,20 +131,27 @@ class MuExchange {
         if (msg instanceof RequestBodyData rbd) {
             if (bodyListener != null) {
                 try {
-                    bodyListener.onDataReceived(rbd.buffer(), error -> {
-                        if (error == null) {
-                            if (rbd.last()) {
-                                onRequestCompleted(MuHeaders.EMPTY);
-                                bodyListener.onComplete();
-                                // todo not read here?
+                    var newSize = requestBodySize.addAndGet(rbd.buffer().remaining());
+                    if (newSize > data.connection.server().maxRequestSize()) {
+                        request.onError();
+                        bodyListener.onError(new ClientErrorException("413 Request Entity Too Large", 413));
+                    } else {
+                        bodyListener.onDataReceived(rbd.buffer(), error -> {
+                            if (error == null) {
+                                if (rbd.last()) {
+                                    onRequestCompleted(MuHeaders.EMPTY);
+                                    bodyListener.onComplete();
+                                    // todo not read here?
+                                } else {
+                                    // todo lots of small message chunks can lead to huge stacks
+                                    data.connection.readyToRead(true);
+                                }
                             } else {
-                                data.connection.readyToRead(true);
+                                // TODO also close things here?
+                                bodyListener.onError(error);
                             }
-                        } else {
-                            // TODO also close things here?
-                            bodyListener.onError(error);
-                        }
-                    });
+                        });
+                    }
                 } catch (Exception e) {
                     log.warn("Exception thrown from onDataReceived handler", e);
                     // TODO: handle error

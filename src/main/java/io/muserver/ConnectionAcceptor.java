@@ -158,7 +158,7 @@ class ConnectionAcceptor implements CompletionHandler<AsynchronousSocketChannel,
 
     public void killConnections() {
         for (MuHttp1Connection connection : connections) {
-            connection.forceShutdown();
+            connection.forceShutdown(null);
         }
     }
 }

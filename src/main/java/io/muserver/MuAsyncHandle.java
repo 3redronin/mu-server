@@ -19,7 +19,11 @@ public class MuAsyncHandle implements AsyncHandle {
 
     @Override
     public void setReadListener(RequestBodyListener readListener) {
-        exchange.data.exchange.setReadListener(readListener);
+        if (exchange.request.hasBody()) {
+            exchange.data.exchange.setReadListener(readListener);
+        } else {
+            readListener.onComplete();
+        }
     }
 
     @Override

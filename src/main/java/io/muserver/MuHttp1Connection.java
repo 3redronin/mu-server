@@ -234,7 +234,8 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
 
         var req = new MuRequestImpl(data, newRequest.method(), relativeUri, headers, newRequest.hasBody());
         var resp = new MuResponseImpl(data, channel);
-        exchange = new MuExchange(data, req, resp);
+        var exchange = new MuExchange(data, req, resp);
+        this.exchange = exchange;
         data.exchange = exchange;
         onExchangeStarted(exchange);
 
@@ -269,7 +270,7 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
             } catch (InvalidRequestException e) {
                 log.warn("Invalid HTTP request. Closing connection.", e);
                 acceptor.onInvalidRequest(e);
-                forceShutdown();
+                forceShutdown(e);
                 return;
             }
             if (msg != null) {
@@ -278,8 +279,11 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
             }
             // todo if there is a partial body, was that lost?
             readBuffer.compact(); // todo only do it here?
+        } else {
+            readBuffer.clear();
         }
-        channel.read(readBuffer, null, this);
+
+        channel.read(readBuffer, this.server().requestIdleTimeoutMillis(), TimeUnit.MILLISECONDS, null, this);
     }
     /**
      * Read from socket completed
@@ -297,7 +301,7 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
                 // todo write it back
                 log.error("Invalid request parsing message", e);
                 acceptor.onInvalidRequest(e);
-                forceShutdown();
+                forceShutdown(e);
             }
         } else {
             log.info("Got EOF from client");
@@ -339,15 +343,21 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
      */
     @Override
     public void failed(Throwable exc, Object attachment) {
-        acceptor.onConnectionEnded(this, exc);
-        var logIt = !(exc instanceof ClosedChannelException);
-        if (logIt) { // TODO also log if requests are in progress
-            log.error("Read failed", exc);
+        MuExchange cur = exchange;
+        boolean closeConnection = true;
+        if (cur != null) {
+            closeConnection = exchange.onException(exc);
         }
-        forceShutdown();
+        if (closeConnection) {
+            var logIt = !(exc instanceof ClosedChannelException);
+            if (logIt) { // TODO also log if requests are in progress
+                log.error("Read failed", exc);
+            }
+            forceShutdown(exc);
+        }
     }
 
-    public void forceShutdown() {
+    public void forceShutdown(Throwable exc) {
         try {
             if (channel.isOpen()) {
                 log.info("Server closing " + this);
@@ -356,14 +366,14 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
         } catch (IOException e) {
             log.info("Error while closing channel: " + e.getMessage());
         } finally {
-            acceptor.onConnectionEnded(this, null);
+            acceptor.onConnectionEnded(this, exc);
         }
     }
 
     private void completeGracefulShutdownMaybe() {
         if (inputClosed && outputClosed) {
             log.info("This is a graceful shutdown");
-            forceShutdown();
+            forceShutdown(null);
         } else if (inputClosed && exchange == null) {
             log.info("No current exchange");
             initiateShutdown();
@@ -374,32 +384,26 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
         // Todo wait for active exchange
         if (!outputClosed) {
             outputClosed = true;
-            try {
-                if (channel instanceof MuTlsAsynchronousSocketChannel tlsC) {
-                    log.info("Initiating graceful shutdown");
-                    tlsC.shutdownOutputAsync(new CompletionHandler<Void, Void>() {
-                        @Override
-                        public void completed(Void result, Void attachment) {
-                            log.info("Outbound is closed and inputClosed=" + inputClosed);
-                            inputClosed = true;
-                            completeGracefulShutdownMaybe();
-                        }
+            if (channel instanceof MuTlsAsynchronousSocketChannel tlsC) {
+                log.info("Initiating graceful shutdown");
+                tlsC.shutdownOutputAsync(new CompletionHandler<Void, Void>() {
+                    @Override
+                    public void completed(Void result, Void attachment) {
+                        log.info("Outbound is closed and inputClosed=" + inputClosed);
+                        inputClosed = true;
+                        completeGracefulShutdownMaybe();
+                    }
 
-                        @Override
-                        public void failed(Throwable exc, Void attachment) {
-                            log.info("Graceful shutdown failed; closing: " + exc.getClass());
-                            tlsC.closeQuietly();
-                            acceptor.onConnectionEnded(MuHttp1Connection.this, exc); // TODO confirm this
-                        }
-                    }, null);
-                } else {
-                    log.info("Shutting down output stream now");
-                    channel.shutdownOutput();
-                    completeGracefulShutdownMaybe();
-                }
-
-            } catch (IOException e) {
-                forceShutdown();
+                    @Override
+                    public void failed(Throwable exc, Void attachment) {
+                        log.info("Graceful shutdown failed; closing: " + exc.getClass());
+                        tlsC.closeQuietly();
+                        acceptor.onConnectionEnded(MuHttp1Connection.this, exc); // TODO confirm this
+                    }
+                }, null);
+            } else {
+                log.info("Closing http connection");
+                forceShutdown(null);
             }
         }
     }
@@ -419,8 +423,10 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
     public void onExchangeComplete(MuExchange muExchange) {
         this.exchange = null;
         acceptor.onExchangeComplete(muExchange);
-        readBuffer.clear();
-        readyToRead(true);
+        if (muExchange.state == HttpExchangeState.COMPLETE) {
+            // todo is this the only time to read again?
+            readyToRead(true);
+        }
     }
 
     public InputStream requestInputStream() {
@@ -467,7 +473,7 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
 
                 } catch (Exception e) {
                     log.warn("Invalid message body format. Closing connection");
-                    forceShutdown();
+                    forceShutdown(e);
                     throw new IOException("Error reading stream from client", e);
                 }
             }

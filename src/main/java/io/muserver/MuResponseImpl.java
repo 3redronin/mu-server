@@ -53,7 +53,10 @@ public class MuResponseImpl implements MuResponse {
         if (text == null) text = "";
         Charset charset = setDefaultContentType();
         ByteBuffer body;
-        if (prepareForGzip()) {
+        // Note that checking a string length against a byte size is not normally valid but we
+        // don't have to be exact here. In a string with multi-byte characters it will just mean
+        // sometimes it won't gzip when it should. But it's better than always zipping small strings.
+        if (text.length() >= data.server().minimumGzipSize() && prepareForGzip()) {
             byte[] uncompressed = text.getBytes(charset);
             var baos = new ByteArrayOutputStream();
             try (var out = new GZIPOutputStream(baos)) {

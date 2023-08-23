@@ -108,7 +108,7 @@ public class RequestBodyReaderListenerAdapterTest {
                 return true;
             })
             .start();
-
+i guess the read listener onerror wasn't called
         Request.Builder request = request()
             .url(server.uri().toString())
             .post(new SlowBodySender(100, 200));
@@ -166,7 +166,7 @@ public class RequestBodyReaderListenerAdapterTest {
     @Test
     public void exceedingUploadSizeResultsIn413OrKilledConnectionForChunkedRequestWhereResponseNotStarted() throws Exception {
         AtomicReference<Throwable> exception = new AtomicReference<>();
-        server = ServerUtils.httpsServerForTest()
+        server = httpServer()
             .withMaxRequestSize(1000)
             .addHandler((request, response) -> {
                 AsyncHandle handle = request.handleAsync();
