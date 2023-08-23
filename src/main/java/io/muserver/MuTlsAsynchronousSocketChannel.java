@@ -289,13 +289,17 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
     public <A> void write(ByteBuffer src, long timeout, TimeUnit unit, A attachment, CompletionHandler<Integer, ? super A> handler) {
         netBuffer.clear();
         try {
-            sslEngine.wrap(src, netBuffer);
+            SSLEngineResult result = sslEngine.wrap(src, netBuffer);
+            if (result.getStatus() != SSLEngineResult.Status.OK) {
+                // todo handle this properly
+                throw new SSLException("Got a " + result + " when encrypting data");
+            }
         } catch (SSLException e) {
             handler.failed(e, attachment);
             return;
         }
         netBuffer.flip();
-        socketChannel.write(netBuffer, attachment, new CompletionHandler<>() {
+        socketChannel.write(netBuffer, timeout, unit, attachment, new CompletionHandler<>() {
             @Override
             public void completed(Integer result, A attachment) {
                 handler.completed(result, attachment);
@@ -327,7 +331,19 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
 
     @Override
     public <A> void write(ByteBuffer[] srcs, int offset, int length, long timeout, TimeUnit unit, A attachment, CompletionHandler<Long, ? super A> handler) {
-        throw new RuntimeException("Not implemented");
+        netBuffer.clear();
+        try {
+            SSLEngineResult result = sslEngine.wrap(srcs, offset, length, netBuffer);
+            if (result.getStatus() != SSLEngineResult.Status.OK) {
+                // todo handle this properly
+                throw new SSLException("Got a " + result + " when encrypting data");
+            }
+        } catch (SSLException e) {
+            handler.failed(e, attachment);
+            return;
+        }
+        netBuffer.flip();
+        socketChannel.write(new ByteBuffer[] { netBuffer }, 0, 1, timeout, unit, attachment, handler);
     }
 
     @Override

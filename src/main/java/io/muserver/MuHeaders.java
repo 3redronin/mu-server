@@ -431,4 +431,24 @@ class MuHeaders implements Headers {
         return Headtils.getMediaType(this);
     }
 
+    public void setOrAddCSVHeader(CharSequence name, CharSequence value, boolean allowDuplicates) {
+        String existingValue = get(name);
+        if (existingValue == null) {
+            set(name, value);
+        } else if (!allowDuplicates) {
+            String[] split = existingValue.split("\\s*,\\s*");
+            boolean alreadyThere = false;
+            for (String s : split) {
+                if (s.contentEquals(value)) {
+                    alreadyThere = true;
+                    break;
+                }
+            }
+            if (!alreadyThere) {
+                set(name, existingValue + ", " + value);
+            }
+        } else {
+            set(name, existingValue + ", " + value);
+        }
+    }
 }

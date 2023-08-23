@@ -50,8 +50,20 @@ public class MuResponseImpl implements MuResponse {
     @Override
     public void write(String text) throws IOException {
         if (state != ResponseState.NOTHING) throw new IllegalStateException("Cannot write text");
+        if (text == null) text = "";
         Charset charset = setDefaultContentType();
-        ByteBuffer body = charset.encode(text != null ? text : "");
+        ByteBuffer body;
+        if (prepareForGzip()) {
+            byte[] uncompressed = text.getBytes(charset);
+            var baos = new ByteArrayOutputStream();
+            try (var out = new GZIPOutputStream(baos)) {
+                // todo: look at writing to outputStream() instead. Would have lower memory but would lose the content size
+                out.write(uncompressed);
+            }
+            body = ByteBuffer.wrap(baos.toByteArray());
+        } else {
+            body = charset.encode(text);
+        }
         headers.set(HeaderNames.CONTENT_LENGTH, body.remaining());
         ByteBuffer headerBuf = headersBuffer(true, headers);
         blockingWrite(headerBuf, body);
@@ -62,7 +74,6 @@ public class MuResponseImpl implements MuResponse {
     private boolean prepareForGzip() {
         var settings = data.acceptor().muServer.settings;
         if (!settings.gzipEnabled()) return false;
-        if (headers.contains(HeaderNames.CONTENT_ENCODING)) return false; // don't re-encode something
 
         var responseType = headers.contentType();
         if (responseType == null) return false;
@@ -70,7 +81,9 @@ public class MuResponseImpl implements MuResponse {
         boolean mimeTypeOk = settings.mimeTypesToGzip().contains(mime);
         if (!mimeTypeOk) return false;
 
-        headers.add(HeaderNames.VARY, HeaderNames.ACCEPT_ENCODING); // TODO change to add if not already there
+        headers.setOrAddCSVHeader(HeaderNames.VARY, HeaderNames.ACCEPT_ENCODING, false); // TODO change to add if not already there
+
+        if (headers.contains(HeaderNames.CONTENT_ENCODING)) return false; // don't re-encode something
 
         boolean clientSupports = false;
         for (ParameterizedHeaderWithValue acceptEncoding : data.requestHeaders().acceptEncoding()) {
@@ -237,7 +250,7 @@ public class MuResponseImpl implements MuResponse {
 
             OutputStream adapter = new OutputStream() {
                 private int state = 0;
-                private boolean chunked = false;
+                private boolean isChunked;
 
                 @Override
                 public void write(int b) throws IOException {
@@ -250,20 +263,12 @@ public class MuResponseImpl implements MuResponse {
                     if (state == 2) throw new IOException("Writing to a closed stream");
                     ByteBuffer hb;
                     if (state == 0) {
-                        MuResponseImpl.this.state = ResponseState.STREAMING;
                         state = 1;
-                        if (!headers.contains(HeaderNames.CONTENT_TYPE)) {
-                            headers.set(HeaderNames.CONTENT_TYPE, ContentTypes.APPLICATION_OCTET_STREAM);
-                        }
-                        if (!headers.contains(HeaderNames.CONTENT_LENGTH)) {
-                            chunked = true;
-                            headers.set(HeaderNames.TRANSFER_ENCODING, HeaderValues.CHUNKED);
-                        }
-                        hb = headersBuffer(true, headers);
+                        hb = startStreaming();
                     } else {
                         hb = null;
                     }
-                    if (chunked) {
+                    if (isChunked()) {
                         sendChunk(hb, ByteBuffer.wrap(b, off, len));
                     } else if (hb != null) {
                         blockingWrite(hb, ByteBuffer.wrap(b, off, len));
@@ -290,6 +295,17 @@ public class MuResponseImpl implements MuResponse {
             this.outputStream = bufferSize == 0 ? adapter : new BufferedOutputStream(adapter, bufferSize);
         }
         return this.outputStream;
+    }
+
+    ByteBuffer startStreaming() {
+        this.state = ResponseState.STREAMING;
+        if (!headers.contains(HeaderNames.CONTENT_TYPE)) {
+            headers.set(HeaderNames.CONTENT_TYPE, ContentTypes.APPLICATION_OCTET_STREAM);
+        }
+        if (!headers.contains(HeaderNames.CONTENT_LENGTH)) {
+            headers.set(HeaderNames.TRANSFER_ENCODING, HeaderValues.CHUNKED);
+        }
+        return headersBuffer(true, headers);
     }
 
     @Override
@@ -330,5 +346,9 @@ public class MuResponseImpl implements MuResponse {
 
     public void onCancelled(ResponseState responseState) {
         state = responseState;
+    }
+
+    boolean isChunked() {
+        return !headers.contains(HeaderNames.CONTENT_LENGTH);
     }
 }

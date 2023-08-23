@@ -29,6 +29,8 @@ class MuExchange {
     final MuExchangeData data;
     final MuRequestImpl request;
     final MuResponseImpl response;
+    private volatile RequestBodyListener requestBodyListener;
+    private volatile MuAsyncHandle asyncHandle;
 
     MuExchange(MuExchangeData data, MuRequestImpl request, MuResponseImpl response) {
         this.data = data;
@@ -122,13 +124,53 @@ class MuExchange {
 
 
     public void onMessage(ConMessage msg) {
+        RequestBodyListener bodyListener = this.requestBodyListener;
         if (msg instanceof RequestBodyData rbd) {
-            if (rbd.last()) {
-                onRequestCompleted(MuHeaders.EMPTY);
+            if (bodyListener != null) {
+                try {
+                    bodyListener.onDataReceived(rbd.buffer(), error -> {
+                        if (error == null) {
+                            if (rbd.last()) {
+                                onRequestCompleted(MuHeaders.EMPTY);
+                                bodyListener.onComplete();
+                                // todo not read here?
+                            } else {
+                                data.connection.readyToRead(true);
+                            }
+                        } else {
+                            // TODO also close things here?
+                            bodyListener.onError(error);
+                        }
+                    });
+                } catch (Exception e) {
+                    log.warn("Exception thrown from onDataReceived handler", e);
+                    // TODO: handle error
+                }
+            } else {
+                // todo when does this happen?
+                log.warn("Ignoring request body");
+                data.connection.readyToRead(true);
             }
         } else if (msg instanceof EndOfChunks eoc) {
             onRequestCompleted(eoc.trailers());
+            bodyListener.onComplete();
         }
+    }
+
+    public void setReadListener(RequestBodyListener listener) {
+        this.requestBodyListener = listener;
+        this.data.connection.readyToRead(true);
+    }
+
+    public boolean isAsync() {
+        return asyncHandle != null;
+    }
+
+    public AsyncHandle handleAsync() {
+        if (asyncHandle == null) {
+            asyncHandle = new MuAsyncHandle(this);
+        }
+        return asyncHandle;
     }
 }
 class MuExchangeData {

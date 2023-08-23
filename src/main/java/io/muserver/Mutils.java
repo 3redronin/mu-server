@@ -295,3 +295,7 @@ public class Mutils {
 
     private static final ByteBuffer EMPTY_BUFFER = ByteBuffer.allocate(0);
 }
+
+class NotImplementedException extends RuntimeException {
+
+}

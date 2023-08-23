@@ -1,6 +1,7 @@
 package io.muserver;
 
 import java.nio.ByteBuffer;
+import java.nio.channels.CompletionHandler;
 import java.util.concurrent.Future;
 
 /**
@@ -55,5 +56,9 @@ public interface AsyncHandle {
      * @param responseCompleteListener The handler to invoke when the request is complete.
      */
     void addResponseCompleteHandler(ResponseCompleteListener responseCompleteListener);
+
+    default <A> void read(CompletionHandler<Integer, A> completionHandler, A attachment) {
+        completionHandler.failed(new NotImplementedException(), attachment);
+    }
 
 }

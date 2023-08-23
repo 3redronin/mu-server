@@ -22,6 +22,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static io.muserver.MuServerBuilder.httpServer;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.call;
@@ -34,7 +35,29 @@ public class RequestBodyReaderListenerAdapterTest {
     private RecordingRequestBodyListener readListener;
 
     @Test
-    public void requestBodiesCanBeReadAsynchronously() throws IOException {
+    public void requestBodiesCanBeReadAsynchronouslyOverHttp() throws IOException {
+        server = httpServer()
+            .addHandler((request, response) -> {
+                AsyncHandle handle = request.handleAsync();
+                readListener = new RecordingRequestBodyListener(handle);
+                handle.setReadListener(readListener);
+                return true;
+            })
+            .start();
+
+        Request.Builder request = request()
+            .url(server.uri().toString())
+            .post(new SlowBodySender(2));
+
+        try (Response resp = call(request)) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.body().string(), equalTo("Loop 0\nLoop 1\n"));
+        }
+        assertThat("All: " + readListener.events.toString(), readListener.events, contains("data received: 7 bytes", "data written", "data received: 7 bytes", "data written", "onComplete"));
+    }
+
+    @Test
+    public void requestBodiesCanBeReadAsynchronouslyOverHttps() throws IOException {
         server = ServerUtils.httpsServerForTest()
             .addHandler((request, response) -> {
                 AsyncHandle handle = request.handleAsync();
@@ -54,6 +77,7 @@ public class RequestBodyReaderListenerAdapterTest {
         }
         assertThat("All: " + readListener.events.toString(), readListener.events, contains("data received: 7 bytes", "data written", "data received: 7 bytes", "data written", "onComplete"));
     }
+
 
     @Test(timeout = 10000)
     public void emptyBodiesAreOkay() {

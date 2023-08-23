@@ -51,6 +51,8 @@ public interface RequestBodyListener {
 
     /**
      * Called when the request body is fully received.
+     * <p>Note that if the client has sent any trailers they will be available at {@link MuRequest#trailers()} when
+     * this is invoked.</p>
      */
     void onComplete();
 

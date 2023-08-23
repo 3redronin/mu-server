@@ -49,6 +49,10 @@ class RequestParser {
         this.maxHeaderSize = maxHeaderSize;
     }
 
+    public boolean requestBodyExpectedNext() {
+        return state == State.FIXED_BODY || state == State.CHUNKED_BODY;
+    }
+
     private enum State {
         RL_METHOD, RL_URI, RL_PROTO, H_NAME, H_VALUE, FIXED_BODY, CHUNKED_BODY, COMPLETE
     }

@@ -99,7 +99,7 @@ public class MuRequestImpl implements MuRequest {
 
     @Override
     public Optional<InputStream> inputStream() {
-        return Optional.empty();
+        return hasBody ? Optional.of(data.connection.requestInputStream()) : Optional.empty();
     }
 
     @Override
@@ -170,7 +170,7 @@ public class MuRequestImpl implements MuRequest {
 
     @Override
     public AsyncHandle handleAsync() {
-        return null;
+        return data.exchange.handleAsync();
     }
 
     @Override
@@ -190,7 +190,7 @@ public class MuRequestImpl implements MuRequest {
 
     @Override
     public boolean isAsync() {
-        return false;
+        return data.exchange.isAsync();
     }
 
     @Override

@@ -170,7 +170,7 @@ public class GzipTest {
             assertThat(resp.code(), is(200));
             assertThat(resp.headers("content-type"), contains("text/plain;charset=utf-8"));
             assertThat(resp.headers("content-encoding"), contains("gzip"));
-            assertThat(resp.headers("vary"), contains("accept-encoding"));
+            assertThat(resp.headers("vary").toString(), resp.headers("vary"), contains("accept-encoding"));
 
             try (ByteArrayOutputStream boas = new ByteArrayOutputStream();
                  InputStream is = new GZIPInputStream(resp.body().byteStream())) {

@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import javax.ws.rs.NotFoundException;
 import javax.ws.rs.RedirectionException;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.ByteBuffer;
@@ -18,6 +19,7 @@ import java.util.Collections;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 
 class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Object> {
     private static final Logger log = LoggerFactory.getLogger(MuHttp1Connection.class);
@@ -94,11 +96,7 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
         this.httpsProtocol = protocol;
         this.cipher = cipher;
         acceptor.onConnectionEstablished(this);
-        readyToRead();
-    }
-
-    void readyToRead() {
-        channel.read(readBuffer, null, this);
+        readyToRead(false);
     }
 
 //    void onResponseCompleted(MuResponseImpl muResponse) {
@@ -216,7 +214,7 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
 
         if (headers.containsValue(HeaderNames.EXPECT, HeaderValues.CONTINUE, true)) {
             long proposedLength = headers.getLong(HeaderNames.CONTENT_LENGTH.toString(), -1L);
-            // TODO don't block and handle timeouts
+            // TODO don't block and do handle timeouts
             try {
                 if (proposedLength > acceptor.muServer.maxRequestSize()) {
                     var responseHeaders = MuHeaders.responseHeaders();
@@ -254,13 +252,35 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
             if (!handled) {
                 throw new NotFoundException();
             }
-            resp.end();
+            if (!exchange.isAsync()) {
+                resp.end();
+            }
         } catch (Throwable e) {
             useCustomExceptionHandlerOrFireIt(exchange, e);
         }
     }
 
 
+    void readyToRead(boolean canReadFromMemory) {
+        if (canReadFromMemory && readBuffer.hasRemaining()) {
+            ConMessage msg;
+            try {
+                msg = requestParser.offer(readBuffer);
+            } catch (InvalidRequestException e) {
+                log.warn("Invalid HTTP request. Closing connection.", e);
+                acceptor.onInvalidRequest(e);
+                forceShutdown();
+                return;
+            }
+            if (msg != null) {
+                handleMessage(msg);
+                return; // todo how about not returning and instead get ready to read more?
+            }
+            // todo if there is a partial body, was that lost?
+            readBuffer.compact(); // todo only do it here?
+        }
+        channel.read(readBuffer, null, this);
+    }
     /**
      * Read from socket completed
      */
@@ -272,25 +292,10 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
             acceptor.muServer.stats.onBytesRead(result); // TODO handle this differently?
             try {
                 var msg = requestParser.offer(readBuffer);
-                if (msg instanceof NewRequest nr) {
-                    handleNewRequest(nr);
-                } else if (msg == null) {
-                    readBuffer.compact();
-                    if (readBuffer.hasRemaining()) {
-                        log.info("Going to read into the remaining " + readBuffer.remaining() + " in the hope of getting a full message");
-                    } else {
-                        // TODO get a  bigger buffer
-                        throw new RuntimeException("Buffer is full and there is no message!");
-                    }
-                    readyToRead();
-                } else {
-                    MuExchange e = exchange;
-                    if (e != null) {
-                        e.onMessage(msg);
-                    }
-                }
+                handleMessage(msg);
             } catch (InvalidRequestException e) {
                 // todo write it back
+                log.error("Invalid request parsing message", e);
                 acceptor.onInvalidRequest(e);
                 forceShutdown();
             }
@@ -299,6 +304,34 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
             inputClosed = true;
             completeGracefulShutdownMaybe();
         }
+    }
+
+    private void handleMessage(ConMessage msg) {
+        if (msg instanceof NewRequest nr) {
+            handleNewRequest(nr);
+        } else if (msg == null) {
+            readBuffer.compact();
+            if (readBuffer.hasRemaining()) {
+                log.info("Going to read into the remaining " + readBuffer.remaining() + " in the hope of getting a full message");
+            } else {
+                // TODO get a  bigger buffer
+                throw new RuntimeException("Buffer is full and there is no message!");
+            }
+            readyToRead(false);
+        } else {
+            MuExchange e = exchange;
+            if (e != null) {
+                e.onMessage(msg);
+            }
+        }
+    }
+
+    <A> void write(ByteBuffer src, long timeout, TimeUnit unit, A attachment, CompletionHandler<Integer, ? super A> handler) {
+        channel.write(src, timeout, unit, attachment, handler);
+    }
+
+    <A> void scatteringWrite(ByteBuffer[] srcs, int offset, int length, long timeout, TimeUnit unit, A attachment, CompletionHandler<Long, ? super A> handler) {
+        channel.write(srcs, offset, length, timeout, unit, attachment, handler);
     }
 
     /**
@@ -387,6 +420,58 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
         this.exchange = null;
         acceptor.onExchangeComplete(muExchange);
         readBuffer.clear();
-        readyToRead();
+        readyToRead(true);
     }
+
+    public InputStream requestInputStream() {
+        if (!requestParser.requestBodyExpectedNext()) {
+            throw new IllegalStateException("Input stream not expected here");
+        }
+        return new InputStream() {
+
+            private boolean eos = false;
+            @Override
+            public int read() throws IOException {
+                if (eos) return -1;
+                byte[] tmp = new byte[1];
+                return read(tmp, 0, 1);
+            }
+
+            @Override
+            public int read(byte[] b, int off, int len) throws IOException {
+                if (eos) return -1;
+                try {
+
+                    // Don't read more than we can eat
+                    int limitBefore = readBuffer.limit();
+                    if (readBuffer.remaining() > b.length) {
+                        readBuffer.limit(readBuffer.position() + b.length);
+                    }
+                    ConMessage msg = requestParser.offer(readBuffer);
+                    int bytesRead;
+                    if (msg instanceof RequestBodyData rbd) {
+                        bytesRead = rbd.buffer().remaining();
+                        rbd.buffer().put(b, off, bytesRead);
+                        if (rbd.last()) eos = true;
+                    } else if (msg instanceof EndOfChunks eoc) {
+                        eos = true;
+
+                        bytesRead = -1;
+                    } else if (msg == null) {
+                        throw new RuntimeException("Not handled");
+                    } else {
+                        throw new RuntimeException("Unexpected message read: " + msg.getClass());
+                    }
+                    readBuffer.limit(limitBefore);
+                    return bytesRead;
+
+                } catch (Exception e) {
+                    log.warn("Invalid message body format. Closing connection");
+                    forceShutdown();
+                    throw new IOException("Error reading stream from client", e);
+                }
+            }
+        };
+    }
+
 }
