@@ -1,7 +1,6 @@
 package io.muserver;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.CompletionHandler;
 import java.nio.charset.StandardCharsets;
@@ -31,7 +30,7 @@ public class MuAsyncHandle implements AsyncHandle {
         try {
             exchange.response.end();
         } catch (IOException e) {
-            throw new UncheckedIOException("Error while closing response", e);
+            complete(e);
         }
     }
 

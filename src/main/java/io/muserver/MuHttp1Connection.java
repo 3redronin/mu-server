@@ -6,7 +6,6 @@ import org.slf4j.LoggerFactory;
 import javax.ws.rs.NotFoundException;
 import javax.ws.rs.RedirectionException;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.ByteBuffer;
@@ -427,57 +426,6 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
             // todo is this the only time to read again?
             readyToRead(true);
         }
-    }
-
-    public InputStream requestInputStream() {
-        if (!requestParser.requestBodyExpectedNext()) {
-            throw new IllegalStateException("Input stream not expected here");
-        }
-        return new InputStream() {
-
-            private boolean eos = false;
-            @Override
-            public int read() throws IOException {
-                if (eos) return -1;
-                byte[] tmp = new byte[1];
-                return read(tmp, 0, 1);
-            }
-
-            @Override
-            public int read(byte[] b, int off, int len) throws IOException {
-                if (eos) return -1;
-                try {
-
-                    // Don't read more than we can eat
-                    int limitBefore = readBuffer.limit();
-                    if (readBuffer.remaining() > b.length) {
-                        readBuffer.limit(readBuffer.position() + b.length);
-                    }
-                    ConMessage msg = requestParser.offer(readBuffer);
-                    int bytesRead;
-                    if (msg instanceof RequestBodyData rbd) {
-                        bytesRead = rbd.buffer().remaining();
-                        rbd.buffer().put(b, off, bytesRead);
-                        if (rbd.last()) eos = true;
-                    } else if (msg instanceof EndOfChunks eoc) {
-                        eos = true;
-
-                        bytesRead = -1;
-                    } else if (msg == null) {
-                        throw new RuntimeException("Not handled");
-                    } else {
-                        throw new RuntimeException("Unexpected message read: " + msg.getClass());
-                    }
-                    readBuffer.limit(limitBefore);
-                    return bytesRead;
-
-                } catch (Exception e) {
-                    log.warn("Invalid message body format. Closing connection");
-                    forceShutdown(e);
-                    throw new IOException("Error reading stream from client", e);
-                }
-            }
-        };
     }
 
 }

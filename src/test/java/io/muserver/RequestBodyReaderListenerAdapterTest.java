@@ -1,8 +1,5 @@
 package io.muserver;
 
-import io.netty.buffer.ByteBufAllocator;
-import io.netty.buffer.ByteBufAllocatorMetric;
-import io.netty.buffer.ByteBufAllocatorMetricProvider;
 import okhttp3.MediaType;
 import okhttp3.Request;
 import okhttp3.RequestBody;
@@ -108,7 +105,6 @@ public class RequestBodyReaderListenerAdapterTest {
                 return true;
             })
             .start();
-i guess the read listener onerror wasn't called
         Request.Builder request = request()
             .url(server.uri().toString())
             .post(new SlowBodySender(100, 200));
@@ -120,19 +116,10 @@ i guess the read listener onerror wasn't called
         }
 
         assertEventually(() -> readListener.events, allOf(
-            hasItems("data received: 7 bytes", "data written", "Error for onError: TimeoutException")
+            hasItems("data received: 7 bytes", "data written", "Error for onError: InterruptedByTimeoutException")
         ));
     }
 
-    private static long getDirectMemory() {
-        ByteBufAllocator allocator = ByteBufAllocator.DEFAULT;
-        if (allocator instanceof ByteBufAllocatorMetricProvider) {
-            ByteBufAllocatorMetric metric = ((ByteBufAllocatorMetricProvider) allocator).metric();
-            return metric.usedDirectMemory();
-        } else {
-            return -1;
-        }
-    }
 
     @Test
     public void exceedingMaxContentLengthWillResultIn413() {
@@ -141,6 +128,7 @@ i guess the read listener onerror wasn't called
         server = ServerUtils.httpsServerForTest()
             .withMaxRequestSize(1000)
             .addHandler((request, response) -> {
+                request.readBodyAsString();
                 response.write("hello");
                 return true;
             })

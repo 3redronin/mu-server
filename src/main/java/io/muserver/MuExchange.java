@@ -9,6 +9,10 @@ import javax.ws.rs.InternalServerErrorException;
 import javax.ws.rs.NotFoundException;
 import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.Response;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
+import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -34,6 +38,7 @@ class MuExchange {
     private volatile RequestBodyListener requestBodyListener;
     private volatile MuAsyncHandle asyncHandle;
     private final AtomicLong requestBodySize = new AtomicLong(0);
+    private InputStream requestInputStream;
 
     MuExchange(MuExchangeData data, MuRequestImpl request, MuResponseImpl response) {
         this.data = data;
@@ -61,6 +66,11 @@ class MuExchange {
         if (state.endState()) {
             log.warn("Got exception after state is " + state);
             return true;
+        }
+
+        RequestBodyListener rbl = this.requestBodyListener;
+        if (rbl != null && request.requestState() == RequestState.RECEIVING_BODY) {
+            rbl.onError(cause);
         }
 
         boolean streamUnrecoverable = true;
@@ -143,6 +153,7 @@ class MuExchange {
                                     bodyListener.onComplete();
                                     // todo not read here?
                                 } else {
+                                    request.onRequestBodyReceived();
                                     // todo lots of small message chunks can lead to huge stacks
                                     data.connection.readyToRead(true);
                                 }
@@ -171,6 +182,21 @@ class MuExchange {
         this.requestBodyListener = listener;
         this.data.connection.readyToRead(true);
     }
+
+
+    public InputStream requestInputStream() {
+        var in = this.requestInputStream;
+        if (in == null) {
+            if (requestBodyListener != null || request.requestState() != RequestState.HEADERS_RECEIVED) {
+                throw new IllegalStateException("Cannot use an input stream when reading already started: " + request.requestState());
+            }
+            var adapter = new RequestBodyListenerToInputStreamAdapter();
+            this.requestInputStream = in = adapter;
+            setReadListener(adapter);
+        }
+        return in;
+    }
+
 
     public boolean isAsync() {
         return asyncHandle != null;
@@ -205,4 +231,74 @@ class MuExchangeData {
         return connection.acceptor;
     }
 
+}
+
+class RequestBodyListenerToInputStreamAdapter extends InputStream implements RequestBodyListener {
+
+    ByteBuffer curBuffer;
+    DoneCallback doneCallback;
+    private boolean eos = false;
+    private IOException error;
+    private final Object lock = new Object();
+
+    @Override
+    public void onDataReceived(ByteBuffer buffer, DoneCallback doneCallback) throws Exception {
+        synchronized (lock) {
+            this.curBuffer = buffer;
+            this.doneCallback = doneCallback;
+            lock.notify();
+        }
+    }
+
+    @Override
+    public void onComplete() {
+        synchronized (lock) {
+            lock.notify();
+            eos = true;
+        }
+    }
+
+    @Override
+    public void onError(Throwable t) {
+        synchronized (lock) {
+            if (t instanceof IOException ioe) {
+                this.error = ioe;
+            } else if (t instanceof UncheckedIOException uioe) {
+                this.error = uioe.getCause();
+            } else {
+                this.error = new IOException("Error reading data", t);
+            } // todo: what about interrupted ones? and timeouts?
+            lock.notify();
+        }
+    }
+
+    @Override
+    public int read() throws IOException {
+        if (eos) return -1;
+        byte[] tmp = new byte[1];
+        return read(tmp, 0, 1);
+    }
+
+    @Override
+    public int read(byte[] b, int off, int len) throws IOException {
+        synchronized (lock) {
+            if (eos) return -1;
+            if (error != null) throw error;
+            if (curBuffer != null && curBuffer.hasRemaining()) {
+                int num = Math.min(len, curBuffer.remaining());
+                curBuffer.get(b, off, num);
+                return num;
+            } else {
+                try {
+                    if (doneCallback != null) {
+                        doneCallback.onComplete(null);
+                    }
+                    lock.wait(); // no need for timeout as the request body listener will time out and notify
+                } catch (Exception e) {
+                    onError(e);
+                }
+            }
+        }
+        return read(b, off, len);
+    }
 }

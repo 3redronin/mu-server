@@ -37,7 +37,7 @@ public class MuRequestImpl implements MuRequest {
         this.uri = getUri(headers, serverUri.getScheme(), host, relativeUri, serverUri);
         this.headers = headers;
         this.hasBody = hasBody;
-        this.state = hasBody ? RequestState.RECEIVING_BODY : RequestState.COMPLETE;
+        this.state = hasBody ? RequestState.HEADERS_RECEIVED : RequestState.COMPLETE;
     }
 
     private static URI getUri(Headers h, String scheme, String hostHeader, String requestUri, URI defaultValue) {
@@ -99,7 +99,7 @@ public class MuRequestImpl implements MuRequest {
 
     @Override
     public Optional<InputStream> inputStream() {
-        return hasBody ? Optional.of(data.connection.requestInputStream()) : Optional.empty();
+        return hasBody ? Optional.of(data.exchange.requestInputStream()) : Optional.empty();
     }
 
     @Override
@@ -239,10 +239,19 @@ public class MuRequestImpl implements MuRequest {
         return contextToAdd;
     }
 
+    void onRequestBodyReceived() {
+        if (state == RequestState.HEADERS_RECEIVED) {
+            state = RequestState.RECEIVING_BODY;
+        } else if (state != RequestState.RECEIVING_BODY) {
+            throw new IllegalStateException("Cannot receive body with state " + state);
+        }
+    }
+
     void onComplete(Headers trailers) {
         state = RequestState.COMPLETE;
         this.trailers = trailers;
     }
+
     void onError() {
         this.state = RequestState.ERRORED;
     }

@@ -67,8 +67,9 @@ class RequestParser {
 
         if (state == State.RL_METHOD) {
             String s = new String(bb.array(), bb.position(), bb.limit());
-            if (s.length() > 200) {
-                log.info("<<\n" + s.substring(0, 200).replace("\r", "\\r").replace("\n", "\\n\r\n") + "...(" + s.length() + " total)");
+            int maxLengthToLog = 400;
+            if (s.length() > maxLengthToLog) {
+                log.info("<<\n" + s.substring(0, maxLengthToLog).replace("\r", "\\r").replace("\n", "\\n\r\n") + "...(" + s.length() + " total)");
             } else {
                 log.info("<<\n" + s.replace("\r", "\\r").replace("\n", "\\n\r\n"));
             }
