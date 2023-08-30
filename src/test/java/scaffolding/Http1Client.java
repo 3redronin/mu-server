@@ -1,7 +1,6 @@
 package scaffolding;
 
-import io.muserver.HttpVersion;
-import io.muserver.Method;
+import io.muserver.*;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
@@ -33,15 +32,18 @@ public class Http1Client implements AutoCloseable {
     private final Socket socket;
     private final InputStream inputStream;
     private final OutputStream outputStream;
+    private final MuServer server;
 
-    public Http1Client(Socket socket, InputStream inputStream, OutputStream outputStream) {
+    public Http1Client(Socket socket, InputStream inputStream, OutputStream outputStream, MuServer server) {
         this.socket = socket;
         this.inputStream = inputStream;
         this.outputStream = outputStream;
+        this.server = server;
     }
 
-    public static Http1Client connect(URI uri) {
+    public static Http1Client connect(MuServer server) {
         try {
+            var uri = server.uri();
             Socket socket;
             if (uri.getScheme().equals("http")) {
                 socket = new Socket(uri.getHost(), uri.getPort());
@@ -49,19 +51,19 @@ public class Http1Client implements AutoCloseable {
                 socket = sslSocketFactory.createSocket(uri.getHost(), uri.getPort());
             }
             OutputStream os = new BufferedOutputStream(socket.getOutputStream(), 8192);
-            return new Http1Client(socket, socket.getInputStream(), os);
+            return new Http1Client(socket, socket.getInputStream(), os, server);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
     }
 
-    public Http1Client writeRequestLine(Method method, URI uri) {
-        return writeRequestLine(method, uri, HttpVersion.HTTP_1_1, true);
+    public Http1Client writeRequestLine(Method method, String uri) {
+        return writeRequestLine(method, server.uri().resolve(uri), HttpVersion.HTTP_1_1, true);
     }
     public Http1Client writeRequestLine(Method method, URI uri, HttpVersion httpVersion, boolean writeHost) {
         writeAscii(method.name() + " " + uri.getRawPath() + " " + httpVersion.version() + "\r\n");
         if (writeHost) {
-            writeHeader("host", uri.getAuthority());
+            writeHeader("host", server.uri().getAuthority());
         }
         return this;
     }
@@ -108,4 +110,62 @@ public class Http1Client implements AutoCloseable {
         }
         return this;
     }
+
+
+    public HttpVersion readVersion() throws IOException {
+        return HttpVersion.valueOf(readUntil(' ', 10));
+    }
+
+    public String readLine() throws IOException {
+        return readUntil('\r', 10000);
+    }
+
+    public String readBody(Headers headers) throws IOException {
+        if (!headers.hasBody()) return "";
+        if (headers.contains(HeaderNames.TRANSFER_ENCODING, HeaderValues.CHUNKED, true)) {
+            throw new RuntimeException("Chunked not supported yet");
+        } else {
+            int toRead = headers.getInt(HeaderNames.CONTENT_LENGTH, 0);
+            byte[] buf = new byte[toRead];
+            int off = 0;
+            while (toRead > 0) {
+                int actuallyRead = inputStream.read(buf, off, toRead);
+                if (actuallyRead == -1) throw new EOFException("EOF while reading response body");
+                off += actuallyRead;
+                toRead -= actuallyRead;
+            }
+            String charset = headers.contentType().getParameters().getOrDefault("charset", "UTF-8");
+            return new String(buf, charset);
+        }
+
+    }
+
+    public Headers readHeaders() throws IOException {
+        String line;
+        var headers = Headers.http1Headers();
+        while (!(line = readUntil('\r', 1000)).isEmpty()) {
+            String[] bits = line.split(":", 2);
+            headers.add(bits[0], bits[1].trim());
+        }
+        return headers;
+    }
+
+    public String readUntil(char target, int maxLength) throws IOException {
+        var sb = new StringBuilder();
+        while (true) {
+            int i = inputStream.read();
+            if (i == -1) throw new EOFException(sb.toString());
+            var c = (char) i;
+            if (c == target) {
+                if (target == '\r') {
+                    if (((char)inputStream.read()) != '\n') throw new IllegalStateException("Expected a newline after carriage return. " + sb);
+                }
+                return sb.toString();
+            } else {
+                sb.append(c);
+            }
+            if (sb.length() > maxLength) throw new RuntimeException("Too long. Stopped at: " + sb);
+        }
+    }
+
 }

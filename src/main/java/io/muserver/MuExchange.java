@@ -5,25 +5,19 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.ws.rs.ClientErrorException;
-import javax.ws.rs.InternalServerErrorException;
 import javax.ws.rs.NotFoundException;
-import javax.ws.rs.WebApplicationException;
-import javax.ws.rs.core.Response;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static io.muserver.Mutils.htmlEncode;
-
-class MuExchange {
+class MuExchange implements ResponseInfo {
     private static final Logger log = LoggerFactory.getLogger(MuExchange.class);
 
-    private static final Map<String, String> exceptionMessageMap = new HashMap<>();
+    static final Map<String, String> exceptionMessageMap = new HashMap<>();
 
     static {
         MuRuntimeDelegate.ensureSet();
@@ -39,6 +33,7 @@ class MuExchange {
     private volatile MuAsyncHandle asyncHandle;
     private final AtomicLong requestBodySize = new AtomicLong(0);
     private InputStream requestInputStream;
+    private long endTime;
 
     MuExchange(MuExchangeData data, MuRequestImpl request, MuResponseImpl response) {
         this.data = data;
@@ -46,93 +41,41 @@ class MuExchange {
         this.response = response;
     }
 
-    private void onRequestCompleted(Headers trailers) {
+    void onRequestCompleted(Headers trailers) {
         this.request.onComplete(trailers);
         if (response.responseState().endState()) onCompleted();
     }
 
-    void onResponseCompleted() {
+    void onResponseCompleted(MuResponseImpl muResponse) {
         if (request.requestState().endState()) onCompleted();
     }
 
     private void onCompleted() {
         boolean good = response.responseState().completedSuccessfully() && request.requestState() == RequestState.COMPLETE;
         this.state = good ? HttpExchangeState.COMPLETE : HttpExchangeState.ERRORED;
+        this.endTime = System.currentTimeMillis();
         this.data.connection.onExchangeComplete(this);
     }
 
-    public boolean onException(Throwable cause) {
+    public void onException(Throwable cause) {
 
         if (state.endState()) {
             log.warn("Got exception after state is " + state);
-            return true;
+            return;
         }
 
         RequestBodyListener rbl = this.requestBodyListener;
         if (rbl != null && request.requestState() == RequestState.RECEIVING_BODY) {
+            // todo if this callback throws an exception, is it going to go around in a loop back to here?
             rbl.onError(cause);
+        } else if (request.hasBody()) {
+            // discard the remaining body
+            setReadListener(new DiscardingRequestBodyListener());
+        } else if (!request.requestState().endState()) {
+            log.error("Didn't expect a non end state on the request for " + this);
         }
+        response.onException(cause);
 
-        boolean streamUnrecoverable = true;
-        try {
-
-            if (!response.hasStartedSendingData()) {
-                if (request.requestState() != RequestState.ERRORED) {
-                    streamUnrecoverable = false;
-                }
-                WebApplicationException wae;
-                if (cause instanceof WebApplicationException) {
-                    wae = (WebApplicationException) cause;
-                } else {
-                    String errorID = "ERR-" + UUID.randomUUID();
-                    log.info("Sending a 500 to the client with ErrorID=" + errorID + " for " + request, cause);
-                    wae = new InternalServerErrorException("Oops! An unexpected error occurred. The ErrorID=" + errorID);
-                }
-                Response exResp = wae.getResponse();
-                if (exResp == null) {
-                    exResp = Response.serverError().build();
-                }
-                int status = exResp.getStatus();
-                if (status == 429 || status == 408 || status == 413) {
-                    streamUnrecoverable = true;
-                }
-                response.status(status);
-                boolean isHttp1 = request.protocol().equals("HTTP/1.1");
-                MuRuntimeDelegate.writeResponseHeaders(request.uri(), exResp, response, isHttp1);
-                if (streamUnrecoverable && isHttp1) {
-                    response.headers().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
-                }
-
-                boolean sendBody = exResp.getStatusInfo().getFamily() != Response.Status.Family.REDIRECTION;
-                if (sendBody) {
-                    response.contentType(ContentTypes.TEXT_HTML_UTF8);
-                    String message = wae.getMessage();
-                    message = exceptionMessageMap.getOrDefault(message, message);
-                    String html = "<h1>" + status + " " + exResp.getStatusInfo().getReasonPhrase() + "</h1><p>" + htmlEncode(message) + "</p>";
-                    if (request.isAsync()) {
-                        // todo: write async?
-                        response.write(html);
-                    } else {
-                        response.write(html);
-                    }
-                }
-                response.end();
-            } else {
-                log.info(cause.getClass().getName() + " while handling " + request + " - note a " + response.status() +
-                    " was already sent and the client may have received an incomplete response. Exception was " + cause.getMessage());
-                onCompleted();
-            }
-        } catch (Exception e) {
-            log.warn("Error while processing processing " + cause + " for " + request, e);
-            onCompleted();
-        } finally {
-            if (streamUnrecoverable) {
-                response.onCancelled(ResponseState.ERRORED);
-                request.onCancelled(ResponseState.ERRORED, cause);
-                data.connection.initiateShutdown();
-            }
-        }
-        return streamUnrecoverable;
     }
 
 
@@ -207,6 +150,35 @@ class MuExchange {
             asyncHandle = new MuAsyncHandle(this);
         }
         return asyncHandle;
+    }
+
+    @Override
+    public String toString() {
+        return "MuExchange " + state + " - " + request + " and " + response;
+    }
+
+
+    @Override
+    public long duration() {
+        long start = request.startTime();
+        long end = endTime;
+        if (end == 0) end = System.currentTimeMillis();
+        return end - start;
+    }
+
+    @Override
+    public boolean completedSuccessfully() {
+        return state == HttpExchangeState.COMPLETE; // TODO what about upgraded?
+    }
+
+    @Override
+    public MuRequest request() {
+        return request;
+    }
+
+    @Override
+    public MuResponse response() {
+        return response;
     }
 }
 class MuExchangeData {
@@ -300,5 +272,20 @@ class RequestBodyListenerToInputStreamAdapter extends InputStream implements Req
             }
         }
         return read(b, off, len);
+    }
+}
+
+class DiscardingRequestBodyListener implements RequestBodyListener {
+    @Override
+    public void onDataReceived(ByteBuffer buffer, DoneCallback doneCallback) throws Exception {
+        doneCallback.onComplete(null);
+    }
+
+    @Override
+    public void onComplete() {
+    }
+
+    @Override
+    public void onError(Throwable t) {
     }
 }

@@ -262,4 +262,10 @@ public class MuRequestImpl implements MuRequest {
             state = RequestState.ERRORED;
         }
     }
+
+    public void onException(Throwable cause) {
+        if (!state.endState()) {
+            state = RequestState.ERRORED;
+        }
+    }
 }

@@ -3,6 +3,7 @@ package io.muserver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.ws.rs.ClientErrorException;
 import javax.ws.rs.NotFoundException;
 import javax.ws.rs.RedirectionException;
 import java.io.IOException;
@@ -10,8 +11,8 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.channels.AsynchronousSocketChannel;
-import java.nio.channels.ClosedChannelException;
 import java.nio.channels.CompletionHandler;
+import java.nio.channels.InterruptedByTimeoutException;
 import java.security.cert.Certificate;
 import java.time.Instant;
 import java.util.Collections;
@@ -81,7 +82,6 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
         try {
             if (server.unhandledExceptionHandler != null && !(ex instanceof RedirectionException) && server.unhandledExceptionHandler.handle(exchange.request, exchange.response, ex)) {
                 exchange.response.end();
-                exchange.onResponseCompleted();
             } else {
                 exchange.onException(ex);
             }
@@ -343,15 +343,11 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
     @Override
     public void failed(Throwable exc, Object attachment) {
         MuExchange cur = exchange;
-        boolean closeConnection = true;
         if (cur != null) {
-            closeConnection = exchange.onException(exc);
-        }
-        if (closeConnection) {
-            var logIt = !(exc instanceof ClosedChannelException);
-            if (logIt) { // TODO also log if requests are in progress
-                log.error("Read failed", exc);
-            }
+            var toUse = (exc instanceof InterruptedByTimeoutException) ? new ClientErrorException("Timed out waiting to read request", 408) : exc;
+            cur.onException(toUse);
+        } else {
+            log.warn("Read failure without an exchange", exc);
             forceShutdown(exc);
         }
     }
@@ -422,9 +418,15 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
     public void onExchangeComplete(MuExchange muExchange) {
         this.exchange = null;
         acceptor.onExchangeComplete(muExchange);
-        if (muExchange.state == HttpExchangeState.COMPLETE) {
+        if (muExchange.state == HttpExchangeState.ERRORED) {
+            forceShutdown(null); // TODO put an exception?
+        } else if (muExchange.response.headers().contains(HeaderNames.CONNECTION, HeaderValues.CLOSE, true)) {
+            initiateShutdown();
+        } else if (muExchange.state == HttpExchangeState.COMPLETE) {
             // todo is this the only time to read again?
             readyToRead(true);
+        } else {
+            log.error("Unexpected situation: " + muExchange);
         }
     }
 

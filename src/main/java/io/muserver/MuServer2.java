@@ -24,11 +24,13 @@ class MuServer2 implements MuServer {
     final MuStats2Impl stats = new MuStats2Impl();
     final UnhandledExceptionHandler unhandledExceptionHandler;
     final MuServerSettings settings;
+    private final List<ResponseCompleteListener> responseCompleteListeners;
 
-    MuServer2(List<MuHandler> handlers, UnhandledExceptionHandler unhandledExceptionHandler, MuServerSettings settings) {
+    MuServer2(List<MuHandler> handlers, UnhandledExceptionHandler unhandledExceptionHandler, MuServerSettings settings, List<ResponseCompleteListener> responseCompleteListeners) {
         this.handlers = handlers;
         this.unhandledExceptionHandler = unhandledExceptionHandler;
         this.settings = settings;
+        this.responseCompleteListeners = responseCompleteListeners;
     }
 
     void addAcceptor(ConnectionAcceptor acceptor) {
@@ -45,7 +47,7 @@ class MuServer2 implements MuServer {
 
         var settings = new MuServerSettings(builder.gzipEnabled(), builder.minimumGzipSize(), builder.mimeTypesToGzip(), builder.maxRequestSize(), builder.maxHeadersSize(), builder.maxUrlSize(), builder.idleTimeoutMills(), builder.requestReadTimeoutMillis());
 
-        MuServer2 server = new MuServer2(builder.handlers(), builder.unhandledExceptionHandler(), settings);
+        MuServer2 server = new MuServer2(builder.handlers(), builder.unhandledExceptionHandler(), settings, builder.responseCompleteListeners());
         if (!hasHttps) {
             server.addAcceptor(createAcceptor(server, null, endpoint));
         } else {
@@ -256,6 +258,9 @@ class MuServer2 implements MuServer {
 
     public void onExchangeComplete(MuExchange exchange) {
         stats.onRequestEnded(exchange.request);
+        for (ResponseCompleteListener listener : responseCompleteListeners) {
+            listener.onComplete(exchange);
+        }
     }
 
     public void onInvalidRequest(InvalidRequestException e) {
