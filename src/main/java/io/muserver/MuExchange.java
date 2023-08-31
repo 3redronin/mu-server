@@ -293,9 +293,11 @@ class DiscardingRequestBodyListener implements RequestBodyListener {
 
     @Override
     public void onComplete() {
+        System.out.println("complete");
     }
 
     @Override
     public void onError(Throwable t) {
+        System.out.println("err " + t);
     }
 }

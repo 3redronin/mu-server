@@ -52,17 +52,54 @@ public class StateChangesTest {
     public void when_request_HEADERS_RECEIVED_and_response_NOTHING_action_READ_TIMEOUT_leadsTo_Connection_Dropped(String type) throws Exception {
         server = serverBuilder(type)
             .withRequestTimeout(500, TimeUnit.MILLISECONDS)
-            .addHandler((request, response) -> {
+            .addHandler(Method.POST, "/read", (request, response, pp) -> {
                 request.inputStream().get().read();
-                return true;
+            })
+            .addHandler(Method.POST, "/discard", (request, response, pp) -> {
             })
             .start();
-        try (var client = POST("/")
+        try (var client = POST("/read")
             .contentHeader("text/plain", 20)
             .flushHeaders()) {
             assertThrows(SocketException.class, () -> client.in().readAllBytes());
         }
         assertOneCompleted(RequestState.ERRORED, ResponseState.ERRORED);
+        completed.clear();
+        try (var client = POST("/discard")
+            .contentHeader("text/plain", 20)
+            .flushHeaders()) {
+            assertThrows(SocketException.class, () -> client.in().readAllBytes());
+        }
+        assertOneCompleted(RequestState.ERRORED, ResponseState.ERRORED);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "http", "https" })
+    public void when_request_HEADERS_RECEIVED_and_response_FULL_SENT_action_READ_TIMEOUT_leadsTo_Connection_Dropped(String type) throws Exception {
+        server = serverBuilder(type)
+            .withRequestTimeout(500, TimeUnit.MILLISECONDS)
+            .addHandler(Method.POST, "/read", (request, response, pp) -> {
+                response.write("hi");
+                request.inputStream().get().read();
+            })
+            .addHandler(Method.POST, "/discard", (request, response, pp) -> {
+                response.write("hi");
+            })
+            .start();
+        try (var client = POST("/read")
+            .contentHeader("text/plain", 20)
+            .flushHeaders()) {
+            assertThrows(SocketException.class, () -> client.in().readAllBytes());
+        }
+        assertOneCompleted(RequestState.ERRORED, ResponseState.FULL_SENT);
+        completed.clear();
+        try (var client = POST("/discard")
+            .contentHeader("text/plain", 20)
+            .flushHeaders()) {
+            assertThrows(SocketException.class, () -> client.in().readAllBytes());
+        }
+        assertOneCompleted(RequestState.ERRORED, ResponseState.FULL_SENT);
+
     }
 
     @ParameterizedTest

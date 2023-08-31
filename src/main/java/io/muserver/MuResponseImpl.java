@@ -175,6 +175,8 @@ public class MuResponseImpl implements MuResponse {
         }
     }
 
+
+    this should call muexhcange.end and discard the body and throw if timed out
     public void end() throws IOException {
 
         PrintWriter w = writer;
