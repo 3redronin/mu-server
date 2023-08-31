@@ -168,4 +168,13 @@ public class Http1Client implements AutoCloseable {
         }
     }
 
+    public Http1Client contentHeader(String contentType, int contentLength) {
+        if (contentLength >= 0) writeHeader("content-length", contentLength);
+        if (contentType != null) writeHeader("content-type", contentType);
+        return this;
+    }
+
+    public Http1Client flushHeaders() {
+        return endHeaders().flush();
+    }
 }

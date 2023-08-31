@@ -256,16 +256,22 @@ public class MuRequestImpl implements MuRequest {
         this.state = RequestState.ERRORED;
     }
 
-    public void onCancelled(ResponseState responseState, Throwable cause) {
-        if (!state.endState()) {
-            // todo: what to do with reader / thread that is blocking
-            state = RequestState.ERRORED;
-        }
-    }
-
     public void onException(Throwable cause) {
         if (!state.endState()) {
             state = RequestState.ERRORED;
         }
     }
+
+    @Override
+    public void abort() {
+        throw new UserRequestAbortException();
+    }
+
+    void abort(Throwable cause) {
+        if (!state.endState()) {
+            this.state = RequestState.ERRORED;
+        }
+    }
 }
+
+class UserRequestAbortException extends RuntimeException {}

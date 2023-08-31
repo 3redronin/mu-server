@@ -3,7 +3,6 @@ package io.muserver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.ws.rs.ClientErrorException;
 import javax.ws.rs.NotFoundException;
 import javax.ws.rs.RedirectionException;
 import java.io.IOException;
@@ -12,7 +11,6 @@ import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.channels.AsynchronousSocketChannel;
 import java.nio.channels.CompletionHandler;
-import java.nio.channels.InterruptedByTimeoutException;
 import java.security.cert.Certificate;
 import java.time.Instant;
 import java.util.Collections;
@@ -79,14 +77,18 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
 
     static void useCustomExceptionHandlerOrFireIt(MuExchange exchange, Throwable ex) {
         var server = (MuServer2) exchange.request.server();
-        try {
-            if (server.unhandledExceptionHandler != null && !(ex instanceof RedirectionException) && server.unhandledExceptionHandler.handle(exchange.request, exchange.response, ex)) {
-                exchange.response.end();
-            } else {
-                exchange.onException(ex);
+        if (ex instanceof UserRequestAbortException) {
+            exchange.abort(ex);
+        } else {
+            try {
+                if (server.unhandledExceptionHandler != null && !(ex instanceof RedirectionException) && server.unhandledExceptionHandler.handle(exchange.request, exchange.response, ex)) {
+                    exchange.response.end();
+                } else {
+                    exchange.onException(ex);
+                }
+            } catch (Throwable handlerException) {
+                exchange.onException(handlerException);
             }
-        } catch (Throwable handlerException) {
-            exchange.onException(handlerException);
         }
     }
 
@@ -344,12 +346,12 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
     public void failed(Throwable exc, Object attachment) {
         MuExchange cur = exchange;
         if (cur != null) {
-            var toUse = (exc instanceof InterruptedByTimeoutException) ? new ClientErrorException("Timed out waiting to read request", 408) : exc;
-            cur.onException(toUse);
+            log.warn("Killing exchange due to read error: " + cur, exc);
+            cur.abort(exc);
         } else {
             log.warn("Read failure without an exchange", exc);
-            forceShutdown(exc);
         }
+        forceShutdown(exc);
     }
 
     public void forceShutdown(Throwable exc) {

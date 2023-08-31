@@ -252,4 +252,18 @@ public interface MuRequest {
      * @return The trailers, or <code>null</code> if there are no trailers.
      */
     Headers trailers();
+
+    /**
+     * Gets the current state of the request. Note that this is distinct from
+     * {@link MuResponse#responseState()}
+     * @return The current state of the request
+     */
+    RequestState requestState();
+
+    /**
+     * Immediately halts processing of this request.
+     * <p>On HTTP 1 requests, the connection will be forcefully killed. On HTTP 2 requests, the stream
+     * will be reset.</p>
+     */
+    void abort();
 }

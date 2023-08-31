@@ -3,7 +3,7 @@ package io.muserver;
 /**
  * The current state of a request
  */
-enum RequestState {
+public enum RequestState {
     /**
      * The request headers have been received. There is a request body but haven't started processing it yet.
      * <p>Note: if there is no request body expected, </p>
@@ -18,7 +18,8 @@ enum RequestState {
      */
     COMPLETE(true),
     /**
-     * An error occurred before the full request was received, e.g. because the client disconnected or was uploading data too slowly
+     * An error occurred before the full request was received, e.g. because the client disconnected or was uploading data too slowly,
+     * or {@link MuRequest#abort()} was called.
      */
     ERRORED(true);
 

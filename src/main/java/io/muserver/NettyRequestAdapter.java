@@ -459,6 +459,11 @@ class NettyRequestAdapter implements MuRequest {
         return state;
     }
 
+    @Override
+    public void abort() {
+
+    }
+
     void onRequestBodyRead(ByteBuf content, boolean last, DoneCallback callback) {
         RequestBodyReader rbr = this.requestBodyReader;
         if (rbr != null) {

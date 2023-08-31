@@ -413,4 +413,10 @@ public class MuResponseImpl implements MuResponse {
         }
 
     }
+
+    void abort(Throwable cause) {
+        if (!responseState().endState()) {
+            state = ResponseState.ERRORED;
+        }
+    }
 }

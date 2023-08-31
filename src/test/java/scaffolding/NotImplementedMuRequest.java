@@ -159,4 +159,14 @@ public class NotImplementedMuRequest implements MuRequest {
     public Headers trailers() {
         return throwIt();
     }
+
+    @Override
+    public RequestState requestState() {
+        return throwIt();
+    }
+
+    @Override
+    public void abort() {
+        throwIt();
+    }
 }

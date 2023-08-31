@@ -8,6 +8,7 @@ import scaffolding.Http1Client;
 import scaffolding.MuAssert;
 
 import javax.ws.rs.ClientErrorException;
+import java.io.EOFException;
 import java.io.IOException;
 import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
@@ -44,38 +45,90 @@ public class StateChangesTest {
     }
 
     private MuServer server;
+    private final List<ResponseInfo> completed = new ArrayList<>();
 
     @ParameterizedTest
     @ValueSource(strings = { "http", "https" })
     public void when_request_HEADERS_RECEIVED_and_response_NOTHING_action_READ_TIMEOUT_leadsTo_Connection_Dropped(String type) throws Exception {
-        server = muServer()
+        server = serverBuilder(type)
             .withRequestTimeout(500, TimeUnit.MILLISECONDS)
-            .withHttpPort(type.equals("http") ? 0 : -1)
-            .withHttpsPort(type.equals("https") ? 0 : -1)
             .addHandler((request, response) -> {
                 request.inputStream().get().read();
                 return true;
             })
             .start();
-
-        try (var client = Http1Client.connect(server)
-            .writeRequestLine(Method.POST, "/")
-            .writeHeader("content-length", 20)
-            .endHeaders()
-            .flush()) {
+        try (var client = POST("/")
+            .contentHeader("text/plain", 20)
+            .flushHeaders()) {
             assertThrows(SocketException.class, () -> client.in().readAllBytes());
         }
+        assertOneCompleted(RequestState.ERRORED, ResponseState.ERRORED);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "http", "https" })
+    public void when_request_HEADERS_RECEIVED_and_response_NOTHING_action_CANCEL_then_errors_happen(String type) throws Exception {
+        server = serverBuilder(type)
+            .addHandler((request, response) -> {
+                request.abort();
+                return true;
+            })
+            .start();
+        try (var client = POST("/")
+            .contentHeader("text/plain", 20)
+            .flushHeaders()) {
+            assertThat(client.in().readAllBytes().length, equalTo(0));
+        }
+        assertOneCompleted(RequestState.ERRORED, ResponseState.ERRORED);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "http", "https" })
+    public void when_request_COMPLETE_and_response_STREAMING_action_CANCEL_response_killed_early(String type) throws Exception {
+        server = serverBuilder(type)
+            .addHandler((request, response) -> {
+                response.headers().set(HeaderNames.CONTENT_LENGTH, 20);
+                response.sendChunk("Hello");
+                request.abort();
+                return true;
+            })
+            .start();
+        try (var client = GET("/").flushHeaders()) {
+            var headers = assert200(client);
+            assertThrows(EOFException.class, () -> client.readBody(headers));
+        }
+        assertOneCompleted(RequestState.COMPLETE, ResponseState.ERRORED);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "http", "https" })
+    public void when_request_HEADERS_RECEIVED_and_response_STREAMING_action_CANCEL_response_killed_early(String type) throws Exception {
+        server = serverBuilder(type)
+            .addHandler((request, response) -> {
+                response.headers().set(HeaderNames.CONTENT_LENGTH, 20);
+                response.sendChunk("Hello");
+                request.abort();
+                return true;
+            })
+            .start();
+        try (var client = POST("/")
+            .contentHeader("text/plain", 20)
+            .flushHeaders()) {
+            var headers = assert200(client);
+            assertThrows(EOFException.class, () -> client.readBody(headers));
+        }
+        assertOneCompleted(RequestState.ERRORED, ResponseState.ERRORED);
+    }
+
+    private static Headers assert200(Http1Client client) throws IOException {
+        assertThat(client.readLine(), equalTo("HTTP/1.1 200 OK"));
+        return client.readHeaders();
     }
 
     @ParameterizedTest
     @ValueSource(strings = { "http", "https" })
     public void when_request_HEADERS_RECEIVED_and_response_NOTHING_exception_thrown_then_error_is_sent_to_client_and_connection_reusable(String type) throws Exception {
-        var completed = new ArrayList<ResponseInfo>();
-        server = muServer()
-            .withHttpPort(type.equals("http") ? 0 : -1)
-            .withHttpsPort(type.equals("https") ? 0 : -1)
-            .addResponseCompleteListener(completed::add)
-            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> response.write("Hello"))
+        server = serverBuilder(type)
             .addHandler((request, response) -> {
                 AsyncHandle asyncHandle = request.handleAsync();
                 asyncHandle.complete(new ClientErrorException("You are a bad client", 400));
@@ -83,12 +136,9 @@ public class StateChangesTest {
             })
             .start();
 
-        try (var client = Http1Client.connect(server)
-            .writeRequestLine(Method.POST, "/")
-            .writeHeader("content-length", 5)
-            .writeHeader("content-type", "text/plain")
-            .endHeaders()
-            .flush()) {
+        try (var client = POST("/")
+            .contentHeader("text/plain", 5)
+            .flushHeaders()) {
 
             assertThat(client.readLine(), equalTo("HTTP/1.1 400 OK")); // TODO set the status message!!
             var headers = client.readHeaders();
@@ -98,24 +148,47 @@ public class StateChangesTest {
 
             client.out().write("hello".getBytes(StandardCharsets.UTF_8));
             client.out().flush();
-            assertEventually(() -> completed, hasSize(1));
-            var info = completed.get(0);
-            assertThat(((MuRequestImpl)info.request()).requestState(), equalTo(RequestState.COMPLETE));
-            assertThat(info.response().responseState(), equalTo(ResponseState.FULL_SENT));
+
+            assertOneCompleted(RequestState.COMPLETE, ResponseState.FULL_SENT);
             assertThatClientCanStillSendRequests(client);
         }
     }
 
+    private void assertOneCompleted(RequestState expectedRequestState, ResponseState expectedResponseState) {
+        assertEventually(() -> completed, hasSize(1));
+        ResponseInfo info = completed.get(0);
+        assertThat(info.request().requestState(), equalTo(expectedRequestState));
+        assertThat(info.response().responseState(), equalTo(expectedResponseState));
+        var requestGood = expectedRequestState == RequestState.COMPLETE;
+        var responseGood = expectedResponseState == ResponseState.FINISHED || expectedResponseState == ResponseState.FULL_SENT;
+        assertThat(info.completedSuccessfully(), equalTo(requestGood && responseGood));
+    }
+
+    private MuServerBuilder serverBuilder(String type) {
+        return muServer()
+            .withHttpPort(type.equals("http") ? 0 : -1)
+            .withHttpsPort(type.equals("https") ? 0 : -1)
+            .addResponseCompleteListener(completed::add)
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> response.write("Hello"));
+    }
+
+    private Http1Client POST(String uri) {
+        return Http1Client.connect(server)
+            .writeRequestLine(Method.POST, uri);
+    }
+    private Http1Client GET(String uri) {
+        return Http1Client.connect(server)
+            .writeRequestLine(Method.GET, uri);
+    }
+
     private void assertThatClientCanStillSendRequests(Http1Client client) throws IOException {
         client.writeRequestLine(Method.GET, "/hello").endHeaders().flush();
-        assertThat(client.readLine(), equalTo("HTTP/1.1 200 OK"));
-        assertThat(client.readBody(client.readHeaders()), equalTo("Hello"));
+        var headers = assert200(client);
+        assertThat(client.readBody(headers), equalTo("Hello"));
     }
 
     @AfterEach
     public void stopIt() {
-
-        System.out.println("Stopping");
         MuAssert.stopAndCheck(server);
     }
 }

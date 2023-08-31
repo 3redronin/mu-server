@@ -57,6 +57,16 @@ class MuExchange implements ResponseInfo {
         this.data.connection.onExchangeComplete(this);
     }
 
+    public void abort(Throwable cause) {
+        if (state.endState()) {
+            log.warn("Got exception after state is " + state);
+            return;
+        }
+        request.abort(cause);
+        response.abort(cause);
+        onCompleted();
+    }
+
     public void onException(Throwable cause) {
 
         if (state.endState()) {
