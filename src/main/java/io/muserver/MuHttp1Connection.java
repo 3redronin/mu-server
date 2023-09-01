@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.ByteBuffer;
+import java.nio.channels.AsynchronousCloseException;
 import java.nio.channels.AsynchronousSocketChannel;
 import java.nio.channels.CompletionHandler;
 import java.security.cert.Certificate;
@@ -234,7 +235,7 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
         }
 
         var req = new MuRequestImpl(data, newRequest.method(), relativeUri, headers, newRequest.hasBody());
-        var resp = new MuResponseImpl(data, channel);
+        var resp = new MuResponseImpl(data);
         var exchange = new MuExchange(data, req, resp);
         this.exchange = exchange;
         data.exchange = exchange;
@@ -348,7 +349,7 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
         if (cur != null) {
             log.warn("Killing exchange due to read error: " + cur, exc);
             cur.abort(exc);
-        } else {
+        } else if (!(exc instanceof AsynchronousCloseException)) {
             log.warn("Read failure without an exchange", exc);
         }
         forceShutdown(exc);

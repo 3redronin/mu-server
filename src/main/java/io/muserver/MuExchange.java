@@ -10,11 +10,18 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.CompletionHandler;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
-class MuExchange implements ResponseInfo {
+class MuExchange implements ResponseInfo, AsyncHandle {
     private static final Logger log = LoggerFactory.getLogger(MuExchange.class);
 
     static final Map<String, String> exceptionMessageMap = new HashMap<>();
@@ -30,10 +37,11 @@ class MuExchange implements ResponseInfo {
     final MuRequestImpl request;
     final MuResponseImpl response;
     private volatile RequestBodyListener requestBodyListener;
-    private volatile MuAsyncHandle asyncHandle;
     private final AtomicLong requestBodySize = new AtomicLong(0);
     private InputStream requestInputStream;
     private long endTime;
+    private boolean isAsync = false;
+    private List<ResponseCompleteListener> completeListeners;
 
     MuExchange(MuExchangeData data, MuRequestImpl request, MuResponseImpl response) {
         this.data = data;
@@ -54,6 +62,15 @@ class MuExchange implements ResponseInfo {
         boolean good = response.responseState().completedSuccessfully() && request.requestState() == RequestState.COMPLETE;
         this.state = good ? HttpExchangeState.COMPLETE : HttpExchangeState.ERRORED;
         this.endTime = System.currentTimeMillis();
+        if (completeListeners != null) {
+            for (ResponseCompleteListener listener : completeListeners) {
+                try {
+                    listener.onComplete(this);
+                } catch (Exception e) {
+                    log.warn("ResponseCompleteListener threw exception while processing " + this, e);
+                }
+            }
+        }
         this.data.connection.onExchangeComplete(this);
     }
 
@@ -131,10 +148,6 @@ class MuExchange implements ResponseInfo {
         }
     }
 
-    public void setReadListener(RequestBodyListener listener) {
-        this.requestBodyListener = listener;
-        this.data.connection.readyToRead(true);
-    }
 
 
     public InputStream requestInputStream() {
@@ -152,14 +165,124 @@ class MuExchange implements ResponseInfo {
 
 
     public boolean isAsync() {
-        return asyncHandle != null;
+        return isAsync;
     }
 
     public AsyncHandle handleAsync() {
-        if (asyncHandle == null) {
-            asyncHandle = new MuAsyncHandle(this);
+        isAsync = true;
+        return this;
+    }
+
+
+    @Override
+    public void setReadListener(RequestBodyListener readListener) {
+        if (request.hasBody()) {
+            this.requestBodyListener = readListener;
+            this.data.connection.readyToRead(true);
+        } else {
+            readListener.onComplete();
         }
-        return asyncHandle;
+    }
+
+    @Override
+    public void complete() {
+        try {
+            response.end();
+        } catch (IOException e) {
+            complete(e);
+        }
+    }
+
+    @Override
+    public void complete(Throwable throwable) {
+        onException(throwable);
+    }
+
+    @Override
+    public void write(ByteBuffer data, DoneCallback callback) {
+        Mutils.notNull("data", data);
+        Mutils.notNull("callback", callback);
+        write(data, true, callback);
+    }
+    public void write(ByteBuffer data, boolean encodeChunks, DoneCallback callback) {
+        var resp = response;
+
+        boolean chunked = encodeChunks && resp.isChunked();
+        int buffersToSend = (resp.hasStartedSendingData() ? 0 : 1) + (chunked ? 2 : 0) + (data != null ? 1 : 0);
+        int bi = -1;
+        var toSend = new ByteBuffer[buffersToSend];
+        if (!resp.hasStartedSendingData()) {
+            toSend[++bi] = resp.startStreaming();
+        }
+        if (chunked) {
+            toSend[++bi] = StandardCharsets.US_ASCII.encode(Integer.toHexString(data.remaining()) + "\r\n");
+        }
+        toSend[++bi] = data;
+        if (chunked) {
+            toSend[++bi] = StandardCharsets.US_ASCII.encode("\r\n");
+        }
+
+        var sb = new StringBuilder();
+        for (ByteBuffer buffer : toSend) {
+            sb.append(new String(buffer.array(), buffer.position(), buffer.limit()));
+        }
+        log.info(">>\n" + sb.toString().replace("\r", "\\r").replace("\n", "\\n\r\n"));
+
+        MuHttp1Connection con = this.data.connection;
+        CompletionHandler<Long, Object> writeHandler = new CompletionHandler<>() {
+            @Override
+            public void completed(Long result, Object attachment) {
+                MuExchange.this.data.server().stats.onBytesSent(result);
+                // todo report this up the chain so stats are updated
+                try {
+                    boolean broke = false;
+                    for (ByteBuffer byteBuffer : toSend) {
+                        if (byteBuffer.hasRemaining()) {
+                            con.scatteringWrite(toSend, 0, toSend.length, MuExchange.this.data.server().settings.responseWriteTimeoutMillis(), TimeUnit.MILLISECONDS, null, this);
+                            broke = true;
+                            break;
+                        }
+                    }
+                    if (!broke) {
+                        callback.onComplete(null);
+                    }
+                } catch (Exception e) {
+                    failed(e, attachment);
+                }
+            }
+
+            @Override
+            public void failed(Throwable exc, Object attachment) {
+                try {
+                    callback.onComplete(exc); // todo check the exchange status here - should it just be closed?
+                } catch (Exception e) {
+                    complete(e);
+                }
+            }
+        };
+        con.scatteringWrite(toSend, 0, toSend.length, this.data.server().settings.responseWriteTimeoutMillis(), TimeUnit.MILLISECONDS, null, writeHandler);
+
+    }
+
+    @Override
+    public Future<Void> write(ByteBuffer data) {
+        CompletableFuture<Void> cf = new CompletableFuture<>();
+        write(data, error -> {
+            if (error == null) {
+                cf.complete(null);
+            } else {
+                cf.completeExceptionally(error);
+            }
+        });
+        return cf;
+    }
+
+    @Override
+    public void addResponseCompleteHandler(ResponseCompleteListener responseCompleteListener) {
+        if (completeListeners == null) {
+            completeListeners = new ArrayList<>();
+        }
+        completeListeners.add(responseCompleteListener);
     }
 
     @Override
@@ -300,4 +423,7 @@ class DiscardingRequestBodyListener implements RequestBodyListener {
     public void onError(Throwable t) {
         System.out.println("err " + t);
     }
+
+
+
 }

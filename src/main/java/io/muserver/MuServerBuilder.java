@@ -2,7 +2,6 @@ package io.muserver;
 
 import io.muserver.handlers.ResourceType;
 import io.muserver.rest.MuRuntimeDelegate;
-import io.netty.channel.WriteBufferWaterMark;
 import io.netty.util.HashedWheelTimer;
 import io.netty.util.concurrent.DefaultThreadFactory;
 
@@ -42,13 +41,13 @@ public class MuServerBuilder {
     private HttpsConfigBuilder sslContextBuilder;
     private Http2Config http2Config;
     private long requestReadTimeoutMillis = TimeUnit.MINUTES.toMillis(2);
+    private long responseWriteTimeoutMillis = TimeUnit.MINUTES.toMillis(2);
     private long idleTimeoutMills = TimeUnit.MINUTES.toMillis(10);
     private ExecutorService executor;
     private long maxRequestSize = 24 * 1024 * 1024;
     private List<ResponseCompleteListener> responseCompleteListeners;
     private HashedWheelTimer wheelTimer;
     private List<RateLimiterImpl> rateLimiters;
-    private WriteBufferWaterMark writeBufferWaterMark = WriteBufferWaterMark.DEFAULT;
     private UnhandledExceptionHandler unhandledExceptionHandler;
 
     /**
@@ -270,6 +269,24 @@ public class MuServerBuilder {
         this.requestReadTimeoutMillis = unit.toMillis(duration);
         return this;
     }
+    /**
+     * Sets the timeout to use when writing response data to a client. When this timeout occurs the
+     * request is cancelled and the connection closed.
+     * <p>The default is 2 minutes.</p>
+     *
+     * @param duration The allowed timeout duration, or 0 to disable timeouts.
+     * @param unit     The unit of the duration.
+     * @return This builder
+     * @see #withIdleTimeout(long, TimeUnit)
+     */
+    public MuServerBuilder withResponseWriteTimeoutMillis(long duration, TimeUnit unit) {
+        if (duration < 0) {
+            throw new IllegalArgumentException("The duration must be 0 or greater");
+        }
+        Mutils.notNull("unit", unit);
+        this.responseWriteTimeoutMillis = unit.toMillis(duration);
+        return this;
+    }
 
 
     /**
@@ -337,11 +354,6 @@ public class MuServerBuilder {
             }
             this.responseCompleteListeners.add(listener);
         }
-        return this;
-    }
-
-    MuServerBuilder withWriteBufferWaterMark(int low, int high) {
-        this.writeBufferWaterMark = new WriteBufferWaterMark(low, high);
         return this;
     }
 
@@ -503,6 +515,14 @@ public class MuServerBuilder {
     public long requestReadTimeoutMillis() {
         return requestReadTimeoutMillis;
     }
+
+    /**
+     * @return The current value of this property
+     */
+    public long responseWriteTimeoutMillis() {
+        return responseWriteTimeoutMillis;
+    }
+
 
     /**
      * @return The current value of this property

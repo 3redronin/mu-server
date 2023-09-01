@@ -45,7 +45,7 @@ class MuServer2 implements MuServer {
         var bindPort = hasHttps ? builder.httpsPort() : builder.httpPort();
         InetSocketAddress endpoint = builder.interfaceHost() == null ? new InetSocketAddress(bindPort) : new InetSocketAddress(builder.interfaceHost(), bindPort);
 
-        var settings = new MuServerSettings(builder.gzipEnabled(), builder.minimumGzipSize(), builder.mimeTypesToGzip(), builder.maxRequestSize(), builder.maxHeadersSize(), builder.maxUrlSize(), builder.idleTimeoutMills(), builder.requestReadTimeoutMillis());
+        var settings = new MuServerSettings(builder.gzipEnabled(), builder.minimumGzipSize(), builder.mimeTypesToGzip(), builder.maxRequestSize(), builder.maxHeadersSize(), builder.maxUrlSize(), builder.idleTimeoutMills(), builder.requestReadTimeoutMillis(), builder.responseWriteTimeoutMillis());
 
         MuServer2 server = new MuServer2(builder.handlers(), builder.unhandledExceptionHandler(), settings, builder.responseCompleteListeners());
         if (!hasHttps) {
@@ -270,4 +270,4 @@ class MuServer2 implements MuServer {
 
 
 record MuServerSettings(boolean gzipEnabled, long minGzipSize, Set<String> mimeTypesToGzip, long maxRequestSize, int maxHeadersSize, int maxUrlSize,
-                        long idleTimeoutMills, long requestReadTimeoutMillis) {}
+                        long idleTimeoutMills, long requestReadTimeoutMillis, long responseWriteTimeoutMillis) {}

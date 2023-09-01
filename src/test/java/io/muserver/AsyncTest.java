@@ -73,7 +73,6 @@ public class AsyncTest {
 
         int totalCount = 1000;
         server = httpsServer()
-            .withWriteBufferWaterMark(1, 1000)
             .withHttp2Config(Http2ConfigBuilder.http2Config()) // test http 1 only
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.contentType(ContentTypes.APPLICATION_OCTET_STREAM);

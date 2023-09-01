@@ -11,7 +11,6 @@ import javax.ws.rs.core.Response;
 import java.io.*;
 import java.net.URI;
 import java.nio.ByteBuffer;
-import java.nio.channels.AsynchronousSocketChannel;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -29,7 +28,6 @@ public class MuResponseImpl implements MuResponse {
     private static final Logger log = LoggerFactory.getLogger(MuResponseImpl.class);
 
     private final MuExchangeData data;
-    private final AsynchronousSocketChannel tlsChannel;
     private int status = 200;
     private final MuHeaders headers = MuHeaders.responseHeaders();
     private MuHeaders trailers = null;
@@ -37,9 +35,8 @@ public class MuResponseImpl implements MuResponse {
     private OutputStream outputStream;
     private PrintWriter writer;
 
-    public MuResponseImpl(MuExchangeData data, AsynchronousSocketChannel tlsChannel) {
+    public MuResponseImpl(MuExchangeData data) {
         this.data = data;
-        this.tlsChannel = tlsChannel;
     }
 
     @Override
@@ -73,9 +70,24 @@ public class MuResponseImpl implements MuResponse {
             body = charset.encode(text);
         }
         headers.set(HeaderNames.CONTENT_LENGTH, body.remaining());
-        ByteBuffer headerBuf = headersBuffer(true, headers);
-        blockingWrite(headerBuf, body);
+        blockingWrite(body);
         setState(ResponseState.FULL_SENT);
+    }
+
+    private void blockingWrite(ByteBuffer body) throws IOException {
+        try {
+            data.exchange.write(body).get(this.data.server().settings.responseWriteTimeoutMillis(), TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            setState(ResponseState.ERRORED);
+            throw new InterruptedIOException("Interrupted while writing response");
+        } catch (ExecutionException e) {
+            setState(ResponseState.ERRORED);
+            Throwable cause = e.getCause();
+            throw cause instanceof IOException ? (IOException) cause : new IOException("Exception while writing body", cause);
+        } catch (TimeoutException e) {
+            setState(ResponseState.TIMED_OUT);
+            throw new IOException("Timed out while writing", e);
+        }
     }
 
     private boolean prepareForGzip() {
@@ -107,39 +119,6 @@ public class MuResponseImpl implements MuResponse {
         return true;
     }
 
-    private void blockingWrite(ByteBuffer... buffers) throws IOException {
-        try {
-            for (ByteBuffer buffer : buffers) {
-                String s = new String(buffer.array(), buffer.position(), buffer.limit());
-                log.info(">>\n" + s.replace("\r", "\\r").replace("\n", "\\n\r\n"));
-
-
-                // TODO use scattering write
-                while (buffer.hasRemaining()) {
-                    int written = tlsChannel.write(buffer).get(10, TimeUnit.SECONDS).intValue();
-                    if (written > 0) {
-                        log.info("Wrote " + written + " bytes");
-                        data.acceptor().muServer.stats.onBytesSent(written); // TODO do this somewhere else?
-                    } else if (written == -1) {
-                        state = ResponseState.ERRORED;
-                        throw new IOException("Write failed");
-                    }
-                }
-            }
-        } catch (InterruptedException e) {
-            state = ResponseState.ERRORED;
-            throw new InterruptedIOException();
-        } catch (ExecutionException e) {
-            state = ResponseState.ERRORED;
-            Throwable cause = e.getCause();
-            if (cause instanceof IOException) throw (IOException) cause;
-            throw new IOException(cause);
-        } catch (TimeoutException e) {
-            state = ResponseState.TIMED_OUT;
-            throw new IOException("Timed out writing response", e);
-        }
-    }
-
     private ByteBuffer headersBuffer(boolean reqLine, MuHeaders headers) {
         return http1HeadersBuffer(headers, reqLine ? data.newRequest.version() : null, status, "OK");
     }
@@ -165,18 +144,6 @@ public class MuResponseImpl implements MuResponse {
         w.flush();
     }
 
-    private void sendChunk(ByteBuffer headersBuffer, ByteBuffer chunk) throws IOException {
-        var chunkStart = StandardCharsets.US_ASCII.encode(Integer.toHexString(chunk.remaining()) + "\r\n");
-        var chunkEnd = StandardCharsets.US_ASCII.encode("\r\n");
-        if (headersBuffer != null) {
-            blockingWrite(headersBuffer, chunkStart, chunk, chunkEnd);
-        } else {
-            blockingWrite(chunkStart, chunk, chunkEnd);
-        }
-    }
-
-
-    this should call muexhcange.end and discard the body and throw if timed out
     public void end() throws IOException {
 
         PrintWriter w = writer;
@@ -195,17 +162,30 @@ public class MuResponseImpl implements MuResponse {
                 boolean sendTrailers = trailers != null && Headtils.getParameterizedHeaderWithValues(data.requestHeaders(), HeaderNames.TE)
                     .stream().anyMatch(v -> v.value().equalsIgnoreCase("trailers"));
                 if (sendTrailers) {
-                    var trailersBuffer = headersBuffer(false, trailers);
-                    blockingWrite(StandardCharsets.US_ASCII.encode("0\r\n"), trailersBuffer);
+                    // todo: make this more efficient
+                    this.data.exchange.write(StandardCharsets.US_ASCII.encode("0\r\n"), false, error -> {
+                        if (error == null) {
+                            var trailersBuffer = headersBuffer(false, trailers);
+                            this.data.exchange.write(trailersBuffer, false, error2 -> {
+                                setState(error2 == null ? ResponseState.FINISHED : ResponseState.ERRORED);
+                            });
+                        } else {
+                            setState(ResponseState.ERRORED);
+                        }
+                    });
                 } else {
-                    blockingWrite(StandardCharsets.US_ASCII.encode("0\r\n\r\n"));
+                    this.data.exchange.write(StandardCharsets.US_ASCII.encode("0\r\n\r\n"), false, error -> {
+                        setState(error == null ? ResponseState.FINISHED : ResponseState.ERRORED);
+                    });
                 }
+            } else {
+                // TODO: check bytes sent size here
+                setState(ResponseState.FINISHED);
             }
-            setState(ResponseState.FINISHED);
         } else if (state == ResponseState.NOTHING) {
-            ByteBuffer headerBuf = headersBuffer(true, headers);
-            blockingWrite(headerBuf);
-            setState(ResponseState.FINISHED);
+            this.data.exchange.write(StandardCharsets.US_ASCII.encode("0\r\n\r\n"), error -> {
+                setState(error == null ? ResponseState.FULL_SENT : ResponseState.ERRORED);
+            });
         }
     }
 
@@ -264,8 +244,7 @@ public class MuResponseImpl implements MuResponse {
                 throw new IllegalStateException("Cannot write to response with state " + state);
 
             OutputStream adapter = new OutputStream() {
-                private int state = 0;
-                private boolean isChunked;
+                private boolean closed = false;
 
                 @Override
                 public void write(int b) throws IOException {
@@ -275,28 +254,15 @@ public class MuResponseImpl implements MuResponse {
                 @Override
                 public void write(byte[] b, int off, int len) throws IOException {
                     System.out.println("Sending " + (len - off) + " bytes");
-                    if (state == 2) throw new IOException("Writing to a closed stream");
-                    ByteBuffer hb;
-                    if (state == 0) {
-                        state = 1;
-                        hb = startStreaming();
-                    } else {
-                        hb = null;
-                    }
-                    if (isChunked()) {
-                        sendChunk(hb, ByteBuffer.wrap(b, off, len));
-                    } else if (hb != null) {
-                        blockingWrite(hb, ByteBuffer.wrap(b, off, len));
-                    } else {
-                        blockingWrite(ByteBuffer.wrap(b, off, len));
-                    }
+                    if (closed) throw new IOException("Writing to a closed stream");
+                    blockingWrite(ByteBuffer.wrap(b, off, len));
                 }
 
                 @Override
-                public void close() throws IOException {
-                    if (state != 2) {
+                public void close() {
+                    if (!closed) {
                         System.out.println("Closed");
-                        state = 2;
+                        closed = true;
                     }
                 }
             };

@@ -421,7 +421,7 @@ public class MuServer2Test {
                 response.writer().write("world");
                 response.trailers().set(HeaderNames.SERVER_TIMING, new ParameterizedHeaderWithValue("total", Map.of("dur", "123.4")));
             });
-        server = muServerBuilder.start();
+        server = muServerBuilder.withGzipEnabled(false).start();
         log.info("Started at " + server.uri());
 
         try (var resp = call(request(server.uri().resolve("/blah")))) {
