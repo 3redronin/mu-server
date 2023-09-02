@@ -176,6 +176,10 @@ class MuExchange implements ResponseInfo, AsyncHandle {
 
     @Override
     public void setReadListener(RequestBodyListener readListener) {
+        Mutils.notNull("readListener", readListener);
+        if (this.requestBodyListener != null) {
+            throw new IllegalStateException("Cannot set a read listener when the body is already being read");
+        }
         if (request.hasBody()) {
             this.requestBodyListener = readListener;
             this.data.connection.readyToRead(true);
@@ -487,6 +491,7 @@ class MuExchangeData {
 
 class RequestBodyListenerToInputStreamAdapter extends InputStream implements RequestBodyListener {
 
+    private static final Logger log = LoggerFactory.getLogger(RequestBodyListenerToInputStreamAdapter.class);
     ByteBuffer curBuffer;
     DoneCallback doneCallback;
     private boolean eos = false;
@@ -496,6 +501,7 @@ class RequestBodyListenerToInputStreamAdapter extends InputStream implements Req
     @Override
     public void onDataReceived(ByteBuffer buffer, DoneCallback doneCallback) throws Exception {
         synchronized (lock) {
+            log.info("datareceivednotify");
             this.curBuffer = buffer;
             this.doneCallback = doneCallback;
             lock.notify();
@@ -505,14 +511,16 @@ class RequestBodyListenerToInputStreamAdapter extends InputStream implements Req
     @Override
     public void onComplete() {
         synchronized (lock) {
-            lock.notify();
+            log.info("completednotify");
             eos = true;
+            lock.notify();
         }
     }
 
     @Override
     public void onError(Throwable t) {
         synchronized (lock) {
+            log.info("onerrornotify");
             if (t instanceof IOException ioe) {
                 this.error = ioe;
             } else if (t instanceof UncheckedIOException uioe) {
@@ -534,6 +542,7 @@ class RequestBodyListenerToInputStreamAdapter extends InputStream implements Req
     @Override
     public int read(byte[] b, int off, int len) throws IOException {
         synchronized (lock) {
+            log.info("readlock");
             if (eos) return -1;
             if (error != null) throw error;
             if (curBuffer != null && curBuffer.hasRemaining()) {
@@ -545,9 +554,13 @@ class RequestBodyListenerToInputStreamAdapter extends InputStream implements Req
                     if (doneCallback != null) {
                         doneCallback.onComplete(null);
                     }
-                    lock.wait(); // no need for timeout as the request body listener will time out and notify
+                    if (!eos) {
+                        log.info("readwait");
+                        lock.wait(); // no need for timeout as the request body listener will time out and notify
+                    }
                 } catch (Exception e) {
                     onError(e);
+                    throw e instanceof IOException ? (IOException) e : new IOException("Error waiting for data", e);
                 }
             }
         }

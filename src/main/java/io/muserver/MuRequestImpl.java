@@ -3,9 +3,11 @@ package io.muserver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
+import java.nio.charset.Charset;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -104,7 +106,13 @@ public class MuRequestImpl implements MuRequest {
 
     @Override
     public String readBodyAsString() throws IOException {
-        return null;
+        Optional<InputStream> inputStream = inputStream();
+        if (inputStream.isEmpty()) return "";
+        Charset charset = headers.contentCharset(true);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        long byteLen = headers.getLong(HeaderNames.CONTENT_LENGTH.toString(), Long.MAX_VALUE);
+        Mutils.copy(inputStream.get(), baos, (int)Math.min(byteLen, 8192L));
+        return baos.toString(charset);
     }
 
     @Override

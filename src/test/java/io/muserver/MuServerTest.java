@@ -7,7 +7,9 @@ import okhttp3.Response;
 import okhttp3.internal.http2.ErrorCode;
 import okhttp3.internal.http2.StreamResetException;
 import okio.BufferedSink;
-import org.junit.*;
+import org.junit.jupiter.api.*;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import scaffolding.*;
 
 import java.io.File;
@@ -31,6 +33,7 @@ import static java.util.Arrays.asList;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static org.hamcrest.core.IsEqual.equalTo;
+import static org.junit.jupiter.api.Assertions.fail;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 import static scaffolding.MuAssert.assertEventually;
@@ -40,7 +43,7 @@ public class MuServerTest {
     private MuServer server;
     private static String hostname;
 
-    @BeforeClass
+    @BeforeAll
     public static void setup() {
         try {
             hostname = InetAddress.getLocalHost().getHostName().toLowerCase();
@@ -169,7 +172,7 @@ public class MuServerTest {
 
     @Test
     public void ifBoundToLocalhostThenLoopbackAddressIsUsed() throws IOException {
-        Assume.assumeNotNull(hostname);
+        Assumptions.assumeTrue(hostname != null);
 
         for (String host : asList("127.0.0.1", "localhost")) {
             MuServer server = ServerUtils.httpsServerForTest()
@@ -186,7 +189,7 @@ public class MuServerTest {
 
     @Test
     public void ifBoundTo0000ThenExternalAccessIsPossible() throws IOException {
-        Assume.assumeNotNull(hostname);
+        Assumptions.assumeTrue(hostname != null);
         server = ServerUtils.httpsServerForTest()
             .withInterface("0.0.0.0")
             .addHandler(Method.GET, "/", (req, resp, pp) -> resp.write("Hello from " + server.address().getHostString()))
@@ -198,7 +201,7 @@ public class MuServerTest {
 
     @Test
     public void ifBoundToHostnameThenExternalAccessIsPossible() throws IOException {
-        Assume.assumeNotNull(hostname);
+        Assumptions.assumeTrue(hostname != null);
         server = ServerUtils.httpsServerForTest()
             .withInterface(hostname)
             .addHandler(Method.GET, "/", (req, resp, pp) -> resp.write("Hello from " + server.uri().getHost()))
@@ -222,7 +225,7 @@ public class MuServerTest {
     public void ifNoPortsDefinedAFriendlyMessageIsReturned() {
         try {
             muServer().start();
-            Assert.fail("No exception thrown");
+            fail("No exception thrown");
         } catch (IllegalArgumentException e) {
             assertThat(e.getMessage(), is(equalTo("No ports were configured. Please call MuServerBuilder.withHttpPort(int) or MuServerBuilder.withHttpsPort(int)")));
         }
@@ -324,11 +327,12 @@ public class MuServerTest {
         assertThat(server.stats().invalidHttpRequests(), is(1L));
     }
 
-    @Test
-    public void nonUTF8IsSupported() throws IOException {
+    @ParameterizedTest
+    @ValueSource(strings = { "http", "https" })
+    public void nonUTF8IsSupported(String type) throws IOException {
         File warAndPeaceInRussian = FileUtils.warAndPeaceInRussian();
 
-        server = ServerUtils.httpsServerForTest()
+        server = ServerUtils.httpsServerForTest(type)
             .addHandler((req, resp) -> {
                 resp.contentType(req.headers().contentType().toString());
                 String body = req.readBodyAsString();
@@ -436,7 +440,7 @@ public class MuServerTest {
             })
             .start();
         try (Response resp = call(request(server.uri()))) {
-            Assert.fail("Should not succeed but got " + resp.code());
+            fail("Should not succeed but got " + resp.code());
         } catch (RuntimeException re) {
             if (re.getCause() instanceof StreamResetException) {
                 assertThat(((StreamResetException) re.getCause()).errorCode, is(ErrorCode.INTERNAL_ERROR));
@@ -501,7 +505,8 @@ public class MuServerTest {
         }
     }
 
-    @Test(timeout = 30000)
+    @Test
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
     public void idleTimeoutCanBeConfiguredAndConnectionClosedIfAlreadyStarted() throws Exception {
         CompletableFuture<Throwable> exceptionFromServer = new CompletableFuture<>();
         CompletableFuture<ResponseInfo> received = new CompletableFuture<>();
@@ -523,7 +528,7 @@ public class MuServerTest {
         try (Response resp = call(request(server.uri()))) {
             assertThat(resp.code(), is(200));
             resp.body().string();
-            Assert.fail("Body should not be readable");
+            fail("Body should not be readable");
         } catch (StreamResetException e) {
             assertThat(e.errorCode, is(ErrorCode.INTERNAL_ERROR));
         } catch (IOException e) {
@@ -538,7 +543,8 @@ public class MuServerTest {
     }
 
 
-    @Test(timeout = 30000)
+    @Test
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
     public void aifRequestsCannotBeSubmittedToTheExecutorTheyAreRejectedWithA503() throws Exception {
         CountDownLatch firstRequestStartedLatch = new CountDownLatch(1);
         CountDownLatch thirdRequestFinishedLatch = new CountDownLatch(1);
@@ -583,13 +589,15 @@ public class MuServerTest {
         assertThat(executor.shutdownNow(), hasSize(0));
     }
 
-    @Test(timeout = 10000)
+    @Test
+    @Timeout(value = 10, unit = TimeUnit.SECONDS)
     public void nioThreadsCanBeSetToASpecificValue() throws Exception {
         int expectWorkerPoolSize = 10;
         nioThreadsPoolVerification(true, expectWorkerPoolSize);
     }
 
-    @Test(timeout = 10000)
+    @Test
+    @Timeout(value = 10, unit = TimeUnit.SECONDS)
     public void nioThreadsDefaultIs2TimesOfProcessNumberButNotMoreThan16() throws Exception {
         final int processors = Runtime.getRuntime().availableProcessors();
         int expectPoolSize;
@@ -652,7 +660,7 @@ public class MuServerTest {
         assertThat(MuServer.artifactVersion(), equalTo("0.x"));
     }
 
-    @After
+    @AfterEach
     public void stopIt() {
         scaffolding.MuAssert.stopAndCheck(server);
     }

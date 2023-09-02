@@ -1,7 +1,14 @@
 package io.muserver;
 
+import javax.ws.rs.ClientErrorException;
+import javax.ws.rs.ServerErrorException;
 import javax.ws.rs.core.MediaType;
+import java.nio.charset.Charset;
+import java.nio.charset.IllegalCharsetNameException;
+import java.nio.charset.UnsupportedCharsetException;
 import java.util.*;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 /**
  * HTTP headers
@@ -375,5 +382,31 @@ public interface Headers extends Iterable<Map.Entry<String, String>>, RequestPar
      */
     static Headers http2Headers() {
         return new MuHeaders();
+    }
+
+    /**
+     * Gets the charset of the <code>content-type</code>, defaulting to UTF-8 if not specified
+     * @param isRequest if <code>true</code> and the charset is invalid or unsupported, then a {@link ClientErrorException}
+     *                  is thrown. If <code>false</code> and their is an error, then a {@link ServerErrorException} is thrown.
+     * @return The charset that is specified in the content-type header
+     */
+    default Charset contentCharset(boolean isRequest) {
+        MediaType mediaType = contentType();
+        Charset bodyCharset = UTF_8;
+        if (mediaType != null) {
+            String charset = mediaType.getParameters().get("charset");
+            if (!Mutils.nullOrEmpty(charset)) {
+                try {
+                    bodyCharset = Charset.forName(charset);
+                } catch (IllegalCharsetNameException | UnsupportedCharsetException e) {
+                    if (isRequest) {
+                        throw new ClientErrorException("Invalid request body charset", 400);
+                    } else {
+                        throw new ServerErrorException("Invalid response body charset", 500);
+                    }
+                }
+            }
+        }
+        return bodyCharset;
     }
 }

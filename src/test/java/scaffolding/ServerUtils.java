@@ -3,6 +3,7 @@ package scaffolding;
 import io.muserver.Http2ConfigBuilder;
 import io.muserver.MuServerBuilder;
 
+import static io.muserver.MuServerBuilder.httpServer;
 import static io.muserver.MuServerBuilder.httpsServer;
 
 public class ServerUtils {
@@ -17,4 +18,9 @@ public class ServerUtils {
         }
         return builder;
     }
+
+    public static MuServerBuilder httpsServerForTest(String type) {
+        return type.equalsIgnoreCase("http") ? httpServer() : httpsServerForTest();
+    }
+
 }
