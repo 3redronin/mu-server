@@ -93,4 +93,9 @@ public interface HttpConnection {
      * @return The client certificate, or <code>empty</code> if no certificate is available
      */
     Optional<Certificate> clientCertificate();
+
+    /**
+     * @return True if the connection to the client appears to be open
+     */
+    boolean isOpen();
 }

@@ -4,7 +4,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.ws.rs.NotFoundException;
-import javax.ws.rs.RedirectionException;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -76,23 +75,6 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
         this.readBuffer = readBuffer;
     }
 
-    static void useCustomExceptionHandlerOrFireIt(MuExchange exchange, Throwable ex) {
-        var server = (MuServer2) exchange.request.server();
-        if (ex instanceof UserRequestAbortException) {
-            exchange.abort(ex);
-        } else {
-            try {
-                if (server.unhandledExceptionHandler != null && !(ex instanceof RedirectionException) && server.unhandledExceptionHandler.handle(exchange.request, exchange.response, ex)) {
-                    exchange.response.end();
-                } else {
-                    exchange.onException(ex);
-                }
-            } catch (Throwable handlerException) {
-                exchange.onException(handlerException);
-            }
-        }
-    }
-
 
     void handshakeComplete(String protocol, String cipher) {
         this.httpsProtocol = protocol;
@@ -100,17 +82,6 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
         acceptor.onConnectionEstablished(this);
         readyToRead(false);
     }
-
-//    void onResponseCompleted(MuResponseImpl muResponse) {
-//        MuExchange e = exchange;
-//        if (e != null) {
-//            e.onResponseCompleted();
-//            if (e.state.endState()) {
-//                exchange = null;
-//            }
-//            completeGracefulShutdownMaybe();
-//        }
-//    }
 
     @Override
     public String protocol() {
@@ -199,6 +170,11 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
         return Optional.empty();
     }
 
+    @Override
+    public boolean isOpen() {
+        return channel.isOpen();
+    }
+
     private void handleNewRequest(NewRequest newRequest) {
         var data = new MuExchangeData(MuHttp1Connection.this, newRequest);
         String relativeUri;
@@ -256,10 +232,10 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
                 throw new NotFoundException();
             }
             if (!exchange.isAsync()) {
-                resp.end();
+                exchange.complete();
             }
         } catch (Throwable e) {
-            useCustomExceptionHandlerOrFireIt(exchange, e);
+            exchange.complete(e);
         }
     }
 

@@ -1,12 +1,9 @@
 package io.muserver;
 
-import io.muserver.rest.MuRuntimeDelegate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.ws.rs.InternalServerErrorException;
 import javax.ws.rs.RedirectionException;
-import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.Response;
 import java.io.*;
 import java.net.URI;
@@ -15,14 +12,12 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.zip.GZIPOutputStream;
 
 import static io.muserver.ContentTypes.TEXT_PLAIN_UTF8;
-import static io.muserver.Mutils.htmlEncode;
 
 public class MuResponseImpl implements MuResponse {
     private static final Logger log = LoggerFactory.getLogger(MuResponseImpl.class);
@@ -30,7 +25,7 @@ public class MuResponseImpl implements MuResponse {
     private final MuExchangeData data;
     private int status = 200;
     private final MuHeaders headers = MuHeaders.responseHeaders();
-    private MuHeaders trailers = null;
+    MuHeaders trailers = null;
     private ResponseState state = ResponseState.NOTHING;
     private OutputStream outputStream;
     private PrintWriter writer;
@@ -119,7 +114,7 @@ public class MuResponseImpl implements MuResponse {
         return true;
     }
 
-    private ByteBuffer headersBuffer(boolean reqLine, MuHeaders headers) {
+    ByteBuffer headersBuffer(boolean reqLine, MuHeaders headers) {
         return http1HeadersBuffer(headers, reqLine ? data.newRequest.version() : null, status, "OK");
     }
 
@@ -144,7 +139,7 @@ public class MuResponseImpl implements MuResponse {
         w.flush();
     }
 
-    public void end() throws IOException {
+    public void closeStreams() throws IOException {
 
         PrintWriter w = writer;
         if (w != null) {
@@ -156,40 +151,10 @@ public class MuResponseImpl implements MuResponse {
             outputStream = null;
             os.close();
         }
-        if (state == ResponseState.STREAMING) {
-            setState(ResponseState.FINISHING);
-            if (headers.containsValue(HeaderNames.TRANSFER_ENCODING, HeaderValues.CHUNKED, true)) {
-                boolean sendTrailers = trailers != null && Headtils.getParameterizedHeaderWithValues(data.requestHeaders(), HeaderNames.TE)
-                    .stream().anyMatch(v -> v.value().equalsIgnoreCase("trailers"));
-                if (sendTrailers) {
-                    // todo: make this more efficient
-                    this.data.exchange.write(StandardCharsets.US_ASCII.encode("0\r\n"), false, error -> {
-                        if (error == null) {
-                            var trailersBuffer = headersBuffer(false, trailers);
-                            this.data.exchange.write(trailersBuffer, false, error2 -> {
-                                setState(error2 == null ? ResponseState.FINISHED : ResponseState.ERRORED);
-                            });
-                        } else {
-                            setState(ResponseState.ERRORED);
-                        }
-                    });
-                } else {
-                    this.data.exchange.write(StandardCharsets.US_ASCII.encode("0\r\n\r\n"), false, error -> {
-                        setState(error == null ? ResponseState.FINISHED : ResponseState.ERRORED);
-                    });
-                }
-            } else {
-                // TODO: check bytes sent size here
-                setState(ResponseState.FINISHED);
-            }
-        } else if (state == ResponseState.NOTHING) {
-            this.data.exchange.write(StandardCharsets.US_ASCII.encode("0\r\n\r\n"), error -> {
-                setState(error == null ? ResponseState.FULL_SENT : ResponseState.ERRORED);
-            });
-        }
+
     }
 
-    private void setState(ResponseState newState) {
+    void setState(ResponseState newState) {
         if (!this.state.endState()) {
             this.state = newState;
             if (newState.endState()) {
@@ -330,55 +295,7 @@ public class MuResponseImpl implements MuResponse {
     }
 
     public void onException(Throwable cause) {
-        if (state.endState()) return;
 
-        MuRequestImpl request = data.exchange.request;
-        try {
-            if (!hasStartedSendingData()) {
-                WebApplicationException wae;
-                if (cause instanceof WebApplicationException) {
-                    wae = (WebApplicationException) cause;
-                } else {
-                    String errorID = "ERR-" + UUID.randomUUID();
-                    log.info("Sending a 500 to the client with ErrorID=" + errorID + " for " + request, cause);
-                    wae = new InternalServerErrorException("Oops! An unexpected error occurred. The ErrorID=" + errorID);
-                }
-                Response exResp = wae.getResponse();
-                if (exResp == null) {
-                    exResp = Response.serverError().build();
-                }
-                int status = exResp.getStatus();
-                status(status);
-                boolean isHttp1 = data.newRequest.version() == HttpVersion.HTTP_1_1;
-                MuRuntimeDelegate.writeResponseHeaders(request.uri(), exResp, this, isHttp1);
-                if (status == 429 || status == 408 || status == 413) {
-                    headers().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
-                }
-                boolean sendBody = exResp.getStatusInfo().getFamily() != Response.Status.Family.REDIRECTION;
-                if (sendBody) {
-                    contentType(ContentTypes.TEXT_HTML_UTF8);
-                    String message = wae.getMessage();
-                    message = MuExchange.exceptionMessageMap.getOrDefault(message, message);
-                    String html = "<h1>" + status + " " + exResp.getStatusInfo().getReasonPhrase() + "</h1><p>" + htmlEncode(message) + "</p>";
-                    if (data.exchange.isAsync()) {
-                        // todo: write async?
-                        write(html);
-                    } else {
-                        write(html);
-                    }
-                }
-                end();
-            } else {
-                log.info(cause.getClass().getName() + " while handling " + request + " - note a " + status() +
-                    " was already sent and the client may have received an incomplete response. Exception was " + cause.getMessage());
-            }
-        } catch (Exception e) {
-            log.warn("Error while processing processing " + cause + " for " + request, e);
-        } finally {
-            if (!responseState().endState()) {
-                state = ResponseState.ERRORED;
-            }
-        }
 
     }
 

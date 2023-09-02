@@ -5,21 +5,21 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.ws.rs.ClientErrorException;
+import javax.ws.rs.InternalServerErrorException;
 import javax.ws.rs.NotFoundException;
+import javax.ws.rs.WebApplicationException;
+import javax.ws.rs.core.Response;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.CompletionHandler;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
+import java.util.*;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
+
+import static io.muserver.Mutils.htmlEncode;
 
 class MuExchange implements ResponseInfo, AsyncHandle {
     private static final Logger log = LoggerFactory.getLogger(MuExchange.class);
@@ -186,16 +186,161 @@ class MuExchange implements ResponseInfo, AsyncHandle {
 
     @Override
     public void complete() {
+
+        // This either sends and end-of-chunks message for a chunked request that is still streaming, or sends
+        // the response headers with no body if there is no body.
+
+        var resp = response;
         try {
-            response.end();
+            // todo for chunked, could get remaining bytes and then write it with a final-chunk to reduce writes
+            resp.closeStreams();
         } catch (IOException e) {
             complete(e);
+            return;
+        }
+        if (resp.responseState() == ResponseState.STREAMING) {
+            resp.setState(ResponseState.FINISHING);
+            if (resp.headers().containsValue(HeaderNames.TRANSFER_ENCODING, HeaderValues.CHUNKED, true)) {
+                CountDownLatch blocker = isAsync ? new CountDownLatch(1) : null;
+                boolean sendTrailers = resp.trailers != null && Headtils.getParameterizedHeaderWithValues(data.requestHeaders(), HeaderNames.TE)
+                    .stream().anyMatch(v -> v.value().equalsIgnoreCase("trailers"));
+                if (sendTrailers) {
+                    // todo: make this more efficient
+                    write(StandardCharsets.US_ASCII.encode("0\r\n"), false, error -> {
+                        if (error == null) {
+                            var trailersBuffer = resp.headersBuffer(false, resp.trailers);
+                            write(trailersBuffer, false, error2 -> {
+                                if (error2 == null) {
+                                    resp.setState(ResponseState.FINISHED);
+                                } else {
+                                    complete(error2);
+                                }
+                                if (blocker != null) blocker.countDown();
+                            });
+                        } else {
+                            complete(error);
+                            if (blocker != null) blocker.countDown();
+                        }
+                    });
+                } else {
+                    write(StandardCharsets.US_ASCII.encode("0\r\n\r\n"), false, error -> {
+                        if (error == null) {
+                            resp.setState(ResponseState.FINISHED);
+                        } else {
+                            complete(error);
+                        }
+                        if (blocker != null) blocker.countDown();
+                    });
+                }
+
+                if (blocker != null) {
+                    try {
+                        if (!blocker.await(data.server().settings.responseWriteTimeoutMillis(), TimeUnit.MILLISECONDS)) {
+                            complete(new TimeoutException("Timed out finishing chunked message"));
+                        }
+                    } catch (InterruptedException e) {
+                        complete(e);
+                    }
+                }
+            } else {
+                // TODO: check bytes sent size here
+                resp.setState(ResponseState.FINISHED);
+            }
+        } else if (resp.responseState() == ResponseState.NOTHING) {
+            var declaredLength = resp.headers().getLong(HeaderNames.CONTENT_LENGTH.toString(), -1);
+            int status = resp.status();
+            if (declaredLength == -1 && status != 204 && status != 304 && request.method() != Method.HEAD) {
+                resp.headers().set(HeaderNames.CONTENT_LENGTH, HeaderValues.ZERO);
+            } else if (declaredLength > -1 && status == 204) {
+                resp.headers().remove(HeaderNames.CONTENT_LENGTH);
+            } else if (declaredLength > 0 && (status != 304 && request.method() != Method.HEAD)) {
+                complete(new IllegalStateException("Response length was declared to be " + declaredLength + " but no response body was given"));
+                return;
+            }
+            if (status == 429 || status == 408 || status == 413) {
+                if (!resp.headers().contains(HeaderNames.CONNECTION)) {
+                    resp.headers().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
+                }
+            }
+
+            var blocker = isAsync ? new CountDownLatch(1) : null;
+            write(null, false, error -> {
+                if (error == null) {
+                    resp.setState(ResponseState.FULL_SENT);
+                } else {
+                    complete(error);
+                }
+                if (blocker != null) blocker.countDown();
+            });
+            if (blocker != null) {
+                try {
+                    if (!blocker.await(data.server().settings.responseWriteTimeoutMillis(), TimeUnit.MILLISECONDS)) {
+                        complete(new TimeoutException("Timed out finishing chunked message"));
+                    }
+                } catch (InterruptedException e) {
+                    complete(e);
+                }
+            }
         }
     }
 
     @Override
-    public void complete(Throwable throwable) {
-        onException(throwable);
+    public void complete(Throwable cause) {
+        if (state.endState()) {
+            log.warn("Completion error thrown after state is " + state, cause);
+            return;
+        }
+
+        MuRequestImpl request = data.exchange.request;
+        MuResponseImpl resp = data.exchange.response;
+        try {
+            if (this.data.connection.isOpen() && !response.hasStartedSendingData()) {
+                WebApplicationException wae;
+                if (cause instanceof WebApplicationException) {
+                    wae = (WebApplicationException) cause;
+                } else {
+                    String errorID = "ERR-" + UUID.randomUUID();
+                    log.info("Sending a 500 to the client with ErrorID=" + errorID + " for " + request, cause);
+                    wae = new InternalServerErrorException("Oops! An unexpected error occurred. The ErrorID=" + errorID);
+                }
+                Response exResp = wae.getResponse();
+                if (exResp == null) {
+                    exResp = Response.serverError().build();
+                }
+                int status = exResp.getStatus();
+                resp.status(status);
+                boolean isHttp1 = data.newRequest.version() == HttpVersion.HTTP_1_1;
+                MuRuntimeDelegate.writeResponseHeaders(request.uri(), exResp, resp, isHttp1);
+                boolean sendBody = exResp.getStatusInfo().getFamily() != Response.Status.Family.REDIRECTION;
+                if (sendBody) {
+                    String message = wae.getMessage();
+                    message = MuExchange.exceptionMessageMap.getOrDefault(message, message);
+                    String html = "<h1>" + status + " " + exResp.getStatusInfo().getReasonPhrase() + "</h1><p>" + htmlEncode(message) + "</p>";
+                    response.contentType(ContentTypes.TEXT_HTML_UTF8);
+                    ByteBuffer body = StandardCharsets.UTF_8.encode(html);
+                    response.headers().set(HeaderNames.CONTENT_LENGTH, body.remaining());
+                    write(body, false, error -> {
+                        if (error == null) {
+                            response.setState(ResponseState.FULL_SENT);
+                        } else {
+                            log.info("Error while sending error message to response; will abort: " + error.getMessage());
+                            abort(error);
+                        }
+                    });
+                }
+            } else {
+                log.info(cause.getClass().getName() + " while handling " + request + " - note a " + resp.status() +
+                    " was already sent and the client may have received an incomplete response. Exception was " + cause.getMessage());
+                abort(cause);
+            }
+        } catch (Exception e) {
+            log.warn("Error while processing processing " + cause + " for " + request, e);
+            abort(cause);
+        } finally {
+            if (!resp.responseState().endState()) {
+                abort(cause);
+            }
+        }
     }
 
     @Override
@@ -217,7 +362,9 @@ class MuExchange implements ResponseInfo, AsyncHandle {
         if (chunked) {
             toSend[++bi] = StandardCharsets.US_ASCII.encode(Integer.toHexString(data.remaining()) + "\r\n");
         }
-        toSend[++bi] = data;
+        if (data != null) {
+            toSend[++bi] = data;
+        }
         if (chunked) {
             toSend[++bi] = StandardCharsets.US_ASCII.encode("\r\n");
         }

@@ -284,6 +284,11 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
         return fromContext(nettyCtx);
     }
 
+    @Override
+    public boolean isOpen() {
+        return true;
+    }
+
     static Optional<Certificate> fromContext(ChannelHandlerContext channelHandlerContext) {
         try {
             SslHandler sslhandler = (SslHandler) channelHandlerContext.channel().pipeline().get("ssl");

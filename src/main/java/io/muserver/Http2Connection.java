@@ -558,5 +558,10 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
         return Http1Connection.fromContext(nettyContext);
     }
 
+    @Override
+    public boolean isOpen() {
+        return true;
+    }
+
 }
 
