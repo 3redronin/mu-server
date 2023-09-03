@@ -1,11 +1,14 @@
 package io.muserver;
 
+import okhttp3.MediaType;
+import okhttp3.RequestBody;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import scaffolding.MuAssert;
+import scaffolding.StringUtils;
 
 import javax.net.ssl.*;
 import java.io.*;
@@ -428,6 +431,31 @@ public class MuServer2Test {
         }
 
     }
+
+    @Test
+    public void canWriteLargeStrings() throws Exception {
+        var rando = StringUtils.randomStringOfLength(200000);
+        server = httpsServer()
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.write(rando);
+            }).start();
+        try (var resp = call(request(server.uri()))) {
+            assertThat(resp.body().string(), equalTo(rando));
+        }
+    }
+
+    @Test
+    public void canReadLargeStrings() throws Exception {
+        var rando = StringUtils.randomStringOfLength(20000);
+        var received = new AtomicReference<String>();
+        server = httpsServer()
+            .addHandler(Method.POST, "/", (request, response, pathParams) -> {
+                received.set(request.readBodyAsString());
+            }).start();
+        call(request(server.uri()).post(RequestBody.create(rando, MediaType.get("text/plain")))).close();
+        assertThat(received.get(), equalTo(rando));
+    }
+
 
     @Test
     public void canWriteFixedLengthToOutputStream() throws Exception {

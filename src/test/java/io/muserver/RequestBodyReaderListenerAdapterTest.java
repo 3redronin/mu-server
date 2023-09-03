@@ -66,11 +66,35 @@ public class RequestBodyReaderListenerAdapterTest {
 
         Request.Builder request = request()
             .url(server.uri().toString())
-            .post(new SlowBodySender(2));
+            .post(new SlowBodySender(2000));
 
         try (Response resp = call(request)) {
             assertThat(resp.code(), equalTo(200));
             assertThat(resp.body().string(), equalTo("Loop 0\nLoop 1\n"));
+        }
+        assertThat("All: " + readListener.events.toString(), readListener.events, contains("data received: 7 bytes", "data written", "data received: 7 bytes", "data written", "onComplete"));
+    }
+
+
+    @Test
+    public void requestBodiesCanBeReadAsynchronouslyOverHttps2() throws IOException {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler((request, response) -> {
+                AsyncHandle handle = request.handleAsync();
+                readListener = new RecordingRequestBodyListener(handle);
+                handle.setReadListener(readListener);
+                return true;
+            })
+            .start();
+
+        String body = "*".repeat(20000);
+        Request.Builder request = request()
+            .url(server.uri().toString())
+            .post(RequestBody.create(body, MediaType.get("text/plain")));
+
+        try (Response resp = call(request)) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.body().string(), equalTo(body));
         }
         assertThat("All: " + readListener.events.toString(), readListener.events, contains("data received: 7 bytes", "data written", "data received: 7 bytes", "data written", "onComplete"));
     }

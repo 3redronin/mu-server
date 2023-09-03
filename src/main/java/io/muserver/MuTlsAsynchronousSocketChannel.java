@@ -114,7 +114,7 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
                     netWriteBuffer.clear();
                     appWriteBuffer.clear();
                     SSLEngineResult wrapResult = sslEngine.wrap(appWriteBuffer, netWriteBuffer);
-//                    log.info("Wrap result: " + wrapResult);
+                    log.info("Wrap result: " + wrapResult);
                     // TODO: handle status=closed and buffer overflow for TLS handshake error
                     if (wrapResult.getStatus() != SSLEngineResult.Status.OK && wrapResult.getStatus() != SSLEngineResult.Status.CLOSED) {
                         throw new RuntimeException("Got " + wrapResult + " while wrapping");
@@ -223,20 +223,24 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
 
     @Override
     public <A> void connect(SocketAddress remote, A attachment, CompletionHandler<Void, ? super A> handler) {
-        throw new IllegalStateException();
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public Future<Void> connect(SocketAddress remote) {
-        throw new IllegalStateException();
+        throw new UnsupportedOperationException();
     }
 
+    int i = 0;
     @Override
     public <A> void read(ByteBuffer dst, long timeout, TimeUnit unit, A attachment, CompletionHandler<Integer, ? super A> handler) {
-        netReadBuffer.clear();
+        netReadBuffer.compact();
+        var finalI = i++;
+        log.info("Reading " + finalI + " with status " + sslEngine.getHandshakeStatus() + " dst: " + dst);
         socketChannel.read(netReadBuffer, timeout, unit, attachment, new CompletionHandler<>() {
             @Override
             public void completed(Integer result, A attachment) {
+                log.info("Read " + finalI + " result=" + result + " with status " + sslEngine.getHandshakeStatus());
                 if (result == -1) {
                     log.info("TLS CLOSE_NOTIFY received");
                     try {
@@ -254,9 +258,18 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
                 } else {
                     netReadBuffer.flip();
                     SSLEngineResult unwrapResult;
+                    log.info("netReadBuffer remaining=" + netReadBuffer.remaining() + " - dst: " + dst.remaining() + " - and " + sslEngine.getHandshakeStatus());
                     try {
-                        unwrapResult = sslEngine.unwrap(netReadBuffer, dst); // TODO handle buffer overflow
+
+                        do {
+                            unwrapResult = sslEngine.unwrap(netReadBuffer, dst);
+                        } while (netReadBuffer.hasRemaining() && dst.hasRemaining() && unwrapResult.getStatus() == SSLEngineResult.Status.OK);
+
+                        log.info("unwrap result: " + unwrapResult);
+
+                        // TODO handle buffer overflow if nothing was read and buffer underflow
                     } catch (SSLException e) {
+                        log.warn("SSLException: " + sslEngine.getHandshakeStatus());
                         handler.failed(e, attachment);
                         return;
                     }
@@ -264,8 +277,6 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
                         handshakeStatus = unwrapResult.getHandshakeStatus();
                         pendingTasks.add(() -> handler.completed(-1, attachment));
                         doHandshake();
-                    } else if (unwrapResult.getStatus() != SSLEngineResult.Status.OK) {
-                        handler.failed(new SSLException("Result from decrypting: " + unwrapResult), attachment); // TODO: handle states where more reading needed
                     } else {
                         handler.completed(result, attachment);
                     }
@@ -294,6 +305,7 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
         netWriteBuffer.clear();
         try {
             SSLEngineResult result = sslEngine.wrap(src, netWriteBuffer);
+            log.info("Wrap result " + result);
             if (result.getStatus() != SSLEngineResult.Status.OK) {
                 // todo handle this properly
                 throw new SSLException("Got a " + result + " when encrypting data");
@@ -333,9 +345,12 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
         return fut;
     }
 
+    int writeI = 0;
     @Override
     public <A> void write(ByteBuffer[] srcs, int offset, int length, long timeout, TimeUnit unit, A attachment, CompletionHandler<Long, ? super A> handler) {
         netWriteBuffer.clear();
+        int finalWriteI = ++writeI;
+        log.info("Writing " + finalWriteI);
         try {
             SSLEngineResult result = sslEngine.wrap(srcs, offset, length, netWriteBuffer);
             if (result.getStatus() != SSLEngineResult.Status.OK) {

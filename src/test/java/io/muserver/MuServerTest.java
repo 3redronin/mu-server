@@ -333,6 +333,7 @@ public class MuServerTest {
         File warAndPeaceInRussian = FileUtils.warAndPeaceInRussian();
 
         server = ServerUtils.httpsServerForTest(type)
+            .withHttpsConfig(HttpsConfigBuilder.unsignedLocalhost())
             .addHandler((req, resp) -> {
                 resp.contentType(req.headers().contentType().toString());
                 String body = req.readBodyAsString();
