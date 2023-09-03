@@ -15,7 +15,6 @@ import java.nio.channels.AsynchronousSocketChannel;
 import java.nio.channels.CompletionHandler;
 import java.nio.channels.spi.AsynchronousChannelProvider;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -114,7 +113,7 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
                     netWriteBuffer.clear();
                     appWriteBuffer.clear();
                     SSLEngineResult wrapResult = sslEngine.wrap(appWriteBuffer, netWriteBuffer);
-                    log.info("Wrap result: " + wrapResult);
+//                    log.info("Wrap result: " + wrapResult);
                     // TODO: handle status=closed and buffer overflow for TLS handshake error
                     if (wrapResult.getStatus() != SSLEngineResult.Status.OK && wrapResult.getStatus() != SSLEngineResult.Status.CLOSED) {
                         throw new RuntimeException("Got " + wrapResult + " while wrapping");
@@ -265,7 +264,7 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
                             unwrapResult = sslEngine.unwrap(netReadBuffer, dst);
                         } while (netReadBuffer.hasRemaining() && dst.hasRemaining() && unwrapResult.getStatus() == SSLEngineResult.Status.OK);
 
-                        log.info("unwrap result: " + unwrapResult);
+//                        log.info("unwrap result: " + unwrapResult);
 
                         // TODO handle buffer overflow if nothing was read and buffer underflow
                     } catch (SSLException e) {
@@ -302,55 +301,17 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
 
     @Override
     public <A> void write(ByteBuffer src, long timeout, TimeUnit unit, A attachment, CompletionHandler<Integer, ? super A> handler) {
-        netWriteBuffer.clear();
-        try {
-            SSLEngineResult result = sslEngine.wrap(src, netWriteBuffer);
-            log.info("Wrap result " + result);
-            if (result.getStatus() != SSLEngineResult.Status.OK) {
-                // todo handle this properly
-                throw new SSLException("Got a " + result + " when encrypting data");
-            }
-        } catch (SSLException e) {
-            handler.failed(e, attachment);
-            return;
-        }
-        netWriteBuffer.flip();
-        socketChannel.write(netWriteBuffer, timeout, unit, attachment, new CompletionHandler<>() {
-            @Override
-            public void completed(Integer result, A attachment) {
-                handler.completed(result, attachment);
-            }
-
-            @Override
-            public void failed(Throwable exc, A attachment) {
-                handler.failed(exc, attachment);
-            }
-        });
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public Future<Integer> write(ByteBuffer src) {
-        var fut = new CompletableFuture<Integer>();
-        write(src, null, new CompletionHandler<>() {
-            @Override
-            public void completed(Integer result, Object attachment) {
-                fut.complete(result);
-            }
-
-            @Override
-            public void failed(Throwable exc, Object attachment) {
-                fut.completeExceptionally(exc);
-            }
-        });
-        return fut;
+        throw new UnsupportedOperationException();
     }
 
-    int writeI = 0;
     @Override
     public <A> void write(ByteBuffer[] srcs, int offset, int length, long timeout, TimeUnit unit, A attachment, CompletionHandler<Long, ? super A> handler) {
         netWriteBuffer.clear();
-        int finalWriteI = ++writeI;
-        log.info("Writing " + finalWriteI);
         try {
             SSLEngineResult result = sslEngine.wrap(srcs, offset, length, netWriteBuffer);
             if (result.getStatus() != SSLEngineResult.Status.OK) {

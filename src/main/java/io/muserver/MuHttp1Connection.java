@@ -308,10 +308,6 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
         }
     }
 
-    <A> void write(ByteBuffer src, long timeout, TimeUnit unit, A attachment, CompletionHandler<Integer, ? super A> handler) {
-        channel.write(src, timeout, unit, attachment, handler);
-    }
-
     <A> void scatteringWrite(ByteBuffer[] srcs, int offset, int length, long timeout, TimeUnit unit, A attachment, CompletionHandler<Long, ? super A> handler) {
         channel.write(srcs, offset, length, timeout, unit, attachment, handler);
     }
