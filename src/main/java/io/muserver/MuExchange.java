@@ -323,14 +323,23 @@ class MuExchange implements ResponseInfo, AsyncHandle {
                     response.contentType(ContentTypes.TEXT_HTML_UTF8);
                     ByteBuffer body = StandardCharsets.UTF_8.encode(html);
                     response.headers().set(HeaderNames.CONTENT_LENGTH, body.remaining());
+                    var blocker = isAsync ? null : new CompletableFuture<Void>();
                     write(body, false, error -> {
                         if (error == null) {
                             response.setState(ResponseState.FULL_SENT);
+                            if (blocker != null) blocker.complete(null);
                         } else {
                             log.info("Error while sending error message to response; will abort: " + error.getMessage());
-                            abort(error);
+                            if (blocker != null) {
+                                blocker.completeExceptionally(error);
+                            } else {
+                                abort(error);
+                            }
                         }
                     });
+                    if (blocker != null) {
+                        blocker.get(data.server().settings.responseWriteTimeoutMillis(), TimeUnit.MILLISECONDS);
+                    }
                 }
             } else {
                 log.info(cause.getClass().getName() + " while handling " + request + " - note a " + resp.status() +
