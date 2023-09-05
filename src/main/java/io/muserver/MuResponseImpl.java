@@ -208,37 +208,18 @@ public class MuResponseImpl implements MuResponse {
             if (this.state != ResponseState.NOTHING)
                 throw new IllegalStateException("Cannot write to response with state " + state);
 
-            OutputStream adapter = new OutputStream() {
-                private boolean closed = false;
-
-                @Override
-                public void write(int b) throws IOException {
-                    write(new byte[]{(byte) b}, 0, 1);
-                }
-
-                @Override
-                public void write(byte[] b, int off, int len) throws IOException {
-                    System.out.println("Sending " + (len - off) + " bytes");
-                    if (closed) throw new IOException("Writing to a closed stream");
-                    blockingWrite(ByteBuffer.wrap(b, off, len));
-                }
-
-                @Override
-                public void close() {
-                    if (!closed) {
-                        System.out.println("Closed");
-                        closed = true;
-                    }
-                }
-            };
+            OutputStream adapter = new MuResponseOutputStream();
+            if (bufferSize > 0) {
+                adapter = new BufferedOutputStream(adapter, bufferSize);
+            }
             if (prepareForGzip()) {
                 try {
-                    adapter = new GZIPOutputStream(adapter);
+                    adapter = new GZIPOutputStream(adapter, true);
                 } catch (IOException e) {
                     throw new UncheckedIOException("Error while starting GZIP compression", e);
                 }
             }
-            this.outputStream = bufferSize == 0 ? adapter : new BufferedOutputStream(adapter, bufferSize);
+            this.outputStream = adapter;
         }
         return this.outputStream;
     }
@@ -302,6 +283,35 @@ public class MuResponseImpl implements MuResponse {
     void abort(Throwable cause) {
         if (!responseState().endState()) {
             state = ResponseState.ERRORED;
+        }
+    }
+
+    private class MuResponseOutputStream extends OutputStream {
+        private boolean closed = false;
+
+        @Override
+        public void write(int b) throws IOException {
+            write(new byte[]{(byte) b}, 0, 1);
+        }
+
+        @Override
+        public void write(byte[] b, int off, int len) throws IOException {
+            System.out.println("Sending " + (len - off) + " bytes");
+            if (closed) throw new IOException("Writing to a closed stream");
+            blockingWrite(ByteBuffer.wrap(b, off, len));
+        }
+
+        @Override
+        public void close() {
+            if (!closed) {
+                System.out.println("Closed");
+                closed = true;
+            }
+        }
+
+        @Override
+        public void flush() throws IOException {
+            super.flush();
         }
     }
 }
