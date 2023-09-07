@@ -8,8 +8,12 @@ import okhttp3.internal.http2.StreamResetException;
 import okio.BufferedSink;
 import org.junit.After;
 import org.junit.Assert;
-import org.junit.Test;
-import scaffolding.*;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import scaffolding.FileUtils;
+import scaffolding.MuAssert;
+import scaffolding.SlowBodySender;
+import scaffolding.StringUtils;
 
 import javax.ws.rs.ClientErrorException;
 import java.io.File;
@@ -24,6 +28,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static io.muserver.MuServerBuilder.muServer;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.call;
@@ -33,9 +38,10 @@ import static scaffolding.MuAssert.assertEventually;
 public class RequestBodyReaderStringTest {
     private MuServer server;
 
-    @Test
-    public void requestBodiesCanBeReadAsStrings() throws IOException {
-        server = ServerUtils.httpsServerForTest()
+    @ParameterizedTest
+    @ValueSource(strings = { "http", "https"})
+    public void requestBodiesCanBeReadAsStrings(String type) throws IOException {
+        server = serverBuilder(type)
             .addHandler((request, response) -> {
                 String body = request.readBodyAsString();
                 response.write(body);
@@ -58,9 +64,10 @@ public class RequestBodyReaderStringTest {
         }
     }
 
-    @Test
-    public void requestBodiesCanBeReadAsStringsWithLargeChunks() throws IOException {
-        server = ServerUtils.httpsServerForTest()
+    @ParameterizedTest
+    @ValueSource(strings = { "http", "https"})
+    public void requestBodiesCanBeReadAsStringsWithLargeChunks(String type) throws IOException {
+        server = serverBuilder(type)
             .addHandler((request, response) -> {
                 String body = request.readBodyAsString();
                 response.write(body);
@@ -91,9 +98,10 @@ public class RequestBodyReaderStringTest {
         }
     }
 
-    @Test
-    public void requestBodiesCanBeReadAsStringsWithJustOneMessage() throws IOException {
-        server = ServerUtils.httpsServerForTest()
+    @ParameterizedTest
+    @ValueSource(strings = { "http", "https"})
+    public void requestBodiesCanBeReadAsStringsWithJustOneMessage(String type) throws IOException {
+        server = serverBuilder(type)
             .addHandler((request, response) -> {
                 String body = request.readBodyAsString();
                 response.write(body);
@@ -108,9 +116,10 @@ public class RequestBodyReaderStringTest {
         }
     }
 
-    @Test
-    public void smallRequestBodiesCanBeReadAsStrings() throws IOException {
-        server = ServerUtils.httpsServerForTest()
+    @ParameterizedTest
+    @ValueSource(strings = { "http", "https"})
+    public void smallRequestBodiesCanBeReadAsStrings(String type) throws IOException {
+        server = serverBuilder(type)
             .addHandler((request, response) -> {
                 String body = request.readBodyAsString();
                 response.write(body);
@@ -133,9 +142,10 @@ public class RequestBodyReaderStringTest {
         }
     }
 
-    @Test
-    public void emptyStringsAreOkay() throws IOException {
-        server = ServerUtils.httpsServerForTest()
+    @ParameterizedTest
+    @ValueSource(strings = { "http", "https"})
+    public void emptyStringsAreOkay(String type) throws IOException {
+        server = serverBuilder(type)
             .addHandler((request, response) -> {
                 String requestBody = request.readBodyAsString();
                 response.write(String.valueOf(requestBody.length()));
@@ -152,9 +162,10 @@ public class RequestBodyReaderStringTest {
         }
     }
 
-    @Test
-    public void stringsInNonUTF8AreFine() throws IOException {
-        server = ServerUtils.httpsServerForTest()
+    @ParameterizedTest
+    @ValueSource(strings = { "http", "https"})
+    public void stringsInNonUTF8AreFine(String type) throws IOException {
+        server = serverBuilder(type)
             .addHandler((request, response) -> {
                 String requestBody = request.readBodyAsString();
                 response.write(requestBody);
@@ -171,9 +182,10 @@ public class RequestBodyReaderStringTest {
         }
     }
 
-    @Test
-    public void largeStringsInNonUTF8AreFine() throws IOException {
-        server = ServerUtils.httpsServerForTest()
+    @ParameterizedTest
+    @ValueSource(strings = { "http", "https"})
+    public void largeStringsInNonUTF8AreFine(String type) throws IOException {
+        server = serverBuilder(type)
             .addHandler((request, response) -> {
                 String requestBody = request.readBodyAsString();
                 response.write(requestBody);
@@ -191,9 +203,10 @@ public class RequestBodyReaderStringTest {
         }
     }
 
-    @Test
-    public void chineseWorks() throws Exception {
-        server = ServerUtils.httpsServerForTest()
+    @ParameterizedTest
+    @ValueSource(strings = { "http", "https"})
+    public void chineseWorks(String type) throws Exception {
+        server = serverBuilder(type)
             .withHttpsPort(8443)
             .addHandler((request, response) -> {
                 response.contentType(ContentTypes.TEXT_PLAIN_UTF8);
@@ -215,9 +228,10 @@ public class RequestBodyReaderStringTest {
         assertThat(server.stats().completedConnections(), lessThan(2L));
     }
 
-    @Test
-    public void largeUTF8CharactersAreFine() throws IOException {
-        server = ServerUtils.httpsServerForTest()
+    @ParameterizedTest
+    @ValueSource(strings = { "http", "https"})
+    public void largeUTF8CharactersAreFine(String type) throws IOException {
+        server = serverBuilder(type)
             .withGzipEnabled(false)
             .addHandler((request, response) -> {
                 String requestBody = request.readBodyAsString();
@@ -237,9 +251,10 @@ public class RequestBodyReaderStringTest {
         }
     }
 
-    @Test
-    public void largeUTF8CharactersAreFineGzipped() throws IOException {
-        server = ServerUtils.httpsServerForTest()
+    @ParameterizedTest
+    @ValueSource(strings = { "http", "https"})
+    public void largeUTF8CharactersAreFineGzipped(String type) throws IOException {
+        server = serverBuilder(type)
             .withGzipEnabled(true)
             .addHandler((request, response) -> {
                 String requestBody = request.readBodyAsString();
@@ -259,10 +274,11 @@ public class RequestBodyReaderStringTest {
         }
     }
 
-    @Test
-    public void aSlowReadResultsInACompleted408OrKilledConnectionIfResponseNotStarted() {
+    @ParameterizedTest
+    @ValueSource(strings = { "http", "https"})
+    public void aSlowReadResultsInACompleted408OrKilledConnectionIfResponseNotStarted(String type) {
         AtomicReference<Throwable> exception = new AtomicReference<>();
-        server = ServerUtils.httpsServerForTest()
+        server = serverBuilder(type)
             .withRequestTimeout(100, TimeUnit.MILLISECONDS)
             .addHandler((request, response) -> {
                 try {
@@ -291,10 +307,11 @@ public class RequestBodyReaderStringTest {
         assertThat(((ClientErrorException) exception.get()).getResponse().getStatus(), equalTo(408));
     }
 
-    @Test
-    public void aSlowReadResultsInAKilledConnectionIfResponseStarted() {
+    @ParameterizedTest
+    @ValueSource(strings = { "http", "https"})
+    public void aSlowReadResultsInAKilledConnectionIfResponseStarted(String type) {
         AtomicReference<Throwable> exception = new AtomicReference<>();
-        server = ServerUtils.httpsServerForTest()
+        server = serverBuilder(type)
             .withRequestTimeout(50, TimeUnit.MILLISECONDS)
             .addHandler((request, response) -> {
                 response.sendChunk("starting");
@@ -322,12 +339,13 @@ public class RequestBodyReaderStringTest {
         assertThat(((ClientErrorException) exception.get()).getResponse().getStatus(), equalTo(408));
     }
 
-    @Test
-    public void exceedingUploadSizeResultsIn413OrKilledConnectionForChunkedRequestWhereResponseNotStarted() throws Exception {
+    @ParameterizedTest
+    @ValueSource(strings = { "http", "https"})
+    public void exceedingUploadSizeResultsIn413OrKilledConnectionForChunkedRequestWhereResponseNotStarted(String type) throws Exception {
         AtomicReference<Throwable> exception = new AtomicReference<>();
         List<ResponseInfo> infos = new ArrayList<>();
         AtomicBoolean isHttp2 = new AtomicBoolean();
-        server = ServerUtils.httpsServerForTest()
+        server = serverBuilder(type)
             .withMaxRequestSize(1000)
             .addHandler((request, response) -> {
                 isHttp2.set(request.connection().protocol().equals("HTTP/2"));
@@ -372,12 +390,13 @@ public class RequestBodyReaderStringTest {
         assertThat(ri.response.responseState(), equalTo(ResponseState.FULL_SENT));
     }
 
-    @Test
-    public void exceedingUploadSizeResultsInKilledConnectionForChunkedRequestWhereResponseStarted() throws Exception {
+    @ParameterizedTest
+    @ValueSource(strings = { "http", "https"})
+    public void exceedingUploadSizeResultsInKilledConnectionForChunkedRequestWhereResponseStarted(String type) throws Exception {
         AtomicReference<Throwable> exception = new AtomicReference<>();
         AtomicBoolean isHttp2 = new AtomicBoolean();
         List<ResponseInfo> infos = new ArrayList<>();
-        server = ServerUtils.httpsServerForTest()
+        server = serverBuilder(type)
             .withMaxRequestSize(1000)
             .addHandler((request, response) -> {
                 isHttp2.set(request.connection().protocol().equals("HTTP/2"));
@@ -427,5 +446,12 @@ public class RequestBodyReaderStringTest {
     public void destroy() {
         scaffolding.MuAssert.stopAndCheck(server);
     }
+
+    private MuServerBuilder serverBuilder(String type) {
+        return muServer()
+            .withHttpPort(type.equals("http") ? 0 : -1)
+            .withHttpsPort(type.equals("https") ? 0 : -1);
+    }
+
 
 }

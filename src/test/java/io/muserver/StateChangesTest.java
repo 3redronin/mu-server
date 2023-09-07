@@ -47,8 +47,9 @@ public class StateChangesTest {
     private MuServer server;
     private final List<ResponseInfo> completed = new ArrayList<>();
 
+
     @ParameterizedTest
-    @ValueSource(strings = { "http", "https" })
+    @ValueSource(strings = { "http", "https"})
     public void when_request_HEADERS_RECEIVED_and_response_NOTHING_action_READ_TIMEOUT_leadsTo_Connection_Dropped(String type) throws Exception {
         server = serverBuilder(type)
             .withRequestTimeout(500, TimeUnit.MILLISECONDS)

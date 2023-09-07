@@ -510,7 +510,7 @@ class RequestBodyListenerToInputStreamAdapter extends InputStream implements Req
     @Override
     public void onDataReceived(ByteBuffer buffer, DoneCallback doneCallback) throws Exception {
         synchronized (lock) {
-            log.info("datareceivednotify");
+            log.info("datareceivednotify with " + buffer);
             this.curBuffer = buffer;
             this.doneCallback = doneCallback;
             lock.notify();
@@ -551,7 +551,7 @@ class RequestBodyListenerToInputStreamAdapter extends InputStream implements Req
     @Override
     public int read(byte[] b, int off, int len) throws IOException {
         synchronized (lock) {
-            log.info("readlock");
+            log.info("readlock with " + curBuffer);
             if (eos) return -1;
             if (error != null) throw error;
             if (curBuffer != null && curBuffer.hasRemaining()) {
@@ -562,10 +562,12 @@ class RequestBodyListenerToInputStreamAdapter extends InputStream implements Req
                 try {
                     if (doneCallback != null) {
                         doneCallback.onComplete(null);
+                        log.info("completed");
                     }
-                    if (!eos) {
-                        log.info("readwait");
+                    if (!eos && (curBuffer == null || !curBuffer.hasRemaining())) {
+                        log.info("readwait with " + curBuffer);
                         lock.wait(); // no need for timeout as the request body listener will time out and notify
+                        log.info("readawakened with " + curBuffer);
                     }
                 } catch (Exception e) {
                     onError(e);
