@@ -23,22 +23,22 @@ public class RequestParserTest {
 
 
     @Test
-    public void noHeadersAndNoBodySupported() throws InvalidRequestException {
+    public void noHeadersAndNoBodySupported() throws Exception {
         assertThat(parser.offer(wrap("G")), nullValue());
         assertThat(parser.offer(wrap("ET")), nullValue());
         assertThat(parser.offer(wrap(" /")), nullValue());
         assertThat(parser.offer(wrap("a%20link HTTP/1.1\r")), nullValue());
         assertThat(parser.offer(wrap("\n\r\n")), equalTo(
-            new NewRequest(HttpVersion.HTTP_1_1, Method.GET, URI.create("/a%20link"), new MuHeaders(), false)
+            new NewRequest(HttpVersion.HTTP_1_1, Method.GET, URI.create("/a%20link"), "/a%20link", new MuHeaders(), false)
             ));
 
         assertThat(parser.offer(wrap("GET /a%20link HTTP/1.1\r\n\r\n")), equalTo(
-            new NewRequest(HttpVersion.HTTP_1_1, Method.GET, URI.create("/a%20link"), new MuHeaders(), false)
+            new NewRequest(HttpVersion.HTTP_1_1, Method.GET, URI.create("/a%20link"), "/a%20link", new MuHeaders(), false)
         ));
     }
 
     @Test
-    public void http1_0NotSupported() throws InvalidRequestException {
+    public void http1_0NotSupported() throws Exception {
         assertThat(parser.offer(wrap("G")), nullValue());
         assertThat(parser.offer(wrap("ET")), nullValue());
         assertThat(parser.offer(wrap(" /")), nullValue());
@@ -47,7 +47,7 @@ public class RequestParserTest {
     }
 
     @Test
-    public void headersComeOutAsHeaders() throws InvalidRequestException {
+    public void headersComeOutAsHeaders() throws Exception {
         parser.offer(wrap("GET / HTTP/1.1\r\n"));
         var obj = parser.offer(wrap("Host:localhost:1234\r\nx-blah: haha\r\nSOME-Length: 0\r\nX-BLAH: \t something else\t \r\n\r\n"));
         assertThat(obj, instanceOf(NewRequest.class));
@@ -61,18 +61,18 @@ public class RequestParserTest {
     }
 
     @Test
-    public void urisAreNormalised() throws InvalidRequestException {
+    public void urisAreNormalised() throws Exception {
         var req = parser.offer(wrap("GET /a/./b/../c//d HTTP/1.1\r\n\r\n"));
         assertThat(((NewRequest)req).uri().toString(), is("/a/c/d"));
     }
 
     @Test(expected = InvalidRequestException.class)
-    public void urisCannotStartWithDot() throws InvalidRequestException {
+    public void urisCannotStartWithDot() throws Exception {
         parser.offer(wrap("GET ./a HTTP/1.1\r\n\r\n"));
     }
 
     @Test(expected = InvalidRequestException.class)
-    public void pathsGoingAboveRootAreNotAllowed() throws InvalidRequestException {
+    public void pathsGoingAboveRootAreNotAllowed() throws Exception {
         parser.offer(wrap("GET /a/../../../b HTTP/1.1\r\n\r\n"));
     }
 

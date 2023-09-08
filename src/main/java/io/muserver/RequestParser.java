@@ -30,6 +30,7 @@ class RequestParser {
     private long curChunkSize = -1;
     private int headerSize = 0;
 
+
     private void reset() {
         state = State.RL_METHOD;
         cur.setLength(0);
@@ -70,7 +71,7 @@ class RequestParser {
 
     private static final Logger log = LoggerFactory.getLogger(RequestParser.class);
 
-    ConMessage offer(ByteBuffer bb) throws InvalidRequestException {
+    ConMessage offer(ByteBuffer bb) throws InvalidRequestException, RedirectException {
 
         if (state == State.RL_METHOD) {
             String s = new String(bb.array(), bb.position(), bb.limit());
@@ -100,7 +101,7 @@ class RequestParser {
         return null;
     }
 
-    private ConMessage parseReqLineAndHeaders(ByteBuffer bb) throws InvalidRequestException {
+    private ConMessage parseReqLineAndHeaders(ByteBuffer bb) throws InvalidRequestException, RedirectException {
         if (state == State.COMPLETE) reset();
         while (bb.hasRemaining()) {
 
@@ -193,7 +194,7 @@ class RequestParser {
                         state = State.COMPLETE;
                     }
 
-                    return new NewRequest(protocol, method, requestUri, headers, state != State.COMPLETE);
+                    return new NewRequest(protocol, method, requestUri, getRelativeUrl(requestUri), headers, state != State.COMPLETE);
                 } else if (c == ':') {
 
                     String header = cur.toString();
@@ -373,11 +374,42 @@ class RequestParser {
     private void append(byte c) {
         cur.append((char) c);
     }
+
+    static String getRelativeUrl(URI uriInHeaderLine) throws InvalidRequestException, RedirectException {
+        try {
+            URI requestUri = uriInHeaderLine.normalize();
+            if (requestUri.getScheme() == null && requestUri.getHost() != null) {
+                throw new RedirectException(new URI(uriInHeaderLine.toString().substring(1)).normalize());
+            }
+
+            String s = requestUri.getRawPath();
+            if (Mutils.nullOrEmpty(s)) {
+                s = "/";
+            } else {
+                // TODO: consider a redirect if the URL is changed? Handle other percent-encoded characters?
+                s = s.replace("%7E", "~")
+                    .replace("%5F", "_")
+                    .replace("%2E", ".")
+                    .replace("%2D", "-")
+                ;
+            }
+            String q = requestUri.getRawQuery();
+            if (q != null) {
+                s += "?" + q;
+            }
+            return s;
+        } catch (RedirectException re) {
+            throw re;
+        } catch (Exception e) {
+            throw new InvalidRequestException(BAD_REQUEST_400, "invalid request URI", "Error while parsing URI '" + uriInHeaderLine + "': " + e.getMessage());
+        }
+    }
+
 }
 
 
 interface ConMessage {
 }
-record NewRequest(HttpVersion version, Method method, URI uri, MuHeaders headers, boolean hasBody) implements ConMessage {}
+record NewRequest(HttpVersion version, Method method, URI uri, String relativeUri, MuHeaders headers, boolean hasBody) implements ConMessage {}
 record RequestBodyData(ByteBuffer buffer, boolean last) implements ConMessage {}
 record EndOfChunks(MuHeaders trailers) implements ConMessage {}

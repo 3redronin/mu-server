@@ -36,37 +36,6 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
     private boolean discardMode = false;
 
 
-    static String getRelativeUrl(URI uriInHeaderLine) throws InvalidRequestException, RedirectException {
-        try {
-            URI requestUri = uriInHeaderLine.normalize();
-            if (requestUri.getScheme() == null && requestUri.getHost() != null) {
-                throw new RedirectException(new URI(uriInHeaderLine.toString().substring(1)).normalize());
-            }
-
-            String s = requestUri.getRawPath();
-            if (Mutils.nullOrEmpty(s)) {
-                s = "/";
-            } else {
-                // TODO: consider a redirect if the URL is changed? Handle other percent-encoded characters?
-                s = s.replace("%7E", "~")
-                    .replace("%5F", "_")
-                    .replace("%2E", ".")
-                    .replace("%2D", "-")
-                ;
-            }
-            String q = requestUri.getRawQuery();
-            if (q != null) {
-                s += "?" + q;
-            }
-            return s;
-        } catch (RedirectException re) {
-            throw re;
-        } catch (Exception e) {
-            if (log.isDebugEnabled()) log.debug("Invalid request URL " + uriInHeaderLine);
-            throw new InvalidRequestException(HttpStatusCode.BAD_REQUEST_400, "invalid request URI", "Error while parsing URI '" + uriInHeaderLine + "': " + e.getMessage());
-        }
-    }
-
     public MuHttp1Connection(ConnectionAcceptor acceptor, AsynchronousSocketChannel channel, InetSocketAddress remoteAddress, InetSocketAddress localAddress, ByteBuffer readBuffer) {
         this.acceptor = acceptor;
         this.channel = channel;
@@ -178,19 +147,7 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
 
     private void handleNewRequest(NewRequest newRequest) {
         var data = new MuExchangeData(MuHttp1Connection.this, newRequest);
-        String relativeUri;
-        try {
-            relativeUri = getRelativeUrl(newRequest.uri());
-        } catch (InvalidRequestException e) {
-            writeInvalidRequest(e);
-            return;
-        } catch (RedirectException e) {
-            var responseHeaders = MuHeaders.responseHeaders();
-            responseHeaders.set(HeaderNames.LOCATION, e.location.toString());
-            writeSimpleResponseAsync(HttpStatusCode.PERMANENT_REDIRECT_308, responseHeaders, null);
-            return;
-        }
-
+        String relativeUri = newRequest.relativeUri();
         var headers = newRequest.headers();
 
 
@@ -286,6 +243,9 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
             } catch (InvalidRequestException e) {
                 writeInvalidRequest(e);
                 return;
+            } catch (RedirectException e) {
+                writeRedirectResponse(e);
+                return;
             }
             if (msg != null) {
                 handleMessage(msg);
@@ -299,6 +259,13 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
 
         channel.read(readBuffer, this.server().requestIdleTimeoutMillis(), TimeUnit.MILLISECONDS, null, this);
     }
+
+    private void writeRedirectResponse(RedirectException e) {
+        var responseHeaders = MuHeaders.responseHeaders();
+        responseHeaders.set(HeaderNames.LOCATION, e.location.toString());
+        writeSimpleResponseAsync(HttpStatusCode.PERMANENT_REDIRECT_308, responseHeaders, null);
+    }
+
     /**
      * Read from socket completed
      */
@@ -314,6 +281,8 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
                     handleMessage(msg);
                 } catch (InvalidRequestException e) {
                     writeInvalidRequest(e);
+                } catch (RedirectException e) {
+                    writeRedirectResponse(e);
                 }
             } else {
                 readyToRead(false);
