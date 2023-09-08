@@ -143,9 +143,9 @@ public class PetData {
       if(status != null && !"".equals(status)) {
         Integer count = output.get(status);
         if(count == null)
-          count = new Integer(1);
+          count = 1;
         else
-          count = count.intValue() + 1;
+          count = count + 1;
         output.put(status, count);
       }
     }

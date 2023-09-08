@@ -263,6 +263,7 @@ public class HttpsConfigBuilder {
      * @return Creates an SSLContext
      * @deprecated Pass this builder itself to the HttpsConfig rather than building an SSLContext
      */
+    @Deprecated
     SSLContext build() {
         byte[] keystoreBytes = this.keystoreBytes;
         String keystoreTypeToUse = keystoreType;
