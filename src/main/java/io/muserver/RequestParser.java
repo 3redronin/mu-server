@@ -121,7 +121,7 @@ class RequestParser {
                     try {
                         method = Method.valueOf(cur.toString());
                     } catch (IllegalArgumentException e) {
-                        throw new InvalidRequestException(HttpStatusCode.NOT_IMPLEMENTED_501, "Not Implemented", "The HTTP method " + cur + " is not supported by mu-server");
+                        throw new InvalidRequestException(HttpStatusCode.METHOD_NOT_ALLOWED_405, "Invalid HTTP method in the request", "The HTTP method " + cur + " is not supported by mu-server");
                     }
                     state = State.RL_URI;
                     cur.setLength(0);
@@ -133,11 +133,11 @@ class RequestParser {
             } else if (state == State.RL_URI) {
                 if (c == ' ') {
                     String uriStr = cur.toString();
-                    if (uriStr.charAt(0) != '/') {
-                        throw new InvalidRequestException(BAD_REQUEST_400, "Invalid URI", "The URI did not start with a '/'. It was: " + uriStr);
-                    }
                     try {
                         requestUri = new URI(uriStr).normalize();
+                        if (requestUri.getPath() == null) {
+                            requestUri = requestUri.resolve("/");
+                        }
                     } catch (URISyntaxException e) {
                         throw new InvalidRequestException(BAD_REQUEST_400, "Invalid URI", "URI parsing failed: " + e.getMessage());
                     }
@@ -192,6 +192,10 @@ class RequestParser {
                         }
                     } else {
                         state = State.COMPLETE;
+                    }
+
+                    if (!headers.contains(HeaderNames.HOST)) {
+                        throw new InvalidRequestException(BAD_REQUEST_400, "No host header specified", "No host header specified");
                     }
 
                     return new NewRequest(protocol, method, requestUri, getRelativeUrl(requestUri), headers, state != State.COMPLETE);
@@ -377,12 +381,11 @@ class RequestParser {
 
     static String getRelativeUrl(URI uriInHeaderLine) throws InvalidRequestException, RedirectException {
         try {
-            URI requestUri = uriInHeaderLine.normalize();
-            if (requestUri.getScheme() == null && requestUri.getHost() != null) {
+            if (uriInHeaderLine.getScheme() == null && uriInHeaderLine.getHost() != null) {
                 throw new RedirectException(new URI(uriInHeaderLine.toString().substring(1)).normalize());
             }
 
-            String s = requestUri.getRawPath();
+            String s = uriInHeaderLine.getRawPath();
             if (Mutils.nullOrEmpty(s)) {
                 s = "/";
             } else {
@@ -393,7 +396,7 @@ class RequestParser {
                     .replace("%2D", "-")
                 ;
             }
-            String q = requestUri.getRawQuery();
+            String q = uriInHeaderLine.getRawQuery();
             if (q != null) {
                 s += "?" + q;
             }

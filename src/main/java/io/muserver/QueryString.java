@@ -55,7 +55,7 @@ class QueryString implements RequestParameters {
 
     @Override
     public String toString() {
-        var sb = new StringBuilder("?");
+        var sb = new StringBuilder();
         for (String key : map.keySet()) {
             String encodedKey = urlEncode(key);
             for (String value : map.get(key)) {

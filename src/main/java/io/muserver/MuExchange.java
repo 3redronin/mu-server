@@ -361,6 +361,15 @@ class MuExchange implements ResponseInfo, AsyncHandle {
         write(data, true, callback);
     }
     public void write(ByteBuffer data, boolean encodeChunks, DoneCallback callback) {
+        if (data != null && !data.hasRemaining()) {
+            try {
+                callback.onComplete(null); // run async?
+            } catch (Exception e) {
+                complete(e);
+            }
+            return;
+        }
+
         var resp = response;
 
         boolean chunked = encodeChunks && resp.isChunked();
@@ -383,7 +392,9 @@ class MuExchange implements ResponseInfo, AsyncHandle {
 
         var sb = new StringBuilder();
         for (ByteBuffer buffer : toSend) {
-            sb.append(new String(buffer.array(), buffer.position(), buffer.limit()));
+            var dest = new byte[buffer.remaining()];
+            buffer.asReadOnlyBuffer().get(dest);
+            sb.append(new String(dest, StandardCharsets.UTF_8));
         }
         log.info(">>\n" + sb.toString().replace("\r", "\\r").replace("\n", "\\n\r\n"));
 

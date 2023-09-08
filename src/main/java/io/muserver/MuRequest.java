@@ -204,6 +204,7 @@ public interface MuRequest {
      * <p>This is a convenience method that returns <code>connection().remoteAddress().getHostString()</code></p>
      * <p>If you want to know the client's IP address when reverse proxies are used, consider using {@link #clientIP()}</p>
      * @return The IP address of the client, or of a gateway with NAT, etc, or null if the client has already disconnected.
+     * @deprecated Use {@link #connection()} to call {@link HttpConnection#remoteAddress()} instead
      */
     String remoteAddress();
 

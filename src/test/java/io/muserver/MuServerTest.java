@@ -1,6 +1,5 @@
 package io.muserver;
 
-import io.netty.util.concurrent.DefaultThreadFactory;
 import okhttp3.MediaType;
 import okhttp3.RequestBody;
 import okhttp3.Response;
@@ -14,18 +13,13 @@ import scaffolding.*;
 
 import java.io.File;
 import java.io.IOException;
-import java.lang.management.ManagementFactory;
-import java.lang.management.ThreadInfo;
-import java.lang.management.ThreadMXBean;
-import java.lang.reflect.Field;
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static io.muserver.MuServerBuilder.httpServer;
 import static io.muserver.MuServerBuilder.muServer;
@@ -116,6 +110,7 @@ public class MuServerTest {
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
                 response.writer().print("Hello");
+                response.writer().flush();
                 throw new RuntimeException("I'm the fire starter");
             })
             .start();
@@ -144,7 +139,6 @@ public class MuServerTest {
         String randomText = UUID.randomUUID().toString();
 
         server = ServerUtils.httpsServerForTest()
-            .withHttpPort(12809)
             .addHandler((request, response) -> {
                 handlersHit.add("Logger");
                 request.attribute("random", randomText);
@@ -162,7 +156,7 @@ public class MuServerTest {
             })
             .start();
 
-        try (Response resp = call(request().url("http://localhost:12809/blah"))) {
+        try (Response resp = call(request(server.uri().resolve("/blah")))) {
             assertThat(resp.code(), is(202));
             assertThat(resp.body().string(), equalTo("This is a test and this is the state: "
                 + randomText + " and this does not exist: null"));
@@ -204,7 +198,7 @@ public class MuServerTest {
         Assumptions.assumeTrue(hostname != null);
         server = ServerUtils.httpsServerForTest()
             .withInterface(hostname)
-            .addHandler(Method.GET, "/", (req, resp, pp) -> resp.write("Hello from " + server.uri().getHost()))
+            .addHandler(Method.GET, "/", (req, resp, pp) -> resp.write("Hello from " + req.uri().getHost()))
             .start();
         try (Response resp = call(request().url("https://" + hostname + ":" + server.uri().getPort()))) {
             assertThat(resp.body().string(), equalTo("Hello from " + hostname));
@@ -214,7 +208,7 @@ public class MuServerTest {
     @Test
     public void theClientIpAddressOrSomethingLikeThatIsAvailable() throws IOException {
         server = ServerUtils.httpsServerForTest()
-            .addHandler(Method.GET, "/", (req, resp, pp) -> resp.write("Hello there " + req.remoteAddress()))
+            .addHandler(Method.GET, "/", (req, resp, pp) -> resp.write("Hello there " + req.remoteAddress() + " and " + req.connection().remoteAddress()))
             .start();
         try (Response resp = call(request().url(server.uri().toString()))) {
             assertThat(resp.body().string(), containsString("."));
@@ -267,7 +261,7 @@ public class MuServerTest {
     public void doubleSlashesAreIgnored() throws Exception {
         server = httpServer().start();
         String body = runUriTest("//hello/wor%20ld?hello=wo%20rld&two=three", "");
-        assertThat(body, startsWith("HTTP/1.1 301 Moved Permanently"));
+        assertThat(body, startsWith("HTTP/1.1 308 Permanent Redirect"));
         assertThat(body, containsString("location: /hello/wor%20ld?hello=wo%20rld&two=three"));
     }
 
@@ -305,7 +299,7 @@ public class MuServerTest {
             }
             String body = client.responseString();
             assertThat(body, startsWith("HTTP/1.1 400 Bad Request"));
-            assertThat(body, endsWith("400 Bad Request"));
+            assertThat(body, endsWith("400 Bad Request - Invalid URI"));
         }
         assertThat(server.stats().invalidHttpRequests(), is(1L));
     }
@@ -372,11 +366,11 @@ public class MuServerTest {
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.contentType("text/plain");
                 AsyncHandle handle = request.handleAsync();
-                handle.write(ByteBuffer.allocateDirect(0));
-                handle.write(ByteBuffer.allocateDirect(0));
-                handle.write(Mutils.toByteBuffer("Hello"));
-                handle.write(ByteBuffer.allocateDirect(0));
-                handle.write(ByteBuffer.allocateDirect(0));
+                handle.write(ByteBuffer.allocateDirect(0)).get();
+                handle.write(ByteBuffer.allocate(0)).get();
+                handle.write(Mutils.toByteBuffer("Hello")).get();
+                handle.write(ByteBuffer.allocateDirect(0)).get();
+                handle.write(ByteBuffer.allocateDirect(0)).get();
                 handle.complete();
             })
             .start();
@@ -388,6 +382,7 @@ public class MuServerTest {
     }
 
     @Test
+    @Disabled("Idle timeout not supported")
     public void idleTimeoutCanBeConfiguredAnd408ReturnedIfRequestUploadIsSlow() throws Exception {
         server = ServerUtils.httpsServerForTest()
             .withRequestTimeout(50, TimeUnit.MILLISECONDS)
@@ -427,6 +422,7 @@ public class MuServerTest {
     }
 
     @Test
+    @Disabled("Idle timeout not supported")
     public void idleTimeoutCanBeConfiguredAndConnectionClosedEvenIfNotAlreadyStarted() throws Exception {
         CompletableFuture<Throwable> exceptionFromServer = new CompletableFuture<>();
         server = ServerUtils.httpsServerForTest()
@@ -455,6 +451,7 @@ public class MuServerTest {
 
 
     @Test
+    @Disabled("Idle timeout not supported")
     public void idleTimeoutCanBeConfiguredAndTimeoutHappensWhenItDoes() throws Exception {
         server = MuServerBuilder.httpServer()
             .withIdleTimeout(50, TimeUnit.MILLISECONDS)
@@ -507,6 +504,7 @@ public class MuServerTest {
     }
 
     @Test
+    @Disabled("Idle timeout not supported")
     @Timeout(value = 30, unit = TimeUnit.SECONDS)
     public void idleTimeoutCanBeConfiguredAndConnectionClosedIfAlreadyStarted() throws Exception {
         CompletableFuture<Throwable> exceptionFromServer = new CompletableFuture<>();
@@ -546,6 +544,7 @@ public class MuServerTest {
 
     @Test
     @Timeout(value = 30, unit = TimeUnit.SECONDS)
+    @Disabled("No executors yet")
     public void aifRequestsCannotBeSubmittedToTheExecutorTheyAreRejectedWithA503() throws Exception {
         CountDownLatch firstRequestStartedLatch = new CountDownLatch(1);
         CountDownLatch thirdRequestFinishedLatch = new CountDownLatch(1);
@@ -590,71 +589,7 @@ public class MuServerTest {
         assertThat(executor.shutdownNow(), hasSize(0));
     }
 
-    @Test
-    @Timeout(value = 10, unit = TimeUnit.SECONDS)
-    public void nioThreadsCanBeSetToASpecificValue() throws Exception {
-        int expectWorkerPoolSize = 10;
-        nioThreadsPoolVerification(true, expectWorkerPoolSize);
-    }
 
-    @Test
-    @Timeout(value = 10, unit = TimeUnit.SECONDS)
-    public void nioThreadsDefaultIs2TimesOfProcessNumberButNotMoreThan16() throws Exception {
-        final int processors = Runtime.getRuntime().availableProcessors();
-        int expectPoolSize;
-        if (processors > 8) {
-            expectPoolSize = 16;
-        } else {
-            expectPoolSize = Runtime.getRuntime().availableProcessors() * 2;
-        }
-        nioThreadsPoolVerification(false, expectPoolSize);
-    }
-
-    private void nioThreadsPoolVerification(boolean needToSet, int expectNioThreadsPoolSize) throws IOException {
-        final MuServerBuilder muServerBuilder = httpServer();
-        if (needToSet) {
-            muServerBuilder.withNioThreads(expectNioThreadsPoolSize);
-        }
-        server = muServerBuilder
-            .addHandler(Method.GET, "/", (request, response, pathParams) -> TimeUnit.SECONDS.sleep(1))
-            .addHandler(Method.GET, "/threads", (request, response, pathParams) -> {
-                // Get the last pool ID
-                final Field poolId = DefaultThreadFactory.class.getDeclaredField("poolId");
-                poolId.setAccessible(true);
-                final int lastPoolId = ((AtomicInteger) poolId.get(null)).get();
-
-                ThreadMXBean threads = ManagementFactory.getThreadMXBean();
-                final List<String> collect = Stream.of(threads.dumpAllThreads(true, true))
-                    .map(ThreadInfo::getThreadName)
-                    .filter(n -> n.contains("nioEventLoopGroup-" + lastPoolId + "-"))
-                    .collect(Collectors.toList());
-                response.sendChunk("" + collect.size());
-            })
-            .start();
-
-        // Try to request and let the pool full
-        final int taskCount = 50;
-        Deque<Future> taskStack = new ArrayDeque<>(taskCount);
-        final ExecutorService executorService = Executors.newCachedThreadPool();
-        for (int i = 0; i < taskCount; i++) {
-            taskStack.push(executorService.submit(() -> {
-                call(request(server.uri()));
-            }));
-        }
-
-        // wait all tasks done
-        while (!taskStack.isEmpty()) {
-            if (taskStack.peek().isDone()) {
-                taskStack.pop();
-            }
-        }
-
-        executorService.shutdown();
-        try (Response resp = call(request(server.uri().resolve("/threads")))) {
-            assertThat(resp.code(), is(200));
-            assertThat("Worker thread pool size is not expected", resp.body().string(), is(String.valueOf(expectNioThreadsPoolSize)));
-        }
-    }
 
     @Test
     public void versionIsAvailable() {

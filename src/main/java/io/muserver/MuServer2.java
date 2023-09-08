@@ -41,6 +41,10 @@ class MuServer2 implements MuServer {
 
         boolean hasHttps = builder.httpsPort() >= 0;
 
+        if (!hasHttps && builder.httpPort() < 0) {
+            throw new IllegalArgumentException("No ports were configured. Please call MuServerBuilder.withHttpPort(int) or MuServerBuilder.withHttpsPort(int)");
+        }
+
         // connect server socket channel and register it in the selector
         var bindPort = hasHttps ? builder.httpsPort() : builder.httpPort();
         InetSocketAddress endpoint = builder.interfaceHost() == null ? new InetSocketAddress(bindPort) : new InetSocketAddress(builder.interfaceHost(), bindPort);
@@ -167,7 +171,7 @@ class MuServer2 implements MuServer {
 
     @Override
     public InetSocketAddress address() {
-        return connections.stream().map(MuHttp1Connection::remoteAddress).findFirst().get();
+        return acceptors.stream().map(a -> a.address).findFirst().get();
     }
 
     @Override

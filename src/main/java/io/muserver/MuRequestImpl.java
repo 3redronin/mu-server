@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.nio.charset.Charset;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -29,10 +30,14 @@ public class MuRequestImpl implements MuRequest {
     private Headers trailers;
     private List<Cookie> cookies;
     private QueryString query;
+    private Map<String, Object> attributes;
 
     public MuRequestImpl(MuExchangeData data, Method method, String relativeUri, Headers headers, boolean hasBody) {
         this.data = data;
         this.method = method;
+
+
+
         this.serverUri = data.connection.serverUri().resolve(relativeUri);
         this.relativePath = serverUri.getRawPath();
         var host = headers.get("host");
@@ -46,7 +51,10 @@ public class MuRequestImpl implements MuRequest {
         try {
             List<ForwardedHeader> forwarded = h.forwarded();
             if (forwarded.isEmpty()) {
-                return defaultValue;
+                if (Mutils.nullOrEmpty(hostHeader) || defaultValue.getHost().equals(hostHeader)) {
+                    return defaultValue;
+                }
+                return URI.create(scheme + "://" + hostHeader).resolve(requestUri);
             }
             ForwardedHeader f = forwarded.get(0);
             String originalScheme = Mutils.coalesce(f.proto(), scheme);
@@ -163,17 +171,28 @@ public class MuRequestImpl implements MuRequest {
 
     @Override
     public Object attribute(String key) {
-        return null;
+        Mutils.notNull("key", key);
+        if (attributes == null) {
+            return null;
+        }
+        return attributes.get(key);
     }
 
     @Override
     public void attribute(String key, Object value) {
-
+        Mutils.notNull("key", key);
+        if (attributes == null) {
+            attributes = new HashMap<>();
+        }
+        attributes.put(key, value);
     }
 
     @Override
     public Map<String, Object> attributes() {
-        return null;
+        if (attributes == null) {
+            attributes = new HashMap<>();
+        }
+        return attributes;
     }
 
     @Override
@@ -183,7 +202,7 @@ public class MuRequestImpl implements MuRequest {
 
     @Override
     public String remoteAddress() {
-        return null;
+        return data.connection.remoteAddress().getHostString();
     }
 
     @Override

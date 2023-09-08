@@ -8,8 +8,8 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.ByteBuffer;
-import java.nio.channels.AsynchronousCloseException;
 import java.nio.channels.AsynchronousSocketChannel;
+import java.nio.channels.ClosedChannelException;
 import java.nio.channels.CompletionHandler;
 import java.security.cert.Certificate;
 import java.time.Instant;
@@ -149,15 +149,12 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
         var data = new MuExchangeData(MuHttp1Connection.this, newRequest);
         String relativeUri = newRequest.relativeUri();
         var headers = newRequest.headers();
-
-
         var req = new MuRequestImpl(data, newRequest.method(), relativeUri, headers, newRequest.hasBody());
         var resp = new MuResponseImpl(data);
         var exchange = new MuExchange(data, req, resp);
         this.exchange = exchange;
         data.exchange = exchange;
         onExchangeStarted(exchange);
-
 
         if (headers.containsValue(HeaderNames.EXPECT, HeaderValues.CONTINUE, true)) {
             long proposedLength = headers.getLong(HeaderNames.CONTENT_LENGTH.toString(), -1L);
@@ -181,6 +178,7 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
     }
 
     private void writeInvalidRequest(InvalidRequestException e) {
+        log.info("Sending " + e.status + " because " + e.privateDetails);
         acceptor.onInvalidRequest(e);
         discardMode = true;
         var responseHeaders = MuHeaders.responseHeaders();
@@ -328,7 +326,7 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
         if (cur != null) {
             log.warn("Killing exchange due to read error: " + cur, exc);
             cur.abort(exc);
-        } else if (!(exc instanceof AsynchronousCloseException)) {
+        } else if (!(exc instanceof ClosedChannelException)) {
             log.warn("Read failure without an exchange", exc);
         }
         forceShutdown(exc);

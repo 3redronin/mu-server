@@ -571,7 +571,7 @@ public class HttpStatusCode {
                     HttpStatusCode code = (HttpStatusCode) declaredField.get(null);
                     map.put(code.code, code);
                 } catch (IllegalAccessException e) {
-                    throw new RuntimeException(e);
+                    throw new RuntimeException("Error trying to preload " + declaredField, e);
                 }
             }
         }
