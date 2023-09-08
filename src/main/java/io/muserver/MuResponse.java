@@ -32,6 +32,8 @@ public interface MuResponse {
      */
     void status(int value);
 
+    void status(HttpStatusCode statusCode);
+
     /**
      * <p>Writes the given text as the response body for this request. This can only be called once.</p>
      * <p>If you want to send multiple chunks of text, see {@link #sendChunk(String)}</p>
@@ -127,4 +129,6 @@ public interface MuResponse {
      * @return The trailers for this response
      */
     Headers trailers();
+
+    HttpStatusCode statusCode();
 }

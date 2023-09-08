@@ -71,7 +71,7 @@ public class StateChangesTest {
             .flushHeaders()) {
             assertThrows(SocketException.class, () -> client.in().readAllBytes());
         }
-        assertOneCompleted(RequestState.ERRORED, ResponseState.ERRORED);
+        assertOneCompleted(RequestState.ERRORED, ResponseState.FULL_SENT);
     }
 
     @ParameterizedTest
@@ -112,7 +112,7 @@ public class StateChangesTest {
                 return true;
             })
             .start();
-        try (var client = POST("/")
+        try (var client = GET("/")
             .contentHeader("text/plain", 20)
             .flushHeaders()) {
             assertThat(client.in().readAllBytes().length, equalTo(0));
@@ -178,7 +178,7 @@ public class StateChangesTest {
             .contentHeader("text/plain", 5)
             .flushHeaders()) {
 
-            assertThat(client.readLine(), equalTo("HTTP/1.1 400 OK")); // TODO set the status message!!
+            assertThat(client.readLine(), equalTo("HTTP/1.1 400 Bad Request"));
             var headers = client.readHeaders();
             assertThat(headers.getAll("content-type"), contains("text/html;charset=utf-8"));
             assertThat(headers.getAll("connection"), empty());

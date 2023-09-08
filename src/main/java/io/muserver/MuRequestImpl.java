@@ -264,12 +264,6 @@ public class MuRequestImpl implements MuRequest {
         this.state = RequestState.ERRORED;
     }
 
-    public void onException(Throwable cause) {
-        if (!state.endState()) {
-            state = RequestState.ERRORED;
-        }
-    }
-
     @Override
     public void abort() {
         throw new UserRequestAbortException();

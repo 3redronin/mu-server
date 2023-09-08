@@ -110,15 +110,15 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
                         }
                     });
 
-            } catch (InvalidHttpRequestException ihr) {
-                if (ihr.code == 429 || ihr.code == 503) {
+            } catch (InvalidRequestException ihr) {
+                if (ihr.status.code() == 429 || ihr.status.code() == 503) {
                     connectionStats.onRejectedDueToOverload();
                     serverStats.onRejectedDueToOverload();
                 } else {
                     connectionStats.onInvalidRequest();
                     serverStats.onInvalidRequest();
                 }
-                sendSimpleResponse(ctx, ihr.getMessage(), ihr.code);
+                sendSimpleResponse(ctx, ihr.getMessage(), ihr.status.code());
                 ctx.channel().read();
             } catch (RedirectException e) {
                 sendRedirect(ctx, e.location);

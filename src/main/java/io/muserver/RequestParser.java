@@ -9,6 +9,8 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
+import static io.muserver.HttpStatusCode.BAD_REQUEST_400;
+
 class RequestParser {
 
     final int maxUrlLength;
@@ -48,6 +50,10 @@ class RequestParser {
     RequestParser(int maxUrlLength, int maxHeaderSize) {
         this.maxUrlLength = maxUrlLength;
         this.maxHeaderSize = maxHeaderSize;
+    }
+
+    Method method() {
+        return method;
     }
 
     public boolean requestBodyExpectedNext() {
@@ -102,7 +108,7 @@ class RequestParser {
 
             headerSize++;
             if (headerSize > maxHeaderSize) {
-                throw new InvalidRequestException(431, "Request Header Fields Too Large", "Header length (including all white space) reached " + headerSize + " bytes.");
+                throw new InvalidRequestException(HttpStatusCode.REQUEST_HEADER_FIELDS_TOO_LARGE_431, "Request Header Fields Too Large", "Header length (including all white space) reached " + headerSize + " bytes.");
             }
 
             if (c == '\r') {
@@ -114,42 +120,42 @@ class RequestParser {
                     try {
                         method = Method.valueOf(cur.toString());
                     } catch (IllegalArgumentException e) {
-                        throw new InvalidRequestException(501, "Not Implemented", "The HTTP method " + cur + " is not supported by mu-server");
+                        throw new InvalidRequestException(HttpStatusCode.NOT_IMPLEMENTED_501, "Not Implemented", "The HTTP method " + cur + " is not supported by mu-server");
                     }
                     state = State.RL_URI;
                     cur.setLength(0);
                 } else if (Parser.isTChar(c)) {
                     append(c);
                 } else {
-                    throw new InvalidRequestException(400, "Invalid character in request line", "Got a " + c + " character in the request line");
+                    throw new InvalidRequestException(BAD_REQUEST_400, "Invalid character in request line", "Got a " + c + " character in the request line");
                 }
             } else if (state == State.RL_URI) {
                 if (c == ' ') {
                     String uriStr = cur.toString();
                     if (uriStr.charAt(0) != '/') {
-                        throw new InvalidRequestException(400, "Bad Request - Invalid URI", "The URI did not start with a '/'. It was: " + uriStr);
+                        throw new InvalidRequestException(BAD_REQUEST_400, "Invalid URI", "The URI did not start with a '/'. It was: " + uriStr);
                     }
                     try {
                         requestUri = new URI(uriStr).normalize();
                     } catch (URISyntaxException e) {
-                        throw new InvalidRequestException(400, "Bad Request - Invalid URI", "URI parsing failed: " + e.getMessage());
+                        throw new InvalidRequestException(BAD_REQUEST_400, "Invalid URI", "URI parsing failed: " + e.getMessage());
                     }
                     if (requestUri.getPath().startsWith("/..")) {
-                        throw new InvalidRequestException(400, "Bad Request - Invalid URI", "The URI had '..' after normalisation. Raw value was " + uriStr);
+                        throw new InvalidRequestException(BAD_REQUEST_400, "Invalid URI", "The URI had '..' after normalisation. Raw value was " + uriStr);
                     }
                     state = State.RL_PROTO;
                     cur.setLength(0);
                 } else {
                     append(c);
                     if (cur.length() > maxUrlLength) {
-                        throw new InvalidRequestException(414, "URI Too Long", "The URL " + cur + " exceeded the maximum URL length allowed, which is " + maxUrlLength);
+                        throw new InvalidRequestException(HttpStatusCode.URI_TOO_LONG_414, "URI Too Long", "The URL " + cur + " exceeded the maximum URL length allowed, which is " + maxUrlLength);
                     }
                 }
             } else if (state == State.RL_PROTO) {
                 if (c == '\n') {
                     this.protocol = HttpVersion.fromRequestLine(cur.toString());
                     if (this.protocol == null || this.protocol == HttpVersion.HTTP_1_0) { // TODO bother supporting 1.0?
-                        throw new InvalidRequestException(505, "HTTP Version Not Supported", "Http version was " + protocol);
+                        throw new InvalidRequestException(HttpStatusCode.HTTP_VERSION_NOT_SUPPORTED_505, "HTTP Version Not Supported", "Http version was " + protocol);
                     }
                     this.state = State.H_NAME;
                     cur.setLength(0);
@@ -160,10 +166,10 @@ class RequestParser {
             } else if (state == State.H_NAME) {
 
                 if (c == ' ') {
-                    throw new InvalidRequestException(400, "HTTP protocol error: space in header name", "Shouldn't have a space while in " + state);
+                    throw new InvalidRequestException(BAD_REQUEST_400, "HTTP protocol error: space in header name", "Shouldn't have a space while in " + state);
                 } else if (c == '\n') {
                     if (cur.length() > 0) {
-                        throw new InvalidRequestException(400, "A header name included a line feed character", "Value was " + cur);
+                        throw new InvalidRequestException(BAD_REQUEST_400, "A header name included a line feed character", "Value was " + cur);
                     }
                     cur.setLength(0);
 
@@ -171,7 +177,7 @@ class RequestParser {
                     boolean hasTransferEncoding = headers.contains("transfer-encoding");
                     if (hasContentLength || hasTransferEncoding) {
                         if (hasContentLength && hasTransferEncoding) {
-                            throw new InvalidRequestException(400, "A request cannot have both transfer encoding and content length", "Headers were " + headers);
+                            throw new InvalidRequestException(BAD_REQUEST_400, "A request cannot have both transfer encoding and content length", "Headers were " + headers);
                         }
                         if (hasContentLength) {
                             if (bodyLength == 0) {
@@ -217,21 +223,21 @@ class RequestParser {
                     switch (curHeader.toLowerCase()) {
                         case "content-length":
                             if (bodyLength == -2) {
-                                throw new InvalidRequestException(400, "Content-Length set after chunked encoding sent", "Headers were " + headers);
+                                throw new InvalidRequestException(BAD_REQUEST_400, "Content-Length set after chunked encoding sent", "Headers were " + headers);
                             }
                             long prev = this.bodyLength;
                             try {
                                 this.bodyLength = Long.parseLong(val);
                             } catch (NumberFormatException e) {
-                                throw new InvalidRequestException(400, "Invalid content-length header", "Header was " + cur);
+                                throw new InvalidRequestException(BAD_REQUEST_400, "Invalid content-length header", "Header was " + cur);
                             }
                             if (prev != -1 && prev != this.bodyLength) {
-                                throw new InvalidRequestException(400, "Multiple content-length headers", "First was " + prev + " and then " + bodyLength);
+                                throw new InvalidRequestException(BAD_REQUEST_400, "Multiple content-length headers", "First was " + prev + " and then " + bodyLength);
                             }
                             break;
                         case "transfer-encoding":
                             if (bodyLength > -1) {
-                                throw new InvalidRequestException(400, "Can't have transfer-encoding with content-length", "Headers were " + headers);
+                                throw new InvalidRequestException(BAD_REQUEST_400, "Can't have transfer-encoding with content-length", "Headers were " + headers);
                             }
                             if (val.toLowerCase().endsWith("chunked")) {
                                 this.bodyLength = -2;
@@ -275,7 +281,7 @@ class RequestParser {
 
                     if (c == '\n') {
                         if (cur.length() > 0) {
-                            throw new InvalidRequestException(400, "HTTP Protocol error - trailer line had no value", "While reading a header name (" + cur + ") a newline was found, but there was no ':' first.");
+                            throw new InvalidRequestException(BAD_REQUEST_400, "HTTP Protocol error - trailer line had no value", "While reading a header name (" + cur + ") a newline was found, but there was no ':' first.");
                         }
                         if (trailers == null) {
                             trailers = MuHeaders.EMPTY;
@@ -326,7 +332,7 @@ class RequestParser {
                             }
                         }
                     } else {
-                        throw new InvalidRequestException(400, "Invalid character in chunk size declaration: " + c, "Why");
+                        throw new InvalidRequestException(BAD_REQUEST_400, "Invalid character in chunk size declaration: " + c, "Why");
                     }
                 } else if (chunkState == ChunkState.EXTENSION) {
                     if (c == '\n') {
@@ -341,7 +347,7 @@ class RequestParser {
                     if (c == '\n') {
                         chunkState = ChunkState.SIZE;
                     } else {
-                        throw new InvalidRequestException(400, "Extra data after chunk was supposed to end: " + c, "Why2");
+                        throw new InvalidRequestException(BAD_REQUEST_400, "Extra data after chunk was supposed to end: " + c, "Why2");
                     }
                 } else {
                     throw new IllegalStateException("Unexpected state " + state);

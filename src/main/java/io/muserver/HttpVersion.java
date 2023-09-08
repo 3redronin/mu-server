@@ -10,6 +10,9 @@ public enum HttpVersion {
         this.version = version;
     }
 
+    /**
+     * @return The version as a string in the way it appears in the HTTP Protocol, for example <code>HTTP/1.0</code>
+     */
     public String version() {
         return version;
     }

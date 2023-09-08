@@ -252,6 +252,31 @@ public class RequestBodyReaderStringTest {
 
     @ParameterizedTest
     @ValueSource(strings = { "http", "https"})
+    public void bodiesCanBeIgnored(String type) throws IOException {
+        server = serverBuilder(type)
+            .addHandler((request, response) -> {
+                response.write("Hello");
+                return true;
+            })
+            .start();
+        Request.Builder request = request()
+            .url(server.uri().toString())
+            .post(RequestBody.create(StringUtils.randomStringOfLength(100000), MediaType.get("text/plain;charset=UTF-8")));
+
+        try (Response resp = call(request)) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.body().string(), equalTo("Hello"));
+        }
+        try (Response resp = call(request(server.uri()))) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.body().string(), equalTo("Hello"));
+        }
+
+    }
+
+
+    @ParameterizedTest
+    @ValueSource(strings = { "http", "https"})
     public void largeUTF8CharactersAreFineGzipped(String type) throws IOException {
         server = serverBuilder(type)
             .withGzipEnabled(true)

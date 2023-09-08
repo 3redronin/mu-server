@@ -68,9 +68,10 @@ public class Http1Client implements AutoCloseable {
         return this;
     }
 
-    private void writeAscii(String s) {
+    public Http1Client writeAscii(String s) {
         try {
             outputStream.write(s.getBytes(StandardCharsets.US_ASCII));
+            return this;
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
@@ -176,5 +177,9 @@ public class Http1Client implements AutoCloseable {
 
     public Http1Client flushHeaders() {
         return endHeaders().flush();
+    }
+
+    public int available() throws IOException {
+        return inputStream.available();
     }
 }

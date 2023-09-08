@@ -98,7 +98,17 @@ class Http2Response extends NettyResponseAdaptor {
     }
 
     @Override
+    public void status(HttpStatusCode statusCode) {
+        throw new RuntimeException("not supported");
+    }
+
+    @Override
     public Headers trailers() {
+        throw new RuntimeException("not supported");
+    }
+
+    @Override
+    public HttpStatusCode statusCode() {
         throw new RuntimeException("not supported");
     }
 }

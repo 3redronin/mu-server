@@ -102,7 +102,17 @@ class Http1Response extends NettyResponseAdaptor {
     }
 
     @Override
+    public void status(HttpStatusCode statusCode) {
+        this.status = statusCode.code();
+    }
+
+    @Override
     public Headers trailers() {
+        throw new RuntimeException("not supported");
+    }
+
+    @Override
+    public HttpStatusCode statusCode() {
         throw new RuntimeException("not supported");
     }
 }

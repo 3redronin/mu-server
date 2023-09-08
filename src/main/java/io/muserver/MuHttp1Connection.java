@@ -33,9 +33,10 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
     private String cipher;
     private boolean inputClosed = false;
     private boolean outputClosed = false;
+    private boolean discardMode = false;
 
 
-    static String getRelativeUrl(URI uriInHeaderLine) throws InvalidHttpRequestException, RedirectException {
+    static String getRelativeUrl(URI uriInHeaderLine) throws InvalidRequestException, RedirectException {
         try {
             URI requestUri = uriInHeaderLine.normalize();
             if (requestUri.getScheme() == null && requestUri.getHost() != null) {
@@ -62,7 +63,7 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
             throw re;
         } catch (Exception e) {
             if (log.isDebugEnabled()) log.debug("Invalid request URL " + uriInHeaderLine);
-            throw new InvalidHttpRequestException(400, "400 Bad Request - invalid request URI", "Bad Request");
+            throw new InvalidRequestException(HttpStatusCode.BAD_REQUEST_400, "invalid request URI", "Error while parsing URI '" + uriInHeaderLine + "': " + e.getMessage());
         }
     }
 
@@ -180,15 +181,13 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
         String relativeUri;
         try {
             relativeUri = getRelativeUrl(newRequest.uri());
-        } catch (InvalidHttpRequestException e) {
-            var responseHeaders = MuHeaders.responseHeaders();
-            responseHeaders.set(HeaderNames.CONTENT_TYPE, ContentTypes.TEXT_PLAIN_UTF8);
-            writeSimpleResponseAsync(responseHeaders, e.getMessage(), e.code, e.codeTitle);
+        } catch (InvalidRequestException e) {
+            writeInvalidRequest(e);
             return;
         } catch (RedirectException e) {
             var responseHeaders = MuHeaders.responseHeaders();
             responseHeaders.set(HeaderNames.LOCATION, e.location.toString());
-            writeSimpleResponseAsync(responseHeaders, null, 301, "Moved Permanently");
+            writeSimpleResponseAsync(HttpStatusCode.PERMANENT_REDIRECT_308, responseHeaders, null);
             return;
         }
 
@@ -208,7 +207,7 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
             // TODO don't block and do handle timeouts
             try {
                 if (proposedLength > acceptor.muServer.maxRequestSize()) {
-                    writeSimpleResponseAsync(MuHeaders.responseHeaders(), null, 417, "Expectation Failed");
+                    writeSimpleResponseAsync(HttpStatusCode.EXPECTATION_FAILED_417, MuHeaders.responseHeaders(), null);
                     return;
                 } else {
                     channel.write(Mutils.toByteBuffer("HTTP/1.1 100 Continue\r\n\r\n")).get();
@@ -224,20 +223,33 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
         handleIt(req, resp, exchange);
     }
 
-    private void writeSimpleResponseAsync(MuHeaders responseHeaders, String bodyText, int status, String statusString) {
+    private void writeInvalidRequest(InvalidRequestException e) {
+        acceptor.onInvalidRequest(e);
+        discardMode = true;
+        var responseHeaders = MuHeaders.responseHeaders();
+        responseHeaders.set(HeaderNames.CONTENT_TYPE, ContentTypes.TEXT_PLAIN_UTF8);
+        responseHeaders.set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
+        writeSimpleResponseAsync(e.status, responseHeaders, e.status + " - " + e.clientMessage);
+    }
+    private void writeSimpleResponseAsync(HttpStatusCode status, MuHeaders responseHeaders, String bodyText) {
+        var responseLine = ByteBuffer.wrap(status.http11ResponseLine());
         var body = bodyText == null ? null : Mutils.toByteBuffer(bodyText);
         int size = body == null ? 0 : body.remaining();
-        responseHeaders.set(HeaderNames.CONTENT_LENGTH, size);
-        var headers = MuResponseImpl.http1HeadersBuffer(responseHeaders, HttpVersion.HTTP_1_1, status, statusString);
-        var payload = body == null ? new ByteBuffer[] { headers } : new ByteBuffer[] { headers, body };
+        if (!status.noContentLengthHeader()) {
+            responseHeaders.set(HeaderNames.CONTENT_LENGTH, size);
+        }
+        var headers = MuResponseImpl.http1HeadersBuffer(responseHeaders);
+        var payload = body == null || (requestParser.method() == Method.HEAD) ? new ByteBuffer[] { responseLine, headers } : new ByteBuffer[] { responseLine, headers, body };
         scatteringWrite(payload, 0, payload.length, null, new CompletionHandler<>() {
             @Override
             public void completed(Long result, Object attachment) {
-                log.info("Sent " + status + " " + statusString + " with " + result);
+                log.info("Sent " + status + " with " + result);
+                readyToRead(true);
             }
             @Override
             public void failed(Throwable exc, Object attachment) {
-                log.info("Failed to send " + status + " " + statusString, exc);
+                log.info("Failed to send " + status, exc);
+                forceShutdown(exc);
             }
         });
     }
@@ -267,14 +279,12 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
 
 
     void readyToRead(boolean canReadFromMemory) {
-        if (canReadFromMemory && readBuffer.hasRemaining()) {
+        if (canReadFromMemory && readBuffer.hasRemaining() && !discardMode) {
             ConMessage msg;
             try {
                 msg = requestParser.offer(readBuffer);
             } catch (InvalidRequestException e) {
-                log.warn("Invalid HTTP request. Closing connection.", e);
-                acceptor.onInvalidRequest(e);
-                forceShutdown(e);
+                writeInvalidRequest(e);
                 return;
             }
             if (msg != null) {
@@ -298,14 +308,15 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
         if (result != -1) {
             readBuffer.flip();
             acceptor.muServer.stats.onBytesRead(result); // TODO handle this differently?
-            try {
-                var msg = requestParser.offer(readBuffer);
-                handleMessage(msg);
-            } catch (InvalidRequestException e) {
-                // todo write it back
-                log.error("Invalid request parsing message", e);
-                acceptor.onInvalidRequest(e);
-                forceShutdown(e);
+            if (!discardMode) {
+                try {
+                    var msg = requestParser.offer(readBuffer);
+                    handleMessage(msg);
+                } catch (InvalidRequestException e) {
+                    writeInvalidRequest(e);
+                }
+            } else {
+                readyToRead(false);
             }
         } else {
             log.info("Got EOF from client");

@@ -15,8 +15,7 @@ class MultipartParser {
     private static final MediaType DEFAULT_CONTENT_TYPE = new MediaType("text", "plain", StandardCharsets.US_ASCII.name());
 
     private enum State {
-        PART_BOUNDARY, H_NAME, H_VALUE, FIXED_BODY, COMPLETE;
-
+        PART_BOUNDARY, H_NAME, H_VALUE, FIXED_BODY, COMPLETE
     }
 
     private final String messageEndDelimiter;
@@ -88,7 +87,7 @@ class MultipartParser {
 
             headerSize++;
             if (headerSize > 8192) {
-                throw new InvalidRequestException(431, "Multipart Header Fields Too Large", "Header length (including all white space) reached " + headerSize + " bytes.");
+                throw new InvalidRequestException(HttpStatusCode.REQUEST_HEADER_FIELDS_TOO_LARGE_431, "Multipart Header Fields Too Large", "Header length (including all white space) reached " + headerSize + " bytes.");
             }
 
             if (c == '\r') {
@@ -102,7 +101,7 @@ class MultipartParser {
                             state = State.COMPLETE;
                             return;
                         } else if (!partDelimiter.equals(cur.toString())) {
-                            throw new InvalidRequestException(400, "Invalid multipart body", "Expected " + partDelimiter + " but got " + cur);
+                            throw new InvalidRequestException(HttpStatusCode.BAD_REQUEST_400, "Invalid multipart body", "Expected " + partDelimiter + " but got " + cur);
                         }
                         state = State.H_NAME;
                         cur.setLength(0);
@@ -110,15 +109,15 @@ class MultipartParser {
                 } else if (Parser.isTChar(c)) {
                     append(c);
                 } else {
-                    throw new InvalidRequestException(400, "Invalid character in part boundary", "Got a " + c + " character in the request line");
+                    throw new InvalidRequestException(HttpStatusCode.BAD_REQUEST_400, "Invalid character in part boundary", "Got a " + c + " character in the request line");
                 }
             } else if (state == State.H_NAME) {
 
                 if (c == ' ') {
-                    throw new InvalidRequestException(400, "HTTP protocol error: space in header name", "Shouldn't have a space while in " + state);
+                    throw new InvalidRequestException(HttpStatusCode.BAD_REQUEST_400, "HTTP protocol error: space in header name", "Shouldn't have a space while in " + state);
                 } else if (c == '\n') {
                     if (cur.length() > 0) {
-                        throw new InvalidRequestException(400, "A header name included a line feed character", "Value was " + cur);
+                        throw new InvalidRequestException(HttpStatusCode.BAD_REQUEST_400, "A header name included a line feed character", "Value was " + cur);
                     }
                     cur.setLength(0);
 
@@ -162,10 +161,10 @@ class MultipartParser {
                             try {
                                 this.bodyLength = Long.parseLong(val);
                             } catch (NumberFormatException e) {
-                                throw new InvalidRequestException(400, "Invalid content-length header on multipart", "Header was " + cur);
+                                throw new InvalidRequestException(HttpStatusCode.BAD_REQUEST_400, "Invalid content-length header on multipart", "Header was " + cur);
                             }
                             if (prev != -1 && prev != this.bodyLength) {
-                                throw new InvalidRequestException(400, "Multiple content-length headers on multipart", "First was " + prev + " and then " + bodyLength);
+                                throw new InvalidRequestException(HttpStatusCode.BAD_REQUEST_400, "Multiple content-length headers on multipart", "First was " + prev + " and then " + bodyLength);
                             }
                             break;
                         case "content-disposition":

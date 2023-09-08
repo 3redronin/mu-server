@@ -87,27 +87,6 @@ class MuExchange implements ResponseInfo, AsyncHandle {
         onCompleted();
     }
 
-    public void onException(Throwable cause) {
-
-        if (state.endState()) {
-            log.warn("Got exception after state is " + state);
-            return;
-        }
-
-        RequestBodyListener rbl = this.requestBodyListener;
-        if (rbl != null && request.requestState() == RequestState.RECEIVING_BODY) {
-            // todo if this callback throws an exception, is it going to go around in a loop back to here?
-            rbl.onError(cause);
-        } else if (request.hasBody()) {
-            // discard the remaining body
-            setReadListener(new DiscardingRequestBodyListener());
-        } else if (!request.requestState().endState()) {
-            log.error("Didn't expect a non end state on the request for " + this);
-        }
-        response.onException(cause);
-
-    }
-
 
     public void onMessage(ConMessage msg) {
         RequestBodyListener bodyListener = this.requestBodyListener;
@@ -197,6 +176,9 @@ class MuExchange implements ResponseInfo, AsyncHandle {
 
     @Override
     public void complete() {
+        if (requestBodyListener == null) {
+            setReadListener(new DiscardingRequestBodyListener());
+        }
 
         // This either sends and end-of-chunks message for a chunked request that is still streaming, or sends
         // the response headers with no body if there is no body.
@@ -219,7 +201,7 @@ class MuExchange implements ResponseInfo, AsyncHandle {
                     // todo: make this more efficient
                     write(StandardCharsets.US_ASCII.encode("0\r\n"), false, error -> {
                         if (error == null) {
-                            var trailersBuffer = resp.headersBuffer(false, resp.trailers);
+                            var trailersBuffer = resp.headersBuffer(resp.trailers);
                             write(trailersBuffer, false, error2 -> {
                                 if (error2 == null) {
                                     resp.setState(ResponseState.FINISHED);
@@ -301,6 +283,13 @@ class MuExchange implements ResponseInfo, AsyncHandle {
             log.warn("Completion error thrown after state is " + state, cause);
             return;
         }
+        if (cause instanceof UserRequestAbortException) {
+            abort(cause);
+            return;
+        }
+        if (requestBodyListener == null) {
+            setReadListener(new DiscardingRequestBodyListener());
+        }
 
         MuRequestImpl request = data.exchange.request;
         MuResponseImpl resp = data.exchange.response;
@@ -359,7 +348,7 @@ class MuExchange implements ResponseInfo, AsyncHandle {
             log.warn("Error while processing processing " + cause + " for " + request, e);
             abort(cause);
         } finally {
-            if (!resp.responseState().endState()) {
+            if (!isAsync && !resp.responseState().endState()) {
                 abort(cause);
             }
         }
@@ -375,10 +364,11 @@ class MuExchange implements ResponseInfo, AsyncHandle {
         var resp = response;
 
         boolean chunked = encodeChunks && resp.isChunked();
-        int buffersToSend = (resp.hasStartedSendingData() ? 0 : 1) + (chunked ? 2 : 0) + (data != null ? 1 : 0);
+        int buffersToSend = (resp.hasStartedSendingData() ? 0 : 2) + (chunked ? 2 : 0) + (data != null ? 1 : 0);
         int bi = -1;
         var toSend = new ByteBuffer[buffersToSend];
         if (!resp.hasStartedSendingData()) {
+            toSend[++bi] = ByteBuffer.wrap(resp.statusCode().http11ResponseLine());
             toSend[++bi] = resp.startStreaming();
         }
         if (chunked) {
@@ -398,7 +388,7 @@ class MuExchange implements ResponseInfo, AsyncHandle {
         log.info(">>\n" + sb.toString().replace("\r", "\\r").replace("\n", "\\n\r\n"));
 
         MuHttp1Connection con = this.data.connection;
-        CompletionHandler<Long, Object> writeHandler = new CompletionHandler<>() {
+        con.scatteringWrite(toSend, 0, toSend.length, null, new CompletionHandler<>() {
             @Override
             public void completed(Long result, Object attachment) {
                 MuExchange.this.data.server().stats.onBytesSent(result);
@@ -428,8 +418,7 @@ class MuExchange implements ResponseInfo, AsyncHandle {
                     complete(e);
                 }
             }
-        };
-        con.scatteringWrite(toSend, 0, toSend.length, null, writeHandler);
+        });
     }
 
     @Override

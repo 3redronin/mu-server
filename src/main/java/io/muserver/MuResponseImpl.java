@@ -23,7 +23,7 @@ public class MuResponseImpl implements MuResponse {
     private static final Logger log = LoggerFactory.getLogger(MuResponseImpl.class);
 
     private final MuExchangeData data;
-    private int status = 200;
+    private HttpStatusCode status = HttpStatusCode.OK_200;
     private final MuHeaders headers = MuHeaders.responseHeaders();
     MuHeaders trailers = null;
     private ResponseState state = ResponseState.NOTHING;
@@ -36,12 +36,18 @@ public class MuResponseImpl implements MuResponse {
 
     @Override
     public int status() {
-        return status;
+        return status.code();
     }
 
     @Override
     public void status(int value) {
-        this.status = value;
+        this.status = HttpStatusCode.of(value);
+    }
+
+    @Override
+    public void status(HttpStatusCode statusCode) {
+        Mutils.notNull("statusCode", statusCode);
+        this.status = statusCode;
     }
 
     @Override
@@ -114,15 +120,12 @@ public class MuResponseImpl implements MuResponse {
         return true;
     }
 
-    ByteBuffer headersBuffer(boolean reqLine, MuHeaders headers) {
-        return http1HeadersBuffer(headers, reqLine ? data.newRequest.version() : null, status, "OK");
+    ByteBuffer headersBuffer(MuHeaders headers) {
+        return http1HeadersBuffer(headers);
     }
 
-    static ByteBuffer http1HeadersBuffer(MuHeaders headers, HttpVersion httpVersion, int status, String statusString) {
+    static ByteBuffer http1HeadersBuffer(MuHeaders headers) {
         var sb = new StringBuilder();
-        if (httpVersion != null) {
-            sb.append(httpVersion.version()).append(' ').append(status).append(' ').append(statusString).append("\r\n");
-        }
         for (Map.Entry<String, List<String>> entry : headers.all().entrySet()) {
             for (String value : entry.getValue()) {
                 sb.append(entry.getKey()).append(": ").append(value).append("\r\n");
@@ -232,7 +235,7 @@ public class MuResponseImpl implements MuResponse {
         if (!headers.contains(HeaderNames.CONTENT_LENGTH)) {
             headers.set(HeaderNames.TRANSFER_ENCODING, HeaderValues.CHUNKED);
         }
-        return headersBuffer(true, headers);
+        return headersBuffer(headers);
     }
 
     @Override
@@ -269,6 +272,11 @@ public class MuResponseImpl implements MuResponse {
             trailers = new MuHeaders();
         }
         return trailers;
+    }
+
+    @Override
+    public HttpStatusCode statusCode() {
+        return status;
     }
 
     boolean isChunked() {

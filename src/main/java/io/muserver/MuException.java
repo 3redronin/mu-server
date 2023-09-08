@@ -25,19 +25,6 @@ public class MuException extends RuntimeException {
 	}
 }
 
-/**
- * Thrown when an HttpExchange can't start because the request is invalid
- */
-class InvalidHttpRequestException extends Exception {
-    final int code;
-    final String codeTitle;
-    InvalidHttpRequestException(int code, String clientMessage, String codeTitle) {
-        super(clientMessage);
-        this.code = code;
-        this.codeTitle = codeTitle;
-    }
-}
-
 class RedirectException extends Exception {
     final URI location;
     RedirectException(URI location) {
