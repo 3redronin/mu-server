@@ -267,7 +267,7 @@ public class MuServerTest {
     public void doubleSlashesAreIgnored() throws Exception {
         server = httpServer().start();
         String body = runUriTest("//hello/wor%20ld?hello=wo%20rld&two=three", "");
-        assertThat(body, startsWith("HTTP/1.1 302 Found"));
+        assertThat(body, startsWith("HTTP/1.1 301 Moved Permanently"));
         assertThat(body, containsString("location: /hello/wor%20ld?hello=wo%20rld&two=three"));
     }
 

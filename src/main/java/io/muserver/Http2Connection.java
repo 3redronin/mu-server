@@ -233,7 +233,7 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
             String uri = HttpExchange.getRelativeUrl(headers.path().toString());
             ServerSettings settings = server.settings();
             if (uri.length() > settings.maxUrlSize) {
-                throw new InvalidHttpRequestException(414, "414 Request-URI Too Long");
+                throw new InvalidHttpRequestException(414, "414 Request-URI Too Long", "Request-URI Too Long");
             }
 
             HttpRequest nettyReq = new Http2To1RequestAdapter(streamId, nettyMeth, uri, headers);
@@ -243,7 +243,7 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
                 if (bodyLen == 0) {
                     hasRequestBody = false;
                 } else if (bodyLen > settings.maxRequestSize) {
-                    throw new InvalidHttpRequestException(413, "413 Payload Too Large");
+                    throw new InvalidHttpRequestException(413, "413 Payload Too Large", "Payload Too Large");
                 }
             }
             Http2Headers muHeaders = new Http2Headers(headers, hasRequestBody);
@@ -258,7 +258,7 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
 
 
             if (settings.block(muReq)) {
-                throw new InvalidHttpRequestException(429, "429 Too Many Requests");
+                throw new InvalidHttpRequestException(429, "429 Too Many Requests", "Too Many Requests");
             }
 
             resp.addChangeListener((exchange, newState) -> {
@@ -297,7 +297,7 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
                 server.stats.onRequestEnded(httpExchange.request);
                 connectionStats.onRequestEnded(httpExchange.request);
                 log.warn("Could not service " + httpExchange.request + " because the thread pool is full so sending a 503");
-                throw new InvalidHttpRequestException(503, "503 Service Unavailable");
+                throw new InvalidHttpRequestException(503, "503 Service Unavailable", "Service Unavailable");
             }
 
         } catch (InvalidHttpRequestException ihr) {

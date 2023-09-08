@@ -287,7 +287,7 @@ class HttpExchange implements ResponseInfo, Exchange {
         muResponse.setExchange(httpExchange);
 
         if (settings.block(muRequest)) {
-            throw new InvalidHttpRequestException(429, "429 Too Many Requests");
+            throw new InvalidHttpRequestException(429, "429 Too Many Requests", "Too Many Requests");
         }
         httpExchange.addChangeListener(stateChangeListener);
         muRequest.addChangeListener(requestStateChangeListener);
@@ -300,7 +300,7 @@ class HttpExchange implements ResponseInfo, Exchange {
             serverStats.onRequestEnded(httpExchange.request);
             connectionStats.onRequestEnded(httpExchange.request);
             log.warn("Could not service " + muRequest + " because the thread pool is full so sending a 503");
-            throw new InvalidHttpRequestException(503, "503 Service Unavailable");
+            throw new InvalidHttpRequestException(503, "503 Service Unavailable", "Service Unavailable");
         }
         return httpExchange;
     }
@@ -332,7 +332,7 @@ class HttpExchange implements ResponseInfo, Exchange {
             throw re;
         } catch (Exception e) {
             if (log.isDebugEnabled()) log.debug("Invalid request URL " + nettyUri);
-            throw new InvalidHttpRequestException(400, "400 Bad Request");
+            throw new InvalidHttpRequestException(400, "400 Bad Request", "Bad Request");
         }
     }
 
@@ -341,7 +341,7 @@ class HttpExchange implements ResponseInfo, Exchange {
         try {
             method = Method.fromNetty(nettyMethod);
         } catch (IllegalArgumentException e) {
-            throw new InvalidHttpRequestException(405, "405 Method Not Allowed");
+            throw new InvalidHttpRequestException(405, "405 Method Not Allowed", "Method Not Allowed");
         }
         return method;
     }
@@ -351,13 +351,13 @@ class HttpExchange implements ResponseInfo, Exchange {
             Throwable cause = nettyRequest.decoderResult().cause();
             if (cause instanceof TooLongFrameException) {
                 if (cause.getMessage().contains("header is larger")) {
-                    throw new InvalidHttpRequestException(431, "431 Request Header Fields Too Large");
+                    throw new InvalidHttpRequestException(431, "431 Request Header Fields Too Large", "Request Header Fields Too Large");
                 } else if (cause.getMessage().contains("line is larger")) {
-                    throw new InvalidHttpRequestException(414, "414 Request-URI Too Long");
+                    throw new InvalidHttpRequestException(414, "414 Request-URI Too Long", "Request-URI Too Long");
                 }
             }
             if (log.isDebugEnabled()) log.debug("Invalid http request received", cause);
-            throw new InvalidHttpRequestException(500, "Invalid HTTP request received");
+            throw new InvalidHttpRequestException(500, "Invalid HTTP request received", "Server Error");
         }
 
         String contentLenDecl = nettyRequest.headers().get("Content-Length");
@@ -366,17 +366,17 @@ class HttpExchange implements ResponseInfo, Exchange {
             if (requestBodyLen <= settings.maxRequestSize) {
                 ctx.writeAndFlush(new DefaultFullHttpResponse(HTTP_1_1, HttpResponseStatus.CONTINUE));
             } else {
-                throw new InvalidHttpRequestException(417, "417 Expectation Failed - request too large");
+                throw new InvalidHttpRequestException(417, "417 Expectation Failed - request too large", "Expectation Failed");
             }
         }
 
         if (!nettyRequest.headers().contains(HttpHeaderNames.HOST)) {
-            throw new InvalidHttpRequestException(400, "400 Bad Request - no Host header");
+            throw new InvalidHttpRequestException(400, "400 Bad Request - no Host header", "Bad Request");
         }
         if (contentLenDecl != null) {
             long cld = Long.parseLong(contentLenDecl, 10);
             if (cld > settings.maxRequestSize) {
-                throw new InvalidHttpRequestException(413, "413 Payload Too Large");
+                throw new InvalidHttpRequestException(413, "413 Payload Too Large", "Payload Too Large");
             }
         }
     }

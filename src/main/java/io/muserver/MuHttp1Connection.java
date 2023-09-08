@@ -62,7 +62,7 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
             throw re;
         } catch (Exception e) {
             if (log.isDebugEnabled()) log.debug("Invalid request URL " + uriInHeaderLine);
-            throw new InvalidHttpRequestException(400, "400 Bad Request");
+            throw new InvalidHttpRequestException(400, "400 Bad Request - invalid request URI", "Bad Request");
         }
     }
 
@@ -181,23 +181,34 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
         try {
             relativeUri = getRelativeUrl(newRequest.uri());
         } catch (InvalidHttpRequestException e) {
-            // TODO handle this
-            throw new RuntimeException(e);
+            var responseHeaders = MuHeaders.responseHeaders();
+            responseHeaders.set(HeaderNames.CONTENT_TYPE, ContentTypes.TEXT_PLAIN_UTF8);
+            writeSimpleResponseAsync(responseHeaders, e.getMessage(), e.code, e.codeTitle);
+            return;
         } catch (RedirectException e) {
-            // TODO redirect it
-            throw new RuntimeException(e);
+            var responseHeaders = MuHeaders.responseHeaders();
+            responseHeaders.set(HeaderNames.LOCATION, e.location.toString());
+            writeSimpleResponseAsync(responseHeaders, null, 301, "Moved Permanently");
+            return;
         }
 
         var headers = newRequest.headers();
+
+
+        var req = new MuRequestImpl(data, newRequest.method(), relativeUri, headers, newRequest.hasBody());
+        var resp = new MuResponseImpl(data);
+        var exchange = new MuExchange(data, req, resp);
+        this.exchange = exchange;
+        data.exchange = exchange;
+        onExchangeStarted(exchange);
+
 
         if (headers.containsValue(HeaderNames.EXPECT, HeaderValues.CONTINUE, true)) {
             long proposedLength = headers.getLong(HeaderNames.CONTENT_LENGTH.toString(), -1L);
             // TODO don't block and do handle timeouts
             try {
                 if (proposedLength > acceptor.muServer.maxRequestSize()) {
-                    var responseHeaders = MuHeaders.responseHeaders();
-                    responseHeaders.set(HeaderNames.CONTENT_LENGTH, 0);
-                    channel.write(MuResponseImpl.http1HeadersBuffer(responseHeaders, HttpVersion.HTTP_1_1, 417, "Expectation Failed")).get();
+                    writeSimpleResponseAsync(MuHeaders.responseHeaders(), null, 417, "Expectation Failed");
                     return;
                 } else {
                     channel.write(Mutils.toByteBuffer("HTTP/1.1 100 Continue\r\n\r\n")).get();
@@ -210,13 +221,28 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
 
         }
 
-        var req = new MuRequestImpl(data, newRequest.method(), relativeUri, headers, newRequest.hasBody());
-        var resp = new MuResponseImpl(data);
-        var exchange = new MuExchange(data, req, resp);
-        this.exchange = exchange;
-        data.exchange = exchange;
-        onExchangeStarted(exchange);
+        handleIt(req, resp, exchange);
+    }
 
+    private void writeSimpleResponseAsync(MuHeaders responseHeaders, String bodyText, int status, String statusString) {
+        var body = bodyText == null ? null : Mutils.toByteBuffer(bodyText);
+        int size = body == null ? 0 : body.remaining();
+        responseHeaders.set(HeaderNames.CONTENT_LENGTH, size);
+        var headers = MuResponseImpl.http1HeadersBuffer(responseHeaders, HttpVersion.HTTP_1_1, status, statusString);
+        var payload = body == null ? new ByteBuffer[] { headers } : new ByteBuffer[] { headers, body };
+        scatteringWrite(payload, 0, payload.length, null, new CompletionHandler<>() {
+            @Override
+            public void completed(Long result, Object attachment) {
+                log.info("Sent " + status + " " + statusString + " with " + result);
+            }
+            @Override
+            public void failed(Throwable exc, Object attachment) {
+                log.info("Failed to send " + status + " " + statusString, exc);
+            }
+        });
+    }
+
+    private void handleIt(MuRequestImpl req, MuResponseImpl resp, MuExchange exchange) {
         try {
             boolean handled = false;
             for (MuHandler muHandler : acceptor.muServer.handlers) {
@@ -308,8 +334,9 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
         }
     }
 
-    <A> void scatteringWrite(ByteBuffer[] srcs, int offset, int length, long timeout, TimeUnit unit, A attachment, CompletionHandler<Long, ? super A> handler) {
-        channel.write(srcs, offset, length, timeout, unit, attachment, handler);
+    <A> void scatteringWrite(ByteBuffer[] srcs, int offset, int length, A attachment, CompletionHandler<Long, ? super A> handler) {
+        var timeout = this.acceptor.muServer.settings.responseWriteTimeoutMillis();
+        channel.write(srcs, offset, length, timeout, TimeUnit.MILLISECONDS, attachment, handler);
     }
 
     /**

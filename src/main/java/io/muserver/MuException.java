@@ -30,9 +30,11 @@ public class MuException extends RuntimeException {
  */
 class InvalidHttpRequestException extends Exception {
     final int code;
-    InvalidHttpRequestException(int code, String clientMessage) {
+    final String codeTitle;
+    InvalidHttpRequestException(int code, String clientMessage, String codeTitle) {
         super(clientMessage);
         this.code = code;
+        this.codeTitle = codeTitle;
     }
 }
 

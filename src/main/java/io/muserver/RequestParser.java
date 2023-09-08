@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
@@ -128,7 +129,11 @@ class RequestParser {
                     if (uriStr.charAt(0) != '/') {
                         throw new InvalidRequestException(400, "Bad Request - Invalid URI", "The URI did not start with a '/'. It was: " + uriStr);
                     }
-                    requestUri = URI.create(uriStr).normalize();
+                    try {
+                        requestUri = new URI(uriStr).normalize();
+                    } catch (URISyntaxException e) {
+                        throw new InvalidRequestException(400, "Bad Request - Invalid URI", "URI parsing failed: " + e.getMessage());
+                    }
                     if (requestUri.getPath().startsWith("/..")) {
                         throw new InvalidRequestException(400, "Bad Request - Invalid URI", "The URI had '..' after normalisation. Raw value was " + uriStr);
                     }

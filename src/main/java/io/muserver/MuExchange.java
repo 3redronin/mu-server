@@ -407,7 +407,7 @@ class MuExchange implements ResponseInfo, AsyncHandle {
                     boolean broke = false;
                     for (ByteBuffer byteBuffer : toSend) {
                         if (byteBuffer.hasRemaining()) {
-                            con.scatteringWrite(toSend, 0, toSend.length, MuExchange.this.data.server().settings.responseWriteTimeoutMillis(), TimeUnit.MILLISECONDS, null, this);
+                            con.scatteringWrite(toSend, 0, toSend.length, null, this);
                             broke = true;
                             break;
                         }
@@ -429,8 +429,7 @@ class MuExchange implements ResponseInfo, AsyncHandle {
                 }
             }
         };
-        con.scatteringWrite(toSend, 0, toSend.length, this.data.server().settings.responseWriteTimeoutMillis(), TimeUnit.MILLISECONDS, null, writeHandler);
-
+        con.scatteringWrite(toSend, 0, toSend.length, null, writeHandler);
     }
 
     @Override
