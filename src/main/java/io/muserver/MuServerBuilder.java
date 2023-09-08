@@ -49,6 +49,8 @@ public class MuServerBuilder {
     private HashedWheelTimer wheelTimer;
     private List<RateLimiterImpl> rateLimiters;
     private UnhandledExceptionHandler unhandledExceptionHandler;
+    private RequestBodyErrorAction requestBodyTooLargeAction = RequestBodyErrorAction.SEND_RESPONSE;
+
 
     /**
      * @param port The HTTP port to use. A value of 0 will have a random port assigned; a value of -1 will
@@ -221,10 +223,11 @@ public class MuServerBuilder {
     }
 
     /**
-     * The maximum allowed request body size. If exceeded, a 413 will be returned.
+     * The maximum allowed request body size. If exceeded, a 413 will be returned, or the connection will be killed.
      *
      * @param maxSizeInBytes The maximum request body size allowed, in bytes. The default is 24MB.
      * @return The current Mu Server builder
+     * @see #withRequestBodyTooLargeAction(RequestBodyErrorAction)
      */
     public MuServerBuilder withMaxRequestSize(long maxSizeInBytes) {
         this.maxRequestSize = maxSizeInBytes;
@@ -636,4 +639,21 @@ public class MuServerBuilder {
     }
 
 
+    /**
+     * Specifies what to do when a request body is too large.
+     * @param requestBodyTooLargeAction The action to take. Defaults to {@link RequestBodyErrorAction#SEND_RESPONSE}
+     * @return The current Mu Server Builder
+     * @see #withMaxRequestSize(long)}
+     */
+    public MuServerBuilder withRequestBodyTooLargeAction(RequestBodyErrorAction requestBodyTooLargeAction) {
+        this.requestBodyTooLargeAction = requestBodyTooLargeAction;
+        return this;
+    }
+
+    /**
+     * @return The current value of this seting.
+     */
+    public RequestBodyErrorAction requestBodyTooLargeAction() {
+        return this.requestBodyTooLargeAction;
+    }
 }

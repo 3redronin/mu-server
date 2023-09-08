@@ -93,7 +93,6 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
                     });
                 }
                 case NOT_HANDSHAKING, FINISHED -> {
-                    log.info("Not handshaking! ");
                     Runnable toDo = pendingTasks.poll();
                     while (toDo != null) {
                         toDo.run();
@@ -230,16 +229,12 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
         throw new UnsupportedOperationException();
     }
 
-    int i = 0;
     @Override
     public <A> void read(ByteBuffer dst, long timeout, TimeUnit unit, A attachment, CompletionHandler<Integer, ? super A> handler) {
         netReadBuffer.compact();
-        var finalI = i++;
-        log.info("Reading " + finalI + " with status " + sslEngine.getHandshakeStatus() + " dst: " + dst);
         socketChannel.read(netReadBuffer, timeout, unit, attachment, new CompletionHandler<>() {
             @Override
             public void completed(Integer result, A attachment) {
-                log.info("Read " + finalI + " result=" + result + " with status " + sslEngine.getHandshakeStatus());
                 if (result == -1) {
                     log.info("TLS CLOSE_NOTIFY received");
                     try {
@@ -257,7 +252,6 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
                 } else {
                     netReadBuffer.flip();
                     SSLEngineResult unwrapResult;
-                    log.info("netReadBuffer remaining=" + netReadBuffer.remaining() + " - dst: " + dst.remaining() + " - and " + sslEngine.getHandshakeStatus());
                     try {
 
                         do {

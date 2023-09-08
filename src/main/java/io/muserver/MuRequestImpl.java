@@ -111,7 +111,7 @@ public class MuRequestImpl implements MuRequest {
         Charset charset = headers.contentCharset(true);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         long byteLen = headers.getLong(HeaderNames.CONTENT_LENGTH.toString(), Long.MAX_VALUE);
-        Mutils.copy(inputStream.get(), baos, (int)Math.min(byteLen, 8192L));
+        Mutils.copy(inputStream.get(), baos, (int)Math.min(byteLen, 8192L)); // todo use read buffer size
         return baos.toString(charset);
     }
 

@@ -296,7 +296,6 @@ public class MuResponseImpl implements MuResponse {
 
         @Override
         public void write(byte[] b, int off, int len) throws IOException {
-            System.out.println("Sending " + (len - off) + " bytes");
             if (closed) throw new IOException("Writing to a closed stream");
             blockingWrite(ByteBuffer.wrap(b, off, len));
         }
@@ -304,14 +303,9 @@ public class MuResponseImpl implements MuResponse {
         @Override
         public void close() {
             if (!closed) {
-                System.out.println("Closed");
                 closed = true;
             }
         }
 
-        @Override
-        public void flush() throws IOException {
-            super.flush();
-        }
     }
 }

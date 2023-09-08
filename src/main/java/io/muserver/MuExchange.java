@@ -79,6 +79,9 @@ class MuExchange implements ResponseInfo, AsyncHandle {
             log.warn("Got exception after state is " + state);
             return;
         }
+        if (this.requestBodyListener != null) {
+            this.requestBodyListener.onError(cause);
+        }
         request.abort(cause);
         response.abort(cause);
         onCompleted();
@@ -113,8 +116,12 @@ class MuExchange implements ResponseInfo, AsyncHandle {
                 try {
                     var newSize = requestBodySize.addAndGet(rbd.buffer().remaining());
                     if (newSize > data.connection.server().maxRequestSize()) {
-                        request.onError();
                         bodyListener.onError(new ClientErrorException("413 Request Entity Too Large", 413));
+                        if (data.server().settings.requestBodyTooLargeAction() == RequestBodyErrorAction.SEND_RESPONSE) {
+                            setReadListener(new DiscardingRequestBodyListener());
+                        } else {
+                            request.onError();
+                        }
                     } else {
                         bodyListener.onDataReceived(rbd.buffer(), error -> {
                             if (error == null) {
@@ -177,7 +184,7 @@ class MuExchange implements ResponseInfo, AsyncHandle {
     @Override
     public void setReadListener(RequestBodyListener readListener) {
         Mutils.notNull("readListener", readListener);
-        if (this.requestBodyListener != null) {
+        if (this.requestBodyListener != null && !(readListener instanceof DiscardingRequestBodyListener)) {
             throw new IllegalStateException("Cannot set a read listener when the body is already being read");
         }
         if (request.hasBody()) {
@@ -302,6 +309,8 @@ class MuExchange implements ResponseInfo, AsyncHandle {
                 WebApplicationException wae;
                 if (cause instanceof WebApplicationException) {
                     wae = (WebApplicationException) cause;
+                } else if (cause.getCause() instanceof WebApplicationException) {
+                    wae = (WebApplicationException) cause.getCause();
                 } else {
                     String errorID = "ERR-" + UUID.randomUUID();
                     log.info("Sending a 500 to the client with ErrorID=" + errorID + " for " + request, cause);
@@ -500,7 +509,6 @@ class MuExchangeData {
 
 class RequestBodyListenerToInputStreamAdapter extends InputStream implements RequestBodyListener {
 
-    private static final Logger log = LoggerFactory.getLogger(RequestBodyListenerToInputStreamAdapter.class);
     ByteBuffer curBuffer;
     DoneCallback doneCallback;
     private boolean eos = false;
@@ -510,7 +518,6 @@ class RequestBodyListenerToInputStreamAdapter extends InputStream implements Req
     @Override
     public void onDataReceived(ByteBuffer buffer, DoneCallback doneCallback) throws Exception {
         synchronized (lock) {
-            log.info("datareceivednotify with " + buffer);
             this.curBuffer = buffer;
             this.doneCallback = doneCallback;
             lock.notify();
@@ -520,7 +527,6 @@ class RequestBodyListenerToInputStreamAdapter extends InputStream implements Req
     @Override
     public void onComplete() {
         synchronized (lock) {
-            log.info("completednotify");
             eos = true;
             lock.notify();
         }
@@ -529,7 +535,6 @@ class RequestBodyListenerToInputStreamAdapter extends InputStream implements Req
     @Override
     public void onError(Throwable t) {
         synchronized (lock) {
-            log.info("onerrornotify");
             if (t instanceof IOException ioe) {
                 this.error = ioe;
             } else if (t instanceof UncheckedIOException uioe) {
@@ -551,7 +556,6 @@ class RequestBodyListenerToInputStreamAdapter extends InputStream implements Req
     @Override
     public int read(byte[] b, int off, int len) throws IOException {
         synchronized (lock) {
-            log.info("readlock with " + curBuffer);
             if (eos) return -1;
             if (error != null) throw error;
             if (curBuffer != null && curBuffer.hasRemaining()) {
@@ -562,12 +566,9 @@ class RequestBodyListenerToInputStreamAdapter extends InputStream implements Req
                 try {
                     if (doneCallback != null) {
                         doneCallback.onComplete(null);
-                        log.info("completed");
                     }
                     if (!eos && (curBuffer == null || !curBuffer.hasRemaining())) {
-                        log.info("readwait with " + curBuffer);
                         lock.wait(); // no need for timeout as the request body listener will time out and notify
-                        log.info("readawakened with " + curBuffer);
                     }
                 } catch (Exception e) {
                     onError(e);
@@ -584,17 +585,8 @@ class DiscardingRequestBodyListener implements RequestBodyListener {
     public void onDataReceived(ByteBuffer buffer, DoneCallback doneCallback) throws Exception {
         doneCallback.onComplete(null);
     }
-
     @Override
-    public void onComplete() {
-        System.out.println("complete");
-    }
-
+    public void onComplete() {}
     @Override
-    public void onError(Throwable t) {
-        System.out.println("err " + t);
-    }
-
-
-
+    public void onError(Throwable t) {}
 }

@@ -4,7 +4,6 @@ import okhttp3.MediaType;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
-import okhttp3.internal.http2.StreamResetException;
 import okio.BufferedSink;
 import org.junit.After;
 import org.junit.Assert;
@@ -19,18 +18,19 @@ import javax.ws.rs.ClientErrorException;
 import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.channels.InterruptedByTimeoutException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.MuServerBuilder.muServer;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 import static scaffolding.MuAssert.assertEventually;
@@ -207,7 +207,6 @@ public class RequestBodyReaderStringTest {
     @ValueSource(strings = { "http", "https"})
     public void chineseWorks(String type) throws Exception {
         server = serverBuilder(type)
-            .withHttpsPort(8443)
             .addHandler((request, response) -> {
                 response.contentType(ContentTypes.TEXT_PLAIN_UTF8);
                 String requestBody = request.readBodyAsString();
@@ -276,7 +275,7 @@ public class RequestBodyReaderStringTest {
 
     @ParameterizedTest
     @ValueSource(strings = { "http", "https"})
-    public void aSlowReadResultsInACompleted408OrKilledConnectionIfResponseNotStarted(String type) {
+    public void aSlowReadResultsInAKilledConnectionIfResponseNotStarted(String type) {
         AtomicReference<Throwable> exception = new AtomicReference<>();
         server = serverBuilder(type)
             .withRequestTimeout(100, TimeUnit.MILLISECONDS)
@@ -295,16 +294,12 @@ public class RequestBodyReaderStringTest {
             .url(server.uri().toString())
             .post(new SlowBodySender(2, 200));
 
-        try (Response resp = call(request)) {
-            assertThat(resp.code(), equalTo(408));
-            assertThat(resp.body().string(), containsString("408 Request Timeout"));
-        } catch (Exception e) {
-            // The HttpServerKeepAliveHandler will probably close the connection before the full request body is read, which is probably a good thing in this case.
-            // So allow a valid 408 response or an error
-            assertThat(e.getCause(), instanceOf(IOException.class));
-        }
-        assertThat(exception.get(), instanceOf(ClientErrorException.class));
-        assertThat(((ClientErrorException) exception.get()).getResponse().getStatus(), equalTo(408));
+        assertThrows(UncheckedIOException.class, () -> {
+            try (Response resp = call(request)) {
+                resp.body().string();
+            }
+        });
+        assertThat(exception.get(), instanceOf(InterruptedByTimeoutException.class));
     }
 
     @ParameterizedTest
@@ -335,20 +330,17 @@ public class RequestBodyReaderStringTest {
         } catch (Exception e) {
             MuAssert.assertIOException(e);
         }
-        assertThat(exception.get(), instanceOf(ClientErrorException.class));
-        assertThat(((ClientErrorException) exception.get()).getResponse().getStatus(), equalTo(408));
+        assertThat(exception.get(), instanceOf(InterruptedByTimeoutException.class));
     }
 
     @ParameterizedTest
-    @ValueSource(strings = { "http", "https"})
-    public void exceedingUploadSizeResultsIn413OrKilledConnectionForChunkedRequestWhereResponseNotStarted(String type) throws Exception {
+    @ValueSource(strings = { "https", "http" })
+    public void exceedingUploadSizeResultsIn413ForChunkedRequestWhereResponseNotStarted(String type) throws Exception {
         AtomicReference<Throwable> exception = new AtomicReference<>();
         List<ResponseInfo> infos = new ArrayList<>();
-        AtomicBoolean isHttp2 = new AtomicBoolean();
         server = serverBuilder(type)
             .withMaxRequestSize(1000)
             .addHandler((request, response) -> {
-                isHttp2.set(request.connection().protocol().equals("HTTP/2"));
                 try {
                     request.readBodyAsString();
                 } catch (Throwable e) {
@@ -362,84 +354,96 @@ public class RequestBodyReaderStringTest {
 
         Request.Builder request = request()
             .url(server.uri().toString())
-            .post(new SlowBodySender(1000, 5));
+            .post(new SlowBodySender(1000, 1));
 
         try (Response resp = call(request)) {
             assertThat(resp.code(), equalTo(413));
             assertThat(resp.body().string(), containsString("413 Request Entity Too Large"));
-            Assert.fail("Should not read the whole body");
-        } catch (Exception e) {
-            // The HttpServerKeepAliveHandler will probably close the connection before the full request body is read, which is probably a good thing in this case.
-            // So allow a valid 413 response or an error
-            if (isHttp2.get()) {
-                assertThat(e.getCause(), instanceOf(StreamResetException.class));
-            } else {
-                MuAssert.assertIOException(e);
-                assertThat(e, not(instanceOf(StreamResetException.class)));
-            }
         }
-        assertEventually(exception::get, instanceOf(ClientErrorException.class));
-        assertThat(((ClientErrorException) exception.get()).getResponse().getStatus(), equalTo(413));
+        assertEventually(exception::get, instanceOf(IOException.class));
+        Throwable cause = exception.get().getCause();
+        assertThat(cause, instanceOf(ClientErrorException.class));
+        assertThat(((ClientErrorException) cause).getResponse().getStatus(), equalTo(413));
 
         assertEventually(() -> infos, not(empty()));
         assertThat(infos.size(), equalTo(1));
-        HttpExchange ri = (HttpExchange) infos.get(0);
-        assertThat(ri.completedSuccessfully(), equalTo(false));
-        assertThat(ri.state(), equalTo(HttpExchangeState.ERRORED));
-        assertThat(ri.request.requestState(), equalTo(RequestState.ERRORED));
+        var ri = (MuExchange) infos.get(0);
+        assertThat(ri.completedSuccessfully(), equalTo(true));
+        assertThat(ri.state, equalTo(HttpExchangeState.COMPLETE));
+        assertThat(ri.request.requestState(), equalTo(RequestState.COMPLETE));
         assertThat(ri.response.responseState(), equalTo(ResponseState.FULL_SENT));
     }
 
     @ParameterizedTest
-    @ValueSource(strings = { "http", "https"})
-    public void exceedingUploadSizeResultsInKilledConnectionForChunkedRequestWhereResponseStarted(String type) throws Exception {
-        AtomicReference<Throwable> exception = new AtomicReference<>();
-        AtomicBoolean isHttp2 = new AtomicBoolean();
+    @ValueSource(strings = { "https", "http" })
+    public void exceedingUploadSizeResultsInClosedConnectionForChunkedRequestWhereResponseAlreadyStarted(String type) {
+        testConnectionKilledDueToLargeBody(type, (request, response) -> {
+            response.sendChunk("Hi");
+            request.readBodyAsString();
+            return true;
+        }, ResponseState.ERRORED, RequestBodyErrorAction.SEND_RESPONSE);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "https", "http" })
+    public void exceedingUploadSizeResultsInClosedConnectionForChunkedRequestWhereResponseAlreadyCompleted(String type) {
+        testConnectionKilledDueToLargeBody(type, (request, response) -> {
+            response.write("Hi");
+            request.readBodyAsString();
+            return true;
+        }, ResponseState.FULL_SENT, RequestBodyErrorAction.SEND_RESPONSE);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "https", "http" })
+    public void exceedingUploadSizeResultsInClosedConnectionForChunkedRequestWhenTooLargeActionIsKill(String type) {
+        testConnectionKilledDueToLargeBody(type, (request, response) -> {
+            request.readBodyAsString();
+            return true;
+        }, ResponseState.FULL_SENT /* hmm */, RequestBodyErrorAction.KILL_CONNECTION);
+    }
+
+
+    private void testConnectionKilledDueToLargeBody(String type, MuHandler handler, ResponseState expectedResponseState, RequestBodyErrorAction requestBodyTooLargeAction) {
+        AtomicReference<Throwable> exceptionThrownOnRequestRead = new AtomicReference<>();
         List<ResponseInfo> infos = new ArrayList<>();
         server = serverBuilder(type)
+            .withRequestBodyTooLargeAction(requestBodyTooLargeAction)
             .withMaxRequestSize(1000)
             .addHandler((request, response) -> {
-                isHttp2.set(request.connection().protocol().equals("HTTP/2"));
-                response.sendChunk("starting");
                 try {
-                    request.readBodyAsString();
+                    return handler.handle(request, response);
                 } catch (Throwable e) {
-                    exception.set(e);
+                    exceptionThrownOnRequestRead.set(e);
                     throw e;
                 }
-                return true;
             })
             .addResponseCompleteListener(infos::add)
             .start();
 
         Request.Builder request = request()
             .url(server.uri().toString())
-            .post(new SlowBodySender(1000, 0));
+            .post(new SlowBodySender(1000, 1));
 
-        try (Response resp = call(request)) {
-            resp.body().string();
-            Assert.fail("Should not succeed but got " + resp);
-        } catch (Exception e) {
-            if (isHttp2.get()) {
-                assertThat(Mutils.coalesce(e.getCause(), e), instanceOf(StreamResetException.class));
-            } else {
-                if (e instanceof UncheckedIOException) {
-                    assertThat(e.getCause(), instanceOf(IOException.class));
-                } else {
-                    assertThat(e, instanceOf(IOException.class));
-                }
+        var exceptionFromClient = assertThrows(Exception.class, () -> {
+            try (Response resp = call(request)) {
+                resp.body().string();
             }
-        }
-        assertThat(exception.get(), instanceOf(ClientErrorException.class));
-        assertThat(((ClientErrorException) exception.get()).getResponse().getStatus(), equalTo(413));
+        });
+        assertThat(exceptionFromClient, anyOf(instanceOf(UncheckedIOException.class), instanceOf(IOException.class)));
+
+        assertEventually(exceptionThrownOnRequestRead::get, instanceOf(IOException.class));
+        Throwable cause = exceptionThrownOnRequestRead.get().getCause();
+        assertThat(cause, instanceOf(ClientErrorException.class));
+        assertThat(((ClientErrorException) cause).getResponse().getStatus(), equalTo(413));
 
         assertEventually(() -> infos, not(empty()));
         assertThat(infos.size(), equalTo(1));
-        HttpExchange ri = (HttpExchange) infos.get(0);
+        var ri = (MuExchange) infos.get(0);
         assertThat(ri.completedSuccessfully(), equalTo(false));
-        assertThat(ri.state(), equalTo(HttpExchangeState.ERRORED));
+        assertThat(ri.state, equalTo(HttpExchangeState.ERRORED));
         assertThat(ri.request.requestState(), equalTo(RequestState.ERRORED));
-        assertThat(ri.response.responseState(), equalTo(ResponseState.ERRORED));
+        assertThat(ri.response.responseState(), equalTo(expectedResponseState));
     }
 
     @After
