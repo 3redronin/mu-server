@@ -7,6 +7,7 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import scaffolding.Http1Client;
 import scaffolding.MuAssert;
 import scaffolding.StringUtils;
 
@@ -19,9 +20,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static io.muserver.MuServerBuilder.httpServer;
 import static io.muserver.MuServerBuilder.httpsServer;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
@@ -93,40 +94,22 @@ public class MuServer2Test {
 
     @Test
     public void serverCanIntitiateShutdownOnTLS() throws Exception {
-        MuServerBuilder muServerBuilder = httpsServer()
-            .withHttpsPort(0)
-            .addHandler((request, response) -> true);
-        var server = muServerBuilder.start();
-        SSLContext ctx = SSLContext.getInstance("TLS");
-        ctx.init(new KeyManager[0], new TrustManager[] {new X509TrustManager() {
-                public void checkClientTrusted(X509Certificate[] x509Certificates, String s) {
-                }
-                public void checkServerTrusted(X509Certificate[] x509Certificates, String s) {
-                }
-                public X509Certificate[] getAcceptedIssuers() {
-                    return null;
-                }
-            }},
-            new SecureRandom());
-        HttpsURLConnection conn = (HttpsURLConnection) server.uri().toURL().openConnection();
-        conn.setSSLSocketFactory(ctx.getSocketFactory());
-        conn.setHostnameVerifier((arg0, arg1) -> true);
-        conn.setConnectTimeout(5000);
-        conn.connect();
-        assertEventually(server::activeConnections, hasSize(1));
-
-
-        server.stop(5, TimeUnit.SECONDS);
-        InputStream inputStream = conn.getInputStream();
-        inputStream.read();
-
+        var server = httpsServer().addHandler((request, response) -> {
+            response.write("hello");
+            return true;
+        }).start();
+        var client = Http1Client.connect(server)
+            .writeRequestLine(Method.GET, "/")
+            .flushHeaders();
+        client.readLine();
+        assertThat(client.readBody(client.readHeaders()), equalTo("hello"));
+        server.stop();
         assertEventually(server::activeConnections, empty());
-
+        assertThrows(EOFException.class, client::readLine);
     }
 
-
     @Test
-    public void serverCanInitiateGracefulShutdown() throws Exception {
+    public void serverCanInitiateGracefulShutdownOverHttp() throws Exception {
         var events = new ConcurrentLinkedQueue<String>() {
             @Override
             public boolean add(String s) {
@@ -136,13 +119,11 @@ public class MuServer2Test {
         };
         var serverStoppedLatch = new CountDownLatch(1);
 
-        MuServerBuilder muServerBuilder = MuServerBuilder.muServer()
-            .withHttpPort(0)
+        var server = httpServer()
             .addHandler(Method.GET, "/blah", (request, response, pathParams) -> {
                 events.add("Writing response");
                 response.write("Hello\r\n");
-            });
-        var server = muServerBuilder.start();
+            }).start();
 
         Socket clientConnection = new Socket(server.uri().getHost(), server.uri().getPort());
         // Get the input and output streams
@@ -193,7 +174,7 @@ public class MuServer2Test {
     }
 
     @Test
-    public void clientCanInitiateGracefulShutdown() throws Exception {
+    public void clientCanInitiateGracefulShutdownOverHttp() throws Exception {
         var events = new ConcurrentLinkedQueue<String>() {
             @Override
             public boolean add(String s) {
@@ -202,13 +183,11 @@ public class MuServer2Test {
             }
         };
 
-        MuServerBuilder muServerBuilder = MuServerBuilder.muServer()
-            .withHttpPort(0)
+        server = httpServer()
             .addHandler(Method.GET, "/blah", (request, response, pathParams) -> {
                 events.add("Writing response");
                 response.write("Hello\r\n");
-            });
-        server = muServerBuilder.start();
+            }).start();
 
         Socket clientConnection = new Socket(server.uri().getHost(), server.uri().getPort());
         // Get the input and output streams

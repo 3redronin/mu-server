@@ -378,6 +378,10 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
                 }, null);
             } else {
                 log.info("Closing http connection");
+                try {
+                    channel.shutdownOutput();
+                } catch (IOException ignored) {
+                }
                 forceShutdown(null);
             }
         }
