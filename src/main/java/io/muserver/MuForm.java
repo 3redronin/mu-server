@@ -7,18 +7,42 @@ import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import static java.util.Collections.emptyList;
+import static java.util.Collections.emptyMap;
 
-interface MuForm {
+interface MuForm extends RequestParameters {
 
     RequestParameters params();
 
     List<UploadedFile> uploads(String name);
+
+}
+
+class EmptyForm implements MuForm {
+
+    static final MuForm VALUE = new EmptyForm();
+    private EmptyForm() {}
+
+    @Override
+    public RequestParameters params() {
+        return this;
+    }
+
+    @Override
+    public List<UploadedFile> uploads(String name) {
+        return emptyList();
+    }
+
+    @Override
+    public Map<String, List<String>> all() {
+        return emptyMap();
+    }
 
 }
 
@@ -74,5 +98,15 @@ class UrlEncodedFormReader implements MuForm, RequestBodyListener {
     public void onError(Throwable t) {
         // todo support cancelling?
         query.completeExceptionally(t);
+    }
+
+    @Override
+    public Map<String, List<String>> all() {
+        if (!query.isDone()) throw new IllegalStateException("all() called before future complete");
+        try {
+            return query.get().all();
+        } catch (Exception e) {
+            throw new MuException("Should not happen", e);
+        }
     }
 }

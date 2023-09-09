@@ -3,11 +3,14 @@ package io.muserver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.ws.rs.BadRequestException;
+import javax.ws.rs.core.MediaType;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.nio.charset.Charset;
+import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -148,9 +151,22 @@ public class MuRequestImpl implements MuRequest {
     public RequestParameters form() throws IOException {
         var cur = data.exchange.requestBodyListener();
         if (cur == null) {
-            UrlEncodedFormReader readListener = new UrlEncodedFormReader(data.connection.server().requestIdleTimeoutMillis());
-            data.exchange.setReadListener(readListener);
-            return readListener.params();
+            MediaType bodyType = headers.contentType();
+            var type = bodyType == null ? null : bodyType.getType().toLowerCase();
+            var subtype = bodyType == null ? null : bodyType.getSubtype().toLowerCase();
+            if ("application".equals(type) && "x-www-form-urlencoded".equals(subtype)) {
+                UrlEncodedFormReader readListener = new UrlEncodedFormReader(data.connection.server().requestIdleTimeoutMillis());
+                data.exchange.setReadListener(readListener);
+                return readListener.params();
+            } else if ("multipart".equals(type) && "form-data".equals(subtype)) {
+                var charset = headers.contentCharset(true);
+                var boundary = bodyType.getParameters().get("boundary");
+                if (Mutils.nullOrEmpty(boundary)) throw new BadRequestException("No boundary specified in the multipart form-data");
+                new MultipartRequestBodyParser(Files.createTempDirectory("mu-server", null), charset, boundary);
+                return EmptyForm.VALUE.params();
+            } else {
+                return EmptyForm.VALUE.params();
+            }
         } else if (cur instanceof MuForm muForm) {
             return muForm.params();
         } else {

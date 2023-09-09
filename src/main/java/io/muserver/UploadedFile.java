@@ -2,16 +2,14 @@ package io.muserver;
 
 import io.netty.handler.codec.http.multipart.DiskFileUpload;
 import io.netty.handler.codec.http.multipart.FileUpload;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 
-import static io.muserver.Mutils.fullPath;
 import static io.muserver.Mutils.notNull;
 
 /**
@@ -19,6 +17,8 @@ import static io.muserver.Mutils.notNull;
  * input field in a multipart form.
  */
 public interface UploadedFile {
+
+    Path asPath();
 
     /**
      * Gets a copy of the file. This has been uploaded to the server and saved locally.
@@ -66,6 +66,8 @@ public interface UploadedFile {
      */
     void saveTo(File dest) throws IOException;
 
+    void saveTo(Path dest) throws IOException;
+
     /**
      * Gets the size of the file.
      * @return The file size.
@@ -85,6 +87,11 @@ class MuUploadedFile implements UploadedFile {
 
     MuUploadedFile(FileUpload fileUpload) {
         fu = fileUpload;
+    }
+
+    @Override
+    public Path asPath() {
+        return file.toPath();
     }
 
     @Override
@@ -153,6 +160,11 @@ class MuUploadedFile implements UploadedFile {
     }
 
     @Override
+    public void saveTo(Path dest) throws IOException {
+        saveTo(dest.toFile());
+    }
+
+    @Override
     public long size() {
         return fu.length();
     }
@@ -168,22 +180,25 @@ class MuUploadedFile implements UploadedFile {
 }
 
 class MuUploadedFile2 implements UploadedFile {
-    private static final Logger log = LoggerFactory.getLogger(MuUploadedFile2.class);
-    private File file;
+    private Path file;
     private boolean shouldDeleteOnClean = true;
     private final String contentType;
     private final String filename;
 
-    MuUploadedFile2(File file, String contentType, String filename) {
+    MuUploadedFile2(Path file, String contentType, String filename) {
         this.file = file;
         this.contentType = contentType;
         this.filename = filename;
     }
 
+    @Override
+    public Path asPath() {
+        return file;
+    }
 
     @Override
     public File asFile() throws IOException {
-        return file;
+        return file.toFile();
     }
 
     @Override
@@ -193,7 +208,7 @@ class MuUploadedFile2 implements UploadedFile {
 
     @Override
     public byte[] asBytes() throws IOException {
-        try (FileInputStream fis = new FileInputStream(file)) {
+        try (var fis = asStream()) {
             return Mutils.toByteArray(fis, 8192);
         }
     }
@@ -230,28 +245,38 @@ class MuUploadedFile2 implements UploadedFile {
     @Override
     public void saveTo(File dest) throws IOException {
         notNull("dest", dest);
-        dest.getParentFile().mkdirs();
-        Path moved = Files.move(file.toPath(), dest.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        saveTo(dest.toPath());
+    }
+
+    @Override
+    public void saveTo(Path dest) throws IOException {
+        notNull("dest", dest);
+        Files.createDirectories(dest.getParent());
+        var moved = Files.move(file, dest, StandardCopyOption.REPLACE_EXISTING);
         shouldDeleteOnClean = false;
-        System.out.println("Moved to " + moved);
-        this.file = moved.toFile();
+        this.file = moved;
     }
 
     @Override
     public long size() {
-        return file.length();
+        try {
+            return Files.size(file);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Error loading file size", e); // todo unchecked?
+        }
     }
 
     @Override
     public InputStream asStream() throws IOException {
-        return new FileInputStream(file);
+        return Files.newInputStream(file, StandardOpenOption.READ);
     }
 
     void deleteFile() {
         if (shouldDeleteOnClean) {
-            boolean deleted = file.delete();
-            if (!deleted) {
-                log.info("Failed to delete " + fullPath(file));
+            try {
+                Files.deleteIfExists(file);
+            } catch (IOException e) {
+                file.toFile().deleteOnExit();
             }
         }
     }

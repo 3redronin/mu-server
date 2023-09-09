@@ -6,8 +6,14 @@ import org.slf4j.LoggerFactory;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.MultivaluedHashMap;
 import javax.ws.rs.core.MultivaluedMap;
-import java.io.*;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.charset.Charset;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.List;
 
 import static io.muserver.Mutils.coalesce;
@@ -15,7 +21,7 @@ import static java.util.Collections.emptyList;
 
 class MultipartRequestBodyParser {
     private static final Logger log = LoggerFactory.getLogger(MultipartRequestBodyParser.class);
-    private final File fileUploadDir;
+    private final Path fileUploadDir;
 
     private enum PartState {HEADERS, BODY}
 
@@ -25,7 +31,7 @@ class MultipartRequestBodyParser {
     private final MultivaluedMap<String, UploadedFile> fileParams = new MultivaluedHashMap<>();
 
 
-    MultipartRequestBodyParser(File fileUploadDir, Charset bodyCharset, String boundary) {
+    MultipartRequestBodyParser(Path fileUploadDir, Charset bodyCharset, String boundary) {
         this.fileUploadDir = fileUploadDir;
         this.bodyCharset = bodyCharset;
         this.boundary = boundary;
@@ -55,8 +61,8 @@ class MultipartRequestBodyParser {
             PartState partState = PartState.HEADERS;
 
             MediaType partType = MediaType.TEXT_PLAIN_TYPE;
-            FileOutputStream fileOutputStream = null;
-            File file = null;
+            OutputStream fileOutputStream = null;
+            Path file = null;
             String formName = null;
             String filename = null;
 
@@ -71,7 +77,7 @@ class MultipartRequestBodyParser {
                         byte b = buffer[i];
                         if (lastB == '\r' && b == '\n') {
                             lineBuffer.write(buffer, offset, i - offset - 1);
-                            String line = lineBuffer.toString(bodyCharset.name());
+                            String line = lineBuffer.toString(bodyCharset);
                             lineBuffer.reset();
 
                             if (line.isEmpty()) {
@@ -88,10 +94,12 @@ class MultipartRequestBodyParser {
                                         filename = disposition.parameters().get("filename");
                                         if (filename != null) {
                                             if (fileUploadDir != null) {
-                                                fileUploadDir.mkdirs();
+                                                Files.createDirectories(fileUploadDir);
+                                                file = Files.createTempFile(fileUploadDir, "muserverupload", ".tmp");
+                                            } else {
+                                                file = Files.createTempFile("muserverupload", ".tmp");
                                             }
-                                            file = File.createTempFile("muserverupload", ".tmp", fileUploadDir);
-                                            fileOutputStream = new FileOutputStream(file);
+                                            fileOutputStream = Files.newOutputStream(file, StandardOpenOption.APPEND, StandardOpenOption.WRITE);
                                         }
                                     } else {
                                         log.warn("Unsupported multipart-form part: " + disposition.value() + " - this part will be ignored");

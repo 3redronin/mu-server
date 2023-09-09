@@ -87,7 +87,7 @@ public class MultipartRequestBodyParserTest {
             "\r\n" +
             "on\r\n" +
             "-----------------------------41184676334--\r\n";
-        MultipartRequestBodyParser parser = new MultipartRequestBodyParser(new File("target/tempupload/a/b/c/d"), UTF_8, "---------------------------41184676334");
+        MultipartRequestBodyParser parser = new MultipartRequestBodyParser(new File("target/tempupload/a/b/c/d").toPath(), UTF_8, "---------------------------41184676334");
         parser.parse(new ByteArrayInputStream(input.getBytes(UTF_8)));
 
         assertThat(parser.formValue("再见 "), contains("ha"));
@@ -135,7 +135,7 @@ public class MultipartRequestBodyParserTest {
 
         ByteArrayInputStream bais = new ByteArrayInputStream(baos.toByteArray());
 
-        MultipartRequestBodyParser parser = new MultipartRequestBodyParser(new File("target/tempupload/bin"), UTF_8, "43c1c131-74dd-4048-abc3-fb668bc8d734");
+        MultipartRequestBodyParser parser = new MultipartRequestBodyParser(new File("target/tempupload/bin").toPath(), UTF_8, "43c1c131-74dd-4048-abc3-fb668bc8d734");
         parser.parse(bais);
 
         assertThat(parser.formValue("The name"), contains("the value / with / stuff"));
@@ -147,7 +147,7 @@ public class MultipartRequestBodyParserTest {
     @Test
     @Ignore("not really")
     public void binaryFilesWorkReally() throws IOException, InterruptedException {
-        MultipartRequestBodyParser parser = new MultipartRequestBodyParser(new File("target/tempupload/bin"), UTF_8, "9fcbdd85-e675-4559-a957-b04c9a2b4d17");
+        MultipartRequestBodyParser parser = new MultipartRequestBodyParser(new File("target/tempupload/bin").toPath(), UTF_8, "9fcbdd85-e675-4559-a957-b04c9a2b4d17");
 
         GrowableByteBufferInputStream slow = new GrowableByteBufferInputStream();
 

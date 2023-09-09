@@ -12,7 +12,7 @@ public class BoundariedInputStream extends FilterInputStream {
 
     private final InputStream source;
     private byte[] boundary;
-    private byte[] buffer;
+    private final byte[] buffer;
     private int bufferInd;
     private int bufferLen;
     private boolean isClosed;
