@@ -16,11 +16,46 @@ import java.util.concurrent.TimeoutException;
 import static java.util.Collections.emptyList;
 import static java.util.Collections.emptyMap;
 
+/**
+ * The data posted in an HTML form submission
+ */
 interface MuForm extends RequestParameters {
 
+    /**
+     * The text parameters in the form.
+     * @return the text parameters sent in the form
+     */
     RequestParameters params();
 
-    List<UploadedFile> uploads(String name);
+    /**
+     * Gets all uploaded files in the form
+     * @return The uploaded files in this form request
+     */
+    Map<String, List<UploadedFile>> uploadedFiles();
+
+    /**
+     * Gets all the uploaded files with the given name, or an empty list if none are found.
+     *
+     * @param name The file input name to get
+     * @return All the files with the given name
+     */
+    default List<UploadedFile> uploadedFiles(String name) {
+        List<UploadedFile> list = uploadedFiles().get(name);
+        return list == null ? emptyList() : list;
+    };
+
+    /**
+     * <p>Gets the uploaded file with the given name, or null if there is no upload with that name.</p>
+     * <p>If there are multiple files with the same name, the first one is returned.</p>
+     *
+     * @param name The querystring parameter name to get
+     * @return The querystring value, or an empty string
+     */
+    default UploadedFile uploadedFile(String name) {
+        var list = uploadedFiles().get(name);
+        return list.isEmpty() ? null : list.get(0);
+    }
+
 
 }
 
@@ -35,8 +70,8 @@ class EmptyForm implements MuForm {
     }
 
     @Override
-    public List<UploadedFile> uploads(String name) {
-        return emptyList();
+    public Map<String, List<UploadedFile>> uploadedFiles() {
+        return emptyMap();
     }
 
     @Override
@@ -75,8 +110,8 @@ class UrlEncodedFormReader implements MuForm, RequestBodyListener {
     }
 
     @Override
-    public List<UploadedFile> uploads(String name) {
-        return emptyList();
+    public Map<String, List<UploadedFile>> uploadedFiles() {
+        return emptyMap();
     }
 
     @Override
