@@ -13,6 +13,7 @@ public class HttpStatusCode {
 
     private final int code;
     private final String reason;
+    private byte[] responseLineBytes;
 
     HttpStatusCode(int code, String reason) {
         if (code < 100 || code > 999) throw new IllegalArgumentException("Status codes must be 3 digits");
@@ -65,8 +66,16 @@ public class HttpStatusCode {
         return code / 100 == 5;
     }
 
+    /**
+     * @return An HTTP1 response line, as ascii bytes, e.g. <code>HTTP/1.1 200 OK\r\n</code>
+     */
     byte[] http11ResponseLine() {
-        return (HttpVersion.HTTP_1_1.version() + " " + code + " " + reason + "\r\n").getBytes(StandardCharsets.US_ASCII);
+        // Not strictly thread safe, but it doesn't matter if multiple threads overwrite each other
+        var cached = this.responseLineBytes;
+        if (cached != null) return cached;
+        byte[] bytes = (HttpVersion.HTTP_1_1.version() + " " + code + " " + reason + "\r\n").getBytes(StandardCharsets.US_ASCII);
+        this.responseLineBytes = bytes;
+        return bytes;
     }
 
     boolean noContentLengthHeader() {

@@ -114,6 +114,9 @@ public class MuRequestImpl implements MuRequest {
 
     @Override
     public String readBodyAsString() throws IOException {
+        if (data.exchange.requestBodyListener() != null) {
+            throw new IllegalStateException("The body of the request message cannot be read twice. This can happen when calling any 2 of inputStream(), readBodyAsString(), or form() methods.");
+        }
         Optional<InputStream> inputStream = inputStream();
         if (inputStream.isEmpty()) return "";
         Charset charset = headers.contentCharset(true);
@@ -143,7 +146,16 @@ public class MuRequestImpl implements MuRequest {
 
     @Override
     public RequestParameters form() throws IOException {
-        return null;
+        var cur = data.exchange.requestBodyListener();
+        if (cur == null) {
+            UrlEncodedFormReader readListener = new UrlEncodedFormReader(data.connection.server().requestIdleTimeoutMillis());
+            data.exchange.setReadListener(readListener);
+            return readListener.params();
+        } else if (cur instanceof MuForm muForm) {
+            return muForm.params();
+        } else {
+            throw new IllegalStateException("The body of the request message cannot be read twice. This can happen when calling any 2 of inputStream(), readBodyAsString(), or form() methods.");
+        }
     }
 
     @Override

@@ -134,7 +134,9 @@ class MuExchange implements ResponseInfo, AsyncHandle {
         }
     }
 
-
+    RequestBodyListener requestBodyListener() {
+        return requestBodyListener;
+    }
 
     public InputStream requestInputStream() {
         var in = this.requestInputStream;
