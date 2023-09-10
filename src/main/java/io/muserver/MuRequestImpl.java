@@ -10,7 +10,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.nio.charset.Charset;
-import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -162,7 +161,6 @@ public class MuRequestImpl implements MuRequest {
                 var charset = headers.contentCharset(true);
                 var boundary = bodyType.getParameters().get("boundary");
                 if (Mutils.nullOrEmpty(boundary)) throw new BadRequestException("No boundary specified in the multipart form-data");
-                new MultipartRequestBodyParser(Files.createTempDirectory("mu-server", null), charset, boundary);
                 return EmptyForm.VALUE.params();
             } else {
                 return EmptyForm.VALUE.params();

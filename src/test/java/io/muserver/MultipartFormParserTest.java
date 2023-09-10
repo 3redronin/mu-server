@@ -181,6 +181,57 @@ public class MultipartFormParserTest {
     }
 
 
+    @ParameterizedTest
+    @ValueSource(strings = {"1", "*"})
+    public void canDecodeWithPreambleAndEpilogue(String type) throws Throwable {
+        String input = """
+            blah blah this is ignored preamble
+            --2fe110ee-3c8a-480b-a07b-32d777205a7 nope
+            --2fe110ee-3c8a-480b-a07b-32d777205a76
+            Content-Disposition: form-data; name="Hello"
+            Content-Length: 7
+            
+            Wor
+            ld
+            --2fe110ee-3c8a-480b-a07b-32d777205a76
+            Content-Disposition: form-data; name="The 你好 name"
+            
+            你好 the value / with / stuff
+            --2fe110ee-3c8a-480b-a07b-32d777205a76--
+            this is the epilogue""";
+
+        MultipartFormParser result = parse("2fe110ee-3c8a-480b-a07b-32d777205a76", type, input);
+        assertThat(result.getAll("Hello"), contains("Wor\r\nld"));
+        assertThat(result.getAll("The 你好 name"), contains("你好 the value / with / stuff"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"1", "*"})
+    public void formNamesCanBeUTF8(String type) throws Throwable {
+        String input = """
+            ------WebKitFormBoundaryr1H5MRBBwYhyzO4H
+            Content-Disposition: form-data; name="The 你好 %22name%22 : <hi> \\r\\n"
+                        
+            The 你好 &quot;value&quot; : &lt;hi&gt; \\r\\n
+            ------WebKitFormBoundaryr1H5MRBBwYhyzO4H--
+            """;
+
+        MultipartFormParser result = parse("----WebKitFormBoundaryr1H5MRBBwYhyzO4H", type, input);
+        assertThat(result.getAll("The 你好 \"name\" : <hi> \\r\\n"), contains("The 你好 &quot;value&quot; : &lt;hi&gt; \\r\\n"));
+    }
+
+    /*
+    test default charsets
+    --AaB03x
+       content-disposition: form-data; name="_charset_"
+
+       iso-8859-1
+       --AaB03x--
+       content-disposition: form-data; name="field1"
+
+       ...text encoded in iso-8859-1 ...
+       AaB03x--
+     */
 
     /*
 

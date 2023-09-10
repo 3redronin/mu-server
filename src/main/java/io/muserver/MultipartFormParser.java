@@ -51,7 +51,6 @@ class MultipartFormParser implements MuForm, RequestBodyListener, Closeable {
     private volatile State state = State.INITIAL;
     private volatile HeadersState headersState;
     private volatile Throwable error = null;
-    private final StringBuilder charBuffer;
     private final BoundaryCheckingOutputStream bodyBuffer;
     private final MuHeaders curHeaders = new MuHeaders();
 
@@ -125,18 +124,25 @@ class MultipartFormParser implements MuForm, RequestBodyListener, Closeable {
     private void parse(ByteBuffer buffer, DoneCallback doneCallback) throws Exception {
         while (buffer.hasRemaining()) {
             byte b = buffer.get();
-            if (state != State.ENTRY_DATA) {
-                System.out.println(((char)b) + " << " + state);
-            }
             switch (state) {
                 case INITIAL -> {
                     var c = (char) b; //ascii, so it fits
-                    if (isOWS(c) && charBuffer.isEmpty()) {
-                        // skip starting whitespace
+                    // anything before '--boundary' should be discarded so we keep track of that
+                    // once we hit '--boundary', the next two chars are either '\r\n' (for a section)
+                    // or '--' (for end of body). So at '--boundary' we stop comparing, get the next
+                    // two chars, and then see what's what.
+                    var dashDashBoundaryLength = 2 + boundary.length();
+                    System.out.println(charBuffer + " len=" + charBuffer.length() + " / " + dashDashBoundaryLength);
+                    if (charBuffer.length() < dashDashBoundaryLength) {
+                        var expected = bodyBuffer.boundaryEnd[charBuffer.length() + 2]; // boundary end starts with 2 chars (\r\n) that are not expected here
+                        if (c == expected) {
+                            charBuffer.append(c);
+                        } else {
+                            charBuffer.setLength(0);
+                        }
                     } else {
                         charBuffer.append(c);
-                        int delimLength = boundary.length() + 4;
-                        if (charBuffer.length() == delimLength) {
+                        if (charBuffer.length() == dashDashBoundaryLength + 2) {
                             String contents = clearBuffer();
                             if (contents.equals("--" + boundary + "\r\n")) {
                                 changeStateToBoundaryHeaders();
@@ -370,7 +376,7 @@ class MultipartFormParser implements MuForm, RequestBodyListener, Closeable {
 
     private static class BoundaryCheckingOutputStream extends ByteArrayOutputStream {
 
-        private final byte[] boundaryEnd;
+        final byte[] boundaryEnd;
 
         private BoundaryCheckingOutputStream(byte[] boundaryEnd) {
             this.boundaryEnd = boundaryEnd;
@@ -427,5 +433,17 @@ class MultipartFormParser implements MuForm, RequestBodyListener, Closeable {
 
     }
 
+    private static boolean isFieldNameChar(char c) {
+        return c >= 33 && c <= 126 && c != ':';
+    }
+    private static boolean isBChar(char c) {
+        return c == ' ' || isBCharNoSpace(c);
+    }
+    private static boolean isBCharNoSpace(char c) {
+        // DIGIT / ALPHA / "'" / "(" / ")" / "+"  / "_" / "," / "-" / "." / "/" / ":" / "=" / "?"
+        //                  39 || 40 || 41 || 43 || 45 || 44 || 46 || 47 || 58 || 61 || 63
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+            c == 39 || c == 40 || c==41 || (c >= '+' && c <= ':') || c == 63;
+    }
 
 }
