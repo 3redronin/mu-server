@@ -273,11 +273,15 @@ class MuUploadedFile2 implements UploadedFile {
 
     void deleteFile() {
         if (shouldDeleteOnClean) {
-            try {
-                Files.deleteIfExists(file);
-            } catch (IOException e) {
-                file.toFile().deleteOnExit();
-            }
+            tryToDelete(file);
+        }
+    }
+
+    static void tryToDelete(Path file) {
+        try {
+            Files.deleteIfExists(file);
+        } catch (IOException e) {
+            file.toFile().deleteOnExit();
         }
     }
 }

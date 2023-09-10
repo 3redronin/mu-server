@@ -13,6 +13,8 @@ import scaffolding.StringUtils;
 import javax.ws.rs.RedirectionException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InterruptedIOException;
+import java.io.UncheckedIOException;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -405,9 +407,13 @@ public class AsyncTest {
             this.listeners.add(listener);
         }
 
-        public void stop() throws InterruptedException {
+        public void stop() {
             stopped.set(true);
-            thread.join();
+            try {
+                thread.join();
+            } catch (InterruptedException e) {
+                throw new UncheckedIOException(new InterruptedIOException("Interrupted while stopping"));
+            }
         }
     }
 

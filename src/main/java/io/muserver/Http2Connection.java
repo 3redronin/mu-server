@@ -334,8 +334,12 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
             DoneCallback doneCallback = error -> {
 
                 Http2Stream stream = this.connection().stream(streamId);
-                if (stream != null && this.decoder().flowController().consumeBytes(stream, consumed)) {
-                    ctx.flush();
+                try {
+                    if (stream != null && this.decoder().flowController().consumeBytes(stream, consumed)) {
+                        ctx.flush();
+                    }
+                } catch (Http2Exception e) {
+                    if (error == null) error = e;
                 }
 
                 data.release();

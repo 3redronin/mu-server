@@ -108,11 +108,8 @@ class GrowableByteBufferInputStream extends InputStream {
             readListener.onComplete();
         } else {
             try {
-                readListener.onDataReceived(byteBuffer, new DoneCallback() {
-                    @Override
-                    public void onComplete(Throwable error) throws Exception {
+                readListener.onDataReceived(byteBuffer, error -> {
 
-                    }
                 });
             } catch (Exception e) {
                 throw new RuntimeException(e);

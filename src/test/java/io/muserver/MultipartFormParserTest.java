@@ -9,6 +9,8 @@ import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Base64;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -133,6 +135,49 @@ public class MultipartFormParserTest {
 
         var result = parse("boundary00000000000000000000000000000000000000123", bufferSize, ByteBuffer.wrap(baos.toByteArray()));
         assertThat(result.getAll("hello"), containsInAnyOrder("hello you", "Hello in utf-16"));
+    }
+
+
+    @ParameterizedTest
+    @ValueSource(strings = {"1", "*"})
+    public void mulitpleFieldsCanBeUploaded(String bufferSize) throws Throwable {
+        var input = """
+            --boundary00000000000000000000000000000000000000123
+            Content-Disposition: form-data; name="image"; filename="/tmp/guangzhou, china.jpeg"
+            Content-Type: image/jpeg
+            
+            Binary image data goes here
+            --boundary00000000000000000000000000000000000000123
+            Content-Disposition: form-data; name="hello"
+                        
+            hello you
+            --boundary00000000000000000000000000000000000000123--
+            """.trim().replace("\n", "\r\n").split("Binary image data goes here");
+
+        var baos = new ByteArrayOutputStream();
+        baos.writeBytes(input[0].getBytes(StandardCharsets.UTF_8));
+        baos.writeBytes(Files.readAllBytes(UploadTest.guangzhouChina.toPath()));
+        baos.writeBytes(input[1].getBytes(StandardCharsets.UTF_8));
+
+        Path tempFile;
+        try (var result = parse("boundary00000000000000000000000000000000000000123", bufferSize, ByteBuffer.wrap(baos.toByteArray()))) {
+            assertThat(result.getAll("hello"), contains("hello you"));
+            var image = result.uploadedFile("image");
+            assertThat(image, notNullValue());
+            assertThat(image.size(), equalTo(372_987L));
+            assertThat(image.filename(), equalTo("guangzhou, china.jpeg"));
+            assertThat(image.extension(), equalTo("jpeg"));
+            tempFile = image.asPath();
+            assertThat(image.asFile().isFile(), equalTo(true));
+            assertThat(Files.size(tempFile), equalTo(372_987L));
+
+            var b64 = Base64.getEncoder();
+            assertThat(b64.encodeToString(image.asBytes()),
+                equalTo(b64.encodeToString(Files.readAllBytes(UploadTest.guangzhouChina.toPath()))));
+
+            ((MuUploadedFile2)image).deleteFile();
+        }
+        assertThat(Files.exists(tempFile), equalTo(false));
     }
 
 

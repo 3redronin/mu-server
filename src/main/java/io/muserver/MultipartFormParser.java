@@ -7,32 +7,24 @@ import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.MultivaluedHashMap;
 import javax.ws.rs.core.MultivaluedMap;
 import java.io.ByteArrayOutputStream;
+import java.io.Closeable;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.AsynchronousFileChannel;
+import java.nio.channels.CompletionHandler;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.*;
 
 import static io.muserver.ParseUtils.*;
 
-class MultipartFormParser implements MuForm, RequestBodyListener {
+class MultipartFormParser implements MuForm, RequestBodyListener, Closeable {
     static {
         MuRuntimeDelegate.ensureSet();
-    }
-
-
-    MultipartFormParser(Path fileUploadDir, Charset bodyCharset, String boundary) {
-        if (boundary.length() > 70) {
-            throw new BadRequestException("Multi part form param boundary value is too long");
-        }
-        this.fileUploadDir = fileUploadDir;
-        this.bodyCharset = bodyCharset;
-        this.boundary = boundary;
-        this.charBuffer = new StringBuilder(boundary.length() + 6);
-        byte[] boundaryEndBytes = ("\r\n--" + boundary).getBytes(StandardCharsets.US_ASCII);
-        this.bodyBuffer = new BoundaryCheckingOutputStream(boundaryEndBytes);
     }
 
     private enum State {
@@ -69,6 +61,21 @@ class MultipartFormParser implements MuForm, RequestBodyListener {
     private volatile MediaType type;
     private volatile ParameterizedHeaderWithValue contentDisposition;
     private volatile char curHeader; // only two headers supported: 'd' for 'content-disposition'; 't' for 'content-type'
+    private volatile AsynchronousFileChannel fileChannel;
+    private volatile Path tempFile;
+
+    MultipartFormParser(Path fileUploadDir, Charset bodyCharset, String boundary) {
+        if (boundary.length() > 70) {
+            throw new BadRequestException("Multi part form param boundary value is too long");
+        }
+        this.fileUploadDir = fileUploadDir;
+        this.bodyCharset = bodyCharset;
+        this.boundary = boundary;
+        this.charBuffer = new StringBuilder(boundary.length() + 6);
+        byte[] boundaryEndBytes = ("\r\n--" + boundary).getBytes(StandardCharsets.US_ASCII);
+        this.bodyBuffer = new BoundaryCheckingOutputStream(boundaryEndBytes);
+    }
+
 
     private void throwIfError() {
         if (error != null) {
@@ -96,10 +103,31 @@ class MultipartFormParser implements MuForm, RequestBodyListener {
     }
 
     @Override
-    public void onDataReceived(ByteBuffer buffer, DoneCallback doneCallback) throws Exception {
+    public void onDataReceived(ByteBuffer buffer, DoneCallback doneCallback) {
+        try {
+            parse(buffer, error -> {
+                if (error == null && buffer.hasRemaining()) {
+                    System.out.println("Still " + buffer.remaining() + " to write");
+                    onDataReceived(buffer, doneCallback);
+                } else {
+                    doneCallback.onComplete(error);
+                }
+            });
+        } catch (Exception e) {
+            try {
+                close();
+            } catch (IOException ignored) {
+            }
+            doneCallback.onComplete(e);
+        }
+    }
 
+    private void parse(ByteBuffer buffer, DoneCallback doneCallback) throws Exception {
         while (buffer.hasRemaining()) {
             byte b = buffer.get();
+            if (state != State.ENTRY_DATA) {
+                System.out.println(((char)b) + " << " + state);
+            }
             switch (state) {
                 case INITIAL -> {
                     var c = (char) b; //ascii, so it fits
@@ -115,8 +143,7 @@ class MultipartFormParser implements MuForm, RequestBodyListener {
                             } else if (contents.equals("--" + boundary + "--")) {
                                 state = State.BODY_END;
                             } else {
-                                err(doneCallback, "Invalid request body in multi-part form: first line is " + contents + " and boundary is " + boundary);
-                                return;
+                                throw new BadRequestException("Invalid request body in multi-part form: first line is " + contents + " and boundary is " + boundary);
                             }
                         }
                     }
@@ -129,21 +156,18 @@ class MultipartFormParser implements MuForm, RequestBodyListener {
                                 switchToHeaderNameState(c);
                             } else if (c == '\r') {
                                 if (!charBuffer.isEmpty()) {
-                                    err(doneCallback, "Invalid characters in multipart form data");
-                                    return;
+                                    throw new BadRequestException("Invalid characters in multipart form data");
                                 }
                                 charBuffer.append('\r');
                             } else if (c == '\n') {
                                 if (charBuffer.length() != 1 && charBuffer.charAt(0) != '\r') {
-                                    err(doneCallback, "Newline character without carriage return in section headers");
+                                    throw new BadRequestException("Newline character without carriage return in section headers");
                                 } else {
                                     // we come to the end of without leaving the INITIAL state - there is no header!
-                                    err(doneCallback, "No content-disposition header for form section");
+                                    throw new BadRequestException("No content-disposition header for form section");
                                 }
-                                return;
                             } else if (!isOWS(c)) {
-                                err(doneCallback, "Invalid character while parsing multi part form section headers");
-                                return;
+                                throw new BadRequestException("Invalid character while parsing multi part form section headers");
                             }
                         }
                         case NAME -> {
@@ -158,8 +182,7 @@ class MultipartFormParser implements MuForm, RequestBodyListener {
                                     default -> curHeader = 0;
                                 }
                             } else if (!isOWS(c)) {
-                                err(doneCallback, "Invalid character while reading section header name: " + b);
-                                return;
+                                throw new BadRequestException("Invalid character while reading section header name: " + b);
                             }
                         }
                         case NAME_DONE -> {
@@ -167,8 +190,7 @@ class MultipartFormParser implements MuForm, RequestBodyListener {
                                 charBuffer.append(c);
                                 headersState = HeadersState.VALUE;
                             } else if (!isOWS(c)) {
-                                err(doneCallback, "Invalid character between name and value in section: " + b);
-                                return;
+                                throw new BadRequestException("Invalid character between name and value in section: " + b);
                             }
                         }
                         case VALUE -> {
@@ -179,8 +201,7 @@ class MultipartFormParser implements MuForm, RequestBodyListener {
                                     contentDisposition = ParameterizedHeaderWithValue.fromString(clearBuffer().trim())
                                         .stream().filter(h -> h.value().equals("form-data")).findFirst().orElse(null);
                                     if (contentDisposition == null || !contentDisposition.parameters().containsKey("name")) {
-                                        err(doneCallback, "A section is missing a content disposition header with a name attribute");
-                                        return;
+                                        throw new BadRequestException("A section is missing a content disposition header with a name attribute");
                                     }
                                 } else if (curHeader == 't') {
                                     type = MediaTypeParser.fromString(clearBuffer().trim());
@@ -189,8 +210,7 @@ class MultipartFormParser implements MuForm, RequestBodyListener {
                                 }
                                 headersState = HeadersState.VALUE_DONE;
                             } else {
-                                err(doneCallback, "Invalid character reading value: " + b);
-                                return;
+                                throw new BadRequestException("Invalid character reading value: " + b);
                             }
                         }
                         case VALUE_DONE -> {
@@ -201,33 +221,27 @@ class MultipartFormParser implements MuForm, RequestBodyListener {
                                 charBuffer.append(c);
                             } else if (c == '\n' && charBuffer.length() == 1 && charBuffer.charAt(0) == '\r') {
                                 headersState = HeadersState.HEADERS_DONE;
-                                charBuffer.setLength(0);
-                                state = State.ENTRY_DATA;
+                                switchToEntryData();
                             }
 
                         }
                         case HEADERS_DONE -> {
-                            err(doneCallback, "Did not expect more header characters when already done");
-                            return;
+                            throw new BadRequestException("Did not expect more header characters when already done");
                         }
                     }
                 }
                 case ENTRY_DATA -> {
-                    var cd = contentDisposition;
-                    if (cd == null) {
-                        err(doneCallback, "Multipart section does not have a content-disposition header");
-                        return;
-                    }
-                    String filename = cd.parameter("filename");
-                    var isFile = filename != null;
+                    var isFile = fileChannel != null;
+
                     bodyBuffer.write(b);
                     if (bodyBuffer.endsWithBoundary()) {
                         var sectionCharset = type == null ? null : type.getParameters().get("charset");
+                        var cd = this.contentDisposition;
                         var paramName = cd.parameter("name");
                         if (isFile) {
+                            var filename = cd.parameter("filename");
                             var fileType = type != null ? type : MediaType.APPLICATION_OCTET_STREAM_TYPE;
-                            var path = Path.of(filename);
-                            var uploadedFile = new MuUploadedFile2(path, fileType.toString(), filename);
+                            var uploadedFile = new MuUploadedFile2(tempFile, fileType.toString(), filename);
                             fileParams.putIfAbsent(paramName, new ArrayList<>());
                             fileParams.get(paramName).add(uploadedFile);
                         } else {
@@ -236,7 +250,25 @@ class MultipartFormParser implements MuForm, RequestBodyListener {
                             var valueAsString = new String(valueBytes, toUse);
                             formParams.add(paramName, valueAsString);
                         }
+                        type = null;
+                        contentDisposition = null;
+                        curHeader = 0;
                         state = State.BOUNDARY_END;
+                        if (fileChannel != null) {
+                            bodyBuffer.flushTo(fileChannel, flushError -> {
+                                try {
+                                    fileChannel.close();
+                                    fileChannel = null;
+                                    tempFile = null;
+                                    doneCallback.onComplete(flushError);
+                                } catch (IOException e) {
+                                    doneCallback.onComplete(error);
+                                } finally {
+                                    fileChannel = null;
+                                }
+                            });
+                            return; // stop processing here to return to the calling method, so that we wait until the async operation is finished
+                        }
                     }
                 }
                 case BOUNDARY_END -> {
@@ -245,8 +277,7 @@ class MultipartFormParser implements MuForm, RequestBodyListener {
                         if (c == '-' || c == '\r') {
                             charBuffer.append(c);
                         } else {
-                            err(doneCallback, "Invalid character after a boundary end: " + b);
-                            return;
+                            throw new BadRequestException("Invalid character after a boundary end: " + b);
                         }
                     } else {
                         var prev = charBuffer.charAt(0);
@@ -255,19 +286,38 @@ class MultipartFormParser implements MuForm, RequestBodyListener {
                         } else if (prev == '\r' && c == '\n') {
                             changeStateToBoundaryHeaders();
                         } else {
-                            err(doneCallback, "Invalid characters after boundary: " + ((int) prev) + " and " + b);
-                            return;
+                            throw new BadRequestException("Invalid characters after boundary: " + ((int) prev) + " and " + b);
                         }
                     }
                 }
                 case BODY_END -> {
-                    err(doneCallback, "Invalid multi-part request body - overflow");
-                    return;
+                    throw new BadRequestException("Invalid multi-part request body - overflow");
                 }
+            }
+
+            // we have enough file data in memory - flush to disk and stop processing until the write callback is completed
+            if (fileChannel != null && bodyBuffer.size() > 8192) {
+                bodyBuffer.flushTo(fileChannel, doneCallback);
+                return;
             }
         }
 
+
         doneCallback.onComplete(null);
+    }
+
+    private void switchToEntryData() throws Exception {
+        charBuffer.setLength(0);
+        bodyBuffer.reset();
+        state = State.ENTRY_DATA;
+        var cd = contentDisposition;
+        if (cd == null) {
+            throw new BadRequestException("Multipart section does not have a content-disposition header");
+        }
+        if (cd.parameters().containsKey("filename")) {
+            tempFile = Files.createTempFile(fileUploadDir, "muserverupload", ".tmp");
+            fileChannel = AsynchronousFileChannel.open(tempFile, StandardOpenOption.WRITE);
+        }
     }
 
     private void switchToHeaderNameState(char c) {
@@ -281,8 +331,16 @@ class MultipartFormParser implements MuForm, RequestBodyListener {
         return s;
     }
 
-    private static void err(DoneCallback doneCallback, String message) throws Exception {
-        doneCallback.onComplete(new BadRequestException(message));
+    @Override
+    public void close() throws IOException {
+        if (fileChannel != null) {
+            fileChannel.close();
+            fileChannel = null;
+        }
+        if (tempFile != null) {
+            MuUploadedFile2.tryToDelete(tempFile);
+            tempFile = null;
+        }
     }
 
     private void changeStateToBoundaryHeaders() {
@@ -334,6 +392,40 @@ class MultipartFormParser implements MuForm, RequestBodyListener {
             this.reset();
             return bytes;
         }
+
+        public void flushTo(AsynchronousFileChannel fileChannel, DoneCallback doneCallback) throws IOException {
+            var toWrite = ByteBuffer.wrap(buf, 0, size() - boundaryEnd.length);
+            long size = fileChannel.size();
+            fileChannel.write(toWrite, size, null, new CompletionHandler<>() {
+                @Override
+                public void completed(Integer result, Object attachment) {
+                    if (toWrite.hasRemaining()) {
+                        fileChannel.write(toWrite, size + result, null, this);
+                    } else {
+                        compact();
+                        doneCallback.onComplete(null);
+                    }
+                }
+
+                @Override
+                public void failed(Throwable exc, Object attachment) {
+                    doneCallback.onComplete(exc);
+                }
+            });
+        }
+
+        /**
+         * Discards all data before the last 'n' bytes (the length of the boundary) and moves those
+         * remaining bytes to the beginning of the array.
+         */
+        public void compact() {
+            byte[] ending = new byte[boundaryEnd.length];
+            System.arraycopy(buf, size() - boundaryEnd.length, ending, 0, ending.length);
+            reset();
+            write(ending, 0, ending.length);
+        }
+
     }
+
 
 }
