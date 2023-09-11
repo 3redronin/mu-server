@@ -1,5 +1,6 @@
 package io.muserver.rest;
 
+import io.muserver.ContentTypes;
 import io.muserver.MuServer;
 import io.muserver.Mutils;
 import okhttp3.MediaType;
@@ -20,7 +21,7 @@ import java.util.concurrent.CountDownLatch;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 
@@ -133,6 +134,27 @@ public class BinaryEntityProvidersTest {
         }
 
         assertThat(errors.toString(), equalTo(""));
+    }
+
+    @Test
+    public void exceptionsThrownBeforeStreamingDoNotHaveClashingHeaders() throws IOException {
+        @Path("samples")
+        class Sample {
+            @GET
+            @Produces("application/json")
+            public StreamingOutput streamStuff() {
+                return output -> {
+                    throw new BadRequestException("Some plain text");
+                };
+            }
+        }
+        startServer(new Sample());
+
+        try (Response resp = call(request(server.uri().resolve("/samples")))) {
+            assertThat(resp.code(), equalTo(400));
+            assertThat(resp.body().string(), containsString("Some plain text"));
+            assertThat(resp.headers("content-type"), contains(ContentTypes.TEXT_HTML_UTF8.toString()));
+        }
     }
 
     @Test
