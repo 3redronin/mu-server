@@ -20,7 +20,8 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.*;
 
-import static io.muserver.ParseUtils.*;
+import static io.muserver.ParseUtils.isOWS;
+import static io.muserver.ParseUtils.isTChar;
 
 class MultipartFormParser implements MuForm, RequestBodyListener, Closeable {
     static {
@@ -51,6 +52,7 @@ class MultipartFormParser implements MuForm, RequestBodyListener, Closeable {
     private volatile State state = State.INITIAL;
     private volatile HeadersState headersState;
     private volatile Throwable error = null;
+    private final StringBuilder charBuffer;
     private final BoundaryCheckingOutputStream bodyBuffer;
     private final MuHeaders curHeaders = new MuHeaders();
 
@@ -106,7 +108,6 @@ class MultipartFormParser implements MuForm, RequestBodyListener, Closeable {
         try {
             parse(buffer, error -> {
                 if (error == null && buffer.hasRemaining()) {
-                    System.out.println("Still " + buffer.remaining() + " to write");
                     onDataReceived(buffer, doneCallback);
                 } else {
                     doneCallback.onComplete(error);
@@ -132,7 +133,6 @@ class MultipartFormParser implements MuForm, RequestBodyListener, Closeable {
                     // or '--' (for end of body). So at '--boundary' we stop comparing, get the next
                     // two chars, and then see what's what.
                     var dashDashBoundaryLength = 2 + boundary.length();
-                    System.out.println(charBuffer + " len=" + charBuffer.length() + " / " + dashDashBoundaryLength);
                     if (charBuffer.length() < dashDashBoundaryLength) {
                         var expected = bodyBuffer.boundaryEnd[charBuffer.length() + 2]; // boundary end starts with 2 chars (\r\n) that are not expected here
                         if (c == expected) {
@@ -155,10 +155,10 @@ class MultipartFormParser implements MuForm, RequestBodyListener, Closeable {
                     }
                 }
                 case BOUNDARY_HEADERS -> {
-                    var c = (char) b; //ascii, so it fits
                     switch (headersState) {
                         case INITIAL -> {
-                            if (isTChar(c)) {
+                            var c = (char) b; //ascii, so it fits
+                            if (isFieldNameChar(c)) {
                                 switchToHeaderNameState(c);
                             } else if (c == '\r') {
                                 if (!charBuffer.isEmpty()) {
@@ -177,11 +177,13 @@ class MultipartFormParser implements MuForm, RequestBodyListener, Closeable {
                             }
                         }
                         case NAME -> {
-                            if (isTChar(c)) {
-                                switchToHeaderNameState(c);
+                            var c = (char) b; //ascii, so it fits
+                            if (isFieldNameChar(c)) {
+                                charBuffer.append(c);
                             } else if (c == ':') {
                                 headersState = HeadersState.NAME_DONE;
                                 var header = clearBuffer().toLowerCase();
+                                bodyBuffer.reset();
                                 switch (header) {
                                     case "content-disposition" -> curHeader = 'd';
                                     case "content-type" -> curHeader = 't';
@@ -192,35 +194,33 @@ class MultipartFormParser implements MuForm, RequestBodyListener, Closeable {
                             }
                         }
                         case NAME_DONE -> {
-                            if (isVChar(c)) {
-                                charBuffer.append(c);
+                            if (!ParseUtils.isOWS(b)) {
+                                bodyBuffer.write(b);
                                 headersState = HeadersState.VALUE;
-                            } else if (!isOWS(c)) {
-                                throw new BadRequestException("Invalid character between name and value in section: " + b);
                             }
                         }
                         case VALUE -> {
-                            if (isVChar(c) || isOWS(c) || c == '\r') {
-                                charBuffer.append(c);
-                            } else if (c == '\n' && !charBuffer.isEmpty() && charBuffer.charAt(charBuffer.length() - 1) == '\r') {
+                            bodyBuffer.write(b);
+                            if (bodyBuffer.endsWith((byte)'\r', (byte)'\n')) {
                                 if (curHeader == 'd') {
-                                    contentDisposition = ParameterizedHeaderWithValue.fromString(clearBuffer().trim())
+                                    var hv = bodyBuffer.getTrimLastClear(StandardCharsets.UTF_8);
+                                    contentDisposition = ParameterizedHeaderWithValue.fromString(hv)
                                         .stream().filter(h -> h.value().equals("form-data")).findFirst().orElse(null);
                                     if (contentDisposition == null || !contentDisposition.parameters().containsKey("name")) {
                                         throw new BadRequestException("A section is missing a content disposition header with a name attribute");
                                     }
                                 } else if (curHeader == 't') {
-                                    type = MediaTypeParser.fromString(clearBuffer().trim());
+                                    var hv = bodyBuffer.getTrimLastClear(StandardCharsets.US_ASCII);
+                                    type = MediaTypeParser.fromString(hv);
                                 } else {
-                                    charBuffer.setLength(0);
+                                    bodyBuffer.reset();
                                 }
                                 headersState = HeadersState.VALUE_DONE;
-                            } else {
-                                throw new BadRequestException("Invalid character reading value: " + b);
                             }
                         }
                         case VALUE_DONE -> {
 
+                            var c = (char)b;
                             if (isTChar(c)) {
                                 switchToHeaderNameState(c);
                             } else if (c == '\r' && charBuffer.isEmpty()) {
@@ -297,7 +297,7 @@ class MultipartFormParser implements MuForm, RequestBodyListener, Closeable {
                     }
                 }
                 case BODY_END -> {
-                    throw new BadRequestException("Invalid multi-part request body - overflow");
+                    // just eat it up and discard
                 }
             }
 
@@ -310,6 +310,10 @@ class MultipartFormParser implements MuForm, RequestBodyListener, Closeable {
 
 
         doneCallback.onComplete(null);
+    }
+
+    private boolean isHVChar(byte b) {
+        return b >= 32;
     }
 
     private void switchToEntryData() throws Exception {
@@ -431,6 +435,21 @@ class MultipartFormParser implements MuForm, RequestBodyListener, Closeable {
             write(ending, 0, ending.length);
         }
 
+
+        /**
+         * Drops the last 2 characters (reason: when using it there is a \r\n that we want to drop),
+         * converts it to a String, and then clears the buffer.
+         */
+        public String getTrimLastClear(Charset charset) {
+            String s = new String(buf, 0, size() - 2, charset);
+            reset();
+            return s;
+        }
+
+        public boolean endsWith(byte b1, byte b2) {
+            if (size() < 2) return false;
+            return buf[size() - 2] == b1 && buf[size() - 1] == b2;
+        }
     }
 
     private static boolean isFieldNameChar(char c) {

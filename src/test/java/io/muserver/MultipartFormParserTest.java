@@ -4,7 +4,6 @@ import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
-import javax.ws.rs.BadRequestException;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -18,7 +17,6 @@ import java.util.concurrent.TimeUnit;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class MultipartFormParserTest {
 
@@ -30,15 +28,6 @@ public class MultipartFormParserTest {
         var result = parse(boundary, bufferSize, input);
         assertThat(result.size(), equalTo(0));
     }
-
-    @ParameterizedTest
-    @ValueSource(strings = {"1", "*"})
-    public void readingAfterEndNotAllowed(String bufferSize) throws Exception {
-        var boundary = UUID.randomUUID().toString();
-        var input = "--" + boundary + "--hi";
-        assertThrows(BadRequestException.class, () -> parse(boundary, bufferSize, input));
-    }
-
 
     @ParameterizedTest
     @ValueSource(strings = {"1", "*"})
@@ -67,13 +56,13 @@ public class MultipartFormParserTest {
             you
             --boundary
             content-disposition: form-data; name="hello"
-            
+                        
             你好
             --boundary
             content-disposition: form-data; name="goodbye you"
             ignored-header: ignored-value
             content-type: text/plain
-            
+                        
             bye bye -- 再见
             --boundary--
             """;
@@ -145,7 +134,7 @@ public class MultipartFormParserTest {
             --boundary00000000000000000000000000000000000000123
             Content-Disposition: form-data; name="image"; filename="/tmp/guangzhou, china.jpeg"
             Content-Type: image/jpeg
-            
+                        
             Binary image data goes here
             --boundary00000000000000000000000000000000000000123
             Content-Disposition: form-data; name="hello"
@@ -175,7 +164,7 @@ public class MultipartFormParserTest {
             assertThat(b64.encodeToString(image.asBytes()),
                 equalTo(b64.encodeToString(Files.readAllBytes(UploadTest.guangzhouChina.toPath()))));
 
-            ((MuUploadedFile2)image).deleteFile();
+            ((MuUploadedFile2) image).deleteFile();
         }
         assertThat(Files.exists(tempFile), equalTo(false));
     }
@@ -190,12 +179,12 @@ public class MultipartFormParserTest {
             --2fe110ee-3c8a-480b-a07b-32d777205a76
             Content-Disposition: form-data; name="Hello"
             Content-Length: 7
-            
+                        
             Wor
             ld
             --2fe110ee-3c8a-480b-a07b-32d777205a76
             Content-Disposition: form-data; name="The 你好 name"
-            
+                        
             你好 the value / with / stuff
             --2fe110ee-3c8a-480b-a07b-32d777205a76--
             this is the epilogue""";
@@ -210,14 +199,15 @@ public class MultipartFormParserTest {
     public void formNamesCanBeUTF8(String type) throws Throwable {
         String input = """
             ------WebKitFormBoundaryr1H5MRBBwYhyzO4H
-            Content-Disposition: form-data; name="The 你好 %22name%22 : <hi> \\r\\n"
-                        
-            The 你好 &quot;value&quot; : &lt;hi&gt; \\r\\n
+            Content-Disposition: form-data; name="The 你好 %22name%22 : <hi> "
+            
+            The 你好 "value" : <hi> \\r\\n
             ------WebKitFormBoundaryr1H5MRBBwYhyzO4H--
             """;
 
         MultipartFormParser result = parse("----WebKitFormBoundaryr1H5MRBBwYhyzO4H", type, input);
-        assertThat(result.getAll("The 你好 \"name\" : <hi> \\r\\n"), contains("The 你好 &quot;value&quot; : &lt;hi&gt; \\r\\n"));
+        System.out.println(result.all());
+        assertThat(result.getAll("The 你好 \"name\" : <hi> "), contains("The 你好 \"value\" : <hi> \\r\\n"));
     }
 
     /*
@@ -320,7 +310,7 @@ Contents of the text file with boundary---- inside go here.
         return parser;
     }
 
-    private static void processAndWaitForBuffer(MultipartFormParser parser, ByteBuffer buffer) throws Throwable {
+    static void processAndWaitForBuffer(RequestBodyListener parser, ByteBuffer buffer) throws Throwable {
         var result = new CompletableFuture<Void>();
         DoneCallback callback = error -> {
             if (error == null) {
@@ -336,5 +326,9 @@ Contents of the text file with boundary---- inside go here.
             throw e.getCause();
         }
     }
+
+
+
+
 
 }

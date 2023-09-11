@@ -14,6 +14,10 @@ class ParseUtils {
     static boolean isOWS(char c) {
         return c == ' ' || c == '\t';
     }
+    static boolean isOWS(byte b) {
+        return b == (byte)' ' || b == (byte)'\t';
+    }
+
 
     static String quoteIfNeeded(String value) {
         boolean needsQuoting = false;
