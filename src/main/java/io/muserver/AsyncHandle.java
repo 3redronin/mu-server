@@ -1,7 +1,6 @@
 package io.muserver;
 
 import java.nio.ByteBuffer;
-import java.nio.channels.CompletionHandler;
 import java.util.concurrent.Future;
 
 /**
@@ -14,7 +13,8 @@ public interface AsyncHandle {
 
     /**
      * <p>Sets a listener that will be notified when chunks of request data become available.</p>
-     * <p>If this is not set, then the usual (blocking) request reading methods on the request object can be used.</p>
+     * <p>If not set, then any form data posted will be discarded</p>
+     * <p>Consider using {@link #readForm(FormConsumer)} as a simpler approach if you are reading a form body</p>
      * @param readListener The listener.
      */
     void setReadListener(RequestBodyListener readListener);
@@ -27,7 +27,7 @@ public interface AsyncHandle {
     /**
      * Call this to indicate that the response is complete.
      * <p>If the <code>throwable</code> parameter is not null then the error will be logged and, if possible,
-     * a <code>500 Internal Server Error</code> message will be sent to the client.
+     * a <code>500 Internal Server Error</code> or similar message will be sent to the client.
      * @param throwable an exception to log, or null if there was no problem
      */
     void complete(Throwable throwable);
@@ -57,8 +57,10 @@ public interface AsyncHandle {
      */
     void addResponseCompleteHandler(ResponseCompleteListener responseCompleteListener);
 
-    default <A> void read(CompletionHandler<Integer, A> completionHandler, A attachment) {
-        completionHandler.failed(new NotImplementedException(), attachment);
-    }
 
+    /**
+     * Registers a callback to be invoked for reading form bodies
+     * @param formConsumer A handler that will use the form
+     */
+    void readForm(FormConsumer formConsumer);
 }

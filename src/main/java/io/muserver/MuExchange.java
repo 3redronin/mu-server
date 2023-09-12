@@ -4,10 +4,8 @@ import io.muserver.rest.MuRuntimeDelegate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.ws.rs.ClientErrorException;
-import javax.ws.rs.InternalServerErrorException;
-import javax.ws.rs.NotFoundException;
-import javax.ws.rs.WebApplicationException;
+import javax.ws.rs.*;
+import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import java.io.IOException;
 import java.io.InputStream;
@@ -281,6 +279,10 @@ class MuExchange implements ResponseInfo, AsyncHandle {
 
     @Override
     public void complete(Throwable cause) {
+        if (cause == null) {
+            complete();
+            return;
+        }
         if (state.endState()) {
             log.warn("Completion error thrown after state is " + state, cause);
             return;
@@ -453,6 +455,29 @@ class MuExchange implements ResponseInfo, AsyncHandle {
             completeListeners = new ArrayList<>();
         }
         completeListeners.add(responseCompleteListener);
+    }
+
+    @Override
+    public void readForm(FormConsumer formConsumer) {
+        MediaType bodyType = request.headers().contentType();
+        var type = bodyType == null ? null : bodyType.getType().toLowerCase();
+        var subtype = bodyType == null ? null : bodyType.getSubtype().toLowerCase();
+        if ("application".equals(type) && "x-www-form-urlencoded".equals(subtype)) {
+            var readListener = new UrlEncodedFormReader(formConsumer);
+            setReadListener(readListener);
+        } else if ("multipart".equals(type) && "form-data".equals(subtype)) {
+            var charset = request.headers().contentCharset(true);
+            var boundary = bodyType.getParameters().get("boundary");
+            if (Mutils.nullOrEmpty(boundary)) throw new BadRequestException("No boundary specified in the multipart form-data");
+            var readListener = new MultipartFormParser(formConsumer, data.server().settings.tempDirectory(), charset, boundary);
+            setReadListener(readListener);
+        } else {
+            try {
+                formConsumer.onReady(EmptyForm.VALUE);
+            } catch (Exception e) {
+                formConsumer.onError(e);
+            }
+        }
     }
 
     @Override

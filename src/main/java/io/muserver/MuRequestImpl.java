@@ -3,17 +3,20 @@ package io.muserver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.ws.rs.BadRequestException;
-import javax.ws.rs.core.MediaType;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InterruptedIOException;
 import java.net.URI;
 import java.nio.charset.Charset;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 
 public class MuRequestImpl implements MuRequest {
@@ -33,6 +36,7 @@ public class MuRequestImpl implements MuRequest {
     private List<Cookie> cookies;
     private QueryString query;
     private Map<String, Object> attributes;
+    private CompletableFuture<MuForm> formFuture;
 
     public MuRequestImpl(MuExchangeData data, Method method, String relativeUri, Headers headers, boolean hasBody) {
         this.data = data;
@@ -130,12 +134,12 @@ public class MuRequestImpl implements MuRequest {
 
     @Override
     public List<UploadedFile> uploadedFiles(String name) throws IOException {
-        return null;
+        return form().uploadedFiles(name);
     }
 
     @Override
     public UploadedFile uploadedFile(String name) throws IOException {
-        return null;
+        return form().uploadedFile(name);
     }
 
     @Override
@@ -147,28 +151,34 @@ public class MuRequestImpl implements MuRequest {
     }
 
     @Override
-    public RequestParameters form() throws IOException {
-        var cur = data.exchange.requestBodyListener();
-        if (cur == null) {
-            MediaType bodyType = headers.contentType();
-            var type = bodyType == null ? null : bodyType.getType().toLowerCase();
-            var subtype = bodyType == null ? null : bodyType.getSubtype().toLowerCase();
-            if ("application".equals(type) && "x-www-form-urlencoded".equals(subtype)) {
-                UrlEncodedFormReader readListener = new UrlEncodedFormReader(data.connection.server().requestIdleTimeoutMillis());
-                data.exchange.setReadListener(readListener);
-                return readListener.params();
-            } else if ("multipart".equals(type) && "form-data".equals(subtype)) {
-                var charset = headers.contentCharset(true);
-                var boundary = bodyType.getParameters().get("boundary");
-                if (Mutils.nullOrEmpty(boundary)) throw new BadRequestException("No boundary specified in the multipart form-data");
-                return EmptyForm.VALUE.params();
-            } else {
-                return EmptyForm.VALUE.params();
-            }
-        } else if (cur instanceof MuForm muForm) {
-            return muForm.params();
-        } else {
-            throw new IllegalStateException("The body of the request message cannot be read twice. This can happen when calling any 2 of inputStream(), readBodyAsString(), or form() methods.");
+    public MuForm form() throws IOException {
+        if (isAsync()) {
+            throw new IllegalStateException("Use AsyncHandle.readForm to read form bodies in async mode");
+        }
+        if (formFuture == null) {
+            formFuture = new CompletableFuture<>();
+            data.exchange.readForm(new FormConsumer() {
+                @Override
+                public void onReady(MuForm form) {
+                    formFuture.complete(form);
+                }
+                @Override
+                public void onError(Throwable cause) {
+                    formFuture.completeExceptionally(cause);
+                }
+            });
+        }
+        try {
+            return formFuture.get(data.server().settings.requestReadTimeoutMillis(), TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            throw new InterruptedIOException("Interrupted while reading form");
+        } catch (ExecutionException e) {
+            var cause = e.getCause();
+            if (cause instanceof RuntimeException re) throw re;
+            if (cause instanceof IOException ioe) throw ioe;
+            throw new IOException("Error while reading form body", cause);
+        } catch (TimeoutException e) {
+            throw new IOException("Timed out while reading form body", e);
         }
     }
 

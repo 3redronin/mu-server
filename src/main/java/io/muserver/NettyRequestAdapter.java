@@ -249,9 +249,9 @@ class NettyRequestAdapter implements MuRequest {
     }
 
     @Override
-    public RequestParameters form() throws IOException {
+    public MuForm form() throws IOException {
         ensureFormDataLoaded();
-        return ((FormRequestBodyReader) requestBodyReader).params();
+        throw new UnsupportedOperationException();
     }
 
     @Override
@@ -558,6 +558,11 @@ class NettyRequestAdapter implements MuRequest {
                     responseCompleteListener.onComplete(exchange);
                 }
             });
+        }
+
+        @Override
+        public void readForm(FormConsumer formConsumer) {
+
         }
 
     }

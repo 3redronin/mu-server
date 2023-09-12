@@ -1,17 +1,10 @@
 package io.muserver;
 
-import java.io.IOException;
-import java.io.InterruptedIOException;
-import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 import static java.util.Collections.emptyList;
 import static java.util.Collections.emptyMap;
@@ -19,7 +12,7 @@ import static java.util.Collections.emptyMap;
 /**
  * The data posted in an HTML form submission
  */
-interface MuForm extends RequestParameters {
+public interface MuForm extends RequestParameters {
 
     /**
      * The text parameters in the form.
@@ -53,10 +46,33 @@ interface MuForm extends RequestParameters {
      */
     default UploadedFile uploadedFile(String name) {
         var list = uploadedFiles().get(name);
-        return list.isEmpty() ? null : list.get(0);
+        return list == null || list.isEmpty() ? null : list.get(0);
     }
 
 
+}
+
+class UrlEncodedMuForm implements MuForm {
+    private final QueryString qs;
+
+    UrlEncodedMuForm(QueryString qs) {
+        this.qs = qs;
+    }
+
+    @Override
+    public RequestParameters params() {
+        return qs;
+    }
+
+    @Override
+    public Map<String, List<UploadedFile>> uploadedFiles() {
+        return emptyMap();
+    }
+
+    @Override
+    public Map<String, List<String>> all() {
+        return qs.all();
+    }
 }
 
 class EmptyForm implements MuForm {
@@ -81,37 +97,14 @@ class EmptyForm implements MuForm {
 
 }
 
-class UrlEncodedFormReader implements MuForm, RequestBodyListener {
-
-    private final CompletableFuture<QueryString> query = new CompletableFuture<>();
+class UrlEncodedFormReader implements RequestBodyListener {
 
     // todo make a proper parser so we don't need to build the string first
     private final StringBuilder sb = new StringBuilder();
-    private final long readTimeoutMillis;
+    private final FormConsumer formConsumer;
 
-    UrlEncodedFormReader(long readTimeoutMillis) {
-        this.readTimeoutMillis = readTimeoutMillis;
-    }
-
-    @Override
-    public RequestParameters params() {
-        try {
-            return query.get(readTimeoutMillis, TimeUnit.MILLISECONDS);
-        } catch (InterruptedException e) {
-            throw new UncheckedIOException(new InterruptedIOException("Interrupted while reading form"));
-        } catch (ExecutionException e) {
-            var cause = e.getCause();
-            if (cause instanceof RuntimeException re) throw re;
-            if (cause instanceof IOException ioe) throw new UncheckedIOException("Error while reading form body", ioe);
-            throw new UncheckedIOException(new IOException("Error while reading form body", cause));
-        } catch (TimeoutException e) {
-            throw new MuException("Timed out while reading form body", e);
-        }
-    }
-
-    @Override
-    public Map<String, List<UploadedFile>> uploadedFiles() {
-        return emptyMap();
+    UrlEncodedFormReader(FormConsumer formConsumer) {
+        this.formConsumer = formConsumer;
     }
 
     @Override
@@ -126,22 +119,16 @@ class UrlEncodedFormReader implements MuForm, RequestBodyListener {
     public void onComplete() {
         var result = QueryString.parse(sb.toString());
         sb.setLength(0);
-        query.complete(result);
+        try {
+            formConsumer.onReady(new UrlEncodedMuForm(result));
+        } catch (Exception e) {
+            onError(e);
+        }
     }
 
     @Override
     public void onError(Throwable t) {
-        // todo support cancelling?
-        query.completeExceptionally(t);
+        formConsumer.onError(t);
     }
 
-    @Override
-    public Map<String, List<String>> all() {
-        if (!query.isDone()) throw new IllegalStateException("all() called before future complete");
-        try {
-            return query.get().all();
-        } catch (Exception e) {
-            throw new MuException("Should not happen", e);
-        }
-    }
 }

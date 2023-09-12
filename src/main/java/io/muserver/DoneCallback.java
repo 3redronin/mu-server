@@ -6,7 +6,7 @@ package io.muserver;
 public interface DoneCallback {
 
     /**
-     * The operation has completed.
+     * Calling this indicates that an async operation has completed.
      *
      * @param error If <code>null</code>, then the operation was a success. Otherwise it failed.
      */

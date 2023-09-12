@@ -6,6 +6,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
+import scaffolding.StringUtils;
 
 import java.io.IOException;
 import java.net.MalformedURLException;
@@ -34,9 +35,9 @@ public class RequestFormUrlEncodedTest {
             })
             .start();
         try (Response resp = call(request(server.uri())
-        .post(new FormBody.Builder()
-            .add("forma", "")
-            .build())
+            .post(new FormBody.Builder()
+                .add("forma", "")
+                .build())
         )) {
             assertThat(resp.body().string(), equalTo("query: true form: true / 1"));
         }
@@ -72,6 +73,35 @@ public class RequestFormUrlEncodedTest {
         vals.add(null);
         assertThat(actual, equalTo(vals));
     }
+
+
+    @Test
+    public void formParametersCanBeGotAsync() throws Exception {
+        server = ServerUtils.httpsServerForTest().addHandler((request, response) -> {
+            var handle = request.handleAsync();
+            handle.readForm(new FormConsumer() {
+                @Override
+                public void onReady(MuForm form) {
+                    handle.write(Mutils.toByteBuffer(form.get("theparam")), throwable -> {
+                        handle.complete(throwable);
+                    });
+                }
+                @Override
+                public void onError(Throwable cause) {
+                    handle.write(Mutils.toByteBuffer("Error: " + cause.getMessage()), handle::complete);
+                }
+            });
+            return true;
+        }).start();
+
+        var body = StringUtils.randomAsciiStringOfLength(32000);
+        try (var resp = call(request(server.uri())
+            .post(new FormBody.Builder().add("theparam", body).build()))) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.body().string(), equalTo(body));
+        }
+    }
+
 
     @Test
     public void formParametersWithMultipleValuesCanBeGot() throws MalformedURLException {

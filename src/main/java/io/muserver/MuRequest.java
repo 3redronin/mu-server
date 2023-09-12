@@ -97,7 +97,9 @@ public interface MuRequest {
      * @return All the files with the given name
      * @throws IOException Thrown when there is an error while reading the file, e.g. if a user closes their
      *                     browser before the upload is complete.
+     * @deprecated use <code>form.uploadedFiles(String)</code> instead
      */
+    @Deprecated
     List<UploadedFile> uploadedFiles(String name) throws IOException;
 
     /**
@@ -108,7 +110,9 @@ public interface MuRequest {
      * @return The querystring value, or an empty string
      * @throws IOException Thrown when there is an error while reading the file, e.g. if a user closes their
      *                     browser before the upload is complete.
+     * @deprecated use <code>form.uploadedFile(String)</code> instead
      */
+    @Deprecated
     UploadedFile uploadedFile(String name) throws IOException;
 
     /**
@@ -119,12 +123,13 @@ public interface MuRequest {
 
     /**
      * <p>Gets the form parameters for this request.</p>
-     * <p>Note: this cannot be called after a call to {@link #inputStream()} or {@link #readBodyAsString()}</p>
+     * <p>Note: this cannot be called after a call to {@link #inputStream()} or {@link #readBodyAsString()} or
+     * when in async mode. To access the form from an async handler, call {@link AsyncHandle#readForm(FormConsumer)}</p>
      * @throws IOException Thrown when there is an error while reading the form, e.g. if a user closes their
      *                     browser before the form is fully read into memory.
      * @return Returns an object allowing you to access the form parameters of this request.
      */
-    RequestParameters form() throws IOException;
+    MuForm form() throws IOException;
 
     /**
      * Gets all the client-sent cookies

@@ -76,7 +76,7 @@ public class NotImplementedMuRequest implements MuRequest {
     }
 
     @Override
-    public RequestParameters form() throws IOException {
+    public MuForm form() throws IOException {
         return throwIt();
     }
 

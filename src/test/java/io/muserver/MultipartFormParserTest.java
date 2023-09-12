@@ -21,7 +21,7 @@ import static org.hamcrest.Matchers.*;
 public class MultipartFormParserTest {
 
     @ParameterizedTest
-    @ValueSource(strings = {"1", "*"})
+    @ValueSource(strings = {"*", "1"})
     public void canParseEmptyBodies(String bufferSize) throws Throwable {
         var boundary = UUID.randomUUID().toString();
         var input = "--" + boundary + "--";
@@ -149,23 +149,22 @@ public class MultipartFormParserTest {
         baos.writeBytes(input[1].getBytes(StandardCharsets.UTF_8));
 
         Path tempFile;
-        try (var result = parse("boundary00000000000000000000000000000000000000123", bufferSize, ByteBuffer.wrap(baos.toByteArray()))) {
-            assertThat(result.getAll("hello"), contains("hello you"));
-            var image = result.uploadedFile("image");
-            assertThat(image, notNullValue());
-            assertThat(image.size(), equalTo(372_987L));
-            assertThat(image.filename(), equalTo("guangzhou, china.jpeg"));
-            assertThat(image.extension(), equalTo("jpeg"));
-            tempFile = image.asPath();
-            assertThat(image.asFile().isFile(), equalTo(true));
-            assertThat(Files.size(tempFile), equalTo(372_987L));
+        var result = parse("boundary00000000000000000000000000000000000000123", bufferSize, ByteBuffer.wrap(baos.toByteArray()));
+        assertThat(result.getAll("hello"), contains("hello you"));
+        var image = result.uploadedFile("image");
+        assertThat(image, notNullValue());
+        assertThat(image.size(), equalTo(372_987L));
+        assertThat(image.filename(), equalTo("guangzhou, china.jpeg"));
+        assertThat(image.extension(), equalTo("jpeg"));
+        tempFile = image.asPath();
+        assertThat(image.asFile().isFile(), equalTo(true));
+        assertThat(Files.size(tempFile), equalTo(372_987L));
 
-            var b64 = Base64.getEncoder();
-            assertThat(b64.encodeToString(image.asBytes()),
-                equalTo(b64.encodeToString(Files.readAllBytes(UploadTest.guangzhouChina.toPath()))));
+        var b64 = Base64.getEncoder();
+        assertThat(b64.encodeToString(image.asBytes()),
+            equalTo(b64.encodeToString(Files.readAllBytes(UploadTest.guangzhouChina.toPath()))));
 
-            ((MuUploadedFile2) image).deleteFile();
-        }
+        ((MuUploadedFile2) image).deleteFile();
         assertThat(Files.exists(tempFile), equalTo(false));
     }
 
@@ -189,7 +188,7 @@ public class MultipartFormParserTest {
             --2fe110ee-3c8a-480b-a07b-32d777205a76--
             this is the epilogue""";
 
-        MultipartFormParser result = parse("2fe110ee-3c8a-480b-a07b-32d777205a76", type, input);
+        var result = parse("2fe110ee-3c8a-480b-a07b-32d777205a76", type, input);
         assertThat(result.getAll("Hello"), contains("Wor\r\nld"));
         assertThat(result.getAll("The 你好 name"), contains("你好 the value / with / stuff"));
     }
@@ -205,9 +204,27 @@ public class MultipartFormParserTest {
             ------WebKitFormBoundaryr1H5MRBBwYhyzO4H--
             """;
 
-        MultipartFormParser result = parse("----WebKitFormBoundaryr1H5MRBBwYhyzO4H", type, input);
+        var result = parse("----WebKitFormBoundaryr1H5MRBBwYhyzO4H", type, input);
         System.out.println(result.all());
         assertThat(result.getAll("The 你好 \"name\" : <hi> "), contains("The 你好 \"value\" : <hi> \\r\\n"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"1", "*"})
+    public void filenamesCanBeUTF8(String type) throws Throwable {
+        String input = """
+            ------WebKitFormBoundaryr1H5MRBBwYhyzO4H
+            Content-Disposition: form-data; name="data"; filename="The 你好, 'name'; hi .txt"
+            
+            Hello
+            ------WebKitFormBoundaryr1H5MRBBwYhyzO4H--
+            """;
+
+        var result = parse("----WebKitFormBoundaryr1H5MRBBwYhyzO4H", type, input);
+        UploadedFile data = result.uploadedFile("data");
+        assertThat(data, notNullValue());
+        assertThat(data.asString(), equalTo("Hello"));
+        assertThat(data.filename(), equalTo("The 你好, 'name'; hi .txt"));
     }
 
     /*
@@ -284,14 +301,23 @@ Contents of the text file with boundary---- inside go here.
      */
 
 
-    private MultipartFormParser parse(String boundary, String bufferSize, String input) throws Throwable {
+    private MuForm parse(String boundary, String bufferSize, String input) throws Throwable {
         var buffer = Mutils.toByteBuffer(input.trim().replace("\n", "\r\n"));
         return parse(boundary, bufferSize, buffer);
     }
 
     @NotNull
-    private static MultipartFormParser parse(String boundary, String bufferSize, ByteBuffer buffer) throws Throwable {
-        var parser = new MultipartFormParser(Files.createTempDirectory("muservertests"), StandardCharsets.UTF_8, boundary);
+    private static MuForm parse(String boundary, String bufferSize, ByteBuffer buffer) throws Throwable {
+        var result = new CompletableFuture<MuForm>();
+        var formConsumer = new FormConsumer() {
+            public void onReady(MuForm form) {
+                result.complete(form);
+            }
+            public void onError(Throwable cause) {
+                result.completeExceptionally(cause);
+            }
+        };
+        var parser = new MultipartFormParser(formConsumer, Files.createTempDirectory("muservertests"), StandardCharsets.UTF_8, boundary);
         if (bufferSize.equals("*")) {
             processAndWaitForBuffer(parser, buffer);
         } else {
@@ -307,7 +333,13 @@ Contents of the text file with boundary---- inside go here.
             }
         }
         parser.onComplete();
-        return parser;
+        try {
+            return result.get(10, TimeUnit.SECONDS);
+        } catch (ExecutionException ee) {
+            throw ee.getCause();
+        } finally {
+            parser.close();
+        }
     }
 
     static void processAndWaitForBuffer(RequestBodyListener parser, ByteBuffer buffer) throws Throwable {

@@ -9,7 +9,6 @@ import javax.ws.rs.core.MultivaluedMap;
 import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.AsynchronousFileChannel;
 import java.nio.channels.CompletionHandler;
@@ -23,10 +22,12 @@ import java.util.*;
 import static io.muserver.ParseUtils.isOWS;
 import static io.muserver.ParseUtils.isTChar;
 
-class MultipartFormParser implements MuForm, RequestBodyListener, Closeable {
+class MultipartFormParser implements RequestBodyListener, Closeable {
     static {
         MuRuntimeDelegate.ensureSet();
     }
+
+    private final FormConsumer formConsumer;
 
     private enum State {
         INITIAL,
@@ -65,7 +66,8 @@ class MultipartFormParser implements MuForm, RequestBodyListener, Closeable {
     private volatile AsynchronousFileChannel fileChannel;
     private volatile Path tempFile;
 
-    MultipartFormParser(Path fileUploadDir, Charset bodyCharset, String boundary) {
+    MultipartFormParser(FormConsumer formConsumer, Path fileUploadDir, Charset bodyCharset, String boundary) {
+        this.formConsumer = formConsumer;
         if (boundary.length() > 70) {
             throw new BadRequestException("Multi part form param boundary value is too long");
         }
@@ -75,32 +77,6 @@ class MultipartFormParser implements MuForm, RequestBodyListener, Closeable {
         this.charBuffer = new StringBuilder(boundary.length() + 6);
         byte[] boundaryEndBytes = ("\r\n--" + boundary).getBytes(StandardCharsets.US_ASCII);
         this.bodyBuffer = new BoundaryCheckingOutputStream(boundaryEndBytes);
-    }
-
-
-    private void throwIfError() {
-        if (error != null) {
-            var ex = error instanceof IOException ioe ? ioe : new IOException("Error reading form body", error);
-            throw new UncheckedIOException(ex);
-        }
-    }
-
-    @Override
-    public RequestParameters params() {
-        throwIfError();
-        return this;
-    }
-
-    @Override
-    public Map<String, List<UploadedFile>> uploadedFiles() {
-        throwIfError();
-        return Collections.unmodifiableMap(fileParams);
-    }
-
-    @Override
-    public Map<String, List<String>> all() {
-        throwIfError();
-        return formParams;
     }
 
     @Override
@@ -231,9 +207,7 @@ class MultipartFormParser implements MuForm, RequestBodyListener, Closeable {
                             }
 
                         }
-                        case HEADERS_DONE -> {
-                            throw new BadRequestException("Did not expect more header characters when already done");
-                        }
+                        case HEADERS_DONE -> throw new BadRequestException("Did not expect more header characters when already done");
                     }
                 }
                 case ENTRY_DATA -> {
@@ -312,10 +286,6 @@ class MultipartFormParser implements MuForm, RequestBodyListener, Closeable {
         doneCallback.onComplete(null);
     }
 
-    private boolean isHVChar(byte b) {
-        return b >= 32;
-    }
-
     private void switchToEntryData() throws Exception {
         charBuffer.setLength(0);
         bodyBuffer.reset();
@@ -369,12 +339,18 @@ class MultipartFormParser implements MuForm, RequestBodyListener, Closeable {
         }
         this.charBuffer.setLength(0);
         this.bodyBuffer.reset();
+        try {
+            formConsumer.onReady(new MultipartForm(this.formParams, this.fileParams));
+        } catch (Exception e) {
+            formConsumer.onError(e);
+        }
     }
 
     @Override
     public void onError(Throwable t) {
         this.error = t;
         state = State.ERROR;
+        formConsumer.onError(t);
     }
 
 
@@ -465,4 +441,31 @@ class MultipartFormParser implements MuForm, RequestBodyListener, Closeable {
             c == 39 || c == 40 || c==41 || (c >= '+' && c <= ':') || c == 63;
     }
 
+}
+
+
+class MultipartForm implements MuForm {
+
+    private final MultivaluedMap<String, String> formParams;
+    private final Map<String, List<UploadedFile>> fileParams;
+
+    public MultipartForm(MultivaluedMap<String, String> formParams, Map<String, List<UploadedFile>> fileParams) {
+        this.formParams = formParams;
+        this.fileParams = fileParams;
+    }
+
+    @Override
+    public RequestParameters params() {
+        return this;
+    }
+
+    @Override
+    public Map<String, List<UploadedFile>> uploadedFiles() {
+        return fileParams;
+    }
+
+    @Override
+    public Map<String, List<String>> all() {
+        return formParams;
+    }
 }
