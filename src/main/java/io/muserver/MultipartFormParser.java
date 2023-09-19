@@ -242,9 +242,8 @@ class MultipartFormParser implements RequestBodyListener, Closeable {
                                     tempFile = null;
                                     doneCallback.onComplete(flushError);
                                 } catch (IOException e) {
-                                    doneCallback.onComplete(error);
-                                } finally {
                                     fileChannel = null;
+                                    doneCallback.onComplete(error);
                                 }
                             });
                             return; // stop processing here to return to the calling method, so that we wait until the async operation is finished

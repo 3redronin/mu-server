@@ -91,7 +91,7 @@ public class UploadTest {
         )) {
             assertThat(resp.code(), is(200));
             assertThat(resp.body().string(), is("guangzhou.jpeg is 372987 bytes\n" +
-                "guangzhou  china.jpeg is 372987 bytes\n" +
+                "guangzhou, china.jpeg is 372987 bytes\n" +
                 "friends.jpg is 1712954 bytes\n\n" +
                 "non-existent: 0"));
         }
