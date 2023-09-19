@@ -122,7 +122,11 @@ public class UploadTest {
         server = ServerUtils.httpsServerForTest()
             .withMaxRequestSize(guangzhou.length() / 2)
             .addHandler(Method.POST, "/upload", (request, response, pathParams) -> {
-                request.readBodyAsString();
+                try {
+                    request.readBodyAsString();
+                } catch (IOException e) {
+                    throw e;
+                }
             }).start();
 
         try (Response resp = call(request(server.uri().resolve("/upload"))

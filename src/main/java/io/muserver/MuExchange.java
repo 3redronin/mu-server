@@ -92,10 +92,10 @@ class MuExchange implements ResponseInfo, AsyncHandle {
             if (bodyListener != null) {
                 try {
                     var newSize = requestBodySize.addAndGet(rbd.buffer().remaining());
-                    if (newSize > data.connection.server().maxRequestSize()) {
+                    if (newSize > data.connection.server().maxRequestSize() && requestBodyListener != DiscardingRequestBodyListener.INSTANCE) {
                         bodyListener.onError(new ClientErrorException("413 Request Entity Too Large", 413));
                         if (data.server().settings.requestBodyTooLargeAction() == RequestBodyErrorAction.SEND_RESPONSE) {
-                            setReadListener(new DiscardingRequestBodyListener());
+                            setReadListener(DiscardingRequestBodyListener.INSTANCE);
                         } else {
                             request.onError();
                         }
@@ -177,7 +177,7 @@ class MuExchange implements ResponseInfo, AsyncHandle {
     @Override
     public void complete() {
         if (requestBodyListener == null) {
-            setReadListener(new DiscardingRequestBodyListener());
+            setReadListener(DiscardingRequestBodyListener.INSTANCE);
         }
 
         // This either sends and end-of-chunks message for a chunked request that is still streaming, or sends
@@ -292,7 +292,7 @@ class MuExchange implements ResponseInfo, AsyncHandle {
             return;
         }
         if (requestBodyListener == null) {
-            setReadListener(new DiscardingRequestBodyListener());
+            setReadListener(DiscardingRequestBodyListener.INSTANCE);
         }
 
         MuRequestImpl request = data.exchange.request;
@@ -607,6 +607,8 @@ class RequestBodyListenerToInputStreamAdapter extends InputStream implements Req
 }
 
 class DiscardingRequestBodyListener implements RequestBodyListener {
+    private DiscardingRequestBodyListener() {}
+    static RequestBodyListener INSTANCE = new DiscardingRequestBodyListener();
     @Override
     public void onDataReceived(ByteBuffer buffer, DoneCallback doneCallback) throws Exception {
         doneCallback.onComplete(null);
