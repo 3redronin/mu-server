@@ -291,7 +291,7 @@ class MuExchange implements ResponseInfo, AsyncHandle {
             abort(cause);
             return;
         }
-        if (requestBodyListener == null) {
+        if (!request.requestState().endState() && requestBodyListener == null) {
             setReadListener(DiscardingRequestBodyListener.INSTANCE);
         }
 
@@ -318,31 +318,35 @@ class MuExchange implements ResponseInfo, AsyncHandle {
                 boolean isHttp1 = data.newRequest.version() == HttpVersion.HTTP_1_1;
                 MuRuntimeDelegate.writeResponseHeaders(request.uri(), exResp, resp, isHttp1);
                 boolean sendBody = exResp.getStatusInfo().getFamily() != Response.Status.Family.REDIRECTION;
+                ByteBuffer body;
                 if (sendBody) {
                     String message = wae.getMessage();
                     message = MuExchange.exceptionMessageMap.getOrDefault(message, message);
                     String html = "<h1>" + status + " " + exResp.getStatusInfo().getReasonPhrase() + "</h1><p>" + htmlEncode(message) + "</p>";
                     response.contentType(ContentTypes.TEXT_HTML_UTF8);
-                    ByteBuffer body = StandardCharsets.UTF_8.encode(html);
+                    body = StandardCharsets.UTF_8.encode(html);
                     response.headers().set(HeaderNames.CONTENT_LENGTH, body.remaining());
-                    var blocker = isAsync ? null : new CompletableFuture<Void>();
-                    write(body, false, error -> {
-                        if (error == null) {
-                            response.setState(ResponseState.FULL_SENT);
-                            if (blocker != null) blocker.complete(null);
-                        } else {
-                            log.info("Error while sending error message to response; will abort: " + error.getMessage());
-                            if (blocker != null) {
-                                blocker.completeExceptionally(error);
-                            } else {
-                                abort(error);
-                            }
-                        }
-                    });
-                    if (blocker != null) {
-                        blocker.get(data.server().settings.responseWriteTimeoutMillis(), TimeUnit.MILLISECONDS);
-                    }
+                } else {
+                    body = null;
                 }
+                var blocker = isAsync ? null : new CompletableFuture<Void>();
+                write(body, false, error -> {
+                    if (error == null) {
+                        response.setState(ResponseState.FULL_SENT);
+                        if (blocker != null) blocker.complete(null);
+                    } else {
+                        log.info("Error while sending error message to response; will abort: " + error.getMessage());
+                        if (blocker != null) {
+                            blocker.completeExceptionally(error);
+                        } else {
+                            abort(error);
+                        }
+                    }
+                });
+                if (blocker != null) {
+                    blocker.get(data.server().settings.responseWriteTimeoutMillis(), TimeUnit.MILLISECONDS);
+                }
+
             } else {
                 log.info(cause.getClass().getName() + " while handling " + request + " - note a " + resp.status() +
                     " was already sent and the client may have received an incomplete response. Exception was " + cause.getMessage());
@@ -364,6 +368,7 @@ class MuExchange implements ResponseInfo, AsyncHandle {
         Mutils.notNull("callback", callback);
         write(data, true, callback);
     }
+
     public void write(ByteBuffer data, boolean encodeChunks, DoneCallback callback) {
         if (data != null && !data.hasRemaining()) {
             try {
@@ -376,7 +381,7 @@ class MuExchange implements ResponseInfo, AsyncHandle {
 
         var resp = response;
 
-        boolean chunked = encodeChunks && resp.isChunked();
+        boolean chunked = encodeChunks && resp.isChunked() && data != null;
         int buffersToSend = (resp.hasStartedSendingData() ? 0 : 2) + (chunked ? 2 : 0) + (data != null ? 1 : 0);
         int bi = -1;
         var toSend = new ByteBuffer[buffersToSend];
@@ -468,7 +473,8 @@ class MuExchange implements ResponseInfo, AsyncHandle {
         } else if ("multipart".equals(type) && "form-data".equals(subtype)) {
             var charset = request.headers().contentCharset(true);
             var boundary = bodyType.getParameters().get("boundary");
-            if (Mutils.nullOrEmpty(boundary)) throw new BadRequestException("No boundary specified in the multipart form-data");
+            if (Mutils.nullOrEmpty(boundary))
+                throw new BadRequestException("No boundary specified in the multipart form-data");
             var readListener = new MultipartFormParser(formConsumer, data.server().settings.tempDirectory(), charset, boundary);
             setReadListener(readListener);
         } else {
@@ -509,6 +515,7 @@ class MuExchange implements ResponseInfo, AsyncHandle {
         return response;
     }
 }
+
 class MuExchangeData {
     final MuHttp1Connection connection;
     final NewRequest newRequest;
@@ -607,14 +614,21 @@ class RequestBodyListenerToInputStreamAdapter extends InputStream implements Req
 }
 
 class DiscardingRequestBodyListener implements RequestBodyListener {
-    private DiscardingRequestBodyListener() {}
+    private DiscardingRequestBodyListener() {
+    }
+
     static RequestBodyListener INSTANCE = new DiscardingRequestBodyListener();
+
     @Override
     public void onDataReceived(ByteBuffer buffer, DoneCallback doneCallback) throws Exception {
         doneCallback.onComplete(null);
     }
+
     @Override
-    public void onComplete() {}
+    public void onComplete() {
+    }
+
     @Override
-    public void onError(Throwable t) {}
+    public void onError(Throwable t) {
+    }
 }
