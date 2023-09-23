@@ -514,6 +514,11 @@ class NettyRequestAdapter implements MuRequest {
         }
 
         @Override
+        public void sendInformationalResponse(HttpStatusCode status, DoneCallback callback) {
+
+        }
+
+        @Override
         public void complete(Throwable throwable) {
             if (throwable == null) {
                 complete();

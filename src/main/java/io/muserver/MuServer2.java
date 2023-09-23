@@ -55,7 +55,7 @@ class MuServer2 implements MuServer {
         if (tempDir == null) {
             tempDir = Files.createTempDirectory("muservertemp");
         }
-        var settings = new MuServerSettings(builder.gzipEnabled(), builder.minimumGzipSize(), builder.mimeTypesToGzip(), builder.maxRequestSize(), builder.maxHeadersSize(), builder.maxUrlSize(), builder.idleTimeoutMills(), builder.requestReadTimeoutMillis(), builder.responseWriteTimeoutMillis(), builder.requestBodyTooLargeAction(), tempDir);
+        var settings = new MuServerSettings(builder.gzipEnabled(), builder.minimumGzipSize(), builder.mimeTypesToGzip(), builder.maxRequestSize(), builder.maxHeadersSize(), builder.maxUrlSize(), builder.idleTimeoutMills(), builder.requestReadTimeoutMillis(), builder.responseWriteTimeoutMillis(), builder.requestBodyTooLargeAction(), tempDir, builder.autoHandleExpectHeaders());
 
         MuServer2 server = new MuServer2(builder.handlers(), builder.unhandledExceptionHandler(), settings, builder.responseCompleteListeners());
         if (!hasHttps) {
@@ -281,5 +281,6 @@ class MuServer2 implements MuServer {
 
 record MuServerSettings(boolean gzipEnabled, long minGzipSize, Set<String> mimeTypesToGzip, long maxRequestSize,
                         int maxHeadersSize, int maxUrlSize, long idleTimeoutMills, long requestReadTimeoutMillis,
-                        long responseWriteTimeoutMillis, RequestBodyErrorAction requestBodyTooLargeAction, Path tempDirectory) {
+                        long responseWriteTimeoutMillis, RequestBodyErrorAction requestBodyTooLargeAction, Path tempDirectory,
+                        boolean autoHandleExpectHeaders) {
 }

@@ -25,6 +25,18 @@ public interface AsyncHandle {
     void complete();
 
     /**
+     * Sends an informational response to the client.
+     * <p>Informational responses are represented with the <code>1xx</code> response status codes. They are used to
+     * send data back to the client before the actual response is ready.</p>
+     * <p>Note that any headers added before this is called will be sent with the informational response and then cleared.</p>
+     * @param status The interim response
+     * @param callback The callback to call when completed
+     * @throws IllegalArgumentException if the status code is not an informational response code
+     * @throws IllegalStateException if the main response status and headers have already been sent
+     */
+    void sendInformationalResponse(HttpStatusCode status, DoneCallback callback);
+
+    /**
      * Call this to indicate that the response is complete.
      * <p>If the <code>throwable</code> parameter is not null then the error will be logged and, if possible,
      * a <code>500 Internal Server Error</code> or similar message will be sent to the client.

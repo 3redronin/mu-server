@@ -3,6 +3,7 @@ package io.muserver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.ws.rs.ClientErrorException;
 import javax.ws.rs.NotFoundException;
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -16,7 +17,6 @@ import java.time.Instant;
 import java.util.Collections;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Object> {
@@ -155,26 +155,22 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
         this.exchange = exchange;
         data.exchange = exchange;
         onExchangeStarted(exchange);
-
-        if (headers.containsValue(HeaderNames.EXPECT, HeaderValues.CONTINUE, true)) {
+        if (headers.containsValue(HeaderNames.EXPECT, HeaderValues.CONTINUE, true) && data.server().settings.autoHandleExpectHeaders()) {
             long proposedLength = headers.getLong(HeaderNames.CONTENT_LENGTH.toString(), -1L);
-            // TODO don't block and do handle timeouts
-            try {
-                if (proposedLength > acceptor.muServer.maxRequestSize()) {
-                    writeSimpleResponseAsync(HttpStatusCode.EXPECTATION_FAILED_417, MuHeaders.responseHeaders(), null);
-                    return;
-                } else {
-                    channel.write(Mutils.toByteBuffer("HTTP/1.1 100 Continue\r\n\r\n")).get();
-                }
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            } catch (ExecutionException e) {
-                throw new RuntimeException(e.getCause());
+            if (proposedLength > acceptor.muServer.maxRequestSize()) {
+                exchange.complete(new ClientErrorException("Expectation Failed - request body too large", 417));
+            } else {
+                exchange.sendInformationalResponse(HttpStatusCode.CONTINUE_100, error -> {
+                    if (error == null) {
+                        handleIt(req, resp, exchange);
+                    } else {
+                        exchange.complete(error);
+                    }
+                });
             }
-
+        } else {
+            handleIt(req, resp, exchange);
         }
-
-        handleIt(req, resp, exchange);
     }
 
     private void writeInvalidRequest(InvalidRequestException e) {

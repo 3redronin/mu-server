@@ -6,6 +6,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http.*;
 
+import java.io.IOException;
 import java.util.Map;
 
 import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
@@ -104,6 +105,11 @@ class Http1Response extends NettyResponseAdaptor {
     @Override
     public void status(HttpStatusCode statusCode) {
         this.status = statusCode.code();
+    }
+
+    @Override
+    public void sendInformationalResponse(HttpStatusCode status) throws IOException {
+
     }
 
     @Override

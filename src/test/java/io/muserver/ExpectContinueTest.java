@@ -1,8 +1,8 @@
 package io.muserver;
 
 import okhttp3.Response;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.MuAssert;
 import scaffolding.RawClient;
 import scaffolding.ServerUtils;
@@ -21,7 +21,7 @@ public class ExpectContinueTest {
 
     private MuServer server;
 
-    @Test(timeout = 20000)
+    @Test
     public void continueIsReturnedIfExpectIsSent() throws IOException, InterruptedException {
         server = httpServer()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> response.write(request.readBodyAsString()))
@@ -50,7 +50,42 @@ public class ExpectContinueTest {
 
     }
 
-    @Test(timeout = 20000)
+    @Test
+    public void ifAutoResponseIsOffThenItCanBeDoneInTheResponseHandler() throws IOException, InterruptedException {
+        server = httpServer()
+            .withAutoHandleExpectHeaders(false)
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                if (request.headers().contains(HeaderNames.EXPECT, "100-continue", true)) {
+                    response.sendInformationalResponse(HttpStatusCode.CONTINUE_100);
+                }
+                response.write(request.readBodyAsString());
+            })
+            .start();
+
+        String toSend = StringUtils.randomAsciiStringOfLength(1024);
+
+        try (RawClient rawClient = RawClient.create(server.uri())) {
+            rawClient.sendStartLine("GET", "/")
+                .sendHeader("host", server.uri().getAuthority())
+                .sendHeader("expect", "100-continue")
+                .sendHeader("content-length", "1024")
+                .endHeaders()
+                .flushRequest();
+
+            assertEventually(rawClient::responseString, containsString("HTTP/1.1 100 Continue\r\n"));
+
+            rawClient
+                .sendUTF8(toSend)
+                .flushRequest();
+
+            assertEventually(rawClient::responseString, startsWith("HTTP/1.1 100 Continue\r\n" +
+                "\r\nHTTP/1.1 200 OK\r\n"));
+            assertEventually(rawClient::responseString, endsWith(toSend));
+        }
+
+    }
+
+    @Test
     public void rejectionIsReturnedIfExpectIsSentAndItIsTooBig() throws IOException, InterruptedException {
         server = httpServer()
             .withMaxRequestSize(1000)
@@ -66,7 +101,9 @@ public class ExpectContinueTest {
                 .flushRequest();
 
             assertEventually(rawClient::responseString, startsWith("HTTP/1.1 417 Expectation Failed\r\n"));
-            assertEventually(rawClient::responseString, endsWith("\r\n\r\n"));
+            assertEventually(rawClient::responseString, containsString("Expectation Failed - request body too large"));
+
+            rawClient.sendUTF8("!".repeat(1024)).flushRequest();
         }
 
     }
@@ -85,7 +122,7 @@ public class ExpectContinueTest {
     }
 
 
-    @After
+    @AfterEach
     public void cleanup() {
         MuAssert.stopAndCheck(server);
     }

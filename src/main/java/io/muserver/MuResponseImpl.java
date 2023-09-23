@@ -12,6 +12,7 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -48,6 +49,31 @@ public class MuResponseImpl implements MuResponse {
     public void status(HttpStatusCode statusCode) {
         Mutils.notNull("statusCode", statusCode);
         this.status = statusCode;
+    }
+
+    @Override
+    public void sendInformationalResponse(HttpStatusCode status) throws IOException {
+        var blocker = new CompletableFuture<Void>();
+        this.data.exchange.sendInformationalResponse(status, error -> {
+            if (error == null) {
+                blocker.complete(null);
+            } else {
+                blocker.completeExceptionally(error);
+            }
+        });
+        try {
+            blocker.get(data.server().settings.responseWriteTimeoutMillis(), TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            throw new InterruptedIOException("Interrupted while writing informational response");
+        } catch (ExecutionException e) {
+            if (e.getCause() instanceof IOException ioe) {
+                throw ioe;
+            } else {
+                throw new IOException("Error while sending informational response", e.getCause());
+            }
+        } catch (TimeoutException e) {
+            throw new IOException("Timed out writing informational response");
+        }
     }
 
     @Override

@@ -278,6 +278,28 @@ class MuExchange implements ResponseInfo, AsyncHandle {
     }
 
     @Override
+    public void sendInformationalResponse(HttpStatusCode status, DoneCallback callback) {
+        if (!status.isInformational()) throw new IllegalArgumentException(status + " is not allowed in an informational response");
+        if (this.response.hasStartedSendingData()) throw new IllegalStateException("Cannot send informational response after the main response has started");
+        Headers headers = response.headers();
+        var hasHeaders = headers.size() > 1;
+        var bits = new ByteBuffer[2];
+        bits[0] = ByteBuffer.wrap(status.http11ResponseLine());
+        if (hasHeaders) {
+            var date = headers.get(HeaderNames.DATE);
+            headers.remove(HeaderNames.DATE);
+            bits[1] = response.headersBuffer((MuHeaders) headers);
+            headers.clear();
+            if (date != null) {
+                headers.set(HeaderNames.DATE, date);
+            }
+        } else {
+            bits[1] = Mutils.toByteBuffer("\r\n");
+        }
+        scatteringWrite(bits, callback);
+    }
+
+    @Override
     public void complete(Throwable cause) {
         if (cause == null) {
             complete();

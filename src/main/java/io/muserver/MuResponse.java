@@ -35,6 +35,26 @@ public interface MuResponse {
     void status(HttpStatusCode statusCode);
 
     /**
+     * Sends an informational response to the client.
+     * <p>Informational responses are represented with the <code>1xx</code> response status codes. They are used to
+     * send data back to the client before the actual response is ready.</p>
+     * <p>Note that any headers added before this is called will be sent with the informational response and then cleared.</p>
+     * <p>The following example sets a pre-load hint to the client:</p>
+     * <pre><code>
+     *     // set link header before sending 103 and it will be included in the informational response
+     *     response.headers().set(&quot;link&quot;, &quot;&lt;/styles.css&gt;; rel=preload&quot;);
+     *     response.sendInformationalResponse(HttpStatusCode.EARLY_HINTS_103);
+     *     // now send the actual response
+     *     response.contentType(ContentTypes.TEXT_HTML_UTF8);
+     *     response.write("...html...");
+     * </code></pre>
+     * @param status The interim response
+     * @throws IllegalArgumentException if the status code is not an informational response code
+     * @throws IllegalStateException if the main response status and headers have already been sent
+     */
+    void sendInformationalResponse(HttpStatusCode status) throws IOException;
+
+    /**
      * <p>Writes the given text as the response body for this request. This can only be called once.</p>
      * <p>If you want to send multiple chunks of text, see {@link #sendChunk(String)}</p>
      * @param text The full response body to send to the client.

@@ -7,6 +7,8 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http2.Http2ConnectionEncoder;
 
+import java.io.IOException;
+
 class Http2Response extends NettyResponseAdaptor {
 
     private final ChannelHandlerContext ctx;
@@ -100,6 +102,11 @@ class Http2Response extends NettyResponseAdaptor {
     @Override
     public void status(HttpStatusCode statusCode) {
         throw new RuntimeException("not supported");
+    }
+
+    @Override
+    public void sendInformationalResponse(HttpStatusCode status) throws IOException {
+
     }
 
     @Override
