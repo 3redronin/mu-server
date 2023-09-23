@@ -297,6 +297,20 @@ class MuExchange implements ResponseInfo, AsyncHandle {
 
         MuRequestImpl request = data.exchange.request;
         MuResponseImpl resp = data.exchange.response;
+
+        UnhandledExceptionHandler handler = data.server().unhandledExceptionHandler;
+        if (handler != null) {
+            try {
+                if (handler.handle(request, response, cause)) {
+                    complete();
+                    return;
+                }
+            } catch (Exception ex) {
+                // replace the cause with whatever the exception handler threw
+                cause = ex;
+            }
+        }
+
         try {
             if (this.data.connection.isOpen() && !response.hasStartedSendingData()) {
                 WebApplicationException wae;

@@ -4,9 +4,9 @@ import okhttp3.Response;
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.api.ContentResponse;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 import scaffolding.StringUtils;
@@ -170,7 +170,7 @@ public class ExceptionsTest {
             ContentResponse get = client.GET(server.uri());
             assertThat(get.getStatus(), is(200));
             get.getContentAsString();
-            Assert.fail("Should have thrown!");
+            Assertions.fail("Should have thrown!");
         } catch (ExecutionException e) {
             assertThat(e.getCause(), instanceOf(EOFException.class));
         } finally {
@@ -178,7 +178,7 @@ public class ExceptionsTest {
         }
     }
 
-    @After
+    @AfterEach
     public void stop() {
         scaffolding.MuAssert.stopAndCheck(server);
     }
