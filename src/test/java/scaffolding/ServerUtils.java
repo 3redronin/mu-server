@@ -23,4 +23,12 @@ public class ServerUtils {
         return type.equalsIgnoreCase("http") ? httpServer() : httpsServerForTest();
     }
 
+    public static MuServerBuilder testServer(String type) {
+        return switch (type) {
+            case "http" -> httpServer();
+            case "https" -> httpsServer();
+            default -> throw new IllegalArgumentException("Dunno this: " + type);
+        };
+    }
+
 }

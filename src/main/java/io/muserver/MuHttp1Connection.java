@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.ws.rs.ClientErrorException;
 import javax.ws.rs.NotFoundException;
+import java.io.EOFException;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -283,6 +284,9 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
             }
         } else {
             log.info("Got EOF from client");
+            if (exchange != null) {
+                exchange.abort(new EOFException("Client closed connection"));
+            }
             inputClosed = true;
             completeGracefulShutdownMaybe();
         }
