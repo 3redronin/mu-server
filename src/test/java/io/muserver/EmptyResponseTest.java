@@ -1,8 +1,8 @@
 package io.muserver;
 
 import okhttp3.Response;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.ClientUtils;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
@@ -45,7 +45,21 @@ public class EmptyResponseTest {
         }
     }
 
-    @After
+    @Test
+    public void a200HasNoBodyWithZeroLengthContent() throws IOException {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> response.status(200))
+            .start();
+
+        try (Response resp = ClientUtils.call(request(server.uri()))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.header("Date"), is(notNullValue()));
+            assertThat(resp.header("Content-Length"), is("0"));
+            assertThat(resp.body().bytes().length, is(0));
+        }
+    }
+
+    @AfterEach
     public void destroy() {
         MuAssert.stopAndCheck(server);
     }

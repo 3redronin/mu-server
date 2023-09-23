@@ -1,7 +1,7 @@
 package io.muserver;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import static io.muserver.CookieBuilder.newCookie;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -29,7 +29,7 @@ public class CookieBuilderTest {
     public void throwsWithNoName() {
         try {
             newCookie().withValue("value").build();
-            Assert.fail("Should throw");
+            Assertions.fail("Should throw");
         } catch (IllegalStateException e) {
             assertThat(e.getMessage(), is("A cookie name must be specified"));
         }
@@ -39,7 +39,7 @@ public class CookieBuilderTest {
     public void throwsWithInvalidSameSite() {
         try {
             newCookie().withSameSite("something-invalid");
-            Assert.fail("Should throw");
+            Assertions.fail("Should throw");
         } catch (IllegalArgumentException e) {
             assertThat(e.getMessage(), is("Invalid SameSite value. It should be one of: Lax, Strict, None"));
         }
@@ -49,7 +49,7 @@ public class CookieBuilderTest {
     public void throwsWithNoValue() {
         try {
             newCookie().withName("cookiename").build();
-            Assert.fail("Should throw");
+            Assertions.fail("Should throw");
         } catch (IllegalStateException e) {
             assertThat(e.getMessage(), is("A cookie value cannot be null"));
         }
@@ -59,7 +59,7 @@ public class CookieBuilderTest {
     public void invalidValuesAreRejected() {
         try {
             newCookie().withValue("你好");
-            Assert.fail("Should throw");
+            Assertions.fail("Should throw");
         } catch (IllegalArgumentException e) {
             assertThat(e.getMessage(), is("A cookie value can only be ASCII characters excluding control " +
                 "characters, whitespace, quotes, commas, semicolons and backslashes. Consider using " +
@@ -71,7 +71,7 @@ public class CookieBuilderTest {
     public void invalidNamesAreRejected() {
         try {
             newCookie().withName("an invalid name because of the spaces");
-            Assert.fail("Should throw");
+            Assertions.fail("Should throw");
         } catch (IllegalArgumentException e) {
             assertThat(e.getMessage(), is("A cookie name can only be alphanumeric ASCII characters or any " +
                 "of \"!#$%&'*+-.^_`|~\" (excluding quotes)"));
@@ -130,7 +130,7 @@ public class CookieBuilderTest {
             " cookie1=value1;httponly,cookie2=value2 "}) {
             try {
                 setCookieFrom(headerValue);
-                Assert.fail(headerValue + " did not throw exception");
+                Assertions.fail(headerValue + " did not throw exception");
             } catch (IllegalArgumentException e) {
                 // good
             }

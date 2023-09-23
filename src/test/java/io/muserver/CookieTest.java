@@ -5,9 +5,9 @@ import okhttp3.CookieJar;
 import okhttp3.HttpUrl;
 import okhttp3.OkHttpClient;
 import okhttp3.Response;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.ClientUtils;
 import scaffolding.MuAssert;
 import scaffolding.RawClient;
@@ -34,7 +34,7 @@ public class CookieTest {
     private MuServer server;
     private OkHttpClient client;
 
-    @Before
+    @BeforeEach
     public void setupClient() {
         CookieJar inMemoryCookieJar = new InMemoryCookieJar();
         client = ClientUtils.client.newBuilder()
@@ -250,7 +250,7 @@ public class CookieTest {
         return HttpUrl.get(server.uri());
     }
 
-    @After
+    @AfterEach
     public void stopIt() {
         MuAssert.stopAndCheck(server);
     }

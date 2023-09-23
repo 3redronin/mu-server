@@ -257,7 +257,7 @@ class MuExchange implements ResponseInfo, AsyncHandle {
             }
 
             var blocker = isAsync ? new CountDownLatch(1) : null;
-            write(null, false, error -> {
+            writeEmptyBody(error -> {
                 if (error == null) {
                     resp.setState(ResponseState.FULL_SENT);
                 } else {
@@ -268,7 +268,7 @@ class MuExchange implements ResponseInfo, AsyncHandle {
             if (blocker != null) {
                 try {
                     if (!blocker.await(data.server().settings.responseWriteTimeoutMillis(), TimeUnit.MILLISECONDS)) {
-                        complete(new TimeoutException("Timed out finishing chunked message"));
+                        complete(new TimeoutException("Timed out finishing empty message"));
                     }
                 } catch (InterruptedException e) {
                     complete(e);
@@ -369,6 +369,13 @@ class MuExchange implements ResponseInfo, AsyncHandle {
         write(data, true, callback);
     }
 
+    public void writeEmptyBody(DoneCallback callback) {
+        var bits = new ByteBuffer[2];
+        bits[0] = ByteBuffer.wrap(response.statusCode().http11ResponseLine());
+        bits[1] = response.headersBuffer((MuHeaders) response.headers());
+        scatteringWrite(bits, callback);
+    }
+
     public void write(ByteBuffer data, boolean encodeChunks, DoneCallback callback) {
         if (data != null && !data.hasRemaining()) {
             try {
@@ -398,7 +405,10 @@ class MuExchange implements ResponseInfo, AsyncHandle {
         if (chunked) {
             toSend[++bi] = StandardCharsets.US_ASCII.encode("\r\n");
         }
+        scatteringWrite(toSend, callback);
+    }
 
+    private void scatteringWrite(ByteBuffer[] toSend, DoneCallback callback) {
         var sb = new StringBuilder();
         for (ByteBuffer buffer : toSend) {
             var dest = new byte[buffer.remaining()];
