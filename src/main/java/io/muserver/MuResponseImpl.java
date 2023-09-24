@@ -117,7 +117,7 @@ public class MuResponseImpl implements MuResponse {
         }
     }
 
-    private boolean prepareForGzip() {
+    boolean prepareForGzip() {
         var settings = data.acceptor().muServer.settings;
         if (!settings.gzipEnabled()) return false;
 
@@ -237,7 +237,7 @@ public class MuResponseImpl implements MuResponse {
             if (this.state != ResponseState.NOTHING)
                 throw new IllegalStateException("Cannot write to response with state " + state);
 
-            OutputStream adapter = new MuResponseOutputStream();
+            OutputStream adapter = new MuResponseOutputStream(data.exchange);
             if (bufferSize > 0) {
                 adapter = new BufferedOutputStream(adapter, bufferSize);
             }
@@ -320,8 +320,14 @@ public class MuResponseImpl implements MuResponse {
         }
     }
 
-    private class MuResponseOutputStream extends OutputStream {
+
+    static class MuResponseOutputStream extends OutputStream {
+        private final MuExchange exchange;
         private boolean closed = false;
+
+        MuResponseOutputStream(MuExchange exchange) {
+            this.exchange = exchange;
+        }
 
         @Override
         public void write(int b) throws IOException {
@@ -331,7 +337,15 @@ public class MuResponseImpl implements MuResponse {
         @Override
         public void write(byte[] b, int off, int len) throws IOException {
             if (closed) throw new IOException("Writing to a closed stream");
-            blockingWrite(ByteBuffer.wrap(b, off, len));
+            exchange.response.blockingWrite(ByteBuffer.wrap(b, off, len));
+        }
+
+        public void writeAsync(byte[] b, int off, int len, DoneCallback callback) {
+            if (closed) {
+                callback.onComplete(new IOException("Writing to a closed stream"));
+                return;
+            }
+            exchange.write(ByteBuffer.wrap(b, off, len), true, callback);
         }
 
         @Override

@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import javax.ws.rs.*;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
@@ -16,6 +17,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.zip.GZIPOutputStream;
 
 import static io.muserver.Mutils.htmlEncode;
 
@@ -44,6 +46,7 @@ class MuExchange implements ResponseInfo, AsyncHandle {
     private long endTime;
     private boolean isAsync = false;
     private List<ResponseCompleteListener> completeListeners;
+    private MuGZIPOutputStream gzipStream;
 
     MuExchange(MuExchangeData data, MuRequestImpl request, MuResponseImpl response) {
         this.data = data;
@@ -197,57 +200,38 @@ class MuExchange implements ResponseInfo, AsyncHandle {
         }
         if (resp.responseState() == ResponseState.STREAMING) {
             resp.setState(ResponseState.FINISHING);
-            if (resp.headers().containsValue(HeaderNames.TRANSFER_ENCODING, HeaderValues.CHUNKED, true)) {
-                CountDownLatch blocker = isAsync ? new CountDownLatch(1) : null;
-                boolean sendTrailers = resp.trailers != null && Headtils.getParameterizedHeaderWithValues(data.requestHeaders(), HeaderNames.TE)
-                    .stream().anyMatch(v -> v.value().equalsIgnoreCase("trailers"));
-                if (sendTrailers) {
-                    // todo: make this more efficient
-                    write(StandardCharsets.US_ASCII.encode("0\r\n"), false, error -> {
-                        if (error == null) {
-                            var trailersBuffer = resp.headersBuffer(resp.trailers);
-                            write(trailersBuffer, false, error2 -> {
-                                if (error2 == null) {
-                                    resp.setState(ResponseState.FINISHED);
-                                } else {
-                                    complete(error2);
-                                }
-                                if (blocker != null) blocker.countDown();
-                            });
-                        } else {
-                            complete(error);
-                            if (blocker != null) blocker.countDown();
-                        }
-                    });
-                } else {
-                    write(StandardCharsets.US_ASCII.encode("0\r\n\r\n"), false, error -> {
-                        if (error == null) {
-                            resp.setState(ResponseState.FINISHED);
-                        } else {
-                            complete(error);
-                        }
-                        if (blocker != null) blocker.countDown();
-                    });
-                }
-
-                if (blocker != null) {
-                    try {
-                        if (!blocker.await(data.server().settings.responseWriteTimeoutMillis(), TimeUnit.MILLISECONDS)) {
-                            complete(new TimeoutException("Timed out finishing chunked message"));
-                        }
-                    } catch (InterruptedException e) {
-                        complete(e);
-                    }
-                }
+            if (gzipStream == null) {
+                completeStreaming(resp);
             } else {
-                long declaredLength = resp.headers().getLong(HeaderNames.CONTENT_LENGTH.toString(), -1);
-                long actualLength = responseBodyWritten.get();
-                if (declaredLength > actualLength) {
-                    var message = "Response error: body size was declared to be " + declaredLength + " bytes however only " + actualLength + " bytes were sent for " + request;
-                    log.warn(message);
-                    abort(new IllegalStateException(message));
+                try {
+                    gzipStream.close();
+                } catch (IOException e) {
+                    complete(e);
+                    return;
+                }
+                byte[] finalBits = gzipStream.getAndClear();
+                if (finalBits.length > 0) {
+                    var blocker = isAsync ? null : new CompletableFuture<Void>();
+                    write(ByteBuffer.wrap(finalBits), true, error -> {
+                        if (error == null) {
+                            completeStreaming(resp);
+                            if (blocker != null) blocker.complete(null);
+                        } else {
+                            complete(error);
+                            if (blocker != null) blocker.completeExceptionally(error);
+                        }
+                    });
+                    if (blocker != null) {
+                        try {
+                            blocker.get(data.server().settings.responseWriteTimeoutMillis(), TimeUnit.MILLISECONDS);
+                        } catch (InterruptedException | TimeoutException e) {
+                            complete(e);
+                        } catch (ExecutionException e) {
+                            complete(e.getCause());
+                        }
+                    }
                 } else {
-                    resp.setState(ResponseState.FINISHED);
+                    completeStreaming(resp);
                 }
             }
         } else if (resp.responseState() == ResponseState.NOTHING) {
@@ -284,6 +268,62 @@ class MuExchange implements ResponseInfo, AsyncHandle {
                 } catch (InterruptedException e) {
                     complete(e);
                 }
+            }
+        }
+    }
+
+    private void completeStreaming(MuResponseImpl resp) {
+        if (resp.headers().containsValue(HeaderNames.TRANSFER_ENCODING, HeaderValues.CHUNKED, true)) {
+            CountDownLatch blocker = isAsync ? new CountDownLatch(1) : null;
+            boolean sendTrailers = resp.trailers != null && Headtils.getParameterizedHeaderWithValues(data.requestHeaders(), HeaderNames.TE)
+                .stream().anyMatch(v -> v.value().equalsIgnoreCase("trailers"));
+            if (sendTrailers) {
+                // todo: make this more efficient
+                write(StandardCharsets.US_ASCII.encode("0\r\n"), false, error -> {
+                    if (error == null) {
+                        var trailersBuffer = resp.headersBuffer(resp.trailers);
+                        write(trailersBuffer, false, error2 -> {
+                            if (error2 == null) {
+                                resp.setState(ResponseState.FINISHED);
+                            } else {
+                                complete(error2);
+                            }
+                            if (blocker != null) blocker.countDown();
+                        });
+                    } else {
+                        complete(error);
+                        if (blocker != null) blocker.countDown();
+                    }
+                });
+            } else {
+                write(StandardCharsets.US_ASCII.encode("0\r\n\r\n"), false, error -> {
+                    if (error == null) {
+                        resp.setState(ResponseState.FINISHED);
+                    } else {
+                        complete(error);
+                    }
+                    if (blocker != null) blocker.countDown();
+                });
+            }
+
+            if (blocker != null) {
+                try {
+                    if (!blocker.await(data.server().settings.responseWriteTimeoutMillis(), TimeUnit.MILLISECONDS)) {
+                        complete(new TimeoutException("Timed out finishing chunked message"));
+                    }
+                } catch (InterruptedException e) {
+                    complete(e);
+                }
+            }
+        } else {
+            long declaredLength = resp.headers().getLong(HeaderNames.CONTENT_LENGTH.toString(), -1);
+            long actualLength = responseBodyWritten.get();
+            if (declaredLength > actualLength) {
+                var message = "Response error: body size was declared to be " + declaredLength + " bytes however only " + actualLength + " bytes were sent for " + request;
+                log.warn(message);
+                abort(new IllegalStateException(message));
+            } else {
+                resp.setState(ResponseState.FINISHED);
             }
         }
     }
@@ -413,7 +453,33 @@ class MuExchange implements ResponseInfo, AsyncHandle {
     public void write(ByteBuffer data, DoneCallback callback) {
         Mutils.notNull("data", data);
         Mutils.notNull("callback", callback);
-        write(data, true, callback);
+        try {
+            if (response.responseState() == ResponseState.NOTHING && response.prepareForGzip()) {
+                this.gzipStream = new MuGZIPOutputStream(new ByteArrayOutputStream());
+            }
+            if (gzipStream != null) {
+                byte[] dataBytes;
+                var offset = data.position();
+                var len = data.remaining();
+                if (data.hasArray()) {
+                    dataBytes = data.array();
+                    data.position(data.limit());
+                } else {
+                    dataBytes = new byte[len];
+                    data.get(dataBytes);
+                }
+                gzipStream.write(dataBytes, offset, len);
+                if (gzipStream.written() > 0) {
+                    write(ByteBuffer.wrap(gzipStream.getAndClear()), true, callback);
+                } else {
+                    callback.onComplete(null);
+                }
+            } else {
+                write(data, true, callback);
+            }
+        } catch (IOException e) {
+            callback.onComplete(e);
+        }
     }
 
     public void writeEmptyBody(DoneCallback callback) {
@@ -708,5 +774,21 @@ class DiscardingRequestBodyListener implements RequestBodyListener {
 
     @Override
     public void onError(Throwable t) {
+    }
+}
+
+class MuGZIPOutputStream extends GZIPOutputStream {
+    private final ByteArrayOutputStream baos;
+    MuGZIPOutputStream(ByteArrayOutputStream baos) throws IOException {
+        super(baos, true);
+        this.baos = baos;
+    }
+    byte[] getAndClear() {
+        byte[] bytes = baos.toByteArray();
+        baos.reset();
+        return bytes;
+    }
+    int written() {
+        return baos.size();
     }
 }
