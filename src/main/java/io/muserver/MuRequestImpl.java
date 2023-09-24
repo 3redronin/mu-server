@@ -331,4 +331,11 @@ public class MuRequestImpl implements MuRequest {
     }
 }
 
-class UserRequestAbortException extends RuntimeException {}
+class UserRequestAbortException extends RuntimeException {
+    public UserRequestAbortException() {
+    }
+
+    public UserRequestAbortException(String message) {
+        super(message);
+    }
+}

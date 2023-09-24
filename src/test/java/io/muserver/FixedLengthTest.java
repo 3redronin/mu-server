@@ -2,15 +2,17 @@ package io.muserver;
 
 import okhttp3.Response;
 import okhttp3.internal.http2.StreamResetException;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.ProtocolException;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CountDownLatch;
 
 import static org.hamcrest.CoreMatchers.equalTo;
@@ -23,37 +25,39 @@ import static scaffolding.ClientUtils.request;
 public class FixedLengthTest {
 
     private MuServer server;
-    private StringBuilder errors = new StringBuilder();
-    private CountDownLatch errorSetLatch = new CountDownLatch(1);
+    private final StringBuilder errors = new StringBuilder();
+    private final CountDownLatch errorSetLatch = new CountDownLatch(1);
 
-    @Test
-    public void ifMoreThanDeclaredAreSentThenAnExceptionIsThrownAndConnectionIsClosedForHttp1() throws IOException {
-        server = ServerUtils.httpsServerForTest()
+    @ParameterizedTest
+    @ValueSource(strings = { "http_throw", "http_swallow", "https_throw", "https_swallow" })
+    public void ifMoreThanDeclaredAreSentThenAnExceptionIsThrownAndConnectionIsClosedForHttp1(String type) throws IOException {
+        server = ServerUtils.testServer(type)
             .addHandler((req, resp) -> {
                 resp.contentType("text/plain");
                 resp.headers().set(HeaderNames.CONTENT_LENGTH, 20);
-                PrintWriter writer = resp.writer();
-                writer.print("01234");
-                writer.flush();
+                var output = resp.outputStream();
+                output.write("01234".getBytes(StandardCharsets.UTF_8));
+                output.flush();
 
                 try {
-                    writer.print(" and this will push the response over 20 bytes in size");
-                    writer.flush();
-
-                    writer.print("For http, subsequent calls will fail");
-                    writer.flush();
+                    output.write(" and this will push the response over 20 bytes in size".getBytes(StandardCharsets.UTF_8));
+                    output.flush();
+                    output.write("For http, subsequent calls will fail".getBytes(StandardCharsets.UTF_8));
+                    output.flush();
                 } catch (Exception ex) {
                     errors.append(ex.getMessage());
                     errorSetLatch.countDown();
-                    throw ex;
+                    if (type.endsWith("throw")) {
+                        throw ex;
+                    }
                 }
 
                 return true;
             }).start();
 
         try (Response resp = call(request(server.uri().resolve("/blah")))) {
-            resp.body().string();
-            Assert.fail("Should have failed due to invalid HTTP response");
+            var actual = resp.body().string();
+            Assertions.fail("Should have failed due to invalid HTTP response but got: " + actual);
         } catch (Exception e) {
             assertThat(e, anyOf(instanceOf(StreamResetException.class), instanceOf(ProtocolException.class)));
         }
@@ -64,9 +68,45 @@ public class FixedLengthTest {
             "59 bytes being sent."));
     }
 
-    @Test
-    public void ifLessThanDeclaredAreSentThenAnExceptionIsThrownAndConnectionIsClosed() throws Exception {
-        server = ServerUtils.httpsServerForTest()
+    @ParameterizedTest
+    @ValueSource(strings = { "http", "https" })
+    public void whenUsingAPrintWriterWhichSwallowsExceptionsAndTooMuchDataIsWrittenThenTheConnectionIsClosed(String type) throws IOException {
+        server = ServerUtils.testServer(type)
+            .addHandler((req, resp) -> {
+                resp.contentType("text/plain");
+                resp.headers().set(HeaderNames.CONTENT_LENGTH, 20);
+                try (PrintWriter writer = resp.writer()) {
+                    writer.println("01234");
+                    writer.flush();
+                    writer.println(" and this will push the response over 20 bytes in size");
+                    writer.flush();
+                    writer.println("For http, subsequent calls will fail");
+                    writer.flush();
+                } catch (Exception ex) {
+                    errors.append(ex.getMessage());
+                } finally {
+                    errorSetLatch.countDown();
+                }
+
+                return true;
+            }).start();
+
+        try (Response resp = call(request(server.uri().resolve("/blah")))) {
+            var actual = resp.body().string();
+            Assertions.fail("Should have failed due to invalid HTTP response but got: " + actual);
+        } catch (Exception e) {
+            assertThat(e, anyOf(instanceOf(StreamResetException.class), instanceOf(ProtocolException.class)));
+        }
+
+        MuAssert.assertNotTimedOut("exception", errorSetLatch);
+        assertThat(errors.toString(), equalTo(""));
+    }
+
+
+    @ParameterizedTest
+    @ValueSource(strings = { "http", "https" })
+    public void ifLessThanDeclaredAreSentThenAnExceptionIsThrownAndConnectionIsClosed(String type) throws Exception {
+        server = ServerUtils.testServer(type)
             .addHandler((req, resp) -> {
                 resp.contentType("text/plain");
                 resp.headers().set(HeaderNames.CONTENT_LENGTH, 20);
@@ -77,13 +117,13 @@ public class FixedLengthTest {
 
         try (Response resp = call(request(server.uri().resolve("/blah")))) {
             resp.body().string();
-            Assert.fail("Should have failed due to invalid HTTP response");
+            Assertions.fail("Should have failed due to invalid HTTP response");
         } catch (Exception e) {
             assertThat(e, anyOf(instanceOf(StreamResetException.class), instanceOf(ProtocolException.class)));
         }
     }
 
-    @After
+    @AfterEach
     public void destroy() {
         scaffolding.MuAssert.stopAndCheck(server);
     }

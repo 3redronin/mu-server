@@ -24,7 +24,7 @@ public class ServerUtils {
     }
 
     public static MuServerBuilder testServer(String type) {
-        return switch (type) {
+        return switch (type.split("_")[0]) {
             case "http" -> httpServer();
             case "https" -> httpsServer();
             default -> throw new IllegalArgumentException("Dunno this: " + type);

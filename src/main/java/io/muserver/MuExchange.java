@@ -36,6 +36,10 @@ class MuExchange implements ResponseInfo, AsyncHandle {
     final MuResponseImpl response;
     private volatile RequestBodyListener requestBodyListener;
     private final AtomicLong requestBodySize = new AtomicLong(0);
+    /**
+     * The size of the body written so far, excluding the transfer encoding bytes added on a body
+     */
+    private final AtomicLong responseBodyWritten = new AtomicLong(0);
     private InputStream requestInputStream;
     private long endTime;
     private boolean isAsync = false;
@@ -236,8 +240,15 @@ class MuExchange implements ResponseInfo, AsyncHandle {
                     }
                 }
             } else {
-                // TODO: check bytes sent size here
-                resp.setState(ResponseState.FINISHED);
+                long declaredLength = resp.headers().getLong(HeaderNames.CONTENT_LENGTH.toString(), -1);
+                long actualLength = responseBodyWritten.get();
+                if (declaredLength > actualLength) {
+                    var message = "Response error: body size was declared to be " + declaredLength + " bytes however only " + actualLength + " bytes were sent for " + request;
+                    log.warn(message);
+                    abort(new IllegalStateException(message));
+                } else {
+                    resp.setState(ResponseState.FINISHED);
+                }
             }
         } else if (resp.responseState() == ResponseState.NOTHING) {
             var declaredLength = resp.headers().getLong(HeaderNames.CONTENT_LENGTH.toString(), -1);
@@ -306,7 +317,7 @@ class MuExchange implements ResponseInfo, AsyncHandle {
             return;
         }
         if (state.endState()) {
-            log.warn("Completion error thrown after state is " + state, cause);
+            log.warn("Completion error thrown after state is " + state + ": " + cause);
             return;
         }
         if (cause instanceof UserRequestAbortException) {
@@ -412,7 +423,13 @@ class MuExchange implements ResponseInfo, AsyncHandle {
         scatteringWrite(bits, callback);
     }
 
-    public void write(ByteBuffer data, boolean encodeChunks, DoneCallback callback) {
+    public void write(ByteBuffer data, boolean isResponseEntityData, DoneCallback callback) {
+        var resp = response;
+        if (resp.responseState().endState()) {
+            callback.onComplete(new IllegalStateException("Cannot write data when response state is " + resp.responseState()));
+            return;
+        }
+
         if (data != null && !data.hasRemaining()) {
             try {
                 callback.onComplete(null); // run async?
@@ -422,9 +439,21 @@ class MuExchange implements ResponseInfo, AsyncHandle {
             return;
         }
 
-        var resp = response;
 
-        boolean chunked = encodeChunks && resp.isChunked() && data != null;
+        boolean chunked = isResponseEntityData && resp.isChunked() && data != null;
+
+        long toAdd = isResponseEntityData && data != null ? data.remaining() : 0;
+        if (isResponseEntityData && !chunked && data != null) {
+            long declaredLen = resp.headers().getLong(HeaderNames.CONTENT_LENGTH.toString(), Long.MAX_VALUE);
+            long lenAfterWrite = toAdd + responseBodyWritten.get();
+            if (declaredLen < lenAfterWrite) {
+                IOException ex = new IOException("The declared content length for " + request.method() + " " + request.uri() + " was " + declaredLen + " bytes. The current write is being aborted and the connection is being closed because it would have resulted in " + lenAfterWrite + " bytes being sent.");
+                abort(ex);
+                callback.onComplete(ex);
+                return;
+            }
+        }
+
         int buffersToSend = (resp.hasStartedSendingData() ? 0 : 2) + (chunked ? 2 : 0) + (data != null ? 1 : 0);
         int bi = -1;
         var toSend = new ByteBuffer[buffersToSend];
@@ -442,6 +471,9 @@ class MuExchange implements ResponseInfo, AsyncHandle {
             toSend[++bi] = StandardCharsets.US_ASCII.encode("\r\n");
         }
         scatteringWrite(toSend, callback);
+
+        // technically this is being updated too early, but doesn't matter
+        responseBodyWritten.addAndGet(toAdd);
     }
 
     private void scatteringWrite(ByteBuffer[] toSend, DoneCallback callback) {
