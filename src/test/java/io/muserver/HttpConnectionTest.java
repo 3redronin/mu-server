@@ -1,7 +1,7 @@
 package io.muserver;
 
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.ServerUtils;
 
 import java.time.Instant;
@@ -68,20 +68,21 @@ public class HttpConnectionTest {
                 .withBucket(request.relativePath())
                 .withRate(1)
                 .withWindow(1, TimeUnit.HOURS)
+                .withRejectionAction(RateLimitRejectionAction.SEND_429)
                 .build())
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 try {
                     HttpConnection con = request.connection();
-                    assertThat(con.startTime().toEpochMilli(), lessThanOrEqualTo(Instant.now().toEpochMilli()));
-                    assertThat(con.remoteAddress().getAddress().getHostAddress(), is("127.0.0.1"));
+                    assertThat("startTime", con.startTime().toEpochMilli(), lessThanOrEqualTo(Instant.now().toEpochMilli()));
+                    assertThat("remoteAddress", con.remoteAddress().getAddress().getHostAddress(), is("127.0.0.1"));
 
-                    assertThat(con.activeRequests(), contains(request));
-                    assertThat(con.completedRequests(), is(1L));
-                    assertThat(con.invalidHttpRequests(), is(0L));
-                    assertThat(con.rejectedDueToOverload(), is(2L));
-                    assertThat(con.activeWebsockets(), is(empty()));
+                    assertThat("activeRequests", con.activeRequests(), contains(request));
+                    assertThat("completedRequests", con.completedRequests(), is(1L));
+                    assertThat("invalidRequests", con.invalidHttpRequests(), is(0L));
+                    assertThat("rejected", con.rejectedDueToOverload(), is(2L));
+                    assertThat("activeWebsockets", con.activeWebsockets(), is(empty()));
 
-                    assertThat(request.server().activeConnections(), hasItems(con));
+                    assertThat("activeConnections", request.server().activeConnections(), hasItems(con));
 
                 } catch (Throwable t) {
                     error.set(t);
@@ -95,7 +96,7 @@ public class HttpConnectionTest {
         assertThat(error.get(), is(nullValue()));
     }
 
-    @After
+    @AfterEach
     public void stopIt() {
         scaffolding.MuAssert.stopAndCheck(server);
     }

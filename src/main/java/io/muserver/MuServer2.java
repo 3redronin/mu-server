@@ -53,7 +53,7 @@ class MuServer2 implements MuServer {
         if (tempDir == null) {
             tempDir = Files.createTempDirectory("muservertemp");
         }
-        var settings = new MuServerSettings(builder.gzipEnabled(), builder.minimumGzipSize(), builder.mimeTypesToGzip(), builder.maxRequestSize(), builder.maxHeadersSize(), builder.maxUrlSize(), builder.idleTimeoutMills(), builder.requestReadTimeoutMillis(), builder.responseWriteTimeoutMillis(), builder.requestBodyTooLargeAction(), tempDir, builder.autoHandleExpectHeaders());
+        var settings = new MuServerSettings(builder.gzipEnabled(), builder.minimumGzipSize(), builder.mimeTypesToGzip(), builder.maxRequestSize(), builder.maxHeadersSize(), builder.maxUrlSize(), builder.idleTimeoutMills(), builder.requestReadTimeoutMillis(), builder.responseWriteTimeoutMillis(), builder.requestBodyTooLargeAction(), tempDir, builder.autoHandleExpectHeaders(), builder.rateLimitersCopy());
 
         MuServer2 server = new MuServer2(builder.handlers(), builder.unhandledExceptionHandler(), settings, builder.responseCompleteListeners());
 
@@ -248,7 +248,7 @@ class MuServer2 implements MuServer {
 
     @Override
     public List<RateLimiter> rateLimiters() {
-        return null;
+        return settings.rateLimiters() == null ? Collections.emptyList() : settings.rateLimiters().stream().map(RateLimiter.class::cast).collect(Collectors.toList());
     }
 
     public void onConnectionAccepted(MuHttp1Connection connection) {
@@ -284,11 +284,22 @@ class MuServer2 implements MuServer {
     public void onInvalidRequest(InvalidRequestException e) {
         stats.onInvalidRequest();
     }
+
+    public void onRejectedDueToOverload(RateLimitedException e) {
+        stats.onRejectedDueToOverload();
+    }
 }
 
 
 record MuServerSettings(boolean gzipEnabled, long minGzipSize, Set<String> mimeTypesToGzip, long maxRequestSize,
                         int maxHeadersSize, int maxUrlSize, long idleTimeoutMills, long requestReadTimeoutMillis,
                         long responseWriteTimeoutMillis, RequestBodyErrorAction requestBodyTooLargeAction, Path tempDirectory,
-                        boolean autoHandleExpectHeaders) {
+                        boolean autoHandleExpectHeaders, List<RateLimiterImpl> rateLimiters) {
+    public void block(MuRequestImpl request) throws RateLimitedException {
+        if (rateLimiters != null) {
+            for (RateLimiterImpl limiter : rateLimiters) {
+                limiter.record(request);
+            }
+        }
+    }
 }

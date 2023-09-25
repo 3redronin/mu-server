@@ -45,7 +45,11 @@ class ServerSettings {
         boolean allowed = true;
         if (rateLimiters != null) {
             for (RateLimiterImpl limiter : rateLimiters) {
-                allowed &= limiter.record(request);
+                try {
+                    limiter.record(request);
+                } catch (RateLimitedException e) {
+                    allowed = false;
+                }
             }
         }
         return !allowed;

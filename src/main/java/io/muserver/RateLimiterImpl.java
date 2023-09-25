@@ -22,10 +22,10 @@ class RateLimiterImpl implements RateLimiter {
         this.timer = timer;
     }
 
-    boolean record(MuRequest request) {
+    void record(MuRequest request) throws RateLimitedException {
         RateLimit rateLimit = selector.select(request);
         if (rateLimit == null || rateLimit.bucket == null) {
-            return true;
+            return;
         }
         String name = rateLimit.bucket;
         AtomicLong counter = map.computeIfAbsent(name, s -> new AtomicLong(0));
@@ -34,7 +34,10 @@ class RateLimiterImpl implements RateLimiter {
         if (curVal >= rateLimit.allowed) {
             log.info("Rate limit for " + name + " exceeded. Action: " + rateLimit.action);
             if (rateLimit.action == RateLimitRejectionAction.SEND_429) {
-                return false;
+                long retryAfter = rateLimit.perUnit.toSeconds(rateLimit.per);
+                throw new RateLimitedException(RateLimitRejectionAction.SEND_429, retryAfter);
+            } else if (rateLimit.action == RateLimitRejectionAction.CLOSE_CONNECTION) {
+                throw new RateLimitedException(RateLimitRejectionAction.CLOSE_CONNECTION, 0);
             }
         } else {
             counter.incrementAndGet();
@@ -45,7 +48,6 @@ class RateLimiterImpl implements RateLimiter {
                 }
             }, rateLimit.per, rateLimit.perUnit);
         }
-        return true;
     }
 
     @Override
@@ -67,5 +69,15 @@ class RateLimiterImpl implements RateLimiter {
         return "RateLimiterImpl{" +
             "buckets=" + map +
             '}';
+    }
+}
+
+class RateLimitedException extends Exception {
+    final RateLimitRejectionAction action;
+    final long retryAfterSeconds;
+
+    RateLimitedException(RateLimitRejectionAction action, long retryAfterSeconds) {
+        this.action = action;
+        this.retryAfterSeconds = retryAfterSeconds;
     }
 }

@@ -563,7 +563,10 @@ public class MuServerBuilder {
      * @return The current value of this property
      */
     public List<RateLimiter> rateLimiters() {
-        return rateLimiters.stream().map(RateLimiter.class::cast).collect(Collectors.toList());
+        return rateLimiters == null ? Collections.emptyList() : rateLimiters.stream().map(RateLimiter.class::cast).collect(Collectors.toList());
+    }
+    List<RateLimiterImpl> rateLimitersCopy() {
+        return rateLimiters == null ? null : new ArrayList<>(rateLimiters);
     }
 
     /**

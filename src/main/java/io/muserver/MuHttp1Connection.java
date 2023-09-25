@@ -19,6 +19,7 @@ import java.util.Collections;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Object> {
     private static final Logger log = LoggerFactory.getLogger(MuHttp1Connection.class);
@@ -35,7 +36,8 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
     private boolean inputClosed = false;
     private boolean outputClosed = false;
     private boolean discardMode = false;
-
+    private final AtomicLong completedRequests = new AtomicLong();
+    private final AtomicLong rejectedDueToOverload = new AtomicLong();
 
     public MuHttp1Connection(ConnectionAcceptor acceptor, AsynchronousSocketChannel channel, InetSocketAddress remoteAddress, InetSocketAddress localAddress, ByteBuffer readBuffer) {
         this.acceptor = acceptor;
@@ -91,7 +93,7 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
 
     @Override
     public long completedRequests() {
-        return 0;
+        return completedRequests.get();
     }
 
     @Override
@@ -101,7 +103,7 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
 
     @Override
     public long rejectedDueToOverload() {
-        return 0;
+        return rejectedDueToOverload.get();
     }
 
     @Override
@@ -112,7 +114,7 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
 
     @Override
     public Set<MuWebSocket> activeWebsockets() {
-        return null;
+        return Collections.emptySet();
     }
 
     @Override
@@ -151,6 +153,21 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
         String relativeUri = newRequest.relativeUri();
         var headers = newRequest.headers();
         var req = new MuRequestImpl(data, newRequest.method(), relativeUri, headers, newRequest.hasBody());
+
+        try {
+            acceptor.muServer.settings.block(req);
+        } catch (RateLimitedException e) {
+            onRejectedDueToOverload(e);
+            if (e.action == RateLimitRejectionAction.CLOSE_CONNECTION) {
+                forceShutdown(e);
+            } else {
+                MuHeaders responseHeaders = MuHeaders.responseHeaders();
+                responseHeaders.set(HeaderNames.RETRY_AFTER, e.retryAfterSeconds);
+                writeSimpleResponseAsync(HttpStatusCode.TOO_MANY_REQUESTS_429, responseHeaders, "429 Too Many Requests");
+            }
+            return;
+        }
+
         var resp = new MuResponseImpl(data);
         var exchange = new MuExchange(data, req, resp);
         this.exchange = exchange;
@@ -172,6 +189,11 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
         } else {
             handleIt(req, resp, exchange);
         }
+    }
+
+    private void onRejectedDueToOverload(RateLimitedException e) {
+        rejectedDueToOverload.incrementAndGet();
+        acceptor.onRejectedDueToOverload(e);
     }
 
     private void writeInvalidRequest(InvalidRequestException e) {
@@ -401,6 +423,7 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
 
     public void onExchangeComplete(MuExchange muExchange) {
         this.exchange = null;
+        completedRequests.incrementAndGet();
         acceptor.onExchangeComplete(muExchange);
         if (muExchange.state == HttpExchangeState.ERRORED) {
             forceShutdown(null); // TODO put an exception?

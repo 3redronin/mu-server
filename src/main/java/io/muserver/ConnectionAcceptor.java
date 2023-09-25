@@ -163,4 +163,8 @@ class ConnectionAcceptor implements CompletionHandler<AsynchronousSocketChannel,
             connection.forceShutdown(null);
         }
     }
+
+    public void onRejectedDueToOverload(RateLimitedException e) {
+        muServer.onRejectedDueToOverload(e);
+    }
 }

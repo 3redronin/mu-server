@@ -12,5 +12,10 @@ public enum RateLimitRejectionAction {
     /**
      * An HTTP 429 response is sent to the client
      */
-    SEND_429
+    SEND_429,
+
+    /**
+     * The client connection is closed immediately
+     */
+    CLOSE_CONNECTION
 }
