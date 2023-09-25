@@ -293,7 +293,7 @@ public class Mutils {
         return pathAndQuery;
     }
 
-    private static final ByteBuffer EMPTY_BUFFER = ByteBuffer.allocate(0);
+    static final ByteBuffer EMPTY_BUFFER = ByteBuffer.allocate(0);
 }
 
 class NotImplementedException extends RuntimeException {

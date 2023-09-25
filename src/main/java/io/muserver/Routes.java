@@ -27,7 +27,7 @@ public class Routes {
         return new MuHandler() {
             @Override
             public boolean handle(MuRequest request, MuResponse response) throws Exception {
-                boolean methodMatches = method == null || method.equals(request.method());
+                boolean methodMatches = method == null || method.equals(request.method()) || (request.method() == Method.HEAD && method == Method.GET);
                 if (methodMatches) {
                     PathMatch matcher = uriPattern.matcher(request.relativePath());
                     if (matcher.fullyMatches()) {

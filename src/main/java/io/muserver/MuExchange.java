@@ -527,14 +527,16 @@ class MuExchange implements ResponseInfo, AsyncHandle {
             toSend[++bi] = ByteBuffer.wrap(resp.statusCode().http11ResponseLine());
             toSend[++bi] = resp.startStreaming();
         }
+
+        boolean isHead = request.method() == Method.HEAD;
         if (chunked) {
-            toSend[++bi] = StandardCharsets.US_ASCII.encode(Integer.toHexString(data.remaining()) + "\r\n");
+            toSend[++bi] = isHead ? Mutils.EMPTY_BUFFER : StandardCharsets.US_ASCII.encode(Integer.toHexString(data.remaining()) + "\r\n");
         }
         if (data != null) {
-            toSend[++bi] = data;
+            toSend[++bi] = isHead ? Mutils.EMPTY_BUFFER : data;
         }
         if (chunked) {
-            toSend[++bi] = StandardCharsets.US_ASCII.encode("\r\n");
+            toSend[++bi] = isHead ? Mutils.EMPTY_BUFFER : StandardCharsets.US_ASCII.encode("\r\n");
         }
         scatteringWrite(toSend, callback);
 

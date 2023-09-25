@@ -46,4 +46,10 @@ public enum Method {
         return Method.valueOf(method.name());
     }
 
+    /**
+     * @return <code>true</code> if the method is {@link #GET} or {@link #HEAD}
+     */
+    public boolean getOrHead() {
+        return this == GET || this == HEAD;
+    }
 }
