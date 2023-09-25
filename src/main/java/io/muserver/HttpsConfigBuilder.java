@@ -285,11 +285,43 @@ public class HttpsConfigBuilder {
 
             KeyManagerFactory kmf = keyManagerFactory;
             if (kmf == null) {
-                kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-                kmf.init(ks, keyPasswordToUse);
-            }
 
-            serverContext.init(kmf.getKeyManagers(), null, null);
+                String defaultAliasToUse = this.defaultAlias;
+                Map<String, String> sanToAliasMap = new HashMap<>();
+                try {
+                    if (defaultAliasToUse == null) {
+                        Enumeration<String> aliases = ks.aliases();
+                        if (aliases.hasMoreElements()) {
+                            defaultAliasToUse = aliases.nextElement();
+                        }
+                    }
+                    kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+                    kmf.init(ks, keyPasswordToUse);
+                    sanToAliasMap.putAll(buildSanToAliasMap(ks));
+                    log.debug("keystore san to alias mapping: {}", sanToAliasMap);
+                } finally {
+                    try {
+                        keystoreStream.close();
+                    } catch (IOException e) {
+                        log.info("Error while closing keystore stream: " + e.getMessage());
+                    }
+                }
+
+                X509ExtendedKeyManager x509KeyManager = null;
+                for (KeyManager keyManager : kmf.getKeyManagers()) {
+                    if (keyManager instanceof X509ExtendedKeyManager) {
+                        x509KeyManager = (X509ExtendedKeyManager) keyManager;
+                    }
+                }
+                if (x509KeyManager == null)
+                    throw new Exception("KeyManagerFactory did not create an X509ExtendedKeyManager");
+                SniKeyManager sniKeyManager = new SniKeyManager(x509KeyManager, defaultAliasToUse, sanToAliasMap);
+                serverContext.init(new KeyManager[]{sniKeyManager}, null, null);
+
+
+            } else {
+                serverContext.init(kmf.getKeyManagers(), null, null);
+            }
             return serverContext;
         } catch (Exception e) {
             throw new MuException("Error while setting up SSLContext", e);
