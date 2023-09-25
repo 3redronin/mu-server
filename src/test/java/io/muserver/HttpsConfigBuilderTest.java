@@ -1,7 +1,7 @@
 package io.muserver;
 
 import okhttp3.Response;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 
@@ -20,6 +20,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static scaffolding.ClientUtils.*;
 
 public class HttpsConfigBuilderTest {
@@ -29,13 +30,14 @@ public class HttpsConfigBuilderTest {
         HttpsConfigBuilder.unsignedLocalhost();
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void throwsIfTheClasspathIsInvalid() {
-        HttpsConfigBuilder.httpsConfig()
+        var builder = HttpsConfigBuilder.httpsConfig()
             .withKeystoreType("JKS")
             .withKeystorePassword("Very5ecure")
-            .withKeyPassword("ActuallyNotSecure")
-            .withKeystoreFromClasspath("/io/muserver/resources/wrong.jks");
+            .withKeyPassword("ActuallyNotSecure");
+        assertThrows(IllegalArgumentException.class, () ->
+            builder.withKeystoreFromClasspath("/io/muserver/resources/wrong.jks"));
     }
 
     @Test
@@ -165,29 +167,33 @@ public class HttpsConfigBuilderTest {
         }
     }
 
-    @Test(expected = MuException.class)
+    @Test
     public void throwsIfThePasswordIsWrong() {
-        ServerUtils.httpsServerForTest()
-            .withHttpsConfig(HttpsConfigBuilder.httpsConfig()
-                .withKeystoreType("PKCS12")
-                .withKeystorePassword("Very5ecured")
-                .withKeyPassword("Very5ecured")
-                .withKeystore(new File("src/main/resources/io/muserver/resources/localhost.p12")))
-            .start();
+        assertThrows(MuException.class, () ->
+            ServerUtils.httpsServerForTest()
+                .withHttpsConfig(HttpsConfigBuilder.httpsConfig()
+                    .withKeystoreType("PKCS12")
+                    .withKeystorePassword("Very5ecured")
+                    .withKeyPassword("Very5ecured")
+                    .withKeystore(new File("src/main/resources/io/muserver/resources/localhost.p12")))
+                .start());
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void throwsIfTheFileDoesNotExist() {
-        HttpsConfigBuilder.httpsConfig()
+        HttpsConfigBuilder builder = HttpsConfigBuilder.httpsConfig()
             .withKeystoreType("JKS")
             .withKeystorePassword("Very5ecure")
-            .withKeyPassword("Very5ecure")
-            .withKeystore(new File("src/test/blah"));
+            .withKeyPassword("Very5ecure");
+        assertThrows(IllegalArgumentException.class, () ->
+            builder.withKeystore(new File("src/test/blah")));
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void throwsIfClasspathIsIncorrect() {
-        HttpsConfigBuilder.httpsConfig()
-            .withKeystoreFromClasspath("/some/path/that/is/no/there.jks");
+        assertThrows(IllegalArgumentException.class, () ->
+            HttpsConfigBuilder.httpsConfig()
+                .withKeystoreFromClasspath("/some/path/that/is/no/there.jks"));
     }
+
 }
