@@ -109,7 +109,7 @@ class RequestParser {
 
             headerSize++;
             if (headerSize > maxHeaderSize) {
-                throw new InvalidRequestException(HttpStatusCode.REQUEST_HEADER_FIELDS_TOO_LARGE_431, "Request Header Fields Too Large", "Header length (including all white space) reached " + headerSize + " bytes.");
+                throw new InvalidRequestException(HttpStatusCode.REQUEST_HEADER_FIELDS_TOO_LARGE_431, null, "Header length (including all white space) reached " + headerSize + " bytes.");
             }
 
             if (c == '\r') {
@@ -149,7 +149,7 @@ class RequestParser {
                 } else {
                     append(c);
                     if (cur.length() > maxUrlLength) {
-                        throw new InvalidRequestException(HttpStatusCode.URI_TOO_LONG_414, "URI Too Long", "The URL " + cur + " exceeded the maximum URL length allowed, which is " + maxUrlLength);
+                        throw new InvalidRequestException(HttpStatusCode.URI_TOO_LONG_414, "Please use a shorter request URL", "The URL " + cur + " exceeded the maximum URL length allowed, which is " + maxUrlLength);
                     }
                 }
             } else if (state == State.RL_PROTO) {

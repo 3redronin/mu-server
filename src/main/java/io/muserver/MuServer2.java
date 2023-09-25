@@ -42,14 +42,12 @@ class MuServer2 implements MuServer {
     static MuServer start(MuServerBuilder builder) throws IOException {
 
         boolean hasHttps = builder.httpsPort() >= 0;
+        boolean hasHttp = builder.httpPort() >= 0;
 
-        if (!hasHttps && builder.httpPort() < 0) {
+        if (!hasHttps && !hasHttp) {
             throw new IllegalArgumentException("No ports were configured. Please call MuServerBuilder.withHttpPort(int) or MuServerBuilder.withHttpsPort(int)");
         }
 
-        // connect server socket channel and register it in the selector
-        var bindPort = hasHttps ? builder.httpsPort() : builder.httpPort();
-        InetSocketAddress endpoint = builder.interfaceHost() == null ? new InetSocketAddress(bindPort) : new InetSocketAddress(builder.interfaceHost(), bindPort);
 
         Path tempDir = builder.tempDirectory();
         if (tempDir == null) {
@@ -58,9 +56,15 @@ class MuServer2 implements MuServer {
         var settings = new MuServerSettings(builder.gzipEnabled(), builder.minimumGzipSize(), builder.mimeTypesToGzip(), builder.maxRequestSize(), builder.maxHeadersSize(), builder.maxUrlSize(), builder.idleTimeoutMills(), builder.requestReadTimeoutMillis(), builder.responseWriteTimeoutMillis(), builder.requestBodyTooLargeAction(), tempDir, builder.autoHandleExpectHeaders());
 
         MuServer2 server = new MuServer2(builder.handlers(), builder.unhandledExceptionHandler(), settings, builder.responseCompleteListeners());
-        if (!hasHttps) {
+
+
+        if (hasHttp) {
+            InetSocketAddress endpoint = bindEndpoint(builder, builder.httpPort());
             server.addAcceptor(createAcceptor(server, null, endpoint));
-        } else {
+        }
+
+        if (hasHttps) {
+            InetSocketAddress endpoint = bindEndpoint(builder, builder.httpsPort());
             // initialize the SSLContext, a configuration holder, reusable object
             HttpsConfigBuilder httpsConfigBuilder = builder.httpsConfigBuilder();
             if (httpsConfigBuilder == null) {
@@ -72,6 +76,10 @@ class MuServer2 implements MuServer {
         }
 
         return server;
+    }
+
+    private static InetSocketAddress bindEndpoint(MuServerBuilder builder, int bindPort) {
+        return builder.interfaceHost() == null ? new InetSocketAddress(bindPort) : new InetSocketAddress(builder.interfaceHost(), bindPort);
     }
 
     private static ConnectionAcceptor createAcceptor(MuServer2 muServer, HttpsConfig httpsConfig, InetSocketAddress bindAddress) throws IOException {

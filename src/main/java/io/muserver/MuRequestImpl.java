@@ -242,11 +242,6 @@ public class MuRequestImpl implements MuRequest {
     }
 
     @Override
-    public String clientIP() {
-        return null;
-    }
-
-    @Override
     public MuServer server() {
         return data.acceptor().muServer;
     }

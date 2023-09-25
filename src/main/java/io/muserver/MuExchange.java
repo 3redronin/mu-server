@@ -496,7 +496,7 @@ class MuExchange implements ResponseInfo, AsyncHandle {
             return;
         }
 
-        if (data != null && !data.hasRemaining()) {
+        if (data != null && !data.hasRemaining() && resp.responseState() != ResponseState.NOTHING) {
             try {
                 callback.onComplete(null); // run async?
             } catch (Exception e) {

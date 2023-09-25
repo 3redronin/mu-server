@@ -181,7 +181,7 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
         var responseHeaders = MuHeaders.responseHeaders();
         responseHeaders.set(HeaderNames.CONTENT_TYPE, ContentTypes.TEXT_PLAIN_UTF8);
         responseHeaders.set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
-        writeSimpleResponseAsync(e.status, responseHeaders, e.status + " - " + e.clientMessage);
+        writeSimpleResponseAsync(e.status, responseHeaders, e.responseBody());
     }
     private void writeSimpleResponseAsync(HttpStatusCode status, MuHeaders responseHeaders, String bodyText) {
         var responseLine = ByteBuffer.wrap(status.http11ResponseLine());

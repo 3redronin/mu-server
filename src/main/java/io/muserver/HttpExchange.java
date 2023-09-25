@@ -351,13 +351,13 @@ class HttpExchange implements ResponseInfo, Exchange {
             Throwable cause = nettyRequest.decoderResult().cause();
             if (cause instanceof TooLongFrameException) {
                 if (cause.getMessage().contains("header is larger")) {
-                    throw new  InvalidRequestException(HttpStatusCode.REQUEST_HEADER_FIELDS_TOO_LARGE_431, "431 Request Header Fields Too Large", "Request Header Fields Too Large");
+                    throw new InvalidRequestException(HttpStatusCode.REQUEST_HEADER_FIELDS_TOO_LARGE_431, "431 Request Header Fields Too Large", "Request Header Fields Too Large");
                 } else if (cause.getMessage().contains("line is larger")) {
-                    throw new  InvalidRequestException(HttpStatusCode.URI_TOO_LONG_414, "414 Request-URI Too Long", "Request-URI Too Long");
+                    throw new InvalidRequestException(HttpStatusCode.URI_TOO_LONG_414, "414 Request-URI Too Long", "Request-URI Too Long");
                 }
             }
             if (log.isDebugEnabled()) log.debug("Invalid http request received", cause);
-            throw new  InvalidRequestException(HttpStatusCode.INTERNAL_SERVER_ERROR_500, "Invalid HTTP request received", "Server Error");
+            throw new InvalidRequestException(HttpStatusCode.INTERNAL_SERVER_ERROR_500, "Invalid HTTP request received", "Server Error");
         }
 
         String contentLenDecl = nettyRequest.headers().get("Content-Length");

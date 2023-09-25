@@ -11,4 +11,12 @@ class InvalidRequestException extends Exception {
         this.clientMessage = clientMessage;
         this.privateDetails = privateDetails;
     }
+
+    String responseBody() {
+        if (clientMessage != null) {
+            return status + " - " + clientMessage;
+        } else {
+            return status.toString();
+        }
+    }
 }

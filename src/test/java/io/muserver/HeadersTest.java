@@ -3,8 +3,8 @@ package io.muserver;
 import okhttp3.Request;
 import okhttp3.Response;
 import org.hamcrest.Matchers;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.ClientUtils;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
@@ -23,14 +23,15 @@ import static io.muserver.MuServerBuilder.httpServer;
 import static org.hamcrest.CoreMatchers.*;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.IsEqual.equalTo;
-import static scaffolding.ClientUtils.*;
+import static scaffolding.ClientUtils.call;
+import static scaffolding.ClientUtils.request;
 import static scaffolding.StringUtils.randomAsciiStringOfLength;
 
 public class HeadersTest {
 
     private MuServer server;
 
-    @After
+    @AfterEach
     public void stopIt() {
         MuAssert.stopAndCheck(server);
     }
@@ -122,7 +123,7 @@ public class HeadersTest {
         try (Response resp = call(request(server.uri().resolve("/this-is-much-longer-than-that-value-allowed-by-the-config-above-i-think")))) {
             assertThat(resp.code(), is(414));
             assertThat(resp.header("Content-Type"), is("text/plain;charset=utf-8"));
-            assertThat(resp.body().string(), is("414 Request-URI Too Long"));
+            assertThat(resp.body().string(), is("414 URI Too Long - Please use a shorter request URL"));
         }
         assertThat(handlerHit.get(), is(false));
     }
@@ -138,11 +139,9 @@ public class HeadersTest {
 
         try (Response resp = call(xSomethingHeader(randomAsciiStringOfLength(1025)))) {
             assertThat(resp.code(), is(431));
-            if (!isHttp2(resp)) { // for HTTP2, netty sends a 431 with no body
-                assertThat(resp.body().string(), is("431 Request Header Fields Too Large"));
-                assertThat(resp.header("X-Something"), is(nullValue()));
-                assertThat(resp.header("Content-Type"), is("text/plain;charset=utf-8"));
-            }
+            assertThat(resp.body().string(), is("431 Request Header Fields Too Large"));
+            assertThat(resp.header("X-Something"), is(nullValue()));
+            assertThat(resp.header("Content-Type"), is("text/plain;charset=utf-8"));
         }
     }
 
@@ -171,19 +170,21 @@ public class HeadersTest {
     public void ifXForwardedHeadersAreSpecifiedThenRequestUriUsesThem() {
         URI[] actual = new URI[2];
         server = ServerUtils.httpsServerForTest()
-            .withHttpPort(12752)
+            .withHttpPort(0)
             .addHandler((request, response) -> {
                 actual[0] = request.uri();
                 actual[1] = request.serverURI();
                 return true;
             }).start();
 
+        var httpPort = server.httpUri().getPort();
+
         call(request(server.httpUri().resolve("/blah?query=value"))
             .header("X-Forwarded-Proto", "https")
             .header("X-Forwarded-Host", "www.example.org")
             .header("X-Forwarded-Port", "443")
         ).close();
-        assertThat(actual[1].toString(), equalTo("http://localhost:12752/blah?query=value"));
+        assertThat(actual[1].toString(), equalTo("http://localhost:" + httpPort + "/blah?query=value"));
         assertThat(actual[0].toString(), equalTo("https://www.example.org/blah?query=value"));
     }
 
@@ -192,7 +193,7 @@ public class HeadersTest {
         AtomicReference<List<ForwardedHeader>> forwardedHeaders = new AtomicReference<>();
         URI[] actual = new URI[2];
         server = ServerUtils.httpsServerForTest()
-            .withHttpPort(12753)
+            .withHttpPort(0)
             .addHandler((request, response) -> {
                 actual[0] = request.uri();
                 actual[1] = request.serverURI();
@@ -206,7 +207,7 @@ public class HeadersTest {
             .header("X-Forwarded-Host", "www.example.org:12000, second.example.org")
             .addHeader("X-Forwarded-Host", "localhost:8192")
         ).close();
-        assertThat(actual[1].toString(), equalTo("http://localhost:12753/blah?query=value"));
+        assertThat(actual[1].toString(), equalTo("http://localhost:" + server.httpUri().getPort() + "/blah?query=value"));
         assertThat(actual[0].toString(), equalTo("https://www.example.org:12000/blah?query=value"));
         assertThat(forwardedHeaders.get(), Matchers.contains(
             ForwardedHeader.fromString("host=\"www.example.org:12000\";proto=https").get(0),

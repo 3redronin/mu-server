@@ -224,7 +224,15 @@ public interface MuRequest {
      * <code>connection().remoteAddress().getHostString()</code>).</p>
      * @return A string containing an IP address.
      */
-    String clientIP();
+    default String clientIP() {
+        List<ForwardedHeader> forwarded = headers().forwarded();
+        for (ForwardedHeader forwardedHeader : forwarded) {
+            if (forwardedHeader.forValue() != null) {
+                return forwardedHeader.forValue();
+            }
+        }
+        return this.connection().remoteAddress().getHostString();
+    }
 
     /**
      * @return Returns a reference to the mu server instance.
