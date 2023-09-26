@@ -39,16 +39,17 @@ public class MuServer2Test {
     @Test
     public void canStartAndStopHttp() throws Exception {
         var s = "Hello ".repeat(1000);
+        int port = 0;
         for (int i = 0; i < 2; i++) {
             int finalI = i;
             MuServerBuilder muServerBuilder = MuServerBuilder.muServer()
-                .withHttpPort(10000) // todo reuse same port and make this work
+                .withHttpPort(port)
                 .addHandler(Method.GET, "/blah", (request, response, pathParams) -> {
                     response.write("Hello " + s + finalI);
                 });
-            // todo reuse same port and make this work
             var server = muServerBuilder.start();
             log.info("Started at " + server.uri());
+            port = server.uri().getPort(); // so next time we reuse the same port
 
             try (var resp = call(request(server.uri().resolve("/blah")))) {
                 assertThat(resp.code(), equalTo(200));

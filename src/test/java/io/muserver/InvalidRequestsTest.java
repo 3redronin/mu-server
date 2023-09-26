@@ -57,7 +57,7 @@ public class InvalidRequestsTest {
         server = serverBuilder(type.split("_")[0])
             .withMaxUrlSize(30)
             .start();
-        String expectedBody = "414 URI Too Long - URI Too Long";
+        String expectedBody = "414 URI Too Long - Please use a shorter request URL";
         try (var client = newRequest(method, "/0123456789012345678901234567890")
             .writeHeader("content-length", method == Method.POST ? "5" : "0")
             .flushHeaders()) {

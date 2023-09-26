@@ -1,16 +1,18 @@
 package io.muserver;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.time.format.DateTimeParseException;
 import java.util.Date;
 
+import static io.muserver.Mutils.fromHttpDate;
 import static io.muserver.Mutils.join;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class MutilsTest {
 
@@ -53,18 +55,18 @@ public class MutilsTest {
 
     @Test
     public void parsesDatesCorrectly() {
-        assertThat(Mutils.fromHttpDate("Sat, 28 Jul 2018 13:50:55 GMT"), equalTo(new Date(1532785855000L)));
-        assertThat(Mutils.fromHttpDate("Fri, 2 Aug 2019 23:17:35 GMT"), equalTo(new Date(1564787855000L)));
+        assertThat(fromHttpDate("Sat, 28 Jul 2018 13:50:55 GMT"), equalTo(new Date(1532785855000L)));
+        assertThat(fromHttpDate("Fri, 2 Aug 2019 23:17:35 GMT"), equalTo(new Date(1564787855000L)));
     }
 
-    @Test(expected = DateTimeParseException.class)
+    @Test
     public void throwsIfBadFormat() {
-        Mutils.fromHttpDate("28Jul 2018 13:50:55");
+        assertThrows(DateTimeParseException.class, () -> fromHttpDate("28Jul 2018 13:50:55"));
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void toByteBufferThrowsIfTextNull() {
-        Mutils.toByteBuffer(null);
+        assertThrows(IllegalArgumentException.class, () -> Mutils.toByteBuffer(null));
     }
 
     @Test

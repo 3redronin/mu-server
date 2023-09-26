@@ -7,11 +7,11 @@ import org.junit.jupiter.params.provider.ValueSource;
 import scaffolding.Http1Client;
 import scaffolding.MuAssert;
 
-import static io.muserver.MuServerBuilder.muServer;
 import static java.util.Collections.emptyList;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.equalTo;
+import static scaffolding.ServerUtils.testServer;
 
 public class InformationalResponseTest {
 
@@ -20,7 +20,7 @@ public class InformationalResponseTest {
     @ParameterizedTest
     @ValueSource(strings = { "http", "https" })
     public void ifNoHeadersSetThenJustResponseLineSentAsInformational(String type) throws Exception {
-        server = serverBuilder(type)
+        server = testServer(type)
             .addHandler((request, response) -> {
                 response.sendInformationalResponse(HttpStatusCode.PROCESSING_102);
                 response.headers().set("something", "hi");
@@ -40,7 +40,8 @@ public class InformationalResponseTest {
             assertThat(headers.getAll("something"), contains("hi"));
             assertThat(headers.getAll("content-length"), contains("5"));
             assertThat(headers.getAll("content-type"), contains("text/plain;charset=utf-8"));
-            assertThat(headers.toString(emptyList()), headers.size(), equalTo(4));
+            assertThat(headers.getAll("vary"), contains("accept-encoding"));
+            assertThat(headers.toString(emptyList()), headers.size(), equalTo(5));
             assertThat(client.readBody(headers), equalTo("Hello"));
         }
     }
@@ -49,7 +50,7 @@ public class InformationalResponseTest {
     @ParameterizedTest
     @ValueSource(strings = { "http", "https" })
     public void headersSetBeforeSendingAreReturnedInTheInformationalResponsePortion(String type) throws Exception {
-        server = serverBuilder(type)
+        server = testServer(type)
             .addHandler((request, response) -> {
                 response.headers().set("link", "</styles.css>; rel=preload");
                 response.sendInformationalResponse(HttpStatusCode.EARLY_HINTS_103);
@@ -72,16 +73,12 @@ public class InformationalResponseTest {
             assertThat(headers.getAll("something"), contains("hi"));
             assertThat(headers.getAll("content-length"), contains("5"));
             assertThat(headers.getAll("content-type"), contains("text/html;charset=utf-8"));
-            assertThat(headers.toString(emptyList()), headers.size(), equalTo(4));
+            assertThat(headers.getAll("vary"), contains("accept-encoding"));
+            assertThat(headers.toString(emptyList()), headers.size(), equalTo(5));
             assertThat(client.readBody(headers), equalTo("Hello"));
         }
     }
 
-    private MuServerBuilder serverBuilder(String type) {
-        return muServer()
-            .withHttpPort(type.equals("http") ? 0 : -1)
-            .withHttpsPort(type.equals("https") ? 0 : -1);
-    }
 
     @AfterEach
     public void stopIt() {
