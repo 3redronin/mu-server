@@ -337,7 +337,7 @@ class RequestParser {
                             }
                         }
                     } else {
-                        throw new InvalidRequestException(BAD_REQUEST_400, "Invalid character in chunk size declaration: " + c, "Why");
+                        throw new InvalidRequestException(BAD_REQUEST_400, "Invalid HTTP request body format", "Invalid character in chunk size declaration: " + c);
                     }
                 } else if (chunkState == ChunkState.EXTENSION) {
                     if (c == '\n') {
@@ -352,7 +352,7 @@ class RequestParser {
                     if (c == '\n') {
                         chunkState = ChunkState.SIZE;
                     } else {
-                        throw new InvalidRequestException(BAD_REQUEST_400, "Extra data after chunk was supposed to end: " + c, "Why2");
+                        throw new InvalidRequestException(BAD_REQUEST_400, "Invalid HTTP request body format", "Extra data after chunk was supposed to end: " + c);
                     }
                 } else {
                     throw new IllegalStateException("Unexpected state " + state);

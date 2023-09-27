@@ -300,8 +300,6 @@ public class MuRequestImpl implements MuRequest {
     void onRequestBodyReceived() {
         if (state == RequestState.HEADERS_RECEIVED) {
             state = RequestState.RECEIVING_BODY;
-        } else if (state != RequestState.RECEIVING_BODY) {
-            throw new IllegalStateException("Cannot receive body with state " + state);
         }
     }
 

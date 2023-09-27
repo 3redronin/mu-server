@@ -10,14 +10,12 @@ import javax.ws.rs.core.Response;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.CompletionHandler;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.zip.GZIPOutputStream;
 
 import static io.muserver.Mutils.htmlEncode;
 
@@ -114,12 +112,13 @@ class MuExchange implements ResponseInfo, AsyncHandle {
                                     bodyListener.onComplete();
                                     // todo not read here?
                                 } else {
-                                    request.onRequestBodyReceived();
                                     // todo lots of small message chunks can lead to huge stacks
+                                    request.onRequestBodyReceived();
                                     data.connection.readyToRead(true);
                                 }
                             } else {
                                 // TODO also close things here?
+                                request.onError();
                                 bodyListener.onError(error);
                             }
                         });
@@ -686,111 +685,3 @@ class MuExchangeData {
 
 }
 
-class RequestBodyListenerToInputStreamAdapter extends InputStream implements RequestBodyListener {
-
-    ByteBuffer curBuffer;
-    DoneCallback doneCallback;
-    private boolean eos = false;
-    private IOException error;
-    private final Object lock = new Object();
-
-    @Override
-    public void onDataReceived(ByteBuffer buffer, DoneCallback doneCallback) throws Exception {
-        synchronized (lock) {
-            this.curBuffer = buffer;
-            this.doneCallback = doneCallback;
-            lock.notify();
-        }
-    }
-
-    @Override
-    public void onComplete() {
-        synchronized (lock) {
-            eos = true;
-            lock.notify();
-        }
-    }
-
-    @Override
-    public void onError(Throwable t) {
-        synchronized (lock) {
-            if (t instanceof IOException ioe) {
-                this.error = ioe;
-            } else if (t instanceof UncheckedIOException uioe) {
-                this.error = uioe.getCause();
-            } else {
-                this.error = new IOException("Error reading data", t);
-            } // todo: what about interrupted ones? and timeouts?
-            lock.notify();
-        }
-    }
-
-    @Override
-    public int read() throws IOException {
-        if (eos) return -1;
-        byte[] tmp = new byte[1];
-        return read(tmp, 0, 1);
-    }
-
-    @Override
-    public int read(byte[] b, int off, int len) throws IOException {
-        synchronized (lock) {
-            if (eos) return -1;
-            if (error != null) throw error;
-            if (curBuffer != null && curBuffer.hasRemaining()) {
-                int num = Math.min(len, curBuffer.remaining());
-                curBuffer.get(b, off, num);
-                return num;
-            } else {
-                try {
-                    if (doneCallback != null) {
-                        doneCallback.onComplete(null);
-                    }
-                    if (!eos && (curBuffer == null || !curBuffer.hasRemaining())) {
-                        lock.wait(); // no need for timeout as the request body listener will time out and notify
-                    }
-                } catch (Exception e) {
-                    onError(e);
-                    throw e instanceof IOException ? (IOException) e : new IOException("Error waiting for data", e);
-                }
-            }
-        }
-        return read(b, off, len);
-    }
-}
-
-class DiscardingRequestBodyListener implements RequestBodyListener {
-    private DiscardingRequestBodyListener() {
-    }
-
-    static RequestBodyListener INSTANCE = new DiscardingRequestBodyListener();
-
-    @Override
-    public void onDataReceived(ByteBuffer buffer, DoneCallback doneCallback) throws Exception {
-        doneCallback.onComplete(null);
-    }
-
-    @Override
-    public void onComplete() {
-    }
-
-    @Override
-    public void onError(Throwable t) {
-    }
-}
-
-class MuGZIPOutputStream extends GZIPOutputStream {
-    private final ByteArrayOutputStream baos;
-    MuGZIPOutputStream(ByteArrayOutputStream baos) throws IOException {
-        super(baos, true);
-        this.baos = baos;
-    }
-    byte[] getAndClear() {
-        byte[] bytes = baos.toByteArray();
-        baos.reset();
-        return bytes;
-    }
-    int written() {
-        return baos.size();
-    }
-}

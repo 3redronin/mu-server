@@ -7,8 +7,9 @@ import okhttp3.Response;
 import okio.BufferedSink;
 import org.eclipse.jetty.client.api.Result;
 import org.eclipse.jetty.client.util.InputStreamContentProvider;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 import scaffolding.SlowBodySender;
@@ -80,7 +81,8 @@ public class RequestBodyReaderInputStreamAdapterTest {
         }
     }
 
-    @Test(timeout = 30000)
+    @Test
+    @Timeout(30)
     public void hugeBodiesCanBeStreamedWithJetty() throws Exception {
 
         long loops = 1000;
@@ -189,12 +191,13 @@ public class RequestBodyReaderInputStreamAdapterTest {
     }
 
     @Test
-    public void closingTheStreamEarlyIsFine() throws Exception {
+    public void closingTheStreamEarlyKillsTheConnection() throws Exception {
         byte[] chunkPayload = StringUtils.randomBytes(2);
         server = ServerUtils.httpsServerForTest()
             .addHandler((request, response) -> {
                 try (InputStream is = request.inputStream().orElseThrow(() -> new MuException("No input stream"))) {
-                    response.sendChunk("The first letter is " + ((char) is.read()));
+                    char c = (char) is.read();
+                    response.sendChunk("The first letter is " + c);
                 }
                 return true;
             })
@@ -217,7 +220,7 @@ public class RequestBodyReaderInputStreamAdapterTest {
             }
         }))) {
             assertThat(resp.body().string(), equalTo("The first letter is " + ((char)chunkPayload[0])));
-            assertThat(resp.code(), equalTo(200)); // server error or closed connection is fine
+            assertThat(resp.code(), equalTo(200));
         }
     }
 
@@ -226,7 +229,8 @@ public class RequestBodyReaderInputStreamAdapterTest {
         server = ServerUtils.httpsServerForTest()
             .addHandler((request, response) -> {
                 try (InputStream is = request.inputStream().orElseThrow(() -> new MuException("No input stream"))) {
-                    response.sendChunk("read " + ((char) is.read()) + " / available " + is.available() + " / skip " + is.skip(6) + " / available " + is.available() + " / read " + ((char) is.read()) + " / available " + is.available() + "\n");
+                    char firstChar = (char) is.read();
+                    response.sendChunk("read " + firstChar + " / available " + is.available() + " / skip " + is.skip(6) + " / available " + is.available() + " / read " + ((char) is.read()) + " / available " + is.available() + "\n");
                     while (is.read() > -1) {
                     }
                 }
@@ -287,7 +291,7 @@ public class RequestBodyReaderInputStreamAdapterTest {
                         while (is.read() > -1) {
                         }
                     } catch (Throwable e) {
-                        exception.set(e);
+                        exception.set(e.getCause());
                         throw e;
                     }
                 }
@@ -311,7 +315,7 @@ public class RequestBodyReaderInputStreamAdapterTest {
         assertThat(((ClientErrorException) exception.get()).getResponse().getStatus(), equalTo(413));
     }
 
-    @After
+    @AfterEach
     public void destroy() throws Exception {
         MuAssert.stopAndCheck(server);
     }
