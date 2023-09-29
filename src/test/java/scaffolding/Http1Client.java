@@ -95,6 +95,7 @@ public class Http1Client implements AutoCloseable {
         return inputStream;
     }
 
+
     public void close() {
         try {
             socket.close();

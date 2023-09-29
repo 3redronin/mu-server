@@ -2,10 +2,14 @@ package io.muserver;
 
 import okhttp3.MediaType;
 import okhttp3.RequestBody;
+import org.eclipse.jetty.client.api.ContentResponse;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import scaffolding.ClientUtils;
 import scaffolding.Http1Client;
 import scaffolding.MuAssert;
 import scaffolding.StringUtils;
@@ -68,11 +72,13 @@ public class MuServer2Test {
         MuServerBuilder muServerBuilder = httpsServer();
         server = muServerBuilder.start();
         SSLContext ctx = SSLContext.getInstance("TLS");
-        ctx.init(new KeyManager[0], new TrustManager[] {new X509TrustManager() {
+        ctx.init(new KeyManager[0], new TrustManager[]{new X509TrustManager() {
                 public void checkClientTrusted(X509Certificate[] x509Certificates, String s) {
                 }
+
                 public void checkServerTrusted(X509Certificate[] x509Certificates, String s) {
                 }
+
                 public X509Certificate[] getAcceptedIssuers() {
                     return null;
                 }
@@ -92,21 +98,22 @@ public class MuServer2Test {
     }
 
 
-
     @Test
     public void serverCanIntitiateShutdownOnTLS() throws Exception {
+        String hello = "hello ".repeat(1000);
         var server = httpsServer().addHandler((request, response) -> {
-            response.write("hello");
+            response.write(hello);
             return true;
         }).start();
         var client = Http1Client.connect(server)
             .writeRequestLine(Method.GET, "/")
             .flushHeaders();
         client.readLine();
-        assertThat(client.readBody(client.readHeaders()), equalTo("hello"));
-        server.stop();
-        assertEventually(server::activeConnections, empty());
+        assertThat(client.readBody(client.readHeaders()), equalTo(hello));
+        new Thread(server::stop).start();
         assertThrows(EOFException.class, client::readLine);
+        client.out().close();
+        assertEventually(server::activeConnections, empty());
     }
 
     @Test
@@ -251,26 +258,33 @@ public class MuServer2Test {
         }
     }
 
-    @Test
-    public void tls12Available() throws Exception {
+    @ParameterizedTest
+    @ValueSource(strings = { "jetty", "okhttpclient" })
+    public void tls12Available(String client) throws Exception {
         var theCipher = "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384";
         MuServerBuilder muServerBuilder = httpsServer()
             .withHttpsConfig(HttpsConfigBuilder.httpsConfig()
                 .withProtocols("TLSv1.2")
-                .withCipherFilter((supportedCiphers, defaultCiphers) -> {
-                    return List.of(theCipher);
-                })
+                .withCipherFilter((supportedCiphers, defaultCiphers) -> List.of(theCipher))
             )
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 HttpConnection con = request.connection();
                 response.write(con.isHttps() + " " + con.httpsProtocol() + " " + con.cipher());
             });
         server = muServerBuilder.start();
-        try (var resp = call(request(server.uri().resolve("/")))) {
-            assertThat(resp.code(), equalTo(200));
-            assertThat(resp.body().string(), equalTo("true TLSv1.2 " + theCipher));
+
+        if (client.equals("jetty")) {
+            ContentResponse resp = ClientUtils.jettyClient().GET(server.uri());
+            assertThat(resp.getStatus(), equalTo(200));
+            assertThat(resp.getContentAsString(), equalTo("true TLSv1.2 " + theCipher));
+        } else {
+            try (var resp = call(request(server.uri().resolve("/")))) {
+                assertThat(resp.code(), equalTo(200));
+                assertThat(resp.body().string(), equalTo("true TLSv1.2 " + theCipher));
+            }
         }
     }
+
 
     @Test
     public void canGetServerInfo() throws Exception {
@@ -307,7 +321,7 @@ public class MuServer2Test {
     @Test
     public void tls13Available() throws Exception {
         AtomicReference<String> theCipher = new AtomicReference<>();
-        MuServerBuilder muServerBuilder = httpsServer()
+        server = httpsServer()
             .withHttpsConfig(HttpsConfigBuilder.httpsConfig()
                 .withProtocols("TLSv1.2", "TLSv1.3")
                 .withCipherFilter((supportedCiphers, defaultCiphers) -> {
@@ -321,8 +335,7 @@ public class MuServer2Test {
                     HttpConnection con = request.connection();
                     response.write(con.isHttps() + " " + con.httpsProtocol() + " " + con.cipher());
                 }
-            });
-        server = muServerBuilder.start();
+            }).start();
         try (var resp = call(request(server.uri().resolve("/")))) {
             assertThat(resp.code(), equalTo(200));
             assertThat(resp.body().string(), equalTo("true TLSv1.3 " + theCipher.get()));

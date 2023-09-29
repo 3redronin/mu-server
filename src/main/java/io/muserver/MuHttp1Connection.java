@@ -387,8 +387,7 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Ob
                     @Override
                     public void completed(Void result, Void attachment) {
                         log.info("Outbound is closed and inputClosed=" + inputClosed);
-                        inputClosed = true;
-                        completeGracefulShutdownMaybe();
+                        forceShutdown(null); // not waiting for client to respond
                     }
 
                     @Override

@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLSession;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -86,7 +87,15 @@ class ConnectionAcceptor implements CompletionHandler<AsynchronousSocketChannel,
                 var tlsChannel = new MuTlsAsynchronousSocketChannel(channel, engine, appReadBuffer, netReadBuffer, appWriteBuffer, netWriterBuffer);
 
                 MuHttp1Connection connection = new MuHttp1Connection(this, tlsChannel, remoteAddress, address, appReadBuffer);
-                tlsChannel.beginHandshake(connection);
+                tlsChannel.beginHandshake(connection, error -> {
+                    if (error == null) {
+                        SSLSession session = engine.getSession();
+                        connection.handshakeComplete(session.getProtocol(), session.getCipherSuite());
+                    } else {
+                        log.error("Error while handshaking", error);
+                        connection.forceShutdown(error);
+                    }
+                });
             }
         } catch (Exception e) {
             if (channel.isOpen()) {
