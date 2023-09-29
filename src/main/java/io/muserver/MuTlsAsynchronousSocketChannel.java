@@ -80,8 +80,9 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
                 case NEED_TASK -> {
                     Runnable task;
                     while ((task = sslEngine.getDelegatedTask()) != null) {
-                        log.info("Running " + task);
+                        var start = System.currentTimeMillis();
                         task.run(); // TODO run async
+                        log.info("Ran SSL task in " + (System.currentTimeMillis() - start) + "ms");
                     }
                     handshakeStatus = sslEngine.getHandshakeStatus();
                     doHandshake(callback);
@@ -188,7 +189,11 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
     private final AtomicLong readCount = new AtomicLong();
     @Override
     public <A> void read(ByteBuffer dst, long timeout, TimeUnit unit, A attachment, CompletionHandler<Integer, ? super A> handler) {
-        netReadBuffer.clear();
+        if (handshakeStatus == SSLEngineResult.HandshakeStatus.NEED_UNWRAP) {
+            netReadBuffer.clear();
+        } else {
+            netReadBuffer.compact();
+        }
         var i = readCount.incrementAndGet();
         log.info("Read " + i);
         socketChannel.read(netReadBuffer, timeout, unit, attachment, new CompletionHandler<>() {
@@ -224,7 +229,7 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
                             handshakeStatus = unwrapResult.getHandshakeStatus();
                         } while (netReadBuffer.hasRemaining() && dst.hasRemaining() && unwrapResult.getStatus() == SSLEngineResult.Status.OK);
 
-//                        log.info("unwrap result: " + unwrapResult);
+                        log.info("unwrap result: " + unwrapResult);
 
                         // TODO handle buffer overflow if nothing was read and buffer underflow
                     } catch (SSLException e) {
@@ -282,7 +287,21 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
             return;
         }
         netWriteBuffer.flip();
-        socketChannel.write(new ByteBuffer[] { netWriteBuffer }, 0, 1, timeout, unit, attachment, handler);
+        socketChannel.write(new ByteBuffer[]{netWriteBuffer}, 0, 1, timeout, unit, attachment, new CompletionHandler<>() {
+            @Override
+            public void completed(Long result, A attachment) {
+                if (netWriteBuffer.hasRemaining()) {
+                    socketChannel.write(new ByteBuffer[] {netWriteBuffer}, 0, 1, timeout, unit, attachment, this);
+                } else{
+                    handler.completed(result, attachment);
+                }
+            }
+
+            @Override
+            public void failed(Throwable exc, A attachment) {
+                handler.failed(exc, attachment);
+            }
+        });
     }
 
     @Override

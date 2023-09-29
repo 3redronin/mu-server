@@ -99,7 +99,7 @@ public class MuServer2Test {
 
 
     @Test
-    public void serverCanIntitiateShutdownOnTLS() throws Exception {
+    public void serverCanInitiateShutdownOnTLS() throws Exception {
         String hello = "hello ".repeat(1000);
         var server = httpsServer().addHandler((request, response) -> {
             response.write(hello);
