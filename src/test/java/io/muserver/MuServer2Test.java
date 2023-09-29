@@ -2,9 +2,8 @@ package io.muserver;
 
 import okhttp3.MediaType;
 import okhttp3.RequestBody;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import scaffolding.Http1Client;
@@ -27,6 +26,7 @@ import static io.muserver.MuServerBuilder.httpsServer;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static org.junit.Assert.assertThrows;
+import static org.junit.jupiter.api.Assertions.fail;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 import static scaffolding.MuAssert.assertEventually;
@@ -57,7 +57,7 @@ public class MuServer2Test {
             }
             server.stop();
             try (var resp = call(request(server.uri().resolve("/blah")))) {
-                Assert.fail("Should not work");
+                fail("Should not work");
             } catch (Exception ex) {
             }
         }
@@ -472,7 +472,7 @@ public class MuServer2Test {
 
     }
 
-    @After
+    @AfterEach
     public void stopIt() {
         if (server != null) {
             server.stop();
