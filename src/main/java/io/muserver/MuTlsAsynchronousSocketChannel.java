@@ -33,6 +33,7 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
     private MuHttp1Connection muConnection;
     private final ConcurrentLinkedQueue<Runnable> pendingTasks = new ConcurrentLinkedQueue<>();
     private final AtomicBoolean shutdownInitiated = new AtomicBoolean(false);
+    private final long handshakeActionTimeoutMillis = 5000;
 
     public MuTlsAsynchronousSocketChannel(AsynchronousSocketChannel socketChannel, SSLEngine sslEngine, ByteBuffer appReadBuffer, ByteBuffer netReadBuffer, ByteBuffer appWriteBuffer, ByteBuffer netWriteBuffer) {
         super(socketChannel.provider());
@@ -65,6 +66,19 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
         try {
             switch (handshakeStatus) {
                 case NEED_UNWRAP -> {
+
+//                    read(appReadBuffer, handshakeActionTimeoutMillis, TimeUnit.MILLISECONDS, null, new CompletionHandler<>() {
+//                        @Override
+//                        public void completed(Integer result, Object attachment) {
+//
+//                        }
+//
+//                        @Override
+//                        public void failed(Throwable exc, Object attachment) {
+//                            abortHandshake(exc);
+//                        }
+//                    });
+
                     netReadBuffer.clear();
                     socketChannel.read(netReadBuffer, null, new CompletionHandler<Integer, Void>() {
                         @Override
@@ -236,7 +250,7 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
             @Override
             public void completed(Integer result, A attachment) {
                 if (result == -1) {
-                    log.info("TLS CLOSE_NOTIFY received");
+                    log.info("TLS CLOSE_NOTIFY received as read -1 bytes: " + sslEngine.isInboundDone() + " and handshake status is " + sslEngine.getHandshakeStatus());
                     try {
                         sslEngine.closeInbound();
                         handshakeStatus = sslEngine.getHandshakeStatus();
@@ -268,7 +282,7 @@ public class MuTlsAsynchronousSocketChannel extends AsynchronousSocketChannel {
                     }
                     if (unwrapResult.getStatus() == SSLEngineResult.Status.CLOSED) {
                         handshakeStatus = unwrapResult.getHandshakeStatus();
-                        pendingTasks.add(() -> handler.completed(-1, attachment));
+                        pendingTasks.add(() -> handler.failed(new IOException("Channel closed"), attachment));
                         doHandshake();
                     } else {
                         handler.completed(result, attachment);
