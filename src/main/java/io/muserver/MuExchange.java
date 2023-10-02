@@ -16,6 +16,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Stream;
 
 import static io.muserver.Mutils.htmlEncode;
 
@@ -544,13 +545,7 @@ class MuExchange implements ResponseInfo, AsyncHandle {
     }
 
     private void scatteringWrite(ByteBuffer[] toSend, DoneCallback callback) {
-        var sb = new StringBuilder();
-        for (ByteBuffer buffer : toSend) {
-            var dest = new byte[buffer.remaining()];
-            buffer.asReadOnlyBuffer().get(dest);
-            sb.append(new String(dest, StandardCharsets.UTF_8));
-        }
-        log.info(">>\n" + sb.toString().replace("\r", "\\r").replace("\n", "\\n\r\n"));
+        logBody(toSend);
 
         MuHttp1Connection con = this.data.connection;
         con.scatteringWrite(toSend, 0, toSend.length, null, new CompletionHandler<>() {
@@ -584,6 +579,26 @@ class MuExchange implements ResponseInfo, AsyncHandle {
                 }
             }
         });
+    }
+
+    private static void logBody(ByteBuffer[] toSend) {
+        var sb = new StringBuilder();
+        for (ByteBuffer buffer : toSend) {
+            var dest = new byte[buffer.remaining()];
+            buffer.asReadOnlyBuffer().get(dest);
+            String str = new String(dest, StandardCharsets.UTF_8);
+            if (str.chars().anyMatch(i -> i < ' ' && i != '\n' && i != '\r')) {
+                sb.setLength(0);
+                sb.append("<binary data> ").append(Stream.of(toSend).map(bb -> dest.length).count()).append(" bytes");
+                break;
+            }
+            sb.append(str);
+            if (sb.length() > 1000) {
+                sb.append(" ... ").append(Stream.of(toSend).map(bb -> dest.length).count());
+                break;
+            }
+        }
+        log.info(">>\n" + sb.toString().replace("\r", "\\r").replace("\n", "\\n\r\n"));
     }
 
     @Override
