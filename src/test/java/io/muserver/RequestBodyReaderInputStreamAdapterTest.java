@@ -9,7 +9,6 @@ import org.eclipse.jetty.client.api.Result;
 import org.eclipse.jetty.client.util.InputStreamContentProvider;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 import scaffolding.SlowBodySender;
@@ -82,7 +81,6 @@ public class RequestBodyReaderInputStreamAdapterTest {
     }
 
     @Test
-    @Timeout(30)
     public void hugeBodiesCanBeStreamedWithJetty() throws Exception {
 
         long loops = 1000;

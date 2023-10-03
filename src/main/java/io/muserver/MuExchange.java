@@ -115,7 +115,7 @@ class MuExchange implements ResponseInfo, AsyncHandle {
                                 } else {
                                     // todo lots of small message chunks can lead to huge stacks
                                     request.onRequestBodyReceived();
-                                    data.connection.readyToRead(true);
+                                    data.connection.readyToRead();
                                 }
                             } else {
                                 // TODO also close things here?
@@ -131,7 +131,7 @@ class MuExchange implements ResponseInfo, AsyncHandle {
             } else {
                 // todo when does this happen?
                 log.warn("Ignoring request body");
-                data.connection.readyToRead(true);
+                data.connection.readyToRead();
             }
         } else if (msg instanceof EndOfChunks eoc) {
             onRequestCompleted(eoc.trailers());
@@ -175,7 +175,7 @@ class MuExchange implements ResponseInfo, AsyncHandle {
         }
         if (request.hasBody()) {
             this.requestBodyListener = readListener;
-            this.data.connection.readyToRead(true);
+            this.data.connection.readyToRead();
         } else {
             readListener.onComplete();
         }
@@ -548,16 +548,16 @@ class MuExchange implements ResponseInfo, AsyncHandle {
         logBody(toSend);
 
         MuHttp1Connection con = this.data.connection;
-        con.scatteringWrite(toSend, 0, toSend.length, null, new CompletionHandler<>() {
+        con.scatteringWrite(toSend, 0, toSend.length, new CompletionHandler<>() {
             @Override
-            public void completed(Long result, Object attachment) {
+            public void completed(Long result, Void attachment) {
                 MuExchange.this.data.server().stats.onBytesSent(result);
                 // todo report this up the chain so stats are updated
                 try {
                     boolean broke = false;
                     for (ByteBuffer byteBuffer : toSend) {
                         if (byteBuffer.hasRemaining()) {
-                            con.scatteringWrite(toSend, 0, toSend.length, null, this);
+                            con.scatteringWrite(toSend, 0, toSend.length, this);
                             broke = true;
                             break;
                         }
@@ -571,7 +571,7 @@ class MuExchange implements ResponseInfo, AsyncHandle {
             }
 
             @Override
-            public void failed(Throwable exc, Object attachment) {
+            public void failed(Throwable exc, Void attachment) {
                 try {
                     callback.onComplete(exc); // todo check the exchange status here - should it just be closed?
                 } catch (Exception e) {

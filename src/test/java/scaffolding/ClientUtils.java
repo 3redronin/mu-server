@@ -116,6 +116,8 @@ public class ClientUtils {
                 SslContextFactory.Client sslContextFactory = new SslContextFactory.Client(true);
                 sslContextFactory.setEndpointIdentificationAlgorithm("HTTPS");
                 jettyClient = new HttpClient(sslContextFactory);
+                jettyClient.setConnectTimeout(10000);
+                jettyClient.setIdleTimeout(10000);
                 jettyClient.start();
             } catch (Exception e) {
                 throw new RuntimeException("Couldn't start jetty client", e);

@@ -320,6 +320,10 @@ public class MuResponseImpl implements MuResponse {
         }
     }
 
+    @Override
+    public String toString() {
+        return status + " (" + responseState() + ")";
+    }
 
     static class MuResponseOutputStream extends OutputStream {
         private final MuExchange exchange;

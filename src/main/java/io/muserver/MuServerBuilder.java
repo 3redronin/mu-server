@@ -41,9 +41,9 @@ public class MuServerBuilder {
     private String host;
     private HttpsConfigBuilder sslContextBuilder;
     private Http2Config http2Config;
-    private long requestReadTimeoutMillis = TimeUnit.MINUTES.toMillis(2);
-    private long responseWriteTimeoutMillis = TimeUnit.MINUTES.toMillis(2);
-    private long idleTimeoutMills = TimeUnit.MINUTES.toMillis(10);
+    private long requestReadTimeoutMillis = TimeUnit.SECONDS.toMillis(10);
+    private long responseWriteTimeoutMillis = TimeUnit.SECONDS.toMillis(10);
+    private long idleTimeoutMills = TimeUnit.SECONDS.toMillis(20);
     private ExecutorService executor;
     private long maxRequestSize = 24 * 1024 * 1024;
     private List<ResponseCompleteListener> responseCompleteListeners;
@@ -53,6 +53,7 @@ public class MuServerBuilder {
     private RequestBodyErrorAction requestBodyTooLargeAction = RequestBodyErrorAction.SEND_RESPONSE;
     private Path tempDirectory;
     private boolean autoHandleExpectHeaders = true;
+    private long handshakeIOTimeout = 5000;
 
 
     /**
@@ -703,6 +704,25 @@ public class MuServerBuilder {
      */
     public MuServerBuilder withAutoHandleExpectHeaders(boolean autoHandleExpectHeaders) {
         this.autoHandleExpectHeaders = autoHandleExpectHeaders;
+        return this;
+    }
+
+    /**
+     * @return the timeout in milliseconds for IO calls during SSL handshakes
+     */
+    public long handshakeIOTimeout() {
+        return this.handshakeIOTimeout;
+    }
+
+    /**
+     * Sets the timeouts for reading and writing during a TLS handshake.
+     * <p>The default is 5 seconds.</p>
+     * @param duration The duration
+     * @param unit The unit
+     * @return This builder
+     */
+    public MuServerBuilder withHandshakeIOTimeout(long duration, TimeUnit unit) {
+        this.handshakeIOTimeout = unit.toMillis(duration);
         return this;
     }
 }

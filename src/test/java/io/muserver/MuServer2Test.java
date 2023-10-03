@@ -9,10 +9,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import scaffolding.ClientUtils;
-import scaffolding.Http1Client;
-import scaffolding.MuAssert;
-import scaffolding.StringUtils;
+import scaffolding.*;
 
 import javax.net.ssl.*;
 import java.io.*;
@@ -277,10 +274,55 @@ public class MuServer2Test {
             ContentResponse resp = ClientUtils.jettyClient().GET(server.uri());
             assertThat(resp.getStatus(), equalTo(200));
             assertThat(resp.getContentAsString(), equalTo("true TLSv1.2 " + theCipher));
+            resp = ClientUtils.jettyClient().GET(server.uri());
+            assertThat(resp.getStatus(), equalTo(200));
+            assertThat(resp.getContentAsString(), equalTo("true TLSv1.2 " + theCipher));
         } else {
             try (var resp = call(request(server.uri().resolve("/")))) {
                 assertThat(resp.code(), equalTo(200));
                 assertThat(resp.body().string(), equalTo("true TLSv1.2 " + theCipher));
+            }
+            try (var resp = call(request(server.uri().resolve("/")))) {
+                assertThat(resp.code(), equalTo(200));
+                assertThat(resp.body().string(), equalTo("true TLSv1.2 " + theCipher));
+            }
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "jetty", "okhttpclient" })
+    public void tls13Available(String client) throws Exception {
+        AtomicReference<String> theCipher = new AtomicReference<>();
+        server = httpsServer()
+            .withHttpsConfig(HttpsConfigBuilder.httpsConfig()
+                .withProtocols("TLSv1.2", "TLSv1.3")
+                .withCipherFilter((supportedCiphers, defaultCiphers) -> {
+                    theCipher.set(defaultCiphers.get(0));
+                    return List.of(theCipher.get());
+                })
+            )
+            .addHandler(Method.GET, "/", new RouteHandler() {
+                @Override
+                public void handle(MuRequest request, MuResponse response, Map<String, String> pathParams) throws Exception {
+                    HttpConnection con = request.connection();
+                    response.write(con.isHttps() + " " + con.httpsProtocol() + " " + con.cipher());
+                }
+            }).start();
+        if (client.equals("jetty")) {
+            ContentResponse resp = ClientUtils.jettyClient().GET(server.uri());
+            assertThat(resp.getStatus(), equalTo(200));
+            assertThat(resp.getContentAsString(), equalTo("true TLSv1.3 " + theCipher));
+            resp = ClientUtils.jettyClient().GET(server.uri());
+            assertThat(resp.getStatus(), equalTo(200));
+            assertThat(resp.getContentAsString(), equalTo("true TLSv1.3 " + theCipher));
+        } else {
+            try (var resp = call(request(server.uri().resolve("/")))) {
+                assertThat(resp.code(), equalTo(200));
+                assertThat(resp.body().string(), equalTo("true TLSv1.3 " + theCipher));
+            }
+            try (var resp = call(request(server.uri().resolve("/")))) {
+                assertThat(resp.code(), equalTo(200));
+                assertThat(resp.body().string(), equalTo("true TLSv1.3 " + theCipher));
             }
         }
     }
@@ -316,30 +358,6 @@ public class MuServer2Test {
             }
         });
         assertThat(server.stats().failedToConnect(), equalTo(1L));
-    }
-
-    @Test
-    public void tls13Available() throws Exception {
-        AtomicReference<String> theCipher = new AtomicReference<>();
-        server = httpsServer()
-            .withHttpsConfig(HttpsConfigBuilder.httpsConfig()
-                .withProtocols("TLSv1.2", "TLSv1.3")
-                .withCipherFilter((supportedCiphers, defaultCiphers) -> {
-                    theCipher.set(defaultCiphers.get(0));
-                    return List.of(theCipher.get());
-                })
-            )
-            .addHandler(Method.GET, "/", new RouteHandler() {
-                @Override
-                public void handle(MuRequest request, MuResponse response, Map<String, String> pathParams) throws Exception {
-                    HttpConnection con = request.connection();
-                    response.write(con.isHttps() + " " + con.httpsProtocol() + " " + con.cipher());
-                }
-            }).start();
-        try (var resp = call(request(server.uri().resolve("/")))) {
-            assertThat(resp.code(), equalTo(200));
-            assertThat(resp.body().string(), equalTo("true TLSv1.3 " + theCipher.get()));
-        }
     }
 
 
@@ -437,18 +455,18 @@ public class MuServer2Test {
         }
     }
 
-    @Test
-    public void canReadLargeStrings() throws Exception {
+    @ParameterizedTest
+    @ValueSource(strings = {"http", "https"})
+    public void canReadLargeStrings(String type) throws Exception {
         var rando = StringUtils.randomStringOfLength(20000);
         var received = new AtomicReference<String>();
-        server = httpsServer()
+        server = ServerUtils.testServer(type)
             .addHandler(Method.POST, "/", (request, response, pathParams) -> {
                 received.set(request.readBodyAsString());
             }).start();
         call(request(server.uri()).post(RequestBody.create(rando, MediaType.get("text/plain")))).close();
         assertThat(received.get(), equalTo(rando));
     }
-
 
     @Test
     public void canWriteFixedLengthToOutputStream() throws Exception {

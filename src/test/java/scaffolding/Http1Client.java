@@ -32,9 +32,9 @@ public class Http1Client implements AutoCloseable {
     private final Socket socket;
     private final InputStream inputStream;
     private final OutputStream outputStream;
-    private final MuServer server;
+    private final URI server;
 
-    public Http1Client(Socket socket, InputStream inputStream, OutputStream outputStream, MuServer server) {
+    public Http1Client(Socket socket, InputStream inputStream, OutputStream outputStream, URI server) {
         this.socket = socket;
         this.inputStream = inputStream;
         this.outputStream = outputStream;
@@ -42,8 +42,10 @@ public class Http1Client implements AutoCloseable {
     }
 
     public static Http1Client connect(MuServer server) {
+        return connect(server.uri());
+    }
+    public static Http1Client connect(URI uri) {
         try {
-            var uri = server.uri();
             Socket socket;
             if (uri.getScheme().equals("http")) {
                 socket = new Socket(uri.getHost(), uri.getPort());
@@ -51,19 +53,19 @@ public class Http1Client implements AutoCloseable {
                 socket = sslSocketFactory.createSocket(uri.getHost(), uri.getPort());
             }
             OutputStream os = new BufferedOutputStream(socket.getOutputStream(), 8192);
-            return new Http1Client(socket, socket.getInputStream(), os, server);
+            return new Http1Client(socket, socket.getInputStream(), os, uri);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
     }
 
     public Http1Client writeRequestLine(Method method, String uri) {
-        return writeRequestLine(method, server.uri().resolve(uri), HttpVersion.HTTP_1_1, true);
+        return writeRequestLine(method, server.resolve(uri), HttpVersion.HTTP_1_1, true);
     }
     public Http1Client writeRequestLine(Method method, URI uri, HttpVersion httpVersion, boolean writeHost) {
         writeAscii(method.name() + " " + uri.getRawPath() + " " + httpVersion.version() + "\r\n");
         if (writeHost) {
-            writeHeader("host", server.uri().getAuthority());
+            writeHeader("host", server.getAuthority());
         }
         return this;
     }

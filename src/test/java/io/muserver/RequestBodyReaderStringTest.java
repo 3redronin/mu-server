@@ -359,7 +359,7 @@ public class RequestBodyReaderStringTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = { "https", "http" })
+    @ValueSource(strings = { "http", "https" })
     public void exceedingUploadSizeResultsIn413ForChunkedRequestWhereResponseNotStarted(String type) throws Exception {
         AtomicReference<Throwable> exception = new AtomicReference<>();
         List<ResponseInfo> infos = new ArrayList<>();
@@ -423,7 +423,7 @@ public class RequestBodyReaderStringTest {
     @ValueSource(strings = { "https", "http" })
     public void exceedingUploadSizeResultsInClosedConnectionForChunkedRequestWhenTooLargeActionIsKill(String type) {
         testConnectionKilledDueToLargeBody(type, (request, response) -> {
-            request.readBodyAsString();
+            response.write(request.readBodyAsString());
             return true;
         }, ResponseState.FULL_SENT /* hmm */, RequestBodyErrorAction.KILL_CONNECTION);
     }
@@ -446,16 +446,18 @@ public class RequestBodyReaderStringTest {
             .addResponseCompleteListener(infos::add)
             .start();
 
+        SlowBodySender slow = new SlowBodySender(1000, 1);
         Request.Builder request = request()
             .url(server.uri().toString())
-            .post(new SlowBodySender(1000, 1));
+            .post(slow);
 
-        var exceptionFromClient = assertThrows(Exception.class, () -> {
-            try (Response resp = call(request)) {
-                resp.body().string();
-            }
-        });
-        assertThat(exceptionFromClient, anyOf(instanceOf(UncheckedIOException.class), instanceOf(IOException.class)));
+        try (Response resp = call(request)) {
+            var body = resp.body().string();
+            assertThat(slow.writeException(), notNullValue());
+            assertThat(slow.writeException().getMessage(), equalTo("Broken pipe"));
+        } catch (Exception exceptionFromClient) {
+            assertThat(exceptionFromClient, anyOf(instanceOf(UncheckedIOException.class), instanceOf(IOException.class)));
+        }
 
         assertEventually(exceptionThrownOnRequestRead::get, instanceOf(IOException.class));
         Throwable cause = exceptionThrownOnRequestRead.get().getCause();

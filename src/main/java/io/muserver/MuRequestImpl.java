@@ -273,7 +273,7 @@ public class MuRequestImpl implements MuRequest {
 
     @Override
     public String toString() {
-        return "MuRequest " + data.newRequest.version().version() + " " + method + " " + serverUri;
+        return "MuRequest " + data.newRequest.version().version() + " " + method + " " + serverUri + " (" + state + ")";
     }
 
     void addContext(String contextToAdd) {

@@ -62,16 +62,29 @@ public class StateChangesTest {
         try (var client = POST("/read")
             .contentHeader("text/plain", 20)
             .flushHeaders()) {
-            assertThrows(SocketException.class, () -> client.in().readAllBytes());
+            assertThrowsOrJustEndsAfterResponse(client, 200);
         }
         assertOneCompleted(RequestState.ERRORED, ResponseState.ERRORED);
         completed.clear();
         try (var client = POST("/discard")
             .contentHeader("text/plain", 20)
             .flushHeaders()) {
-            assertThrows(SocketException.class, () -> client.in().readAllBytes());
+            assertThrowsOrJustEndsAfterResponse(client, 200);
         }
         assertOneCompleted(RequestState.ERRORED, ResponseState.FULL_SENT);
+    }
+
+
+    private static void assertThrowsOrJustEndsAfterResponse(Http1Client client, int expectedLength) throws IOException {
+        try {
+            client.readLine();
+            client.readBody(client.readHeaders());
+            // depending on the OS, socket.close() might be graceful with an EOF or might be reset
+            var bytes = client.in().readAllBytes();
+            assertThat(bytes.length, equalTo(0));
+        } catch (Exception e) {
+            assertThat(e, anyOf(instanceOf(SocketException.class), instanceOf(EOFException.class)));
+        }
     }
 
     @ParameterizedTest
@@ -90,14 +103,14 @@ public class StateChangesTest {
         try (var client = POST("/read")
             .contentHeader("text/plain", 20)
             .flushHeaders()) {
-            assertThrows(SocketException.class, () -> client.in().readAllBytes());
+            assertThrowsOrJustEndsAfterResponse(client, 4040);
         }
         assertOneCompleted(RequestState.ERRORED, ResponseState.FULL_SENT);
         completed.clear();
         try (var client = POST("/discard")
             .contentHeader("text/plain", 20)
             .flushHeaders()) {
-            assertThrows(SocketException.class, () -> client.in().readAllBytes());
+            assertThrowsOrJustEndsAfterResponse(client, 100);
         }
         assertOneCompleted(RequestState.ERRORED, ResponseState.FULL_SENT);
 

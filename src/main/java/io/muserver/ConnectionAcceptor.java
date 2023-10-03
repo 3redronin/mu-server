@@ -70,10 +70,14 @@ class ConnectionAcceptor implements CompletionHandler<AsynchronousSocketChannel,
         try {
             remoteAddress = (InetSocketAddress) channel.getRemoteAddress();
 
+            MuServerSettings settings = muServer.settings;
             if (httpsConfig == null) {
-                MuHttp1Connection connection = new MuHttp1Connection(this, channel, remoteAddress, address, ByteBuffer.allocate(10000));
+                ByteBuffer appReadBuffer = ByteBuffer.allocate(8192);
+                appReadBuffer.limit(0);
+                var plainTextSocketChannel = new AsyncPlaintextSocketChannel(appReadBuffer, settings.requestReadTimeoutMillis(), settings.responseWriteTimeoutMillis(), channel);
+                MuHttp1Connection connection = new MuHttp1Connection(this, plainTextSocketChannel, remoteAddress, address);
                 onConnectionEstablished(connection);
-                connection.readyToRead(false);
+                connection.readyToRead();
             } else {
                 var sslContext = httpsConfig.sslContext();
                 SSLEngine engine = sslContext.createSSLEngine();
@@ -84,12 +88,13 @@ class ConnectionAcceptor implements CompletionHandler<AsynchronousSocketChannel,
                 var appWriteBuffer = ByteBuffer.allocate(engine.getSession().getApplicationBufferSize());
                 var netReadBuffer = ByteBuffer.allocate(engine.getSession().getPacketBufferSize());
                 var netWriterBuffer = ByteBuffer.allocate(engine.getSession().getPacketBufferSize());
-                var tlsChannel = new MuTlsAsynchronousSocketChannel(channel, engine, appReadBuffer, netReadBuffer, appWriteBuffer, netWriterBuffer);
+                var tlsChannel = new AsyncTlsSocketChannel(channel, engine, appReadBuffer, netReadBuffer, appWriteBuffer, netWriterBuffer, settings.handshakeIOTimeout(), settings.requestReadTimeoutMillis(), settings.responseWriteTimeoutMillis());
 
-                MuHttp1Connection connection = new MuHttp1Connection(this, tlsChannel, remoteAddress, address, appReadBuffer);
-                tlsChannel.beginHandshake(connection, error -> {
+                MuHttp1Connection connection = new MuHttp1Connection(this, tlsChannel, remoteAddress, address);
+                tlsChannel.beginHandshake(error -> {
                     if (error == null) {
                         SSLSession session = engine.getSession();
+                        appReadBuffer.position(appReadBuffer.limit());
                         connection.handshakeComplete(session.getProtocol(), session.getCipherSuite());
                     } else {
                         log.error("Error while handshaking", error);
