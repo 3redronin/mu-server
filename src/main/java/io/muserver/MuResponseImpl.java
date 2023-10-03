@@ -20,7 +20,7 @@ import java.util.zip.GZIPOutputStream;
 
 import static io.muserver.ContentTypes.TEXT_PLAIN_UTF8;
 
-public class MuResponseImpl implements MuResponse {
+class MuResponseImpl implements MuResponse {
     private static final Logger log = LoggerFactory.getLogger(MuResponseImpl.class);
 
     private final MuExchangeData data;

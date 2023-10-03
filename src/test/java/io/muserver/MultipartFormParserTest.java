@@ -1,6 +1,5 @@
 package io.muserver;
 
-import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -306,7 +305,6 @@ Contents of the text file with boundary---- inside go here.
         return parse(boundary, bufferSize, buffer);
     }
 
-    @NotNull
     private static MuForm parse(String boundary, String bufferSize, ByteBuffer buffer) throws Throwable {
         var result = new CompletableFuture<MuForm>();
         var formConsumer = new FormConsumer() {

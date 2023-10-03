@@ -18,7 +18,7 @@ public class Cookie {
     private final boolean isSecure;
     private final boolean isHttpOnly;
 
-    public Cookie(String name, String value, String domain, String path, Long maxAge, SameSite sameSite, boolean isSecure, boolean isHttpOnly) {
+    Cookie(String name, String value, String domain, String path, Long maxAge, SameSite sameSite, boolean isSecure, boolean isHttpOnly) {
         this.name = name;
         this.value = value;
         this.domain = domain;

@@ -45,6 +45,9 @@ public interface HttpConnection {
      */
     InetSocketAddress remoteAddress();
 
+    /**
+     * @return The socket address of this connection
+     */
     InetSocketAddress localAddress();
 
     /**

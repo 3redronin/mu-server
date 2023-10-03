@@ -18,10 +18,21 @@ import static io.muserver.Mutils.notNull;
  */
 public interface UploadedFile {
 
-    Path asPath();
+    /**
+     * Gets the upload as a path.
+     * <p>This has been uploaded to the server and saved locally into a temp folder (configured with
+     * {@link MuServerBuilder#withTempDirectory(Path)}), and will be deleted after the response completes. To save the file permanently,
+     * use {@link #saveTo(Path)} instead.</p>
+     * @return Returns a Path object pointing to the uploaded file.
+     * @throws IOException If an error while saving file.
+     */
+    Path asPath() throws IOException;
 
     /**
-     * Gets a copy of the file. This has been uploaded to the server and saved locally.
+     * Gets the upload as a file.
+     * <p>This has been uploaded to the server and saved locally into a temp folder (configured with
+     * {@link MuServerBuilder#withTempDirectory(Path)}), and will be deleted after the response completes. To save the file permanently,
+     * use {@link #saveTo(File)} instead.</p>
      * @return Returns a File object pointing to the uploaded file.
      * @throws IOException If an error while saving file.
      */
@@ -66,6 +77,11 @@ public interface UploadedFile {
      */
     void saveTo(File dest) throws IOException;
 
+    /**
+     * Saves the file to the specified destination. Parent directories will be created if they do not exist.
+     * @param dest The destination to save to.
+     * @throws IOException If there is an error saving the file.
+     */
     void saveTo(Path dest) throws IOException;
 
     /**
@@ -198,6 +214,7 @@ class MuUploadedFile2 implements UploadedFile {
 
     @Override
     public File asFile() throws IOException {
+        // todo: consider removing the IO Exception on the interface
         return file.toFile();
     }
 

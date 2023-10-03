@@ -32,6 +32,10 @@ public interface MuResponse {
      */
     void status(int value);
 
+    /**
+     * Sets the response code for this request. Defaults to <code>{@link HttpStatusCode#OK_200}</code>
+     * @param statusCode The response code to send to the client.
+     */
     void status(HttpStatusCode statusCode);
 
     /**
@@ -51,6 +55,9 @@ public interface MuResponse {
      * @param status The interim response
      * @throws IllegalArgumentException if the status code is not an informational response code
      * @throws IllegalStateException if the main response status and headers have already been sent
+     * @throws IOException if there is an error writing the response to the client, in which case
+     *                     no response will be able to be sent to the client. It is advisable to let
+     *                     this bubble up from your handler.
      */
     void sendInformationalResponse(HttpStatusCode status) throws IOException;
 
@@ -59,6 +66,9 @@ public interface MuResponse {
      * <p>If you want to send multiple chunks of text, see {@link #sendChunk(String)}</p>
      * @param text The full response body to send to the client.
      * @throws IllegalStateException Thrown if this is called twice, or this is called after any other body-writing methods.
+     * @throws IOException if there is an error writing the response to the client, in which case
+     *                     no response will be able to be sent to the client. It is advisable to let
+     *                     this bubble up from your handler.
      */
     void write(String text) throws IOException;
 
@@ -67,7 +77,9 @@ public interface MuResponse {
      * @param text Text to send to the client as an HTTP chunk.
      * @throws IllegalStateException Thrown if {@link #write(String)} or {@link #outputStream()} or {@link #writer()} was
      * already called.
-     */
+     * @throws IOException if there is an error writing the response to the client, in which case
+     *                     no response will be able to be sent to the client. It is advisable to let
+     *                     this bubble up from your handler.     */
     void sendChunk(String text) throws IOException;
 
     /**
@@ -150,5 +162,8 @@ public interface MuResponse {
      */
     Headers trailers();
 
+    /**
+     * @return The status code of this response
+     */
     HttpStatusCode statusCode();
 }

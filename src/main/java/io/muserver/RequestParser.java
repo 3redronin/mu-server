@@ -154,7 +154,7 @@ class RequestParser {
                 }
             } else if (state == State.RL_PROTO) {
                 if (c == '\n') {
-                    this.protocol = HttpVersion.fromRequestLine(cur.toString());
+                    this.protocol = HttpVersion.fromVersion(cur.toString());
                     if (this.protocol == null || this.protocol == HttpVersion.HTTP_1_0) { // TODO bother supporting 1.0?
                         throw new InvalidRequestException(HttpStatusCode.HTTP_VERSION_NOT_SUPPORTED_505, "HTTP Version Not Supported", "Http version was " + protocol);
                     }

@@ -697,8 +697,8 @@ public class MuServerBuilder {
      * Specifies whether mu-server will automatically respond with an informational response to
      * <code>expect: continue</code> request headers.
      * <p>The default is <code>true</code>. If set to <code>false</code>, then you will need to handle <code>expect</code> headers by sending
-     * informational responses when they are encountered. See {@link MuResponse#sendInformationalResponse(HttpStatusCode, Headers)}
-     * or {@link AsyncHandle#sendInformationalResponse(HttpStatusCode, Headers, DoneCallback)}.</p>
+     * informational responses when they are encountered. See {@link MuResponse#sendInformationalResponse(HttpStatusCode)}
+     * or {@link AsyncHandle#sendInformationalResponse(HttpStatusCode, DoneCallback)}.</p>
      * @param autoHandleExpectHeaders <code>true</code> to allow mu-server to respond
      * @return This builder
      */

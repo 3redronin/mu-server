@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 
-public class MuRequestImpl implements MuRequest {
+class MuRequestImpl implements MuRequest {
     private static final Logger log = LoggerFactory.getLogger(MuRequestImpl.class);
 
     private final long startTime = System.currentTimeMillis();

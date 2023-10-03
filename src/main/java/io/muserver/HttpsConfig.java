@@ -12,6 +12,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+/**
+ * HTTPS configuration
+ */
 public class HttpsConfig implements SSLInfo {
     private static final Logger log = LoggerFactory.getLogger(HttpsConfig.class);
     private final SSLContext sslContext;
@@ -24,29 +27,54 @@ public class HttpsConfig implements SSLInfo {
         this.sslParameters = sslParameters;
     }
 
+    /**
+     * @return The SSLContext
+     */
     public SSLContext sslContext() {
         return sslContext;
     }
+
+    /**
+     * @return The SSL parameters
+     */
     public SSLParameters sslParameters() { return sslParameters; };
 
     String[] protocolsArray() {
         return sslParameters.getProtocols();
     }
 
+    /**
+     * @return An unmodifiable list of ciphers supported, in preference order
+     */
     @Override
     public List<String> ciphers() {
         return List.of(cipherSuitesArray());
     }
 
+    /**
+     * @return An unmodifiable list of protocols supported, such as <code>TLSv1.2</code>
+     */
     public List<String> protocols() {
         return List.of(protocolsArray());
     }
 
+    /**
+     * @return Gets the SSL provider, e.g. <code>SunJSSE</code>
+     */
     @Override
     public String providerName() {
         return sslContext.getProvider().getName();
     }
 
+    /**
+     * <p>Gets the server certificates that are in use.</p>
+     * <p>Note: The certificate information is found by making an HTTPS connection to
+     * <code>https://localhost:{port}/</code> and if any exceptions are thrown while
+     * doing the lookup then an empty array is returned.</p>
+     * <p>Using this information, you can find information such as the expiry date of your
+     * certiticates by calling {@link X509Certificate#getNotAfter()}.</p>
+     * @return An ordered list of server certificates, with the server's own certificate first followed by any certificate authorities.
+     */
     @Override
     public synchronized List<X509Certificate> certificates() {
         if (cachedCerts != null) {

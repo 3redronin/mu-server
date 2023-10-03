@@ -20,6 +20,14 @@ public interface MuServer {
      */
     void stop();
 
+    /**
+     * Stops the server gracefully.
+     * <p>New requests will be rejected by the server, however in-flight requests will be given some
+     * time to complete. If they do not complete in time they will be aborted (so the client will
+     * see them as invalid requests).</p>
+     * @param timeout The amount of time to allow in-flight requests to finish before aborting them
+     * @param unit The time unit
+     */
     void stop(long timeout, TimeUnit unit);
 
     /**

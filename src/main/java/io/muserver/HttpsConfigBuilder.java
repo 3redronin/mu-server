@@ -503,7 +503,7 @@ public class HttpsConfigBuilder {
             .withKeystoreFromClasspath("/io/muserver/resources/localhost.p12");
     }
 
-    public HttpsConfig build2() {
+    HttpsConfig build2() {
         SSLContext context = build();
 
         SSLParameters params = context.getDefaultSSLParameters();
