@@ -4,9 +4,10 @@ import okhttp3.MediaType;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 import scaffolding.SlowBodySender;
@@ -54,6 +55,7 @@ public class RequestBodyReaderListenerAdapterTest {
     }
 
     @Test
+    @Timeout(20)
     public void requestBodiesCanBeReadAsynchronouslyOverHttps() throws IOException {
         server = ServerUtils.httpsServerForTest()
             .addHandler((request, response) -> {
@@ -66,18 +68,18 @@ public class RequestBodyReaderListenerAdapterTest {
 
         Request.Builder request = request()
             .url(server.uri().toString())
-            .post(new SlowBodySender(2000));
+            .post(new SlowBodySender(2));
 
         try (Response resp = call(request)) {
             assertThat(resp.code(), equalTo(200));
             assertThat(resp.body().string(), equalTo("Loop 0\nLoop 1\n"));
         }
-        assertThat("All: " + readListener.events.toString(), readListener.events, contains("data received: 7 bytes", "data written", "data received: 7 bytes", "data written", "onComplete"));
+        assertThat("All: " + readListener.events, readListener.events, contains("data received: 7 bytes", "data written", "data received: 7 bytes", "data written", "onComplete"));
     }
 
 
     @Test
-    public void requestBodiesCanBeReadAsynchronouslyOverHttps2() throws IOException {
+    public void requestBodiesCanBeReadAsynchronously() throws IOException {
         server = ServerUtils.httpsServerForTest()
             .addHandler((request, response) -> {
                 AsyncHandle handle = request.handleAsync();
@@ -96,11 +98,12 @@ public class RequestBodyReaderListenerAdapterTest {
             assertThat(resp.code(), equalTo(200));
             assertThat(resp.body().string(), equalTo(body));
         }
-        assertThat("All: " + readListener.events.toString(), readListener.events, contains("data received: 7 bytes", "data written", "data received: 7 bytes", "data written", "onComplete"));
+        // this seems a bit weird to assert on message sizes - it was originally for testing http2. Maybe delete this?
+        assertThat("All: " + readListener.events, readListener.events, contains("data received: 8192 bytes", "data written", "data received: 8192 bytes", "data written", "data received: 3616 bytes", "data written", "onComplete"));
     }
 
-
-    @Test(timeout = 10000)
+    @Test
+    @Timeout(30)
     public void emptyBodiesAreOkay() {
         server = ServerUtils.httpsServerForTest()
             .withRequestTimeout(100, TimeUnit.MILLISECONDS)
@@ -144,10 +147,8 @@ public class RequestBodyReaderListenerAdapterTest {
         ));
     }
 
-
     @Test
-    public void exceedingMaxContentLengthWillResultIn413() {
-        int contentLength = 1024;
+    public void exceedingMaxContentLengthWillResultIn413() throws IOException {
 
         server = ServerUtils.httpsServerForTest()
             .withMaxRequestSize(1000)
@@ -158,7 +159,7 @@ public class RequestBodyReaderListenerAdapterTest {
             })
             .start();
 
-        final String bigString = randomAsciiStringOfLength(contentLength);
+        String bigString = randomAsciiStringOfLength(1024);
 
         Request.Builder request = request()
             .url(server.uri().toString())
@@ -166,11 +167,7 @@ public class RequestBodyReaderListenerAdapterTest {
 
         try (Response resp = call(request)) {
             assertThat(resp.code(), equalTo(413));
-            assertThat(resp.body().string(), containsString("413 Payload Too Large"));
-        } catch (Exception e) {
-            // The HttpServerKeepAliveHandler will probably close the connection before the full request body is read, which is probably a good thing in this case.
-            // So allow a valid 413 response or an error
-            MuAssert.assertIOException(e);
+            assertThat(resp.body().string(), containsString("413 Request Entity Too Large"));
         }
 
     }
@@ -242,6 +239,7 @@ public class RequestBodyReaderListenerAdapterTest {
     public void ifRequestBodyNotConsumedButItIsOverSizeThenConnectionIsClosed() throws IOException {
         server = ServerUtils.httpsServerForTest()
             .withMaxRequestSize(1000)
+            .withRequestBodyTooLargeAction(RequestBodyErrorAction.KILL_CONNECTION)
             .addHandler((request, response) -> {
                 response.write("Hello there");
                 return true;
@@ -254,14 +252,14 @@ public class RequestBodyReaderListenerAdapterTest {
 
         try (Response resp = call(request)) {
             resp.body().string();
-            Assert.fail("Should not be able to read body");
+            Assertions.fail("Should not be able to read body");
         } catch (Exception ex) {
             MuAssert.assertIOException(ex);
         }
     }
 
 
-    @After
+    @AfterEach
     public void destroy() {
         scaffolding.MuAssert.stopAndCheck(server);
     }

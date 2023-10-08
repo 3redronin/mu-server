@@ -33,6 +33,7 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Vo
     private String cipher;
     private final AtomicLong completedRequests = new AtomicLong();
     private final AtomicLong rejectedDueToOverload = new AtomicLong();
+    private Certificate clientCert;
 
     public MuHttp1Connection(ConnectionAcceptor acceptor, MuSocketChannel channel, InetSocketAddress remoteAddress, InetSocketAddress localAddress) {
         this.acceptor = acceptor;
@@ -43,9 +44,10 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Vo
     }
 
 
-    void handshakeComplete(String protocol, String cipher) {
+    void handshakeComplete(String protocol, String cipher, Certificate clientCert) {
         this.httpsProtocol = protocol;
         this.cipher = cipher;
+        this.clientCert = clientCert;
         acceptor.onConnectionEstablished(this);
         readyToRead();
     }
@@ -134,7 +136,7 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Vo
 
     @Override
     public Optional<Certificate> clientCertificate() {
-        return Optional.empty();
+        return Optional.ofNullable(clientCert);
     }
 
     @Override

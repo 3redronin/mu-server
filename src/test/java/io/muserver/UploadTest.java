@@ -2,10 +2,10 @@ package io.muserver;
 
 import okhttp3.Headers;
 import okhttp3.*;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import scaffolding.ServerUtils;
 
 import java.io.File;
@@ -24,10 +24,10 @@ public class UploadTest {
     public static File guangzhouChina = new File("src/test/resources/sample-static/images/guangzhou, china.jpeg");
     public static File friends = new File("src/test/resources/sample-static/images/friends.jpg");
 
-    @Before
-    public void check() throws IOException {
+    @BeforeAll
+    public static void check() throws IOException {
         if (!guangzhou.exists()) {
-            Assert.fail("Could not find an image at " + guangzhou.getCanonicalPath());
+            Assertions.fail("Could not find an image at " + guangzhou.getCanonicalPath());
         }
     }
 
@@ -38,13 +38,13 @@ public class UploadTest {
             .addHandler(Method.POST, "/upload", (request, response, pathParams) -> {
                 response.sendChunk(request.form().get("Hello")
                     + "\n" + request.form().get("The name"));
-                boolean twoWaysToGetFileIsSame = request.uploadedFiles("image").get(0).filename().equals(request.uploadedFile("image").filename());
+                boolean twoWaysToGetFileIsSame = request.form().uploadedFiles("image").get(0).filename().equals(request.form().uploadedFile("image").filename());
                 response.sendChunk("\ntwoWaysToGetFileIsSame=" + twoWaysToGetFileIsSame + "\n");
 
-                UploadedFile image = request.uploadedFile("image");
+                UploadedFile image = request.form().uploadedFile("image");
                 response.sendChunk(image.filename() + " is " + image.asBytes().length + " bytes");
 
-                response.sendChunk("\nnon-existent: " + request.uploadedFile("nothing"));
+                response.sendChunk("\nnon-existent: " + request.form().uploadedFile("nothing"));
 
             }).start();
 
@@ -71,11 +71,11 @@ public class UploadTest {
 
         server = ServerUtils.httpsServerForTest()
             .addHandler(Method.POST, "/upload", (request, response, pathParams) -> {
-                List<UploadedFile> images = request.uploadedFiles("image");
+                List<UploadedFile> images = request.form().uploadedFiles("image");
                 for (UploadedFile image : images) {
                     response.sendChunk(image.filename() + " is " + image.asBytes().length + " bytes\n");
                 }
-                response.sendChunk("\nnon-existent: " + request.uploadedFiles("nothing").size());
+                response.sendChunk("\nnon-existent: " + request.form().uploadedFiles("nothing").size());
             }).start();
 
         try (Response resp = call(request(server.uri().resolve("/upload"))
@@ -103,8 +103,8 @@ public class UploadTest {
 
         server = ServerUtils.httpsServerForTest()
             .addHandler(Method.POST, "/upload", (request, response, pathParams) -> {
-                UploadedFile photo = request.uploadedFile("photo");
-                List<UploadedFile> photos = request.uploadedFiles("photo");
+                UploadedFile photo = request.form().uploadedFile("photo");
+                List<UploadedFile> photos = request.form().uploadedFiles("photo");
                 response.write(photo + " / " + photos.size());
             }).start();
         try (Response resp = call(request(server.uri().resolve("/upload"))
@@ -140,7 +140,7 @@ public class UploadTest {
         }
     }
 
-    @After
+    @AfterEach
     public void stopIt() {
         scaffolding.MuAssert.stopAndCheck(server);
     }

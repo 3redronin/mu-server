@@ -3,8 +3,8 @@ package io.muserver;
 import io.muserver.rest.PathMatch;
 import io.muserver.rest.UriPattern;
 import okhttp3.Response;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.ClientUtils;
 import scaffolding.ServerUtils;
 
@@ -111,7 +111,7 @@ public class RoutesTest {
         }
     }
 
-    @After
+    @AfterEach
     public void destroy() {
         scaffolding.MuAssert.stopAndCheck(server);
     }

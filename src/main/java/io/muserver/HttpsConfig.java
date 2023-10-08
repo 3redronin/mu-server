@@ -19,12 +19,14 @@ public class HttpsConfig implements SSLInfo {
     private static final Logger log = LoggerFactory.getLogger(HttpsConfig.class);
     private final SSLContext sslContext;
     private final SSLParameters sslParameters;
+    private final X509TrustManager clientAuthTrustManager;
     private List<X509Certificate> cachedCerts;
     private URI httpsUri;
 
-    HttpsConfig(SSLContext sslContext, SSLParameters sslParameters) {
+    HttpsConfig(SSLContext sslContext, SSLParameters sslParameters, X509TrustManager clientAuthTrustManager) {
         this.sslContext = sslContext;
         this.sslParameters = sslParameters;
+        this.clientAuthTrustManager = clientAuthTrustManager;
     }
 
     /**
@@ -128,4 +130,11 @@ public class HttpsConfig implements SSLInfo {
         this.httpsUri = httpsUri;
     }
 
+    /**
+     * @return The trust manager to verify client certs when client certs are requested, or <code>null</code>
+     *         if client certs not used.
+     */
+    public X509TrustManager clientAuthTrustManager() {
+        return clientAuthTrustManager;
+    }
 }

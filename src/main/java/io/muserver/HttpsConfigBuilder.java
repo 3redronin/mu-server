@@ -9,6 +9,7 @@ import java.io.*;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateParsingException;
 import java.security.cert.X509Certificate;
@@ -38,7 +39,7 @@ public class HttpsConfigBuilder {
     /**
      * Only used by HttpsConfigBuilder
      */
-    protected TrustManager trustManager;
+    protected X509TrustManager trustManager;
 
     /**
      * The type of keystore, such as JKS, JCEKS, PKCS12, etc
@@ -276,6 +277,7 @@ public class HttpsConfigBuilder {
             keystorePasswordToUse = local.keystorePassword;
             keyPasswordToUse = local.keyPassword;
         }
+        TrustManager[] trustManagers = this.trustManager == null ? null : new TrustManager[] { this.trustManager };
         ByteArrayInputStream keystoreStream = new ByteArrayInputStream(keystoreBytes);
         try {
             SSLContext serverContext = SSLContext.getInstance("TLS");
@@ -284,6 +286,8 @@ public class HttpsConfigBuilder {
             ks.load(keystoreStream, keystorePasswordToUse);
 
             KeyManagerFactory kmf = keyManagerFactory;
+            SecureRandom random = new SecureRandom();
+            random.nextInt(); // twenty years ago this made the first request faster - still needed? Yet to test.
             if (kmf == null) {
 
                 String defaultAliasToUse = this.defaultAlias;
@@ -316,11 +320,11 @@ public class HttpsConfigBuilder {
                 if (x509KeyManager == null)
                     throw new Exception("KeyManagerFactory did not create an X509ExtendedKeyManager");
                 SniKeyManager sniKeyManager = new SniKeyManager(x509KeyManager, defaultAliasToUse, sanToAliasMap);
-                serverContext.init(new KeyManager[]{sniKeyManager}, null, null);
+                serverContext.init(new KeyManager[]{sniKeyManager}, trustManagers, random);
 
 
             } else {
-                serverContext.init(kmf.getKeyManagers(), null, null);
+                serverContext.init(kmf.getKeyManagers(), trustManagers, random);
             }
             return serverContext;
         } catch (Exception e) {
@@ -483,7 +487,10 @@ public class HttpsConfigBuilder {
      * @return This builder.
      */
     public HttpsConfigBuilder withClientCertificateTrustManager(TrustManager trustManager) {
-        this.trustManager = trustManager;
+        if (trustManager != null && !(trustManager instanceof X509TrustManager)) {
+            throw new IllegalArgumentException("Only X509 trust managers are supported");
+        }
+        this.trustManager = (X509TrustManager) trustManager;
         return this;
     }
 
@@ -518,7 +525,7 @@ public class HttpsConfigBuilder {
 
         String[] protocolsToUse = getHttpsProtocolsArray(context);
         params.setProtocols(protocolsToUse);
-        return new HttpsConfig(context, params);
+        return new HttpsConfig(context, params, trustManager);
     }
 
 }

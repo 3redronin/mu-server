@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -12,6 +13,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.AsynchronousServerSocketChannel;
 import java.nio.channels.AsynchronousSocketChannel;
 import java.nio.channels.CompletionHandler;
+import java.security.cert.Certificate;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -83,6 +85,7 @@ class ConnectionAcceptor implements CompletionHandler<AsynchronousSocketChannel,
                 SSLEngine engine = sslContext.createSSLEngine();
                 engine.setSSLParameters(httpsConfig.sslParameters());
                 engine.setUseClientMode(false);
+                engine.setWantClientAuth(httpsConfig.clientAuthTrustManager() != null);
 
                 var appReadBuffer = ByteBuffer.allocate(engine.getSession().getApplicationBufferSize());
                 var netReadBuffer = ByteBuffer.allocate(engine.getSession().getPacketBufferSize());
@@ -93,8 +96,22 @@ class ConnectionAcceptor implements CompletionHandler<AsynchronousSocketChannel,
                 tlsChannel.beginHandshake(error -> {
                     if (error == null) {
                         SSLSession session = engine.getSession();
+
+                        Certificate clientCert = null;
+                        var tm = httpsConfig.clientAuthTrustManager();
+                        if (tm != null) {
+                            try {
+                                var clientCerts = session.getPeerCertificates();
+                                if (clientCerts.length > 0) {
+                                    clientCert = clientCerts[0];
+                                }
+                            } catch (SSLPeerUnverifiedException ignored) {
+                                // no certs specified - let the app decide if this is bad or not
+                            }
+                        }
+
                         appReadBuffer.position(appReadBuffer.limit());
-                        connection.handshakeComplete(session.getProtocol(), session.getCipherSuite());
+                        connection.handshakeComplete(session.getProtocol(), session.getCipherSuite(), clientCert);
                     } else {
                         log.error("Error while handshaking", error);
                         connection.forceShutdown(error);

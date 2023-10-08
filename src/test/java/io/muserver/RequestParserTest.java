@@ -2,10 +2,9 @@ package io.muserver;
 
 
 import org.hamcrest.Matcher;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import scaffolding.StringUtils;
 
-import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.stream.Stream;
@@ -21,20 +20,13 @@ public class RequestParserTest {
 
     private final RequestParser parser = new RequestParser(8192, 1024 * 24);
 
-
     @Test
-    public void noHeadersAndNoBodySupported() throws Exception {
+    public void noHeadersNotSupported() throws Exception {
         assertThat(parser.offer(wrap("G")), nullValue());
         assertThat(parser.offer(wrap("ET")), nullValue());
         assertThat(parser.offer(wrap(" /")), nullValue());
         assertThat(parser.offer(wrap("a%20link HTTP/1.1\r")), nullValue());
-        assertThat(parser.offer(wrap("\n\r\n")), equalTo(
-            new NewRequest(HttpVersion.HTTP_1_1, Method.GET, URI.create("/a%20link"), "/a%20link", new MuHeaders(), false)
-            ));
-
-        assertThat(parser.offer(wrap("GET /a%20link HTTP/1.1\r\n\r\n")), equalTo(
-            new NewRequest(HttpVersion.HTTP_1_1, Method.GET, URI.create("/a%20link"), "/a%20link", new MuHeaders(), false)
-        ));
+        assertThrows(InvalidRequestException.class, () -> parser.offer(wrap("\n\r\n")));
     }
 
     @Test
@@ -62,18 +54,18 @@ public class RequestParserTest {
 
     @Test
     public void urisAreNormalised() throws Exception {
-        var req = parser.offer(wrap("GET /a/./b/../c//d HTTP/1.1\r\n\r\n"));
+        var req = parser.offer(wrap("GET /a/./b/../c//d HTTP/1.1\r\nhost: localhost:1234\r\n\r\n"));
         assertThat(((NewRequest)req).uri().toString(), is("/a/c/d"));
     }
 
-    @Test(expected = InvalidRequestException.class)
-    public void urisCannotStartWithDot() throws Exception {
-        parser.offer(wrap("GET ./a HTTP/1.1\r\n\r\n"));
+    @Test
+    public void urisCannotStartWithDot() {
+        assertThrows(InvalidRequestException.class, () -> parser.offer(wrap("GET ./a HTTP/1.1\r\nHost:localhost:1234\r\n\r\n")));
     }
 
-    @Test(expected = InvalidRequestException.class)
+    @Test
     public void pathsGoingAboveRootAreNotAllowed() throws Exception {
-        parser.offer(wrap("GET /a/../../../b HTTP/1.1\r\n\r\n"));
+        assertThrows(InvalidRequestException.class, () -> parser.offer(wrap("GET /a/../../../b HTTP/1.1\r\nHost:localhost:1234\r\n\r\n")));
     }
 
     @Test
@@ -81,7 +73,7 @@ public class RequestParserTest {
         String message = StringUtils.randomStringOfLength(20000) + "This & that I'm afraid is my message\r\n";
         byte[] messageBytes = message.getBytes(UTF_8);
 
-        var requestHeaderBytes = ("POST / HTTP/1.1\r\ncontent-length: " + (messageBytes.length * 2) + "\r\n\r\n").getBytes(StandardCharsets.US_ASCII);
+        var requestHeaderBytes = ("POST / HTTP/1.1\r\nHost:localhost:1234\r\ncontent-length: " + (messageBytes.length * 2) + "\r\n\r\n").getBytes(StandardCharsets.US_ASCII);
         ByteBuffer headersAndFirstBody = ByteBuffer.allocate(requestHeaderBytes.length + messageBytes.length);
         headersAndFirstBody.put(requestHeaderBytes);
         headersAndFirstBody.put(messageBytes);
@@ -119,7 +111,7 @@ public class RequestParserTest {
     @Test
     public void wholeRequestCanComeInAtOnce() throws Exception {
         String message = "Hello, there";
-        ByteBuffer input = wrap("POST / HTTP/1.1\r\ncontent-length:" + (message.getBytes(UTF_8).length) + "\r\n\r\n" + message);
+        ByteBuffer input = wrap("POST / HTTP/1.1\r\nHost:localhost:1234\r\ncontent-length:" + (message.getBytes(UTF_8).length) + "\r\n\r\n" + message);
         var newReq = (NewRequest) parser.offer(input);
         assertThat(newReq.hasBody(), is(true));
         var body = (RequestBodyData) parser.offer(input);
@@ -129,7 +121,7 @@ public class RequestParserTest {
 
     @Test
     public void zeroLengthBodiesAreFine() throws Exception {
-        var req = (NewRequest) parser.offer(wrap("POST / HTTP/1.1\r\ncontent-length: 0\r\n\r\n"));
+        var req = (NewRequest) parser.offer(wrap("POST / HTTP/1.1\r\nHost:localhost:1234\r\ncontent-length: 0\r\n\r\n"));
         assertThat(req.hasBody(), is(false));
         assertThat(req.method(), is(Method.POST));
     }
@@ -148,7 +140,7 @@ public class RequestParserTest {
 
     @Test
     public void chunkExtensionsAreIgnored() throws Exception {
-        String in = "POST / HTTP/1.1\r\ntransfer-encoding: chunked\r\n\r\n" +
+        String in = "POST / HTTP/1.1\r\nHost:localhost:1234\r\ntransfer-encoding: chunked\r\n\r\n" +
             "6;ignore\r\nHello \r\n" +
             "D;ignore;some=value;another=\"I'm \"good\" or something\"\r\n Hello again \r\n" +
             "17\r\nHello for the last time\r\n" +
@@ -175,6 +167,7 @@ public class RequestParserTest {
     @Test
     public void trailersCanBeSpecified() throws Exception {
         var in = wrap("POST / HTTP/1.1\r\n" +
+            "host: localhost\r\n" +
             "transfer-encoding: chunked\r\n" +
             "x-header: blah\r\n" +
             "\r\n" +
@@ -197,7 +190,7 @@ public class RequestParserTest {
 
     @Test
     public void chunkingCanAllHappenInOneOfferOrByteByByte() throws Exception {
-        String in = "POST / HTTP/1.1\r\ntransfer-encoding: chunked\r\n\r\n" +
+        String in = "POST / HTTP/1.1\r\nHost:localhost:1234\r\ntransfer-encoding: chunked\r\n\r\n" +
             "6\r\nHello \r\n" +
             "6\r\nHello \r\n" +
             "0\r\n" +
@@ -221,13 +214,13 @@ public class RequestParserTest {
             if (msg instanceof RequestBodyData) {
                 receivedBody.append(toString(((RequestBodyData) msg).buffer()));
             }
-            if (i == 46) expectedMsgType = NewRequest.class;
-            if (i == 47) expectedMsgType = null;
-            if (i == 50) expectedMsgType = RequestBodyData.class;
-            if (i == 56) expectedMsgType = null;
-            if (i == 61) expectedMsgType = RequestBodyData.class;
-            if (i == 67) expectedMsgType = null;
-            if (i == 152) expectedMsgType = EndOfChunks.class;
+            if (i == 67) expectedMsgType = NewRequest.class;
+            if (i == 68) expectedMsgType = null;
+            if (i == 71) expectedMsgType = RequestBodyData.class;
+            if (i == 77) expectedMsgType = null;
+            if (i == 82) expectedMsgType = RequestBodyData.class;
+            if (i == 88) expectedMsgType = null;
+            if (i == 173) expectedMsgType = EndOfChunks.class;
 
             Matcher<ConMessage> matcher = expectedMsgType == null ? nullValue(ConMessage.class) : instanceOf(expectedMsgType);
             assertThat("i=" + i, msg, matcher);
@@ -237,7 +230,7 @@ public class RequestParserTest {
 
     @Test
     public void requestBodiesCanBeChunked() throws Exception {
-        var newReq = (NewRequest) parser.offer(wrap("POST / HTTP/1.1\r\ntransfer-encoding: chunked\r\n\r\n"));
+        var newReq = (NewRequest) parser.offer(wrap("POST / HTTP/1.1\r\nHost:localhost:1234\r\ntransfer-encoding: chunked\r\n\r\n"));
         assertThat(newReq.hasBody(), equalTo(true));
         for (int i = 1; i < 10; i++) {
             byte[] chunk = StringUtils.randomBytes(777 * i);
@@ -257,16 +250,16 @@ public class RequestParserTest {
         String message = StringUtils.randomStringOfLength(200) + "This & that I'm afraid is my message\r\n";
         byte[] messageBytes = message.getBytes(UTF_8);
 
-        assertThat(parser.offer(wrap("POST / HTTP/1.1\r\ncontent-length: " + (messageBytes.length * 2) + "\r\n\r\n")), instanceOf(NewRequest.class));
+        assertThat(parser.offer(wrap("POST / HTTP/1.1\r\nHost:localhost:1234]\r\ncontent-length: " + (messageBytes.length * 2) + "\r\n\r\n")), instanceOf(NewRequest.class));
         assertThat(parser.offer(ByteBuffer.wrap(messageBytes)), instanceOf(RequestBodyData.class));
         assertThat(parser.offer(ByteBuffer.wrap(messageBytes)), instanceOf(RequestBodyData.class));
 
         message = "Hello, there";
-        ByteBuffer req2 = wrap("POST / HTTP/1.1\r\ncontent-length:" + (message.getBytes(UTF_8).length) + "\r\n\r\n" + message);
+        ByteBuffer req2 = wrap("POST / HTTP/1.1\r\nHost:localhost:1234\r\ncontent-length:" + (message.getBytes(UTF_8).length) + "\r\n\r\n" + message);
         assertThat(parser.offer(req2), instanceOf(NewRequest.class));
         assertThat(parser.offer(req2), instanceOf(RequestBodyData.class));
 
-        assertThat(parser.offer(wrap("POST / HTTP/1.1\r\ncontent-length: 0\r\n\r\n")), instanceOf(NewRequest.class));
+        assertThat(parser.offer(wrap("POST / HTTP/1.1\r\nHost:localhost:1234\r\ncontent-length: 0\r\n\r\n")), instanceOf(NewRequest.class));
     }
 
 

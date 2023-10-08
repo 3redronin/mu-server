@@ -133,6 +133,9 @@ class RequestParser {
             } else if (state == State.RL_URI) {
                 if (c == ' ') {
                     String uriStr = cur.toString();
+                    if (uriStr.startsWith(".")) {
+                        throw new InvalidRequestException(BAD_REQUEST_400, "Invalid URI", "The given URI started with a '.': " + uriStr);
+                    }
                     try {
                         requestUri = new URI(uriStr).normalize();
                         if (requestUri.getPath() == null) {
