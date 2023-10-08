@@ -361,9 +361,10 @@ public class MuServer2Test {
     }
 
 
-    @Test
-    public void canChunk() throws Exception {
-        MuServerBuilder muServerBuilder = MuServerBuilder.muServer()
+    @ParameterizedTest
+    @ValueSource(strings = {"http", "https"})
+    public void canChunk(String type) throws Exception {
+        server = ServerUtils.httpsServerForTest(type)
             .withHttpsPort(0)
             .addHandler(Method.GET, "/blah", (request, response, pathParams) -> {
                 response.headers().set(HeaderNames.TRAILER, "server-timing");
@@ -371,8 +372,7 @@ public class MuServer2Test {
                 response.sendChunk(" ");
                 response.sendChunk("world");
                 response.trailers().set(HeaderNames.SERVER_TIMING, new ParameterizedHeaderWithValue("total", Map.of("dur", "123.4")));
-            });
-        server = muServerBuilder.start();
+            }).start();
         log.info("Started at " + server.uri());
 
         try (var resp = call(request(server.uri().resolve("/blah")))) {

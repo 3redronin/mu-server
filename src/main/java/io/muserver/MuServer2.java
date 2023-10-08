@@ -43,6 +43,7 @@ class MuServer2 implements MuServer {
 
         boolean hasHttps = builder.httpsPort() >= 0;
         boolean hasHttp = builder.httpPort() >= 0;
+        log.info("About to start http=" + builder.httpPort() + " and https=" + builder.httpsPort());
 
         if (!hasHttps && !hasHttp) {
             throw new IllegalArgumentException("No ports were configured. Please call MuServerBuilder.withHttpPort(int) or MuServerBuilder.withHttpsPort(int)");
@@ -77,6 +78,8 @@ class MuServer2 implements MuServer {
             server.addAcceptor(createAcceptor(server, httpsConfig, endpoint));
             httpsConfig.setHttpsUri(server.httpsUri());
         }
+
+        log.info("Started at " + server.uri().getPort());
 
         return server;
     }

@@ -85,10 +85,9 @@ class ConnectionAcceptor implements CompletionHandler<AsynchronousSocketChannel,
                 engine.setUseClientMode(false);
 
                 var appReadBuffer = ByteBuffer.allocate(engine.getSession().getApplicationBufferSize());
-                var appWriteBuffer = ByteBuffer.allocate(engine.getSession().getApplicationBufferSize());
                 var netReadBuffer = ByteBuffer.allocate(engine.getSession().getPacketBufferSize());
                 var netWriterBuffer = ByteBuffer.allocate(engine.getSession().getPacketBufferSize());
-                var tlsChannel = new AsyncTlsSocketChannel(channel, engine, appReadBuffer, netReadBuffer, appWriteBuffer, netWriterBuffer, settings.handshakeIOTimeout(), settings.requestReadTimeoutMillis(), settings.responseWriteTimeoutMillis());
+                var tlsChannel = new AsyncTlsSocketChannel(channel, engine, appReadBuffer, netReadBuffer, netWriterBuffer, settings.handshakeIOTimeout(), settings.requestReadTimeoutMillis(), settings.responseWriteTimeoutMillis());
 
                 MuHttp1Connection connection = new MuHttp1Connection(this, tlsChannel, remoteAddress, address);
                 tlsChannel.beginHandshake(error -> {

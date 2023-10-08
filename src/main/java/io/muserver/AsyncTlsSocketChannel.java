@@ -21,7 +21,7 @@ class AsyncTlsSocketChannel implements MuSocketChannel {
     private final SSLEngine engine;
     private final ByteBuffer appReadBuffer;
     private final ByteBuffer netReadBuffer;
-    private final ByteBuffer appWriteBuffer;
+    private final static ByteBuffer appWriteBuffer = Mutils.EMPTY_BUFFER;
     private final ByteBuffer netWriteBuffer;
     private final AtomicBoolean shutdownInitiated = new AtomicBoolean(false);
     private final long handshakeIOTimeout;
@@ -29,12 +29,11 @@ class AsyncTlsSocketChannel implements MuSocketChannel {
     private final long writeTimeout;
     private volatile SSLEngineResult engineResult;
 
-    public AsyncTlsSocketChannel(AsynchronousSocketChannel socketChannel, SSLEngine engine, ByteBuffer appReadBuffer, ByteBuffer netReadBuffer, ByteBuffer appWriteBuffer, ByteBuffer netWriteBuffer, long handshakeIOTimeout, long readTimeout, long writeTimeout) {
+    public AsyncTlsSocketChannel(AsynchronousSocketChannel socketChannel, SSLEngine engine, ByteBuffer appReadBuffer, ByteBuffer netReadBuffer, ByteBuffer netWriteBuffer, long handshakeIOTimeout, long readTimeout, long writeTimeout) {
         this.socketChannel = socketChannel;
         this.engine = engine;
         this.appReadBuffer = appReadBuffer;
         this.netReadBuffer = netReadBuffer;
-        this.appWriteBuffer = appWriteBuffer;
         this.netWriteBuffer = netWriteBuffer;
         this.handshakeIOTimeout = handshakeIOTimeout;
         this.readTimeout = readTimeout;
