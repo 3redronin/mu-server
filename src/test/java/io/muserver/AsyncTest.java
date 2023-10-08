@@ -1,40 +1,33 @@
 package io.muserver;
 
-import io.netty.channel.Channel;
 import okhttp3.*;
 import okio.BufferedSink;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Test;
-import scaffolding.MuAssert;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import scaffolding.Http1Client;
 import scaffolding.ServerUtils;
 import scaffolding.StringUtils;
 
 import javax.ws.rs.RedirectionException;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InterruptedIOException;
-import java.io.UncheckedIOException;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static io.muserver.MuServerBuilder.httpsServer;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.*;
 import static scaffolding.MuAssert.assertEventually;
-import static scaffolding.MuAssert.assertNotTimedOut;
 
 public class AsyncTest {
 
@@ -65,93 +58,28 @@ public class AsyncTest {
         }
     }
 
-    @Test(timeout = 35000)
-    public void canWriteAsyncAndDoneCallbackWillDelayWhenNotWritable() throws Exception {
-
-        AtomicInteger sendDoneCallbackCount = new AtomicInteger(0);
-        AtomicInteger receivedCount = new AtomicInteger(0);
-        AtomicInteger failureCount = new AtomicInteger(0);
-        CountDownLatch requestUnWritable = new CountDownLatch(1);
-
-        int totalCount = 1000;
-        server = httpsServer()
-            .withHttp2Config(Http2ConfigBuilder.http2Config()) // test http 1 only
-            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
-                response.contentType(ContentTypes.APPLICATION_OCTET_STREAM);
-                byte[] sendByte = StringUtils.randomBytes(1024);
-                NettyRequestAdapter.AsyncHandleImpl asyncHandle = (NettyRequestAdapter.AsyncHandleImpl)request.handleAsync();
-                ExecutorService executorService = Executors.newFixedThreadPool(1);
-
-                for (int i = 0; i < totalCount; i++) {
-                    asyncHandle.write(ByteBuffer.wrap(sendByte), error -> {
-                        if (error == null) {
-                            sendDoneCallbackCount.incrementAndGet();
-                        } else {
-                            failureCount.incrementAndGet();
-                        }
-                    });
-                }
-
-                Channel channel = ((NettyRequestAdapter)request).ctx.channel();
-                executorService.submit(()->{
-                    while (true){
-                        if (!channel.isWritable()){
-                            requestUnWritable.countDown();
-                            break;
-                        }
-                        try {
-                            Thread.sleep(1);
-                        } catch (InterruptedException e){
-                            break;
-                        }
-                    }});
-
-                assertEventually(sendDoneCallbackCount::get, is(totalCount));
-                executorService.shutdown();
-                asyncHandle.complete();
-            })
-            .start();
-
-        try (Response resp = call(request().url(server.uri().toString()))) {
-            assertThat(resp.code(), equalTo(200));
-
-            byte[] readBytes = new byte[1024];
-
-            // http client read the first 1024 byte and then sleep,
-            // it can't write out given the netty highWaterMark set to 64k
-            InputStream inputStream = resp.body().byteStream();
-            inputStream.read(readBytes);
-            receivedCount.incrementAndGet();
-            
-            assertNotTimedOut("requestUnWritable", requestUnWritable);
-            assertThat(failureCount.get(), is(0));
-
-            // http client read the rest bytes, verify all data received
-            while (inputStream.read(readBytes) != -1) {
-                receivedCount.incrementAndGet();
-            }
-            
-            assertThat(sendDoneCallbackCount.get(), is(totalCount));
-            assertThat(receivedCount.get(), is(totalCount));
-        }
-    }
-
-    @Test
-    public void errorCallbackInvokedWhenTimeoutOccurs() {
+    @ParameterizedTest
+    @ValueSource(strings = { "http", "https"})
+    public void errorCallbackInvokedWhenTimeoutOccurs(String type) {
         AtomicReference<ResponseInfo> infoRef = new AtomicReference<>();
-        server = ServerUtils.httpsServerForTest()
-            .withIdleTimeout(50, TimeUnit.MILLISECONDS)
+        server = ServerUtils.testServer(type)
+            .withRequestTimeout(50, TimeUnit.MILLISECONDS)
             .addHandler((request, response) -> {
                 AsyncHandle handle = request.handleAsync();
                 handle.addResponseCompleteHandler(infoRef::set);
+                handle.setReadListener(DiscardingRequestBodyListener.INSTANCE);
                 return true;
             })
             .start();
-        try (Response resp = call(request(server.uri()))) {
-            resp.body().string();
-            Assert.fail("Should not succeed");
+        try (var client = Http1Client.connect(server)) {
+            client.writeRequestLine(Method.POST, "/")
+                .writeHeader("content-length", "1000") // induce a read timeout by promising a body that is never sent
+                .flushHeaders();
+            client.readLine();
+            var headers = client.readHeaders();
+            client.readBody(headers);
         } catch (Exception ex) {
-            MuAssert.assertIOException(ex);
+            assertThat(ex, instanceOf(IOException.class));
         }
         assertEventually(infoRef::get, not(nullValue()));
         assertThat(infoRef.get().completedSuccessfully(), is(false));
@@ -204,9 +132,9 @@ public class AsyncTest {
     @Test
     public void errorCallbacksHappenIfTheClientDisconnects() throws IOException, InterruptedException {
 
-        DatabaseListenerSimulator changeListener = new DatabaseListenerSimulator(Integer.MAX_VALUE);
-        CountDownLatch timedOutLatch = new CountDownLatch(1);
-        CountDownLatch ctxClosedLatch = new CountDownLatch(1);
+        var changeListener = new DatabaseListenerSimulator(Integer.MAX_VALUE);
+        var timedOutLatch = new CountDownLatch(1);
+        var ctxClosedLatch = new CountDownLatch(1);
         List<Throwable> writeErrors = new ArrayList<>();
 
         AtomicLong connectionsDuringListening = new AtomicLong();
@@ -248,7 +176,7 @@ public class AsyncTest {
             assertThat(changeListener.errors, is(empty()));
             assertThat(resp.code(), equalTo(200));
             resp.body().string();
-            Assert.fail("Should have timeout out");
+            Assertions.fail("Should have timeout out");
         } catch (SocketTimeoutException to) {
             timedOutLatch.countDown();
             assertThat("Timed out waiting for failure callback to happen",
@@ -399,7 +327,7 @@ public class AsyncTest {
                     }
 
                 }
-            });
+            }, "DatabaseSimulator");
             thread.start();
         }
 
@@ -409,11 +337,6 @@ public class AsyncTest {
 
         public void stop() {
             stopped.set(true);
-            try {
-                thread.join();
-            } catch (InterruptedException e) {
-                throw new UncheckedIOException(new InterruptedIOException("Interrupted while stopping"));
-            }
         }
     }
 
@@ -432,7 +355,7 @@ public class AsyncTest {
         }
     }
 
-    @After
+    @AfterEach
     public void destroy() {
         scaffolding.MuAssert.stopAndCheck(server);
     }

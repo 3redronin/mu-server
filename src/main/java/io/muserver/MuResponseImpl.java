@@ -207,7 +207,7 @@ class MuResponseImpl implements MuResponse {
 
     @Override
     public void redirect(URI uri) {
-        throw new RedirectionException(Response.Status.FOUND, uri);
+        throw new RedirectionException(null, Response.Status.FOUND, uri);
     }
 
     @Override
@@ -275,10 +275,9 @@ class MuResponseImpl implements MuResponse {
     }
 
     private void throwIfAsync() {
-        //TODO
-//        if (data.isAsync()) {
-//            throw new IllegalStateException("Cannot use blocking methods when in async mode");
-//        }
+        if (data.exchange.isAsync()) {
+            throw new IllegalStateException("Cannot use blocking methods when in async mode");
+        }
     }
 
 

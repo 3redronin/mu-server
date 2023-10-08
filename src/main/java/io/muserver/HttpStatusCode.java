@@ -81,6 +81,9 @@ public class HttpStatusCode {
     boolean noContentLengthHeader() {
         return isInformational() || code == 204 || code == 304 || code == 205;
     }
+    boolean canHaveEntity() {
+        return !noContentLengthHeader();
+    }
 
     /**
      * @param other A status code to compare

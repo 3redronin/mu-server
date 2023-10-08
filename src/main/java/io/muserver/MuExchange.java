@@ -404,7 +404,7 @@ class MuExchange implements ResponseInfo, AsyncHandle {
                 resp.status(status);
                 boolean isHttp1 = data.newRequest.version() == HttpVersion.HTTP_1_1;
                 MuRuntimeDelegate.writeResponseHeaders(request.uri(), exResp, resp, isHttp1);
-                boolean sendBody = exResp.getStatusInfo().getFamily() != Response.Status.Family.REDIRECTION;
+                boolean sendBody = resp.statusCode().canHaveEntity() && !Mutils.nullOrEmpty(wae.getMessage());
                 ByteBuffer body;
                 if (sendBody) {
                     String message = wae.getMessage();
@@ -525,7 +525,11 @@ class MuExchange implements ResponseInfo, AsyncHandle {
         var toSend = new ByteBuffer[buffersToSend];
         if (!resp.hasStartedSendingData()) {
             toSend[++bi] = ByteBuffer.wrap(resp.statusCode().http11ResponseLine());
-            toSend[++bi] = resp.startStreaming();
+            if (data != null) {
+                toSend[++bi] = resp.startStreaming();
+            } else {
+                toSend[++bi] = resp.headersBuffer((MuHeaders) resp.headers());
+            }
         }
 
         boolean isHead = request.method() == Method.HEAD;
