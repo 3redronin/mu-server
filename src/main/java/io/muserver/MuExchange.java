@@ -573,6 +573,7 @@ class MuExchange implements ResponseInfo, AsyncHandle {
             @Override
             public void failed(Throwable exc, Void attachment) {
                 try {
+                    complete(exc);
                     callback.onComplete(exc); // todo check the exchange status here - should it just be closed?
                 } catch (Exception e) {
                     complete(e);
