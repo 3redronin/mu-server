@@ -4,8 +4,8 @@ import okhttp3.Call;
 import okhttp3.Callback;
 import okhttp3.OkHttpClient;
 import okhttp3.Response;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.ClientUtils;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
@@ -83,8 +83,7 @@ public class FlakyClientTest {
         }
     }
 
-
-    @After
+    @AfterEach
     public void stopIt() {
         MuAssert.stopAndCheck(server);
     }
