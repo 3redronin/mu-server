@@ -167,7 +167,6 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Vo
         var resp = new MuResponseImpl(data);
         var exchange = new MuExchange(data, req, resp);
         log.info("Set exchange for " + exchange);
-        this.exchange = exchange;
         data.exchange = exchange;
         onExchangeStarted(exchange);
         if (headers.containsValue(HeaderNames.EXPECT, HeaderValues.CONTINUE, true) && data.server().settings.autoHandleExpectHeaders()) {

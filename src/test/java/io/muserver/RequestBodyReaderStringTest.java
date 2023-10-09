@@ -425,7 +425,7 @@ public class RequestBodyReaderStringTest {
         testConnectionKilledDueToLargeBody(type, (request, response) -> {
             response.write(request.readBodyAsString());
             return true;
-        }, ResponseState.FULL_SENT /* hmm */, RequestBodyErrorAction.KILL_CONNECTION);
+        }, ResponseState.ERRORED, RequestBodyErrorAction.KILL_CONNECTION);
     }
 
 

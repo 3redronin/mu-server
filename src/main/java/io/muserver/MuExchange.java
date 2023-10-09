@@ -98,7 +98,7 @@ class MuExchange implements ResponseInfo, AsyncHandle {
             if (bodyListener != null) {
                 try {
                     var newSize = requestBodySize.addAndGet(rbd.buffer().remaining());
-                    if (newSize > data.connection.server().maxRequestSize() && requestBodyListener != DiscardingRequestBodyListener.INSTANCE) {
+                    if (newSize > data.connection.server().maxRequestSize() && !request.requestState().endState()) {
                         bodyListener.onError(new ClientErrorException("413 Request Entity Too Large", 413));
                         if (data.server().settings.requestBodyTooLargeAction() == RequestBodyErrorAction.SEND_RESPONSE) {
                             if (rbd.last()) {
