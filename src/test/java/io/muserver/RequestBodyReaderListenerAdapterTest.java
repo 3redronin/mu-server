@@ -4,6 +4,7 @@ import okhttp3.MediaType;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
+import org.eclipse.jetty.client.api.ContentProvider;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -15,16 +16,18 @@ import scaffolding.SlowBodySender;
 import javax.ws.rs.ClientErrorException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.MuServerBuilder.httpServer;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
-import static scaffolding.ClientUtils.call;
-import static scaffolding.ClientUtils.request;
+import static scaffolding.ClientUtils.*;
 import static scaffolding.MuAssert.assertEventually;
 import static scaffolding.StringUtils.randomAsciiStringOfLength;
 
@@ -51,7 +54,7 @@ public class RequestBodyReaderListenerAdapterTest {
             assertThat(resp.code(), equalTo(200));
             assertThat(resp.body().string(), equalTo("Loop 0\nLoop 1\n"));
         }
-        assertThat("All: " + readListener.events.toString(), readListener.events, contains("data received: 7 bytes", "data written", "data received: 7 bytes", "data written", "onComplete"));
+        assertThat("All: " + readListener.events, readListener.events, contains("data received: 7 bytes", "data written", "data received: 7 bytes", "data written", "onComplete"));
     }
 
     @Test
@@ -118,13 +121,13 @@ public class RequestBodyReaderListenerAdapterTest {
         try (Response resp = call(request(server.uri()))) {
             assertThat(resp.code(), equalTo(200));
         }
-        assertThat("All: " + readListener.events.toString(), readListener.events, hasItems("onComplete"));
+        assertThat("All: " + readListener.events, readListener.events, hasItems("onComplete"));
     }
 
     @Test
-    public void ifTheRequestBodyIsTooSlowAnErrorIsReturnedOrConnectionIsKilled() throws IOException {
+    public void ifTheRequestBodyIsTooSlowAnErrorIsReturnedOrConnectionIsKilled() {
         server = ServerUtils.httpsServerForTest()
-            .withRequestTimeout(100, TimeUnit.MILLISECONDS)
+            .withRequestTimeout(50, TimeUnit.MILLISECONDS)
             .addHandler((request, response) -> {
                 AsyncHandle handle = request.handleAsync();
                 readListener = new RecordingRequestBodyListener(handle);
@@ -137,6 +140,7 @@ public class RequestBodyReaderListenerAdapterTest {
             .post(new SlowBodySender(100, 200));
 
         try (Response resp = call(request)) {
+            resp.body().string();
             assertThat(resp.code(), equalTo(408));
         } catch (Exception ex) {
             MuAssert.assertIOException(ex);
@@ -173,7 +177,7 @@ public class RequestBodyReaderListenerAdapterTest {
     }
 
     @Test
-    public void exceedingUploadSizeResultsIn413OrKilledConnectionForChunkedRequestWhereResponseNotStarted() throws Exception {
+    public void exceedingUploadSizeResultsIn413OrKilledConnectionForChunkedRequestWhereResponseNotStarted() {
         AtomicReference<Throwable> exception = new AtomicReference<>();
         server = httpServer()
             .withMaxRequestSize(1000)
@@ -181,7 +185,7 @@ public class RequestBodyReaderListenerAdapterTest {
                 AsyncHandle handle = request.handleAsync();
                 handle.setReadListener(new RequestBodyListener() {
                     @Override
-                    public void onDataReceived(ByteBuffer buffer, DoneCallback doneCallback) throws Exception {
+                    public void onDataReceived(ByteBuffer buffer, DoneCallback doneCallback) {
                         doneCallback.onComplete(null);
                     }
 
@@ -236,7 +240,7 @@ public class RequestBodyReaderListenerAdapterTest {
     }
 
     @Test
-    public void ifRequestBodyNotConsumedButItIsOverSizeThenConnectionIsClosed() throws IOException {
+    public void ifRequestBodyNotConsumedButItIsOverSizeThenConnectionIsClosed() throws Exception {
         server = ServerUtils.httpsServerForTest()
             .withMaxRequestSize(1000)
             .withRequestBodyTooLargeAction(RequestBodyErrorAction.KILL_CONNECTION)
@@ -246,15 +250,28 @@ public class RequestBodyReaderListenerAdapterTest {
             })
             .start();
 
-        Request.Builder request = request()
-            .url(server.uri().toString())
-            .post(new SlowBodySender(1000, 10));
-
-        try (Response resp = call(request)) {
-            resp.body().string();
+        try {
+        var resp = jettyClient().POST(server.uri())
+            .content(new ContentProvider() {
+                public long getLength() {
+                    return -1;
+                }
+                public Iterator<ByteBuffer> iterator() {
+                    return new Iterator<>() {
+                        private final AtomicInteger num = new AtomicInteger();
+                        public boolean hasNext() {
+                            return num.incrementAndGet() <= 1000;
+                        }
+                        public ByteBuffer next() {
+                            return Mutils.toByteBuffer("Hello " + num.get());
+                        }
+                    };
+                }
+            }).send();
+        resp.getContentAsString();
             Assertions.fail("Should not be able to read body");
-        } catch (Exception ex) {
-            MuAssert.assertIOException(ex);
+        } catch (ExecutionException ex) {
+            MuAssert.assertIOException(ex.getCause());
         }
     }
 
