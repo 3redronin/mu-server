@@ -131,7 +131,7 @@ public class MultipartFormParserTest {
     public void mulitpleFieldsCanBeUploaded(String bufferSize) throws Throwable {
         var input = """
             --boundary00000000000000000000000000000000000000123
-            Content-Disposition: form-data; name="image"; filename="/tmp/guangzhou, china.jpeg"
+            Content-Disposition: form-data; name="image"; filename="/tmp/广州, china <>:?\\"|*.jpeg"
             Content-Type: image/jpeg
                         
             Binary image data goes here
@@ -153,7 +153,7 @@ public class MultipartFormParserTest {
         var image = result.uploadedFile("image");
         assertThat(image, notNullValue());
         assertThat(image.size(), equalTo(372_987L));
-        assertThat(image.filename(), equalTo("guangzhou, china.jpeg"));
+        assertThat(image.filename(), equalTo("广州, china        .jpeg"));
         assertThat(image.extension(), equalTo("jpeg"));
         tempFile = image.asPath();
         assertThat(image.asFile().isFile(), equalTo(true));

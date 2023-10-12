@@ -249,7 +249,7 @@ public class AsynchronousProcessingTest {
             public void go(@Suspended AsyncResponse ar, @QueryParam("retryDate") Long retryDate, @QueryParam("retrySeconds") Integer retrySeconds) {
                 registered.set(ar.register(
                     (ConnectionCallback) disconnected -> disconnectedLatch.countDown(),
-                    (CompletionCallback) disconnected -> completedLatch.countDown())
+                    (CompletionCallback) completed -> completedLatch.countDown())
                 );
             }
         }

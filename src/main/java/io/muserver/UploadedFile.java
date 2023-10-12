@@ -246,7 +246,7 @@ class MuUploadedFile2 implements UploadedFile {
         if (i > -1) {
             n = n.substring(i + 1);
         }
-        return n;
+        return n.replaceAll("[<>:\"/|?*\\u0000-\\u001F]", " ");
     }
 
     @Override

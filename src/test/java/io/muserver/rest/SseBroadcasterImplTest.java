@@ -34,6 +34,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.request;
 import static scaffolding.MuAssert.assertEventually;
+import static scaffolding.MuAssert.assertNotTimedOut;
 
 public class SseBroadcasterImplTest {
 
@@ -94,7 +95,7 @@ public class SseBroadcasterImplTest {
             listeners.add(listener);
         }
 
-        MuAssert.assertNotTimedOut("Timed out waiting for subscriptions", subscriptionLatch);
+        assertNotTimedOut("Timed out waiting for subscriptions", subscriptionLatch);
 
         streamer.sendMessages();
         streamer.endBroadcast();
@@ -229,7 +230,7 @@ public class SseBroadcasterImplTest {
             listeners.add(listener);
         }
 
-        MuAssert.assertNotTimedOut("Timed out waiting for subscriptions", subscriptionLatch);
+        assertNotTimedOut("Timed out waiting for subscriptions", subscriptionLatch);
 
         streamer.sendMessages(new Message(1));
         streamer.sendMessages(new Message(2));
@@ -284,7 +285,7 @@ public class SseBroadcasterImplTest {
             assertThat("Timed out waiting for SSE publisher to start", subscriptionLatch.await(10, TimeUnit.SECONDS), is(true));
             assertThat(MuRuntimeDelegate.connectedSinksCount(broadcaster), is(1));
         }
-        MuAssert.assertNotTimedOut("exceptionThrownLatch", exceptionThrownLatch);
+        assertNotTimedOut("exceptionThrownLatch", exceptionThrownLatch);
 
         assertThat(MuRuntimeDelegate.connectedSinksCount(broadcaster), is(0));
 

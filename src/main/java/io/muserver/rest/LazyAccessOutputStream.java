@@ -9,12 +9,13 @@ import java.io.OutputStream;
  * An output stream based on the request output stream, but if no methods are called then the output stream is never created.
  */
 class LazyAccessOutputStream extends OutputStream {
+    private int bufferSize = 8192;
     private final MuResponse muResponse;
     private OutputStream os;
 
     private OutputStream out() {
         if (os == null) {
-            os = muResponse.outputStream();
+            os = muResponse.outputStream(bufferSize);
         }
         return os;
     }
@@ -46,5 +47,14 @@ class LazyAccessOutputStream extends OutputStream {
             os.close();
             os = null;
         }
+    }
+
+    public LazyAccessOutputStream withBufferSize(int bufferSize) {
+        this.bufferSize = bufferSize;
+        return this;
+    }
+
+    public int bufferSize() {
+        return bufferSize;
     }
 }

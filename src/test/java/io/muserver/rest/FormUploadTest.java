@@ -206,7 +206,7 @@ public class FormUploadTest {
                     .build())
             )) {
                 assertThat(resp.code(), is(200));
-                assertThat(resp.body().string(), is("filename is guangzhou  china.jpeg and size is 372987\n" +
+                assertThat(resp.body().string(), is("filename is guangzhou, china.jpeg and size is 372987\n" +
                     "filename is friends.jpg and size is 1712954\n"));
             }
         }

@@ -143,6 +143,7 @@ class MuResponseImpl implements MuResponse {
         if (contentSize < settings.minGzipSize()) return false;
 
         headers.set(HeaderNames.CONTENT_ENCODING, HeaderValues.GZIP);
+        headers.remove(HeaderNames.CONTENT_LENGTH);
         return true;
     }
 
@@ -227,7 +228,7 @@ class MuResponseImpl implements MuResponse {
 
     @Override
     public OutputStream outputStream() {
-        return outputStream(4096);
+        return outputStream(8192);
     }
 
     @Override
@@ -275,9 +276,10 @@ class MuResponseImpl implements MuResponse {
     }
 
     private void throwIfAsync() {
-        if (data.exchange.isAsync()) {
-            throw new IllegalStateException("Cannot use blocking methods when in async mode");
-        }
+        // todo do this? or not
+//        if (data.exchange.isAsync()) {
+//            throw new IllegalStateException("Cannot use blocking methods when in async mode");
+//        }
     }
 
 

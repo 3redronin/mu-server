@@ -106,8 +106,9 @@ public class CORSTest {
             }
 
         }
-        server = ServerUtils.httpsServerForTest().addHandler(
-            restHandler(new Thing())
+        server = ServerUtils.httpsServerForTest()
+            .withGzipEnabled(false)
+            .addHandler(restHandler(new Thing())
                 .withCORS(CORSConfigBuilder.corsConfig()
                     .withAllowedOrigins(asList("http://example.com", "http://foo.example"))
                     .withExposedHeaders(asList("X-EXPOSED", "X-BLAH"))
