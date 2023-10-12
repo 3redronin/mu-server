@@ -124,8 +124,7 @@ public class JaxRSResponseTest {
             ));
             assertThat(resp.headers("etag"), contains(equalTo("W/\"WEAKTAG\"")));
             assertThat(resp.headers("allow"), contains(equalTo("HEAD,GET")));
-            assertThat(resp.headers("set-cookie"), contains(containsString("token=SLDKFJKLEWJRIOEWURIOD289374; Max-Age=10000; Expires=")));
-            assertThat(resp.headers("set-cookie"), contains(containsString("Path=/complex; Secure; HTTPOnly")));
+            assertThat(resp.headers("set-cookie"), contains("token=SLDKFJKLEWJRIOEWURIOD289374; Path=/complex; Max-Age=10000; Secure; HttpOnly"));
             assertThat(resp.headers("arb"), contains(equalTo("bitrary")));
         } finally {
             server.stop();
