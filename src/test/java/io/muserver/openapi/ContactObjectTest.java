@@ -1,6 +1,6 @@
 package io.muserver.openapi;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.io.StringWriter;
@@ -10,6 +10,7 @@ import java.net.URI;
 import static io.muserver.openapi.ContactObjectBuilder.contactObject;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class ContactObjectTest {
     private final Writer writer = new StringWriter();
@@ -27,9 +28,11 @@ public class ContactObjectTest {
         assertThat(writer.toString(), equalTo("{}"));
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void emailMustBeAnEmail() {
-        donFlowmonigal.withEmail("don-at-example.org").build();
+        assertThrows(IllegalArgumentException.class, () ->
+            donFlowmonigal.withEmail("don-at-example.org").build()
+        );
     }
 
 }

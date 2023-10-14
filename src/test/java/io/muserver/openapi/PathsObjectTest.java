@@ -1,6 +1,6 @@
 package io.muserver.openapi;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.io.StringWriter;
@@ -16,6 +16,7 @@ import static io.muserver.openapi.ResponseObjectBuilder.responseObject;
 import static io.muserver.openapi.ResponsesObjectBuilder.responsesObject;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class PathsObjectTest {
 
@@ -43,17 +44,17 @@ public class PathsObjectTest {
         assertThat(writer.toString(), equalTo("{\"/something\":{},\"/something else/yeah\":{}}"));
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void pathsMustStartWithASlash() {
         Map<String, PathItemObject> map = new HashMap<>();
         map.put("/something", pathItemObject().build());
         map.put("something else/yeah", pathItemObject().build());
-        pathsObject()
-            .withPathItemObjects(map)
-            .build();
+        PathsObjectBuilder builder = pathsObject()
+            .withPathItemObjects(map);
+        assertThrows(IllegalArgumentException.class, builder::build);
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void operationIdMustBeUniqueAcrossAllOperations() {
         Map<String, PathItemObject> map = new HashMap<>();
         map.put("/something", pathItemObject()
@@ -62,11 +63,9 @@ public class PathsObjectTest {
         map.put("/something else/yeah", pathItemObject()
             .withOperations(Collections.singletonMap("get", operationObject().withOperationId("something.get").withResponses(responses.build()).build()))
             .build());
-        pathsObject()
-            .withPathItemObjects(map)
-            .build();
-
+        PathsObjectBuilder builder = pathsObject()
+            .withPathItemObjects(map);
+        assertThrows(IllegalArgumentException.class, builder::build);
     }
-
 
 }
