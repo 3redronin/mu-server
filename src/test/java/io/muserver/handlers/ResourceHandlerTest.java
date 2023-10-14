@@ -43,9 +43,9 @@ public class ResourceHandlerTest {
             .addHandler(fileHandler("src/test/resources/sample-static"))
             .start();
 
-        assertContentTypeAndContent("/index.html", "text/html;charset=utf-8", false);
-        assertContentTypeAndContent("/images/" + urlEncode("guangzhou.jpeg"), "image/jpeg", false);
-        assertContentTypeAndContent("/images/" + urlEncode("guangzhou, china.jpeg"), "image/jpeg", false);
+        assertContentTypeAndContent("/index.html", "text/html;charset=utf-8", false, false);
+        assertContentTypeAndContent("/images/" + urlEncode("guangzhou.jpeg"), "image/jpeg", false, false);
+        assertContentTypeAndContent("/images/" + urlEncode("guangzhou, china.jpeg"), "image/jpeg", false, false);
 
         assertNotFound("/bad-path");
     }
@@ -87,9 +87,9 @@ public class ResourceHandlerTest {
             .addHandler(fileOrClasspath("src/test/resources/does-not-exist", "/sample-static"))
             .start();
 
-        assertContentTypeAndContent("/index.html", "text/html;charset=utf-8", false);
-        assertContentTypeAndContent("/images/" + urlEncode("guangzhou.jpeg"), "image/jpeg", false);
-        assertContentTypeAndContent("/images/" + urlEncode("guangzhou, china.jpeg"), "image/jpeg", false);
+        assertContentTypeAndContent("/index.html", "text/html;charset=utf-8", false, false);
+        assertContentTypeAndContent("/images/" + urlEncode("guangzhou.jpeg"), "image/jpeg", false, false);
+        assertContentTypeAndContent("/images/" + urlEncode("guangzhou, china.jpeg"), "image/jpeg", false, false);
 
         assertNotFound("/bad-path");
     }
@@ -287,22 +287,22 @@ public class ResourceHandlerTest {
             .addHandler(fileHandler("src/test/resources/sample-static"))
             .start();
 
-//        assertContentTypeAndContent("/index.html", "text/html", false); // not sure why it's chunked but not gzipped. Probably just too small.
-        assertContentTypeAndContent("/overview.txt", "text/plain;charset=utf-8", true);
-        assertContentTypeAndContent("/sample.css", "text/css", true);
-        assertContentTypeAndContent("/images/guangzhou.jpeg", "image/jpeg", false);
-        assertContentTypeAndContent("/images/friends.jpg", "image/jpeg", false);
+        assertContentTypeAndContent("/index.html", "text/html;charset=utf-8", false, true);
+        assertContentTypeAndContent("/overview.txt", "text/plain;charset=utf-8", true, true);
+        assertContentTypeAndContent("/sample.css", "text/css", true, true);
+        assertContentTypeAndContent("/images/guangzhou.jpeg", "image/jpeg", false, false);
+        assertContentTypeAndContent("/images/friends.jpg", "image/jpeg", false, false);
     }
 
 
-    private void assertContentTypeAndContent(String relativePath, String expectedContentType, boolean expectGzip) throws Exception {
+    private void assertContentTypeAndContent(String relativePath, String expectedContentType, boolean expectGzip, boolean expectVary) throws Exception {
         Map<String, List<String>> headersFromGET;
         URL url = server.httpsUri().resolve(relativePath).toURL();
         try (Response resp = call(request().get().url(url))) {
             headersFromGET = resp.headers().toMultimap();
             assertThat(resp.code(), is(200));
             assertThat(resp.header("Content-Type"), is(expectedContentType));
-            assertThat(resp.header("Vary"), is(expectGzip ? equalTo("accept-encoding") : nullValue()));
+            assertThat(resp.header("Vary"), is(expectVary ? equalTo("accept-encoding") : nullValue()));
             assertThat(resp.body().string(), is(readResource("/sample-static" + urlDecode(relativePath))));
 
             if (expectGzip) {
@@ -337,6 +337,9 @@ public class ResourceHandlerTest {
                 }
                 assertThat(headersFromHEAD, equalTo(headersFromGET));
             } else {
+                if (expectVary) {
+                    headersFromGET.remove("vary");
+                }
                 assertThat(headersFromHEAD, equalTo(headersFromGET));
             }
 
