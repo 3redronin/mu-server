@@ -4,7 +4,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.ws.rs.RedirectionException;
-import javax.ws.rs.core.Response;
 import java.io.*;
 import java.net.URI;
 import java.nio.ByteBuffer;
@@ -208,7 +207,10 @@ class MuResponseImpl implements MuResponse {
 
     @Override
     public void redirect(URI uri) {
-        throw new RedirectionException(null, Response.Status.FOUND, uri);
+        if (!status.isRedirection()) {
+            status(HttpStatusCode.FOUND_302);
+        }
+        throw new RedirectionException(null, status.code(), uri);
     }
 
     @Override

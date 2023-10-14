@@ -407,8 +407,12 @@ class MuExchange implements ResponseInfo, AsyncHandle {
                 int status = exResp.getStatus();
                 resp.status(status);
                 boolean isHttp1 = data.newRequest.version() == HttpVersion.HTTP_1_1;
+                boolean canHaveEntity = resp.statusCode().canHaveEntity();
+                boolean sendBody = canHaveEntity && !Mutils.nullOrEmpty(wae.getMessage());
                 MuRuntimeDelegate.writeResponseHeaders(request.uri(), exResp, resp, isHttp1);
-                boolean sendBody = resp.statusCode().canHaveEntity() && !Mutils.nullOrEmpty(wae.getMessage());
+                if (canHaveEntity && !sendBody && !resp.headers().contains(HeaderNames.CONTENT_LENGTH)) {
+                    resp.headers().set(HeaderNames.CONTENT_LENGTH, HeaderValues.ZERO);
+                }
                 ByteBuffer body;
                 if (sendBody) {
                     String message = wae.getMessage();

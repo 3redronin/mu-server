@@ -4,9 +4,9 @@ import io.muserver.Method;
 import io.muserver.MuServer;
 import okhttp3.Response;
 import okhttp3.internal.Util;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
@@ -21,7 +21,7 @@ public class HttpsRedirectorTest {
 
     private MuServer server;
 
-    @Before
+    @BeforeEach
     public void setup() {
         server = muServer()
             .withHttpPort(0)
@@ -70,7 +70,7 @@ public class HttpsRedirectorTest {
         }
     }
 
-    @After
+    @AfterEach
     public void destroy() {
         scaffolding.MuAssert.stopAndCheck(server);
     }

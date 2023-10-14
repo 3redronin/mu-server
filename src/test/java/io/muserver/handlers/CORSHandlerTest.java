@@ -4,8 +4,8 @@ import io.muserver.Method;
 import io.muserver.MuServer;
 import okhttp3.Response;
 import okhttp3.internal.Util;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.ServerUtils;
 import scaffolding.StringUtils;
 
@@ -103,7 +103,7 @@ public class CORSHandlerTest {
         }
     }
 
-    @After
+    @AfterEach
     public void destroy() {
         scaffolding.MuAssert.stopAndCheck(server);
     }
