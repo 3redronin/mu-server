@@ -551,10 +551,10 @@ class MuExchange implements ResponseInfo, AsyncHandle {
         if (chunked) {
             toSend[++bi] = isHead ? Mutils.EMPTY_BUFFER : StandardCharsets.US_ASCII.encode("\r\n");
         }
-        scatteringWrite(toSend, callback);
 
         // technically this is being updated too early, but doesn't matter
         responseBodyWritten.addAndGet(toAdd);
+        scatteringWrite(toSend, callback);
     }
 
     private void scatteringWrite(ByteBuffer[] toSend, DoneCallback callback) {

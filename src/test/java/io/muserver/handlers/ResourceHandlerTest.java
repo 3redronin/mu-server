@@ -113,12 +113,14 @@ public class ResourceHandlerTest {
             try (Response resp = call(request(imageUri).header("If-Modified-Since", lastModified))) {
                 assertThat(resp.code(), is(304));
                 assertThat(resp.header("last-modified"), is(lastModified));
+                assertThat(resp.header("content-length"), is("372987"));
             }
             Date oneSecBeforeLastModified = new Date(Mutils.fromHttpDate(lastModified).getTime() - 1000);
             try (Response resp = call(request(imageUri).header("If-Modified-Since", Mutils.toHttpDate(oneSecBeforeLastModified)))) {
                 assertThat(resp.code(), is(200));
                 assertThat(resp.header("last-modified"), is(lastModified));
-                resp.body().bytes();
+                int length = Integer.parseInt(resp.header("content-length"));
+                assertThat(resp.body().bytes().length, is(length));
             }
         }
     }
