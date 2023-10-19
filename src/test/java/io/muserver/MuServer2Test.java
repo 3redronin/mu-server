@@ -9,7 +9,10 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import scaffolding.*;
+import scaffolding.ClientUtils;
+import scaffolding.Http1Client;
+import scaffolding.ServerUtils;
+import scaffolding.StringUtils;
 
 import javax.net.ssl.*;
 import java.io.*;
@@ -31,6 +34,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 import static scaffolding.MuAssert.assertEventually;
+import static scaffolding.MuAssert.assertNotTimedOut;
 
 public class MuServer2Test {
 
@@ -172,8 +176,8 @@ public class MuServer2Test {
         }).start();
 
 
-        MuAssert.assertNotTimedOut("Waiting for client EOF", latch);
-        MuAssert.assertNotTimedOut("Waiting for server stop", serverStoppedLatch);
+        assertNotTimedOut("Waiting for client EOF", latch);
+        assertNotTimedOut("Waiting for server stop", serverStoppedLatch);
         assertThat("Actual events: " + events, events, contains("Writing response", "Got line: Hello", "Stop initiated", "Got EOF", "Closed reader"));
         assertThat(server.activeConnections(), empty());
     }
@@ -227,11 +231,9 @@ public class MuServer2Test {
             }
         }).start();
 
-
+        assertNotTimedOut("Waiting for client EOF", latch);
         assertEventually(server::activeConnections, empty());
-        MuAssert.assertNotTimedOut("Waiting for client EOF", latch);
         assertThat("Actual events: " + events, events, contains("Writing response", "Got line: Hello", "Closed output stream", "Exception reading"));
-        assertThat(server.activeConnections(), empty());
     }
 
 
