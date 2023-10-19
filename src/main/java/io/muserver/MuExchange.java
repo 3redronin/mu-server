@@ -10,6 +10,7 @@ import javax.ws.rs.core.Response;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.channels.CompletionHandler;
 import java.nio.charset.StandardCharsets;
@@ -596,18 +597,19 @@ class MuExchange implements ResponseInfo, AsyncHandle {
 
     private static void logBody(ByteBuffer[] toSend) {
         var sb = new StringBuilder();
+        long totalLength = Stream.of(toSend).mapToLong(Buffer::remaining).sum();
         for (ByteBuffer buffer : toSend) {
             var dest = new byte[buffer.remaining()];
             buffer.asReadOnlyBuffer().get(dest);
             String str = new String(dest, StandardCharsets.UTF_8);
             if (str.chars().anyMatch(i -> i < ' ' && i != '\n' && i != '\r')) {
                 sb.setLength(0);
-                sb.append("<binary data> ").append(Stream.of(toSend).map(bb -> dest.length).count()).append(" bytes");
+                sb.append("<binary data> ").append(totalLength).append(" bytes");
                 break;
             }
             sb.append(str);
             if (sb.length() > 1000) {
-                sb.append(" ... ").append(Stream.of(toSend).map(bb -> dest.length).count());
+                sb.append(" ... ").append(totalLength);
                 break;
             }
         }

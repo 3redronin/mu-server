@@ -5,15 +5,14 @@ import io.muserver.Mutils;
 import okhttp3.Response;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 import scaffolding.StringUtils;
 
 import java.io.*;
 import java.net.URI;
-import java.nio.ByteBuffer;
-import java.nio.channels.Channels;
-import java.nio.channels.ReadableByteChannel;
 import java.util.Date;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -34,12 +33,13 @@ public class AsyncFileProviderTest {
     public static final File BIG_FILE_DIR = new File("src/test/big-files");
 
     // Skipping large files is a good idea if the test is too slow
-    private static final boolean SKIP_LARGE_FILES = true;
+    private static final boolean SKIP_LARGE_FILES = false;
 
-    @Test
-    public void canReadFilesFromFileSystem() throws Exception {
+    @ParameterizedTest
+    @ValueSource(strings = { "http", "https" })
+    public void canReadFilesFromFileSystem(String type) throws Exception {
 
-        server = ServerUtils.httpsServerForTest()
+        server = ServerUtils.httpsServerForTest(type)
             .withGzipEnabled(false)
             .addHandler(fileHandler(BIG_FILE_DIR))
             .start();
@@ -111,43 +111,16 @@ public class AsyncFileProviderTest {
     }
 
     private static boolean isEqual(InputStream i1, InputStream i2) throws IOException {
-
-        ReadableByteChannel ch1 = Channels.newChannel(i1);
-        ReadableByteChannel ch2 = Channels.newChannel(i2);
-
-        ByteBuffer buf1 = ByteBuffer.allocateDirect(1000 * 1024);
-        ByteBuffer buf2 = ByteBuffer.allocateDirect(1000 * 1024);
-
-        try {
+        try (var b1 = new BufferedInputStream(i1);
+            var b2 = new BufferedInputStream(i2)) {
             while (true) {
-
-                int n1;
-                n1 = ch1.read(buf1);
-                int n2;
-                n2 = ch2.read(buf2);
-                if (n1 == -1 && n2 == -1) {
+                int fr = b1.read();
+                int tr = b2.read();
+                if (fr != tr)
+                    return false;
+                if (fr == -1)
                     return true;
-                }
-
-                if (n1 == -1 || n2 == -1) {
-                    continue;
-                }
-
-                buf1.flip();
-                buf2.flip();
-
-                for (int i = 0; i < Math.min(n1, n2); i++)
-                    if (buf1.get() != buf2.get()) {
-                        return false;
-                    }
-
-                buf1.compact();
-                buf2.compact();
             }
-
-        } finally {
-            i1.close();
-            i2.close();
         }
     }
 
