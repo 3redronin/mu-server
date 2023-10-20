@@ -2,8 +2,8 @@ package io.muserver.rest;
 
 import io.muserver.MuServer;
 import okhttp3.Response;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.ServerUtils;
 
 import javax.ws.rs.GET;
@@ -118,7 +118,7 @@ public class FilterBindingTest {
         }
     }
 
-    @After
+    @AfterEach
     public void stop() {
         scaffolding.MuAssert.stopAndCheck(server);
     }

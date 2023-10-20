@@ -1,8 +1,8 @@
 package io.muserver.rest;
 
 import io.muserver.MuServer;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 
@@ -20,6 +20,7 @@ import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 
@@ -71,9 +72,9 @@ public class RestHandlerTest {
         }
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void throwsIfObjectDoesNotHavePathAnnotation() {
-        RestHandlerBuilder.restHandler(new Object()).build();
+        assertThrows(IllegalArgumentException.class, () -> RestHandlerBuilder.restHandler(new Object()).build());
     }
 
     @Path("api/fruit bits")
@@ -114,7 +115,7 @@ public class RestHandlerTest {
 
     }
 
-    @After
+    @AfterEach
     public void stopIt() {
         MuAssert.stopAndCheck(server);
     }

@@ -1,7 +1,7 @@
 package io.muserver.rest;
 
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import javax.ws.rs.core.Response;
 import javax.ws.rs.ext.ExceptionMapper;
@@ -23,7 +23,7 @@ public class CustomExceptionMapperTest {
     private static class NoContentException extends Exception {}
     private static class ServerException extends Exception {}
 
-    @Before
+    @BeforeEach
     public void setup() {
         MuRuntimeDelegate.ensureSet();
         Map<Class<? extends Throwable>, ExceptionMapper<? extends Throwable>> mappers = new HashMap<>();

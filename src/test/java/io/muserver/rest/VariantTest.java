@@ -4,8 +4,8 @@ import io.muserver.ContentTypes;
 import io.muserver.HeaderNames;
 import io.muserver.MuServer;
 import okhttp3.Response;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
@@ -235,7 +235,7 @@ public class VariantTest {
         }
     }
 
-    @After
+    @AfterEach
     public void stop() {
         scaffolding.MuAssert.stopAndCheck(server);
     }

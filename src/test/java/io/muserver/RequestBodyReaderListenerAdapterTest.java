@@ -4,30 +4,30 @@ import okhttp3.MediaType;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
-import org.eclipse.jetty.client.api.ContentProvider;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import scaffolding.Http1Client;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 import scaffolding.SlowBodySender;
 
 import javax.ws.rs.ClientErrorException;
 import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.net.SocketException;
 import java.nio.ByteBuffer;
-import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.MuServerBuilder.httpServer;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
-import static scaffolding.ClientUtils.*;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static scaffolding.ClientUtils.call;
+import static scaffolding.ClientUtils.request;
 import static scaffolding.MuAssert.assertEventually;
 import static scaffolding.StringUtils.randomAsciiStringOfLength;
 
@@ -250,28 +250,22 @@ public class RequestBodyReaderListenerAdapterTest {
             })
             .start();
 
-        try {
-        var resp = jettyClient().POST(server.uri())
-            .content(new ContentProvider() {
-                public long getLength() {
-                    return -1;
+        try (var client = Http1Client.connect(server)) {
+            client.writeRequestLine(Method.POST, "/")
+                .writeHeader("transfer-encoding", "chunked")
+                .writeHeader("content-type", "text/plain;charset=utf-8")
+                .flushHeaders();
+            client.writeAscii("8\r\n12345678\r\n").flush();
+            assertThat(client.readLine(), equalTo("HTTP/1.1 200 OK"));
+            client.writeAscii("3E8\r\n" + ("0".repeat(1000) + "\r\n")).flush();
+            var ex = assertThrows(UncheckedIOException.class, () -> {
+                client.readBody(client.readHeaders());
+                for (int i = 0; i < 100; i++) {
+                    client.writeAscii("1").flush();
+                    Thread.sleep(10);
                 }
-                public Iterator<ByteBuffer> iterator() {
-                    return new Iterator<>() {
-                        private final AtomicInteger num = new AtomicInteger();
-                        public boolean hasNext() {
-                            return num.incrementAndGet() <= 1000;
-                        }
-                        public ByteBuffer next() {
-                            return Mutils.toByteBuffer("Hello " + num.get());
-                        }
-                    };
-                }
-            }).send();
-        resp.getContentAsString();
-            Assertions.fail("Should not be able to read body");
-        } catch (ExecutionException ex) {
-            MuAssert.assertIOException(ex.getCause());
+            });
+            assertThat(ex.getCause(), instanceOf(SocketException.class));
         }
     }
 

@@ -2,8 +2,8 @@ package io.muserver.rest;
 
 import io.muserver.MuServer;
 import io.muserver.Mutils;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.MuAssert;
 
 import javax.ws.rs.GET;
@@ -69,7 +69,7 @@ public class HtmlDocumentorTest {
         }
     }
 
-    @After
+    @AfterEach
     public void cleanup() {
         MuAssert.stopAndCheck(server);
     }

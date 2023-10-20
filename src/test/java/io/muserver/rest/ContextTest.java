@@ -4,8 +4,8 @@ import io.muserver.MuRequest;
 import io.muserver.MuResponse;
 import io.muserver.MuServer;
 import okhttp3.Response;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
@@ -244,7 +244,7 @@ public class ContextTest {
         }
     }
 
-    @After
+    @AfterEach
     public void stop() {
         scaffolding.MuAssert.stopAndCheck(server);
     }

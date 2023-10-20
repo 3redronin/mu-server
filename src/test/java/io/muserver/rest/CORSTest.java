@@ -2,8 +2,8 @@ package io.muserver.rest;
 
 import io.muserver.MuServer;
 import okhttp3.internal.Util;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.ServerUtils;
 
 import javax.ws.rs.GET;
@@ -252,7 +252,7 @@ public class CORSTest {
     }
 
 
-    @After
+    @AfterEach
     public void stop() {
         stopAndCheck(server);
     }

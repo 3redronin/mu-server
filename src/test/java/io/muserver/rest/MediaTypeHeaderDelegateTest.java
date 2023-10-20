@@ -1,7 +1,7 @@
 package io.muserver.rest;
 
 import org.hamcrest.MatcherAssert;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import javax.ws.rs.core.MediaType;
 import java.util.List;
@@ -11,13 +11,14 @@ import static java.util.Collections.emptyList;
 import static java.util.Collections.singletonMap;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class MediaTypeHeaderDelegateTest {
     private final MediaTypeHeaderDelegate delegate = new MediaTypeHeaderDelegate();
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void throwsIllegalArgumentExceptionIfInvalid() {
-        mt("text");
+        assertThrows(IllegalArgumentException.class, () -> mt("text"));
     }
 
     @Test

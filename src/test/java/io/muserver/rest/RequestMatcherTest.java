@@ -6,7 +6,7 @@ import io.muserver.HeadersFactory;
 import io.muserver.Method;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import scaffolding.NotImplementedMuRequest;
 
 import javax.ws.rs.*;
@@ -26,6 +26,7 @@ import static java.util.Collections.singletonList;
 import static java.util.stream.Collectors.toList;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class RequestMatcherTest {
     private final SchemaObjectCustomizer customizer = new CompositeSchemaObjectCustomizer(emptyList());
@@ -38,9 +39,9 @@ public class RequestMatcherTest {
     private final ResourceClass resourceAnother = ResourceClass.fromObject(new ResourceAnother(), paramConverterProviders, customizer);
     private final RequestMatcher rm = new RequestMatcher(asList(resourceOne, resourceOneV2, resourceSomething, resourceAnother, resourceSomethingYeah));
 
-    @Test(expected = NotMatchedException.class)
-    public void throwsIfNoValidCandidates() throws NotMatchedException {
-        assertThat(stepOneMatches(URI.create("api/three"), rm), empty());
+    @Test
+    public void throwsIfNoValidCandidates() {
+        assertThrows(NotMatchedException.class, () -> stepOneMatches(URI.create("api/three"), rm));
     }
 
     @Test
@@ -64,9 +65,9 @@ public class RequestMatcherTest {
             .stream().map(rm -> rm.resourceClass).collect(toList());
     }
 
-    @Test(expected = NotMatchedException.class)
+    @Test
     public void ifJustThePrefixMatchesThenItDoesNotMatchIfThereAreNoSubResourceMethods() throws NotMatchedException {
-        rm.stepOneIdentifyASetOfCandidateRootResourceClassesMatchingTheRequest("/api/widgets/something-else-yeah/uhuh");
+        assertThrows(NotMatchedException.class, () -> rm.stepOneIdentifyASetOfCandidateRootResourceClassesMatchingTheRequest("/api/widgets/something-else-yeah/uhuh"));
     }
 
     @Test

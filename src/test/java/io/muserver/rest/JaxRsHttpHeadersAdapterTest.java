@@ -3,7 +3,7 @@ package io.muserver.rest;
 import io.muserver.Cookie;
 import io.muserver.HeaderNames;
 import io.muserver.Headers;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.MultivaluedHashMap;

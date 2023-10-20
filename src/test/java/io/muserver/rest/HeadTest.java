@@ -1,8 +1,8 @@
 package io.muserver.rest;
 
 import io.muserver.MuServer;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.ServerUtils;
 
 import javax.ws.rs.*;
@@ -142,7 +142,7 @@ public class HeadTest {
     }
 
 
-    @After
+    @AfterEach
     public void stop() {
         stopAndCheck(server);
     }

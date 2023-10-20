@@ -7,9 +7,9 @@ import okhttp3.MediaType;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import okio.BufferedSink;
-import org.junit.After;
 import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 
 import javax.ws.rs.*;
 import javax.ws.rs.container.*;
@@ -606,7 +606,7 @@ public class FilterTest {
     }
 
 
-    @After
+    @AfterEach
     public void stopIt() {
         scaffolding.MuAssert.stopAndCheck(server);
     }

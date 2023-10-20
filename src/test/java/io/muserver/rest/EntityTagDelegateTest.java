@@ -1,12 +1,13 @@
 package io.muserver.rest;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import javax.ws.rs.core.EntityTag;
 import javax.ws.rs.ext.RuntimeDelegate;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class EntityTagDelegateTest {
 
@@ -28,9 +29,9 @@ public class EntityTagDelegateTest {
         assertThat(tag.toString(), is("W/\"33a64df551425fcc55e4d42a148795d9f25f89d4\""));
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void badOnesThrow() {
-        del.fromString("W/33a64df551425fcc5\"");
+        assertThrows(IllegalArgumentException.class, () -> del.fromString("W/33a64df551425fcc5\""));
     }
 
     @Test

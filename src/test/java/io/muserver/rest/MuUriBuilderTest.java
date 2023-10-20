@@ -5,7 +5,7 @@ import io.muserver.HttpsConfigBuilder;
 import io.muserver.MuServer;
 import okhttp3.Response;
 import org.hamcrest.Matchers;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import scaffolding.ServerUtils;
 
 import javax.ws.rs.GET;

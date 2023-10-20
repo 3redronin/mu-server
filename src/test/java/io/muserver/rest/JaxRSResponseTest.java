@@ -2,9 +2,9 @@ package io.muserver.rest;
 
 import io.muserver.MuServer;
 import io.muserver.Mutils;
-import org.junit.After;
 import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 
@@ -277,7 +277,7 @@ public class JaxRSResponseTest {
         return cc;
     }
 
-    @After
+    @AfterEach
     public void stop() {
         MuAssert.stopAndCheck(server);
     }

@@ -4,8 +4,8 @@ import io.muserver.MuServer;
 import io.muserver.openapi.SchemaObject;
 import io.muserver.openapi.SchemaObjectBuilder;
 import org.json.JSONObject;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.MuAssert;
 
 import javax.ws.rs.*;
@@ -223,7 +223,7 @@ public class OpenApiCustomSchemaTest {
         }
     }
 
-    @After
+    @AfterEach
     public void cleanup() {
         MuAssert.stopAndCheck(server);
     }
