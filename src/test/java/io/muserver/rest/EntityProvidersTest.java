@@ -9,8 +9,8 @@ import okhttp3.Response;
 import okio.BufferedSink;
 import org.example.MyStringReaderWriter;
 import org.hamcrest.Matchers;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.StringUtils;
 
 import javax.ws.rs.*;
@@ -22,7 +22,6 @@ import java.io.*;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -34,6 +33,7 @@ import java.util.zip.ZipInputStream;
 
 import static io.muserver.Mutils.NEWLINE;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Arrays.asList;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
@@ -366,7 +366,7 @@ public class EntityProvidersTest {
 
                 @Override
                 public void writeTo(BufferedSink bufferedSink) throws IOException {
-                    bufferedSink.write(body.getBytes(StandardCharsets.UTF_8));
+                    bufferedSink.write(body.getBytes(UTF_8));
                     bufferedSink.flush(); // force an HTTP chunk to be sent that will cause the body reader to read the bytes, but not have a complete request
                     bufferedSink.close();
                 }
@@ -445,7 +445,7 @@ public class EntityProvidersTest {
                 ByteArrayOutputStream baos = new ByteArrayOutputStream();
                 Mutils.copy(entityStream, baos, 8192);
                 entityStream.close();
-                return new Dog(baos.toString("utf-8"));
+                return new Dog(baos.toString(UTF_8));
             }
         }
 
@@ -465,9 +465,7 @@ public class EntityProvidersTest {
 
                 @Override
                 public void writeTo(BufferedSink bufferedSink) throws IOException {
-                    bufferedSink.write(body.getBytes(StandardCharsets.UTF_8));
-                    bufferedSink.flush(); // force an HTTP chunk to be sent that will cause the body reader to read the bytes, but not have a complete request
-                    bufferedSink.close();
+                    bufferedSink.write(body.getBytes(UTF_8));
                 }
             })
             .url(server.uri().resolve("/api/dogs").toString())
@@ -482,7 +480,7 @@ public class EntityProvidersTest {
         this.server = httpsServerForTest().addHandler(restHandler(restResource).build()).start();
     }
 
-    @After
+    @AfterEach
     public void stop() {
         scaffolding.MuAssert.stopAndCheck(server);
     }

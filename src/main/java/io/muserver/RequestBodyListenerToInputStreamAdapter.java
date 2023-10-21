@@ -109,9 +109,11 @@ class RequestBodyListenerToInputStreamAdapter extends InputStream implements Req
     @Override
     public void close() throws IOException {
         synchronized (lock) {
-            userClosed = true;
-            if (doneCallback != null) {
-                doneCallback.onComplete(error);
+            if (!userClosed) {
+                userClosed = true;
+                if (doneCallback != null) {
+                    doneCallback.onComplete(error);
+                }
             }
         }
     }
