@@ -289,20 +289,22 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Vo
      */
     @Override
     public void completed(Integer result, Void attachment) {
-        if (result != -1) {
-            var readBuffer = channel.readBuffer();
-            readBuffer.flip();
-            acceptor.muServer.stats.onBytesRead(result); // TODO handle this differently?
-            readyToRead();
-        } else {
-            if (exchange != null) {
-                log.info("Got EOF from client when expecting more, so aborting " + exchange);
-                exchange.abort(new EOFException("Client closed connection"));
+        this.acceptor.muServer.workerExecutor.submit(() -> {
+            if (result != -1) {
+                var readBuffer = channel.readBuffer();
+                readBuffer.flip();
+                acceptor.muServer.stats.onBytesRead(result); // TODO handle this differently?
+                readyToRead();
             } else {
-                log.info("Got EOF from client to shutting channel - status is " + channel.isOpen());
-                initiateShutdown();
+                if (exchange != null) {
+                    log.info("Got EOF from client when expecting more, so aborting " + exchange);
+                    exchange.abort(new EOFException("Client closed connection"));
+                } else {
+                    log.info("Got EOF from client to shutting channel - status is " + channel.isOpen());
+                    initiateShutdown();
+                }
             }
-        }
+        });
     }
 
     private void handleMessage(ConMessage msg) {

@@ -344,10 +344,16 @@ class AsyncTlsSocketChannel implements MuSocketChannel {
                         } else {
                             callback.onComplete(flushErr);
                         }
-
                     });
                 } else {
-                    callback.onComplete(null);
+                    log.info("Graceful TLS shutdown complete so closing channel. Inbound done=" + engine.isInboundDone());
+                    try {
+                        // no need to wait for the client to respond, as per 7.2.1 of RFC 5246 for TLSv1.2 and 6.1 of RFC 8446 for TLSv1.3
+                        socketChannel.close();
+                        callback.onComplete(null);
+                    } catch (IOException e) {
+                        callback.onComplete(e);
+                    }
                 }
 
             } else {

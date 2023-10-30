@@ -2,8 +2,8 @@ package io.muserver.rest;
 
 import io.muserver.MuServer;
 import okhttp3.Response;
-import org.junit.Assert;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import scaffolding.ServerUtils;
 
@@ -108,7 +108,7 @@ public class CollectionParameterStrategyTest {
     }
 
     @Test
-    public void ifNoStrategySpecifiedButAPIHasCollectionsThenThrowError() throws Exception {
+    public void ifNoStrategySpecifiedButAPIHasCollectionsThenThrowError() {
         @Path("values")
         class ValuesResource {
             @GET
@@ -120,7 +120,7 @@ public class CollectionParameterStrategyTest {
             server = ServerUtils.httpsServerForTest()
                 .addHandler(restHandler(new ValuesResource()))
                 .start();
-            Assert.fail("Exception should have been thrown");
+            Assertions.fail("Exception should have been thrown");
         } catch (Exception e) {
             assertThat(e, instanceOf(IllegalStateException.class));
             assertThat(e.getMessage(), containsString("Please specify a string handling strategy for collections for querystring and header parameters"));

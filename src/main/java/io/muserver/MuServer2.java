@@ -8,12 +8,13 @@ import java.net.InetSocketAddress;
 import java.net.SocketOption;
 import java.net.StandardSocketOptions;
 import java.net.URI;
+import java.nio.channels.AsynchronousChannelGroup;
 import java.nio.channels.AsynchronousServerSocketChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 class MuServer2 implements MuServer {
@@ -27,12 +28,16 @@ class MuServer2 implements MuServer {
     final UnhandledExceptionHandler unhandledExceptionHandler;
     final MuServerSettings settings;
     private final List<ResponseCompleteListener> responseCompleteListeners;
+    private final AsynchronousChannelGroup nioGroup;
+    final ExecutorService workerExecutor;
 
-    MuServer2(List<MuHandler> handlers, UnhandledExceptionHandler unhandledExceptionHandler, MuServerSettings settings, List<ResponseCompleteListener> responseCompleteListeners) {
+    MuServer2(List<MuHandler> handlers, UnhandledExceptionHandler unhandledExceptionHandler, MuServerSettings settings, List<ResponseCompleteListener> responseCompleteListeners, AsynchronousChannelGroup nioGroup, ExecutorService workerExecutor) {
         this.handlers = handlers;
         this.unhandledExceptionHandler = unhandledExceptionHandler;
         this.settings = settings;
         this.responseCompleteListeners = responseCompleteListeners;
+        this.nioGroup = nioGroup;
+        this.workerExecutor = workerExecutor;
     }
 
     void addAcceptor(ConnectionAcceptor acceptor) {
@@ -59,12 +64,34 @@ class MuServer2 implements MuServer {
             builder.requestReadTimeoutMillis(), builder.responseWriteTimeoutMillis(), builder.requestBodyTooLargeAction(),
             tempDir, builder.autoHandleExpectHeaders(), builder.rateLimitersCopy(), builder.handshakeIOTimeout());
 
-        MuServer2 server = new MuServer2(builder.handlers(), builder.unhandledExceptionHandler(), settings, builder.responseCompleteListeners());
+        int cores = Runtime.getRuntime().availableProcessors();
+        var acceptorGroup = AsynchronousChannelGroup.withFixedThreadPool(cores, new ThreadFactory() {
+            private final AtomicInteger num = new AtomicInteger(-1);
+            @Override
+            public Thread newThread(Runnable r) {
+                Thread thread = new Thread(r, "mu-acceptor-" + num.incrementAndGet());
+                thread.setDaemon(false);
+                return thread;
+            }
+        });
+
+        ExecutorService workerExecutor = Executors.newCachedThreadPool(new ThreadFactory() {
+            private final AtomicInteger num = new AtomicInteger(-1);
+            @Override
+            public Thread newThread(Runnable r) {
+                Thread thread = new Thread(r, "mu-" + num.incrementAndGet());
+                thread.setDaemon(false);
+                return thread;
+            }
+        });
+
+        MuServer2 server = new MuServer2(builder.handlers(), builder.unhandledExceptionHandler(), settings, builder.responseCompleteListeners(), acceptorGroup, workerExecutor);
+
 
 
         if (hasHttp) {
             InetSocketAddress endpoint = bindEndpoint(builder, builder.httpPort());
-            server.addAcceptor(createAcceptor(server, null, endpoint));
+            server.addAcceptor(createAcceptor(server, null, endpoint, acceptorGroup, workerExecutor));
         }
 
         if (hasHttps) {
@@ -75,7 +102,7 @@ class MuServer2 implements MuServer {
                 httpsConfigBuilder = HttpsConfigBuilder.unsignedLocalhost();
             }
             HttpsConfig httpsConfig = httpsConfigBuilder.build2();
-            server.addAcceptor(createAcceptor(server, httpsConfig, endpoint));
+            server.addAcceptor(createAcceptor(server, httpsConfig, endpoint, acceptorGroup, workerExecutor));
             httpsConfig.setHttpsUri(server.httpsUri());
         }
 
@@ -88,9 +115,9 @@ class MuServer2 implements MuServer {
         return builder.interfaceHost() == null ? new InetSocketAddress(bindPort) : new InetSocketAddress(builder.interfaceHost(), bindPort);
     }
 
-    private static ConnectionAcceptor createAcceptor(MuServer2 muServer, HttpsConfig httpsConfig, InetSocketAddress bindAddress) throws IOException {
+    private static ConnectionAcceptor createAcceptor(MuServer2 muServer, HttpsConfig httpsConfig, InetSocketAddress bindAddress, AsynchronousChannelGroup acceptorGroup, ExecutorService workerExecutor) throws IOException {
 
-        var serverSocketChannel = AsynchronousServerSocketChannel.open();
+        var serverSocketChannel = AsynchronousServerSocketChannel.open(acceptorGroup);
         var supportedOptions = serverSocketChannel.supportedOptions();
         Map<SocketOption<?>, ?> requestedOptions = Map.of(StandardSocketOptions.SO_REUSEADDR, true, StandardSocketOptions.SO_REUSEPORT, true);
         Map<SocketOption<?>, Object> appliedOptions = new HashMap<>();
@@ -106,7 +133,7 @@ class MuServer2 implements MuServer {
             log.info("Applied socket option " + entry.getKey() + "=" + entry.getValue());
         }
 
-        serverSocketChannel.bind(bindAddress);
+        serverSocketChannel.bind(bindAddress, 0);
         InetSocketAddress boundAddress = (InetSocketAddress) serverSocketChannel.getLocalAddress();
         ConnectionAcceptor acceptor = new ConnectionAcceptor(serverSocketChannel, boundAddress, httpsConfig);
         acceptor.readyToAccept(muServer);
@@ -143,8 +170,27 @@ class MuServer2 implements MuServer {
                 break;
             }
         }
+        log.info("Connections stopped");
         for (ConnectionAcceptor acceptor : acceptors) {
             acceptor.killConnections();
+        }
+        log.info("Connections killed");
+
+        workerExecutor.shutdown();
+        nioGroup.shutdown();
+        try {
+            if (!nioGroup.awaitTermination(timeout, unit)) {
+                log.warn("Could not shut down group");
+            }
+        } catch (InterruptedException e) {
+            log.info("Interrupted shutting down group");
+        }
+        try {
+            if (!workerExecutor.awaitTermination(timeout, unit)) {
+                log.warn("Could not shut down worker executor");
+            }
+        } catch (InterruptedException e) {
+            log.info("Interrupted shutting down worker executor");
         }
 
         log.info("Stop completed");

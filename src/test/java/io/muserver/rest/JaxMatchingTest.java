@@ -5,6 +5,8 @@ import okhttp3.Response;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 
@@ -27,8 +29,9 @@ import static scaffolding.ServerUtils.httpsServerForTest;
 public class JaxMatchingTest {
     private MuServer server;
 
-    @Test
-    public void canAccessClassPathParamsInMethod() throws IOException {
+    @ParameterizedTest
+    @ValueSource(strings = {"http", "https"})
+    public void canAccessClassPathParamsInMethod(String type) throws IOException {
         @Path("/{thing : [a-z]+}")
         class Thing {
             @GET
@@ -36,7 +39,7 @@ public class JaxMatchingTest {
                 return thing;
             }
         }
-        server = ServerUtils.httpsServerForTest()
+        server = ServerUtils.httpsServerForTest(type)
             .addHandler(RestHandlerBuilder.restHandler(new Thing()).build())
             .start();
         try (Response resp = call(request().url(server.uri().resolve("/tiger").toString()))) {
