@@ -16,7 +16,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <netty.version>4.1.95.Final</netty.version>
         <slf4j.version>1.7.36</slf4j.version>
-        <jetty.version>9.4.50.v20221201</jetty.version>
+        <jetty.version>9.4.53.v20231009</jetty.version>
         <junit.version>5.10.0</junit.version>
     </properties>
 
@@ -108,18 +108,6 @@
             <scope>test</scope>
         </dependency>
 
-        <dependency>
-            <groupId>junit</groupId>
-            <artifactId>junit</artifactId>
-            <version>4.13.2</version>
-            <scope>test</scope>
-            <exclusions>
-                <exclusion>
-                    <groupId>org.hamcrest</groupId>
-                    <artifactId>*</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
         <dependency>
             <groupId>org.eclipse.jetty</groupId>
             <artifactId>jetty-client</artifactId>

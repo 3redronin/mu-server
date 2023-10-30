@@ -2,9 +2,11 @@ package io.muserver.rest;
 
 import io.muserver.MuServer;
 import okhttp3.Dispatcher;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import scaffolding.*;
 
 import javax.ws.rs.GET;
@@ -27,6 +29,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
@@ -41,7 +44,7 @@ public class SseBroadcasterImplTest {
     public MuServer server;
     private SseClient.OkSse sseClient;
 
-    @Before
+    @BeforeEach
     public void setup() {
         Dispatcher dispatcher = new Dispatcher();
         dispatcher.setMaxRequests(1000);
@@ -53,8 +56,9 @@ public class SseBroadcasterImplTest {
         );
     }
 
-    @Test
-    public void canPublishMessagesToMultipleClients() throws InterruptedException {
+    @ParameterizedTest
+    @ValueSource(strings = { "http", "https" })
+    public void canPublishMessagesToMultipleClients(String type) throws InterruptedException, ExecutionException {
 
         int messagesPublished = 100;
         int numberOfSubscribers = 100;
@@ -74,9 +78,9 @@ public class SseBroadcasterImplTest {
                 subscriptionLatch.countDown();
             }
 
-            public void sendMessages() {
+            public void sendMessages() throws ExecutionException, InterruptedException {
                 for (int i = 0; i < messagesPublished; i++) {
-                    broadcaster.broadcast(sse.newEvent("This is message " + i));
+                    broadcaster.broadcast(sse.newEvent("This is message " + i)).toCompletableFuture().get();
                 }
             }
 
@@ -86,7 +90,8 @@ public class SseBroadcasterImplTest {
         }
 
         Streamer streamer = new Streamer();
-        server = ServerUtils.httpsServerForTest().addHandler(restHandler(streamer)).start();
+        server = ServerUtils.testServer(type)
+            .addHandler(restHandler(streamer)).start();
 
         List<TestSseClient> listeners = new ArrayList<>();
         for (int i = 0; i < numberOfSubscribers; i++) {
@@ -284,14 +289,16 @@ public class SseBroadcasterImplTest {
         try (SseClient.ServerSentEvent ignored = sseClient.newServerSentEvent(request().url(server.uri().resolve("/streamer/register").toString()).build(), new TestSseClient())) {
             assertThat("Timed out waiting for SSE publisher to start", subscriptionLatch.await(10, TimeUnit.SECONDS), is(true));
             assertThat(MuRuntimeDelegate.connectedSinksCount(broadcaster), is(1));
+            ignored.close();
         }
         assertNotTimedOut("exceptionThrownLatch", exceptionThrownLatch);
 
         assertThat(MuRuntimeDelegate.connectedSinksCount(broadcaster), is(0));
+        assertThat(errors, empty());
 
     }
 
-    @After
+    @AfterEach
     public void stop() {
         MuAssert.stopAndCheck(server);
     }

@@ -2,8 +2,8 @@ package io.muserver.rest;
 
 
 import io.muserver.MuServer;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.*;
 
 import javax.ws.rs.*;
@@ -195,9 +195,7 @@ public class SseEventSinkTest {
         }
 
         server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Streamer()))
-            .addResponseCompleteListener(info -> {
-                responseClosedLatch.countDown();
-            })
+            .addResponseCompleteListener(info -> responseClosedLatch.countDown())
             .start();
         try (SseClient.ServerSentEvent ignored = sseClient.newServerSentEvent(request(server.uri().resolve("/streamer/eventStream")).build(), listener)) {
             assertNotTimedOut("Waiting for one message", oneSentLatch);
@@ -248,7 +246,7 @@ public class SseEventSinkTest {
     }
 
 
-    @After
+    @AfterEach
     public void stop() {
         MuAssert.stopAndCheck(server);
         listener.cleanup();

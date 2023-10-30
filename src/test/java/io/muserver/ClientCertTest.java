@@ -33,7 +33,7 @@ public class ClientCertTest {
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 X509Certificate cert = (X509Certificate) request.connection().clientCertificate().get();
                 cert.checkValidity();
-                response.write("The client cert is " + cert.getSubjectDN().getName());
+                response.write("The client cert is " + cert.getSubjectX500Principal().getName());
             })
             .start();
         OkHttpClient client = getClientWithCert("client.p12");

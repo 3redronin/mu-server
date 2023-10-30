@@ -2,8 +2,8 @@ package io.muserver.rest;
 
 import io.muserver.MuServer;
 import io.muserver.Mutils;
-import org.junit.Assert;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
@@ -190,7 +190,7 @@ public class JaxRSResponseTest {
             assertThat(resp.getEntity(), equalTo("Hello world"));
             try {
                 resp.readEntity(String.class);
-                Assert.fail("Should fail because it wasn't buffered before being read");
+                Assertions.fail("Should fail because it wasn't buffered before being read");
             } catch (IllegalStateException e) {
                 // expected
             }

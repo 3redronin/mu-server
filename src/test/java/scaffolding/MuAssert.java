@@ -4,7 +4,7 @@ import io.muserver.MuRequest;
 import io.muserver.MuServer;
 import io.muserver.StatusLogger;
 import org.hamcrest.Matcher;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -81,7 +81,7 @@ public class MuAssert {
             T result = actual.apply();
             assertThat("Actual: " + result, result, matcher);
         } catch (Exception e) {
-            Assert.fail("Lambda threw exception: " + e);
+            Assertions.fail("Lambda threw exception: " + e);
         }
     }
 

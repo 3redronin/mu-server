@@ -7,8 +7,8 @@ import okhttp3.MediaType;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import okio.BufferedSink;
-import org.junit.Assert;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import javax.ws.rs.*;
@@ -129,7 +129,7 @@ public class FilterTest {
                         try {
                             try {
                                 requestContext.getPropertyNames().add("shouldnothappen");
-                                Assert.fail("Should not have worked");
+                                Assertions.fail("Should not have worked");
                             } catch (UnsupportedOperationException e) {
                                 // expected
                             }

@@ -5,8 +5,8 @@ import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import okio.BufferedSink;
-import org.junit.After;
-import org.junit.Assert;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import scaffolding.FileUtils;
@@ -351,7 +351,7 @@ public class RequestBodyReaderStringTest {
 
         try (Response resp = call(request)) {
             resp.body().string();
-            Assert.fail("Should not complete successfully");
+            Assertions.fail("Should not complete successfully");
         } catch (Exception e) {
             MuAssert.assertIOException(e);
         }
@@ -473,7 +473,7 @@ public class RequestBodyReaderStringTest {
         assertThat(ri.response.responseState(), equalTo(expectedResponseState));
     }
 
-    @After
+    @AfterEach
     public void destroy() {
         scaffolding.MuAssert.stopAndCheck(server);
     }
