@@ -27,7 +27,7 @@ class MuRequestImpl implements MuRequest {
     private final Method method;
     private final URI uri;
     private final URI serverUri;
-    private RequestState state;
+    private RequestState state = RequestState.HEADERS_RECEIVED;
     private String contextPath = "";
     private String relativePath;
     private final Headers headers;
@@ -38,19 +38,15 @@ class MuRequestImpl implements MuRequest {
     private Map<String, Object> attributes;
     private CompletableFuture<MuForm> formFuture;
 
-    public MuRequestImpl(MuExchangeData data, Method method, String relativeUri, Headers headers, boolean hasBody) {
+    MuRequestImpl(MuExchangeData data, Method method, String relativeUri, Headers headers, boolean hasBody) {
         this.data = data;
         this.method = method;
-
-
-
         this.serverUri = data.connection.serverUri().resolve(relativeUri);
         this.relativePath = serverUri.getRawPath();
         var host = headers.get("host");
         this.uri = getUri(headers, serverUri.getScheme(), host, relativeUri, serverUri);
         this.headers = headers;
         this.hasBody = hasBody;
-        this.state = hasBody ? RequestState.HEADERS_RECEIVED : RequestState.COMPLETE;
     }
 
     private static URI getUri(Headers h, String scheme, String hostHeader, String requestUri, URI defaultValue) {
@@ -304,6 +300,7 @@ class MuRequestImpl implements MuRequest {
     }
 
     void onComplete(Headers trailers) {
+        if (state.endState()) throw new IllegalStateException("Setting request as complete when state is " + state);
         state = RequestState.COMPLETE;
         this.trailers = trailers;
     }

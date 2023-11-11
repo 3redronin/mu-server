@@ -24,11 +24,11 @@ class AsyncPlaintextSocketChannel implements MuSocketChannel {
         this.channel = channel;
     }
 
-    public void read(CompletionHandler<Integer, Void> completionHandler) {
+    public void read(boolean useReadTimeout, CompletionHandler<Integer, Void> completionHandler) {
         if (readBuffer.position() > 0) {
             log.warn("********** read buffer still has stuff!! " + readBuffer.position());
         }
-        channel.read(readBuffer, readTimeoutMillis, TimeUnit.MILLISECONDS, null, completionHandler);
+        channel.read(readBuffer, useReadTimeout ? readTimeoutMillis : 0, TimeUnit.MILLISECONDS, null, completionHandler);
     }
 
     @Override

@@ -258,18 +258,19 @@ public class SseBroadcasterImplTest {
         assertThat(numWithErrors, is(1));
     }
 
-    @Test
-    public void disconnectedClientsAreRemovedFromBroadcasting() throws InterruptedException {
+    @ParameterizedTest
+    @ValueSource(strings = {"http", "https"})
+    public void disconnectedClientsAreRemovedFromBroadcasting(String type) throws InterruptedException {
         List<String> errors = new CopyOnWriteArrayList<>();
         CountDownLatch subscriptionLatch = new CountDownLatch(1);
-        CountDownLatch exceptionThrownLatch = new CountDownLatch(1);
+        CountDownLatch onCloseLatch = new CountDownLatch(1);
 
         Sse sse = MuRuntimeDelegate.createSseFactory();
         SseBroadcaster broadcaster = sse.newBroadcaster();
         broadcaster.onError((sseEventSink, throwable) -> {
             errors.add(throwable.getMessage());
-            exceptionThrownLatch.countDown();
         });
+        broadcaster.onClose(sseEventSink -> onCloseLatch.countDown());
 
         @Path("/streamer")
         class Streamer {
@@ -282,18 +283,17 @@ public class SseBroadcasterImplTest {
             }
         }
 
-        server = ServerUtils.httpsServerForTest()
+        server = ServerUtils.httpsServerForTest(type)
             .addHandler(RestHandlerBuilder.restHandler(new Streamer()))
             .start();
 
         try (SseClient.ServerSentEvent ignored = sseClient.newServerSentEvent(request().url(server.uri().resolve("/streamer/register").toString()).build(), new TestSseClient())) {
             assertThat("Timed out waiting for SSE publisher to start", subscriptionLatch.await(10, TimeUnit.SECONDS), is(true));
             assertThat(MuRuntimeDelegate.connectedSinksCount(broadcaster), is(1));
-            ignored.close();
         }
-        assertNotTimedOut("exceptionThrownLatch", exceptionThrownLatch);
+        assertNotTimedOut("onCloseLatch", onCloseLatch);
 
-        assertThat(MuRuntimeDelegate.connectedSinksCount(broadcaster), is(0));
+        assertEventually(() -> MuRuntimeDelegate.connectedSinksCount(broadcaster), is(0));
         assertThat(errors, empty());
 
     }

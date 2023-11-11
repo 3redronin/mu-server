@@ -38,7 +38,7 @@ public class ClientCertTest {
             .start();
         OkHttpClient client = getClientWithCert("client.p12");
         try (Response resp = client.newCall(request(server.uri()).build()).execute()) {
-            assertThat(resp.body().string(), equalTo("The client cert is CN=Moo Surfer Test User, O=Moo Surfer, L=London, C=UK"));
+            assertThat(resp.body().string(), equalTo("The client cert is CN=Moo Surfer Test User,O=Moo Surfer,L=London,C=UK"));
         }
     }
 

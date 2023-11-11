@@ -26,8 +26,7 @@ import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Arrays.asList;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.instanceOf;
+import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.request;
 import static scaffolding.MuAssert.assertNotTimedOut;
 
@@ -93,6 +92,7 @@ public class SseEventSinkTest {
         try (SseClient.ServerSentEvent ignored = sseClient.newServerSentEvent(request().url(server.uri().resolve("/streamer/eventStream").toString()).build(), listener)) {
             listener.assertListenerIsClosed();
         }
+        assertThat(listener.receivedMessages.toString(), listener.receivedMessages.size(), greaterThanOrEqualTo(8));
         assertThat(listener.receivedMessages.subList(0, 7), equalTo(asList(
             "open",
             "retryTime=100000",

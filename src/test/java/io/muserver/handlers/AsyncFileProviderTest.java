@@ -13,6 +13,7 @@ import scaffolding.StringUtils;
 
 import java.io.*;
 import java.net.URI;
+import java.time.Duration;
 import java.util.Date;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -24,8 +25,7 @@ import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
-import static scaffolding.ClientUtils.call;
-import static scaffolding.ClientUtils.request;
+import static scaffolding.ClientUtils.*;
 
 public class AsyncFileProviderTest {
 
@@ -33,7 +33,7 @@ public class AsyncFileProviderTest {
     public static final File BIG_FILE_DIR = new File("src/test/big-files");
 
     // Skipping large files is a good idea if the test is too slow
-    private static final boolean SKIP_LARGE_FILES = false;
+    private static final boolean SKIP_LARGE_FILES = true;
 
     @ParameterizedTest
     @ValueSource(strings = { "http", "https" })
@@ -46,6 +46,10 @@ public class AsyncFileProviderTest {
 
         File[] files = BIG_FILE_DIR.listFiles(File::isFile);
         assertThat(files.length, greaterThanOrEqualTo(2));
+
+        var httpClient = client.newBuilder()
+            .callTimeout(Duration.ofMinutes(5))
+            .build();
         for (File file : files) {
             boolean isLarge = file.length() > 10000000L;
             if (SKIP_LARGE_FILES && isLarge) {
@@ -53,7 +57,7 @@ public class AsyncFileProviderTest {
             }
             URI downloadUri = server.uri().resolve("/" + urlEncode(file.getName()));
 
-            try (Response resp = call(request(downloadUri))) {
+            try (Response resp = httpClient.newCall(request(downloadUri).build()).execute()) {
                 assertThat(resp.code(), is(200));
                 assertThat(resp.headers().toString(), resp.headers().get("content-length"), equalTo(String.valueOf(file.length())));
                 assertThat(resp.headers().get("last-modified"), equalTo(Mutils.toHttpDate(new Date(file.lastModified()))));

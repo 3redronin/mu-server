@@ -15,6 +15,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import static io.muserver.MuServerBuilder.muServer;
@@ -136,17 +137,20 @@ public class StateChangesTest {
     @ParameterizedTest
     @ValueSource(strings = { "http", "https" })
     public void when_request_COMPLETE_and_response_STREAMING_action_CANCEL_response_killed_early(String type) throws Exception {
+        var clientHeadersReceivedLatch = new CountDownLatch(1);
         server = serverBuilder(type)
             .addHandler((request, response) -> {
                 response.headers().set(HeaderNames.CONTENT_LENGTH, 20);
                 response.sendChunk("Hello");
+                clientHeadersReceivedLatch.await(10, TimeUnit.SECONDS);
                 request.abort();
                 return true;
             })
             .start();
         try (var client = GET("/").flushHeaders()) {
             var headers = assert200(client);
-            assertThrows(EOFException.class, () -> client.readBody(headers));
+            clientHeadersReceivedLatch.countDown();
+            assertThrows(SocketException.class, () ->  client.readBody(headers));
         }
         assertOneCompleted(RequestState.COMPLETE, ResponseState.ERRORED);
     }

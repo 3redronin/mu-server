@@ -86,8 +86,10 @@ class RequestBodyListenerToInputStreamAdapter extends InputStream implements Req
                 return num;
             } else {
                 try {
-                    if (doneCallback != null) {
-                        doneCallback.onComplete(null);
+                    DoneCallback dc = doneCallback;
+                    if (dc != null) {
+                        doneCallback = null;
+                        dc.onComplete(null);
                         if (error != null) {
                             throw error;
                         }
@@ -111,8 +113,10 @@ class RequestBodyListenerToInputStreamAdapter extends InputStream implements Req
         synchronized (lock) {
             if (!userClosed) {
                 userClosed = true;
-                if (doneCallback != null) {
-                    doneCallback.onComplete(error);
+                DoneCallback dc = doneCallback;
+                if (dc != null) {
+                    doneCallback = null;
+                    dc.onComplete(error);
                 }
             }
         }

@@ -8,7 +8,6 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 import okio.BufferedSink;
 import org.example.MyStringReaderWriter;
-import org.hamcrest.Matchers;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import scaffolding.StringUtils;
@@ -37,6 +36,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Arrays.asList;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.is;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 import static scaffolding.ServerUtils.httpsServerForTest;
@@ -376,7 +376,7 @@ public class EntityProvidersTest {
             assertThat(resp.body().string(), equalTo(body));
         }
         ResponseInfo ri = info.get(5, TimeUnit.SECONDS);
-        assertThat(ri.completedSuccessfully(), Matchers.is(true));
+        assertThat(ri.completedSuccessfully(), is(true));
     }
 
     @Test
@@ -456,7 +456,7 @@ public class EntityProvidersTest {
                 .build())
             .addResponseCompleteListener(info::complete)
             .start();
-        try (Response resp = call(request()
+        try (Response resp = call(request(server.uri().resolve("/api/dogs"))
             .post(new RequestBody() {
                 @Override
                 public MediaType contentType() {
@@ -468,12 +468,11 @@ public class EntityProvidersTest {
                     bufferedSink.write(body.getBytes(UTF_8));
                 }
             })
-            .url(server.uri().resolve("/api/dogs").toString())
         )) {
             assertThat(resp.body().string(), equalTo(body));
         }
         ResponseInfo ri = info.get(10, TimeUnit.SECONDS);
-        assertThat(ri.completedSuccessfully(), Matchers.is(true));
+        assertThat(ri.completedSuccessfully(), is(true));
     }
 
     private void startServer(Object restResource) {

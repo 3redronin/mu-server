@@ -79,7 +79,7 @@ class ConnectionAcceptor implements CompletionHandler<AsynchronousSocketChannel,
                 var plainTextSocketChannel = new AsyncPlaintextSocketChannel(appReadBuffer, settings.requestReadTimeoutMillis(), settings.responseWriteTimeoutMillis(), channel);
                 MuHttp1Connection connection = new MuHttp1Connection(this, plainTextSocketChannel, remoteAddress, address);
                 onConnectionEstablished(connection);
-                connection.readyToRead();
+                connection.readyToRead(true);
             } else {
                 var sslContext = httpsConfig.sslContext();
                 SSLEngine engine = sslContext.createSSLEngine();

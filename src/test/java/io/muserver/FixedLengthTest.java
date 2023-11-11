@@ -11,7 +11,7 @@ import scaffolding.ServerUtils;
 
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.net.ProtocolException;
+import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CountDownLatch;
 
@@ -59,7 +59,7 @@ public class FixedLengthTest {
             var actual = resp.body().string();
             Assertions.fail("Should have failed due to invalid HTTP response but got: " + actual);
         } catch (Exception e) {
-            assertThat(e, anyOf(instanceOf(StreamResetException.class), instanceOf(ProtocolException.class)));
+            assertThat(e, anyOf(instanceOf(StreamResetException.class), instanceOf(SocketException.class)));
         }
 
         MuAssert.assertNotTimedOut("exception", errorSetLatch);
@@ -95,7 +95,7 @@ public class FixedLengthTest {
             var actual = resp.body().string();
             Assertions.fail("Should have failed due to invalid HTTP response but got: " + actual);
         } catch (Exception e) {
-            assertThat(e, anyOf(instanceOf(StreamResetException.class), instanceOf(ProtocolException.class)));
+            assertThat(e, anyOf(instanceOf(StreamResetException.class), instanceOf(SocketException.class)));
         }
 
         MuAssert.assertNotTimedOut("exception", errorSetLatch);
@@ -119,7 +119,7 @@ public class FixedLengthTest {
             resp.body().string();
             Assertions.fail("Should have failed due to invalid HTTP response");
         } catch (Exception e) {
-            assertThat(e, anyOf(instanceOf(StreamResetException.class), instanceOf(ProtocolException.class)));
+            assertThat(e, anyOf(instanceOf(StreamResetException.class), instanceOf(SocketException.class)));
         }
     }
 

@@ -55,8 +55,11 @@ class MuExchange implements ResponseInfo, AsyncHandle {
     }
 
     void onRequestCompleted(Headers trailers) {
-        this.request.onComplete(trailers);
-        if (response.responseState().endState()) onCompleted();
+        if (!request.requestState().endState()) {
+            this.request.onComplete(trailers);
+            if (response.responseState().endState()) onCompleted();
+            data.connection.onRequestCompleted(this);
+        }
     }
 
     void onResponseCompleted(MuResponseImpl muResponse) {
@@ -103,7 +106,7 @@ class MuExchange implements ResponseInfo, AsyncHandle {
                         bodyListener.onError(new ClientErrorException("413 Request Entity Too Large", 413));
                         if (data.server().settings.requestBodyTooLargeAction() == RequestBodyErrorAction.SEND_RESPONSE) {
                             if (rbd.last()) {
-                                onRequestCompleted(null);
+                                onRequestCompleted(MuHeaders.EMPTY);
                             } else {
                                 setReadListener(DiscardingRequestBodyListener.INSTANCE);
                             }
@@ -120,7 +123,7 @@ class MuExchange implements ResponseInfo, AsyncHandle {
                                 } else {
                                     // todo lots of small message chunks can lead to huge stacks
                                     request.onRequestBodyReceived();
-                                    data.connection.readyToRead();
+                                    data.connection.readyToRead(true);
                                 }
                             } else {
                                 // TODO also close things here?
@@ -136,7 +139,7 @@ class MuExchange implements ResponseInfo, AsyncHandle {
             } else {
                 // todo when does this happen?
                 log.warn("Ignoring request body");
-                data.connection.readyToRead();
+                data.connection.readyToRead(true);
             }
         } else if (msg instanceof EndOfChunks eoc) {
             onRequestCompleted(eoc.trailers());
@@ -180,7 +183,7 @@ class MuExchange implements ResponseInfo, AsyncHandle {
         }
         if (request.hasBody()) {
             this.requestBodyListener = readListener;
-            this.data.connection.readyToRead();
+            this.data.connection.readyToRead(true);
         } else {
             readListener.onComplete();
         }

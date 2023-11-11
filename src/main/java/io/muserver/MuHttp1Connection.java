@@ -5,7 +5,6 @@ import org.slf4j.LoggerFactory;
 
 import javax.ws.rs.ClientErrorException;
 import javax.ws.rs.NotFoundException;
-import java.io.EOFException;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -49,7 +48,7 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Vo
         this.cipher = cipher;
         this.clientCert = clientCert;
         acceptor.onConnectionEstablished(this);
-        readyToRead();
+        readyToRead(true);
     }
 
     @Override
@@ -169,6 +168,10 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Vo
         log.info("Set exchange for " + exchange);
         data.exchange = exchange;
         onExchangeStarted(exchange);
+        if (!req.hasBody()) {
+            req.onComplete(MuHeaders.EMPTY);
+            onRequestCompleted(exchange);
+        }
         if (headers.containsValue(HeaderNames.EXPECT, HeaderValues.CONTINUE, true) && data.server().settings.autoHandleExpectHeaders()) {
             long proposedLength = headers.getLong(HeaderNames.CONTENT_LENGTH.toString(), -1L);
             if (proposedLength > acceptor.muServer.maxRequestSize()) {
@@ -217,7 +220,7 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Vo
                 if (responseHeaders.containsValue(HeaderNames.CONNECTION, HeaderValues.CLOSE, true)) {
                     initiateShutdown();
                 } else {
-                    readyToRead();
+                    readyToRead(true);
                 }
             }
             @Override
@@ -252,7 +255,10 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Vo
     }
 
 
-    void readyToRead() {
+    /**
+     * @param notPreemptive A preemptive call is where we read just to detect disconnections, even though we don't expect a read yet
+     */
+    void readyToRead(boolean notPreemptive) {
         var readBuffer = channel.readBuffer();
         if (readBuffer.hasRemaining()) {
             ConMessage msg;
@@ -274,8 +280,7 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Vo
         } else {
             readBuffer.clear();
         }
-
-        channel.read(this);
+        channel.read(notPreemptive, this);
     }
 
     private void writeRedirectResponse(RedirectException e) {
@@ -294,11 +299,11 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Vo
                 var readBuffer = channel.readBuffer();
                 readBuffer.flip();
                 acceptor.muServer.stats.onBytesRead(result); // TODO handle this differently?
-                readyToRead();
+                readyToRead(true);
             } else {
                 if (exchange != null) {
                     log.info("Got EOF from client when expecting more, so aborting " + exchange);
-                    exchange.abort(new EOFException("Client closed connection"));
+                    exchange.abort(new ClientDisconnectedException());
                 } else {
                     log.info("Got EOF from client to shutting channel - status is " + channel.isOpen());
                     initiateShutdown();
@@ -382,12 +387,12 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Vo
             forceShutdown(null); // TODO put an exception?
         } else if (muExchange.response.headers().contains(HeaderNames.CONNECTION, HeaderValues.CLOSE, true)) {
             initiateShutdown();
-        } else if (muExchange.state == HttpExchangeState.COMPLETE) {
-            // todo move this to wherever the request body is completed so we can detect disconnections
-            readyToRead();
-        } else {
+        } else if (muExchange.state != HttpExchangeState.COMPLETE) {
             log.error("Unexpected situation: " + muExchange);
         }
     }
 
+    public void onRequestCompleted(MuExchange exchange) {
+        readyToRead(false);
+    }
 }

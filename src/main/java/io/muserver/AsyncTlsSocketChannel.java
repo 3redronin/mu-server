@@ -151,13 +151,13 @@ class AsyncTlsSocketChannel implements MuSocketChannel {
 
 
     @Override
-    public void read(CompletionHandler<Integer, Void> handler) {
+    public void read(boolean useReadTimeout, CompletionHandler<Integer, Void> handler) {
         int	plainTextCount = appReadBuffer.position();
 
         if (canFlush()) {
             flush(err -> {
                 if (err == null) {
-                    read(handler);
+                    read(useReadTimeout, handler);
                 } else {
                     handler.failed(err, null);
                 }
@@ -186,13 +186,12 @@ class AsyncTlsSocketChannel implements MuSocketChannel {
                 }
             }
 
-
-            socketChannel.read(netReadBuffer, readTimeout, TimeUnit.MILLISECONDS, null, new CompletionHandler<Integer, Void>() {
+            socketChannel.read(netReadBuffer, useReadTimeout ? readTimeout : 0, TimeUnit.MILLISECONDS, null, new CompletionHandler<Integer, Void>() {
                 @Override
                 public void completed(Integer result, Void attachment) {
                     try {
                         if (result == -1) {
-                            log.info("EOF received; closing inbound");
+                            log.info("EOF received; closing inbound when " + engine.getHandshakeStatus() + " and " + engine.isInboundDone());
                             engine.closeInbound();
                         } else {
                             netReadBuffer.flip();

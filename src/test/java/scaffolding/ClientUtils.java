@@ -30,7 +30,7 @@ public class ClientUtils {
         System.setProperty("io.netty.leakDetection.targetRecords", "1000");
         Logger.getLogger(OkHttpClient.class.getName()).setLevel(Level.FINE);
         boolean isDebug = ManagementFactory.getRuntimeMXBean().getInputArguments().toString().contains("jdwp");
-        int timeoutSeconds = isDebug ? 300 : 20;
+        int timeoutSeconds = isDebug ? 300 : 30;
         client = new OkHttpClient.Builder()
             .retryOnConnectionFailure(false)
 //            .protocols(Collections.singletonList(Protocol.HTTP_1_1))

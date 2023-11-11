@@ -1,6 +1,5 @@
 package io.muserver.rest;
 
-import io.muserver.ClientDisconnectedException;
 import io.muserver.MuException;
 import io.muserver.Mutils;
 
@@ -48,8 +47,11 @@ class SseBroadcasterImpl implements SseBroadcaster {
                     Exception ex;
                     switch (info.response().responseState()) {
                         case CLIENT_DISCONNECTED:
-                            ex = new ClientDisconnectedException();
-                            break;
+                            var removed = sinks.remove(sseEventSink);
+                            if (removed) {
+                                sendOnCloseEvent(sseEventSink);
+                            }
+                            return;
                         case TIMED_OUT:
                             ex = new TimeoutException();
                             break;

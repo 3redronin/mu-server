@@ -319,7 +319,11 @@ class MuResponseImpl implements MuResponse {
 
     void abort(Throwable cause) {
         if (!responseState().endState()) {
-            state = ResponseState.ERRORED;
+            if (cause instanceof ClientDisconnectedException) {
+                state = ResponseState.CLIENT_DISCONNECTED;
+            } else {
+                state = ResponseState.ERRORED;
+            }
         }
     }
 

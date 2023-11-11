@@ -6,7 +6,7 @@ import java.nio.channels.CompletionHandler;
 
 interface MuSocketChannel {
 
-    void read(CompletionHandler<Integer, Void> completionHandler);
+    void read(boolean useReadTimeout, CompletionHandler<Integer, Void> completionHandler);
 
     void scatteringWrite(ByteBuffer[] srcs, int offset, int length, CompletionHandler<Long, Void> handler);
 
