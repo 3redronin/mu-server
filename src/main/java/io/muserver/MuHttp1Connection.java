@@ -383,7 +383,7 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Vo
         } else if (muExchange.response.headers().contains(HeaderNames.CONNECTION, HeaderValues.CLOSE, true)) {
             initiateShutdown();
         } else if (muExchange.state == HttpExchangeState.COMPLETE) {
-            // todo is this the only time to read again?
+            // todo move this to wherever the request body is completed so we can detect disconnections
             readyToRead();
         } else {
             log.error("Unexpected situation: " + muExchange);

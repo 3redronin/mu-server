@@ -26,34 +26,38 @@ public class AsyncSsePublisherTest {
             "    \"value1\": \"Something\"\n" +
             "}";
 
+        AtomicReference<Throwable> sendError = new AtomicReference<>();
         CountDownLatch responseInfoLatch = new CountDownLatch(1);
         AtomicReference<ResponseInfo> responseInfo = new AtomicReference<>(null);
         server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/streamer", (request, response, pathParams) -> {
 
-                AsyncSsePublisher ssePublisher = AsyncSsePublisher.start(request, response);
+                var ssePublisher = AsyncSsePublisher.start(request, response);
                 ssePublisher.setResponseCompleteHandler(info -> {
                     responseInfo.set(info);
                     responseInfoLatch.countDown();
                 });
                 ssePublisher.sendComment("this is a comment")
-                    .thenRun(() -> {
-                        ssePublisher.send("Just a message");
-                        ssePublisher.send("A message and event", "customevent");
-                        ssePublisher.setClientReconnectTime(3, TimeUnit.SECONDS);
-                        ssePublisher.send("A message and ID", null, "myid");
-                        ssePublisher.send("A message and event and ID", "customevent", "myid");
-                        ssePublisher.sendComment("this is a comment 2");
-                        ssePublisher.send(multilineJson, null, null);
+                    .thenCompose(ignored -> ssePublisher.send("Just a message"))
+                    .thenCompose(ignored -> ssePublisher.send("A message and event", "customevent"))
+                    .thenCompose(ignored -> ssePublisher.setClientReconnectTime(3, TimeUnit.SECONDS))
+                    .thenCompose(ignored -> ssePublisher.send("A message and ID", null, "myid"))
+                    .thenCompose(ignored -> ssePublisher.send("A message and event and ID", "customevent", "myid"))
+                    .thenCompose(ignored -> ssePublisher.sendComment("this is a comment 2"))
+                    .thenCompose(ignored -> ssePublisher.send(multilineJson, null, null))
+                    .thenRun(ssePublisher::close)
+                    .whenComplete((unused, throwable) -> {
+                        sendError.set(throwable);
                         ssePublisher.close();
                     });
-
             })
             .start();
 
         try (SseClient.ServerSentEvent ignored = sseClient.newServerSentEvent(request().url(server.uri().resolve("/streamer").toString()).build(), listener)) {
             listener.assertListenerIsClosed();
         }
+
+        assertThat(sendError.get(), nullValue());
         assertThat(listener.receivedMessages, equalTo(asList(
             "open",
             "comment=this is a comment",
