@@ -192,7 +192,11 @@ class AsyncTlsSocketChannel implements MuSocketChannel {
                     try {
                         if (result == -1) {
                             log.info("EOF received; closing inbound when " + engine.getHandshakeStatus() + " and " + engine.isInboundDone());
-                            engine.closeInbound();
+                            try {
+                                engine.closeInbound();
+                            } catch (SSLException e) {
+                                log.warn("Exception while closing ssl engine inbound: " + e.getMessage());
+                            }
                         } else {
                             netReadBuffer.flip();
                             engineResult = engine.unwrap(netReadBuffer, appReadBuffer);
