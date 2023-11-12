@@ -102,7 +102,11 @@ public class AsyncTest {
                 changeListener.addListener(new ChangeListener() {
                     @Override
                     public void onData(String data) {
-                        ctx.write(Mutils.toByteBuffer(data + "\n"));
+                        try {
+                            ctx.write(Mutils.toByteBuffer(data + "\n")).get(10, TimeUnit.SECONDS);
+                        } catch (Exception e) {
+                            throw new RuntimeException(e);
+                        }
                     }
 
                     @Override
