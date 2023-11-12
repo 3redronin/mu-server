@@ -61,6 +61,13 @@ class MuExchange implements ResponseInfo, AsyncHandle {
             data.connection.onRequestCompleted(this);
         }
     }
+    void onRequestErrored() {
+        if (!request.requestState().endState()) {
+            this.request.onError();
+            if (response.responseState().endState()) onCompleted();
+            data.connection.onRequestCompleted(this);
+        }
+    }
 
     void onResponseCompleted(MuResponseImpl muResponse) {
         if (request.requestState().endState()) onCompleted();
@@ -126,8 +133,7 @@ class MuExchange implements ResponseInfo, AsyncHandle {
                                     data.connection.readyToRead(true);
                                 }
                             } else {
-                                // TODO also close things here?
-                                request.onError();
+                                onRequestErrored();
                                 bodyListener.onError(error);
                             }
                         });

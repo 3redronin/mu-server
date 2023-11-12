@@ -217,7 +217,8 @@ public class RequestBodyReaderInputStreamAdapterTest {
                 bufferedSink.flush();
             }
         }))) {
-            assertThat(resp.body().string(), equalTo("The first letter is " + ((char)chunkPayload[0])));
+            String body = resp.body().string();
+            assertThat(body, equalTo("The first letter is " + ((char)chunkPayload[0])));
             assertThat(resp.code(), equalTo(200));
         }
     }

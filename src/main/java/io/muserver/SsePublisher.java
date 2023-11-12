@@ -165,20 +165,24 @@ class SsePublisherImpl implements SsePublisher {
 
     static String dataText(String message, String event, String eventID) {
         StringBuilder raw = new StringBuilder();
+        dataText(message, event, eventID, raw);
+        return raw.toString();
+    }
+
+    static void dataText(String message, String event, String eventID, StringBuilder sb) {
         if (eventID != null) {
             ensureNoLineBreaks(eventID, "SSE IDs");
-            raw.append("id: ").append(eventID).append('\n');
+            sb.append("id: ").append(eventID).append('\n');
         }
         if (event != null) {
             ensureNoLineBreaks(event, "SSE event names");
-            raw.append("event: ").append(event).append('\n');
+            sb.append("event: ").append(event).append('\n');
         }
         String[] lines = message.split("(\r\n)|[\r\n]");
         for (String line : lines) {
-            raw.append("data: ").append(line).append('\n');
+            sb.append("data: ").append(line).append('\n');
         }
-        raw.append('\n');
-        return raw.toString();
+        sb.append('\n');
     }
 
     static String commentText(String comment) {

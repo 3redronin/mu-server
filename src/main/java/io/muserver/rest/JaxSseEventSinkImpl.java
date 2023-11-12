@@ -50,17 +50,23 @@ class JaxSseEventSinkImpl implements SseEventSink {
                 stage = ssePublisher.setClientReconnectTime(event.getReconnectDelay(), TimeUnit.MILLISECONDS);
             }
             if (event.getComment() != null) {
-                stage = ssePublisher.sendComment(event.getComment());
+                stage = stage == null ? ssePublisher.sendComment(event.getComment()) : stage.thenCompose(o -> ssePublisher.sendComment(event.getComment()));
             }
             if (event.getData() != null) {
                 MessageBodyWriter messageBodyWriter = entityProviders.selectWriter(event.getType(), event.getGenericType(),
                     JaxRSResponse.Builder.EMPTY_ANNOTATIONS, event.getMediaType());
-                try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-                    messageBodyWriter.writeTo(event.getData(), event.getType(), event.getGenericType(), JaxRSResponse.Builder.EMPTY_ANNOTATIONS,
-                        event.getMediaType(), muHeadersToJaxObj(response.headers()), out);
-                    String data = new String(out.toByteArray(), UTF_8);
-                    stage = ssePublisher.send(data, event.getName(), event.getId());
+                String data;
+                if (messageBodyWriter instanceof StringEntityProviders.StringMessageReaderWriter) {
+                    data = event.getData().toString();
+                } else {
+                    try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+                        messageBodyWriter.writeTo(event.getData(), event.getType(), event.getGenericType(), JaxRSResponse.Builder.EMPTY_ANNOTATIONS,
+                            event.getMediaType(), muHeadersToJaxObj(response.headers()), out);
+                        data = new String(out.toByteArray(), UTF_8);
+                    }
                 }
+
+                stage = stage == null ? ssePublisher.send(data, event.getName(), event.getId()) : stage.thenCompose(o -> ssePublisher.send(data, event.getName(), event.getId()));
             }
             if (stage == null) {
                 throw new IllegalArgumentException("The event had nothing to send");

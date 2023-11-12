@@ -294,7 +294,7 @@ class AsyncTlsSocketChannel implements MuSocketChannel {
             public void completed(Integer result, Void attachment) {
                 netWriteBuffer.compact();
                 if (canFlush()) {
-                    log.info("Short write in flush - writing " + netWriteBuffer.remaining());
+                    log.info("Short write in flush - wrote " + result + " and writing " + netWriteBuffer.remaining() + " and er was " + er + " and now it is " + engine.getHandshakeStatus());
                     flush(callback);
                 } else {
                     callback.onComplete(null);

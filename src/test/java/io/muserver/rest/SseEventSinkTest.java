@@ -70,16 +70,11 @@ public class SseEventSinkTest {
             public void eventStream(@Context SseEventSink eventSink,
                                     @Context Sse sse) {
                 executor.execute(() -> {
-                    try (SseEventSink sink = eventSink) {
-                        sink.send(sse.newEventBuilder()
-                            .reconnectDelay(100000)
-                            .comment("a comment")
-                            .data("event1")
-                            .build());
-                        sink.send(sse.newEvent("event2"));
-                        sink.send(sse.newEventBuilder().data(new Dog(true, "Little")).build());
-                        sink.send(sse.newEventBuilder().data(123).name("Number").id("123").build());
-                    }
+                    eventSink.send(sse.newEventBuilder().reconnectDelay(100000).comment("a comment").data("event1").build())
+                        .thenRun(() -> eventSink.send(sse.newEvent("event2")))
+                        .thenRun(() -> eventSink.send(sse.newEventBuilder().data(new Dog(true, "Little")).build()))
+                        .thenRun(() -> eventSink.send(sse.newEventBuilder().data(123).name("Number").id("123").build()))
+                        .whenComplete((unused, throwable) -> eventSink.close());
                 });
             }
         }

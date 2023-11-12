@@ -1,5 +1,8 @@
 package io.muserver;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
@@ -18,6 +21,7 @@ class RequestBodyListenerToInputStreamAdapter extends InputStream implements Req
     public void onDataReceived(ByteBuffer buffer, DoneCallback doneCallback) throws Exception {
         synchronized (lock) {
             if (userClosed) {
+                log.info("User has closed input stream");
                 doneCallback.onComplete(new IOException("User already closed the input stream"));
                 return;
             }
@@ -108,12 +112,15 @@ class RequestBodyListenerToInputStreamAdapter extends InputStream implements Req
         return read(b, off, len);
     }
 
+    private static final Logger log = LoggerFactory.getLogger(RequestBodyListenerToInputStreamAdapter.class);
+
     @Override
     public void close() throws IOException {
         synchronized (lock) {
             if (!userClosed) {
                 userClosed = true;
                 DoneCallback dc = doneCallback;
+                log.info("Closing req inpu str with dc=" + dc);
                 if (dc != null) {
                     doneCallback = null;
                     dc.onComplete(error);
