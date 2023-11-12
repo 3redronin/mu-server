@@ -150,7 +150,7 @@ public class StateChangesTest {
         try (var client = GET("/").flushHeaders()) {
             var headers = assert200(client);
             clientHeadersReceivedLatch.countDown();
-            assertThrows(SocketException.class, () ->  client.readBody(headers));
+            assertThrows(IOException.class, () ->  client.readBody(headers));
         }
         assertOneCompleted(RequestState.COMPLETE, ResponseState.ERRORED);
     }
