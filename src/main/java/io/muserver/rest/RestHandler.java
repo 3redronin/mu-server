@@ -275,8 +275,18 @@ public class RestHandler implements MuHandler {
 
                         MuRuntimeDelegate.writeResponseHeaders(requestContext.muRequest.uri(), jaxRSResponse, muResponse, isHttp1);
 
-                        messageBodyWriter.writeTo(jaxRSResponse.getEntity(), jaxRSResponse.getType(), jaxRSResponse.getGenericType(), writerAnnontations,
-                            jaxRSResponse.getMediaType(), jaxRSResponse.getHeaders(), jaxRSResponse.getOutputStream());
+                        try {
+                            messageBodyWriter.writeTo(jaxRSResponse.getEntity(), jaxRSResponse.getType(), jaxRSResponse.getGenericType(), writerAnnontations,
+                                jaxRSResponse.getMediaType(), jaxRSResponse.getHeaders(), jaxRSResponse.getOutputStream());
+                        } catch (Exception e) {
+                            // remove the added headers before rewriting
+                            if (!muResponse.hasStartedSendingData()) {
+                                for (String added : jaxRSResponse.getHeaders().keySet()) {
+                                    muResponse.headers().remove(added);
+                                }
+                            }
+                            throw e;
+                        }
                     }
                 }
             }
