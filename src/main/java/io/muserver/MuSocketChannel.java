@@ -18,5 +18,6 @@ interface MuSocketChannel {
 
     void abort() throws IOException;
 
+    boolean isTls();
 }
 

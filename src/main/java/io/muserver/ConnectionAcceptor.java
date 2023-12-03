@@ -76,8 +76,8 @@ class ConnectionAcceptor implements CompletionHandler<AsynchronousSocketChannel,
             if (httpsConfig == null) {
                 ByteBuffer appReadBuffer = ByteBuffer.allocate(8192);
                 appReadBuffer.limit(0);
-                var plainTextSocketChannel = new AsyncPlaintextSocketChannel(appReadBuffer, settings.requestReadTimeoutMillis(), settings.responseWriteTimeoutMillis(), channel);
-                MuHttp1Connection connection = new MuHttp1Connection(this, plainTextSocketChannel, remoteAddress, address);
+                var socketChannel = new OverlappingWriteSocketChannel(new AsyncPlaintextSocketChannel(appReadBuffer, settings.requestReadTimeoutMillis(), settings.responseWriteTimeoutMillis(), channel));
+                MuHttp1Connection connection = new MuHttp1Connection(this, socketChannel, remoteAddress, address);
                 onConnectionEstablished(connection);
                 connection.readyToRead(true);
             } else {
@@ -91,8 +91,9 @@ class ConnectionAcceptor implements CompletionHandler<AsynchronousSocketChannel,
                 var netReadBuffer = ByteBuffer.allocate(engine.getSession().getPacketBufferSize());
                 var netWriterBuffer = ByteBuffer.allocate(engine.getSession().getPacketBufferSize());
                 var tlsChannel = new AsyncTlsSocketChannel(channel, engine, appReadBuffer, netReadBuffer, netWriterBuffer, settings.handshakeIOTimeout(), settings.requestReadTimeoutMillis(), settings.responseWriteTimeoutMillis());
+                var socketChannel = new OverlappingWriteSocketChannel(tlsChannel);
 
-                MuHttp1Connection connection = new MuHttp1Connection(this, tlsChannel, remoteAddress, address);
+                MuHttp1Connection connection = new MuHttp1Connection(this, socketChannel, remoteAddress, address);
                 tlsChannel.beginHandshake(error -> {
                     if (error == null) {
                         SSLSession session = engine.getSession();

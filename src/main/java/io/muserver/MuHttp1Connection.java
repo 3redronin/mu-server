@@ -58,7 +58,7 @@ class MuHttp1Connection implements HttpConnection, CompletionHandler<Integer, Vo
 
     @Override
     public boolean isHttps() {
-        return channel instanceof AsyncTlsSocketChannel;
+        return channel.isTls();
     }
 
     @Override

@@ -22,6 +22,7 @@ import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -282,6 +283,37 @@ public class AsyncTest {
             assertThat(resp.body().string(), equalTo("Loop 0\nLoop 1\nLoop 2\nLoop 3\nLoop 4\nLoop 5\nLoop 6\nLoop 7\nLoop 8\nLoop 9\n"));
         }
 
+    }
+
+
+    @ParameterizedTest
+    @ValueSource(strings = { "http", "https"})
+    public void writesCanOverlapButAreAppliedInOrder(String type) throws Exception {
+        StringBuffer result = new StringBuffer();
+        AtomicInteger doneCount = new AtomicInteger();
+        server = ServerUtils.httpsServerForTest(type)
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.contentType(ContentTypes.APPLICATION_OCTET_STREAM);
+                AsyncHandle asyncHandle = request.handleAsync();
+                for (int i = 0; i < 100; i++) {
+                    int finalI = i;
+                    asyncHandle.write(Mutils.toByteBuffer(String.valueOf(i)), error -> {
+                        if (error != null) {
+                            result.append(finalI).append(": + ").append(error.getMessage());
+                        }
+                        doneCount.incrementAndGet();
+                    });
+                }
+                asyncHandle.complete();
+            })
+            .start();
+        try (Response resp = call(request().url(server.uri().toString()))) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.body().string(), equalTo("01234567891011121314151617181920212223242526272829" +
+                "303132333435363738394041424344454647484950515253545556575859606162636465666768697071727374757677" +
+                "78798081828384858687888990919293949596979899"));
+            assertThat(result.toString(), equalTo(""));
+        }
     }
 
 

@@ -65,4 +65,9 @@ class AsyncPlaintextSocketChannel implements MuSocketChannel {
         channel.close();
     }
 
+    @Override
+    public boolean isTls() {
+        return false;
+    }
+
 }

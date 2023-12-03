@@ -373,4 +373,9 @@ class AsyncTlsSocketChannel implements MuSocketChannel {
         socketChannel.close();
     }
 
+    @Override
+    public boolean isTls() {
+        return true;
+    }
+
 }
