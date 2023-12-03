@@ -15,181 +15,41 @@ import static io.muserver.openapi.Jsonizer.append;
  */
 public class SchemaObject implements JsonWriter {
 
-    /**
-     * @deprecated use {@link #title()} instead
-     */
-    @Deprecated
-    public final String title;
-    /**
-      @deprecated use {@link #multipleOf()} instead
-     */
-    @Deprecated
-    public final Double multipleOf;
-    /**
-      @deprecated use {@link #maximum()} instead
-     */
-    @Deprecated
-    public final Double maximum;
-    /**
-      @deprecated use {@link #exclusiveMaximum()} instead
-     */
-    @Deprecated
-    public final Boolean exclusiveMaximum;
-    /**
-      @deprecated use {@link #minimum()} instead
-     */
-    @Deprecated
-    public final Double minimum;
-    /**
-      @deprecated use {@link #exclusiveMinimum()} instead
-     */
-    @Deprecated
-    public final Boolean exclusiveMinimum;
-    /**
-      @deprecated use {@link #maxLength()} instead
-     */
-    @Deprecated
-    public final Integer maxLength;
-    /**
-      @deprecated use {@link #minLength()} instead
-     */
-    @Deprecated
-    public final Integer minLength;
-    /**
-      @deprecated use {@link #pattern()} instead
-     */
-    @Deprecated
-    public final Pattern pattern;
-    /**
-      @deprecated use {@link #maxItems()} instead
-     */
-    @Deprecated
-    public final Integer maxItems;
-    /**
-      @deprecated use {@link #minItems()} instead
-     */
-    @Deprecated
-    public final Integer minItems;
-    /**
-      @deprecated use {@link #uniqueItems()} instead
-     */
-    @Deprecated
-    public final Boolean uniqueItems;
-    /**
-      @deprecated use {@link #maxProperties()} instead
-     */
-    @Deprecated
-    public final Integer maxProperties;
-    /**
-      @deprecated use {@link #minProperties()} instead
-     */
-    @Deprecated
-    public final Integer minProperties;
-    /**
-      @deprecated use {@link #required()} instead
-     */
-    @Deprecated
-    public final List<String> required;
-    /**
-      @deprecated use {@link #enumValue()} instead
-     */
-    @Deprecated
-    public final List<Object> enumValue;
-    /**
-      @deprecated use {@link #type()} instead
-     */
-    @Deprecated
-    public final String type;
-    /**
-      @deprecated use {@link #allOf()} instead
-     */
-    @Deprecated
-    public final List<SchemaObject> allOf;
-    /**
-      @deprecated use {@link #oneOf()} instead
-     */
-    @Deprecated
-    public final List<SchemaObject> oneOf;
-    /**
-      @deprecated use {@link #anyOf()} instead
-     */
-    @Deprecated
-    public final List<SchemaObject> anyOf;
-    /**
-      @deprecated use {@link #not()} instead
-     */
-    @Deprecated
-    public final List<SchemaObject> not;
-    /**
-      @deprecated use {@link #items()} instead
-     */
-    @Deprecated
-    public final SchemaObject items;
-    /**
-      @deprecated use {@link #properties()} instead
-     */
-    @Deprecated
-    public final Map<String, SchemaObject> properties;
-    /**
-      @deprecated use {@link #additionalProperties()} instead
-     */
-    @Deprecated
-    public final Object additionalProperties;
-    /**
-      @deprecated use {@link #description()} instead
-     */
-    @Deprecated
-    public final String description;
-    /**
-      @deprecated use {@link #format()} instead
-     */
-    @Deprecated
-    public final String format;
-    /**
-      @deprecated use {@link #defaultValue()} instead
-     */
-    @Deprecated
-    public final Object defaultValue;
-    /**
-      @deprecated use {@link #nullable()} instead
-     */
-    @Deprecated
-    public final Boolean nullable;
-    /**
-      @deprecated use {@link #discriminator()} instead
-     */
-    @Deprecated
-    public final DiscriminatorObject discriminator;
-    /**
-      @deprecated use {@link #readOnly()} instead
-     */
-    @Deprecated
-    public final Boolean readOnly;
-    /**
-      @deprecated use {@link #writeOnly()} instead
-     */
-    @Deprecated
-    public final Boolean writeOnly;
-    /**
-      @deprecated use {@link #xml()} instead
-     */
-    @Deprecated
-    public final XmlObject xml;
-    /**
-      @deprecated use {@link #externalDocs()} instead
-     */
-    @Deprecated
-    public final ExternalDocumentationObject externalDocs;
-    /**
-      @deprecated use {@link #example()} instead
-     */
-    @Deprecated
-    public final Object example;
-    /**
-      @deprecated use {@link #deprecated()} instead
-     */
-    @Deprecated
-    public final Boolean deprecated;
+    private final String title;
+    private final Double multipleOf;
+    private final Double maximum;
+    private final Boolean exclusiveMaximum;
+    private final Double minimum;
+    private final Boolean exclusiveMinimum;
+    private final Integer maxLength;
+    private final Integer minLength;
+    private final Pattern pattern;
+    private final Integer maxItems;
+    private final Integer minItems;
+    private final Boolean uniqueItems;
+    private final Integer maxProperties;
+    private final Integer minProperties;
+    private final List<String> required;
+    private final List<Object> enumValue;
+    private final String type;
+    private final List<SchemaObject> allOf;
+    private final List<SchemaObject> oneOf;
+    private final List<SchemaObject> anyOf;
+    private final List<SchemaObject> not;
+    private final SchemaObject items;
+    private final Map<String, SchemaObject> properties;
+    private final Object additionalProperties;
+    private final String description;
+    private final String format;
+    private final Object defaultValue;
+    private final Boolean nullable;
+    private final DiscriminatorObject discriminator;
+    private final Boolean readOnly;
+    private final Boolean writeOnly;
+    private final XmlObject xml;
+    private final ExternalDocumentationObject externalDocs;
+    private final Object example;
+    private final Boolean deprecated;
 
     SchemaObject(String title, Double multipleOf, Double maximum, Boolean exclusiveMaximum, Double minimum, Boolean exclusiveMinimum, Integer maxLength, Integer minLength, Pattern pattern, Integer maxItems, Integer minItems, Boolean uniqueItems, Integer maxProperties, Integer minProperties, List<String> required, List<Object> enumValue, String type, List<SchemaObject> allOf, List<SchemaObject> oneOf, List<SchemaObject> anyOf, List<SchemaObject> not, SchemaObject items, Map<String, SchemaObject> properties, Object additionalProperties, String description, String format, Object defaultValue, Boolean nullable, DiscriminatorObject discriminator, Boolean readOnly, Boolean writeOnly, XmlObject xml, ExternalDocumentationObject externalDocs, Object example, Boolean deprecated) {
         if (readOnly != null && readOnly && writeOnly != null && writeOnly) {

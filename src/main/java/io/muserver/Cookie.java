@@ -15,29 +15,13 @@ public class Cookie {
 
     final DefaultCookie nettyCookie;
 
-    /**
-     * <p>Creates a new cookie with secure settings such as HttpOnly and Secure set to true.</p>
-     * @param name The name of the cookie
-     * @param value The value of the cookie
-     * @return Returns a new cookie that can be sent to the response
-     * @deprecated Please use {@link CookieBuilder#newSecureCookie()} instead
-     */
-    @Deprecated
-    public static Cookie secureCookie(String name, String value) {
-        return CookieBuilder.newSecureCookie()
-            .withName(name)
-            .withValue(value)
-            .build();
-    }
 
     /**
      * <p>Creates a new cookie with secure settings such as HttpOnly and Secure set to true.</p>
      * @param name The name of the cookie
      * @param value The value of the cookie
-     * @deprecated Please use {@link CookieBuilder#newCookie()} instead
      */
-    @Deprecated
-    public Cookie(String name, String value) {
+    Cookie(String name, String value) {
         nettyCookie = new DefaultCookie(name, value);
     }
 
@@ -56,16 +40,6 @@ public class Cookie {
     }
 
     /**
-     * Sets the value of the cookie.
-     * @param value The value to set.
-     * @deprecated Please create cookies with the {@link CookieBuilder}
-     */
-    @Deprecated
-    public void setValue(String value) {
-        nettyCookie.setValue(value);
-    }
-
-    /**
      * @return The domain this cookie is valid for
      */
     public String domain() {
@@ -73,30 +47,10 @@ public class Cookie {
     }
 
     /**
-     *
-     * @param domain domain
-     * @deprecated Please create cookies with the {@link CookieBuilder}
-     */
-    @Deprecated
-    public void setDomain(String domain) {
-        nettyCookie.setDomain(domain);
-    }
-
-    /**
      * @return The path this cookie applies to
      */
     public String path() {
         return nettyCookie.path();
-    }
-
-    /**
-     *
-     * @param path path
-     * @deprecated Please create cookies with the {@link CookieBuilder}
-     */
-    @Deprecated
-    public void setPath(String path) {
-        nettyCookie.setPath(path);
     }
 
     /**
@@ -114,16 +68,6 @@ public class Cookie {
     }
 
     /**
-     *
-     * @param maxAgeInSeconds max
-     * @deprecated Please create cookies with the {@link CookieBuilder}
-     */
-    @Deprecated
-    public void setMaxAge(long maxAgeInSeconds) {
-        nettyCookie.setMaxAge(maxAgeInSeconds);
-    }
-
-    /**
      * @return True if this cookie is only readable over https
      */
     public boolean isSecure() {
@@ -131,30 +75,10 @@ public class Cookie {
     }
 
     /**
-     *
-     * @param secure secure
-     * @deprecated Please create cookies with the {@link CookieBuilder}
-     */
-    @Deprecated
-    public void setSecure(boolean secure) {
-        nettyCookie.setSecure(secure);
-    }
-
-    /**
      * @return True if this cookie is only available via HTTP. If false, client side script will not be able to read the cookie (if the client supports this).
      */
     public boolean isHttpOnly() {
         return nettyCookie.isHttpOnly();
-    }
-
-    /**
-     *
-     * @param httpOnly httpOnly
-     * @deprecated Please create cookies with the {@link CookieBuilder}
-     */
-    @Deprecated
-    public void setHttpOnly(boolean httpOnly) {
-        nettyCookie.setHttpOnly(httpOnly);
     }
 
     public int hashCode() {

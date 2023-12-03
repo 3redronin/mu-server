@@ -9,26 +9,10 @@ import java.net.URI;
  */
 public class ExampleObject implements JsonWriter {
 
-    /**
-     * @deprecated use {@link #summary()} instead
-     */
-    @Deprecated
-    public final String summary;
-    /**
-      @deprecated use {@link #description()} instead
-     */
-    @Deprecated
-    public final String description;
-    /**
-      @deprecated use {@link #value()} instead
-     */
-    @Deprecated
-    public final Object value;
-    /**
-      @deprecated use {@link #externalValue()} instead
-     */
-    @Deprecated
-    public final URI externalValue;
+    private final String summary;
+    private final String description;
+    private final Object value;
+    private final URI externalValue;
 
     ExampleObject(String summary, String description, Object value, URI externalValue) {
         if (value != null && externalValue != null) {

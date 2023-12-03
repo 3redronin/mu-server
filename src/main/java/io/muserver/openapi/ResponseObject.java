@@ -12,26 +12,10 @@ import static io.muserver.openapi.Jsonizer.append;
  */
 public class ResponseObject implements JsonWriter {
 
-    /**
-     * @deprecated use {@link #description()} instead
-     */
-    @Deprecated
-    public final String description;
-    /**
-      @deprecated use {@link #headers()} instead
-     */
-    @Deprecated
-    public final Map<String, HeaderObject> headers;
-    /**
-      @deprecated use {@link #content()} instead
-     */
-    @Deprecated
-    public final Map<String, MediaTypeObject> content;
-    /**
-      @deprecated use {@link #links()} instead
-     */
-    @Deprecated
-    public final Map<String, LinkObject> links;
+    private final String description;
+    private final Map<String, HeaderObject> headers;
+    private final Map<String, MediaTypeObject> content;
+    private final Map<String, LinkObject> links;
 
     ResponseObject(String description, Map<String, HeaderObject> headers, Map<String, MediaTypeObject> content, Map<String, LinkObject> links) {
         notNull("description", description);

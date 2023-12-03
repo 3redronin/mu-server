@@ -12,31 +12,11 @@ import static io.muserver.openapi.ParameterObject.allowedStyles;
  */
 public class EncodingObject implements JsonWriter {
 
-    /**
-     * @deprecated Use {@link #contentType()} instead
-     */
-    @Deprecated
-    public final String contentType;
-    /**
-      @deprecated Use {@link #headers()} instead
-     */
-    @Deprecated
-    public final Map<String, HeaderObject> headers;
-    /**
-      @deprecated Use {@link #style()} instead
-     */
-    @Deprecated
-    public final String style;
-    /**
-      @deprecated Use {@link #explode()} instead
-     */
-    @Deprecated
-    public final Boolean explode;
-    /**
-      @deprecated Use {@link #allowReserved()} instead
-     */
-    @Deprecated
-    public final Boolean allowReserved;
+    private final String contentType;
+    private final Map<String, HeaderObject> headers;
+    private final String style;
+    private final Boolean explode;
+    private final Boolean allowReserved;
 
     EncodingObject(String contentType, Map<String, HeaderObject> headers, String style, Boolean explode, Boolean allowReserved) {
         if (style != null && !allowedStyles().contains(style)) {

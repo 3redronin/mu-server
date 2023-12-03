@@ -11,16 +11,8 @@ import static io.muserver.openapi.Jsonizer.append;
  * @see ExternalDocumentationObjectBuilder
  */
 public class ExternalDocumentationObject implements JsonWriter {
-    /**
-     * @deprecated use {@link #description()} instead
-     */
-    @Deprecated
-    public final String description;
-    /**
-      @deprecated use {@link #url()} instead
-     */
-    @Deprecated
-    public final URI url;
+    private final String description;
+    private final URI url;
 
     ExternalDocumentationObject(String description, URI url) {
         notNull("url", url);

@@ -36,14 +36,6 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
     String get(CharSequence name, String defaultValue);
 
     /**
-     * @param name The name
-     * @return The value
-     * @deprecated use {@link #getInt(CharSequence, int)}
-     */
-    @Deprecated
-    Integer getInt(CharSequence name);
-
-    /**
      * Gets the parameter as an integer, or returns the default value if it was not specified or was in an invalid format.
      * @param name The name of the parameter.
      * @param defaultValue The value to use if none was specified, or an invalid format was used.
@@ -83,25 +75,6 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
      * @return Returns true if the value was truthy, or false if it was falsy or not specified.
      */
     boolean getBoolean(String name);
-
-    /**
-     * Deprecated
-     * @param name The name
-     * @return The value
-     * @deprecated Please use an alternate accessor
-     */
-    @Deprecated
-    Short getShort(CharSequence name);
-
-    /**
-     * Deprecated
-     * @param name The name
-     * @param defaultValue Default
-     * @return The value
-     * @deprecated Please use an alternate accessor
-     */
-    @Deprecated
-    short getShort(CharSequence name, short defaultValue);
 
     /**
      * Gets a date header.
@@ -227,15 +200,6 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
     Headers addInt(CharSequence name, int value);
 
     /**
-     * @deprecated use an alternative such as {@link #addInt(CharSequence, int)}
-     * @param name The header name
-     * @param value The value
-     * @return This headers object
-     */
-    @Deprecated
-    Headers addShort(CharSequence name, short value);
-
-    /**
      * Sets a header value. If a header with the given name already exists then this replaces it.
      * @param name The header name
      * @param value The value
@@ -290,15 +254,6 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
     Headers setInt(CharSequence name, int value);
 
     /**
-     * @deprecated use {@link #setInt(CharSequence, int)} instead
-     * @param name The header name
-     * @param value The value
-     * @return This headers object
-     */
-    @Deprecated
-    Headers setShort(CharSequence name, short value);
-
-    /**
      * Removes a header. Does nothing if the header is not set.
      * @param name The header to remove
      * @return This headers object
@@ -344,29 +299,6 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
      * @return True if a header name with the given value exists.
      */
     boolean containsValue(CharSequence name, CharSequence value, boolean ignoreCase);
-
-    /**
-     * @deprecated use an alternative
-     * @param name The header name
-     * @return This headers object
-     */
-    @Deprecated
-    String getAsString(CharSequence name);
-
-    /**
-     * @deprecated use an alternative
-     * @param name The header name
-     * @return This headers object
-     */
-    @Deprecated
-    List<String> getAllAsString(CharSequence name);
-
-    /**
-     * @deprecated use an alternative
-     * @return Am iterator
-     */
-    @Deprecated
-    Iterator<Map.Entry<String, String>> iteratorAsString();
 
     /**
      * Returns true if the headers suggest there is a message body by checking if there is a {@link HeaderNames#TRANSFER_ENCODING}

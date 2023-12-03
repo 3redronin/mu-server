@@ -35,11 +35,6 @@ public class ThreadTesting {
                                 });
                             }
 
-
-                            @Override
-                            public void onText(String message, DoneCallback onComplete) throws Exception {
-                                super.onText(message, onComplete);
-                            }
                         };
                     }
                 })

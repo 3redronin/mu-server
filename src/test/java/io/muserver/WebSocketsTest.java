@@ -198,7 +198,7 @@ public class WebSocketsTest {
         CompletableFuture<String> result = new CompletableFuture<>();
         server = ServerUtils.httpsServerForTest()
             .addHandler(webSocketHandler((request, responseHeaders) -> new BaseWebSocket() {
-                public void onText(String message, DoneCallback onComplete) {
+                public void onText(String message, boolean isLast, DoneCallback onComplete) {
                     session().sendText("This is message one", error1 -> {
                         if (error1 != null) {
                             result.completeExceptionally(error1);

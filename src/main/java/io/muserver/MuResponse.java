@@ -3,7 +3,6 @@ package io.muserver;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.URI;
-import java.util.concurrent.Future;
 
 /**
  * <p>A response sent to a client.</p>
@@ -31,14 +30,6 @@ public interface MuResponse {
      * @param value The response code to send to the client.
      */
     void status(int value);
-
-    /**
-     * @deprecated For async handling, call {@link MuRequest#handleAsync()}
-     * @param text Text to send
-     * @return Returns a future
-     */
-    @Deprecated
-    Future<Void> writeAsync(String text);
 
     /**
      * <p>Writes the given text as the response body for this request. This can only be called once.</p>

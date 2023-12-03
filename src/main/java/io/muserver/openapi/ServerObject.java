@@ -11,21 +11,9 @@ import static io.muserver.openapi.Jsonizer.append;
  * @see ServerObjectBuilder
  */
 public class ServerObject implements JsonWriter {
-    /**
-     * @deprecated use {@link #url()} instead
-     */
-    @Deprecated
-    public final String url;
-    /**
-      @deprecated use {@link #description()} instead
-     */
-    @Deprecated
-    public final String description;
-    /**
-      @deprecated use {@link #variables()} instead
-     */
-    @Deprecated
-    public final Map<String, ServerVariableObject> variables;
+    private final String url;
+    private final String description;
+    private final Map<String, ServerVariableObject> variables;
 
     ServerObject(String url, String description, Map<String, ServerVariableObject> variables) {
         notNull("url", url);

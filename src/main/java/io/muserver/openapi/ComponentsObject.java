@@ -12,51 +12,15 @@ import static io.muserver.openapi.Jsonizer.append;
  */
 public class ComponentsObject implements JsonWriter {
 
-    /**
-     * Use {@link #schemas()} instead
-     */
-    @Deprecated
-    public final Map<String, SchemaObject> schemas;
-    /**
-     * Use {@link #responses()} instead
-     */
-    @Deprecated
-    public final Map<String, ResponseObject> responses;
-    /**
-     * Use {@link #parameters()} instead
-     */
-    @Deprecated
-    public final Map<String, ParameterObject> parameters;
-    /**
-     * Use {@link #examples()} instead
-     */
-    @Deprecated
-    public final Map<String, ExampleObject> examples;
-    /**
-     * Use {@link #requestBodies()} instead
-     */
-    @Deprecated
-    public final Map<String, RequestBodyObject> requestBodies;
-    /**
-     * Use {@link #headers()} instead
-     */
-    @Deprecated
-    public final Map<String, HeaderObject> headers;
-    /**
-     * Use {@link #securitySchemes()} instead
-     */
-    @Deprecated
-    public final Map<String, SecuritySchemeObject> securitySchemes;
-    /**
-     * Use {@link #links()} instead
-     */
-    @Deprecated
-    public final Map<String, LinkObject> links;
-    /**
-     * Use {@link #callbacks()} instead
-     */
-    @Deprecated
-    public final Map<String, CallbackObject> callbacks;
+    private final Map<String, SchemaObject> schemas;
+    private final Map<String, ResponseObject> responses;
+    private final Map<String, ParameterObject> parameters;
+    private final Map<String, ExampleObject> examples;
+    private final Map<String, RequestBodyObject> requestBodies;
+    private final Map<String, HeaderObject> headers;
+    private final Map<String, SecuritySchemeObject> securitySchemes;
+    private final Map<String, LinkObject> links;
+    private final Map<String, CallbackObject> callbacks;
 
     ComponentsObject(Map<String, SchemaObject> schemas, Map<String, ResponseObject> responses, Map<String, ParameterObject> parameters, Map<String, ExampleObject> examples, Map<String, RequestBodyObject> requestBodies, Map<String, HeaderObject> headers, Map<String, SecuritySchemeObject> securitySchemes, Map<String, LinkObject> links, Map<String, CallbackObject> callbacks) {
         checkKey(schemas, responses, parameters, examples, requestBodies, headers, securitySchemes, links, callbacks);

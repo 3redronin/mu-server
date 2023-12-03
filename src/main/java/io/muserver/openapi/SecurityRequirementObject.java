@@ -13,11 +13,7 @@ import static io.muserver.openapi.Jsonizer.append;
  */
 public class SecurityRequirementObject implements JsonWriter {
 
-    /**
-     * @deprecated use {@link #requirements()} instead
-     */
-    @Deprecated
-    public final Map<String, List<String>> requirements;
+    private final Map<String, List<String>> requirements;
 
     SecurityRequirementObject(Map<String, List<String>> requirements) {
         notNull("requirements", requirements);

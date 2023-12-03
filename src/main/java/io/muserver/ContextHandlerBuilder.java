@@ -1,10 +1,8 @@
 package io.muserver;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
-import static io.muserver.MuServerBuilder.getContextualHandlerForResourceHandler;
 
 /**
  * Use this to serve a list of handlers from a base path.
@@ -41,44 +39,6 @@ public class ContextHandlerBuilder implements MuHandlerBuilder<ContextHandler> {
     }
 
     /**
-     * @param path     The path
-     * @param handlers The handler
-     * @return A context handler that you can add handlers to
-     * @deprecated Use {@link #context(String)} and then add handlers on to that.
-     */
-    @Deprecated
-    public static ContextHandlerBuilder context(String path, MuHandler... handlers) {
-        return new ContextHandlerBuilder()
-            .withPath(path)
-            .withHandlers(handlers);
-    }
-
-    /**
-     * @param path     The path
-     * @param handlers The handler
-     * @return A context handler that you can add handlers to
-     * @deprecated Use {@link #context(String)} and then add handlers on to that.
-     */
-    @Deprecated
-    public static ContextHandlerBuilder context(String path, MuHandlerBuilder... handlers) {
-        return new ContextHandlerBuilder()
-            .withPath(path)
-            .withHandlers(handlers);
-    }
-
-    private ContextHandlerBuilder withHandlers(MuHandler... handlers) {
-        this.handlers.addAll(Arrays.asList(handlers));
-        return this;
-    }
-
-    private ContextHandlerBuilder withHandlers(MuHandlerBuilder... handlers) {
-        for (MuHandlerBuilder handler : handlers) {
-            this.addHandler(handler);
-        }
-        return this;
-    }
-
-    /**
      * <p>Adds a request handler relative to the context of this builder.</p>
      * <p>Note that handlers are executed in the order added to the builder, but all async
      * handlers are executed before synchronous handlers.</p>
@@ -106,14 +66,8 @@ public class ContextHandlerBuilder implements MuHandlerBuilder<ContextHandler> {
      */
     public ContextHandlerBuilder addHandler(MuHandler handler) {
         if (handler != null) {
-            handler = getContextualHandlerForResourceHandler(handler);
             handlers.add(handler);
         }
-        return this;
-    }
-
-    ContextHandlerBuilder addHandlerTemp(MuHandler handler) {
-        handlers.add(handler);
         return this;
     }
 

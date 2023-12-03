@@ -12,16 +12,8 @@ import static io.muserver.openapi.Jsonizer.append;
  */
 public class LicenseObject implements JsonWriter {
 
-    /**
-     * @deprecated use {@link #name()} instead
-     */
-    @Deprecated
-    public final String name;
-    /**
-      @deprecated use {@link #url()} instead
-     */
-    @Deprecated
-    public final URI url;
+    private final String name;
+    private final URI url;
 
     LicenseObject(String name, URI url) {
         notNull("name", name);

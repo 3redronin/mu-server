@@ -13,46 +13,14 @@ import static io.muserver.openapi.Jsonizer.append;
  */
 public class OpenAPIObject implements JsonWriter {
 
-    /**
-     * Use {@link #openApi()} instead
-     */
-    @Deprecated
-    public final String openapi = "3.0.1";
-    /**
-     * Use {@link #info()} instead
-     */
-    @Deprecated
-    public final InfoObject info;
-    /**
-     * Use {@link #servers()} instead
-     */
-    @Deprecated
-    public final List<ServerObject> servers;
-    /**
-     * Use {@link #paths()} instead
-     */
-    @Deprecated
-    public final PathsObject paths;
-    /**
-     * Use {@link #components()} instead
-     */
-    @Deprecated
-    public final ComponentsObject components;
-    /**
-     * Use {@link #security()} instead
-     */
-    @Deprecated
-    public final List<SecurityRequirementObject> security;
-    /**
-     * Use {@link #tags()} instead
-     */
-    @Deprecated
-    public final List<TagObject> tags;
-    /**
-     * Use {@link #externalDocs()} instead
-     */
-    @Deprecated
-    public final ExternalDocumentationObject externalDocs;
+    private final String openapi = "3.0.1";
+    private final InfoObject info;
+    private final List<ServerObject> servers;
+    private final PathsObject paths;
+    private final ComponentsObject components;
+    private final List<SecurityRequirementObject> security;
+    private final List<TagObject> tags;
+    private final ExternalDocumentationObject externalDocs;
 
     OpenAPIObject(InfoObject info, List<ServerObject> servers, PathsObject paths, ComponentsObject components, List<SecurityRequirementObject> security, List<TagObject> tags, ExternalDocumentationObject externalDocs) {
         notNull("info", info);

@@ -14,31 +14,11 @@ import static java.util.stream.Collectors.toSet;
  */
 public class PathItemObject implements JsonWriter {
 
-    /**
-     * @deprecated use {@link #summary()} instead
-     */
-    @Deprecated
-    public final String summary;
-    /**
-      @deprecated use {@link #description()} instead
-     */
-    @Deprecated
-    public final String description;
-    /**
-      @deprecated use {@link #operations()} instead
-     */
-    @Deprecated
-    public final Map<String, OperationObject> operations;
-    /**
-      @deprecated use {@link #servers()} instead
-     */
-    @Deprecated
-    public final List<ServerObject> servers;
-    /**
-      @deprecated use {@link #parameters()} instead
-     */
-    @Deprecated
-    public final List<ParameterObject> parameters;
+    private final String summary;
+    private final String description;
+    private final Map<String, OperationObject> operations;
+    private final List<ServerObject> servers;
+    private final List<ParameterObject> parameters;
 
     PathItemObject(String summary, String description, Map<String, OperationObject> operations,
                           List<ServerObject> servers, List<ParameterObject> parameters) {

@@ -10,26 +10,10 @@ import static io.muserver.openapi.Jsonizer.append;
  */
 public class OAuthFlowsObject implements JsonWriter {
 
-    /**
-     * @deprecated use {@link #implicit()} instead
-     */
-    @Deprecated
-    public final OAuthFlowObject implicit;
-    /**
-      @deprecated use {@link #password()} instead
-     */
-    @Deprecated
-    public final OAuthFlowObject password;
-    /**
-      @deprecated use {@link #clientCredentials()} instead
-     */
-    @Deprecated
-    public final OAuthFlowObject clientCredentials;
-    /**
-      @deprecated use {@link #authorizationCode()} instead
-     */
-    @Deprecated
-    public final OAuthFlowObject authorizationCode;
+    private final OAuthFlowObject implicit;
+    private final OAuthFlowObject password;
+    private final OAuthFlowObject clientCredentials;
+    private final OAuthFlowObject authorizationCode;
 
     OAuthFlowsObject(OAuthFlowObject implicit, OAuthFlowObject password, OAuthFlowObject clientCredentials, OAuthFlowObject authorizationCode) {
         this.implicit = implicit;

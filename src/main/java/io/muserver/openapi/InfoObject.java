@@ -13,36 +13,12 @@ import static io.muserver.openapi.Jsonizer.append;
  */
 public class InfoObject implements JsonWriter {
 
-    /**
-     * @deprecated use {@link #title()} instead
-     */
-    @Deprecated
-    public final String title;
-    /**
-      @deprecated use {@link #description()} instead
-     */
-    @Deprecated
-    public final String description;
-    /**
-      @deprecated use {@link #termsOfService()} instead
-     */
-    @Deprecated
-    public final URI termsOfService;
-    /**
-      @deprecated use {@link #contact()} instead
-     */
-    @Deprecated
-    public final ContactObject contact;
-    /**
-      @deprecated use {@link #license()} instead
-     */
-    @Deprecated
-    public final LicenseObject license;
-    /**
-      @deprecated use {@link #version()} instead
-     */
-    @Deprecated
-    public final String version;
+    private final String title;
+    private final String description;
+    private final URI termsOfService;
+    private final ContactObject contact;
+    private final LicenseObject license;
+    private final String version;
 
 
     InfoObject(String title, String description, URI termsOfService, ContactObject contact, LicenseObject license, String version) {

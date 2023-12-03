@@ -21,10 +21,8 @@ public class ContextHandler implements MuHandler {
      * Creates a new handler
      * @param contextPath The patch
      * @param muHandlers The handlers
-     * @deprecated Use {@link ContextHandlerBuilder#context(String)} instead
      */
-    @Deprecated
-    public ContextHandler(String contextPath, List<MuHandler> muHandlers) {
+    ContextHandler(String contextPath, List<MuHandler> muHandlers) {
         String slashTrimmed = Mutils.trim(Mutils.coalesce(contextPath, "").trim(), "/");
         this.hasContext = !slashTrimmed.isEmpty();
         this.contextPath = Stream.of(slashTrimmed.split("/"))

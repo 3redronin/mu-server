@@ -9,26 +9,10 @@ import java.util.Map;
  */
 public class MediaTypeObject implements JsonWriter {
 
-    /**
-     * @deprecated use {@link #schema()} instead
-     */
-    @Deprecated
-    public final SchemaObject schema;
-    /**
-      @deprecated use {@link #example()} instead
-     */
-    @Deprecated
-    public final Object example;
-    /**
-      @deprecated use {@link #examples()} instead
-     */
-    @Deprecated
-    public final Map<String, ExampleObject> examples;
-    /**
-      @deprecated use {@link #encoding()} instead
-     */
-    @Deprecated
-    public final Map<String, EncodingObject> encoding;
+    private final SchemaObject schema;
+    private final Object example;
+    private final Map<String, ExampleObject> examples;
+    private final Map<String, EncodingObject> encoding;
 
     MediaTypeObject(SchemaObject schema, Object example, Map<String, ExampleObject> examples, Map<String, EncodingObject> encoding) {
         if (example != null && examples != null) {

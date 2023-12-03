@@ -122,50 +122,6 @@ public interface MuRequest {
     RequestParameters form() throws IOException;
 
     /**
-     * Deprecated since 1.8
-     *
-     * @param name The querystring parameter name to get
-     * @return The querystring value, or an empty string
-     * @deprecated Use <code>query().get(name)</code> instead
-     */
-    @Deprecated
-    String parameter(String name);
-
-    /**
-     * Deprecated since 1.8
-     *
-     * @param name The querystring parameter name to get
-     * @return All values of the parameter with the given name
-     * @deprecated Use <code>query().getAll(name)</code> instead
-     */
-    @Deprecated
-    List<String> parameters(String name);
-
-    /**
-     * Deprecated since 1.8
-     *
-     * @param name The name of the form element to get
-     * @return The value of the form element with the given name, or an empty string
-     * @throws IOException Thrown when there is an error while reading the form, e.g. if a user closes their
-     *                     browser before the form is fully read into memory.
-     * @deprecated Use <code>form().get(name)</code> instead
-     */
-    @Deprecated
-    String formValue(String name) throws IOException;
-
-    /**
-     * Deprecated since 1.8
-     *
-     * @param name The name of the form element to get
-     * @return All values of the form element with the given name
-     * @throws IOException Thrown when there is an error while reading the form, e.g. if a user closes their
-     *                     browser before the form is fully read into memory.
-     * @deprecated Use <code>form().getAll(name)</code> instead
-     */
-    @Deprecated
-    List<String> formValues(String name) throws IOException;
-
-    /**
      * Gets all the client-sent cookies
      *
      * @return A list of cookie objects in the order the client sent them
@@ -204,25 +160,6 @@ public interface MuRequest {
      * @see #contextPath()
      */
     String relativePath();
-
-    /**
-     * <p>Gets request-specific state that was added with {@link #state(Object)}.</p>
-     * <p>An example is getting user information in a view handler that was previously set by an authentication handler.</p>
-     * @return An object previously set by {@link #state(Object)}, or <code>null</code> if it was never set.
-     * @deprecated Use {@link #attribute(String)} instead
-     */
-    @Deprecated
-    Object state();
-
-    /**
-     * <p>Sets the given object as state that is bound to this request which any subsequent handlers can access.</p>
-     * <p>An example use case is if you have a authentication handler that uses this method to set user information on
-     * the request, and then a subsequent handler calls {@link #state()} to get the user info.</p>
-     * @param value Any object to store as state.
-     * @deprecated Use {@link #attribute(String, Object)} instead with a key name
-     */
-    @Deprecated
-    void state(Object value);
 
     /**
      * <p>Gets request-specific state that was added with {@link #attribute(String, Object)}.</p>

@@ -1,6 +1,5 @@
 package io.muserver;
 
-import javax.net.ssl.SSLContext;
 import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -123,23 +122,6 @@ public interface MuServer {
      * @return A set of mime-types.
      */
     Set<String> mimeTypesToGzip();
-
-    /**
-     * Changes the HTTPS certificate. This can be changed without restarting the server.
-     * @param newSSLContext The new SSL Context to use.
-     * @deprecated Use {@link #changeSSLContext(SSLContextBuilder)} instead.
-     */
-    @Deprecated
-    void changeSSLContext(SSLContext newSSLContext);
-
-    /**
-     * Changes the HTTPS certificate. This can be changed without restarting the server.
-     * @param newSSLContext The new SSL Context to use.
-     * @deprecated Use {@link #changeHttpsConfig(HttpsConfigBuilder)} instead
-     */
-    @Deprecated
-    void changeSSLContext(SSLContextBuilder newSSLContext);
-
 
     /**
      * Changes the HTTPS certificate. This can be changed without restarting the server.
