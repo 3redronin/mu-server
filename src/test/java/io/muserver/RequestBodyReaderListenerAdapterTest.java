@@ -217,8 +217,8 @@ public class RequestBodyReaderListenerAdapterTest {
             .post(new SlowBodySender(1000, 10));
 
         try (Response resp = call(request)) {
-            resp.body().string();
-            Assert.fail("Should not be able to read body");
+            String read = resp.body().string();
+            Assert.fail("Should not be able to read body but got " + read + " and " + resp.isSuccessful());
         } catch (Exception ex) {
             MuAssert.assertIOException(ex);
         }
