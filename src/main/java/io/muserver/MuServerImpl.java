@@ -1,5 +1,7 @@
 package io.muserver;
 
+import io.netty.handler.ssl.SslContext;
+
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.util.Collections;
@@ -114,7 +116,9 @@ class MuServerImpl implements MuServer {
     public void changeHttpsConfig(HttpsConfigBuilder newHttpsConfig) {
         Mutils.notNull("newSSLContext", newHttpsConfig);
         try {
-            sslContextProvider.set(newHttpsConfig.toNettySslContext(http2Enabled));
+            SslContext nettySslContext = newHttpsConfig.toNettySslContext(http2Enabled);
+            sslContextProvider.set(nettySslContext);
+            ((SSLInfoImpl) sslContextProvider.sslInfo()).setHttpsUri(httpsUri);
         } catch (Exception e) {
             throw new MuException("Error while changing SSL Certificate. The old one will still be used.", e);
         }

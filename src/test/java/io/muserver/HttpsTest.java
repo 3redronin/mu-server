@@ -19,6 +19,7 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 import static io.muserver.MuServerBuilder.httpServer;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -152,6 +153,9 @@ public class HttpsTest {
         }
 
         assertThat(certInformation(server.uri()), containsString("My JKS Certificate"));
+        assertThat(server.sslInfo().certificates().stream().map(cert -> cert.getIssuerX500Principal().getName()).collect(Collectors.joining()),
+            equalTo("CN=My JKS Certificate,OU=Ronin,O=MuServer,L=NA,ST=NA,C=NA"));
+
 
         HttpsConfigBuilder newCert = HttpsConfigBuilder.httpsConfig()
             .withKeystoreType("PKCS12")
@@ -160,6 +164,8 @@ public class HttpsTest {
             .withKeystoreFromClasspath("/pkcs12-keystore.p12");
 
         server.changeHttpsConfig(newCert);
+        assertThat(server.sslInfo().certificates().stream().map(cert -> cert.getIssuerX500Principal().getName()).collect(Collectors.joining()),
+            equalTo("CN=My PKCS12 Certificate,OU=Ronin,O=MuServer,L=NA,ST=NA,C=NA"));
 
         try (Response resp = call(request(server.httpsUri()))) {
             assertThat(resp.body().string(), equalTo("This is encrypted"));
