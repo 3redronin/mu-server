@@ -421,8 +421,8 @@ public class ResourceHandlerTest {
                         .addHandler(classpathHandler("/META-INF/resources/webjars/jquery-ui"))
                     )
                 )
-                .addHandler(context("/jquery-3.6.3")
-                    .addHandler(classpathHandler("/META-INF/resources/webjars/jquery/3.6.3"))
+                .addHandler(context("/jquery-3.7.1")
+                    .addHandler(classpathHandler("/META-INF/resources/webjars/jquery/3.7.1"))
                 )
                 .addHandler(context("/jquery-ui-1.13.2")
                     .addHandler(classpathHandler("/META-INF/resources/webjars/jquery-ui/1.13.2"))
@@ -430,20 +430,20 @@ public class ResourceHandlerTest {
             )
             .start();
 
-        try (Response resp = call(request(server.uri().resolve("/lib/jquery/3.6.3/jquery.min.js")))) {
+        try (Response resp = call(request(server.uri().resolve("/lib/jquery/3.7.1/jquery.min.js")))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.header("Content-Type"), is("application/javascript"));
-            assertThat(resp.body().string(), is(readResource("/META-INF/resources/webjars/jquery/3.6.3/jquery.min.js")));
+            assertThat(resp.body().string(), is(readResource("/META-INF/resources/webjars/jquery/3.7.1/jquery.min.js")));
         }
         try (Response resp = call(request(server.uri().resolve("/lib/jquery/ui/1.13.2/jquery-ui.min.js")))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.header("Content-Type"), is("application/javascript"));
             assertThat(resp.body().string(), is(readResource("/META-INF/resources/webjars/jquery-ui/1.13.2/jquery-ui.min.js")));
         }
-        try (Response resp = call(request(server.uri().resolve("/lib/jquery-3.6.3/jquery.min.js")))) {
+        try (Response resp = call(request(server.uri().resolve("/lib/jquery-3.7.1/jquery.min.js")))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.header("Content-Type"), is("application/javascript"));
-            assertThat(resp.body().string(), is(readResource("/META-INF/resources/webjars/jquery/3.6.3/jquery.min.js")));
+            assertThat(resp.body().string(), is(readResource("/META-INF/resources/webjars/jquery/3.7.1/jquery.min.js")));
         }
         try (Response resp = call(request(server.uri().resolve("/lib/jquery-ui-1.13.2/jquery-ui.min.js")))) {
             assertThat(resp.code(), is(200));

@@ -146,6 +146,7 @@ public class HttpsTest {
                 return true;
             })
             .start();
+
         try (Response resp = call(request(server.httpsUri()))) {
             assertThat(resp.body().string(), equalTo("This is encrypted"));
         }

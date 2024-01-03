@@ -14,9 +14,9 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <netty.version>4.1.101.Final</netty.version>
+        <netty.version>4.1.104.Final</netty.version>
         <slf4j.version>1.7.36</slf4j.version>
-        <jetty.version>9.4.50.v20221201</jetty.version>
+        <jetty.version>9.4.53.v20231009</jetty.version>
     </properties>
 
     <scm>
@@ -165,13 +165,13 @@
         <dependency>
             <groupId>org.json</groupId>
             <artifactId>json</artifactId>
-            <version>20220924</version>
+            <version>20231013</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.webjars</groupId>
             <artifactId>jquery</artifactId>
-            <version>3.6.3</version>
+            <version>3.7.1</version>
             <scope>test</scope>
         </dependency>
         <dependency>
