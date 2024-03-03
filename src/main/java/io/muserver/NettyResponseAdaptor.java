@@ -110,7 +110,7 @@ abstract class NettyResponseAdaptor implements MuResponse {
     }
 
     public void status(int value) {
-        if (state != ResponseState.NOTHING) {
+        if (state != ResponseState.NOTHING && !state.completedWithError()) {
             throw new IllegalStateException("Cannot set the status after the headers have already been sent");
         }
         status = value;

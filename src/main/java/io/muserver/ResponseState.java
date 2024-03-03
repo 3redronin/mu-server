@@ -35,7 +35,7 @@ public enum ResponseState {
     ERRORED(true, false),
 
     /**
-     * The idle timeout (as specified in {@link MuServerBuilder#withIdleTimeout(long, TimeUnit)} occurred and so the
+     * The idle timeout (as specified in {@link MuServerBuilder#withIdleTimeout(long, TimeUnit)}) occurred and so the
      * response was cancelled early.
      */
     TIMED_OUT(true, false),
@@ -59,6 +59,10 @@ public enum ResponseState {
      */
     public boolean endState() {
         return endState;
+    }
+
+    boolean completedWithError() {
+        return endState && !fullResponseSent;
     }
 
     /**
