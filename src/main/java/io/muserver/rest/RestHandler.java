@@ -332,8 +332,12 @@ public class RestHandler implements MuHandler {
             paramValue = request;
         } else if (type.equals(HttpHeaders.class)) {
             paramValue = new JaxRsHttpHeadersAdapter(request.headers(), request.cookies());
-        } else if (type.equals(SecurityContext.class)) {
-            return requestContext.getSecurityContext();
+        } else if (SecurityContext.class.isAssignableFrom(type)) {
+            SecurityContext sc = requestContext.getSecurityContext();
+            if (sc != null && !type.isAssignableFrom(sc.getClass())) {
+                throw new MuException("Invalid security context type: " + sc.getClass() + " being used for " + mm.resourceMethod.methodHandle);
+            }
+            return sc;
         } else if (type.equals(Sse.class)) {
             return new JaxSseImpl();
         } else if (type.equals(SseEventSink.class)) {
