@@ -112,6 +112,22 @@ public class ContextHandlerTest {
         }
     }
 
+
+    @Test
+    public void callsToContextNamesWithoutTrailingSlashesWithQueryStringsResultIn302() throws Exception {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(context("my app"))
+            .start();
+
+        String urlEncodedQuery = "?" + Mutils.urlEncode("some key") + "=" + Mutils.urlEncode("some value & another");
+        URL url = server.uri().resolve("/my%20app" + urlEncodedQuery).toURL();
+        try (Response resp = call(request().get().url(url))) {
+            assertThat(resp.code(), equalTo(302));
+            assertThat(resp.header("location"), equalTo(server.uri().resolve("/my%20app/" + urlEncodedQuery).toString()));
+            assertThat(resp.body().contentLength(), equalTo(0L));
+        }
+    }
+
     @Test
     public void contextIsEmptyStringIfNotUsed() throws IOException {
 

@@ -38,7 +38,12 @@ public class ContextHandler implements MuHandler {
         String rp = request.relativePath();
         if (hasContext && rp.equals(slashContext)) {
             URI cur = request.uri();
-            URI newUri = new URI(cur.getScheme(), cur.getUserInfo(), cur.getHost(), cur.getPort(), cur.getPath() + "/", cur.getQuery(), cur.getFragment());
+            URI newUri;
+            if (cur.getRawQuery() == null) {
+                newUri = cur.resolve(cur.getRawPath() + "/");
+            } else {
+                newUri = cur.resolve(cur.getRawPath() + "/?" + cur.getRawQuery());
+            }
             response.redirect(newUri);
             return true;
         }
