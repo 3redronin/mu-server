@@ -158,9 +158,13 @@ class SsePublisherImpl implements SsePublisher {
     }
 
     private static void ensureNoLineBreaks(String value, String thing) {
-        if (value.contains("\n") || value.contains("\r")) {
+        if (containsLinebreak(value)) {
             throw new IllegalArgumentException(thing + " cannot have new line characters in them");
         }
+    }
+
+    private static boolean containsLinebreak(String value) {
+        return value.contains("\n") || value.contains("\r");
     }
 
     static String dataText(String message, String event, String eventID) {
@@ -173,9 +177,13 @@ class SsePublisherImpl implements SsePublisher {
             ensureNoLineBreaks(event, "SSE event names");
             raw.append("event: ").append(event).append('\n');
         }
-        String[] lines = message.split("(\r\n)|[\r\n]");
-        for (String line : lines) {
-            raw.append("data: ").append(line).append('\n');
+        if (containsLinebreak(message)) {
+            String[] lines = message.split("(\r\n)|[\r\n]"); // this is quite expensive if the string is big
+            for (String line : lines) {
+                raw.append("data: ").append(line).append('\n');
+            }
+        } else {
+            raw.append("data: ").append(message).append('\n');
         }
         raw.append('\n');
         return raw.toString();
