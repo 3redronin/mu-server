@@ -5,12 +5,15 @@ import io.netty.handler.codec.http.QueryStringDecoder;
 
 import javax.ws.rs.core.*;
 import java.net.URI;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static io.muserver.Mutils.urlDecode;
+import static io.muserver.Mutils.urlEncode;
 import static io.muserver.rest.ReadOnlyMultivaluedMap.readOnly;
 import static java.util.stream.Collectors.toList;
 
@@ -22,15 +25,13 @@ class MuUriInfo implements UriInfo {
     private final URI baseUri;
     private final URI requestUri;
     private final String encodedRelativePath;
-    private final List<String> matchedURIs;
-    private final List<Object> matchedResources;
+    private final RequestMatcher.MatchedMethod matchedMethod;
 
-    MuUriInfo(URI baseUri, URI requestUri, String encodedRelativePath, List<String> matchedURIs, List<Object> matchedResources) {
+    MuUriInfo(URI baseUri, URI requestUri, String encodedRelativePath, RequestMatcher.MatchedMethod matchedMethod) {
         this.baseUri = baseUri;
         this.requestUri = requestUri;
         this.encodedRelativePath = encodedRelativePath;
-        this.matchedURIs = matchedURIs;
-        this.matchedResources = matchedResources;
+        this.matchedMethod = matchedMethod;
     }
 
     @Override
@@ -113,8 +114,19 @@ class MuUriInfo implements UriInfo {
 
     @Override
     public MultivaluedMap<String, String> getPathParameters(boolean decode) {
-        MultivaluedMap<String, String> all = new MultivaluedHashMap<>();
-        getPathSegments(decode).forEach(seg -> all.putAll(seg.getMatrixParameters()));
+        if (matchedMethod == null) return ReadOnlyMultivaluedMap.empty();
+        Map<String, PathSegment> pp = matchedMethod.pathParams;
+        if (pp.isEmpty()) return ReadOnlyMultivaluedMap.empty();
+        MultivaluedMap<String, String> all = new MultivaluedHashMap<>(pp.size());
+        for (Map.Entry<String, PathSegment> entry : pp.entrySet()) {
+            String param = entry.getKey();
+            String path = entry.getValue().getPath();
+            if (!all.containsKey(param)) {
+                all.put(param, new ArrayList<>());
+            }
+            if (!decode) path = urlEncode(path);
+            all.get(param).add(path);
+        }
         return readOnly(all);
     }
 
@@ -144,20 +156,27 @@ class MuUriInfo implements UriInfo {
 
     @Override
     public List<String> getMatchedURIs(boolean decode) {
-        if (decode) {
-            return matchedURIs;
+        RequestMatcher.MatchedMethod mm = matchedMethod;
+        if (mm == null) {
+            return Collections.emptyList();
         }
-        throw NotImplementedException.notYet();
+        List<String> matchedURIs = new ArrayList<>();
+        matchedURIs.add(decode ? Mutils.urlDecode(encodedRelativePath) : encodedRelativePath);
+        String methodSpecific = mm.pathMatch.regexMatcher().group();
+        String path = encodedRelativePath.replace("/" + methodSpecific, "");
+        matchedURIs.add(decode ? Mutils.urlDecode(path) : path);
+        return Collections.unmodifiableList(matchedURIs);
+
     }
 
     @Override
     public List<Object> getMatchedResources() {
-        return matchedResources;
+        return matchedMethod == null ? Collections.emptyList() : Collections.singletonList(matchedMethod.matchedClass.resourceClass.resourceInstance);
     }
 
     @Override
     public URI resolve(URI relative) {
-        return this.requestUri.resolve(relative);
+        return this.baseUri.resolve(relative);
     }
 
     @Override

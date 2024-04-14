@@ -26,7 +26,6 @@ import java.util.function.Function;
 
 import static io.muserver.rest.CORSConfig.getAllowedMethods;
 import static java.util.Collections.emptyList;
-import static java.util.Collections.singletonList;
 
 /**
  * A handler that serves JAX-RS resources.
@@ -352,18 +351,7 @@ public class RestHandler implements MuHandler {
     }
 
     static MuUriInfo createUriInfo(String relativePath, RequestMatcher.MatchedMethod mm, URI baseUri, URI requestUri) {
-        List<String> matchedURIs = new ArrayList<>();
-        matchedURIs.add(relativePath);
-        ResourceMethod rm = null;
-        if (mm != null) {
-            String methodSpecific = mm.pathMatch.regexMatcher().group();
-            matchedURIs.add(relativePath.replace("/" + methodSpecific, ""));
-            rm = mm.resourceMethod;
-        }
-        List<Object> matchedResources = rm == null ? emptyList() : singletonList(mm.resourceMethod.resourceClass.resourceInstance);
-        return new MuUriInfo(baseUri, requestUri,
-            Mutils.trim(relativePath, "/"), Collections.unmodifiableList(matchedURIs),
-            matchedResources);
+        return new MuUriInfo(baseUri, requestUri, Mutils.trim(relativePath, "/"), mm);
     }
 
     private static Object readRequestEntity(JaxRSRequest requestContext, Parameter parameter) throws java.io.IOException {
