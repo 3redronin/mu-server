@@ -37,7 +37,7 @@ public class JaxMatchingTest {
             }
         }
         server = ServerUtils.httpsServerForTest()
-            .addHandler(RestHandlerBuilder.restHandler(new Thing()).build())
+            .addHandler(restHandler(new Thing()).build())
             .start();
         try (Response resp = call(request().url(server.uri().resolve("/tiger").toString()))) {
             assertThat(resp.body().string(), is("tiger"));
@@ -58,7 +58,7 @@ public class JaxMatchingTest {
             }
         }
         server = ServerUtils.httpsServerForTest()
-            .addHandler(RestHandlerBuilder.restHandler(new Thing()).build())
+            .addHandler(restHandler(new Thing()).build())
             .start();
         try (Response resp = call(request(server.uri().resolve("/tiger/tiger/tiger/tiger")))) {
             assertThat(resp.body().string(), is("tiger")); // uppercut
@@ -93,7 +93,7 @@ public class JaxMatchingTest {
             }
         }
         server = ServerUtils.httpsServerForTest()
-            .addHandler(RestHandlerBuilder.restHandler(new Thing()).build())
+            .addHandler(restHandler(new Thing()).build())
             .start();
         try (Response resp = call(request(server.uri().resolve("/api/123")))) {
             assertThat(resp.body().string(), is("got 123"));
@@ -120,7 +120,7 @@ public class JaxMatchingTest {
             public void id() {}
         }
         server = ServerUtils.httpsServerForTest()
-            .addHandler(RestHandlerBuilder.restHandler(new Runners()))
+            .addHandler(restHandler(new Runners()))
             .start();
         try (Response resp = call(request(server.uri().resolve("/runners/myrunner/system")))) {
             assertThat(resp.code(), is(404));
@@ -139,7 +139,7 @@ public class JaxMatchingTest {
             }
         }
         server = ServerUtils.httpsServerForTest()
-            .addHandler(RestHandlerBuilder.restHandler(new Thing()).build())
+            .addHandler(restHandler(new Thing()).build())
             .start();
         URI matrixUri = server.uri().resolve("/blah;ignored=true/tiger;color=red;type=cat/something;ignored=true");
         try (Response resp = call(request().url(matrixUri.toString()))) {

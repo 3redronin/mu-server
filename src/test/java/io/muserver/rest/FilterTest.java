@@ -13,10 +13,7 @@ import org.junit.Test;
 
 import javax.ws.rs.*;
 import javax.ws.rs.container.*;
-import javax.ws.rs.core.Context;
-import javax.ws.rs.core.MultivaluedMap;
-import javax.ws.rs.core.NewCookie;
-import javax.ws.rs.core.UriBuilder;
+import javax.ws.rs.core.*;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -169,6 +166,40 @@ public class FilterTest {
             "REQUEST GET " + server.uri().resolve("/in%20a%20context/blah"),
             "REQUEST POST " + server.uri().resolve("/in%20a%20context/something") + " - a-value"
         ));
+    }
+
+    @Test
+    public void pathParamsAreAvailableInFilters() throws Exception {
+        @Path("something/{classLevel}/{repeat}")
+        class SomeResource {
+            @GET
+            @Path("/and/{methodLevel}/{repeat}")
+            public String hi(@Context ContainerRequestContext rc) {
+                return rc.getProperty("added") + " ";
+            }
+
+        }
+        server = httpsServerForTest()
+            .addHandler(restHandler(new SomeResource()).addRequestFilter(requestContext -> {
+                    UriInfo info = requestContext.getUriInfo();
+                    boolean decode = "decode it".equals(info.getQueryParameters().get("decode").get(0));
+                    MultivaluedMap<String, String> pathParameters = info.getPathParameters(decode);
+                requestContext.setProperty("added", info.getPath(decode) + " " +
+                    String.join(",", pathParameters.get("classLevel")) + " " +
+                    String.join(",", pathParameters.get("repeat")) + " " +
+                    String.join(",", pathParameters.get("methodLevel")));
+            })
+            )
+            .start();
+        try (Response resp = call(request(server.uri().resolve("/something/class%20param/repeat%20value/and/method%20param/repeat%20value?decode=decode%20it")))) {
+            assertThat(resp.body().string(), is("something/class param/repeat value/and/method param/repeat value class param repeat value method param "));
+        }
+
+        try (Response resp = call(request(server.uri().resolve("/something/class%20param/repeat%20value/and/method%20param/repeat%20value?decode=no%20decode")))) {
+            assertThat(resp.body().string(), is("something/class%20param/repeat%20value/and/method%20param/repeat%20value class%20param repeat%20value method%20param "));
+        }
+
+
     }
 
     @Test

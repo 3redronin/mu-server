@@ -71,6 +71,9 @@ public class ClientUtils {
     }
 
     public static Response call(Request.Builder request) {
+        return call(client, request);
+    }
+    public static Response call(OkHttpClient client, Request.Builder request) {
         Request req = request.build();
         try {
             return client.newCall(req).execute();
