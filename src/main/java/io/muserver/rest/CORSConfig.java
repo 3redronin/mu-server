@@ -82,7 +82,7 @@ public class CORSConfig {
             }
             return true;
         } else {
-            respHeaders.set(HeaderNames.ACCESS_CONTROL_ALLOW_ORIGIN, "null");
+            respHeaders.remove(HeaderNames.ACCESS_CONTROL_ALLOW_ORIGIN);
             return false;
         }
 

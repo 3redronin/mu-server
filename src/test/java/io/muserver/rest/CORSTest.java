@@ -159,7 +159,7 @@ public class CORSTest {
             .url(server.uri().resolve("/things").toString()))
         ) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.header("Access-Control-Allow-Origin"), is("null"));
+            assertThat(resp.header("Access-Control-Allow-Origin"), is(nullValue()));
             assertThat(resp.header("Access-Control-Allow-Methods"), is(nullValue()));
             assertThat(resp.header("Access-Control-Allow-Headers"), is(nullValue()));
             assertThat(resp.header("Access-Control-Max-Age"), is(nullValue()));
@@ -219,7 +219,7 @@ public class CORSTest {
             .url(server.uri().resolve("/things").toString()))
         ) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.header("Access-Control-Allow-Origin"), is("null"));
+            assertThat(resp.header("Access-Control-Allow-Origin"), is(nullValue()));
         }
     }
 
