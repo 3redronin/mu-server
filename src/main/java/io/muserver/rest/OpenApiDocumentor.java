@@ -2,8 +2,8 @@ package io.muserver.rest;
 
 import io.muserver.*;
 import io.muserver.openapi.*;
+import jakarta.ws.rs.ext.ParamConverterProvider;
 
-import javax.ws.rs.ext.ParamConverterProvider;
 import java.io.BufferedWriter;
 import java.io.OutputStreamWriter;
 import java.lang.reflect.Type;

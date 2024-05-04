@@ -1,8 +1,8 @@
 package io.muserver.rest;
 
 import io.muserver.openapi.SchemaObject;
+import jakarta.ws.rs.core.MediaType;
 
-import javax.ws.rs.core.MediaType;
 import java.lang.reflect.Method;
 import java.lang.reflect.Type;
 import java.util.Optional;

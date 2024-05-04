@@ -3,6 +3,13 @@ package io.muserver.rest;
 
 import io.muserver.Method;
 import io.muserver.MuServer;
+import jakarta.ws.rs.ClientErrorException;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.core.Context;
+import jakarta.ws.rs.core.HttpHeaders;
+import jakarta.ws.rs.core.SecurityContext;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Before;
@@ -10,13 +17,6 @@ import org.junit.Test;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 
-import javax.ws.rs.ClientErrorException;
-import javax.ws.rs.GET;
-import javax.ws.rs.Path;
-import javax.ws.rs.Produces;
-import javax.ws.rs.core.Context;
-import javax.ws.rs.core.HttpHeaders;
-import javax.ws.rs.core.SecurityContext;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.security.Principal;

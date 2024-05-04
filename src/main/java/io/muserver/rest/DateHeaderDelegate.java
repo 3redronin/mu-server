@@ -1,8 +1,8 @@
 package io.muserver.rest;
 
 import io.muserver.Mutils;
+import jakarta.ws.rs.ext.RuntimeDelegate;
 
-import javax.ws.rs.ext.RuntimeDelegate;
 import java.time.format.DateTimeParseException;
 import java.util.Date;
 

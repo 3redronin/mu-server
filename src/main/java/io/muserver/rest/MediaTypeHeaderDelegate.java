@@ -1,9 +1,9 @@
 package io.muserver.rest;
 
 import io.muserver.MediaTypeParser;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.ext.RuntimeDelegate;
 
-import javax.ws.rs.core.MediaType;
-import javax.ws.rs.ext.RuntimeDelegate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;

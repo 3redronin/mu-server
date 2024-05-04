@@ -1,11 +1,10 @@
 package io.muserver.rest;
 
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.OPTIONS;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.PathParam;
 import org.junit.Test;
-
-import javax.ws.rs.GET;
-import javax.ws.rs.OPTIONS;
-import javax.ws.rs.Path;
-import javax.ws.rs.PathParam;
 
 import static java.net.URI.create;
 import static java.util.Collections.emptyList;

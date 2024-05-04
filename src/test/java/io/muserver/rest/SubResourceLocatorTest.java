@@ -1,12 +1,11 @@
 package io.muserver.rest;
 
 import io.muserver.MuServer;
+import jakarta.ws.rs.*;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.MuAssert;
-
-import javax.ws.rs.*;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.MatcherAssert.assertThat;

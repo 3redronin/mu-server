@@ -1,15 +1,15 @@
 package io.muserver.rest;
 
 import io.muserver.MuServer;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.QueryParam;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 import scaffolding.ServerUtils;
 
-import javax.ws.rs.GET;
-import javax.ws.rs.Path;
-import javax.ws.rs.QueryParam;
 import java.util.List;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;

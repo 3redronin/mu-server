@@ -7,11 +7,11 @@ import io.muserver.openapi.InfoObject;
 import io.muserver.openapi.OpenAPIObjectBuilder;
 import io.muserver.openapi.SchemaObject;
 import io.muserver.openapi.SchemaObjectBuilder;
+import jakarta.ws.rs.container.ContainerRequestFilter;
+import jakarta.ws.rs.container.ContainerResponseFilter;
+import jakarta.ws.rs.container.PreMatching;
+import jakarta.ws.rs.ext.*;
 
-import javax.ws.rs.container.ContainerRequestFilter;
-import javax.ws.rs.container.ContainerResponseFilter;
-import javax.ws.rs.container.PreMatching;
-import javax.ws.rs.ext.*;
 import java.io.InputStream;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
@@ -50,7 +50,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     /**
      * Adds one or more rest resources to this handler
      *
-     * @param resources One or more instances of classes that are decorated with {@link javax.ws.rs.Path} annotations.
+     * @param resources One or more instances of classes that are decorated with {@link jakarta.ws.rs.Path} annotations.
      * @return This builder
      */
     public RestHandlerBuilder addResource(Object... resources) {
@@ -151,7 +151,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     }
 
     /**
-     * Specifies if values passed to method parameters with {@link javax.ws.rs.QueryParam} or {@link javax.ws.rs.HeaderParam} annotations should be transformed or not.
+     * Specifies if values passed to method parameters with {@link jakarta.ws.rs.QueryParam} or {@link jakarta.ws.rs.HeaderParam} annotations should be transformed or not.
      * <p>The primary use of this is to allow querystring parameters such as <code>/path?value=one,two,three</code> to be interpreted
      * as a list of three values rather than a single string. This only applies to parameters that are collections.</p>
      * <p>The default is {@link CollectionParameterStrategy#NO_TRANSFORM} which is the JAX-RS standard.</p>
@@ -226,7 +226,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      *
      * @param <T>             The exception type that the mapper can handle
      * @param exceptionClass  The type of exception to map.
-     * @param exceptionMapper A function that creates a {@link javax.ws.rs.core.Response} suitable for the exception.
+     * @param exceptionMapper A function that creates a {@link jakarta.ws.rs.core.Response} suitable for the exception.
      * @return Returns this builder.
      */
     public <T extends Throwable> RestHandlerBuilder addExceptionMapper(Class<T> exceptionClass, ExceptionMapper<T> exceptionMapper) {
@@ -252,7 +252,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * <p>Creates a handler builder for JAX-RS REST services.</p>
      * <p>Note that CORS is disabled by default.</p>
      *
-     * @param resources Instances of classes that have a {@link javax.ws.rs.Path} annotation.
+     * @param resources Instances of classes that have a {@link jakarta.ws.rs.Path} annotation.
      * @return Returns a builder that can be used to specify more config
      */
     public static RestHandlerBuilder restHandler(Object... resources) {
@@ -290,7 +290,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * <p>Registers a request filter, which is run before a rest method is executed.</p>
      * <p>It will be run after the method has been matched, or if the {@link PreMatching} annotation is applied to the
      * filter then it will run before matching occurs.</p>
-     * <p>To access the {@link javax.ws.rs.container.ResourceInfo} or {@link io.muserver.MuRequest} for the current
+     * <p>To access the {@link jakarta.ws.rs.container.ResourceInfo} or {@link io.muserver.MuRequest} for the current
      * request, the following code can be used:</p>
      * <pre><code>
      * ResourceInfo resourceInfo = (ResourceInfo) context.getProperty(MuRuntimeDelegate.RESOURCE_INFO_PROPERTY);
@@ -310,7 +310,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
 
     /**
      * Registers a response filter, which is called after execution of a method takes place.
-     * <p>To access the {@link javax.ws.rs.container.ResourceInfo} or {@link io.muserver.MuRequest} for the current
+     * <p>To access the {@link jakarta.ws.rs.container.ResourceInfo} or {@link io.muserver.MuRequest} for the current
      * request, the following code can be used:</p>
      * <pre><code>
      * ResourceInfo resourceInfo = (ResourceInfo) context.getProperty(MuRuntimeDelegate.RESOURCE_INFO_PROPERTY);
@@ -370,7 +370,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * Registers a writer interceptor allowing for inspection and alteration of response bodies.
      * <p>Interceptors are executed in the order added, and are called before any message body
      * writers added by {@link #addCustomWriter(MessageBodyWriter)}.</p>
-     * <p>To access the {@link javax.ws.rs.container.ResourceInfo} or {@link io.muserver.MuRequest} for the current
+     * <p>To access the {@link jakarta.ws.rs.container.ResourceInfo} or {@link io.muserver.MuRequest} for the current
      * request, the following code can be used:</p>
      * <pre><code>
      * ResourceInfo resourceInfo = (ResourceInfo) context.getProperty(MuRuntimeDelegate.RESOURCE_INFO_PROPERTY);
@@ -389,7 +389,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * Registers a reader interceptor allowing for inspection and alteration of request bodies.
      * <p>Interceptors are executed in the order added, and are called before any message body
      * readers added by {@link #addCustomReader(MessageBodyReader)}.</p>
-     * <p>To access the {@link javax.ws.rs.container.ResourceInfo} or {@link io.muserver.MuRequest} for the current
+     * <p>To access the {@link jakarta.ws.rs.container.ResourceInfo} or {@link io.muserver.MuRequest} for the current
      * request, the following code can be used:</p>
      * <pre><code>
      * ResourceInfo resourceInfo = (ResourceInfo) context.getProperty(MuRuntimeDelegate.RESOURCE_INFO_PROPERTY);

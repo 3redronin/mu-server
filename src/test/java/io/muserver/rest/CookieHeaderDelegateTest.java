@@ -1,8 +1,7 @@
 package io.muserver.rest;
 
+import jakarta.ws.rs.core.Cookie;
 import org.junit.Test;
-
-import javax.ws.rs.core.Cookie;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;

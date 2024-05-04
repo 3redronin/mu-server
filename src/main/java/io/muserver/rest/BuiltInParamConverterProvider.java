@@ -3,10 +3,10 @@ package io.muserver.rest;
 import io.muserver.Cookie;
 import io.muserver.Mutils;
 import io.muserver.UploadedFile;
+import jakarta.ws.rs.core.PathSegment;
+import jakarta.ws.rs.ext.ParamConverter;
+import jakarta.ws.rs.ext.ParamConverterProvider;
 
-import javax.ws.rs.core.PathSegment;
-import javax.ws.rs.ext.ParamConverter;
-import javax.ws.rs.ext.ParamConverterProvider;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;

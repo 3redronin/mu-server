@@ -360,7 +360,7 @@ abstract class NettyResponseAdaptor implements MuResponse {
 
     static class EmptyHttpResponse extends DefaultFullHttpResponse {
         EmptyHttpResponse(HttpResponseStatus status) {
-            super(HttpVersion.HTTP_1_1, status, false);
+            super(HttpVersion.HTTP_1_1, status, Unpooled.buffer(0));
         }
     }
 

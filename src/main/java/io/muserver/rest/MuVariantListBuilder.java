@@ -1,9 +1,9 @@
 package io.muserver.rest;
 
 import io.muserver.ParameterizedHeaderWithValue;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Variant;
 
-import javax.ws.rs.core.MediaType;
-import javax.ws.rs.core.Variant;
 import java.util.*;
 
 import static java.util.Arrays.asList;

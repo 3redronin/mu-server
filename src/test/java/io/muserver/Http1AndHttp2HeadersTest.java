@@ -1,9 +1,9 @@
 package io.muserver;
 
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
+import jakarta.ws.rs.core.MediaType;
 import org.junit.Test;
 
-import javax.ws.rs.core.MediaType;
 import java.util.*;
 import java.util.stream.Collectors;
 

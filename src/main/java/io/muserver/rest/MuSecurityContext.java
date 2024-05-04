@@ -1,6 +1,7 @@
 package io.muserver.rest;
 
-import javax.ws.rs.core.SecurityContext;
+import jakarta.ws.rs.core.SecurityContext;
+
 import java.security.Principal;
 
 class MuSecurityContext implements SecurityContext {
