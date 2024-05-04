@@ -311,7 +311,7 @@
                                     </excludes>
                                     <includes>
                                         <include>org.slf4j:slf4j-api</include>
-                                        <include>javax.ws.rs:javax.ws.rs-api</include>
+                                        <include>jakarta.ws.rs:jakarta.ws.rs-api</include>
                                         <include>io.netty:*</include>
                                     </includes>
                                 </bannedDependencies>
