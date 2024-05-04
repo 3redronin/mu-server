@@ -91,4 +91,13 @@ public interface HttpConnection {
      * @return The client certificate, or <code>empty</code> if no certificate is available
      */
     Optional<Certificate> clientCertificate();
+
+    /**
+     * Gets information from a proxy that uses the <a href="https://www.haproxy.org/download/1.8/doc/proxy-protocol.txt">HA
+     * Proxy protocol</a>.
+     * <p>Note: this is only available if enabled via {@link MuServerBuilder#withHAProxyProtocolEnabled(boolean)}</p>
+     * @return Information from a proxy about the source client, or {@link Optional#empty()} if none specified.
+     */
+    Optional<ProxiedConnectionInfo> proxyInfo();
+
 }

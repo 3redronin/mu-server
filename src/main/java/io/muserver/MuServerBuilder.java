@@ -65,6 +65,7 @@ public class MuServerBuilder {
     private List<RateLimiterImpl> rateLimiters;
     private WriteBufferWaterMark writeBufferWaterMark = WriteBufferWaterMark.DEFAULT;
     private UnhandledExceptionHandler unhandledExceptionHandler;
+    private boolean haProxyProtocolEnabled = false;
 
     /**
      * @param port The HTTP port to use. A value of 0 will have a random port assigned; a value of -1 will
@@ -538,6 +539,11 @@ public class MuServerBuilder {
     /**
      * @return The current value of this property
      */
+    public boolean haProxyProtocolEnabled() { return this.haProxyProtocolEnabled; }
+
+    /**
+     * @return The current value of this property
+     */
     public List<ResponseCompleteListener> responseCompleteListeners() {
         return Collections.unmodifiableList(responseCompleteListeners);
     }
@@ -584,6 +590,16 @@ public class MuServerBuilder {
         return muServer().withHttpsPort(0);
     }
 
+    /**
+     * If enabled, then <a href="https://www.haproxy.org/download/1.8/doc/proxy-protocol.txt">HA Proxy Protocol</a>
+     * parsing on new connections will be enabled.
+     * @param enabled <code>true</code> to enable. The default is <code>false</code>
+     * @return This builder
+     */
+    public MuServerBuilder withHAProxyProtocolEnabled(boolean enabled) {
+        this.haProxyProtocolEnabled = enabled;
+        return this;
+    }
 
     /**
      * Creates and starts this server. An exception is thrown if it fails to start.
@@ -634,7 +650,7 @@ public class MuServerBuilder {
             boolean http2Enabled = http2Config != null && http2Config.enabled;
             MuServerImpl server = new MuServerImpl(stats, http2Enabled, settings, unhandledExceptionHandler);
 
-            Channel httpChannel = httpPort < 0 ? null : createChannel(bossGroup, workerGroup, nettyHandlerAdapter, host, httpPort, null, trafficShapingHandler, server, false, idleTimeoutMills, writeBufferWaterMark);
+            Channel httpChannel = httpPort < 0 ? null : createChannel(bossGroup, workerGroup, nettyHandlerAdapter, host, httpPort, null, trafficShapingHandler, server, false, idleTimeoutMills, writeBufferWaterMark, haProxyProtocolEnabled);
             Channel httpsChannel;
             if (httpsPort < 0) {
                 httpsChannel = null;
@@ -643,7 +659,7 @@ public class MuServerBuilder {
                 SslContext nettySslContext = toUse.toNettySslContext(http2Enabled);
                 log.debug("SSL Context is " + nettySslContext);
                 sslContextProvider = new SslContextProvider(nettySslContext);
-                httpsChannel = createChannel(bossGroup, workerGroup, nettyHandlerAdapter, host, httpsPort, sslContextProvider, trafficShapingHandler, server, http2Enabled, idleTimeoutMills, writeBufferWaterMark);
+                httpsChannel = createChannel(bossGroup, workerGroup, nettyHandlerAdapter, host, httpsPort, sslContextProvider, trafficShapingHandler, server, http2Enabled, idleTimeoutMills, writeBufferWaterMark, haProxyProtocolEnabled);
             }
             URI uri = null;
             if (httpChannel != null) {
@@ -677,7 +693,7 @@ public class MuServerBuilder {
         return URI.create(protocol + "://" + host.toLowerCase() + ":" + a.getPort());
     }
 
-    private static Channel createChannel(NioEventLoopGroup bossGroup, NioEventLoopGroup workerGroup, NettyHandlerAdapter nettyHandlerAdapter, String host, int port, SslContextProvider sslContextProvider, GlobalTrafficShapingHandler trafficShapingHandler, MuServerImpl server, final boolean http2, long idleTimeoutMills, WriteBufferWaterMark writeBufferWaterMark) throws InterruptedException {
+    private static Channel createChannel(NioEventLoopGroup bossGroup, NioEventLoopGroup workerGroup, NettyHandlerAdapter nettyHandlerAdapter, String host, int port, SslContextProvider sslContextProvider, GlobalTrafficShapingHandler trafficShapingHandler, MuServerImpl server, final boolean http2, long idleTimeoutMills, WriteBufferWaterMark writeBufferWaterMark, boolean haProxyProtocolEnabled) throws InterruptedException {
         boolean usesSsl = sslContextProvider != null;
         String proto = usesSsl ? "https" : "http";
         ServerBootstrap b = new ServerBootstrap();
@@ -690,6 +706,10 @@ public class MuServerBuilder {
                     ChannelPipeline p = socketChannel.pipeline();
                     p.addLast("idle", new IdleStateHandler(0, 0, idleTimeoutMills, TimeUnit.MILLISECONDS));
                     p.addLast(trafficShapingHandler);
+                    if (haProxyProtocolEnabled) {
+                        OptionalHAProxyMessageDecoder haProxyMessageDecoder = new OptionalHAProxyMessageDecoder();
+                        p.addLast(OptionalHAProxyMessageDecoder.CHANNEL_NAME, haProxyMessageDecoder);
+                    }
                     if (usesSsl) {
                         SslHandler sslHandler = sslContextProvider.get().newHandler(socketChannel.alloc());
                         SSLParameters params = sslHandler.engine().getSSLParameters();

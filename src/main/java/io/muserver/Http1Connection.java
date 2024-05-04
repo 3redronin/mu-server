@@ -3,6 +3,7 @@ package io.muserver;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.handler.codec.haproxy.HAProxyMessage;
 import io.netty.handler.codec.http.*;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.timeout.IdleState;
@@ -37,6 +38,7 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
     private ChannelHandlerContext nettyCtx;
     private InetSocketAddress remoteAddress;
     private Exchange currentExchange = null;
+    private ProxiedConnectionInfo proxyInfo;
 
     Http1Connection(NettyHandlerAdapter nettyHandlerAdapter, MuServerImpl server, String proto) {
         this.nettyHandlerAdapter = nettyHandlerAdapter;
@@ -81,7 +83,11 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
     }
 
     private void onChannelRead(ChannelHandlerContext ctx, Object msg) {
-        if (msg instanceof HttpRequest) {
+        if (msg instanceof HAProxyMessage) {
+            HAProxyMessage hap = (HAProxyMessage) msg;
+            this.proxyInfo = ProxiedConnectionInfoImpl.fromNetty(hap);
+            ctx.channel().read();
+        } else if (msg instanceof HttpRequest) {
             try {
                 this.currentExchange = HttpExchange.create(server, proto, ctx, this, (HttpRequest) msg,
                     nettyHandlerAdapter, connectionStats,
@@ -277,6 +283,11 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
     @Override
     public Optional<Certificate> clientCertificate() {
         return fromContext(nettyCtx);
+    }
+
+    @Override
+    public Optional<ProxiedConnectionInfo> proxyInfo() {
+        return Optional.ofNullable(proxyInfo);
     }
 
     static Optional<Certificate> fromContext(ChannelHandlerContext channelHandlerContext) {
