@@ -126,6 +126,15 @@ class ResourceClass {
 
         Path path = annotationSource.getDeclaredAnnotation(Path.class);
         if (path == null) {
+            for (Annotation other : annotationSource.getDeclaredAnnotations()) {
+                if (other.annotationType().getName().equals("javax.ws.rs.Path")) {
+                    throw new IllegalArgumentException("The class " + annotationSource.getName() + " contains an old version " +
+                        "of the JAX-RS implementation. The package name for JAX-RS resources has changed from 'javax.ws.rs' to " +
+                        "'jakarta.ws.rs' in the 3.0.0 release of jakarta.ws.rs-api. Please change all references in your project to this new namespace in order to " +
+                        "use the version of JAX-RS that mu-server implements (this may be as simple as doing a global find and " +
+                        "replace for 'javax.ws.rs' to 'jakarta.ws.rs').");
+                }
+            }
             throw new IllegalArgumentException("The class " + annotationSource.getName() + " must specify a " + Path.class.getName()
                 + " annotation because it has other JAX RS annotations declared. (Note that @Path cannot be inherited if there are other JAX RS annotations declared on this class.)");
         }
