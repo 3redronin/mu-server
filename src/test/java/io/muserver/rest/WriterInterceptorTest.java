@@ -2,15 +2,15 @@ package io.muserver.rest;
 
 import io.muserver.MuRequest;
 import io.muserver.MuServer;
+import jakarta.ws.rs.*;
+import jakarta.ws.rs.container.ResourceInfo;
+import jakarta.ws.rs.ext.WriterInterceptor;
+import jakarta.ws.rs.ext.WriterInterceptorContext;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.ServerUtils;
 
-import javax.ws.rs.*;
-import javax.ws.rs.container.ResourceInfo;
-import javax.ws.rs.ext.WriterInterceptor;
-import javax.ws.rs.ext.WriterInterceptorContext;
 import java.io.FilterOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -188,7 +188,7 @@ public class WriterInterceptorTest {
                     } else if (context.getEntity().equals("runtimeException")) {
                         throw new RuntimeException("Runtime exception!!");
                     } else if (context.getEntity().equals("responseException")) {
-                        context.setEntity(javax.ws.rs.core.Response.status(409).entity("Response exception!!").build());
+                        context.setEntity(jakarta.ws.rs.core.Response.status(409).entity("Response exception!!").build());
                     } else if (context.getEntity().equals("entityException")) {
                         context.setEntity(new ClientErrorException("Entity exception!!", 488));
                     }

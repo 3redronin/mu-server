@@ -2,16 +2,16 @@ package io.muserver.rest;
 
 import io.muserver.*;
 import io.netty.handler.codec.http.HttpHeaderNames;
+import jakarta.ws.rs.ProcessingException;
+import jakarta.ws.rs.WebApplicationException;
+import jakarta.ws.rs.container.ContainerResponseContext;
+import jakarta.ws.rs.core.Cookie;
+import jakarta.ws.rs.core.*;
+import jakarta.ws.rs.ext.MessageBodyReader;
+import jakarta.ws.rs.ext.RuntimeDelegate;
+import jakarta.ws.rs.ext.WriterInterceptor;
+import jakarta.ws.rs.ext.WriterInterceptorContext;
 
-import javax.ws.rs.ProcessingException;
-import javax.ws.rs.WebApplicationException;
-import javax.ws.rs.container.ContainerResponseContext;
-import javax.ws.rs.core.Cookie;
-import javax.ws.rs.core.*;
-import javax.ws.rs.ext.MessageBodyReader;
-import javax.ws.rs.ext.RuntimeDelegate;
-import javax.ws.rs.ext.WriterInterceptor;
-import javax.ws.rs.ext.WriterInterceptorContext;
 import java.io.*;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;

@@ -1,8 +1,8 @@
 package io.muserver;
 
 import io.netty.buffer.ByteBuf;
+import jakarta.ws.rs.WebApplicationException;
 
-import javax.ws.rs.WebApplicationException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InterruptedIOException;

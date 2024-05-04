@@ -19,12 +19,11 @@ package org.example.petstore.resource;
 import io.muserver.rest.ApiResponse;
 import io.muserver.rest.Description;
 import io.muserver.rest.Required;
+import jakarta.ws.rs.*;
+import jakarta.ws.rs.core.Response;
 import org.example.petstore.data.UserData;
 import org.example.petstore.exception.ApiException;
 import org.example.petstore.model.User;
-
-import javax.ws.rs.*;
-import javax.ws.rs.core.Response;
 
 @Path("/user")
 @Description("Operations about user")

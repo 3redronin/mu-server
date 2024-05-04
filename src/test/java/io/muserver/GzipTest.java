@@ -1,16 +1,16 @@
 package io.muserver;
 
 import io.muserver.rest.RestHandlerBuilder;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.core.StreamingOutput;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.MuAssert;
 import scaffolding.StringUtils;
 
-import javax.ws.rs.GET;
-import javax.ws.rs.Path;
-import javax.ws.rs.Produces;
-import javax.ws.rs.core.StreamingOutput;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;

@@ -3,6 +3,8 @@ package io.muserver.rest;
 import io.muserver.ContentTypes;
 import io.muserver.MuServer;
 import io.muserver.Mutils;
+import jakarta.ws.rs.*;
+import jakarta.ws.rs.core.StreamingOutput;
 import okhttp3.MediaType;
 import okhttp3.RequestBody;
 import okhttp3.Response;
@@ -13,8 +15,6 @@ import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 import scaffolding.StringUtils;
 
-import javax.ws.rs.*;
-import javax.ws.rs.core.StreamingOutput;
 import java.io.*;
 import java.util.concurrent.CountDownLatch;
 
@@ -163,15 +163,15 @@ public class BinaryEntityProvidersTest {
         class Sample {
             @GET
             @Produces("text/plain")
-            public javax.ws.rs.core.Response streamStuff() {
+            public jakarta.ws.rs.core.Response streamStuff() {
                 StreamingOutput streamingOutput = new StreamingOutput() {
                     @Override
                     public void write(OutputStream output) throws IOException, WebApplicationException {
-                        javax.ws.rs.core.Response r = javax.ws.rs.core.Response.status(400).entity("This is your fault").build();
+                        jakarta.ws.rs.core.Response r = jakarta.ws.rs.core.Response.status(400).entity("This is your fault").build();
                         throw new WebApplicationException(r);
                     }
                 };
-                return javax.ws.rs.core.Response.ok(streamingOutput).build();
+                return jakarta.ws.rs.core.Response.ok(streamingOutput).build();
             }
         }
         startServer(new Sample());

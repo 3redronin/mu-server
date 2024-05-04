@@ -20,13 +20,13 @@ package org.example.petstore.resource;
 import io.muserver.rest.ApiResponse;
 import io.muserver.rest.Description;
 import io.muserver.rest.Required;
+import jakarta.ws.rs.*;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.StreamingOutput;
 import org.example.petstore.data.VehicleData;
 import org.example.petstore.model.Vehicle;
 
-import javax.ws.rs.*;
-import javax.ws.rs.core.MediaType;
-import javax.ws.rs.core.Response;
-import javax.ws.rs.core.StreamingOutput;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.time.Instant;

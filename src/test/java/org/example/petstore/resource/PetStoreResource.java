@@ -17,13 +17,12 @@
 package org.example.petstore.resource;
 
 import io.muserver.rest.Required;
+import jakarta.ws.rs.*;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
 import org.example.petstore.data.PetData;
 import org.example.petstore.data.StoreData;
 import org.example.petstore.model.Order;
-
-import javax.ws.rs.*;
-import javax.ws.rs.core.MediaType;
-import javax.ws.rs.core.Response;
 
 @Path("/store")
 //@Api(value="/store" , description = "Operations about store")

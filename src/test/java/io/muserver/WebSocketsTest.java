@@ -1,5 +1,6 @@
 package io.muserver;
 
+import jakarta.ws.rs.ClientErrorException;
 import okhttp3.Request;
 import okhttp3.Response;
 import okhttp3.WebSocket;
@@ -20,7 +21,6 @@ import scaffolding.RawClient;
 import scaffolding.ServerUtils;
 import scaffolding.StringUtils;
 
-import javax.ws.rs.ClientErrorException;
 import java.net.ProtocolException;
 import java.net.URI;
 import java.nio.ByteBuffer;

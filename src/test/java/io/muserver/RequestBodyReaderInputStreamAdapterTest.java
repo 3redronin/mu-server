@@ -1,5 +1,6 @@
 package io.muserver;
 
+import jakarta.ws.rs.ClientErrorException;
 import okhttp3.MediaType;
 import okhttp3.Request;
 import okhttp3.RequestBody;
@@ -14,7 +15,6 @@ import scaffolding.ServerUtils;
 import scaffolding.SlowBodySender;
 import scaffolding.StringUtils;
 
-import javax.ws.rs.ClientErrorException;
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;

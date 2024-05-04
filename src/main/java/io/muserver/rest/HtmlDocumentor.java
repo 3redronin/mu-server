@@ -2,8 +2,8 @@ package io.muserver.rest;
 
 import io.muserver.Mutils;
 import io.muserver.openapi.*;
+import jakarta.ws.rs.core.MediaType;
 
-import javax.ws.rs.core.MediaType;
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.net.URI;

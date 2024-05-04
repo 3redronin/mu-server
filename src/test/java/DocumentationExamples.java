@@ -4,12 +4,12 @@ import io.muserver.rest.CORSConfigBuilder;
 import io.muserver.rest.Description;
 import io.muserver.rest.Required;
 import io.muserver.rest.RestHandlerBuilder;
+import jakarta.ws.rs.*;
 import org.example.petstore.resource.PetResource;
 import org.example.petstore.resource.PetStoreResource;
 import org.example.petstore.resource.UserResource;
 import org.example.petstore.resource.VehicleResource;
 
-import javax.ws.rs.*;
 import java.time.*;
 import java.util.UUID;
 

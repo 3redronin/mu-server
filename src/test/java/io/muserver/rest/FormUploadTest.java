@@ -2,12 +2,12 @@ package io.muserver.rest;
 
 import io.muserver.MuServer;
 import io.muserver.UploadedFile;
+import jakarta.ws.rs.*;
 import okhttp3.*;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.ServerUtils;
 
-import javax.ws.rs.*;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -18,8 +18,8 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static io.muserver.UploadTest.*;
+import static jakarta.ws.rs.core.MediaType.APPLICATION_OCTET_STREAM;
 import static java.util.Arrays.asList;
-import static javax.ws.rs.core.MediaType.APPLICATION_OCTET_STREAM;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static scaffolding.ClientUtils.call;
@@ -36,7 +36,7 @@ public class FormUploadTest {
         class ImageResource {
 
             @POST
-            @Consumes(javax.ws.rs.core.MediaType.MULTIPART_FORM_DATA)
+            @Consumes(jakarta.ws.rs.core.MediaType.MULTIPART_FORM_DATA)
             public String create(@FormParam("Hello") String hello, @FormParam("image") UploadedFile file, @FormParam("The name") String theName) {
                 String filename = file == null ? "null" : file.filename();
                 long size = file == null ? -1 : file.size();
@@ -91,7 +91,7 @@ public class FormUploadTest {
         class ImageResource {
 
             @POST
-            @Consumes(javax.ws.rs.core.MediaType.MULTIPART_FORM_DATA)
+            @Consumes(jakarta.ws.rs.core.MediaType.MULTIPART_FORM_DATA)
             @Produces("text/plain")
             public String create(@FormParam("metadata") String metadata, @FormParam("file") File file) {
                 long size = file == null ? -1 : file.length();
@@ -125,14 +125,14 @@ public class FormUploadTest {
 
             @POST
             @Path("concreteList")
-            @Consumes(javax.ws.rs.core.MediaType.MULTIPART_FORM_DATA)
+            @Consumes(jakarta.ws.rs.core.MediaType.MULTIPART_FORM_DATA)
             public String concreteList(@FormParam("image") List<UploadedFile> files) {
                 return describe(files);
             }
 
             @POST
             @Path("wildcardList")
-            @Consumes(javax.ws.rs.core.MediaType.MULTIPART_FORM_DATA)
+            @Consumes(jakarta.ws.rs.core.MediaType.MULTIPART_FORM_DATA)
             public String wildcardList(@FormParam("image") List<? extends UploadedFile> files) {
                 // The wildcard type is to simulate what a kotlin list looks like
                 return describe(files);
@@ -140,7 +140,7 @@ public class FormUploadTest {
 
             @POST
             @Path("wildcardCollection")
-            @Consumes(javax.ws.rs.core.MediaType.MULTIPART_FORM_DATA)
+            @Consumes(jakarta.ws.rs.core.MediaType.MULTIPART_FORM_DATA)
             public String wildcardCollection(@FormParam("image") Collection<? extends UploadedFile> files) {
                 // The wildcard type is to simulate what a kotlin list looks like
                 return describe(files);
@@ -148,7 +148,7 @@ public class FormUploadTest {
 
             @POST
             @Path("concreteCollection")
-            @Consumes(javax.ws.rs.core.MediaType.MULTIPART_FORM_DATA)
+            @Consumes(jakarta.ws.rs.core.MediaType.MULTIPART_FORM_DATA)
             public String concreteCollection(@FormParam("image") Collection<UploadedFile> files) {
                 // The wildcard type is to simulate what a kotlin list looks like
                 return describe(files);
@@ -156,14 +156,14 @@ public class FormUploadTest {
 
             @POST
             @Path("concreteSet")
-            @Consumes(javax.ws.rs.core.MediaType.MULTIPART_FORM_DATA)
+            @Consumes(jakarta.ws.rs.core.MediaType.MULTIPART_FORM_DATA)
             public String concreteSet(@FormParam("image") Set<UploadedFile> files) {
                 // The wildcard type is to simulate what a kotlin list looks like
                 return describe(files.stream().sorted((o1, o2) -> o2.filename().compareTo(o1.filename())).collect(Collectors.toList()));
             }
             @POST
             @Path("wildcardSet")
-            @Consumes(javax.ws.rs.core.MediaType.MULTIPART_FORM_DATA)
+            @Consumes(jakarta.ws.rs.core.MediaType.MULTIPART_FORM_DATA)
             public String wildcardSet(@FormParam("image") Set<? extends UploadedFile> files) {
                 // The wildcard type is to simulate what a kotlin list looks like
                 return describe(files.stream().sorted((o1, o2) -> o2.filename().compareTo(o1.filename())).collect(Collectors.toList()));
