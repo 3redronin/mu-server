@@ -62,8 +62,11 @@ class BackPressureHandler extends ChannelDuplexHandler {
 
     private void deliverTasks(ChannelHandlerContext ctx, boolean evenIfUnwriteable) {
         Delivery task;
+        boolean hasSent = false;
         while ( (evenIfUnwriteable || ctx.channel().isWritable()) && (task = toSend.poll()) != null) {
             task.send(ctx);
+            hasSent = true;
         }
+        if (hasSent) ctx.flush();
     }
 }
