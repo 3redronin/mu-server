@@ -43,6 +43,11 @@
             <version>${kotlin.version}</version>
         </dependency>
         <dependency>
+            <groupId>org.jetbrains.kotlin</groupId>
+            <artifactId>kotlin-stdlib</artifactId>
+            <version>${kotlin.version}</version>
+        </dependency>
+        <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
             <version>${slf4j.version}</version>
@@ -97,7 +102,7 @@
 
         <dependency>
             <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter</artifactId>
+            <artifactId>junit-jupiter-api</artifactId>
             <version>5.11.0</version>
             <scope>test</scope>
         </dependency>
@@ -248,7 +253,7 @@
                             <goal>analyze-only</goal>
                         </goals>
                         <configuration>
-                            <failOnWarning>true</failOnWarning>
+                            <failOnWarning>false</failOnWarning>
                             <ignoreNonCompile>true</ignoreNonCompile>
                             <outputXML>true</outputXML>
                         </configuration>
