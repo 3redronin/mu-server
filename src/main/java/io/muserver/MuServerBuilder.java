@@ -585,6 +585,10 @@ public class MuServerBuilder {
     }
 
 
+    public MuServer start3() {
+        return Mu3ServerImpl.start(this);
+    }
+
     /**
      * Creates and starts this server. An exception is thrown if it fails to start.
      *

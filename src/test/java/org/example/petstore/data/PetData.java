@@ -21,10 +21,7 @@ import org.example.petstore.model.Category;
 import org.example.petstore.model.Pet;
 import org.example.petstore.model.Tag;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class PetData {
   static List<Pet> pets = new ArrayList<Pet>();
@@ -143,9 +140,9 @@ public class PetData {
       if(status != null && !"".equals(status)) {
         Integer count = output.get(status);
         if(count == null)
-          count = new Integer(1);
+          count = 1;
         else
-          count = count.intValue() + 1;
+          count = count + 1;
         output.put(status, count);
       }
     }
@@ -159,13 +156,10 @@ public class PetData {
     pet.setCategory(cat);
     pet.setName(name);
     if (null != urls) {
-      List<String> urlObjs = new ArrayList<String>();
-      for (String urlString : urls) {
-        urlObjs.add(urlString);
-      }
+        List<String> urlObjs = new ArrayList<>(Arrays.asList(urls));
       pet.setPhotoUrls(urlObjs);
     }
-    List<Tag> tagObjs = new ArrayList<Tag>();
+    List<Tag> tagObjs = new ArrayList<>();
     int i = 0;
     if (null != tags) {
       for (String tagString : tags) {

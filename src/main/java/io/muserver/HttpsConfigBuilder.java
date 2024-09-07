@@ -31,13 +31,14 @@ public class HttpsConfigBuilder {
     private byte[] keystoreBytes;
     private SSLContext sslContext;
     private CipherSuiteFilter nettyCipherSuiteFilter;
+    private SSLCipherFilter sslCipherFilter;
     private KeyManagerFactory keyManagerFactory;
     private String defaultAlias;
 
     /**
      * Only used by HttpsConfigBuilder
      */
-    protected TrustManager trustManager;
+    protected X509TrustManager trustManager;
 
     /**
      * The type of keystore, such as JKS, JCEKS, PKCS12, etc
@@ -213,6 +214,7 @@ public class HttpsConfigBuilder {
      * @return This builder
      */
     public HttpsConfigBuilder withCipherFilter(SSLCipherFilter cipherFilter) {
+        this.sslCipherFilter = cipherFilter;
         if (cipherFilter == null) {
             this.nettyCipherSuiteFilter = null;
         } else {
@@ -261,6 +263,7 @@ public class HttpsConfigBuilder {
      * @return Creates an SSLContext
      * @deprecated Pass this builder itself to the HttpsConfig rather than building an SSLContext
      */
+    @Deprecated
     SSLContext build() {
         if (keystoreBytes == null) {
             throw new MuException("No keystore has been set");
@@ -286,6 +289,24 @@ public class HttpsConfigBuilder {
                 log.info("Error while closing keystore stream: " + e.getMessage());
             }
         }
+    }
+
+    HttpsConfig build3() {
+        SSLContext context = build();
+
+        SSLParameters params = context.getDefaultSSLParameters();
+        params.setUseCipherSuitesOrder(true);
+
+        if (sslCipherFilter != null) {
+            SSLServerSocketFactory ssf = context.getServerSocketFactory();
+            List<String> selected = sslCipherFilter.selectCiphers(Set.of(ssf.getSupportedCipherSuites()), List.of(ssf.getDefaultCipherSuites()));
+            String[] ciphersToUse = selected.toArray(new String[0]);
+            params.setCipherSuites(ciphersToUse);
+        }
+
+        String[] protocolsToUse = getHttpsProtocolsArray(context);
+        params.setProtocols(protocolsToUse);
+        return new HttpsConfig(context, params, trustManager);
     }
 
     static Map<String, String> buildSanToAliasMap(KeyStore keyStore) throws KeyStoreException {
@@ -394,21 +415,24 @@ public class HttpsConfigBuilder {
     }
 
     private String[] getHttpsProtocolsArray() throws NoSuchAlgorithmException {
-        List<String> supportedProtocols = asList(SSLContext.getDefault().getSupportedSSLParameters().getProtocols());
+        return getHttpsProtocolsArray(SSLContext.getDefault());
+
+    }
+    private String[] getHttpsProtocolsArray(SSLContext sslContext) {
+        List<String> supportedProtocols = asList(sslContext.getSupportedSSLParameters().getProtocols());
         List<String> protocolsToUse = new ArrayList<>();
         for (String protocol : Mutils.coalesce(this.protocols, new String[]{"TLSv1.2", "TLSv1.3"})) {
             if (supportedProtocols.contains(protocol)) {
                 protocolsToUse.add(protocol);
             } else {
-                log.warn("Will not use " + protocol + " as it is not supported by the current JDK");
+                log.warn("Will not use " + protocol + " as it is not supported by the current SSLContext");
             }
         }
         if (protocolsToUse.isEmpty()) {
             throw new MuException("Cannot start up as none of the requested SSL protocols " + Arrays.toString(this.protocols)
-                + " are supported by the current JDK " + supportedProtocols);
+                + " are supported by the current SSLContext " + supportedProtocols);
         }
-        String[] protocolsArray = protocolsToUse.toArray(new String[0]);
-        return protocolsArray;
+        return protocolsToUse.toArray(new String[0]);
     }
 
 
@@ -433,7 +457,10 @@ public class HttpsConfigBuilder {
      * @return This builder.
      */
     public HttpsConfigBuilder withClientCertificateTrustManager(TrustManager trustManager) {
-        this.trustManager = trustManager;
+        if (trustManager != null && !(trustManager instanceof X509TrustManager)) {
+            throw new IllegalArgumentException("Only X509 trust managers are supported");
+        }
+        this.trustManager = (X509TrustManager) trustManager;
         return this;
     }
 

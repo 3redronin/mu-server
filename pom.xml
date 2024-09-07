@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>io.muserver</groupId>
-    <artifactId>mu-server</artifactId>
+    <artifactId>mu3</artifactId>
     <version>2.0-SNAPSHOT</version>
 
     <name>mu-server</name>
@@ -17,6 +17,7 @@
         <netty.version>4.1.112.Final</netty.version>
         <slf4j.version>1.7.36</slf4j.version>
         <jetty.version>9.4.54.v20240208</jetty.version>
+        <kotlin.version>2.0.20</kotlin.version>
     </properties>
 
     <scm>
@@ -36,6 +37,11 @@
 
 
     <dependencies>
+        <dependency>
+            <groupId>org.jetbrains.kotlin</groupId>
+            <artifactId>kotlin-stdlib-jdk8</artifactId>
+            <version>${kotlin.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
@@ -87,6 +93,13 @@
             <groupId>jakarta.ws.rs</groupId>
             <artifactId>jakarta.ws.rs-api</artifactId>
             <version>3.0.0</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>5.11.0</version>
+            <scope>test</scope>
         </dependency>
 
         <dependency>
@@ -205,7 +218,14 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.2.5</version>
+                <version>3.5.0</version>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.junit.jupiter</groupId>
+                        <artifactId>junit-jupiter-engine</artifactId>
+                        <version>5.11.0</version>
+                    </dependency>
+                </dependencies>
             </plugin>
             <plugin>
                 <groupId>com.github.danielflower.mavenplugins</groupId>
@@ -215,20 +235,6 @@
                     <releaseProfiles>
                         <releaseProfile>release</releaseProfile>
                     </releaseProfiles>
-                </configuration>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.13.0</version>
-                <configuration>
-                    <source>1.8</source>
-                    <target>1.8</target>
-                    <failOnWarning>true</failOnWarning>
-                    <showWarnings>true</showWarnings>
-                    <compilerArgs>
-                        <arg>-Xlint:-options</arg>
-                    </compilerArgs>
                 </configuration>
             </plugin>
             <plugin>
@@ -254,7 +260,7 @@
                 <artifactId>maven-javadoc-plugin</artifactId>
                 <version>3.6.3</version>
                 <configuration>
-                    <source>8</source>
+                    <source>11</source>
                     <detectJavaApiLink>false</detectJavaApiLink>
                 </configuration>
                 <executions>
@@ -282,40 +288,102 @@
                     </execution>
                 </executions>
             </plugin>
+<!--            <plugin>-->
+<!--                <groupId>org.apache.maven.plugins</groupId>-->
+<!--                <artifactId>maven-enforcer-plugin</artifactId>-->
+<!--                <version>3.4.1</version>-->
+<!--                <executions>-->
+<!--                    <execution>-->
+<!--                        <id>enforce-versions</id>-->
+<!--                        <goals>-->
+<!--                            <goal>enforce</goal>-->
+<!--                        </goals>-->
+<!--                        <configuration>-->
+<!--                            <rules>-->
+<!--                                <bannedDependencies>-->
+<!--                                    <excludes>-->
+<!--                                        <exclude>*:*:*:*:runtime</exclude>-->
+<!--                                        <exclude>*:*:*:*:compile</exclude>-->
+<!--                                    </excludes>-->
+<!--                                    <includes>-->
+<!--                                        <include>org.slf4j:slf4j-api</include>-->
+<!--                                        <include>jakarta.ws.rs:jakarta.ws.rs-api</include>-->
+<!--                                        <include>io.netty:*</include>-->
+<!--                                    </includes>-->
+<!--                                </bannedDependencies>-->
+<!--                                <dependencyConvergence/>-->
+<!--                                <requireMavenVersion>-->
+<!--                                    <version>3.0.4</version>-->
+<!--                                </requireMavenVersion>-->
+<!--                                <requireJavaVersion>-->
+<!--                                    <version>1.11.0</version>-->
+<!--                                </requireJavaVersion>-->
+<!--                            </rules>-->
+<!--                        </configuration>-->
+<!--                    </execution>-->
+<!--                </executions>-->
+<!--            </plugin>-->
             <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-enforcer-plugin</artifactId>
-                <version>3.4.1</version>
+                <groupId>org.jetbrains.kotlin</groupId>
+                <artifactId>kotlin-maven-plugin</artifactId>
+                <version>${kotlin.version}</version>
                 <executions>
                     <execution>
-                        <id>enforce-versions</id>
+                        <id>compile</id>
+                        <phase>compile</phase>
                         <goals>
-                            <goal>enforce</goal>
+                            <goal>compile</goal>
                         </goals>
-                        <configuration>
-                            <rules>
-                                <bannedDependencies>
-                                    <excludes>
-                                        <exclude>*:*:*:*:runtime</exclude>
-                                        <exclude>*:*:*:*:compile</exclude>
-                                    </excludes>
-                                    <includes>
-                                        <include>org.slf4j:slf4j-api</include>
-                                        <include>jakarta.ws.rs:jakarta.ws.rs-api</include>
-                                        <include>io.netty:*</include>
-                                    </includes>
-                                </bannedDependencies>
-                                <dependencyConvergence/>
-                                <requireMavenVersion>
-                                    <version>3.0.4</version>
-                                </requireMavenVersion>
-                                <requireJavaVersion>
-                                    <version>1.8.0</version>
-                                </requireJavaVersion>
-                            </rules>
-                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>test-compile</id>
+                        <phase>test-compile</phase>
+                        <goals>
+                            <goal>test-compile</goal>
+                        </goals>
                     </execution>
                 </executions>
+                <configuration>
+                    <jvmTarget>11</jvmTarget>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.13.0</version>
+                <executions>
+                    <execution>
+                        <id>default-compile</id>
+                        <phase>none</phase>
+                    </execution>
+                    <execution>
+                        <id>default-testCompile</id>
+                        <phase>none</phase>
+                    </execution>
+                    <execution>
+                        <id>compile</id>
+                        <phase>compile</phase>
+                        <goals>
+                            <goal>compile</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>testCompile</id>
+                        <phase>test-compile</phase>
+                        <goals>
+                            <goal>testCompile</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <source>11</source>
+                    <target>11</target>
+                    <failOnWarning>true</failOnWarning>
+                    <showWarnings>true</showWarnings>
+                    <compilerArgs>
+                        <arg>-Xlint:-options</arg>
+                    </compilerArgs>
+                </configuration>
             </plugin>
         </plugins>
     </build>
@@ -355,23 +423,6 @@
                                 </goals>
                             </execution>
                         </executions>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
-        <profile>
-            <id>java-8-api</id>
-            <activation>
-                <jdk>[9,)</jdk>
-            </activation>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-compiler-plugin</artifactId>
-                        <configuration>
-                            <release>8</release>
-                        </configuration>
                     </plugin>
                 </plugins>
             </build>

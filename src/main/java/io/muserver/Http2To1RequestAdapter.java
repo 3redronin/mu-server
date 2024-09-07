@@ -2,6 +2,8 @@ package io.muserver;
 
 import io.netty.handler.codec.DecoderResult;
 import io.netty.handler.codec.http.*;
+import io.netty.handler.codec.http.HttpVersion;
+import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.handler.codec.http2.HttpConversionUtil;
@@ -51,6 +53,7 @@ class Http2To1RequestAdapter implements HttpRequest {
     public HttpRequest setUri(String uri) {
         throw new IllegalStateException("Can't set stuff");
     }
+
 
     @Override
     public HttpRequest setProtocolVersion(HttpVersion version) {

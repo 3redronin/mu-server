@@ -1,5 +1,6 @@
 package io.muserver;
 
+import java.io.Closeable;
 import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -13,7 +14,11 @@ import java.util.concurrent.TimeUnit;
  * A web server handler. Create and start a web server by using {@link MuServerBuilder#httpsServer()} or
  * {@link MuServerBuilder#httpServer()}
  */
-public interface MuServer {
+public interface MuServer extends Closeable {
+
+    default void close() {
+        stop();
+    }
 
     /**
      * Shuts down the server
