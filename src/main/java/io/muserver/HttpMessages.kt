@@ -5,7 +5,7 @@ import java.io.OutputStream
 
 
 internal sealed interface HttpMessageTemp {
-    var httpVersion: String
+    var httpVersion: HttpVersion?
     fun headers() : Mu3Headers
     fun bodyTransferSize() : BodySize
     companion object {
@@ -64,7 +64,7 @@ data class BodySize(val type: BodyType, val bytes: Long?) {
 internal data class HttpRequestTemp(
     var method: Method?,
     var url: String,
-    override var httpVersion: String,
+    override var httpVersion: HttpVersion?,
     private val headers: Mu3Headers = Mu3Headers(),
 ) : HttpMessageTemp {
     fun isWebsocketUpgrade() = headers.containsValue("upgrade", "websocket", false)
@@ -91,14 +91,14 @@ internal data class HttpRequestTemp(
         out.write(' '.code)
         out.write(url.headerBytes())
         out.write(' '.code)
-        out.write(httpVersion.headerBytes())
+        out.write(httpVersion!!.headerBytes())
         out.write(CRLF)
         headers.writeTo(out)
         out.write(CRLF)
     }
 
     companion object {
-        internal fun empty() = HttpRequestTemp(null, "", "")
+        internal fun empty() = HttpRequestTemp(null, "", null)
     }
 
     override fun headers() = headers
@@ -107,7 +107,7 @@ internal data class HttpRequestTemp(
 
 internal data class HttpResponseTemp(
     var request: HttpRequestTemp?,
-    override var httpVersion: String,
+    override var httpVersion: HttpVersion?,
     var statusCode: Int,
     var reason: String,
     private val headers: Mu3Headers = Mu3Headers(),
@@ -141,7 +141,7 @@ internal data class HttpResponseTemp(
     }
 
     internal fun writeTo(out: OutputStream) {
-        out.write(httpVersion.headerBytes())
+        out.write(httpVersion!!.headerBytes())
         out.write(' '.code)
         out.write(statusCode.toString().headerBytes())
         out.write(' '.code)
@@ -153,7 +153,7 @@ internal data class HttpResponseTemp(
     override fun headers() = headers
 
     companion object {
-        internal fun empty() = HttpResponseTemp(null, "", 0, "")
+        internal fun empty() = HttpResponseTemp(null, null, 0, "")
     }
 
 }

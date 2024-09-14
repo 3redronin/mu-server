@@ -122,13 +122,13 @@ internal class Http1MessageParser(type: HttpMessageType, private val requestQueu
                 }
                 ParseState.REQUEST_LINE_ENDING -> {
                     if (b.isLF()) {
-                        exchange.httpVersion = buffer.consumeAscii()
+                        exchange.httpVersion = buffer.consumeHttpVersion()
                         state = ParseState.HEADER_START
                     } else throw ParseException("state=$state b=$b", i)
                 }
                 ParseState.RESPONSE_START -> {
                     if (b == SP) {
-                        exchange.httpVersion = buffer.consumeAscii()
+                        exchange.httpVersion = buffer.consumeHttpVersion()
                         state = ParseState.STATUS_CODE
                     } else {
                         if (b.isVChar()) {
@@ -459,6 +459,11 @@ internal class Http1MessageParser(type: HttpMessageType, private val requestQueu
             val v = this.toString(StandardCharsets.US_ASCII)
             this.reset()
             return v
+        }
+
+        private fun ByteArrayOutputStream.consumeHttpVersion(): HttpVersion {
+            return HttpVersion.fromVersion(this.consumeAscii())
+                ?: throw HttpException(HttpStatusCode.HTTP_VERSION_NOT_SUPPORTED_505)
         }
     }
 }

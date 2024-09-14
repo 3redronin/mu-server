@@ -1,7 +1,5 @@
 package io.muserver;
 
-import org.jetbrains.annotations.NotNull;
-
 import java.nio.charset.StandardCharsets;
 
 /**
@@ -48,5 +46,11 @@ public enum HttpVersion {
 
     byte[] headerBytes() {
         return version.getBytes(StandardCharsets.US_ASCII);
+    }
+
+
+    @Override
+    public String toString() {
+        return version;
     }
 }

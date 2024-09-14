@@ -129,7 +129,7 @@ internal class Mu3Http1Connection(val server: Mu3ServerImpl, val creator: Connec
                     method = request.method!!,
                     requestUri = serverUri,
                     serverUri = serverUri,
-                    httpVersion = HttpVersion.fromVersion(request.httpVersion),
+                    httpVersion = request.httpVersion!!,
                     mu3Headers = headers
                 )
                 val muResponse = Mu3Response(muRequest, outputStream)
