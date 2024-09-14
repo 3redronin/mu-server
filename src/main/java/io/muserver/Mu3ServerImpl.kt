@@ -1,10 +1,5 @@
 package io.muserver
 
-import com.danielflower.ifp.*
-import com.danielflower.ifp.Http1MessageParser
-import com.danielflower.ifp.HttpMessage
-import com.danielflower.ifp.HttpMessageListener
-import com.danielflower.ifp.HttpMessageType
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.io.Closeable
@@ -120,17 +115,17 @@ internal class Mu3ServerImpl(private val acceptors: List<ConnectionAcceptor>, va
 }
 
 internal class Mu3Http1Connection(val server: Mu3ServerImpl, val creator: ConnectionAcceptor, val clientSocket: Socket) {
-    private val requestPipeline : Queue<HttpRequest> = ConcurrentLinkedQueue()
+    private val requestPipeline : Queue<HttpRequestTemp> = ConcurrentLinkedQueue()
 
     fun start(outputStream: OutputStream) {
 
         val requestListener = object : HttpMessageListener {
 
-            override fun onHeaders(exchange: HttpMessage) {
-                val request = exchange as HttpRequest
+            override fun onHeaders(exchange: HttpMessageTemp) {
+                val request = exchange as HttpRequestTemp
                 val method = Method.valueOf(request.method)
                 val serverUri = creator.uri.resolve(request.url).normalize()
-                val headers = Mu3Headers(request.headers())
+                val headers = request.headers()
                 val muRequest = Mu3Request(method, serverUri, serverUri, HttpVersion.fromVersion(request.httpVersion), headers)
                 val muResponse = Mu3Response(muRequest, outputStream)
                 log.info("Got request: $muRequest")
@@ -142,16 +137,16 @@ internal class Mu3Http1Connection(val server: Mu3ServerImpl, val creator: Connec
                 muResponse.cleanup()
             }
 
-            override fun onBodyBytes(exchange: HttpMessage, type: BodyBytesType, array: ByteArray, offset: Int, length: Int) {
+            override fun onBodyBytes(exchange: HttpMessageTemp, type: BodyBytesType, array: ByteArray, offset: Int, length: Int) {
                 log.info("Got body bytes")
             }
 
-            override fun onMessageEnded(exchange: HttpMessage) {
+            override fun onMessageEnded(exchange: HttpMessageTemp) {
                 log.info("Request ended")
             }
 
-            override fun onError(exchange: HttpMessage, error: Exception) {
-                val req = exchange as HttpRequest
+            override fun onError(exchange: HttpMessageTemp, error: Exception) {
+                val req = exchange as HttpRequestTemp
                 log.error("Request error: $req", error)
             }
         }

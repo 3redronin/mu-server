@@ -1,33 +1,36 @@
 package io.muserver
 
-import com.danielflower.ifp.BodySize
-import com.danielflower.ifp.COLON_SP
-import com.danielflower.ifp.CRLF
-import com.danielflower.ifp.HttpHeaders
-import com.danielflower.ifp.HttpHeaders.Companion.headerBytes
 import jakarta.ws.rs.core.MediaType
 import java.io.OutputStream
+import java.nio.charset.StandardCharsets
+import java.util.*
 
-internal class Mu3Headers(private val raw: HttpHeaders = HttpHeaders()) : Headers {
+internal class Mu3Headers(
+    /**
+     * Headers where all header names are lowercase
+     */
+    private val headers: MutableList<Pair<String, String>> = mutableListOf(),
+) : Headers {
     override fun iterator(): MutableIterator<MutableMap.MutableEntry<String, String>> {
         TODO("Not yet implemented")
     }
 
-    override fun toString(toSuppress: Collection<String>?) = raw.toString(toSuppress)
+    override fun get(name: String): String? {
+        val lowered = name.lowercase()
+        return headers.firstOrNull { it.first == lowered }?.second
+    }
 
-    override fun get(name: String) = raw.header(name)
+    override fun get(name: CharSequence): String? = get(name.toString())
 
-    override fun get(name: CharSequence) = raw.header(name.toString())
+    override fun get(name: CharSequence, defaultValue: String?): String? = get(name.toString()) ?: defaultValue
 
-    override fun get(name: CharSequence, defaultValue: String?) = raw.header(name.toString()) ?: defaultValue
+    override fun getInt(name: CharSequence, defaultValue: Int): Int = get(name.toString())?.toIntOrNull() ?: defaultValue
 
-    override fun getInt(name: CharSequence, defaultValue: Int): Int = raw.header(name.toString())?.toIntOrNull() ?: defaultValue
+    override fun getLong(name: String, defaultValue: Long): Long = get(name)?.toLongOrNull() ?: defaultValue
 
-    override fun getLong(name: String, defaultValue: Long) = raw.header(name.toString())?.toLongOrNull() ?: defaultValue
+    override fun getFloat(name: String, defaultValue: Float): Float = get(name)?.toFloatOrNull() ?: defaultValue
 
-    override fun getFloat(name: String, defaultValue: Float) = raw.header(name.toString())?.toFloatOrNull() ?: defaultValue
-
-    override fun getDouble(name: String, defaultValue: Double) = raw.header(name.toString())?.toDoubleOrNull() ?: defaultValue
+    override fun getDouble(name: String, defaultValue: Double): Double = get(name)?.toDoubleOrNull() ?: defaultValue
 
     override fun getBoolean(name: String): Boolean {
         val s = get(name) ?: return false
@@ -41,33 +44,40 @@ internal class Mu3Headers(private val raw: HttpHeaders = HttpHeaders()) : Header
 
     override fun getTimeMillis(name: CharSequence, defaultValue: Long) = getTimeMillis(name) ?: defaultValue
 
-    override fun getAll(name: String): List<String> = raw.getAll(name)
+    override fun getAll(name: String): List<String> {
+        val lowered = name.lowercase()
+        return headers.filter { it.first == lowered }.map { it.second }
+    }
 
     override fun getAll(name: CharSequence): List<String> = getAll(name.toString())
 
-    override fun entries(): List<Map.Entry<String, String>> = raw.all().map { PairEntryAdaptor(it) }
+    override fun entries(): List<Map.Entry<String, String>> = headers.map { PairEntryAdaptor(it) }
 
-    override fun contains(name: String) = raw.hasHeader(name.lowercase())
+
+    override fun contains(name: String) : Boolean {
+        val lowered = name.lowercase()
+        return headers.any { it.first == lowered }
+    }
 
     override fun contains(name: CharSequence) = contains(name.toString())
 
     override fun contains(name: String, value: String, ignoreCase: Boolean): Boolean {
         val lowerName = name.lowercase()
-        return raw.all().any { it.first == lowerName && it.second.equals(value, ignoreCase) }
+        return headers.any { it.first == lowerName && it.second.equals(value, ignoreCase) }
     }
 
     override fun contains(name: CharSequence, value: CharSequence, ignoreCase: Boolean): Boolean {
         return contains(name.toString(), value, ignoreCase)
     }
 
-    override fun isEmpty() = raw.size() == 0
+    override fun isEmpty() = headers.isEmpty()
 
-    override fun size() = raw.size()
+    override fun size() = headers.size
 
-    override fun names(): Set<String> = raw.all().map { it.first }.toSet()
+    override fun names(): Set<String> = headers.map { it.first }.toSet()
 
     override fun add(name: String, value: Any): Headers {
-        raw.addHeader(name, value.toString())
+        headers.add(Pair(name, value.toString()))
         return this
     }
 
@@ -86,7 +96,7 @@ internal class Mu3Headers(private val raw: HttpHeaders = HttpHeaders()) : Header
 
     override fun add(headers: Headers): Headers {
         for (entry in headers.entries()) {
-            raw.addHeader(entry.key, entry.value.toString())
+            this.headers.add(Pair(entry.key, entry.value.toString()))
         }
         return this
     }
@@ -96,7 +106,9 @@ internal class Mu3Headers(private val raw: HttpHeaders = HttpHeaders()) : Header
     }
 
     override fun set(name: String, value: Any): Headers {
-        raw.setHeader(name, value.toString())
+        val lower = name.lowercase()
+        headers.removeAll { it.first == lower }
+        add(lower, value)
         return this
     }
 
@@ -135,12 +147,14 @@ internal class Mu3Headers(private val raw: HttpHeaders = HttpHeaders()) : Header
     }
 
     override fun containsValue(name: CharSequence, value: CharSequence, ignoreCase: Boolean): Boolean {
-        return containsValue(name.toString(), value.toString(), ignoreCase)
+        return headers.any { h -> name.contentEquals(h.first, true) && value.contentEquals(h.second, ignoreCase) }
     }
+    fun contentLength(): Long? = get("content-length")?.toLongOrNull()
+    internal fun hasChunkedBody() = containsValue("transfer-encoding", "chunked", false)
 
     override fun hasBody(): Boolean {
-        val cl = raw.contentLength()
-        return raw.hasChunkedBody() || (cl != null && cl > 0L)
+        val cl = contentLength()
+        return hasChunkedBody() || (cl != null && cl > 0L)
     }
 
     override fun accept(): List<ParameterizedHeaderWithValue> {
@@ -173,13 +187,58 @@ internal class Mu3Headers(private val raw: HttpHeaders = HttpHeaders()) : Header
     }
 
     internal fun writeTo(out: OutputStream) {
-        for (header in raw.all()) {
+        for (header in headers) {
             out.write(header.first.headerBytes())
             out.write(COLON_SP)
             out.write(header.second.headerBytes())
             out.write(CRLF)
         }
     }
+
+    override fun toString(): String = toString(null)
+    override fun toString(toSuppress: Collection<String>?): String {
+        val sup = toSuppress ?: setOf("authorization", "cookie", "set-cookie")
+        val sb = StringBuilder("HttpHeaders[")
+        var first = true
+        for (header in headers) {
+            if (!first) sb.append(", ")
+            val name = header.first
+            val suppress = sup.any { it.equals(name, ignoreCase = true) }
+            val value = if (suppress) "(hidden)" else header.second
+            sb.append(name).append(": ").append(value)
+            first = false
+        }
+        sb.append("]")
+        return sb.toString()
+    }
+
+    companion object {
+        internal fun String.headerBytes() = this.toByteArray(StandardCharsets.US_ASCII)
+
+        @JvmStatic
+        fun parse(headerBytes: ByteArray) = parse(headerBytes, 0, headerBytes.size)
+        @JvmStatic
+        fun parse(headerBytes: ByteArray, offset: Int, length: Int): Mu3Headers {
+            val parser = Http1MessageParser(HttpMessageType.REQUEST, LinkedList())
+            val requestLine = "GET / HTTP/1.1\r\n".headerBytes()
+            var headers : Mu3Headers? = null
+            val listener = object : HttpMessageListener {
+                override fun onHeaders(exchange: HttpMessageTemp) {
+                    headers = exchange.headers()
+                }
+                override fun onBodyBytes(exchange: HttpMessageTemp, type: BodyBytesType, array: ByteArray, offset: Int, length: Int) = throw NotImplementedError()
+                override fun onMessageEnded(exchange: HttpMessageTemp) = Unit
+                override fun onError(exchange: HttpMessageTemp, error: Exception) = throw IllegalArgumentException("headerBytes contains invalid headers", error)
+            }
+            parser.feed(requestLine, 0, requestLine.size, listener)
+            parser.feed(headerBytes, offset, length, listener)
+
+            return headers ?: throw IllegalArgumentException("headerBytes did not contain headers")
+        }
+
+    }
+
+
 }
 
 internal class PairEntryAdaptor<N,V>(val pair: Pair<N,V>) : Map.Entry<N,V> {

@@ -1,5 +1,9 @@
 package io.muserver;
 
+import org.jetbrains.annotations.NotNull;
+
+import java.nio.charset.StandardCharsets;
+
 /**
  * An HTTP protocol version
  */
@@ -40,5 +44,9 @@ public enum HttpVersion {
             case "HTTP/1.0": return HTTP_1_0;
             default: return null;
         }
+    }
+
+    byte[] headerBytes() {
+        return version.getBytes(StandardCharsets.US_ASCII);
     }
 }

@@ -1,4 +1,4 @@
-package com.danielflower.ifp
+package io.muserver
 
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -25,10 +25,10 @@ private const val ZERO = 48.toByte()
 private const val NINE = 57.toByte()
 
 internal interface HttpMessageListener {
-    fun onHeaders(exchange: HttpMessage)
-    fun onBodyBytes(exchange: HttpMessage, type: BodyBytesType, array: ByteArray, offset: Int, length: Int)
-    fun onMessageEnded(exchange: HttpMessage)
-    fun onError(exchange: HttpMessage, error: Exception)
+    fun onHeaders(exchange: HttpMessageTemp)
+    fun onBodyBytes(exchange: HttpMessageTemp, type: BodyBytesType, array: ByteArray, offset: Int, length: Int)
+    fun onMessageEnded(exchange: HttpMessageTemp)
+    fun onError(exchange: HttpMessageTemp, error: Exception)
 }
 
 /**
@@ -50,7 +50,7 @@ enum class BodyBytesType {
      * The raw bytes of the trailers of a message.
      *
      * Trailers may be added to chunked messages. In order to inspect these, you may wish to parse them by calling
-     * [HttpHeaders.parse]
+     * [HttpHeadersTemp.parse]
      */
     TRAILERS,
 
@@ -60,20 +60,20 @@ enum class BodyBytesType {
     WEBSOCKET_FRAME,
 }
 
-internal class Http1MessageParser(type: HttpMessageType, private val requestQueue: Queue<HttpRequest>) {
+internal class Http1MessageParser(type: HttpMessageType, private val requestQueue: Queue<HttpRequestTemp>) {
 
     private var remainingBytesToProxy: Long = 0L
     private var state : ParseState
     private val buffer = ByteArrayOutputStream()
-    private var exchange : HttpMessage
+    private var exchange : HttpMessageTemp
     private var headerName : String? = null
     private var copyFrom : Int? = null
     init {
         if (type == HttpMessageType.REQUEST) {
-            exchange = HttpRequest.empty()
+            exchange = HttpRequestTemp.empty()
             state = ParseState.REQUEST_START
         } else {
-            exchange = HttpResponse.empty()
+            exchange = HttpResponseTemp.empty()
             state = ParseState.RESPONSE_START
         }
     }
@@ -81,7 +81,7 @@ internal class Http1MessageParser(type: HttpMessageType, private val requestQueu
     private val log : Logger = LoggerFactory.getLogger(Http1MessageParser::class.java)
 
     fun feed(bytes: ByteArray, offset: Int, length: Int, listener: HttpMessageListener) {
-        if (log.isDebugEnabled) log.debug("${if (exchange is HttpRequest) "REQ" else "RESP"} fed $length bytes at $state")
+        if (log.isDebugEnabled) log.debug("${if (exchange is HttpRequestTemp) "REQ" else "RESP"} fed $length bytes at $state")
         if (copyFrom != null) copyFrom = offset
         var i = offset
         while (i < offset + length) {
@@ -89,7 +89,7 @@ internal class Http1MessageParser(type: HttpMessageType, private val requestQueu
             when (state) {
                 ParseState.REQUEST_START -> {
                     if (b.isUpperCase()) {
-                        requestQueue.offer(exchange as HttpRequest)
+                        requestQueue.offer(exchange as HttpRequestTemp)
                         state = ParseState.METHOD
                         buffer.append(b)
                     } else throw ParseException("state=$state b=$b", i)
@@ -197,7 +197,7 @@ internal class Http1MessageParser(type: HttpMessageType, private val requestQueu
                     if (b.isLF()) {
                         val value = buffer.consumeAscii().trimEnd()
                         if (value.isEmpty()) throw ParseException("No header value for header $headerName", i)
-                        exchange.headers().addHeader(headerName!!, value)
+                        exchange.headers().add(headerName!!, value)
                         state = ParseState.HEADER_START
                     } else throw ParseException("No LF after CR at $state", i)
                 }
@@ -353,8 +353,8 @@ internal class Http1MessageParser(type: HttpMessageType, private val requestQueu
         }
     }
 
-    private fun request() = (exchange as HttpRequest)
-    private fun response() = (exchange as HttpResponse)
+    private fun request() = (exchange as HttpRequestTemp)
+    private fun response() = (exchange as HttpResponseTemp)
 
     private fun sendContent(listener: HttpMessageListener, bytes: ByteArray, originalOffset: Int, originalLength: Int, currentIndex: Int): Int {
         val remainingInBuffer = originalLength - (currentIndex - originalOffset)
@@ -367,32 +367,28 @@ internal class Http1MessageParser(type: HttpMessageType, private val requestQueu
 
     private fun onMessageEnded(listener: HttpMessageListener) {
         val exc = exchange
-        this.state = if (exc is HttpRequest) {
+        this.state = if (exc is HttpRequestTemp) {
             if (exc.isWebsocketUpgrade()) {
                 ParseState.WEBSOCKET
             } else {
-                this.exchange = HttpRequest.empty()
+                this.exchange = HttpRequestTemp.empty()
                 ParseState.REQUEST_START
             }
         } else {
-            if (exc.headers().hasHeaderValue("upgrade", "websocket")) {
+            if (exc.headers().containsValue("upgrade", "websocket", false)) {
                 ParseState.WEBSOCKET
             } else {
-                this.exchange = HttpResponse.empty()
+                this.exchange = HttpResponseTemp.empty()
                 ParseState.RESPONSE_START
             }
         }
-        if (state != ParseState.WEBSOCKET && !(exc is HttpResponse && exc.statusCode == 100)) {
+        if (state != ParseState.WEBSOCKET && !(exc is HttpResponseTemp && exc.statusCode == 100)) {
             listener.onMessageEnded(exc)
         }
     }
 
     fun error(e: Exception, messageListener: HttpMessageListener) {
-        if (state == ParseState.REQUEST_START || state == ParseState.RESPONSE_START) {
-            log.info("Seems like connection has ended " + state, e)
-        } else {
-            messageListener.onError(exchange, e)
-        }
+        messageListener.onError(exchange, e)
     }
 
     private enum class ParseState(val eofAction: EOFAction) {

@@ -1,6 +1,5 @@
 package io.muserver
 
-import com.danielflower.ifp.CRLF
 import java.io.OutputStream
 import java.io.PrintWriter
 import java.net.URI
