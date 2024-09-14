@@ -48,9 +48,6 @@ enum class BodyBytesType {
 
     /**
      * The raw bytes of the trailers of a message.
-     *
-     * Trailers may be added to chunked messages. In order to inspect these, you may wish to parse them by calling
-     * [HttpHeadersTemp.parse]
      */
     TRAILERS,
 
@@ -98,7 +95,11 @@ internal class Http1MessageParser(type: HttpMessageType, private val requestQueu
                     if (b.isUpperCase()) {
                         buffer.append(b)
                     } else if (b == SP) {
-                        request().method = buffer.consumeAscii()
+                        request().method = try {
+                            Method.valueOf(buffer.consumeAscii())
+                        } catch (e: IllegalArgumentException) {
+                            throw HttpException(HttpStatusCode.METHOD_NOT_ALLOWED_405)
+                        }
                         state = ParseState.REQUEST_TARGET
                     } else throw ParseException("state=$state b=$b", i)
                 }

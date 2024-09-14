@@ -2,8 +2,6 @@ package io.muserver
 
 import io.muserver.Mu3Headers.Companion.headerBytes
 import java.io.OutputStream
-import java.nio.charset.StandardCharsets
-import java.util.*
 
 
 internal sealed interface HttpMessageTemp {
@@ -64,7 +62,7 @@ data class BodySize(val type: BodyType, val bytes: Long?) {
 }
 
 internal data class HttpRequestTemp(
-    var method: String,
+    var method: Method?,
     var url: String,
     override var httpVersion: String,
     private val headers: Mu3Headers = Mu3Headers(),
@@ -89,7 +87,7 @@ internal data class HttpRequestTemp(
     }
 
     internal fun writeTo(out: OutputStream) {
-        out.write(method.headerBytes())
+        out.write(method!!.headerBytes())
         out.write(' '.code)
         out.write(url.headerBytes())
         out.write(' '.code)
@@ -100,7 +98,7 @@ internal data class HttpRequestTemp(
     }
 
     companion object {
-        internal fun empty() = HttpRequestTemp("", "", "")
+        internal fun empty() = HttpRequestTemp(null, "", "")
     }
 
     override fun headers() = headers
@@ -123,10 +121,10 @@ internal data class HttpResponseTemp(
         // 6.3.1
         if (isInformational() || statusCode == 204 || statusCode == 304) return BodySize.NONE
         val req = request ?: throw IllegalStateException("Cannot tell the size without the request")
-        if (req.method == "HEAD") return BodySize.NONE
+        if (req.method!!.isHead) return BodySize.NONE
 
         // 6.3.2
-        if (req.method == "CONNECT") return BodySize.UNSPECIFIED
+        if (req.method == Method.CONNECT) return BodySize.UNSPECIFIED
 
         // 6.3.3
         val cl = headers.getAll("content-length")

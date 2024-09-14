@@ -1,5 +1,7 @@
 package io.muserver;
 
+import java.nio.charset.StandardCharsets;
+
 /**
  * An HTTP Method
  */
@@ -46,4 +48,23 @@ public enum Method {
         return Method.valueOf(method.name());
     }
 
+    /**
+     * Specifies if this method is {@link #HEAD}
+     * @return <code>true</code> if this is a <code>HEAD</code> request
+     */
+    public boolean isHead() {
+        return this == HEAD;
+    }
+
+    /**
+     * Specifies if this method is {@link #GET} {@link #HEAD}
+     * @return <code>true</code> if this is a <code>HEAD</code> request
+     */
+    public boolean isGetOrHead() {
+        return this == GET || this == HEAD;
+    }
+
+    byte[] headerBytes() {
+        return this.name().getBytes(StandardCharsets.US_ASCII);
+    }
 }

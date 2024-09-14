@@ -123,10 +123,15 @@ internal class Mu3Http1Connection(val server: Mu3ServerImpl, val creator: Connec
 
             override fun onHeaders(exchange: HttpMessageTemp) {
                 val request = exchange as HttpRequestTemp
-                val method = Method.valueOf(request.method)
                 val serverUri = creator.uri.resolve(request.url).normalize()
                 val headers = request.headers()
-                val muRequest = Mu3Request(method, serverUri, serverUri, HttpVersion.fromVersion(request.httpVersion), headers)
+                val muRequest = Mu3Request(
+                    method = request.method!!,
+                    requestUri = serverUri,
+                    serverUri = serverUri,
+                    httpVersion = HttpVersion.fromVersion(request.httpVersion),
+                    mu3Headers = headers
+                )
                 val muResponse = Mu3Response(muRequest, outputStream)
                 log.info("Got request: $muRequest")
                 for (handler in server.handlers) {
