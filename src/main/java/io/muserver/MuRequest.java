@@ -1,5 +1,7 @@
 package io.muserver;
 
+import kotlin.NotImplementedError;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -236,8 +238,18 @@ public interface MuRequest {
     /**
      * The protocol for the request.
      * @return A string such as <code>HTTP/1.1</code> or <code>HTTP/2</code>
+     * @deprecated Use {@link #httpVersion()} instead
      */
+    @Deprecated
     String protocol();
+
+    /**
+     * The HTTP version of the request
+     * @return the version
+     */
+    default HttpVersion httpVersion() {
+        throw new NotImplementedError();
+    }
 
     /**
      * @return The HTTP connection that this request is sent over.
