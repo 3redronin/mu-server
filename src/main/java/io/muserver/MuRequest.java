@@ -211,7 +211,9 @@ public interface MuRequest {
      * <p>If you want to know the client's IP address when reverse proxies are used, consider using {@link #clientIP()}</p>
      * @return The IP address of the client, or of a gateway with NAT, etc, or null if the client has already disconnected.
      */
-    String remoteAddress();
+    default String remoteAddress() {
+        return connection().remoteAddress().getHostString();
+    }
 
     /**
      * Makes a best-effort guess at the client's IP address, taking into account any <code>Forwarded</code> or <code>X-Forwarded-*</code> headers.
@@ -223,7 +225,15 @@ public interface MuRequest {
      * <code>connection().remoteAddress().getHostString()</code>).</p>
      * @return A string containing an IP address.
      */
-    String clientIP();
+    default String clientIP() {
+        List<ForwardedHeader> forwarded = headers().forwarded();
+        for (ForwardedHeader forwardedHeader : forwarded) {
+            if (forwardedHeader.forValue() != null) {
+                return forwardedHeader.forValue();
+            }
+        }
+        return this.connection().remoteAddress().getHostString();
+    }
 
     /**
      * @return Returns a reference to the mu server instance.
@@ -241,7 +251,9 @@ public interface MuRequest {
      * @deprecated Use {@link #httpVersion()} instead
      */
     @Deprecated
-    String protocol();
+    default String protocol() {
+        return httpVersion().version();
+    }
 
     /**
      * The HTTP version of the request

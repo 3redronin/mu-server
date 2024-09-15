@@ -30,14 +30,10 @@ public class Mutils {
      * @return Returns the UTF-8 URL encoded value
      */
     public static String urlEncode(String value) {
-        try {
-            return URLEncoder.encode(value, "UTF-8")
-                .replace("+", "%20")
-                .replace("%7E", "~") // as per https://www.ietf.org/rfc/rfc3986.html ~ doesn't need encoding
-                ;
-        } catch (UnsupportedEncodingException e) {
-            throw new MuException("Error encoding " + value, e);
-        }
+        return URLEncoder.encode(value, UTF_8)
+            .replace("+", "%20")
+            .replace("%7E", "~") // as per https://www.ietf.org/rfc/rfc3986.html ~ doesn't need encoding
+            ;
     }
 
     /**

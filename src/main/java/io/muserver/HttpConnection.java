@@ -14,10 +14,22 @@ import java.util.concurrent.ExecutorService;
 public interface HttpConnection {
 
     /**
-     * The HTTP protocol for the request.
+     * The HTTP protocol for the connection.
      * @return A string such as <code>HTTP/1.1</code> or <code>HTTP/2</code>
+     * @deprecated Use {@link #httpVersion()} instead
      */
-    String protocol();
+    @Deprecated
+    default String protocol() {
+        return httpVersion().version();
+    }
+
+    /**
+     * The HTTP protocol for the connection.
+     * @return the version of HTTP supported.
+     */
+    HttpVersion httpVersion();
+
+
 
     /**
      * @return <code>true</code> if the connnection is secured over HTTPS, otherwise <code>false</code>

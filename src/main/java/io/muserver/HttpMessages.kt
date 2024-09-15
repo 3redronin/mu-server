@@ -69,6 +69,11 @@ internal data class HttpRequestTemp(
     override var bodySize: BodySize?,
     private val headers: Mu3Headers = Mu3Headers(),
 ) : HttpMessageTemp {
+
+    fun normalisedUri(): String {
+        return HttpExchange.getRelativeUrl(url)
+    }
+
     fun isWebsocketUpgrade() = headers.containsValue("upgrade", "websocket", false)
 
     override fun bodyTransferSize() : BodySize {

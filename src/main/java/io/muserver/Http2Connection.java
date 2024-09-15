@@ -7,6 +7,7 @@ import io.netty.handler.codec.http.*;
 import io.netty.handler.codec.http2.*;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
+import kotlin.NotImplementedError;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -491,6 +492,11 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
     @Override
     public String protocol() {
         return "HTTP/2";
+    }
+
+    @Override
+    public HttpVersion httpVersion() {
+        throw new NotImplementedError();
     }
 
     @Override

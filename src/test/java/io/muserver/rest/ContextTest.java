@@ -53,7 +53,7 @@ public class ContextTest {
         this.server = muServer()
             .withHttpsPort(0)
             .addHandler(restHandler(new Sample()))
-            .start();
+            .start3();
         int port = server.uri().getPort();
         try (Response resp = call(request().url(server.uri().resolve("/samples/zample/barmpit?hoo=har%20har").toString()))) {
             assertThat(resp.body().string(), equalTo("https://localhost:" + port + "/\nsamples/zample/barmpit\n" +
@@ -87,7 +87,7 @@ public class ContextTest {
             .addHandler(
                 context("/api/ha ha/").addHandler(restHandler(new Sample()))
             )
-            .start();
+            .start3();
         int port = server.uri().getPort();
         try (Response resp = call(request().url(server.uri().resolve("/api/ha%20ha/samples/zample/barmpit?hoo=har%20har").toString()))) {
             assertThat(resp.body().string(), equalTo("https://localhost:" + port + "/api/ha%20ha/\nsamples/zample/barmpit\n" +
@@ -109,7 +109,7 @@ public class ContextTest {
         }
         this.server = httpsServerForTest()
             .addHandler(restHandler(new Sample()))
-            .start();
+            .start3();
         try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.body().string(), equalTo("Hello world"));
@@ -135,7 +135,7 @@ public class ContextTest {
         }
         this.server = httpsServerForTest()
             .addHandler(restHandler(new Sample()))
-            .start();
+            .start3();
         try (Response resp = call(request()
             .url(server.uri().resolve("/samples").toString())
             .header("X-Something", "Blah")
@@ -157,7 +157,7 @@ public class ContextTest {
                     .collect(Collectors.joining(", "));
             }
         }
-        this.server = httpsServerForTest().addHandler(restHandler(new Sample())).start();
+        this.server = httpsServerForTest().addHandler(restHandler(new Sample())).start3();
         try (Response resp = call(request(server.uri().resolve("/samples"))
             .header("Accept-Language", "fr;q=0.3, es, en-US;q=0.1")
         )) {
@@ -185,7 +185,7 @@ public class ContextTest {
                     .collect(Collectors.joining(", "));
             }
         }
-        this.server = httpsServerForTest().addHandler(restHandler(new Sample())).start();
+        this.server = httpsServerForTest().addHandler(restHandler(new Sample())).start3();
         try (Response resp = call(request(server.uri().resolve("/samples"))
             .header("Accept", "text/html, application/vnd.mu.customer+xml;q=0.9, image/webp;level=1, */*;q=0.8;umm=hey, application/*")
         )) {
@@ -212,7 +212,7 @@ public class ContextTest {
                 return jaxRequest.toString();
             }
         }
-        this.server = httpsServerForTest().addHandler(restHandler(new Sample())).start();
+        this.server = httpsServerForTest().addHandler(restHandler(new Sample())).start3();
         URI url = server.uri().resolve("/samples");
         try (Response resp = call(request(url))) {
             assertThat(resp.body().string(), equalTo("GET " + url));
@@ -231,7 +231,7 @@ public class ContextTest {
         }
         this.server = httpsServerForTest()
             .addHandler(restHandler(new Sample()))
-            .start();
+            .start3();
 
         try (Response resp = call(request(server.uri().resolve("/~.-_/~.-_")))) {
             assertThat(resp.body().string(), is("/~.-_/~.-_"));

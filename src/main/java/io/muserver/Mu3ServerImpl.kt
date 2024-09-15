@@ -1,20 +1,16 @@
 package io.muserver
 
-import org.slf4j.Logger
-import org.slf4j.LoggerFactory
 import java.io.Closeable
-import java.io.EOFException
 import java.io.IOException
-import java.io.OutputStream
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.URI
-import java.util.*
-import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.Executors
 
 internal class Mu3ServerImpl(private val acceptors: List<ConnectionAcceptor>, val handlers: List<MuHandler>) : MuServer {
+
+    val statsImpl = Mu3StatsImpl()
 
     private fun startListening() {
         if (acceptors.isEmpty()) throw IllegalStateException("No listener ports defined")
@@ -41,9 +37,7 @@ internal class Mu3ServerImpl(private val acceptors: List<ConnectionAcceptor>, va
         return acceptors.firstOrNull { it.isHttps }?.uri
     }
 
-    override fun stats(): MuStats? {
-        return null
-    }
+    override fun stats(): MuStats = statsImpl
 
     override fun activeConnections(): Set<HttpConnection> {
         return setOf()
@@ -114,78 +108,17 @@ internal class Mu3ServerImpl(private val acceptors: List<ConnectionAcceptor>, va
 
 }
 
-internal class Mu3Http1Connection(val server: Mu3ServerImpl, val creator: ConnectionAcceptor, val clientSocket: Socket) {
-    private val requestPipeline : Queue<HttpRequestTemp> = ConcurrentLinkedQueue()
-
-    fun start(outputStream: OutputStream) {
-
-        try {
-            clientSocket.getInputStream().use { reqStream ->
-                val requestParser = Http1MessageParser(HttpMessageType.REQUEST, requestPipeline, reqStream)
-                while (true) {
-                    val msg = try {
-                        requestParser.readNext()
-                    } catch (e: IOException) {
-                        log.info("Error reading from client input stream ${e.javaClass} ${e.message}")
-                        break
-                    }
-                    if (msg == EOFMsg) {
-                        log.info("EOF detected")
-//                    reqStream.closeQuietly() // TODO: confirm if the input stream should be closed
-                        clientSocket.shutdownInputQuietly()
-                        break
-                    }
-                    val request = msg as HttpRequestTemp
-
-                    val serverUri = creator.uri.resolve(request.url).normalize()
-                    val headers = request.headers()
-                    val muRequest = Mu3Request(
-                        method = request.method!!,
-                        requestUri = serverUri,
-                        serverUri = serverUri,
-                        httpVersion = request.httpVersion!!,
-                        mu3Headers = headers,
-                        bodySize = request.bodySize!!,
-                        body = if (request.bodySize == BodySize.NONE) EmptyInputStream.INSTANCE else Http1BodyStream(requestParser)
-
-                    )
-                    val muResponse = Mu3Response(muRequest, outputStream)
-                    log.info("Got request: $muRequest")
-                    for (handler in server.handlers) {
-                        if (handler.handle(muRequest, muResponse)) {
-                            break
-                        }
-                    }
-                    muRequest.body.close()
-                    muResponse.cleanup()
-
-                }
-
-            }
-        } catch (e: Exception) {
-            log.error("Unhandled error at the socket", e)
-            clientSocket.closeQuietly()
-        }
-
-    }
-
-    override fun toString() = "HTTP1 connection from ${clientSocket.remoteSocketAddress} to ${clientSocket.localSocketAddress}"
-    companion object {
-        private val log: Logger = LoggerFactory.getLogger(Mu3Http1Connection::class.java)
-    }
-}
-
-private fun Closeable.closeQuietly() {
+internal fun Closeable.closeQuietly() {
     try {
         this.close()
     } catch (_: IOException) {
     }
 }
-private fun Socket.shutdownInputQuietly() {
+internal fun Socket.shutdownInputQuietly() {
     try { this.shutdownInput() }
     catch (_: IOException) { }
 }
-private fun Socket.shutdownOutputQuietly() {
+internal fun Socket.shutdownOutputQuietly() {
     try { this.shutdownOutput() }
     catch (_: IOException) { }
 }

@@ -12,6 +12,7 @@ import io.netty.handler.timeout.IdleStateHandler;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.ServerErrorException;
 import jakarta.ws.rs.core.MediaType;
+import kotlin.NotImplementedError;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,7 +26,6 @@ import java.nio.charset.UnsupportedCharsetException;
 import java.util.*;
 import java.util.concurrent.*;
 
-import static io.muserver.Cookie.nettyToMu;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Collections.emptyList;
 
@@ -243,19 +243,7 @@ class NettyRequestAdapter implements MuRequest {
 
     @Override
     public List<Cookie> cookies() {
-        if (this.cookies == null) {
-            List<String> encoded = headers().getAll(HeaderNames.COOKIE);
-            if (encoded.isEmpty()) {
-                this.cookies = emptyList();
-            } else {
-                List<Cookie> theList = new ArrayList<>();
-                for (String val : encoded) {
-                    theList.addAll(nettyToMu(ServerCookieDecoder.STRICT.decode(val)));
-                }
-                this.cookies = Collections.unmodifiableList(theList);
-            }
-        }
-        return this.cookies;
+        throw new NotImplementedError();
     }
 
     @Override

@@ -3,6 +3,7 @@ package io.muserver
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.net.*
+import java.time.Instant
 import java.util.HashMap
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentHashMap.KeySetView
@@ -33,26 +34,39 @@ internal class ConnectionAcceptor(
             try {
                 val clientSocket = socketServer.accept()
                 executorService.submit {
+                    val startTime = Instant.now()
                     var socket = clientSocket
                     if (httpsConfig != null) {
-
-                        val ssf = httpsConfig.sslContext().socketFactory
-                        val secureSocket = ssf.createSocket(socket, null, socket.port, true) as SSLSocket
-                        secureSocket.useClientMode = false
-                        secureSocket.addHandshakeCompletedListener { listener ->
-                            log.info("Handshake complete ${listener}")
+                        try {
+                            val ssf = httpsConfig.sslContext().socketFactory
+                            val secureSocket = ssf.createSocket(socket, null, socket.port, true) as SSLSocket
+                            secureSocket.useClientMode = false
+                            secureSocket.addHandshakeCompletedListener { event ->
+                                log.info("Handshake complete $event")
+                            }
+                            secureSocket.startHandshake()
+                            socket = secureSocket
+                        } catch (e: Exception) {
+                            log.warn("Failed TLS handshaking", e)
+                            server.statsImpl.onFailedToConnect()
+                            return@submit
                         }
-                        secureSocket.startHandshake()
-                        socket = secureSocket
-
                     }
-                    val con = Mu3Http1Connection(server, this, socket)
+                    val con = Mu3Http1Connection(server, this, socket, startTime)
                     connections.add(con)
-                    socket.getOutputStream().use { clientOut ->
-                        con.start(clientOut)
+                    server.statsImpl.onConnectionOpened()
+                    try {
+                        socket.getOutputStream().use { clientOut ->
+                            con.start(clientOut)
+                        }
+                    } catch (t: Throwable) {
+                        log.error("Unhandled exception for $con", t)
+                    } finally {
+                        server.statsImpl.onConnectionClosed()
+                        connections.remove(con)
                     }
                 }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 if (Thread.interrupted() || e is SocketException) {
                     log.info("Accept listening stopped")
                 } else {

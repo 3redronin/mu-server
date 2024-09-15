@@ -14,7 +14,22 @@ internal class Mu3Headers(
     private val headers: MutableList<Pair<String, String>> = mutableListOf(),
 ) : Headers {
     override fun iterator(): MutableIterator<MutableMap.MutableEntry<String, String>> {
-        TODO("Not yet implemented")
+        val iterator = headers.map { MutablePairEntryAdaptor(it) }.iterator()
+        var lastElement : Pair<String,String>? = null
+        return object : MutableIterator<MutableMap.MutableEntry<String, String>> {
+            override fun hasNext() = iterator.hasNext()
+            override fun next(): MutableMap.MutableEntry<String, String> {
+                val next = iterator.next()
+                lastElement = next.pair
+                return next
+            }
+            override fun remove() {
+                if (lastElement == null) throw IllegalStateException("No element to remove. Call next() first.")
+                headers.remove(lastElement)
+                lastElement = null
+            }
+
+        }
     }
 
     override fun get(name: String): String? {
@@ -124,8 +139,12 @@ internal class Mu3Headers(
         TODO("Not yet implemented")
     }
 
-    override fun set(headers: Headers?): Headers {
-        TODO("Not yet implemented")
+    override fun set(headers: Headers): Headers {
+        clear()
+        for (header in headers) {
+            add(header.key, header.value)
+        }
+        return this
     }
 
     override fun setAll(headers: Headers?): Headers {
@@ -137,15 +156,18 @@ internal class Mu3Headers(
     }
 
     override fun remove(name: String): Headers {
-        TODO("Not yet implemented")
+        val lowered = name.lowercase()
+        headers.removeAll { it.first == lowered }
+        return this
     }
 
     override fun remove(name: CharSequence): Headers {
-        TODO("Not yet implemented")
+        return remove(name.toString())
     }
 
     override fun clear(): Headers {
-        TODO("Not yet implemented")
+        headers.clear()
+        return this
     }
 
     override fun containsValue(name: CharSequence, value: CharSequence, ignoreCase: Boolean): Boolean {
@@ -216,15 +238,37 @@ internal class Mu3Headers(
 
     companion object {
         internal fun String.headerBytes() = this.toByteArray(StandardCharsets.US_ASCII)
+
+        @JvmStatic
+        fun newWithDate(): Mu3Headers {
+            val headers = Mu3Headers()
+            headers.set(HeaderNames.DATE, Mutils.toHttpDate(Date()))
+            return headers
+        }
+
     }
 
 
 }
 
-internal class PairEntryAdaptor<N,V>(val pair: Pair<N,V>) : Map.Entry<N,V> {
+internal class PairEntryAdaptor<N,V>(private val pair: Pair<N,V>) : Map.Entry<N,V> {
     override val key: N
         get() = pair.first
     override val value: V
         get() = pair.second
+
+}
+
+internal class MutablePairEntryAdaptor<N,V>(var pair: Pair<N,V>) : MutableMap.MutableEntry<N,V> {
+    override val key: N
+        get() = pair.first
+    override val value: V
+        get() = pair.second
+
+    override fun setValue(newValue: V): V {
+        val oldPair = pair
+        pair = Pair(oldPair.first, newValue)
+        return oldPair.second
+    }
 
 }

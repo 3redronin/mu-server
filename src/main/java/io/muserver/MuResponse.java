@@ -32,6 +32,12 @@ public interface MuResponse {
     void status(int value);
 
     /**
+     * Sets the response code for this request. Defaults to {@link HttpStatusCode#OK_200}
+     * @param value The response code to send to the client.
+     */
+    void status(HttpStatusCode value);
+
+    /**
      * <p>Writes the given text as the response body for this request. This can only be called once.</p>
      * <p>If you want to send multiple chunks of text, see {@link #sendChunk(String)}</p>
      * @param text The full response body to send to the client.

@@ -1,11 +1,11 @@
 package io.muserver;
 
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import static io.muserver.CookieBuilder.newCookie;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.*;
 
 public class CookieBuilderTest {
 
@@ -14,22 +14,22 @@ public class CookieBuilderTest {
         Cookie cookie = CookieBuilder.newSecureCookie().withName("dummy").withValue("wummy").build();
         assertThat(cookie.isSecure(), is(true));
         assertThat(cookie.isHttpOnly(), is(true));
-        assertThat(cookie.sameSite(), is("Strict"));
+        assertThat(cookie.sameSite(), is(Cookie.SameSite.STRICT));
     }
 
     @Test
-    public void sameSiteDefaultsToNone() {
+    public void sameSiteDefaultsToNull() {
         Cookie cookie = CookieBuilder.newCookie().withName("dummy").withValue("wummy").build();
         assertThat(cookie.isSecure(), is(false));
         assertThat(cookie.isHttpOnly(), is(false));
-        assertThat(cookie.sameSite(), is("None"));
+        assertThat(cookie.sameSite(), is(nullValue()));
     }
 
     @Test
     public void throwsWithNoName() {
         try {
             newCookie().withValue("value").build();
-            Assert.fail("Should throw");
+            Assertions.fail("Should throw");
         } catch (IllegalStateException e) {
             assertThat(e.getMessage(), is("A cookie name must be specified"));
         }
@@ -39,7 +39,7 @@ public class CookieBuilderTest {
     public void throwsWithInvalidSameSite() {
         try {
             newCookie().withSameSite("something-invalid");
-            Assert.fail("Should throw");
+            Assertions.fail("Should throw");
         } catch (IllegalArgumentException e) {
             assertThat(e.getMessage(), is("Invalid SameSite value. It should be one of: Lax, Strict, None"));
         }
@@ -49,17 +49,17 @@ public class CookieBuilderTest {
     public void throwsWithNoValue() {
         try {
             newCookie().withName("cookiename").build();
-            Assert.fail("Should throw");
+            Assertions.fail("Should throw");
         } catch (IllegalStateException e) {
-            assertThat(e.getMessage(), is("A cookie value must be specified"));
+            assertThat(e.getMessage(), is("A cookie value cannot be null"));
         }
     }
 
     @Test
     public void invalidValuesAreRejected() {
         try {
-            newCookie().withValue("an invalid value because of the spaces");
-            Assert.fail("Should throw");
+            newCookie().withValue("你好");
+            Assertions.fail("Should throw");
         } catch (IllegalArgumentException e) {
             assertThat(e.getMessage(), is("A cookie value can only be ASCII characters excluding control " +
                 "characters, whitespace, quotes, commas, semicolons and backslashes. Consider using " +
@@ -71,7 +71,7 @@ public class CookieBuilderTest {
     public void invalidNamesAreRejected() {
         try {
             newCookie().withName("an invalid name because of the spaces");
-            Assert.fail("Should throw");
+            Assertions.fail("Should throw");
         } catch (IllegalArgumentException e) {
             assertThat(e.getMessage(), is("A cookie name can only be alphanumeric ASCII characters or any " +
                 "of \"!#$%&'*+-.^_`|~\" (excluding quotes)"));
@@ -83,7 +83,7 @@ public class CookieBuilderTest {
         Cookie cookie = newCookie()
             .withName("Name0123456789!#$%&'*+-.^_`|~")
             .withValue("Value0123456789!#$%&'()*+-./:<=>?@[]^_`{|}~")
-            .withMaxAgeInSeconds(20)
+            .withMaxAgeInSeconds(20L)
             .withDomain("example.org")
             .withPath("/static")
             .secure(true)
@@ -104,4 +104,64 @@ public class CookieBuilderTest {
         Cookie blah = newCookie().withName("Blah").withUrlEncodedValue("a / umm... yeah?").build();
         assertThat(blah.value(), is("a%20%2F%20umm...%20yeah%3F"));
     }
+
+
+    private final String allowedCookieNameChars = "!#$%&'*+-.0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz|^~_";
+    private final String allowedCookieValueChars = "!#$%&'()*+-./0123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz|^~`";
+
+    @Test
+    public void itCanParseThings() {
+        assertThat(setCookieFrom("sessionId=38afes7a8"), equalTo(cook("sessionId", "38afes7a8")));
+        assertThat(setCookieFrom("sessionId="), equalTo(cook("sessionId", "")));
+        assertThat(setCookieFrom("__Host-example=34d8g; SameSite=None; Secure; Path=/; Partitioned;"), equalTo(cook("__Host-example", "34d8g").secure(true).withSameSite(Cookie.SameSite.NONE).withPath("/")));
+        assertThat(setCookieFrom(allowedCookieNameChars + "=" + allowedCookieValueChars), equalTo(cook(allowedCookieNameChars, allowedCookieValueChars)));
+    }
+
+    @Test
+    public void setCookieDoesNotAllowMultipleValues() {
+        for (String headerValue : new String[]{
+            "cookie1=value1, cookie2=value2",
+            " cookie1=value1,cookie2=value2 ",
+            " cookie1=value1;httponly,cookie2=value2 "}) {
+            try {
+                setCookieFrom(headerValue);
+                Assertions.fail(headerValue + " did not throw exception");
+            } catch (IllegalArgumentException e) {
+                // good
+            }
+        }
+    }
+
+    private static CookieBuilder setCookieFrom(String headerValue) {
+        return CookieBuilder.fromSetCookieHeader(headerValue).orElse(null);
+    }
+
+    @Test
+    public void itCanParseMultipleValues() {
+        assertThat(CookieBuilder.fromCookieHeader("cookie1=value1; cookie2=value2"), contains(cook("cookie1", "value1"), cook("cookie2", "value2")));
+        assertThat(CookieBuilder.fromCookieHeader(" cookie1=value1;cookie2=value2 "), contains(cook("cookie1", "value1"), cook("cookie2", "value2")));
+        assertThat(CookieBuilder.fromCookieHeader(" cookie1=value1 ; cookie2= value2 "), contains(cook("cookie1", "value1"), cook("cookie2", "value2")));
+    }
+
+    @Test
+    public void valuesCanBeQuotedStrings() {
+        assertThat(CookieBuilder.fromCookieHeader(
+                "cookie1=\"value_1\"; " +
+                    "cookie2=\"value+-/_2\""),
+            contains(
+                cook("cookie1", "value_1"),
+                cook("cookie2", "value+-/_2")
+            ));
+    }
+
+    @Test
+    public void setCookieValueCanBeQuotedStrings() {
+        assertThat(setCookieFrom("cookie1=\"value_1\";secure"), equalTo(cook("cookie1", "value_1").secure(true)));
+        assertThat(setCookieFrom("cookie2=\"value+-/_2\""), equalTo(cook("cookie2", "value+-/_2")));
+    }
+
+    private static CookieBuilder cook(String name, String value) {
+        return newCookie().withName(name).withValue(value);
+    }
+
 }

@@ -51,14 +51,14 @@ public class ContextHandler implements MuHandler {
             String originalContextPath = request.contextPath();
             String originalRelativePath = request.relativePath();
             if (hasContext) {
-                ((NettyRequestAdapter) request).addContext(contextPath);
+                ((Mu3Request) request).addContext(contextPath);
             }
             for (MuHandler muHandler : muHandlers) {
                 if (muHandler.handle(request, response)) {
                     return true;
                 }
             }
-            ((NettyRequestAdapter) request).setPaths(originalContextPath, originalRelativePath);
+            ((Mu3Request) request).setPaths(originalContextPath, originalRelativePath);
         }
         return false;
     }

@@ -7,6 +7,7 @@ import io.netty.handler.codec.http.*;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
+import kotlin.NotImplementedError;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -211,6 +212,11 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
     @Override
     public String protocol() {
         return "HTTP/1.1";
+    }
+
+    @Override
+    public HttpVersion httpVersion() {
+        throw new NotImplementedError();
     }
 
     @Override

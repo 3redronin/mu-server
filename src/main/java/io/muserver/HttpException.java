@@ -2,6 +2,7 @@ package io.muserver;
 
 public class HttpException extends RuntimeException {
     private final HttpStatusCode status;
+    private final Mu3Headers headers = Mu3Headers.newWithDate();
 
     public HttpException(HttpStatusCode status) {
         super(status.toString());
@@ -25,5 +26,13 @@ public class HttpException extends RuntimeException {
 
     public HttpStatusCode status() {
         return status;
+    }
+
+    /**
+     * Response headers that will be sent to the client with this HTTP exception
+     * @return headers which can be modified
+     */
+    public Headers responseHeaders() {
+        return headers;
     }
 }

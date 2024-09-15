@@ -11,11 +11,14 @@ internal class Mu3Response(muRequest: Mu3Request, val socketOut: OutputStream) :
 
     private var status : HttpStatusCode = HttpStatusCode.OK_200
     private val headers = Mu3Headers()
-    private var state : ResponseState = ResponseState.NOTHING
+    var state : ResponseState = ResponseState.NOTHING
     private var wrappedOut : OutputStream? = null
 
     override fun status() = status.code()
 
+    override fun status(value: HttpStatusCode) {
+        this.status = value
+    }
     override fun status(value: Int) {
         this.status = HttpStatusCode.of(value)
     }
@@ -58,12 +61,17 @@ internal class Mu3Response(muRequest: Mu3Request, val socketOut: OutputStream) :
         out.flush()
     }
 
-    override fun redirect(url: String?) {
-        TODO("Not yet implemented")
+    override fun redirect(url: String) {
+        redirect(URI.create(url))
     }
 
-    override fun redirect(uri: URI?) {
-        TODO("Not yet implemented")
+    override fun redirect(uri: URI) {
+        if (!status.isRedirection) {
+            status(HttpStatusCode.FOUND_302)
+        }
+        val ex = HttpException(status)
+        ex.responseHeaders().set(HeaderNames.LOCATION, uri.normalize().toString())
+        throw ex
     }
 
     override fun headers() = headers
@@ -77,7 +85,7 @@ internal class Mu3Response(muRequest: Mu3Request, val socketOut: OutputStream) :
     }
 
     override fun addCookie(cookie: Cookie) {
-        TODO("Not yet implemented")
+        headers.add(HeaderNames.SET_COOKIE, cookie.toString())
     }
 
     override fun outputStream() = outputStream(8192)
@@ -105,7 +113,17 @@ internal class Mu3Response(muRequest: Mu3Request, val socketOut: OutputStream) :
     override fun responseState() = state
 
     fun cleanup() {
-        wrappedOut?.close()
+        if (state == ResponseState.NOTHING) {
+            // empty response body
+            if (status == HttpStatusCode.OK_200) {
+                status(HttpStatusCode.NO_CONTENT_204)
+            }
+            headers.set(HeaderNames.CONTENT_LENGTH, 0L)
+            writeStatusAndHeaders()
+            socketOut.flush()
+        } else {
+            wrappedOut?.close()
+        }
     }
 
 }

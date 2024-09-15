@@ -4,8 +4,8 @@ import io.muserver.rest.RestHandlerBuilder;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import okhttp3.Response;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.ServerUtils;
 
 import java.io.IOException;
@@ -47,7 +47,7 @@ public class ContextHandlerTest {
                                 return false;
                             })
                             .addHandler(RestHandlerBuilder.restHandler(new Fruit())))
-            ).start();
+            ).start3();
 
         try (Response resp = call(request().url(server.uri().resolve("/some%20context/bl%20ah").toString()))) {
             assertThat(resp.code(), is(200));
@@ -85,7 +85,7 @@ public class ContextHandlerTest {
                                 return false;
                             })
                             .addHandler(RestHandlerBuilder.restHandler(new Fruit())))
-            ).start();
+            ).start3();
 
         try (Response resp = call(request().url(server.uri().resolve("/some%20context/bl%20ah").toString()))) {
             assertThat(resp.code(), is(200));
@@ -102,7 +102,7 @@ public class ContextHandlerTest {
     public void callsToContextNamesWithoutTrailingSlashesResultIn302() throws Exception {
         server = ServerUtils.httpsServerForTest()
             .addHandler(context("my app"))
-            .start();
+            .start3();
 
         URL url = server.uri().resolve("/my%20app").toURL();
         try (Response resp = call(request().get().url(url))) {
@@ -117,7 +117,7 @@ public class ContextHandlerTest {
     public void callsToContextNamesWithoutTrailingSlashesWithQueryStringsResultIn302() throws Exception {
         server = ServerUtils.httpsServerForTest()
             .addHandler(context("my app"))
-            .start();
+            .start3();
 
         String urlEncodedQuery = "?" + Mutils.urlEncode("some key") + "=" + Mutils.urlEncode("some value & another");
         URL url = server.uri().resolve("/my%20app" + urlEncodedQuery).toURL();
@@ -136,7 +136,7 @@ public class ContextHandlerTest {
                 Routes.route(Method.GET, "/", (request, response, pathParams) -> {
                     response.write("context=" + request.contextPath() + ";relative=" + request.relativePath());
                 }))
-            .start();
+            .start3();
 
         try (Response resp = call(request(server.uri().resolve("/")))) {
             assertThat(resp.code(), is(200));
@@ -159,7 +159,7 @@ public class ContextHandlerTest {
                             response.write("I got it. " + request.contextPath().isEmpty() + " and "
                                 + request.relativePath());
                         }))
-                .start();
+                .start3();
             try (Response resp = call(request(server.uri().resolve("/")))) {
                 assertThat(resp.code(), is(200));
                 assertThat(resp.body().string(), equalTo("I got it. true and /"));
@@ -174,7 +174,7 @@ public class ContextHandlerTest {
             .addHandler(Method.GET, "/b", (request, response, pathParams) -> {
                 response.write(request.contextPath() + " - " + request.relativePath());
             })
-            .start();
+            .start3();
         try (Response resp = call(request(server.uri().resolve("/b")))) {
             assertThat(resp.body().string(), is(" - /b"));
         }
@@ -191,7 +191,7 @@ public class ContextHandlerTest {
                     response.write(request.contextPath() + " - " + request.relativePath());
                 })
             )
-            .start();
+            .start3();
         try (Response resp = call(request(server.uri().resolve("/~.-_/~.-_")))) {
             assertThat(resp.body().string(), is("/~.-_ - /~.-_"));
             assertThat(resp.code(), is(200));
@@ -202,7 +202,7 @@ public class ContextHandlerTest {
         }
     }
 
-    @After
+    @AfterEach
     public void destroy() {
         scaffolding.MuAssert.stopAndCheck(server);
     }

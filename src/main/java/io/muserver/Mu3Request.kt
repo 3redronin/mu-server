@@ -5,6 +5,7 @@ import java.net.URI
 import java.util.*
 
 internal class Mu3Request(
+    val connection: HttpConnection,
     val method: Method,
     val requestUri: URI,
     val serverUri: URI,
@@ -17,6 +18,10 @@ internal class Mu3Request(
     private val startTime = System.currentTimeMillis()
     private var query: QueryString? = null
     private var attributes: MutableMap<String, Any>? = null
+    private var contextPath = ""
+    private var relativePath: String = requestUri.rawPath
+    private var cookies: List<Cookie>? = null
+
 
     override fun startTime() = startTime
 
@@ -61,18 +66,19 @@ internal class Mu3Request(
     }
 
     override fun cookies(): List<Cookie> {
-        TODO("Not yet implemented")
+        if (this.cookies == null) {
+            cookies = mu3Headers.cookies()
+        }
+        return this.cookies!!
     }
 
-    override fun cookie(name: String?): Optional<String> {
-        TODO("Not yet implemented")
+    override fun cookie(name: String): Optional<String> {
+        return Optional.ofNullable(cookies().firstOrNull { it.name() == name }?.value())
     }
 
-    override fun contextPath(): String {
-        TODO("Not yet implemented")
-    }
+    override fun contextPath() = contextPath
 
-    override fun relativePath() = requestUri.rawPath!!
+    override fun relativePath() = relativePath
 
     override fun attribute(key: String): Any? = attributes()[key]
 
@@ -91,29 +97,36 @@ internal class Mu3Request(
         TODO("Not yet implemented")
     }
 
-    override fun remoteAddress(): String {
-        TODO("Not yet implemented")
-    }
+    override fun server() = connection.server()!!
 
-    override fun clientIP(): String {
-        TODO("Not yet implemented")
-    }
-
-    override fun server(): MuServer {
-        TODO("Not yet implemented")
-    }
-
-    override fun isAsync(): Boolean {
-        TODO("Not yet implemented")
-    }
-
-    override fun protocol() = httpVersion.name
+    override fun isAsync(): Boolean = false
 
     override fun httpVersion() = httpVersion
 
-    override fun connection(): HttpConnection {
-        TODO("Not yet implemented")
+    override fun connection() = connection
+
+    fun addContext(contextToAdd: String) {
+        val ctx = normaliseContext(contextToAdd)
+        this.contextPath += ctx
+        this.relativePath = relativePath.substring(ctx.length)
     }
+
+    fun setPaths(contextPath: String, relativePath: String) {
+        this.contextPath = contextPath
+        this.relativePath = relativePath
+    }
+
+    private fun normaliseContext(contextToAdd: String): String {
+        var normal = contextToAdd
+        if (normal.endsWith("/")) {
+            normal = normal.substring(0, normal.length - 1)
+        }
+        if (!normal.startsWith("/")) {
+            normal = "/$normal"
+        }
+        return normal
+    }
+
 
     override fun toString(): String {
         return httpVersion.version() + " " + method + " " + serverUri
