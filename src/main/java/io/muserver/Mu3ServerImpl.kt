@@ -158,7 +158,7 @@ internal class Mu3Http1Connection(val server: Mu3ServerImpl, val creator: Connec
 
         clientSocket.getInputStream().use { reqStream ->
             val requestBuffer = ByteArray(4096)
-            val requestParser = Http1MessageParser(HttpMessageType.REQUEST, requestPipeline)
+            val requestParser = Http1MessageParser(HttpMessageType.REQUEST, requestPipeline, reqStream)
             var read: Int
             try {
                 while (reqStream.read(requestBuffer).also { read = it } != -1) {

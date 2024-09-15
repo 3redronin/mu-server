@@ -1,6 +1,8 @@
 package io.muserver
 
 import jakarta.ws.rs.core.MediaType
+import java.io.ByteArrayInputStream
+import java.io.InputStream
 import java.io.OutputStream
 import java.nio.charset.StandardCharsets
 import java.util.*
@@ -219,7 +221,8 @@ internal class Mu3Headers(
         fun parse(headerBytes: ByteArray) = parse(headerBytes, 0, headerBytes.size)
         @JvmStatic
         fun parse(headerBytes: ByteArray, offset: Int, length: Int): Mu3Headers {
-            val parser = Http1MessageParser(HttpMessageType.REQUEST, LinkedList())
+            val baos : InputStream = ByteArrayInputStream(headerBytes, offset, length)
+            val parser = Http1MessageParser(HttpMessageType.REQUEST, LinkedList(), baos)
             val requestLine = "GET / HTTP/1.1\r\n".headerBytes()
             var headers : Mu3Headers? = null
             val listener = object : HttpMessageListener {

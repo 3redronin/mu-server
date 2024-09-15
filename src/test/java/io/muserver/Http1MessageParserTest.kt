@@ -9,11 +9,17 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
 import java.io.ByteArrayOutputStream
+import java.io.PipedInputStream
+import java.io.PipedOutputStream
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.ConcurrentLinkedQueue
 
 @OptIn(ExperimentalStdlibApi::class)
 class Http1MessageParserTest {
+
+    private val pos = PipedOutputStream()
+    private val pis = PipedInputStream(pos)
+
 
     @Test
     fun tcharsAreValid() {
@@ -47,9 +53,9 @@ class Http1MessageParserTest {
     @ParameterizedTest
     @ValueSource(ints = [0, 100])
     fun `chunked bodies where whole body in single buffer is fine`(bufferOffset: Int) {
-        val parser = Http1MessageParser(HttpMessageType.REQUEST, ConcurrentLinkedQueue())
-        val request = StringBuilder(" ".repeat(bufferOffset))
-        request.append("""
+        val parser = Http1MessageParser(HttpMessageType.REQUEST, ConcurrentLinkedQueue(), pis)
+        val requestString = StringBuilder(" ".repeat(bufferOffset))
+        requestString.append("""
             GET /blah HTTP/1.1\r
             content-type: text/plain;charset=utf-8\r
             transfer-encoding: chunked\r
@@ -66,9 +72,9 @@ class Http1MessageParserTest {
 
         val chunk = "!".repeat(7429)
         val chunkSizeHex = chunk.toByteArray().size.toHexString(HexFormat.UpperCase)
-        request.append(chunkSizeHex).append("\r\n").append(chunk).append("\r\n0\r\n\r\n")
+        requestString.append(chunkSizeHex).append("\r\n").append(chunk).append("\r\n0\r\n\r\n")
 
-        val bytes = request.toString().headerBytes()
+        val bytes = requestString.toString().headerBytes()
 
         val actual = mutableListOf<String>()
 
@@ -100,18 +106,14 @@ class Http1MessageParserTest {
 
         assertThat("Events:\n\t" + actual.joinToString("\n\t"), actual, contains(
             "Got request GET /blah HTTP/1.1 with 9 headers and body size BodySize(type=CHUNKED, bytes=null)",
-            "Received ENCODING bytes: off=${811+bufferOffset} len=10",
             "Received CONTENT bytes: off=${821+bufferOffset} len=7429",
-            "Received ENCODING bytes: off=0 len=2", // this is from a CRLF buffer
-            "Received ENCODING bytes: off=${8252+bufferOffset} len=3",
-            "Received ENCODING bytes: off=0 len=2", // this is from a CRLF buffer
             "Message ended",
         ))
     }
 
     @Test
     fun `chunked bodies where chunk goes over byte buffer edge are fine`() {
-        val parser = Http1MessageParser(HttpMessageType.REQUEST, ConcurrentLinkedQueue())
+        val parser = Http1MessageParser(HttpMessageType.REQUEST, ConcurrentLinkedQueue(), pis)
         val request = StringBuilder("""
             GET /blah HTTP/1.1\r
             content-type: text/plain;charset=utf-8\r
@@ -178,12 +180,8 @@ class Http1MessageParserTest {
 
         assertThat("Events:\n\t" + actual.joinToString("\n\t"), actual, contains(
             "Got request GET /blah HTTP/1.1 with 9 headers and body size BodySize(type=CHUNKED, bytes=null)",
-            "Received ENCODING bytes: off=811 len=10",
             "Received CONTENT bytes: off=821 len=7371",
             "Received CONTENT bytes: off=1000 len=58",
-            "Received ENCODING bytes: off=0 len=2",
-            "Received ENCODING bytes: off=1060 len=3",
-            "Received ENCODING bytes: off=0 len=2",
             "Message ended",
         ))
     }
@@ -191,7 +189,7 @@ class Http1MessageParserTest {
     @ParameterizedTest
     @ValueSource(ints = [1, 2, 3, 11, 20, 1000])
     fun `chunked bodies can span multiple chunks`(bytesPerFeed: Int) {
-        val parser = Http1MessageParser(HttpMessageType.REQUEST, ConcurrentLinkedQueue())
+        val parser = Http1MessageParser(HttpMessageType.REQUEST, ConcurrentLinkedQueue(), pis)
         val request = StringBuilder("""
             GET /blah HTTP/1.1\r
             content-type: text/plain;charset=utf-8\r
@@ -248,7 +246,6 @@ class Http1MessageParserTest {
         }
 
         assertThat(receivedContent.toByteArray().toString(StandardCharsets.UTF_8), equalTo(chunk))
-        assertThat(receivedBytes.toByteArray().toString(StandardCharsets.UTF_8), equalTo(request.toString()))
 
         assertThat("Events:\n\t" + actual.joinToString("\n\t"), actual, contains(
             "Got request GET /blah HTTP/1.1 with 2 headers and body size BodySize(type=CHUNKED, bytes=null)",

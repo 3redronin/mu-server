@@ -4,6 +4,7 @@ import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.io.ByteArrayOutputStream
 import java.io.EOFException
+import java.io.InputStream
 import java.nio.charset.StandardCharsets
 import java.text.ParseException
 import java.util.*
@@ -41,12 +42,6 @@ enum class BodyBytesType {
     CONTENT,
 
     /**
-     * Bytes related to transfer encoding, for example chunked data headers when a message body has a
-     * transfer encoding value of `chunked`.
-     */
-    ENCODING,
-
-    /**
      * The raw bytes of the trailers of a message.
      */
     TRAILERS,
@@ -57,14 +52,13 @@ enum class BodyBytesType {
     WEBSOCKET_FRAME,
 }
 
-internal class Http1MessageParser(type: HttpMessageType, private val requestQueue: Queue<HttpRequestTemp>) {
+internal class Http1MessageParser(type: HttpMessageType, private val requestQueue: Queue<HttpRequestTemp>, private val source: InputStream) {
 
     private var remainingBytesToProxy: Long = 0L
     private var state : ParseState
     private val buffer = ByteArrayOutputStream()
     private var exchange : HttpMessageTemp
     private var headerName : String? = null
-    private var copyFrom : Int? = null
     init {
         if (type == HttpMessageType.REQUEST) {
             exchange = HttpRequestTemp.empty()
@@ -79,7 +73,6 @@ internal class Http1MessageParser(type: HttpMessageType, private val requestQueu
 
     fun feed(bytes: ByteArray, offset: Int, length: Int, listener: HttpMessageListener) {
         if (log.isDebugEnabled) log.debug("${if (exchange is HttpRequestTemp) "REQ" else "RESP"} fed $length bytes at $state")
-        if (copyFrom != null) copyFrom = offset
         var i = offset
         while (i < offset + length) {
             val b = bytes[i]
@@ -239,7 +232,6 @@ internal class Http1MessageParser(type: HttpMessageType, private val requestQueu
                     i += numberSent - 1 // subtracting one because there is an i++ below
                 }
                 ParseState.CHUNK_START -> {
-                    copyFrom = i
                     if (b.isHexDigit()) {
                         state = ParseState.CHUNK_SIZE
                         buffer.append(b)
@@ -266,13 +258,8 @@ internal class Http1MessageParser(type: HttpMessageType, private val requestQueu
                 }
                 ParseState.CHUNK_HEADER_ENDING -> {
                     if (b.isLF()) {
-                        // send the chunk header
-                        val start = copyFrom!!
-                        listener.onBodyBytes(exchange, BodyBytesType.ENCODING, bytes, start, 1 + i - start)
-
                         // remainingBytesToProxy has the chunk size in it
                         state = if (remainingBytesToProxy == 0L) ParseState.LAST_CHUNK else ParseState.CHUNK_DATA
-                        copyFrom = null
                     } else throw ParseException("state=$state b=$b", i)
                 }
                 ParseState.CHUNK_DATA -> {
@@ -290,7 +277,6 @@ internal class Http1MessageParser(type: HttpMessageType, private val requestQueu
                 ParseState.CHUNK_DATA_ENDING -> {
                     if (b.isLF()) {
                         state = ParseState.CHUNK_START
-                        sendCRLF(listener)
                     } else throw ParseException("state=$state b=$b", i)
                 }
                 ParseState.LAST_CHUNK -> {
@@ -303,7 +289,6 @@ internal class Http1MessageParser(type: HttpMessageType, private val requestQueu
                 }
                 ParseState.CHUNKED_BODY_ENDING -> {
                     if (b.isLF()) {
-                        sendCRLF(listener)
                         onMessageEnded(listener)
                     } else throw ParseException("state=$state b=$b", i)
                 }
@@ -330,20 +315,6 @@ internal class Http1MessageParser(type: HttpMessageType, private val requestQueu
             i++
         }
 
-        // When reading the chunk metadata, we read in the data before proxying. If we get to the end of the current
-        // buffer, then we just need to send whatever we were up to.
-        val start = copyFrom
-        if (start != null) {
-            val numToCopy = (offset + length) - start
-            if (numToCopy > 0) {
-                listener.onBodyBytes(exchange, BodyBytesType.ENCODING, bytes, start, numToCopy)
-            }
-            // leave copyFrom not null so it gets set to 'offset' on the next feed call
-        }
-    }
-
-    private fun sendCRLF(listener: HttpMessageListener) {
-        listener.onBodyBytes(exchange, BodyBytesType.ENCODING, CRLF, 0, 2)
     }
 
     fun eof(listener: HttpMessageListener) {
@@ -469,3 +440,6 @@ internal class Http1MessageParser(type: HttpMessageType, private val requestQueu
 }
 
 internal enum class HttpMessageType { REQUEST, RESPONSE }
+
+internal interface Http1ConnectionMsg
+
