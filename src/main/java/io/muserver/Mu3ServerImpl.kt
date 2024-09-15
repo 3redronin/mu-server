@@ -145,7 +145,9 @@ internal class Mu3Http1Connection(val server: Mu3ServerImpl, val creator: Connec
                         serverUri = serverUri,
                         httpVersion = request.httpVersion!!,
                         mu3Headers = headers,
-                        bodySize = request.bodySize!!
+                        bodySize = request.bodySize!!,
+                        body = if (request.bodySize == BodySize.NONE) EmptyInputStream.INSTANCE else Http1BodyStream(requestParser)
+
                     )
                     val muResponse = Mu3Response(muRequest, outputStream)
                     log.info("Got request: $muRequest")
@@ -154,6 +156,7 @@ internal class Mu3Http1Connection(val server: Mu3ServerImpl, val creator: Connec
                             break
                         }
                     }
+                    muRequest.body.close()
                     muResponse.cleanup()
 
                 }

@@ -182,10 +182,10 @@ class NettyRequestAdapter implements MuRequest {
                     bodyCharset = Charset.forName(charset);
                 } catch (IllegalCharsetNameException | UnsupportedCharsetException e) {
                     if (isRequest) {
-                        throw new ClientErrorException("Invalid request body charset", 400);
+                        throw new HttpException(HttpStatusCode.BAD_REQUEST_400, "Invalid request body charset");
                     } else {
                         log.error("Invalid response body charset: " + mediaType, e);
-                        throw new ServerErrorException("Invalid response body charset", 500);
+                        throw new HttpException(HttpStatusCode.INTERNAL_SERVER_ERROR_500, "Invalid response body charset");
                     }
                 }
             }

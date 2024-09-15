@@ -1,5 +1,6 @@
 package io.muserver.rest;
 
+import io.muserver.EmptyInputStream;
 import io.muserver.MuRequest;
 
 import java.io.IOException;

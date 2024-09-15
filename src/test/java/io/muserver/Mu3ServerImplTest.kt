@@ -1,5 +1,7 @@
 package io.muserver
 
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.hamcrest.MatcherAssert.assertThat
 import org.hamcrest.Matchers.equalTo
 import org.junit.jupiter.api.Test
@@ -32,6 +34,35 @@ class Mu3ServerImplTest {
                 }
 
             }
+    }
+
+    @Test
+    fun `reading from body works`() {
+        MuServerBuilder.muServer()
+            .withHttpPort(0)
+            .addHandler(
+                Method.POST, "/"
+            ) { request, response, _ ->
+                val msg = request.readBodyAsString()
+                response.write(msg)
+            }
+            .start3().use { server ->
+                client.call(server.uri().toRequest()
+                    .post("my-first-message".toRequestBody("text/plain".toMediaType()))
+                ).use { resp ->
+                    assertThat(resp.code, equalTo(200))
+                    assertThat(resp.headers["content-type"], equalTo("text/plain;charset=utf-8"))
+                    assertThat(resp.body?.string(), equalTo("my-first-message"))
+                }
+                client.call(server.uri().toRequest()
+                    .post("my second message".toRequestBody("text/plain".toMediaType()))
+                ).use { resp ->
+                    assertThat(resp.code, equalTo(200))
+                    assertThat(resp.body?.string(), equalTo("my second message"))
+                }
+
+            }
+
     }
 
     @Test

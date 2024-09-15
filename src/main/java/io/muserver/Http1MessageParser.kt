@@ -51,8 +51,10 @@ internal enum class BodyBytesType {
      */
     WEBSOCKET_FRAME,
 }
-
-internal class Http1MessageParser(type: HttpMessageType, private val requestQueue: Queue<HttpRequestTemp>, private val source: InputStream) {
+internal interface Http1MessageReader {
+    fun readNext() : Http1ConnectionMsg
+}
+internal class Http1MessageParser(type: HttpMessageType, private val requestQueue: Queue<HttpRequestTemp>, private val source: InputStream) : Http1MessageReader {
 
     /**
      * The number of bytes remaining to be sent in a fixed body size, or in the current chunk of chunked data (or MAX_LENGTH for unspecified lengths)
@@ -77,7 +79,7 @@ internal class Http1MessageParser(type: HttpMessageType, private val requestQueu
     private var limit = 0
     private fun remaining() = limit - position
     private fun hasRemaining() = remaining() > 0
-    fun readNext() : Http1ConnectionMsg {
+    override fun readNext() : Http1ConnectionMsg {
         if (limit == -1) return EOFMsg
         while (true) {
             if (!hasRemaining()) {
@@ -258,7 +260,6 @@ internal class Http1MessageParser(type: HttpMessageType, private val requestQueu
                     }
 
                     ParseState.FIXED_SIZE_BODY, ParseState.UNSPECIFIED_BODY -> {
-                        position++
                         return sendContent()
                     }
 

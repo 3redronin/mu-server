@@ -11,6 +11,7 @@ internal class Mu3Request(
     val httpVersion: HttpVersion,
     val mu3Headers: Mu3Headers,
     val bodySize: BodySize,
+    val body: InputStream,
 ) : MuRequest {
     override fun contentType() = mu3Headers.get("content-type")
     private val startTime = System.currentTimeMillis()
@@ -28,11 +29,16 @@ internal class Mu3Request(
     override fun headers() = mu3Headers
 
     override fun inputStream(): Optional<InputStream> {
-        TODO("Not yet implemented")
+        return if (bodySize == BodySize.NONE) Optional.empty() else Optional.of(body())
     }
 
+    override fun body() = body
+
     override fun readBodyAsString(): String {
-        TODO("Not yet implemented")
+        val charset = NettyRequestAdapter.bodyCharset(mu3Headers, true)
+        body().reader(charset).use { reader ->
+            return reader.readText()
+        }
     }
 
     override fun uploadedFiles(name: String?): MutableList<UploadedFile> {
@@ -101,9 +107,9 @@ internal class Mu3Request(
         TODO("Not yet implemented")
     }
 
-    override fun protocol(): String {
-        TODO("Not yet implemented")
-    }
+    override fun protocol() = httpVersion.name
+
+    override fun httpVersion() = httpVersion
 
     override fun connection(): HttpConnection {
         TODO("Not yet implemented")
