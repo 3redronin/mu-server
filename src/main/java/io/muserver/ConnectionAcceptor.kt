@@ -48,7 +48,9 @@ internal class ConnectionAcceptor(
                     }
                     val con = Mu3Http1Connection(server, this, socket)
                     connections.add(con)
-                    con.start(socket.getOutputStream())
+                    socket.getOutputStream().use { clientOut ->
+                        con.start(clientOut)
+                    }
                 }
             } catch (e: Exception) {
                 if (Thread.interrupted() || e is SocketException) {

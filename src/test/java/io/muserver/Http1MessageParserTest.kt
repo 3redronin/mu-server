@@ -3,11 +3,11 @@ package io.muserver
 import io.muserver.Http1MessageParser.Companion.isTChar
 import io.muserver.Mu3Headers.Companion.headerBytes
 import org.hamcrest.MatcherAssert.assertThat
-import org.hamcrest.Matchers.contains
-import org.hamcrest.Matchers.equalTo
+import org.hamcrest.Matchers.*
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.ValueSource
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.PipedInputStream
 import java.io.PipedOutputStream
@@ -50,11 +50,9 @@ class Http1MessageParserTest {
         }
     }
 
-    @ParameterizedTest
-    @ValueSource(ints = [0, 100])
-    fun `chunked bodies where whole body in single buffer is fine`(bufferOffset: Int) {
-        val parser = Http1MessageParser(HttpMessageType.REQUEST, ConcurrentLinkedQueue(), pis)
-        val requestString = StringBuilder(" ".repeat(bufferOffset))
+    @Test
+    fun `chunked bodies where whole body in single buffer is fine`() {
+        val requestString = StringBuilder()
         requestString.append("""
             GET /blah HTTP/1.1\r
             content-type: text/plain;charset=utf-8\r
@@ -74,41 +72,22 @@ class Http1MessageParserTest {
         val chunkSizeHex = chunk.toByteArray().size.toHexString(HexFormat.UpperCase)
         requestString.append(chunkSizeHex).append("\r\n").append(chunk).append("\r\n0\r\n\r\n")
 
-        val bytes = requestString.toString().headerBytes()
 
-        val actual = mutableListOf<String>()
+        val bais = ByteArrayInputStream(requestString.toString().toByteArray(StandardCharsets.UTF_8))
+        val parser = Http1MessageParser(HttpMessageType.REQUEST, ConcurrentLinkedQueue(), bais)
 
-        parser.feed(bytes, bufferOffset, bytes.size - bufferOffset, object : HttpMessageListener {
-            override fun onHeaders(exchange: HttpMessageTemp) {
-                val req = exchange as HttpRequestTemp
-                actual.add("Got request ${req.method} ${req.url} ${req.httpVersion} with ${exchange.headers().size()} headers and body size ${req.bodyTransferSize()}")
-            }
-
-            override fun onBodyBytes(exchange: HttpMessageTemp, type: BodyBytesType, array: ByteArray, offset: Int, length: Int) {
-                actual.add("Received $type bytes: off=$offset len=$length")
-                if (type == BodyBytesType.CONTENT) {
-                    val content = String(array, offset, length)
-                    if (content != chunk) {
-                        actual.add("Received content bytes: off=$offset len=$length with invalid content: $content")
-                    }
-                }
-            }
-
-            override fun onMessageEnded(exchange: HttpMessageTemp) {
-                actual.add("Message ended")
-            }
-
-            override fun onError(exchange: HttpMessageTemp, error: Exception) {
-                actual.add("Error: $error")
-            }
-
-        })
-
-        assertThat("Events:\n\t" + actual.joinToString("\n\t"), actual, contains(
-            "Got request GET /blah HTTP/1.1 with 9 headers and body size BodySize(type=CHUNKED, bytes=null)",
-            "Received CONTENT bytes: off=${821+bufferOffset} len=7429",
-            "Message ended",
-        ))
+        val request = parser.readNext() as HttpRequestTemp
+        assertThat(request.method, equalTo(Method.GET))
+        assertThat(request.url, equalTo("/blah"))
+        assertThat(request.httpVersion, equalTo(HttpVersion.HTTP_1_1))
+        val body = parser.readNext() as MessageBodyBit
+        var bodyContent = String(body.bytes, body.offset, body.length)
+        assertThat(body.isLast, equalTo(false))
+        val body2 = parser.readNext() as MessageBodyBit
+        bodyContent += String(body2.bytes, body2.offset, body2.length)
+        assertThat(bodyContent, equalTo(chunk))
+        assertThat(body2.isLast, equalTo(false))
+        assertThat(parser.readNext(), instanceOf(EndOfBodyBit::class.java))
     }
 
     @Test

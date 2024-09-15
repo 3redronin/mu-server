@@ -4,7 +4,7 @@ import io.muserver.Mu3Headers.Companion.headerBytes
 import java.io.OutputStream
 
 
-internal sealed interface HttpMessageTemp {
+internal sealed interface HttpMessageTemp : Http1ConnectionMsg {
     var httpVersion: HttpVersion?
     fun headers() : Mu3Headers
     fun bodyTransferSize() : BodySize
@@ -98,7 +98,7 @@ internal data class HttpRequestTemp(
     }
 
     companion object {
-        internal fun empty() = HttpRequestTemp(null, "", null)
+        internal fun empty() = HttpRequestTemp(null, "", null, )
     }
 
     override fun headers() = headers

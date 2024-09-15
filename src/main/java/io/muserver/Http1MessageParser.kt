@@ -54,6 +54,9 @@ enum class BodyBytesType {
 
 internal class Http1MessageParser(type: HttpMessageType, private val requestQueue: Queue<HttpRequestTemp>, private val source: InputStream) {
 
+    /**
+     * The number of bytes remaining to be sent in a fixed body size, or in the current chunk of chunked data (or MAX_LENGTH for unspecified lengths)
+     */
     private var remainingBytesToProxy: Long = 0L
     private var state : ParseState
     private val buffer = ByteArrayOutputStream()
@@ -72,249 +75,287 @@ internal class Http1MessageParser(type: HttpMessageType, private val requestQueu
     private val log : Logger = LoggerFactory.getLogger(Http1MessageParser::class.java)
 
     fun feed(bytes: ByteArray, offset: Int, length: Int, listener: HttpMessageListener) {
-        if (log.isDebugEnabled) log.debug("${if (exchange is HttpRequestTemp) "REQ" else "RESP"} fed $length bytes at $state")
-        var i = offset
-        while (i < offset + length) {
-            val b = bytes[i]
-            when (state) {
-                ParseState.REQUEST_START -> {
-                    if (b.isUpperCase()) {
-                        requestQueue.offer(exchange as HttpRequestTemp)
-                        state = ParseState.METHOD
-                        buffer.append(b)
-                    } else throw ParseException("state=$state b=$b", i)
-                }
-                ParseState.METHOD -> {
-                    if (b.isUpperCase()) {
-                        buffer.append(b)
-                    } else if (b == SP) {
-                        request().method = try {
-                            Method.valueOf(buffer.consumeAscii())
-                        } catch (e: IllegalArgumentException) {
-                            throw HttpException(HttpStatusCode.METHOD_NOT_ALLOWED_405)
-                        }
-                        state = ParseState.REQUEST_TARGET
-                    } else throw ParseException("state=$state b=$b", i)
-                }
-                ParseState.REQUEST_TARGET -> {
-                    if (b.isVChar()) { // todo: only allow valid target chars
-                        buffer.append(b)
-                    } else if (b == SP) {
-                        request().url = buffer.consumeAscii()
-                        state = ParseState.HTTP_VERSION
-                    } else throw ParseException("state=$state b=$b", i)
-                }
-                ParseState.HTTP_VERSION -> {
-                    if (b.isCR()) {
-                        state = ParseState.REQUEST_LINE_ENDING
-                    } else {
-                        if (b.isVChar()) {
-                            buffer.append(b)
-                        } else throw ParseException("state=$state b=$b", i)
+        throw NotImplementedError()
+    }
+    
+    private var bytes = ByteArray(8192)
+    private var position = 0
+    private var limit = 0
+    private fun remaining() = limit - position
+    private fun hasRemaining() = remaining() > 0
+    fun readNext() : Http1ConnectionMsg {
+        if (limit == -1) return EOFMsg
+        while (true) {
+            if (!hasRemaining()) {
+                position = 0
+                limit = source.read(bytes)
+                if (limit == -1) {
+                    if (state == ParseState.UNSPECIFIED_BODY) {
+                        return EndOfBodyBit
                     }
-                }
-                ParseState.REQUEST_LINE_ENDING -> {
-                    if (b.isLF()) {
-                        exchange.httpVersion = buffer.consumeHttpVersion()
-                        state = ParseState.HEADER_START
-                    } else throw ParseException("state=$state b=$b", i)
-                }
-                ParseState.RESPONSE_START -> {
-                    if (b == SP) {
-                        exchange.httpVersion = buffer.consumeHttpVersion()
-                        state = ParseState.STATUS_CODE
-                    } else {
-                        if (b.isVChar()) {
-                            buffer.append(b)
-                        } else throw ParseException("state=$state b=$b", i)
-                    }
-                }
-                ParseState.STATUS_CODE -> {
-                    if (b.isDigit()) {
-                        buffer.append(b)
-                        if (buffer.size() > 3) throw ParseException("status code too long", i)
-                    } else if (b == SP) {
-                        val code = buffer.consumeAscii().toInt()
-                        response().statusCode = code
-                        if (code >= 200 || code == 101) {
-                            response().request = requestQueue.poll() ?: throw ParseException("Got a response without a request", i)
-                        }
-                        state = ParseState.REASON_PHRASE
-                    } else throw ParseException("state=$state b=$b", i)
-                }
-                ParseState.REASON_PHRASE -> {
-                    if (b.isVChar() || b.isOWS()) {
-                        buffer.append(b)
-                    } else if (b == CR) {
-                        state = ParseState.STATUS_LINE_ENDING
-                    } else throw ParseException("state=$state b=$b", i)
-                }
-                ParseState.STATUS_LINE_ENDING -> {
-                    if (b.isLF()) {
-                        response().reason = buffer.consumeAscii()
-                        state = ParseState.HEADER_START
-                    } else throw ParseException("state=$state b=$b", i)
-                }
-                ParseState.HEADER_START -> {
-                    if (b.isTChar()) {
-                        buffer.append(b.toLower())
-                        state = ParseState.HEADER_NAME
-                    } else if (b.isCR()) {
-                        state = ParseState.HEADERS_ENDING
-                    } else throw ParseException("state=$state b=$b", i)
-                }
-                ParseState.HEADER_NAME -> {
-                    if (b.isTChar()) {
-                        buffer.append(b.toLower())
-                    } else if (b == 58.toByte()) {
-                        headerName = buffer.consumeAscii()
-                        if (headerName!!.isEmpty()) throw ParseException("Empty header name", i)
-                        state = ParseState.HEADER_NAME_ENDED
-                    }
-                }
-                ParseState.HEADER_NAME_ENDED -> {
-                    if (b.isOWS()) {
-                        // skip it
-                    } else if (b.isVChar()) {
-                        buffer.append(b)
-                        state = ParseState.HEADER_VALUE
-                    } else throw ParseException("Invalid header value $b", i)
-                }
-                ParseState.HEADER_VALUE -> {
-                    if (b.isVChar() || b.isOWS()) {
-                        buffer.append(b)
-                    } else if (b.isCR()) {
-                        state = ParseState.HEADER_VALUE_ENDING
-                    }
-                }
-                ParseState.HEADER_VALUE_ENDING -> {
-                    if (b.isLF()) {
-                        val value = buffer.consumeAscii().trimEnd()
-                        if (value.isEmpty()) throw ParseException("No header value for header $headerName", i)
-                        exchange.headers().add(headerName!!, value)
-                        state = ParseState.HEADER_START
-                    } else throw ParseException("No LF after CR at $state", i)
-                }
-                ParseState.HEADERS_ENDING -> {
-                    if (b.isLF()) {
-                        val body = exchange.bodyTransferSize()
-                        when (body.type) {
-                            BodyType.FIXED_SIZE -> {
-                                val len = body.bytes!!
-                                state = ParseState.FIXED_SIZE_BODY
-                                remainingBytesToProxy = len
-                            }
-                            BodyType.CHUNKED -> {
-                                state = ParseState.CHUNK_START
-                            }
-                            BodyType.UNSPECIFIED -> {
-                                state = ParseState.UNSPECIFIED_BODY
-                                remainingBytesToProxy = Long.MAX_VALUE
-                            }
-                            BodyType.NONE -> {}
-                        }
-
-                        listener.onHeaders(exchange)
-                        if (body.type == BodyType.NONE) {
-                            onMessageEnded(listener)
-                        }
-                    } else throw ParseException("state=$state b=$b", i)
-                }
-                ParseState.FIXED_SIZE_BODY -> {
-                    val numberSent = sendContent(listener, bytes, offset, length, i)
-                    i += numberSent - 1 // subtracting one because there is an i++ below
-                    if (remainingBytesToProxy == 0L) {
-                        onMessageEnded(listener)
-                    }
-                }
-                ParseState.UNSPECIFIED_BODY -> {
-                    val numberSent = sendContent(listener, bytes, offset, length, i)
-                    i += numberSent - 1 // subtracting one because there is an i++ below
-                }
-                ParseState.CHUNK_START -> {
-                    if (b.isHexDigit()) {
-                        state = ParseState.CHUNK_SIZE
-                        buffer.append(b)
-                    } else throw ParseException("state=$state b=$b", i)
-                }
-                ParseState.CHUNK_SIZE -> {
-                    if (b.isHexDigit()) {
-                        buffer.append(b)
-                    } else {
-                        state = if (b == SEMICOLON) {
-                            ParseState.CHUNK_EXTENSIONS
-                        } else if (b.isCR()) {
-                            ParseState.CHUNK_HEADER_ENDING
-                        } else throw ParseException("state=$state b=$b", i)
-                        remainingBytesToProxy = buffer.consumeAscii().toLong(16)
-                    }
-                }
-                ParseState.CHUNK_EXTENSIONS -> {
-                    if (b.isVChar() || b.isOWS()) {
-                        // todo: only allow valid extension characters
-                    } else if (b.isCR()) {
-                        state = ParseState.CHUNK_HEADER_ENDING
-                    } else throw ParseException("state=$state b=$b", i)
-                }
-                ParseState.CHUNK_HEADER_ENDING -> {
-                    if (b.isLF()) {
-                        // remainingBytesToProxy has the chunk size in it
-                        state = if (remainingBytesToProxy == 0L) ParseState.LAST_CHUNK else ParseState.CHUNK_DATA
-                    } else throw ParseException("state=$state b=$b", i)
-                }
-                ParseState.CHUNK_DATA -> {
-                    val numberSent = sendContent(listener, bytes, offset, length, i)
-                    i += numberSent - 1 // subtracting one because there is an i++ below
-                    if (remainingBytesToProxy == 0L) {
-                        state = ParseState.CHUNK_DATA_READ
-                    }
-                }
-                ParseState.CHUNK_DATA_READ -> {
-                    if (b.isCR()) {
-                        state = ParseState.CHUNK_DATA_ENDING
-                    } else throw ParseException("state=$state b=$b", i)
-                }
-                ParseState.CHUNK_DATA_ENDING -> {
-                    if (b.isLF()) {
-                        state = ParseState.CHUNK_START
-                    } else throw ParseException("state=$state b=$b", i)
-                }
-                ParseState.LAST_CHUNK -> {
-                    if (b.isCR()) {
-                        state = ParseState.CHUNKED_BODY_ENDING
-                    } else if (b.isTChar()) {
-                        buffer.append(b)
-                        state = ParseState.TRAILERS
-                    } else throw ParseException("state=$state b=$b", i)
-                }
-                ParseState.CHUNKED_BODY_ENDING -> {
-                    if (b.isLF()) {
-                        onMessageEnded(listener)
-                    } else throw ParseException("state=$state b=$b", i)
-                }
-                ParseState.TRAILERS -> {
-                    if (b.isOWS() || b.isVChar() || b.isCR()) {
-                        buffer.append(b)
-                    } else if (b.isLF()) {
-                        buffer.append(b)
-                        val trailerPart = buffer.toString(StandardCharsets.US_ASCII)
-                        if (trailerPart.endsWith("\r\n\r\n")) {
-                            buffer.reset()
-                            val trailerBytes = trailerPart.toByteArray(StandardCharsets.US_ASCII)
-                            listener.onBodyBytes(exchange, BodyBytesType.TRAILERS, trailerBytes, 0, trailerBytes.size)
-                            onMessageEnded(listener)
-                        }
-                    } else throw ParseException("state=$state b=$b", i)
-                }
-                ParseState.WEBSOCKET -> {
-                    val remaining = length - i
-                    listener.onBodyBytes(exchange, BodyBytesType.WEBSOCKET_FRAME, bytes, i, remaining)
-                    i += remaining - 1 // -1 because there is an i++ below
+                    return EOFMsg
                 }
             }
-            i++
-        }
+            while (hasRemaining()) {
+                val b = bytes[position]
+                when (state) {
+                    ParseState.REQUEST_START -> {
+                        if (b.isUpperCase()) {
+                            requestQueue.offer(exchange as HttpRequestTemp)
+                            state = ParseState.METHOD
+                            buffer.append(b)
+                        } else throw ParseException("state=$state b=$b", position)
+                    }
 
+                    ParseState.METHOD -> {
+                        if (b.isUpperCase()) {
+                            buffer.append(b)
+                        } else if (b == SP) {
+                            request().method = try {
+                                Method.valueOf(buffer.consumeAscii())
+                            } catch (e: IllegalArgumentException) {
+                                throw HttpException(HttpStatusCode.METHOD_NOT_ALLOWED_405)
+                            }
+                            state = ParseState.REQUEST_TARGET
+                        } else throw ParseException("state=$state b=$b", position)
+                    }
+
+                    ParseState.REQUEST_TARGET -> {
+                        if (b.isVChar()) { // todo: only allow valid target chars
+                            buffer.append(b)
+                        } else if (b == SP) {
+                            request().url = buffer.consumeAscii()
+                            state = ParseState.HTTP_VERSION
+                        } else throw ParseException("state=$state b=$b", position)
+                    }
+
+                    ParseState.HTTP_VERSION -> {
+                        if (b.isCR()) {
+                            state = ParseState.REQUEST_LINE_ENDING
+                        } else {
+                            if (b.isVChar()) {
+                                buffer.append(b)
+                            } else throw ParseException("state=$state b=$b", position)
+                        }
+                    }
+
+                    ParseState.REQUEST_LINE_ENDING -> {
+                        if (b.isLF()) {
+                            exchange.httpVersion = buffer.consumeHttpVersion()
+                            state = ParseState.HEADER_START
+                        } else throw ParseException("state=$state b=$b", position)
+                    }
+
+                    ParseState.RESPONSE_START -> {
+                        if (b == SP) {
+                            exchange.httpVersion = buffer.consumeHttpVersion()
+                            state = ParseState.STATUS_CODE
+                        } else {
+                            if (b.isVChar()) {
+                                buffer.append(b)
+                            } else throw ParseException("state=$state b=$b", position)
+                        }
+                    }
+
+                    ParseState.STATUS_CODE -> {
+                        if (b.isDigit()) {
+                            buffer.append(b)
+                            if (buffer.size() > 3) throw ParseException("status code too long", position)
+                        } else if (b == SP) {
+                            val code = buffer.consumeAscii().toInt()
+                            response().statusCode = code
+                            if (code >= 200 || code == 101) {
+                                response().request =
+                                    requestQueue.poll() ?: throw ParseException("Got a response without a request", position)
+                            }
+                            state = ParseState.REASON_PHRASE
+                        } else throw ParseException("state=$state b=$b", position)
+                    }
+
+                    ParseState.REASON_PHRASE -> {
+                        if (b.isVChar() || b.isOWS()) {
+                            buffer.append(b)
+                        } else if (b == CR) {
+                            state = ParseState.STATUS_LINE_ENDING
+                        } else throw ParseException("state=$state b=$b", position)
+                    }
+
+                    ParseState.STATUS_LINE_ENDING -> {
+                        if (b.isLF()) {
+                            response().reason = buffer.consumeAscii()
+                            state = ParseState.HEADER_START
+                        } else throw ParseException("state=$state b=$b", position)
+                    }
+
+                    ParseState.HEADER_START -> {
+                        if (b.isTChar()) {
+                            buffer.append(b.toLower())
+                            state = ParseState.HEADER_NAME
+                        } else if (b.isCR()) {
+                            state = ParseState.HEADERS_ENDING
+                        } else throw ParseException("state=$state b=$b", position)
+                    }
+
+                    ParseState.HEADER_NAME -> {
+                        if (b.isTChar()) {
+                            buffer.append(b.toLower())
+                        } else if (b == 58.toByte()) {
+                            headerName = buffer.consumeAscii()
+                            if (headerName!!.isEmpty()) throw ParseException("Empty header name", position)
+                            state = ParseState.HEADER_NAME_ENDED
+                        }
+                    }
+
+                    ParseState.HEADER_NAME_ENDED -> {
+                        if (b.isOWS()) {
+                            // skip it
+                        } else if (b.isVChar()) {
+                            buffer.append(b)
+                            state = ParseState.HEADER_VALUE
+                        } else throw ParseException("Invalid header value $b", position)
+                    }
+
+                    ParseState.HEADER_VALUE -> {
+                        if (b.isVChar() || b.isOWS()) {
+                            buffer.append(b)
+                        } else if (b.isCR()) {
+                            state = ParseState.HEADER_VALUE_ENDING
+                        }
+                    }
+
+                    ParseState.HEADER_VALUE_ENDING -> {
+                        if (b.isLF()) {
+                            val value = buffer.consumeAscii().trimEnd()
+                            if (value.isEmpty()) throw ParseException("No header value for header $headerName", position)
+                            exchange.headers().add(headerName!!, value)
+                            state = ParseState.HEADER_START
+                        } else throw ParseException("No LF after CR at $state", position)
+                    }
+
+                    ParseState.HEADERS_ENDING -> {
+                        if (b.isLF()) {
+                            val exc = exchange
+                            val body = exc.bodyTransferSize()
+                            when (body.type) {
+                                BodyType.FIXED_SIZE -> {
+                                    val len = body.bytes!!
+                                    state = ParseState.FIXED_SIZE_BODY
+                                    remainingBytesToProxy = len
+                                }
+
+                                BodyType.CHUNKED -> {
+                                    state = ParseState.CHUNK_START
+                                }
+
+                                BodyType.UNSPECIFIED -> {
+                                    state = ParseState.UNSPECIFIED_BODY
+                                    remainingBytesToProxy = Long.MAX_VALUE
+                                }
+
+                                BodyType.NONE -> {
+                                    onMessageEnded()
+                                }
+                            }
+
+                            position++
+                            return exc
+                        } else throw ParseException("state=$state b=$b", position)
+                    }
+
+                    ParseState.FIXED_SIZE_BODY, ParseState.UNSPECIFIED_BODY -> {
+                        position++
+                        return sendContent()
+                    }
+
+                    ParseState.CHUNK_START -> {
+                        if (b.isHexDigit()) {
+                            state = ParseState.CHUNK_SIZE
+                            buffer.append(b)
+                        } else throw ParseException("state=$state b=$b", position)
+                    }
+
+                    ParseState.CHUNK_SIZE -> {
+                        if (b.isHexDigit()) {
+                            buffer.append(b)
+                        } else {
+                            state = if (b == SEMICOLON) {
+                                ParseState.CHUNK_EXTENSIONS
+                            } else if (b.isCR()) {
+                                ParseState.CHUNK_HEADER_ENDING
+                            } else throw ParseException("state=$state b=$b", position)
+                            remainingBytesToProxy = buffer.consumeAscii().toLong(16)
+                        }
+                    }
+
+                    ParseState.CHUNK_EXTENSIONS -> {
+                        if (b.isVChar() || b.isOWS()) {
+                            // todo: only allow valid extension characters
+                        } else if (b.isCR()) {
+                            state = ParseState.CHUNK_HEADER_ENDING
+                        } else throw ParseException("state=$state b=$b", position)
+                    }
+
+                    ParseState.CHUNK_HEADER_ENDING -> {
+                        if (b.isLF()) {
+                            // remainingBytesToProxy has the chunk size in it
+                            state = if (remainingBytesToProxy == 0L) ParseState.LAST_CHUNK else ParseState.CHUNK_DATA
+                        } else throw ParseException("state=$state b=$b", position)
+                    }
+
+                    ParseState.CHUNK_DATA -> {
+                        return sendContent()
+                    }
+
+                    ParseState.CHUNK_DATA_READ -> {
+                        if (b.isCR()) {
+                            state = ParseState.CHUNK_DATA_ENDING
+                        } else throw ParseException("state=$state b=$b", position)
+                    }
+
+                    ParseState.CHUNK_DATA_ENDING -> {
+                        if (b.isLF()) {
+                            state = ParseState.CHUNK_START
+                        } else throw ParseException("state=$state b=$b", position)
+                    }
+
+                    ParseState.LAST_CHUNK -> {
+                        if (b.isCR()) {
+                            state = ParseState.CHUNKED_BODY_ENDING
+                        } else if (b.isTChar()) {
+                            buffer.append(b)
+                            state = ParseState.TRAILERS
+                        } else throw ParseException("state=$state b=$b", position)
+                    }
+
+                    ParseState.CHUNKED_BODY_ENDING -> {
+                        if (b.isLF()) {
+                            position++
+                            onMessageEnded()
+                            return EndOfBodyBit
+                        } else throw ParseException("state=$state b=$b", position)
+                    }
+
+                    ParseState.TRAILERS -> {
+                        if (b.isOWS() || b.isVChar() || b.isCR()) {
+                            buffer.append(b)
+                        } else if (b.isLF()) {
+                            buffer.append(b)
+                            val trailerPart = buffer.toString(StandardCharsets.US_ASCII)
+                            if (trailerPart.endsWith("\r\n\r\n")) {
+                                buffer.reset()
+                                onMessageEnded()
+                                throw NotImplementedError("Trailers not yet supported")
+                            }
+                        } else throw ParseException("state=$state b=$b", position)
+                    }
+
+                    ParseState.WEBSOCKET -> {
+                        throw NotImplementedError("No websockets yet")
+                    }
+                }
+                position++
+            }
+        }
     }
 
     fun eof(listener: HttpMessageListener) {
@@ -328,16 +369,28 @@ internal class Http1MessageParser(type: HttpMessageType, private val requestQueu
     private fun request() = (exchange as HttpRequestTemp)
     private fun response() = (exchange as HttpResponseTemp)
 
-    private fun sendContent(listener: HttpMessageListener, bytes: ByteArray, originalOffset: Int, originalLength: Int, currentIndex: Int): Int {
-        val remainingInBuffer = originalLength - (currentIndex - originalOffset)
+    private fun sendContent(): MessageBodyBit {
+        val remainingInBuffer = remaining()
         val numberToTransfer = minOf(remainingBytesToProxy, remainingInBuffer.toLong()).toInt()
-        val exc = exchange
-        listener.onBodyBytes(exc, BodyBytesType.CONTENT, bytes, currentIndex, numberToTransfer)
         remainingBytesToProxy -= numberToTransfer
-        return numberToTransfer
+        val start = position
+        position += numberToTransfer
+
+        val isLast = if (state == ParseState.CHUNK_DATA) {
+            if (remainingBytesToProxy == 0L) {
+                state = ParseState.CHUNK_DATA_READ
+            }
+            false
+        } else {
+            remainingBytesToProxy == 0L
+        }
+        if (isLast) {
+            onMessageEnded()
+        }
+        return MessageBodyBit(bytes, start, numberToTransfer, isLast)
     }
 
-    private fun onMessageEnded(listener: HttpMessageListener) {
+    private fun onMessageEnded() {
         val exc = exchange
         this.state = if (exc is HttpRequestTemp) {
             if (exc.isWebsocketUpgrade()) {
@@ -353,9 +406,6 @@ internal class Http1MessageParser(type: HttpMessageType, private val requestQueu
                 this.exchange = HttpResponseTemp.empty()
                 ParseState.RESPONSE_START
             }
-        }
-        if (state != ParseState.WEBSOCKET && !(exc is HttpResponseTemp && exc.statusCode == 100)) {
-            listener.onMessageEnded(exc)
         }
     }
 
@@ -442,4 +492,7 @@ internal class Http1MessageParser(type: HttpMessageType, private val requestQueu
 internal enum class HttpMessageType { REQUEST, RESPONSE }
 
 internal interface Http1ConnectionMsg
-
+class MessageBodyBit(val bytes: ByteArray, val offset: Int, val length: Int, val isLast: Boolean) : Http1ConnectionMsg
+object EmptyMessageBodyBit : Http1ConnectionMsg
+object EndOfBodyBit : Http1ConnectionMsg
+object EOFMsg : Http1ConnectionMsg

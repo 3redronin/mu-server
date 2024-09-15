@@ -119,62 +119,49 @@ internal class Mu3Http1Connection(val server: Mu3ServerImpl, val creator: Connec
 
     fun start(outputStream: OutputStream) {
 
-        val requestListener = object : HttpMessageListener {
-
-            override fun onHeaders(exchange: HttpMessageTemp) {
-                val request = exchange as HttpRequestTemp
-                val serverUri = creator.uri.resolve(request.url).normalize()
-                val headers = request.headers()
-                val muRequest = Mu3Request(
-                    method = request.method!!,
-                    requestUri = serverUri,
-                    serverUri = serverUri,
-                    httpVersion = request.httpVersion!!,
-                    mu3Headers = headers
-                )
-                val muResponse = Mu3Response(muRequest, outputStream)
-                log.info("Got request: $muRequest")
-                for (handler in server.handlers) {
-                    if (handler.handle(muRequest, muResponse)) {
+        try {
+            clientSocket.getInputStream().use { reqStream ->
+                val requestParser = Http1MessageParser(HttpMessageType.REQUEST, requestPipeline, reqStream)
+                while (true) {
+                    val msg = try {
+                        requestParser.readNext()
+                    } catch (e: IOException) {
+                        log.info("Error reading from client input stream ${e.javaClass} ${e.message}")
                         break
                     }
+                    if (msg == EOFMsg) {
+                        log.info("EOF detected")
+//                    reqStream.closeQuietly() // TODO: confirm if the input stream should be closed
+                        clientSocket.shutdownInputQuietly()
+                        break
+                    }
+                    val request = msg as HttpRequestTemp
+
+                    val serverUri = creator.uri.resolve(request.url).normalize()
+                    val headers = request.headers()
+                    val muRequest = Mu3Request(
+                        method = request.method!!,
+                        requestUri = serverUri,
+                        serverUri = serverUri,
+                        httpVersion = request.httpVersion!!,
+                        mu3Headers = headers
+                    )
+                    val muResponse = Mu3Response(muRequest, outputStream)
+                    log.info("Got request: $muRequest")
+                    for (handler in server.handlers) {
+                        if (handler.handle(muRequest, muResponse)) {
+                            break
+                        }
+                    }
+                    muResponse.cleanup()
+
                 }
-                muResponse.cleanup()
-            }
 
-            override fun onBodyBytes(exchange: HttpMessageTemp, type: BodyBytesType, array: ByteArray, offset: Int, length: Int) {
-                log.info("Got body bytes")
             }
-
-            override fun onMessageEnded(exchange: HttpMessageTemp) {
-                log.info("Request ended")
-            }
-
-            override fun onError(exchange: HttpMessageTemp, error: Exception) {
-                val req = exchange as HttpRequestTemp
-                log.error("Request error: $req", error)
-            }
+        } catch (e: Exception) {
+            log.error("Unhandled error at the socket", e)
+            clientSocket.closeQuietly()
         }
-
-        clientSocket.getInputStream().use { reqStream ->
-            val requestBuffer = ByteArray(4096)
-            val requestParser = Http1MessageParser(HttpMessageType.REQUEST, requestPipeline, reqStream)
-            var read: Int
-            try {
-                while (reqStream.read(requestBuffer).also { read = it } != -1) {
-                    requestParser.feed(requestBuffer, 0, read, requestListener)
-                }
-                log.info("Client input stream ended")
-                requestParser.eof(requestListener)
-            } catch (eof: EOFException) {
-                log.info("EOF exception for request stream")
-                requestParser.eof(requestListener)
-            } catch (e: Exception) {
-                requestParser.error(e, requestListener)
-            }
-
-        }
-
 
     }
 
