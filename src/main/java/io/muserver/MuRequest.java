@@ -74,6 +74,15 @@ public interface MuRequest {
     Optional<InputStream> inputStream();
 
     /**
+     * <p>The input stream of the request body.</p>
+     * <p>If there is </p>
+     * @return the input stream of the request body
+     */
+    default InputStream body() {
+        return inputStream().orElse(InputStream.nullInputStream());
+    }
+
+    /**
      * Returns the request body as a string.
      * <p>This is a blocking call which waits until the whole request is available. If you need the raw bytes, or to stream
      * the request body, then use the {@link #inputStream()} instead.</p>

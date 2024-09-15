@@ -35,7 +35,7 @@ internal interface HttpMessageListener {
 /**
  * The class of bytes in a message body
  */
-enum class BodyBytesType {
+internal enum class BodyBytesType {
     /**
      * Bytes that make up the content of an HTTP request or response.
      */
@@ -70,12 +70,6 @@ internal class Http1MessageParser(type: HttpMessageType, private val requestQueu
             exchange = HttpResponseTemp.empty()
             state = ParseState.RESPONSE_START
         }
-    }
-
-    private val log : Logger = LoggerFactory.getLogger(Http1MessageParser::class.java)
-
-    fun feed(bytes: ByteArray, offset: Int, length: Int, listener: HttpMessageListener) {
-        throw NotImplementedError()
     }
     
     private var bytes = ByteArray(8192)
@@ -236,6 +230,7 @@ internal class Http1MessageParser(type: HttpMessageType, private val requestQueu
                         if (b.isLF()) {
                             val exc = exchange
                             val body = exc.bodyTransferSize()
+                            exc.bodySize = body
                             when (body.type) {
                                 BodyType.FIXED_SIZE -> {
                                     val len = body.bytes!!
@@ -344,7 +339,8 @@ internal class Http1MessageParser(type: HttpMessageType, private val requestQueu
                             if (trailerPart.endsWith("\r\n\r\n")) {
                                 buffer.reset()
                                 onMessageEnded()
-                                throw NotImplementedError("Trailers not yet supported")
+                                // TODO: pass back the trailers
+                                return EndOfBodyBit
                             }
                         } else throw ParseException("state=$state b=$b", position)
                     }

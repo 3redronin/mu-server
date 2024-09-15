@@ -10,6 +10,7 @@ internal class Mu3Request(
     val serverUri: URI,
     val httpVersion: HttpVersion,
     val mu3Headers: Mu3Headers,
+    val bodySize: BodySize,
 ) : MuRequest {
     override fun contentType() = mu3Headers.get("content-type")
     private val startTime = System.currentTimeMillis()

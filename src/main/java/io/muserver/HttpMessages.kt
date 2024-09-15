@@ -7,6 +7,7 @@ import java.io.OutputStream
 internal sealed interface HttpMessageTemp : Http1ConnectionMsg {
     var httpVersion: HttpVersion?
     fun headers() : Mu3Headers
+    var bodySize: BodySize?
     fun bodyTransferSize() : BodySize
     companion object {
         internal fun fixedBodyLength(cl: List<String>): BodySize {
@@ -65,6 +66,7 @@ internal data class HttpRequestTemp(
     var method: Method?,
     var url: String,
     override var httpVersion: HttpVersion?,
+    override var bodySize: BodySize?,
     private val headers: Mu3Headers = Mu3Headers(),
 ) : HttpMessageTemp {
     fun isWebsocketUpgrade() = headers.containsValue("upgrade", "websocket", false)
@@ -98,7 +100,7 @@ internal data class HttpRequestTemp(
     }
 
     companion object {
-        internal fun empty() = HttpRequestTemp(null, "", null, )
+        internal fun empty() = HttpRequestTemp(null, "", null, null)
     }
 
     override fun headers() = headers
@@ -110,6 +112,7 @@ internal data class HttpResponseTemp(
     override var httpVersion: HttpVersion?,
     var statusCode: Int,
     var reason: String,
+    override var bodySize: BodySize?,
     private val headers: Mu3Headers = Mu3Headers(),
 ) : HttpMessageTemp {
 
@@ -153,7 +156,7 @@ internal data class HttpResponseTemp(
     override fun headers() = headers
 
     companion object {
-        internal fun empty() = HttpResponseTemp(null, null, 0, "")
+        internal fun empty() = HttpResponseTemp(null, null, 0, "", null)
     }
 
 }

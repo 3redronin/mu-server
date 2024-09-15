@@ -144,7 +144,8 @@ internal class Mu3Http1Connection(val server: Mu3ServerImpl, val creator: Connec
                         requestUri = serverUri,
                         serverUri = serverUri,
                         httpVersion = request.httpVersion!!,
-                        mu3Headers = headers
+                        mu3Headers = headers,
+                        bodySize = request.bodySize!!
                     )
                     val muResponse = Mu3Response(muRequest, outputStream)
                     log.info("Got request: $muRequest")

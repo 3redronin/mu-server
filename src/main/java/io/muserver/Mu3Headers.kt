@@ -216,29 +216,6 @@ internal class Mu3Headers(
 
     companion object {
         internal fun String.headerBytes() = this.toByteArray(StandardCharsets.US_ASCII)
-
-        @JvmStatic
-        fun parse(headerBytes: ByteArray) = parse(headerBytes, 0, headerBytes.size)
-        @JvmStatic
-        fun parse(headerBytes: ByteArray, offset: Int, length: Int): Mu3Headers {
-            val baos : InputStream = ByteArrayInputStream(headerBytes, offset, length)
-            val parser = Http1MessageParser(HttpMessageType.REQUEST, LinkedList(), baos)
-            val requestLine = "GET / HTTP/1.1\r\n".headerBytes()
-            var headers : Mu3Headers? = null
-            val listener = object : HttpMessageListener {
-                override fun onHeaders(exchange: HttpMessageTemp) {
-                    headers = exchange.headers()
-                }
-                override fun onBodyBytes(exchange: HttpMessageTemp, type: BodyBytesType, array: ByteArray, offset: Int, length: Int) = throw NotImplementedError()
-                override fun onMessageEnded(exchange: HttpMessageTemp) = Unit
-                override fun onError(exchange: HttpMessageTemp, error: Exception) = throw IllegalArgumentException("headerBytes contains invalid headers", error)
-            }
-            parser.feed(requestLine, 0, requestLine.size, listener)
-            parser.feed(headerBytes, offset, length, listener)
-
-            return headers ?: throw IllegalArgumentException("headerBytes did not contain headers")
-        }
-
     }
 
 
