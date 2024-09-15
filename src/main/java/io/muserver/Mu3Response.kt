@@ -118,7 +118,9 @@ internal class Mu3Response(muRequest: Mu3Request, val socketOut: OutputStream) :
             if (status == HttpStatusCode.OK_200) {
                 status(HttpStatusCode.NO_CONTENT_204)
             }
-            headers.set(HeaderNames.CONTENT_LENGTH, 0L)
+            if (status.canHaveEntity()) {
+                headers.set(HeaderNames.CONTENT_LENGTH, 0L)
+            }
             writeStatusAndHeaders()
             socketOut.flush()
         } else {

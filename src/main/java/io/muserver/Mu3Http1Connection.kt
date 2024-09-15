@@ -85,7 +85,7 @@ internal class Mu3Http1Connection(
                                 muResponse.headers().set(httpException.responseHeaders())
                                 val status = httpException.status()
                                 muResponse.status(status)
-                                if (status.isClientError || status.isServerError) {
+                                if (status.canHaveEntity()) {
                                     muResponse.write(httpException.message ?: status.toString())
                                 }
                             } else {

@@ -589,12 +589,17 @@ public class MuServerBuilder {
         return Mu3ServerImpl.start(this);
     }
 
+    public boolean useMu3 = true;
+
     /**
      * Creates and starts this server. An exception is thrown if it fails to start.
      *
      * @return The running server.
      */
     public MuServer start() {
+        if (useMu3) {
+            return start3();
+        }
         if (httpPort < 0 && httpsPort < 0) {
             throw new IllegalArgumentException("No ports were configured. Please call MuServerBuilder.withHttpPort(int) or MuServerBuilder.withHttpsPort(int)");
         }
