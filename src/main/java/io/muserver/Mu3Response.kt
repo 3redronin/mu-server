@@ -7,12 +7,13 @@ import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
 import java.util.*
 
-internal class Mu3Response(muRequest: Mu3Request, val socketOut: OutputStream) : MuResponse {
+internal class Mu3Response(private val muRequest: Mu3Request, private val socketOut: OutputStream) : MuResponse, ResponseInfo {
 
     private var status : HttpStatusCode = HttpStatusCode.OK_200
     private val headers = Mu3Headers()
     var state : ResponseState = ResponseState.NOTHING
     private var wrappedOut : OutputStream? = null
+    private var endMillis : Long? = null
 
     override fun status() = status.code()
 
@@ -127,5 +128,10 @@ internal class Mu3Response(muRequest: Mu3Request, val socketOut: OutputStream) :
             wrappedOut?.close()
         }
     }
+
+    override fun duration() = (endMillis ?: System.currentTimeMillis()) - muRequest.startTime()
+    override fun completedSuccessfully() = state.completedSuccessfully()
+    override fun request() = muRequest
+    override fun response() = this
 
 }

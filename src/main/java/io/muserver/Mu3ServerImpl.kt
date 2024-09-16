@@ -8,7 +8,11 @@ import java.net.Socket
 import java.net.URI
 import java.util.concurrent.Executors
 
-internal class Mu3ServerImpl(private val acceptors: List<ConnectionAcceptor>, val handlers: List<MuHandler>) : MuServer {
+internal class Mu3ServerImpl(
+    private val acceptors: List<ConnectionAcceptor>,
+    val handlers: List<MuHandler>,
+    private val responseCompleteListeners: MutableList<ResponseCompleteListener>,
+) : MuServer {
 
     val statsImpl = Mu3StatsImpl()
 
@@ -86,13 +90,24 @@ internal class Mu3ServerImpl(private val acceptors: List<ConnectionAcceptor>, va
         return listOf()
     }
 
+    fun onRequestStarted(req: Mu3Request) {
+        statsImpl.onRequestStarted(req)
+    }
+
+    fun onRequestEnded(req: Mu3Request, resp: Mu3Response) {
+        statsImpl.onRequestEnded(req)
+        for (listener in responseCompleteListeners) {
+            listener.onComplete(resp)
+        }
+    }
+
     companion object {
         @JvmStatic
         fun start(builder: MuServerBuilder): MuServer {
 
             val executor = builder.executor() ?: Executors.newCachedThreadPool()
             val acceptors = mutableListOf<ConnectionAcceptor>()
-            val impl = Mu3ServerImpl(acceptors, builder.handlers())
+            val impl = Mu3ServerImpl(acceptors, builder.handlers(), builder.responseCompleteListeners())
             val address = builder.interfaceHost()?.let { InetAddress.getByName(it) }
             if (builder.httpsPort() >= 0) {
                 val httpsConfig = (builder.httpsConfigBuilder() ?: HttpsConfigBuilder.unsignedLocalhost()).build3()

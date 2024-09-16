@@ -80,7 +80,7 @@ internal class FixedSizeOutputStream(private val declaredLen: Long, private val 
         if (len > 0) {
             bytesWritten += len
             if (bytesWritten > declaredLen) {
-                throw IllegalStateException("Fixed size body size of $declaredLen exceeded")
+                throw HttpException(HttpStatusCode.INTERNAL_SERVER_ERROR_500, "Fixed size body size of $declaredLen exceeded")
             }
             out.write(b, off, len)
         }
@@ -94,7 +94,7 @@ internal class FixedSizeOutputStream(private val declaredLen: Long, private val 
         if (isClosed.compareAndSet(false, true)) {
             // don't actually close the underlying as it is a reusable connection
             if (bytesWritten != declaredLen) {
-                throw IllegalStateException("Fixed size body expected $declaredLen bytes but had $bytesWritten written")
+                throw HttpException(HttpStatusCode.INTERNAL_SERVER_ERROR_500, "Fixed size body expected $declaredLen bytes but had $bytesWritten written")
             }
             out.flush()
         }
