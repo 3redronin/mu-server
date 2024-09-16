@@ -3,7 +3,7 @@ package scaffolding;
 import io.muserver.Http2ConfigBuilder;
 import io.muserver.MuServerBuilder;
 
-import static io.muserver.MuServerBuilder.httpsServer;
+import static io.muserver.MuServerBuilder.muServer;
 
 public class ServerUtils {
 
@@ -11,7 +11,15 @@ public class ServerUtils {
         "MU_TEST_PREFERRED_PROTOCOL", "HTTP2");
 
     public static MuServerBuilder httpsServerForTest() {
-        MuServerBuilder builder = httpsServer();
+        return httpsServerForTest("https");
+    }
+    public static MuServerBuilder httpsServerForTest(String protocol) {
+        MuServerBuilder builder = muServer();
+        if (protocol.equals("http")) {
+            builder.withHttpPort(0);
+        } else if (protocol.equals("https")) {
+            builder.withHttpsPort(0);
+        } else throw new IllegalArgumentException("Unsupported protocol: " + protocol);
         if (preferredProtocol.equals("HTTP2")) {
             builder.withHttp2Config(Http2ConfigBuilder.http2EnabledIfAvailable());
         }

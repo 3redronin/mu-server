@@ -1,8 +1,6 @@
 package io.muserver
 
 import jakarta.ws.rs.core.MediaType
-import java.io.ByteArrayInputStream
-import java.io.InputStream
 import java.io.OutputStream
 import java.nio.charset.StandardCharsets
 import java.util.*
@@ -30,6 +28,12 @@ internal class Mu3Headers(
             }
 
         }
+    }
+
+    fun closeConnection(version: HttpVersion) = when (version) {
+        HttpVersion.HTTP_1_1 -> containsValue(HeaderNames.CONNECTION, HeaderValues.CLOSE.toString(), true)
+        // TODO treat the connection header in http1.0 as a list field value https://httpwg.org/specs/rfc9110.html#rfc.section.5.6.1
+        HttpVersion.HTTP_1_0 -> !containsValue(HeaderNames.CONNECTION, HeaderValues.KEEP_ALIVE.toString(), true)
     }
 
     override fun get(name: String): String? {

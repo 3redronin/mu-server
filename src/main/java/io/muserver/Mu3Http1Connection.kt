@@ -1,5 +1,6 @@
 package io.muserver
 
+import jakarta.ws.rs.WebApplicationException
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.io.IOException
@@ -29,7 +30,8 @@ internal class Mu3Http1Connection(
         try {
             clientSocket.getInputStream().use { reqStream ->
                 val requestParser = Http1MessageParser(HttpMessageType.REQUEST, requestPipeline, reqStream)
-                while (true) {
+                var closeConnection = false
+                while (!closeConnection) {
                     val msg = try {
                         requestParser.readNext()
                     } catch (e: IOException) {
@@ -62,6 +64,8 @@ internal class Mu3Http1Connection(
 
                     onRequestStarted(muRequest)
                     val muResponse = Mu3Response(muRequest, outputStream)
+                    closeConnection = muRequest.headers().closeConnection(muRequest.httpVersion)
+
                     try {
                         log.info("Got request: $muRequest")
                         try {
@@ -77,16 +81,26 @@ internal class Mu3Http1Connection(
                                 muResponse.write(HttpStatusCode.NOT_FOUND_404.toString())
                             }
                         } catch (e: Exception) {
-                            // todo: decide whether to shut down the connection or not
-                            handleThrownException(muResponse, e, request)
+                            if (!handleThrownException(muResponse, e, request)) {
+                                closeConnection = true
+                            }
                         }
                     } finally {
+                        if (!closeConnection) {
+                            closeConnection = muResponse.headers().closeConnection(muRequest.httpVersion())
+                        }
                         try {
-                            muRequest.body.closeQuietly()
+                            try {
+                                muRequest.body.close()
+                            } catch (e: Exception) {
+                                log.warn("Error closing request body for $muRequest", e)
+                                closeConnection = true
+                            }
                             try {
                                 muResponse.cleanup()
-                            } catch (e: HttpException) {
-                                handleThrownException(muResponse, e, request)
+                            } catch (e: Exception) {
+                                log.warn("Error closing response for $muRequest", e)
+                                closeConnection = true
                             }
                         } finally {
                             onRequestEnded(muRequest, muResponse)
@@ -94,10 +108,10 @@ internal class Mu3Http1Connection(
                     }
 
                 }
-
             }
         } catch (e: Exception) {
             log.error("Unhandled error at the socket", e)
+        } finally {
             clientSocket.closeQuietly()
         }
 
@@ -115,30 +129,45 @@ internal class Mu3Http1Connection(
     }
 
 
-    private fun handleThrownException(muResponse: Mu3Response, e: Exception, request: HttpRequestTemp) {
+    /**
+     * @return true if the error response was written successfully to the client, so that the connection is okay
+     */
+    private fun handleThrownException(muResponse: Mu3Response, e: Exception, request: HttpRequestTemp) : Boolean {
+        var sent = false
         val canSend = muResponse.state == ResponseState.NOTHING
         if (canSend) {
-            val httpException = if (e is HttpException) e else {
-                val errorID = "ERR-" + UUID.randomUUID()
-                log.info("Sending a 500 to the client with ErrorID=$errorID for $request", e)
-                HttpException(
-                    HttpStatusCode.INTERNAL_SERVER_ERROR_500,
-                    "Oops! An unexpected error occurred. The ErrorID=$errorID",
-                    e
-                )
+            try {
+                val httpException = when (e) {
+                    is HttpException -> e
+                    is WebApplicationException -> HttpException(
+                        HttpStatusCode.of(e.response.status),
+                        e.message,
+                        e.cause
+                    )
+                    else -> {
+                        val errorID = "ERR-" + UUID.randomUUID()
+                        log.info("Sending a 500 to the client with ErrorID=$errorID for $request", e)
+                        HttpException(HttpStatusCode.INTERNAL_SERVER_ERROR_500, "Oops! An unexpected error occurred. The ErrorID=$errorID", e)
+                    }
+                }
+                muResponse.headers().set(httpException.responseHeaders())
+                val status = httpException.status()
+                muResponse.status(status)
+                if (status.canHaveEntity()) {
+                    muResponse.write(httpException.message ?: status.toString())
+                }
+                sent = true
+            } catch (e: Exception) {
+                log.error("Error writing error response", e)
             }
-            muResponse.headers().set(httpException.responseHeaders())
-            val status = httpException.status()
-            muResponse.status(status)
-            if (status.canHaveEntity()) {
-                muResponse.write(httpException.message ?: status.toString())
-            }
+
         } else {
             log.info(
                 e.javaClass.getName() + " while handling " + request + " - note a " + muResponse.status() +
                         " was already sent and the client may have received an incomplete response. Exception was " + e.message
             )
         }
+        return sent
     }
 
     override fun toString() = "HTTP1 connection from ${clientSocket.remoteSocketAddress} to ${clientSocket.localSocketAddress}"

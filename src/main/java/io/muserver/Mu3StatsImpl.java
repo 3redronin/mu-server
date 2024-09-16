@@ -90,11 +90,13 @@ class Mu3StatsImpl implements MuStats {
         failedToConnect.incrementAndGet();
     }
 
-    void onConnectionOpened() {
+    void onConnectionOpened(HttpConnection con) {
+        log.info("Connection open: " + con);
         activeConnections.incrementAndGet();
     }
 
-    void onConnectionClosed() {
+    void onConnectionClosed(HttpConnection con) {
+        log.info("Connection closed: " + con);
         activeConnections.decrementAndGet();
         totalConnections.incrementAndGet();
     }

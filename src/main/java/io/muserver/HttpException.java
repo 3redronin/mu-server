@@ -15,12 +15,12 @@ public class HttpException extends RuntimeException {
     }
 
     public HttpException(HttpStatusCode status, String message) {
-        super(status.toString());
+        super(status.toString() + " - " + message);
         this.status = status;
     }
 
     public HttpException(HttpStatusCode status, String message, Throwable cause) {
-        super(status.toString(), cause);
+        super(status.toString() + " - " + message, cause);
         this.status = status;
     }
 

@@ -23,8 +23,8 @@ import static scaffolding.ClientUtils.request;
 public class FixedLengthTest {
 
     private MuServer server;
-    private StringBuilder errors = new StringBuilder();
-    private CountDownLatch errorSetLatch = new CountDownLatch(1);
+    private final StringBuilder errors = new StringBuilder();
+    private final CountDownLatch errorSetLatch = new CountDownLatch(1);
 
     @Test
     public void ifMoreThanDeclaredAreSentThenAnExceptionIsThrownAndConnectionIsClosedForHttp1() throws IOException {
@@ -59,9 +59,7 @@ public class FixedLengthTest {
         }
 
         MuAssert.assertNotTimedOut("exception", errorSetLatch);
-        assertThat(errors.toString(), equalTo("The declared content length for GET " + server.uri().resolve("/blah") + " was 20 bytes. " +
-            "The current write is being aborted and the connection is being closed because it would have resulted in " +
-            "59 bytes being sent."));
+        assertThat(errors.toString(), equalTo("500 Internal Server Error - Fixed size body size of 20 exceeded"));
     }
 
     @Test

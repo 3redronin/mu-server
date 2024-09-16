@@ -71,6 +71,7 @@ internal class FixedSizeOutputStream(private val declaredLen: Long, private val 
     private var bytesWritten = 0L
     override fun write(b: Int) {
         bytesWritten++
+        throwIfOver()
         out.write(b)
     }
 
@@ -79,10 +80,17 @@ internal class FixedSizeOutputStream(private val declaredLen: Long, private val 
     override fun write(b: ByteArray, off: Int, len: Int) {
         if (len > 0) {
             bytesWritten += len
-            if (bytesWritten > declaredLen) {
-                throw HttpException(HttpStatusCode.INTERNAL_SERVER_ERROR_500, "Fixed size body size of $declaredLen exceeded")
-            }
+            throwIfOver()
             out.write(b, off, len)
+        }
+    }
+
+    private fun throwIfOver() {
+        if (bytesWritten > declaredLen) {
+            throw HttpException(
+                HttpStatusCode.INTERNAL_SERVER_ERROR_500,
+                "Fixed size body size of $declaredLen exceeded"
+            )
         }
     }
 

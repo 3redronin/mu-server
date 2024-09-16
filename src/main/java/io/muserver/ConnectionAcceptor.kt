@@ -4,7 +4,6 @@ import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.net.*
 import java.time.Instant
-import java.util.HashMap
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentHashMap.KeySetView
 import java.util.concurrent.ExecutorService
@@ -54,7 +53,7 @@ internal class ConnectionAcceptor(
                     }
                     val con = Mu3Http1Connection(server, this, socket, startTime)
                     connections.add(con)
-                    server.statsImpl.onConnectionOpened()
+                    server.statsImpl.onConnectionOpened(con)
                     try {
                         socket.getOutputStream().use { clientOut ->
                             con.start(clientOut)
@@ -62,7 +61,7 @@ internal class ConnectionAcceptor(
                     } catch (t: Throwable) {
                         log.error("Unhandled exception for $con", t)
                     } finally {
-                        server.statsImpl.onConnectionClosed()
+                        server.statsImpl.onConnectionClosed(con)
                         connections.remove(con)
                     }
                 }
@@ -77,6 +76,7 @@ internal class ConnectionAcceptor(
                 }
             }
         }
+        // TODO: interupt the connections
         log.info("Closing server")
         socketServer.close()
         log.info("Closed")
