@@ -539,7 +539,7 @@ public class MuServerBuilder {
      * @return The current value of this property
      */
     public List<ResponseCompleteListener> responseCompleteListeners() {
-        return Collections.unmodifiableList(responseCompleteListeners);
+        return responseCompleteListeners == null ? Collections.emptyList() : Collections.unmodifiableList(responseCompleteListeners);
     }
 
     /**
