@@ -59,7 +59,7 @@ public class FixedLengthTest {
         }
 
         MuAssert.assertNotTimedOut("exception", errorSetLatch);
-        assertThat(errors.toString(), equalTo("500 Internal Server Error - Fixed size body size of 20 exceeded"));
+        assertThat(errors.toString(), equalTo("Fixed size body size of 20 exceeded"));
     }
 
     @Test
