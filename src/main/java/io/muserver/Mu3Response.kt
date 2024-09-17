@@ -9,19 +9,21 @@ import java.util.*
 
 internal class Mu3Response(private val muRequest: Mu3Request, private val socketOut: OutputStream) : MuResponse, ResponseInfo {
 
-    private var status : HttpStatusCode = HttpStatusCode.OK_200
+    private var status : HttpStatus = HttpStatus.OK_200
     private val headers = Mu3Headers()
     var state : ResponseState = ResponseState.NOTHING
     private var wrappedOut : OutputStream? = null
+    private var writer: PrintWriter? = null
     private var endMillis : Long? = null
 
     override fun status() = status.code()
+    override fun statusValue() = status
 
-    override fun status(value: HttpStatusCode) {
+    override fun status(value: HttpStatus) {
         this.status = value
     }
     override fun status(value: Int) {
-        this.status = HttpStatusCode.of(value)
+        this.status = HttpStatus.of(value)
     }
 
     private fun writeStatusAndHeaders() {
@@ -68,7 +70,7 @@ internal class Mu3Response(private val muRequest: Mu3Request, private val socket
 
     override fun redirect(uri: URI) {
         if (!status.isRedirection) {
-            status(HttpStatusCode.FOUND_302)
+            status(HttpStatus.FOUND_302)
         }
         val ex = HttpException(status)
         ex.responseHeaders().set(HeaderNames.LOCATION, uri.normalize().toString())
@@ -106,7 +108,10 @@ internal class Mu3Response(private val muRequest: Mu3Request, private val socket
     }
 
     override fun writer(): PrintWriter {
-        return PrintWriter(outputStream(), false, ensureCharsetSet())
+        if (writer == null) {
+            writer = PrintWriter(outputStream(), false, ensureCharsetSet())
+        }
+        return writer!!
     }
 
     override fun hasStartedSendingData() = state != ResponseState.NOTHING
@@ -116,16 +121,20 @@ internal class Mu3Response(private val muRequest: Mu3Request, private val socket
     fun cleanup() {
         if (state == ResponseState.NOTHING) {
             // empty response body
-            if (status == HttpStatusCode.OK_200) {
-                status(HttpStatusCode.NO_CONTENT_204)
+            if (status == HttpStatus.OK_200) {
+                status(HttpStatus.NO_CONTENT_204)
             }
-            if (status.canHaveEntity()) {
+            if (status.canHaveContent()) {
                 headers.set(HeaderNames.CONTENT_LENGTH, 0L)
             }
             writeStatusAndHeaders()
             socketOut.flush()
         } else {
+            writer?.close()
             wrappedOut?.close()
+        }
+        if (!state.endState()) {
+            state = ResponseState.FINISHED
         }
     }
 

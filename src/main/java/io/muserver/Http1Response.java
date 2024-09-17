@@ -102,7 +102,12 @@ class Http1Response extends NettyResponseAdaptor {
     }
 
     @Override
-    public void status(HttpStatusCode value) {
+    public HttpStatus statusValue() {
+        return null;
+    }
+
+    @Override
+    public void status(HttpStatus value) {
 
     }
 }

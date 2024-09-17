@@ -21,9 +21,14 @@ import java.net.URI;
 public interface MuResponse {
 
     /**
-     * @return The HTTP status of this request.
+     * @return The HTTP status of this response.
      */
     int status();
+
+    /**
+     * @return The HTTP status of this response
+     */
+    HttpStatus statusValue();
 
     /**
      * Sets the response code for this request. Defaults to <code>200</code>
@@ -32,10 +37,10 @@ public interface MuResponse {
     void status(int value);
 
     /**
-     * Sets the response code for this request. Defaults to {@link HttpStatusCode#OK_200}
+     * Sets the response code for this request. Defaults to {@link HttpStatus#OK_200}
      * @param value The response code to send to the client.
      */
-    void status(HttpStatusCode value);
+    void status(HttpStatus value);
 
     /**
      * <p>Writes the given text as the response body for this request. This can only be called once.</p>

@@ -134,18 +134,14 @@ class Mu3ServerImplTest {
                 response.write("Hello, world")
             }
             .start3().use { server ->
-                measureTimeMillis {
-                    client.call(server.uri().toRequest()).use { resp ->
-                        assertThat(resp.code, equalTo(200))
-                        assertThat(resp.body?.string(), equalTo("Hello, world"))
-                    }
-                }.also { println("It took $it") }
-                measureTimeMillis {
-                    client.call(server.uri().toRequest()).use { resp ->
-                        assertThat(resp.code, equalTo(200))
-                        assertThat(resp.body?.string(), equalTo("Hello, world"))
-                    }
-                }.also { println("It took $it") }
+                client.call(server.uri().toRequest()).use { resp ->
+                    assertThat(resp.code, equalTo(200))
+                    assertThat(resp.body?.string(), equalTo("Hello, world"))
+                }
+                client.call(server.uri().toRequest()).use { resp ->
+                    assertThat(resp.code, equalTo(200))
+                    assertThat(resp.body?.string(), equalTo("Hello, world"))
+                }
             }
     }
 

@@ -1,7 +1,5 @@
 package io.muserver
 
-import org.slf4j.Logger
-import org.slf4j.LoggerFactory
 import java.io.ByteArrayOutputStream
 import java.io.EOFException
 import java.io.InputStream
@@ -110,7 +108,7 @@ internal class Http1MessageParser(type: HttpMessageType, private val requestQueu
                             request().method = try {
                                 Method.valueOf(buffer.consumeAscii())
                             } catch (e: IllegalArgumentException) {
-                                throw HttpException(HttpStatusCode.METHOD_NOT_ALLOWED_405)
+                                throw HttpException(HttpStatus.METHOD_NOT_ALLOWED_405)
                             }
                             state = ParseState.REQUEST_TARGET
                         } else throw ParseException("state=$state b=$b", position)
@@ -481,7 +479,7 @@ internal class Http1MessageParser(type: HttpMessageType, private val requestQueu
 
         private fun ByteArrayOutputStream.consumeHttpVersion(): HttpVersion {
             return HttpVersion.fromVersion(this.consumeAscii())
-                ?: throw HttpException(HttpStatusCode.HTTP_VERSION_NOT_SUPPORTED_505)
+                ?: throw HttpException(HttpStatus.HTTP_VERSION_NOT_SUPPORTED_505)
         }
     }
 }

@@ -1,20 +1,17 @@
 package io.muserver;
 
+import jakarta.ws.rs.BadRequestException;
+import jakarta.ws.rs.NotFoundException;
+import jakarta.ws.rs.RedirectionException;
+import jakarta.ws.rs.ServerErrorException;
 import okhttp3.Response;
-import org.eclipse.jetty.client.HttpClient;
-import org.eclipse.jetty.client.api.ContentResponse;
-import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
-import scaffolding.StringUtils;
 
-import java.io.EOFException;
 import java.net.URI;
 import java.util.Collections;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.Mutils.htmlEncode;
@@ -24,13 +21,13 @@ import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 
-public class ExceptionsTest {
+public class ExceptionsFromJakartaTest {
     private MuServer server;
 
     @Test
     public void notFoundExceptionsConvertTo404() throws Exception {
         this.server = ServerUtils.httpsServerForTest().addHandler(Method.GET, "/samples", (req, res, pp) -> {
-            throw HttpException.notFound("I could not find the thing");
+            throw new NotFoundException("I could not find the thing");
         }).start();
         try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
             assertThat(resp.code(), is(404));
@@ -42,7 +39,7 @@ public class ExceptionsTest {
     @Test
     public void notFoundExceptionsConvertTo404WithDefaultMessage() throws Exception {
         this.server = ServerUtils.httpsServerForTest().addHandler(Method.GET, "/samples", (req, res, pp) -> {
-            throw new HttpException(HttpStatus.NOT_FOUND_404);
+            throw new NotFoundException();
         }).start();
         try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
             assertThat(resp.code(), is(404));
@@ -53,36 +50,10 @@ public class ExceptionsTest {
     }
 
     @Test
-    public void nonHttpExceptionsShowAs500WithoutOriginalInfo() throws Exception {
-        this.server = ServerUtils.httpsServerForTest().addHandler(Method.GET, "/samples", (req, res, pp) -> {
-            throw new RuntimeException("This is some secret information");
-        }).start();
-        try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
-            assertThat(resp.code(), is(500));
-            String body = resp.body().string();
-            assertThat(body, containsString("500 Internal Server Error"));
-            assertThat(body, containsString("Oops! An unexpected error occurred. The ErrorID="));
-            assertThat(body, not(containsString("This is some secret information")));
-        }
-    }
-
-
-    @Test
-    public void default404IsANotFoundException() throws Exception {
-        this.server = ServerUtils.httpsServerForTest().addHandler((req, resp) -> false).start();
-        try (Response resp = call(request().url(server.uri().resolve("/does-not-exist").toString()))) {
-            assertThat(resp.code(), is(404));
-            String body = resp.body().string();
-            assertThat(body, containsString("404 Not Found"));
-            assertThat(body, containsString("This page is not available. Sorry about that."));
-        }
-    }
-
-    @Test
     public void redirectExceptionsReallyRedirect() throws Exception {
         this.server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/secured", (request, response, pathParams) -> {
-                throw HttpException.redirect(URI.create("/target"));
+                throw new RedirectionException("Not logged in!", 302, URI.create("/target"));
             })
             .addHandler(Method.GET, "/target", (request, response, pathParams) -> {
                 response.write("You were redirected");
@@ -100,7 +71,7 @@ public class ExceptionsTest {
         this.server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 capturedResponse.set(response);
-                throw new HttpException(HttpStatus.INTERNAL_SERVER_ERROR_500, "ARGHHHHHHH");
+                throw new ServerErrorException("ARGHHHHHHH", 500);
             })
             .withExceptionHandler((request, response, exception) -> {
                 capturedResponse.set(response);
@@ -131,11 +102,11 @@ public class ExceptionsTest {
         this.server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 capturedResponse.set(response);
-                throw new HttpException(HttpStatus.INTERNAL_SERVER_ERROR_500, "ARGHHHHHHH");
+                throw new ServerErrorException("ARGHHHHHHH", 500);
             })
             .withExceptionHandler((request, response, exception) -> {
                 capturedResponse.set(response);
-                throw new HttpException(HttpStatus.BAD_REQUEST_400, "It's bad");
+                throw new BadRequestException("It's bad");
             })
             .start();
         try (Response resp = call(request(server.uri()))) {
@@ -145,34 +116,9 @@ public class ExceptionsTest {
         }
     }
 
-    @Test
-    public void unhandledExceptionsResultInEOFWhenChunkedResponseStarted() throws Exception {
-        this.server = ServerUtils.httpsServerForTest()
-            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
-                response.sendChunk(StringUtils.randomAsciiStringOfLength(16389));
-                throw new RuntimeException("I'm an exception from " + request.connection().protocol());
-            })
-            .start();
-        // This test passes in OkHttpClient 4.9 as it doesn't seem to care about a truncated chunked response
-        SslContextFactory.Client sslContextFactory = new SslContextFactory.Client(true);
-        sslContextFactory.setEndpointIdentificationAlgorithm("https");
-        HttpClient client = new HttpClient(sslContextFactory);
-        client.start();
-        try {
-            ContentResponse get = client.GET(server.uri());
-            assertThat(get.getStatus(), is(200));
-            get.getContentAsString();
-            Assertions.fail("Should have thrown!");
-        } catch (ExecutionException e) {
-            assertThat(e.getCause(), instanceOf(EOFException.class));
-        } finally {
-            client.stop();
-        }
-    }
-
     @AfterEach
     public void stop() {
-        scaffolding.MuAssert.stopAndCheck(server);
+        MuAssert.stopAndCheck(server);
     }
 
 }

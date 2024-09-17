@@ -5,11 +5,9 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.*;
-import io.netty.handler.codec.http.cookie.ServerCookieDecoder;
 import io.netty.handler.codec.http.websocketx.WebSocketServerHandshaker;
 import io.netty.handler.codec.http.websocketx.WebSocketServerHandshakerFactory;
 import io.netty.handler.timeout.IdleStateHandler;
-import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.ServerErrorException;
 import jakarta.ws.rs.core.MediaType;
 import kotlin.NotImplementedError;
@@ -27,7 +25,6 @@ import java.util.*;
 import java.util.concurrent.*;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
-import static java.util.Collections.emptyList;
 
 class NettyRequestAdapter implements MuRequest {
     private static final Logger log = LoggerFactory.getLogger(NettyRequestAdapter.class);
@@ -182,10 +179,10 @@ class NettyRequestAdapter implements MuRequest {
                     bodyCharset = Charset.forName(charset);
                 } catch (IllegalCharsetNameException | UnsupportedCharsetException e) {
                     if (isRequest) {
-                        throw new HttpException(HttpStatusCode.BAD_REQUEST_400, "Invalid request body charset");
+                        throw new HttpException(HttpStatus.BAD_REQUEST_400, "Invalid request body charset");
                     } else {
                         log.error("Invalid response body charset: " + mediaType, e);
-                        throw new HttpException(HttpStatusCode.INTERNAL_SERVER_ERROR_500, "Invalid response body charset");
+                        throw new HttpException(HttpStatus.INTERNAL_SERVER_ERROR_500, "Invalid response body charset");
                     }
                 }
             }

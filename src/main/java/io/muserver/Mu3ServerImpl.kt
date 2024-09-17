@@ -12,6 +12,7 @@ internal class Mu3ServerImpl(
     private val acceptors: List<ConnectionAcceptor>,
     val handlers: List<MuHandler>,
     private val responseCompleteListeners: MutableList<ResponseCompleteListener>,
+    val exceptionHandler: UnhandledExceptionHandler,
 ) : MuServer {
 
     val statsImpl = Mu3StatsImpl()
@@ -105,9 +106,11 @@ internal class Mu3ServerImpl(
         @JvmStatic
         fun start(builder: MuServerBuilder): MuServer {
 
+            val exceptionHandler = UnhandledExceptionHandler.getDefault(builder.unhandledExceptionHandler())
+
             val executor = builder.executor() ?: Executors.newCachedThreadPool()
             val acceptors = mutableListOf<ConnectionAcceptor>()
-            val impl = Mu3ServerImpl(acceptors, builder.handlers(), builder.responseCompleteListeners())
+            val impl = Mu3ServerImpl(acceptors, builder.handlers(), builder.responseCompleteListeners(), exceptionHandler)
             val address = builder.interfaceHost()?.let { InetAddress.getByName(it) }
             if (builder.httpsPort() >= 0) {
                 val httpsConfig = (builder.httpsConfigBuilder() ?: HttpsConfigBuilder.unsignedLocalhost()).build3()
@@ -129,11 +132,4 @@ internal fun Closeable.closeQuietly() {
     } catch (_: IOException) {
     }
 }
-internal fun Socket.shutdownInputQuietly() {
-    try { this.shutdownInput() }
-    catch (_: IOException) { }
-}
-internal fun Socket.shutdownOutputQuietly() {
-    try { this.shutdownOutput() }
-    catch (_: IOException) { }
-}
+

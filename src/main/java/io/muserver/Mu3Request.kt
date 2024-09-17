@@ -132,4 +132,8 @@ internal class Mu3Request(
         return httpVersion.version() + " " + method + " " + serverUri
     }
 
+    fun cleanup() {
+        body.close()
+    }
+
 }

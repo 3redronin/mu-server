@@ -393,12 +393,11 @@ public class MuServerBuilder {
 
     /**
      * Sets the handler to use for exceptions thrown by other handlers, allowing for things such as custom error pages.
-     * <p>Note that if the response has already started sending data, you will not be able to add a custom error
-     * message. In this case, you may want to allow for the default error handling by returning <code>false</code>.</p>
+     * <p>Note that if the response headers have already been written to the client, this will not be called as by then
+     * it is too late to customize the response.</p>
      * <p>The following shows a pattern to filter out certain errors:</p>
      * <pre><code>
      * muServerBuilder.withExceptionHandler((request, response, exception) -&gt; {
-     *     if (response.hasStartedSendingData()) return false; // cannot customise the response
      *     if (exception instanceof NotAuthorizedException) return false;
      *     response.contentType(ContentTypes.TEXT_PLAIN_UTF8);
      *     response.write("Oh I'm worry, there was a problem");

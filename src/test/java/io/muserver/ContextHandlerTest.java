@@ -108,7 +108,8 @@ public class ContextHandlerTest {
         try (Response resp = call(request().get().url(url))) {
             assertThat(resp.code(), equalTo(302));
             assertThat(resp.header("location"), equalTo(server.uri().resolve("/my%20app/").toString()));
-            assertThat(resp.body().string(), equalTo("302 Found"));
+            assertThat(resp.body().contentLength(), equalTo(0L));
+            assertThat(resp.body().string(), equalTo(""));
         }
     }
 
@@ -123,7 +124,8 @@ public class ContextHandlerTest {
         try (Response resp = call(request().get().url(url))) {
             assertThat(resp.code(), equalTo(302));
             assertThat(resp.header("location"), equalTo(server.uri().resolve("/my%20app/" + urlEncodedQuery).toString()));
-            assertThat(resp.body().string(), equalTo("302 Found"));
+            assertThat(resp.body().contentLength(), equalTo(0L));
+            assertThat(resp.body().string(), equalTo(""));
         }
     }
 
