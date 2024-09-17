@@ -106,4 +106,9 @@ class Http2Response extends NettyResponseAdaptor {
     public void status(HttpStatus value) {
 
     }
+
+    @Override
+    public void sendInformationalResponse(HttpStatus status, Headers headers) {
+
+    }
 }

@@ -1,10 +1,10 @@
 package io.muserver
 
+import io.netty.handler.codec.http.HttpServerExpectContinueHandler
 import java.io.Closeable
 import java.io.IOException
 import java.net.InetAddress
 import java.net.InetSocketAddress
-import java.net.Socket
 import java.net.URI
 import java.util.concurrent.Executors
 
@@ -13,6 +13,7 @@ internal class Mu3ServerImpl(
     val handlers: List<MuHandler>,
     private val responseCompleteListeners: MutableList<ResponseCompleteListener>,
     val exceptionHandler: UnhandledExceptionHandler,
+    val maxRequestBodySize: Long,
 ) : MuServer {
 
     val statsImpl = Mu3StatsImpl()
@@ -64,9 +65,7 @@ internal class Mu3ServerImpl(
         return 0
     }
 
-    override fun maxRequestSize(): Long {
-        return 0
-    }
+    override fun maxRequestSize(): Long = maxRequestBodySize
 
     override fun maxUrlSize(): Int {
         return 0
@@ -110,7 +109,18 @@ internal class Mu3ServerImpl(
 
             val executor = builder.executor() ?: Executors.newCachedThreadPool()
             val acceptors = mutableListOf<ConnectionAcceptor>()
-            val impl = Mu3ServerImpl(acceptors, builder.handlers(), builder.responseCompleteListeners(), exceptionHandler)
+            val actualHandlers = builder.handlers().toMutableList()
+            if (builder.autoHandleExpectContinue()) {
+                actualHandlers.add(0, ExpectContinueHandler(builder.maxRequestSize()))
+            }
+
+            val impl = Mu3ServerImpl(
+                acceptors = acceptors,
+                handlers = actualHandlers,
+                responseCompleteListeners = builder.responseCompleteListeners(),
+                exceptionHandler = exceptionHandler,
+                maxRequestBodySize = builder.maxRequestSize(),
+            )
             val address = builder.interfaceHost()?.let { InetAddress.getByName(it) }
             if (builder.httpsPort() >= 0) {
                 val httpsConfig = (builder.httpsConfigBuilder() ?: HttpsConfigBuilder.unsignedLocalhost()).build3()

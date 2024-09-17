@@ -129,4 +129,16 @@ public interface MuResponse {
      * @return The current state of this response
      */
     ResponseState responseState();
+
+    /**
+     * Sends an informational response back to the client.
+     * <p>Note that mu-server automatically handles responses to `expect: 100-continue` and websocket
+     * upgrades. This may therefore be most useful a {@link HttpStatus#EARLY_HINTS_103} response.</p>
+     * @param status The informational status to send to the client
+     * @param headers The headers to send with the informational response (these are independent from
+     *                the main response headers). May be empty or null.
+     * @throws IllegalArgumentException if the status is not {@link HttpStatus#isInformational()}
+     * @throws IllegalStateException if the main response headers have already been sent
+     */
+    void sendInformationalResponse(HttpStatus status, Headers headers);
 }

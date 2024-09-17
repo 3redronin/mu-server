@@ -39,6 +39,18 @@ internal class Mu3Response(private val muRequest: Mu3Request, private val socket
         socketOut.write(CRLF, 0, 2)
     }
 
+    override fun sendInformationalResponse(status: HttpStatus, headers: Headers?) {
+        if (!status.isInformational) throw  IllegalArgumentException("Only informational status is allowed but received $status")
+        if (state != ResponseState.NOTHING) throw IllegalStateException("Informational headers cannot be sent after the main response headers have been sent")
+        socketOut.write(status.http11ResponseLine())
+        if (headers != null) {
+            (headers as Mu3Headers).writeTo(socketOut)
+        }
+        socketOut.write(CRLF, 0, 2)
+        socketOut.flush()
+    }
+
+
     override fun write(text: String) {
         val charset = ensureCharsetSet()
         val bytes = text.toByteArray(charset)

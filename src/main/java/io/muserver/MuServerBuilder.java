@@ -65,6 +65,7 @@ public class MuServerBuilder {
     private List<RateLimiterImpl> rateLimiters;
     private WriteBufferWaterMark writeBufferWaterMark = WriteBufferWaterMark.DEFAULT;
     private UnhandledExceptionHandler unhandledExceptionHandler;
+    private boolean autoHandleExpectContinue = true;
 
     /**
      * @param port The HTTP port to use. A value of 0 will have a random port assigned; a value of -1 will
@@ -769,5 +770,35 @@ public class MuServerBuilder {
             ", responseCompleteListeners=" + responseCompleteListeners +
             ", rateLimiters=" + rateLimiters +
             '}';
+    }
+
+    /**
+     * Gets the current expect-continue handling
+     * @return <code>true</code> if mu-server will automatically handle `expect: 100-continue` headers; otherwise <code>false</code>
+     */
+    public boolean autoHandleExpectContinue() {
+        return autoHandleExpectContinue;
+    }
+
+    /**
+     * Specifies whether mu-server will handle `expect: 100-continue` request headers.
+     *
+     * <p>If <code>true</code> then mu-server will allow or reject requests based on the declared
+     * content-length of the header, using the {@link #withMaxRequestSize(long)} value.</p>
+     *
+     * <p>If <code>false</code> then you will need to supply a handler that sends an informational
+     * response on relevant requests using {@link MuResponse#sendInformationalResponse(HttpStatus, Headers)}.</p>
+     *
+     * <p><strong>Warning:</strong> if automatic handling is disabled and a <code>{@link HttpStatus#CONTINUE_100}</code>
+     * is not sent then clients may hang waiting for a response.</p>
+     *
+     * <p>The default, which is highly recommended, is <code>true</code>.</p>
+     * @param autoHandleExpectContinue <code>true</code> if mu-server will handle this situation; or <code>false</code>
+     *                                 if you wish to handle these.
+     * @return this builder
+     */
+    public MuServerBuilder withAutoHandleExpectContinue(boolean autoHandleExpectContinue) {
+        this.autoHandleExpectContinue = autoHandleExpectContinue;
+        return this;
     }
 }
