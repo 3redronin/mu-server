@@ -1,6 +1,5 @@
 package io.muserver
 
-import jakarta.ws.rs.WebApplicationException
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.io.IOException
@@ -106,8 +105,9 @@ internal class Mu3Http1Connection(
         } finally {
             clientSocket.closeQuietly()
         }
-
     }
+
+
 
     private fun onRequestStarted(req: Mu3Request) {
         currentRequest.set(req);
@@ -154,7 +154,7 @@ internal class Mu3Http1Connection(
     }
 
     override fun activeWebsockets(): Set<MuWebSocket> {
-        TODO("Not yet implemented")
+        return emptySet()
     }
 
     override fun server() = server
@@ -162,6 +162,12 @@ internal class Mu3Http1Connection(
     override fun clientCertificate(): Optional<Certificate> {
         TODO("Not yet implemented")
     }
+
+    override fun abort() {
+        clientSocket.close()
+    }
+
+    override fun isIdle() = activeRequests().isEmpty() && activeWebsockets().isEmpty()
 
     companion object {
         private val log: Logger = LoggerFactory.getLogger(Mu3Http1Connection::class.java)

@@ -1,6 +1,7 @@
 package io.muserver;
 
 import javax.net.ssl.TrustManager;
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.security.cert.Certificate;
 import java.time.Instant;
@@ -103,4 +104,16 @@ public interface HttpConnection {
      * @return The client certificate, or <code>empty</code> if no certificate is available
      */
     Optional<Certificate> clientCertificate();
+
+    /**
+     * Closes this connection immediately, causing a connection reset on the client side.
+     * <p>It is not recommended to use this as Mu Server will clean up connections automatically.</p>
+     */
+    void abort() throws IOException;
+
+    /**
+     * Checks if this connection is being used or not
+     * @return <code>true</code> if there are any active requests or websockets on this connection; otherwise <code>false</code>
+     */
+    boolean isIdle();
 }

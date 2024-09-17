@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.security.cert.Certificate;
@@ -283,6 +284,16 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
     @Override
     public Optional<Certificate> clientCertificate() {
         return fromContext(nettyCtx);
+    }
+
+    @Override
+    public void abort() throws IOException {
+
+    }
+
+    @Override
+    public boolean isIdle() {
+        return false;
     }
 
     static Optional<Certificate> fromContext(ChannelHandlerContext channelHandlerContext) {

@@ -11,6 +11,7 @@ import kotlin.NotImplementedError;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.security.cert.Certificate;
@@ -557,6 +558,16 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
     @Override
     public Optional<Certificate> clientCertificate() {
         return Http1Connection.fromContext(nettyContext);
+    }
+
+    @Override
+    public void abort() throws IOException {
+
+    }
+
+    @Override
+    public boolean isIdle() {
+        return false;
     }
 
 }

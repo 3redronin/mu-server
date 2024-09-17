@@ -76,8 +76,21 @@ internal class ConnectionAcceptor(
                 }
             }
         }
-        // TODO: interupt the connections
-        log.info("Closing server")
+        log.info("Closing server with ${connections.size} connected connections")
+        val waitUntil = Instant.now().plusSeconds(20)
+        while (connections.isNotEmpty() && waitUntil.isBefore(Instant.now())) {
+            for (connection in connections) {
+                if (connection.isIdle) {
+                    log.info("Closing idle connection $connection")
+                    connection.abort()
+                }
+            }
+            Thread.sleep(10)
+        }
+        for (connection in connections) {
+            log.info("Force closure of active connection $connection with requests ${connection.activeRequests()}")
+            connection.abort()
+        }
         socketServer.close()
         log.info("Closed")
     }, toString())
