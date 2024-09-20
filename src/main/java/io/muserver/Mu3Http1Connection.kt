@@ -63,7 +63,7 @@ internal class Mu3Http1Connection(
                     )
 
                     onRequestStarted(muRequest)
-                    val muResponse = Mu3Response(muRequest, outputStream)
+                    val muResponse = Mu3Response(muRequest, outputStream, creator.contentEncoders)
                     closeConnection = muRequest.headers().closeConnection(muRequest.httpVersion)
 
                     try {

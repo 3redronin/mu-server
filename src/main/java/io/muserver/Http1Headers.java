@@ -321,5 +321,15 @@ class Http1Headers implements Headers {
         return Headtils.getMediaType(this);
     }
 
+    @Override
+    public TokenListHeader connection() {
+        return null;
+    }
+
+    @Override
+    public TokenListHeader vary() {
+        return null;
+    }
+
 
 }

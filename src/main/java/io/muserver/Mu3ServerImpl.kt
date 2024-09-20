@@ -1,6 +1,6 @@
 package io.muserver
 
-import io.netty.handler.codec.http.HttpServerExpectContinueHandler
+import io.muserver.GZIPEncoderBuilder.gzipEncoder
 import java.io.Closeable
 import java.io.IOException
 import java.net.InetAddress
@@ -14,6 +14,7 @@ internal class Mu3ServerImpl(
     private val responseCompleteListeners: MutableList<ResponseCompleteListener>,
     val exceptionHandler: UnhandledExceptionHandler,
     val maxRequestBodySize: Long,
+    private val contentEncoders: List<ContentEncoder>,
 ) : MuServer {
 
     val statsImpl = Mu3StatsImpl()
@@ -53,8 +54,9 @@ internal class Mu3ServerImpl(
         return acceptors.first().address
     }
 
+    @Deprecated("see interface")
     override fun minimumGzipSize(): Long {
-        return 0
+        return zippy()?.minGzipSize() ?: 0L
     }
 
     override fun maxRequestHeadersSize(): Int {
@@ -71,12 +73,18 @@ internal class Mu3ServerImpl(
         return 0
     }
 
+    @Deprecated("see interface")
     override fun gzipEnabled(): Boolean {
-        return false
+        return zippy() != null
     }
 
+    override fun contentEncoders() = contentEncoders
+
+    private fun zippy() = acceptors.firstOrNull()?.contentEncoders?.firstOrNull { it is GZIPEncoder } as? GZIPEncoder
+
+    @Deprecated("see interface")
     override fun mimeTypesToGzip(): Set<String> {
-        return setOf()
+        return zippy()?.mimeTypesToGzip() ?: emptySet()
     }
 
     override fun changeHttpsConfig(newHttpsConfig: HttpsConfigBuilder) {
@@ -114,20 +122,23 @@ internal class Mu3ServerImpl(
                 actualHandlers.add(0, ExpectContinueHandler(builder.maxRequestSize()))
             }
 
+            val contentEncoders = builder.contentEncoders() ?: listOf(gzipEncoder().build())
+
             val impl = Mu3ServerImpl(
                 acceptors = acceptors,
                 handlers = actualHandlers,
                 responseCompleteListeners = builder.responseCompleteListeners(),
                 exceptionHandler = exceptionHandler,
                 maxRequestBodySize = builder.maxRequestSize(),
+                contentEncoders = contentEncoders,
             )
             val address = builder.interfaceHost()?.let { InetAddress.getByName(it) }
             if (builder.httpsPort() >= 0) {
                 val httpsConfig = (builder.httpsConfigBuilder() ?: HttpsConfigBuilder.unsignedLocalhost()).build3()
-                acceptors.add(ConnectionAcceptor.create(impl, address, builder.httpsPort(), httpsConfig, executor))
+                acceptors.add(ConnectionAcceptor.create(impl, address, builder.httpsPort(), httpsConfig, executor, contentEncoders))
             }
             if (builder.httpPort() >= 0) {
-                acceptors.add(ConnectionAcceptor.create(impl, address, builder.httpPort(), null, executor))
+                acceptors.add(ConnectionAcceptor.create(impl, address, builder.httpPort(), null, executor, contentEncoders))
             }
             impl.startListening()
             return impl

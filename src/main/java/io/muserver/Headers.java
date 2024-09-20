@@ -374,6 +374,22 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
     MediaType contentType();
 
     /**
+     * Returns the parsed <code>Connection</code> header value.
+     * <p>Duplicate values are removed.</p>
+     * <p>Where there are multiple connection fields they are combined</p>
+     * @return a list of connection tokens.
+     */
+    TokenListHeader connection();
+
+    /**
+     * Returns the parsed <code>Vary</code> header value.
+     * <p>Duplicate values are removed.</p>
+     * <p>Where there are multiple vary fields they are combined</p>
+     * @return a list of vary tokens.
+     */
+    TokenListHeader vary();
+
+    /**
      * Gets the parsed <code>cookie</code> value.
      * <p>This is only relevant for request cookies</p>
      * @return The cookies sent on a request

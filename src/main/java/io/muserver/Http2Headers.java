@@ -344,4 +344,14 @@ class Http2Headers implements Headers {
     public MediaType contentType() {
         return Headtils.getMediaType(this);
     }
+
+    @Override
+    public TokenListHeader connection() {
+        return null;
+    }
+
+    @Override
+    public TokenListHeader vary() {
+        return null;
+    }
 }

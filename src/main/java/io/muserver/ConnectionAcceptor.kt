@@ -16,6 +16,7 @@ internal class ConnectionAcceptor(
     val uri: URI,
     val httpsConfig: HttpsConfig?,
     private val executorService: ExecutorService,
+    val contentEncoders: List<ContentEncoder>,
 ) {
 
     private enum class State { NOT_STARTED, STARTED, STOPPING, STOPPED }
@@ -122,7 +123,8 @@ internal class ConnectionAcceptor(
             address: InetAddress?,
             bindPort: Int,
             httpsConfig: HttpsConfig?,
-            executor: ExecutorService
+            executor: ExecutorService,
+            contentEncoders: List<ContentEncoder>
         ): ConnectionAcceptor {
             val socketServer = ServerSocket(bindPort, 50, address)
             val supportedOptions: Set<SocketOption<*>> = socketServer.supportedOptions()
@@ -145,7 +147,7 @@ internal class ConnectionAcceptor(
 
 
             val uri = URI("http" + (if (httpsConfig == null) "" else "s") + "://localhost:" + socketServer.localPort)
-            return ConnectionAcceptor(server, socketServer, socketServer.localSocketAddress as InetSocketAddress, uri, httpsConfig, executor)
+            return ConnectionAcceptor(server, socketServer, socketServer.localSocketAddress as InetSocketAddress, uri, httpsConfig, executor, contentEncoders)
         }
     }
 

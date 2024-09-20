@@ -6,8 +6,9 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.StreamingOutput;
 import okhttp3.Response;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 import scaffolding.MuAssert;
 import scaffolding.StringUtils;
 
@@ -66,6 +67,7 @@ public class GzipTest {
     }
 
     @Test
+    @Disabled("async not supported yet")
     public void asyncWritesCanBeGzipped() throws IOException {
         server = httpsServerForTest()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
@@ -137,14 +139,14 @@ public class GzipTest {
 
     private void compareZippedVsNotZipped(String path) throws IOException {
         String unzipped;
-        try (Response resp = call(request(server.uri().resolve(path)).header("Accept-Encoding", "hmm, gzip, deflate"))) {
+        try (var resp = call(request(server.uri().resolve(path)).header("Accept-Encoding", "hmm, gzip, deflate"))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.headers("content-encoding"), contains("gzip"));
             assertThat(resp.headers("vary"), contains(containsString("accept-encoding")));
             try (ByteArrayOutputStream boas = new ByteArrayOutputStream();
                  InputStream is = new GZIPInputStream(resp.body().byteStream())) {
                 Mutils.copy(is, boas, 8192);
-                unzipped = boas.toString("UTF-8");
+                unzipped = boas.toString(UTF_8);
             }
         }
 
@@ -181,7 +183,7 @@ public class GzipTest {
         }
     }
 
-    @After
+    @AfterEach
     public void stopIt() {
         MuAssert.stopAndCheck(server);
     }

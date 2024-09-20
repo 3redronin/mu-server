@@ -82,7 +82,9 @@ public interface MuServer extends Closeable {
      * The size a response body must be before GZIP is enabled, if {@link #gzipEnabled()} is true and the mime type is in {@link #mimeTypesToGzip()}
      * <p>This can only be set at point of server creation with {@link MuServerBuilder#withGzip(long, Set)}</p>
      * @return Size in bytes.
+     * @deprecated use {@link #contentEncoders()} to get  info on content encoders
      */
+    @Deprecated
     long minimumGzipSize();
 
     /**
@@ -118,14 +120,26 @@ public interface MuServer extends Closeable {
      * <p>This can only be set at point of server creation with {@link MuServerBuilder#withGzipEnabled(boolean)} or
      * {@link MuServerBuilder#withGzip(long, Set)}</p>
      * @return True if gzip is enabled for responses that match gzip criteria; otherwise false.
+     * @deprecated use {@link #contentEncoders()} to get  info on content encoders
      */
+    @Deprecated
     boolean gzipEnabled();
+
+    /**
+     * The content encoders configured for this server.
+     * <p>A GZIP encoder is an example of an encoder, and is enabled by default. Other encoders can be
+     * set with {@link MuServerBuilder#withContentEncoders(List)}</p>
+     * @return the content encoders, in order
+     */
+    List<ContentEncoder> contentEncoders();
 
     /**
      * Specifies the mime-types that GZIP should be applied to.
      * <p>This can only be set at point of server creation with {@link MuServerBuilder#withGzip(long, Set)}</p>
      * @return A set of mime-types.
+     * @deprecated use {@link #contentEncoders()} to get  info on content encoders
      */
+    @Deprecated
     Set<String> mimeTypesToGzip();
 
     /**

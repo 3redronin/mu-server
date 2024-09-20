@@ -43,15 +43,12 @@ public class MuServerBuilder {
     private static final Logger log = LoggerFactory.getLogger(MuServerBuilder.class);
     private static final int LENGTH_OF_METHOD_AND_PROTOCOL = 17; // e.g. "OPTIONS HTTP/1.1 "
     private static final int DEFAULT_NIO_THREADS = Math.min(16, Runtime.getRuntime().availableProcessors() * 2);
-    private long minimumGzipSize = 1400;
     private int httpPort = -1;
     private int httpsPort = -1;
     private int maxHeadersSize = 8192;
     private int maxUrlSize = 8192 - LENGTH_OF_METHOD_AND_PROTOCOL;
     private int nioThreads = DEFAULT_NIO_THREADS;
     private final List<MuHandler> handlers = new ArrayList<>();
-    private boolean gzipEnabled = true;
-    private Set<String> mimeTypesToGzip = ResourceType.gzippableMimeTypes(ResourceType.getResourceTypes());
     private boolean addShutdownHook = false;
     private String host;
     private HttpsConfigBuilder sslContextBuilder;
@@ -66,6 +63,7 @@ public class MuServerBuilder {
     private WriteBufferWaterMark writeBufferWaterMark = WriteBufferWaterMark.DEFAULT;
     private UnhandledExceptionHandler unhandledExceptionHandler;
     private boolean autoHandleExpectContinue = true;
+    private List<ContentEncoder> contentEncoders = null;
 
     /**
      * @param port The HTTP port to use. A value of 0 will have a random port assigned; a value of -1 will
@@ -106,10 +104,14 @@ public class MuServerBuilder {
      * @param enabled True to enable; false to disable
      * @return The current Mu Server builder
      * @see #withGzip(long, Set)
+     * @deprecated To disable content encoding, pass an empty list to {@link #withContentEncoders(List)}
      */
+    @Deprecated
     public MuServerBuilder withGzipEnabled(boolean enabled) {
-        this.gzipEnabled = enabled;
-        return this;
+        if (enabled) {
+            throw new UnsupportedOperationException("Use withContentEncoders to configure gzip");
+        }
+        return withContentEncoders(Collections.emptyList());
     }
 
     /**
@@ -122,12 +124,11 @@ public class MuServerBuilder {
      * @param mimeTypesToGzip The mime-types that should be gzipped. In general, only text
      *                        files should be gzipped.
      * @return The current Mu Server Builder
+     * @deprecated GZIP is enabled by default. It can be replaced or customized with {@link #withContentEncoders(List)}
      */
+    @Deprecated
     public MuServerBuilder withGzip(long minimumGzipSize, Set<String> mimeTypesToGzip) {
-        this.gzipEnabled = true;
-        this.mimeTypesToGzip = mimeTypesToGzip;
-        this.minimumGzipSize = minimumGzipSize;
-        return this;
+        return withContentEncoders(List.of(GZIPEncoderBuilder.gzipEncoder().withMimeTypesToGzip(mimeTypesToGzip).withMinGzipSize(minimumGzipSize).build()));
     }
 
     /**
@@ -415,9 +416,11 @@ public class MuServerBuilder {
 
     /**
      * @return The current value of this property
+     * @deprecated use {@link #contentEncoders()} to find current settings
      */
+    @Deprecated
     public long minimumGzipSize() {
-        return minimumGzipSize;
+        throw new UnsupportedOperationException("Use contentEncoders() for gzip configuration");
     }
 
     /**
@@ -464,16 +467,20 @@ public class MuServerBuilder {
 
     /**
      * @return The current value of this property
+     * @deprecated check {@link #contentEncoders()} to see which encoders are configured
      */
+    @Deprecated
     public boolean gzipEnabled() {
-        return gzipEnabled;
+        return contentEncoders == null || contentEncoders.stream().anyMatch(e -> "gzip".equals(e.contentCoding()));
     }
 
     /**
      * @return The current value of this property
+     * @deprecated encoders should be configured with {@link #withContentEncoders(List)}
      */
+    @Deprecated
     public Set<String> mimeTypesToGzip() {
-        return Collections.unmodifiableSet(mimeTypesToGzip);
+        throw new UnsupportedOperationException("Use contentEncoders() for gzip configuration");
     }
 
     /**
@@ -604,7 +611,7 @@ public class MuServerBuilder {
             throw new IllegalArgumentException("No ports were configured. Please call MuServerBuilder.withHttpPort(int) or MuServerBuilder.withHttpsPort(int)");
         }
 
-        ServerSettings settings = new ServerSettings(minimumGzipSize, maxHeadersSize, requestReadTimeoutMillis, maxRequestSize, maxUrlSize, gzipEnabled, mimeTypesToGzip, rateLimiters);
+        ServerSettings settings = new ServerSettings(maxHeadersSize, requestReadTimeoutMillis, maxRequestSize, maxUrlSize, rateLimiters);
 
         ExecutorService handlerExecutor = this.executor;
         if (handlerExecutor == null) {
@@ -736,9 +743,6 @@ public class MuServerBuilder {
                 return super.isContentAlwaysEmpty(msg) || msg instanceof NettyResponseAdaptor.EmptyHttpResponse;
             }
         });
-        if (server.settings().gzipEnabled) {
-            p.addLast("compressor", new SelectiveHttpContentCompressor(server.settings()));
-        }
         p.addLast("keepalive", new HttpServerKeepAliveHandler());
         p.addLast("flowControl", new FlowControlHandler());
         p.addLast(BackPressureHandler.NAME, new BackPressureHandler());
@@ -750,15 +754,12 @@ public class MuServerBuilder {
     @Override
     public String toString() {
         return "MuServerBuilder{" +
-            "minimumGzipSize=" + minimumGzipSize +
             ", httpPort=" + httpPort +
             ", httpsPort=" + httpsPort +
             ", maxHeadersSize=" + maxHeadersSize +
             ", maxUrlSize=" + maxUrlSize +
             ", nioThreads=" + nioThreads +
             ", handlers=" + handlers +
-            ", gzipEnabled=" + gzipEnabled +
-            ", mimeTypesToGzip=" + mimeTypesToGzip +
             ", addShutdownHook=" + addShutdownHook +
             ", host='" + host + '\'' +
             ", sslContextBuilder=" + sslContextBuilder +
@@ -801,4 +802,24 @@ public class MuServerBuilder {
         this.autoHandleExpectContinue = autoHandleExpectContinue;
         return this;
     }
+
+    /**
+     * The response body content encoders in priority order, for example a GZIP compressor
+     * @return the list of encoders to use, or null to use the default (GZIP only)
+     */
+    public List<ContentEncoder> contentEncoders() {
+        return contentEncoders;
+    }
+
+    /**
+     * The response body content encoders in priority order, for example a GZIP compressor
+     *
+     * @param contentEncoders the list of encoders to use, or null to use the default (GZIP only)
+     * @return this builder
+     */
+    public MuServerBuilder withContentEncoders(List<ContentEncoder> contentEncoders) {
+        this.contentEncoders = contentEncoders;
+        return this;
+    }
+
 }

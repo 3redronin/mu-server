@@ -78,7 +78,7 @@ class MuServerImpl implements MuServer {
 
     @Override
     public long minimumGzipSize() {
-        return settings.minimumGzipSize;
+        return 0L;
     }
 
     @Override
@@ -103,12 +103,17 @@ class MuServerImpl implements MuServer {
 
     @Override
     public boolean gzipEnabled() {
-        return settings.gzipEnabled;
+        return true;
+    }
+
+    @Override
+    public List<ContentEncoder> contentEncoders() {
+        return List.of();
     }
 
     @Override
     public Set<String> mimeTypesToGzip() {
-        return settings.mimeTypesToGzip;
+        return Collections.emptySet();
     }
 
 

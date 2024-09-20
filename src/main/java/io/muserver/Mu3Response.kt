@@ -7,7 +7,11 @@ import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
 import java.util.*
 
-internal class Mu3Response(private val muRequest: Mu3Request, private val socketOut: OutputStream) : MuResponse, ResponseInfo {
+internal class Mu3Response(
+    private val muRequest: Mu3Request,
+    private val socketOut: OutputStream,
+    private val contentEncoders: List<ContentEncoder>
+) : MuResponse, ResponseInfo {
 
     private var status : HttpStatus = HttpStatus.OK_200
     private val headers = Mu3Headers()
@@ -107,6 +111,15 @@ internal class Mu3Response(private val muRequest: Mu3Request, private val socket
 
     override fun outputStream(bufferSize: Int): OutputStream {
         if (wrappedOut == null) {
+            var responseEncoder : ContentEncoder? = null
+            for (contentEncoder in contentEncoders) {
+                val theOne = contentEncoder.prepare(muRequest, this)
+                if (theOne) {
+                    responseEncoder = contentEncoder
+                    break
+                }
+            }
+
             val fixedLen = headers.getLong(HeaderNames.CONTENT_LENGTH.toString(), -1)
             if (fixedLen == -1L) {
                 headers.set(HeaderNames.TRANSFER_ENCODING, HeaderValues.CHUNKED)
@@ -114,7 +127,11 @@ internal class Mu3Response(private val muRequest: Mu3Request, private val socket
             } else {
                 wrappedOut = FixedSizeOutputStream(fixedLen, socketOut)
             }
+
             writeStatusAndHeaders()
+            if (responseEncoder != null) {
+                wrappedOut = responseEncoder.wrapStream(muRequest, this, wrappedOut)
+            }
         }
         return wrappedOut!!
     }

@@ -32,8 +32,7 @@ internal class Mu3Headers(
 
     fun closeConnection(version: HttpVersion) = when (version) {
         HttpVersion.HTTP_1_1 -> containsValue(HeaderNames.CONNECTION, HeaderValues.CLOSE.toString(), true)
-        // TODO treat the connection header in http1.0 as a list field value https://httpwg.org/specs/rfc9110.html#rfc.section.5.6.1
-        HttpVersion.HTTP_1_0 -> !containsValue(HeaderNames.CONNECTION, HeaderValues.KEEP_ALIVE.toString(), true)
+        HttpVersion.HTTP_1_0 -> !connection().contains(HeaderValues.KEEP_ALIVE.toString(), true)
     }
 
     override fun get(name: String): String? {
@@ -207,6 +206,13 @@ internal class Mu3Headers(
 
     override fun cacheControl(): ParameterizedHeader {
         return ParameterizedHeader.fromString(get(HeaderNames.CACHE_CONTROL))
+    }
+
+    override fun connection(): TokenListHeader {
+        return TokenListHeader.parse(getAll(HeaderNames.CONNECTION), false)
+    }
+    override fun vary(): TokenListHeader {
+        return TokenListHeader.parse(getAll(HeaderNames.VARY), false)
     }
 
     override fun contentType(): MediaType? {

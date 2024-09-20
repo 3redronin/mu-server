@@ -54,15 +54,6 @@ class Http2Response extends NettyResponseAdaptor {
         assert ctx.executor().inEventLoop() : "Not in event loop";
         headers.entries.status(httpStatus().codeAsText());
 
-        if (settings.shouldCompress(headers.get(HeaderNames.CONTENT_LENGTH), headers.get(HeaderNames.CONTENT_TYPE))) {
-            headers.set(HeaderNames.VARY, getVaryWithAE(headers.get(HeaderNames.VARY)));
-            CharSequence toUse = Http2Connection.compressionToUse(request.headers());
-            if (toUse != null && !headers.entries.contains(HeaderNames.CONTENT_ENCODING)) {
-                // By setting the header value, the CompressorHttp2ConnectionEncoder added by the Http2ConnectionBuilder will encode the bytes.
-                // The mu- prefix is what indicates to the compressor that we want to compress it, and MuGzipHttp2ConnectionEncoder removes the mu- prefix.
-                headers.set(HeaderNames.CONTENT_ENCODING, "mu-" + toUse);
-            }
-        }
         ChannelFuture future = encoder.writeHeaders(ctx, streamId, headers.entries, 0, isEnd, ctx.voidPromise());
         if (isEnd) {
             ctx.channel().flush();
