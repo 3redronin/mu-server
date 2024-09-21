@@ -15,13 +15,15 @@ internal class Mu3Request(
     val body: InputStream,
 ) : MuRequest {
     override fun contentType() = mu3Headers.get("content-type")
+    lateinit var response: Mu3Response
     private val startTime = System.currentTimeMillis()
     private var query: QueryString? = null
     private var attributes: MutableMap<String, Any>? = null
     private var contextPath = ""
     private var relativePath: String = requestUri.rawPath
     private var cookies: List<Cookie>? = null
-
+    var asyncHandle : Mu3AsyncHandleImpl? = null
+        private set
 
     override fun startTime() = startTime
 
@@ -94,12 +96,15 @@ internal class Mu3Request(
     }
 
     override fun handleAsync(): AsyncHandle {
-        TODO("Not yet implemented")
+        if (asyncHandle == null) {
+            asyncHandle = Mu3AsyncHandleImpl(this, response)
+        }
+        return asyncHandle!!
     }
 
     override fun server() = connection.server()!!
 
-    override fun isAsync(): Boolean = false
+    override fun isAsync(): Boolean = asyncHandle != null
 
     override fun httpVersion() = httpVersion
 

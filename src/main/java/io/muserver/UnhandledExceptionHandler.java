@@ -92,6 +92,9 @@ class BuiltInExceptionHandler implements UnhandledExceptionHandler {
             } catch (URISyntaxException uriE) {
                 throw new IllegalStateException("Invalid redirect URI " + originalLocation, uriE);
             }
+            if (httpException.getMessage() != null) {
+                response.write(httpException.getMessage());
+            }
         } else {
             if (customHandler == null) {
                 // Use the default error response which is some basic HTML
@@ -114,7 +117,8 @@ class BuiltInExceptionHandler implements UnhandledExceptionHandler {
                 response.headers().set(HeaderNames.DATE, Mutils.toHttpDate(new Date()));
                 if (newStatus.canHaveContent()) {
                     response.contentType(ContentTypes.TEXT_HTML_UTF8);
-                    response.write("<html><head><title>" + encodedTitle + "</title></head><body><h1>" + encodedTitle + "</h1><p>" + Mutils.htmlEncode(body) + "</p></body></html>");
+                    var bodyEl = body == null ? "" : "<p>" + Mutils.htmlEncode(body) + "</p>";
+                    response.write("<html><head><title>" + encodedTitle + "</title></head><body><h1>" + encodedTitle + "</h1>" + bodyEl + "</body></html>");
                 }
             } else {
                 // There is a custom error renderer

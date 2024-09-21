@@ -39,6 +39,20 @@ public class ExceptionsTest {
             assertThat(body, containsString("<p>I could not find the thing</p>"));
         }
     }
+
+    @Test
+    public void whenTheMessageIsNullThereIsNoParagraph() throws Exception {
+        this.server = ServerUtils.httpsServerForTest().addHandler(Method.GET, "/samples", (req, res, pp) -> {
+            throw new HttpException(HttpStatus.BAD_REQUEST_400, (String)null);
+        }).start();
+        try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
+            assertThat(resp.code(), is(400));
+            String body = resp.body().string();
+            assertThat(body, containsString("<h1>400 Bad Request</h1>"));
+            assertThat(body, not(containsString("<p>")));
+        }
+    }
+
     @Test
     public void notFoundExceptionsConvertTo404WithDefaultMessage() throws Exception {
         this.server = ServerUtils.httpsServerForTest().addHandler(Method.GET, "/samples", (req, res, pp) -> {

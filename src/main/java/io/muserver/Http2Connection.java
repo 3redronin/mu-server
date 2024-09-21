@@ -501,6 +501,11 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
     }
 
     @Override
+    public long idleTimeMillis() {
+        return 0;
+    }
+
+    @Override
     public boolean isHttps() {
         return true;
     }

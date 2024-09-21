@@ -10,9 +10,9 @@ public class StatusLogger {
     public static void logRequests(Collection<MuRequest> muRequests) {
         int count = 0;
         for (MuRequest muRequest : muRequests) {
-            NettyRequestAdapter req = (NettyRequestAdapter) muRequest;
-            HttpExchange exchange = req.exchange();
-            log.info(count + ": exchange state "+ exchange.state() + " with duration " + exchange.duration() + "ms. Req: " + req + " (status " + req.requestState() + ") with response " + exchange.response() + " ");
+            Mu3Request req = (Mu3Request) muRequest;
+            var info = req.response;
+            log.info(count + ": exchange state "+ info.status() + " with duration " + info.duration() + "ms. Req: " + req + " with response " + info.response() + " ");
             count++;
         }
     }

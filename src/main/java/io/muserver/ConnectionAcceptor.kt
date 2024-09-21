@@ -15,7 +15,7 @@ internal class ConnectionAcceptor(
     val address: InetSocketAddress,
     val uri: URI,
     val httpsConfig: HttpsConfig?,
-    private val executorService: ExecutorService,
+    val executorService: ExecutorService,
     val contentEncoders: List<ContentEncoder>,
 ) {
 
@@ -29,7 +29,7 @@ internal class ConnectionAcceptor(
 
     val isHttps = httpsConfig != null
 
-    private val thread = Thread( {
+    private val acceptorThread = Thread( {
         while (state == State.STARTED) {
             try {
                 val clientSocket = socketServer.accept()
@@ -96,19 +96,40 @@ internal class ConnectionAcceptor(
         log.info("Closed")
     }, toString())
 
+    private val timeoutThread = Thread( {
+        while (state == State.STARTED) {
+            try {
+                val cutoff = System.currentTimeMillis() - server.idleTimeoutMillis()
+                for (con in connections) {
+                    if (con.lastIO() < cutoff) {
+                        log.info("Aborting it")
+                        con.abort()
+                    }
+                }
+                Thread.sleep(200)
+            } catch (t: Throwable) {
+                if (state == State.STARTED) {
+                    log.error("Exception while doing timeouts", t)
+                }
+            }
+        }
+    }, toString() + "-watcher")
+
     fun start() {
         if (state != State.STOPPED && state != State.NOT_STARTED) throw IllegalStateException("Cannot start with state $state")
-        thread.isDaemon = false
+        acceptorThread.isDaemon = false
         state = State.STARTED
-        thread.start()
+        acceptorThread.start()
+        timeoutThread.start()
     }
 
     fun stop(timeoutMillis: Long) {
         log.info("Stopping server 1")
         state = State.STOPPING
+        timeoutThread.interrupt()
         socketServer.close()
-        thread.join(timeoutMillis)
-        if (thread.isAlive) {
+        acceptorThread.join(timeoutMillis)
+        if (acceptorThread.isAlive) {
             log.warn("Could not kill $this after $timeoutMillis ms")
         }
         state = State.STOPPED

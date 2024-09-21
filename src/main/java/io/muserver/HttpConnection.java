@@ -30,7 +30,10 @@ public interface HttpConnection {
      */
     HttpVersion httpVersion();
 
-
+    /**
+     * Gets the number of milliseconds that this connection has not had any read or write operations
+     */
+    long idleTimeMillis();
 
     /**
      * @return <code>true</code> if the connnection is secured over HTTPS, otherwise <code>false</code>

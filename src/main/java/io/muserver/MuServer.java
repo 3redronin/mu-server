@@ -96,10 +96,19 @@ public interface MuServer extends Closeable {
 
     /**
      * The maximum idle timeout for reading request bodies.
-     * <p>This can only be set at point of server creation with {@link MuServerBuilder#withIdleTimeout(long, TimeUnit)}</p>
+     * <p>This can only be set at point of server creation with {@link MuServerBuilder#withRequestTimeout(long, TimeUnit)} (long, TimeUnit)}</p>
      * @return Timeout in milliseconds.
      */
     long requestIdleTimeoutMillis();
+
+    /**
+     * The maximum idle timeout for connections.
+     * <p>If no bytes are read or written on an HTTP connection in this time the connection will be aborted.</p>
+     * <p>This can only be set at point of server creation with {@link MuServerBuilder#withIdleTimeout(long, TimeUnit)}</p>
+     * @return Timeout in milliseconds.
+     */
+    long idleTimeoutMillis();
+
 
     /**
      * The maximum allowed size of a request body.

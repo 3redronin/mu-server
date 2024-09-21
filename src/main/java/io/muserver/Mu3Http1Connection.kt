@@ -15,8 +15,8 @@ import java.util.concurrent.atomic.AtomicReference
 
 internal class Mu3Http1Connection(
     val server: Mu3ServerImpl,
-    val creator: ConnectionAcceptor,
-    val clientSocket: Socket,
+    private val creator: ConnectionAcceptor,
+    private val clientSocket: Socket,
     val startTime: Instant
 ) : HttpConnection {
     private val requestPipeline : Queue<HttpRequestTemp> = ConcurrentLinkedQueue()
@@ -24,11 +24,13 @@ internal class Mu3Http1Connection(
     private val localAddress = clientSocket.localSocketAddress as InetSocketAddress
     private val currentRequest = AtomicReference<Mu3Request?>()
     private val completedRequests = AtomicLong()
+    @Volatile
+    private var lastIO = System.currentTimeMillis()
 
     fun start(outputStream: OutputStream) {
 
         try {
-            clientSocket.getInputStream().use { reqStream ->
+            RawRequestInputStream(this, clientSocket.getInputStream()).use { reqStream ->
                 val requestParser = Http1MessageParser(HttpMessageType.REQUEST, requestPipeline, reqStream)
                 var closeConnection = false
                 while (!closeConnection) {
@@ -62,8 +64,10 @@ internal class Mu3Http1Connection(
                         )
                     )
 
+                    val muResponse = Mu3Response(muRequest, outputStream)
+                    muRequest.response = muResponse
+
                     onRequestStarted(muRequest)
-                    val muResponse = Mu3Response(muRequest, outputStream, creator.contentEncoders)
                     closeConnection = muRequest.headers().closeConnection(muRequest.httpVersion)
 
                     try {
@@ -77,6 +81,13 @@ internal class Mu3Http1Connection(
                                 }
                             }
                             if (!handled) throw HttpException(HttpStatus.NOT_FOUND_404, "This page is not available. Sorry about that.")
+
+                            if (muRequest.isAsync) {
+                                val asyncHandle = muRequest.asyncHandle!!
+                                // TODO set proper timeout
+                                asyncHandle.waitForCompletion(Long.MAX_VALUE)
+                            }
+
                         } catch (e: Exception) {
                             if (muResponse.hasStartedSendingData()) {
                                 // can't write a custom error at this point
@@ -110,19 +121,24 @@ internal class Mu3Http1Connection(
 
 
     private fun onRequestStarted(req: Mu3Request) {
-        currentRequest.set(req);
+        currentRequest.set(req)
         server.onRequestStarted(req)
     }
 
     private fun onRequestEnded(req: Mu3Request, resp: Mu3Response) {
         currentRequest.set(null)
         completedRequests.incrementAndGet()
+        for (listener in resp.completionListeners()) {
+            listener.onComplete(resp)
+        }
         server.onRequestEnded(req, resp)
     }
 
     override fun toString() = "HTTP1 connection from $remoteAddress to $localAddress"
 
     override fun httpVersion(): HttpVersion = HttpVersion.HTTP_1_1
+
+    override fun idleTimeMillis(): Long = System.currentTimeMillis() - lastIO
 
     override fun isHttps() = creator.isHttps
 
@@ -164,12 +180,35 @@ internal class Mu3Http1Connection(
     }
 
     override fun abort() {
-        clientSocket.close()
+        if (!clientSocket.isClosed) {
+            val cur = currentRequest.get()
+            if (cur != null) {
+                cur.asyncHandle?.complete(MuException("Connection aborted"))
+            }
+            clientSocket.close()
+        }
     }
 
     override fun isIdle() = activeRequests().isEmpty() && activeWebsockets().isEmpty()
+
+    fun onByteRead(read: Int) {
+        onIO()
+        server.statsImpl.onBytesRead(1)
+    }
+
+    fun onBytesRead(buffer: ByteArray, off: Int, len: Int) {
+        onIO()
+        server.statsImpl.onBytesRead(len.toLong())
+    }
+
+    private fun onIO() {
+        lastIO = System.currentTimeMillis()
+    }
+
+    fun lastIO() = lastIO
 
     companion object {
         private val log: Logger = LoggerFactory.getLogger(Mu3Http1Connection::class.java)
     }
 }
+

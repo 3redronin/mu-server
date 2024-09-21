@@ -102,4 +102,9 @@ class Http2Response extends NettyResponseAdaptor {
     public void sendInformationalResponse(HttpStatus status, Headers headers) {
 
     }
+
+    @Override
+    public void addCompletionListener(ResponseCompleteListener listener) {
+
+    }
 }

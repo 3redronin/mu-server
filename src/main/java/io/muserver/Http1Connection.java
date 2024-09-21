@@ -221,6 +221,11 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
     }
 
     @Override
+    public long idleTimeMillis() {
+        return 0;
+    }
+
+    @Override
     public boolean isHttps() {
         return "https".equals(proto);
     }

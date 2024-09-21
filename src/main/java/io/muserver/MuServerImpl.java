@@ -92,6 +92,11 @@ class MuServerImpl implements MuServer {
     }
 
     @Override
+    public long idleTimeoutMillis() {
+        return 0;
+    }
+
+    @Override
     public long maxRequestSize() {
         return settings.maxRequestSize;
     }

@@ -141,4 +141,12 @@ public interface MuResponse {
      * @throws IllegalStateException if the main response headers have already been sent
      */
     void sendInformationalResponse(HttpStatus status, Headers headers);
+
+    /**
+     * Adds a completion listener which will be called at the end of this response
+     * @param listener a completion listener
+     * @throws NullPointerException completion listener is null
+     */
+    void addCompletionListener(ResponseCompleteListener listener);
+
 }

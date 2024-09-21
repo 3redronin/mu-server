@@ -15,6 +15,8 @@ internal class Mu3ServerImpl(
     val exceptionHandler: UnhandledExceptionHandler,
     val maxRequestBodySize: Long,
     private val contentEncoders: List<ContentEncoder>,
+    private val requestIdleTimeoutMillis: Long,
+    private val idleTimeoutMillis: Long,
 ) : MuServer {
 
     val statsImpl = Mu3StatsImpl()
@@ -63,9 +65,9 @@ internal class Mu3ServerImpl(
         return 0
     }
 
-    override fun requestIdleTimeoutMillis(): Long {
-        return 0
-    }
+    override fun requestIdleTimeoutMillis() = requestIdleTimeoutMillis
+
+    override fun idleTimeoutMillis() = idleTimeoutMillis
 
     override fun maxRequestSize(): Long = maxRequestBodySize
 
@@ -131,7 +133,10 @@ internal class Mu3ServerImpl(
                 exceptionHandler = exceptionHandler,
                 maxRequestBodySize = builder.maxRequestSize(),
                 contentEncoders = contentEncoders,
+                requestIdleTimeoutMillis = builder.requestReadTimeoutMillis(),
+                idleTimeoutMillis = builder.idleTimeoutMills(),
             )
+
             val address = builder.interfaceHost()?.let { InetAddress.getByName(it) }
             if (builder.httpsPort() >= 0) {
                 val httpsConfig = (builder.httpsConfigBuilder() ?: HttpsConfigBuilder.unsignedLocalhost()).build3()

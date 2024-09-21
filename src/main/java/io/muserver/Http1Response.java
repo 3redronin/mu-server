@@ -115,4 +115,9 @@ class Http1Response extends NettyResponseAdaptor {
     public void sendInformationalResponse(HttpStatus status, Headers headers) {
 
     }
+
+    @Override
+    public void addCompletionListener(ResponseCompleteListener listener) {
+
+    }
 }

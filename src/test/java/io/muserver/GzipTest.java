@@ -7,7 +7,6 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.StreamingOutput;
 import okhttp3.Response;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import scaffolding.MuAssert;
 import scaffolding.StringUtils;
@@ -67,7 +66,6 @@ public class GzipTest {
     }
 
     @Test
-    @Disabled("async not supported yet")
     public void asyncWritesCanBeGzipped() throws IOException {
         server = httpsServerForTest()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {

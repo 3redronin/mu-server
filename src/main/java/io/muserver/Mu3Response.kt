@@ -6,19 +6,22 @@ import java.net.URI
 import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
 import java.util.*
+import java.util.concurrent.ConcurrentLinkedQueue
 
 internal class Mu3Response(
     private val muRequest: Mu3Request,
     private val socketOut: OutputStream,
-    private val contentEncoders: List<ContentEncoder>
 ) : MuResponse, ResponseInfo {
 
     private var status : HttpStatus = HttpStatus.OK_200
     private val headers = Mu3Headers()
     var state : ResponseState = ResponseState.NOTHING
-    private var wrappedOut : OutputStream? = null
+    @Volatile
+    private var wrappedOut: OutputStream? = null
+    @Volatile
     private var writer: PrintWriter? = null
     private var endMillis : Long? = null
+    private var completionListeners: ConcurrentLinkedQueue<ResponseCompleteListener>? = null
 
     override fun status() = status.code()
     override fun statusValue() = status
@@ -28,6 +31,18 @@ internal class Mu3Response(
     }
     override fun status(value: Int) {
         this.status = HttpStatus.of(value)
+    }
+    override fun addCompletionListener(listener: ResponseCompleteListener?) {
+        if (listener == null) {
+            throw NullPointerException("Null completion listener")
+        }
+        if (completionListeners == null) {
+            completionListeners = ConcurrentLinkedQueue()
+        }
+        completionListeners!!.add(listener)
+    }
+    fun completionListeners(): Iterable<ResponseCompleteListener> {
+        return completionListeners ?: emptyList()
     }
 
     private fun writeStatusAndHeaders() {
@@ -110,9 +125,10 @@ internal class Mu3Response(
     override fun outputStream() = outputStream(8192)
 
     override fun outputStream(bufferSize: Int): OutputStream {
+
         if (wrappedOut == null) {
             var responseEncoder : ContentEncoder? = null
-            for (contentEncoder in contentEncoders) {
+            for (contentEncoder in request().server().contentEncoders()) {
                 val theOne = contentEncoder.prepare(muRequest, this)
                 if (theOne) {
                     responseEncoder = contentEncoder
@@ -172,4 +188,7 @@ internal class Mu3Response(
     override fun request() = muRequest
     override fun response() = this
 
+    override fun toString(): String {
+        return "$status ($state)"
+    }
 }

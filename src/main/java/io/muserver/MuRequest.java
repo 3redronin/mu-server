@@ -201,7 +201,10 @@ public interface MuRequest {
      * <p>When finished, call {@link AsyncHandle#complete()}</p>
      * <p>If called more than once, then the async handle created from the first call is returned.</p>
      * @return An object that you can use to mark the response as complete.
+     * @deprecated this is less performant than using the standard blocking calls and is
+     *      retained for compatibility with existing users.
      */
+    @Deprecated
     AsyncHandle handleAsync();
 
     /**

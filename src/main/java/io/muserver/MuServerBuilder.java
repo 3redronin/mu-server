@@ -54,7 +54,7 @@ public class MuServerBuilder {
     private HttpsConfigBuilder sslContextBuilder;
     private Http2Config http2Config;
     private long requestReadTimeoutMillis = TimeUnit.MINUTES.toMillis(2);
-    private long idleTimeoutMills = TimeUnit.MINUTES.toMillis(10);
+    private long idleTimeoutMills = TimeUnit.MINUTES.toMillis(20);
     private ExecutorService executor;
     private long maxRequestSize = 24 * 1024 * 1024;
     private List<ResponseCompleteListener> responseCompleteListeners;
@@ -247,7 +247,7 @@ public class MuServerBuilder {
     /**
      * Sets the idle timeout for connections. If no bytes are sent or received within this time then
      * the connection is closed.
-     * <p>The default is 5 minutes.</p>
+     * <p>The default is 20 minutes.</p>
      *
      * @param duration The allowed timeout duration, or 0 to disable timeouts.
      * @param unit     The unit of the duration.

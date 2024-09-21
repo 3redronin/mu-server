@@ -39,7 +39,7 @@ public class HttpException extends RuntimeException {
     }
 
     public static HttpException redirect(URI location) {
-        var ex = new HttpException(HttpStatus.FOUND_302);
+        var ex = new HttpException(HttpStatus.FOUND_302, (String)null);
         ex.headers.set(HeaderNames.LOCATION, location.toString());
         return ex;
     }
