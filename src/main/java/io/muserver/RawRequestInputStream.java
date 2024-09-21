@@ -5,6 +5,7 @@ import org.jetbrains.annotations.NotNull;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.SocketTimeoutException;
 
 class RawRequestInputStream extends FilterInputStream {
 
@@ -17,15 +18,23 @@ class RawRequestInputStream extends FilterInputStream {
 
     @Override
     public int read() throws IOException {
-        int read = in.read();
-        if (read >= 0) {
-            connection.onByteRead(read);
+        try {
+            int read = in.read();
+            if (read >= 0) {
+                connection.onByteRead(read);
+            }
+            return read;
+        } catch (SocketTimeoutException e) {
+            throw new HttpException(HttpStatus.REQUEST_TIMEOUT_408);
         }
-        return read;
     }
     @Override
     public int read(byte[] b) throws IOException {
-        return read(b, 0, b.length);
+        try {
+            return read(b, 0, b.length);
+        } catch (SocketTimeoutException e) {
+            throw new HttpException(HttpStatus.REQUEST_TIMEOUT_408);
+        }
     }
     @Override
     public int read(byte[] b, int off, int len) throws IOException {

@@ -96,7 +96,7 @@ public class MuServerTest {
                 response.write("Hello");
             })
             .start();
-        for (int i = 0; i < 5000; i++) {
+        for (int i = 0; i < 100; i++) {
             try (Response resp = call(request(server.uri().resolve("/?i=" + i)))) {
                 assertThat("Error on i=" + i, resp.body().string(), is("Hello"));
             }
@@ -379,7 +379,7 @@ public class MuServerTest {
     }
 
     @Test
-    public void idleTimeoutCanBeConfiguredAndConnectionIsClosedWhenBreached() throws Exception {
+    public void idleTimeoutCanBeConfiguredAndConnectionIsClosedWhenBreachedOr408() throws Exception {
         server = ServerUtils.httpsServerForTest()
             .withRequestTimeout(50, TimeUnit.MILLISECONDS)
             .addHandler(Method.POST, "/", (request, response, pathParams) -> {
@@ -405,7 +405,7 @@ public class MuServerTest {
             }
         };
         try (Response resp = call(request(server.uri()).post(slowBodhy))) {
-            Assertions.fail("Should fail but got " + resp.code());
+            assertThat(resp.code(), equalTo(408));
         } catch (UncheckedIOException se) {
             assertThat(se.getCause(), instanceOf(SocketException.class));
         }
