@@ -89,6 +89,7 @@ public class MuServerTest {
     }
 
     @Test
+    @Timeout(60)
     public void multipleWritesWorkRight() throws Exception {
         server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
@@ -397,14 +398,14 @@ public class MuServerTest {
                 bufferedSink.writeUtf8("Hello");
                 bufferedSink.flush();
                 try {
-                    Thread.sleep(200);
+                    Thread.sleep(500);
                 } catch (InterruptedException e) {
                     throw new RuntimeException(e);
                 }
             }
         };
         try (Response resp = call(request(server.uri()).post(slowBodhy))) {
-            Assertions.fail("Should fail");
+            Assertions.fail("Should fail but got " + resp.code());
         } catch (UncheckedIOException se) {
             assertThat(se.getCause(), instanceOf(SocketException.class));
         }
