@@ -53,10 +53,11 @@ public class Http2ConfigBuilder {
      * <p>The current logic may not always return the correct results. It does not actually test for availability
      * and instead tries to detect the Java version, and enables HTTP2 for Java 9 or later.</p>
      * @return A new builder
+     * @deprecated It is always supported and now turned on by default
      */
+    @Deprecated
     public static Http2ConfigBuilder http2EnabledIfAvailable() {
-        boolean isJava8 = "1.8".equals(System.getProperty("java.specification.version"));
-        return new Http2ConfigBuilder().enabled(!isJava8);
+        return new Http2ConfigBuilder().enabled(true);
     }
 
 }

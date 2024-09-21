@@ -3,12 +3,10 @@ package io.muserver
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.net.*
-import java.nio.charset.StandardCharsets
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentHashMap.KeySetView
 import java.util.concurrent.ExecutorService
-import java.util.concurrent.RejectedExecutionException
 import javax.net.ssl.SSLSocket
 
 internal class ConnectionAcceptor(
@@ -17,6 +15,7 @@ internal class ConnectionAcceptor(
     val address: InetSocketAddress,
     val uri: URI,
     val httpsConfig: HttpsConfig?,
+    val http2Config: Http2Config?,
     val executorService: ExecutorService,
     val contentEncoders: List<ContentEncoder>,
 ) {
@@ -76,10 +75,20 @@ internal class ConnectionAcceptor(
                 val ssf = httpsConfig.sslContext().socketFactory
                 val secureSocket = ssf.createSocket(socket, null, socket.port, true) as SSLSocket
                 secureSocket.useClientMode = false
+
+                if (http2Config?.enabled == true) {
+                    val sslParams = secureSocket.sslParameters
+                    // TODO: advertise h2
+//                    sslParams.applicationProtocols = arrayOf("h2", "http/1.1")
+                    sslParams.applicationProtocols = arrayOf("http/1.1")
+                    secureSocket.sslParameters = sslParams
+                }
+
                 secureSocket.addHandshakeCompletedListener { event ->
                     log.info("Handshake complete $event")
                 }
                 secureSocket.startHandshake()
+                log.info("Selected protocol is ${secureSocket.applicationProtocol}")
                 socket = secureSocket
             } catch (e: Exception) {
                 log.warn("Failed TLS handshaking", e)
@@ -150,6 +159,7 @@ internal class ConnectionAcceptor(
             address: InetAddress?,
             bindPort: Int,
             httpsConfig: HttpsConfig?,
+            http2Config: Http2Config?,
             executor: ExecutorService,
             contentEncoders: List<ContentEncoder>
         ): ConnectionAcceptor {
@@ -176,7 +186,7 @@ internal class ConnectionAcceptor(
             val uriHost = address?.hostName ?: "localhost"
 
             val uri = URI("http" + (if (httpsConfig == null) "" else "s") + "://$uriHost:" + socketServer.localPort)
-            return ConnectionAcceptor(server, socketServer, socketServer.localSocketAddress as InetSocketAddress, uri, httpsConfig, executor, contentEncoders)
+            return ConnectionAcceptor(server, socketServer, socketServer.localSocketAddress as InetSocketAddress, uri, httpsConfig, http2Config, executor, contentEncoders)
         }
     }
 

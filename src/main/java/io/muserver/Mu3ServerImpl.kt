@@ -142,11 +142,12 @@ internal class Mu3ServerImpl(
 
             val address = builder.interfaceHost()?.let { InetAddress.getByName(it) }
             if (builder.httpsPort() >= 0) {
+                val http2Config = builder.http2Config() ?: Http2Config(true)
                 val httpsConfig = (builder.httpsConfigBuilder() ?: HttpsConfigBuilder.unsignedLocalhost()).build3()
-                acceptors.add(ConnectionAcceptor.create(impl, address, builder.httpsPort(), httpsConfig, executor, contentEncoders))
+                acceptors.add(ConnectionAcceptor.create(impl, address, builder.httpsPort(), httpsConfig, http2Config, executor, contentEncoders))
             }
             if (builder.httpPort() >= 0) {
-                acceptors.add(ConnectionAcceptor.create(impl, address, builder.httpPort(), null, executor, contentEncoders))
+                acceptors.add(ConnectionAcceptor.create(impl, address, builder.httpPort(), null, null, executor, contentEncoders))
             }
             impl.startListening()
             return impl
