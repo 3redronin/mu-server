@@ -68,6 +68,7 @@ internal data class HttpRequestTemp(
     override var httpVersion: HttpVersion?,
     override var bodySize: BodySize?,
     private val headers: Mu3Headers = Mu3Headers(),
+    var rejectRequest: HttpException? = null,
 ) : HttpMessageTemp {
 
     fun normalisedUri(): String {

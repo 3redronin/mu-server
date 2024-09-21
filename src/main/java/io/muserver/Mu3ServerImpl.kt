@@ -119,10 +119,13 @@ internal class Mu3ServerImpl(
 
             val executor = builder.executor() ?: Executors.newCachedThreadPool()
             val acceptors = mutableListOf<ConnectionAcceptor>()
-            val actualHandlers = builder.handlers().toMutableList()
+
+            val actualHandlers = mutableListOf<MuHandler>()
+            actualHandlers.add(RequestVerifierHandler.INSTANCE)
             if (builder.autoHandleExpectContinue()) {
                 actualHandlers.add(0, ExpectContinueHandler(builder.maxRequestSize()))
             }
+            actualHandlers.addAll(builder.handlers())
 
             val contentEncoders = builder.contentEncoders() ?: listOf(gzipEncoder().build())
 

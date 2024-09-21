@@ -2,7 +2,9 @@ package io.muserver;
 
 import io.netty.handler.codec.HeadersUtils;
 import jakarta.ws.rs.core.MediaType;
+import org.slf4j.Logger;
 
+import java.net.URI;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -110,6 +112,27 @@ class Headtils {
                 return new AbstractMap.SimpleImmutableEntry<>(next.getKey(), "(hidden)");
             }
             return next;
+        }
+    }
+
+    static URI getUri(Logger log, Headers h, String requestUri, URI defaultValue) {
+        try {
+            String hostHeader = h.get(HeaderNames.HOST);
+            List<ForwardedHeader> forwarded = getForwardedHeaders(h);
+            if (forwarded.isEmpty()) {
+                if (Mutils.nullOrEmpty(hostHeader) || defaultValue.getHost().equals(hostHeader)) {
+                    return defaultValue;
+                }
+                return URI.create(defaultValue.getScheme() + "://" + hostHeader).resolve(requestUri);
+            }
+            ForwardedHeader f = forwarded.get(0);
+            String originalScheme = Mutils.coalesce(f.proto(), defaultValue.getScheme());
+            String host = Mutils.coalesce(f.host(), hostHeader, "localhost");
+            return URI.create(originalScheme + "://" + host).resolve(requestUri);
+        } catch (Exception e) {
+            log.warn("Could not create a URI object using header values " + h
+                + " so using local server URI. URL generation (including in redirects) may be incorrect.");
+            return defaultValue;
         }
     }
 }

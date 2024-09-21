@@ -20,7 +20,7 @@ class ConnectionTest {
             .addHandler(Method.GET, "/") { request, response, _ ->
                 response.write(request.query().get("message"))
             }
-            .start3().use { server ->
+            .start().use { server ->
                 for (i in 0..1) {
                     client.call(
                         server.uri().resolve("?message=my-first-message").toRequest()
@@ -44,7 +44,7 @@ class ConnectionTest {
                 response.headers().set("connection", "close")
                 response.write(request.query().get("message"))
             }
-            .start3().use { server ->
+            .start().use { server ->
                 for (i in 0..1) {
                     client.call(
                         server.uri().resolve("?message=my-first-message").toRequest()
@@ -65,7 +65,7 @@ class ConnectionTest {
             .addHandler(Method.GET, "/") { request, response, _ ->
                 response.write(request.query().get("message"))
             }
-            .start3().use { server ->
+            .start().use { server ->
                 for (i in 0..1) {
                     client.call(
                         server.uri().resolve("?message=my-first-message").toRequest()

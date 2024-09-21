@@ -122,8 +122,6 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
                 }
                 sendSimpleResponse(ctx, ihr.getMessage(), ihr.code);
                 ctx.channel().read();
-            } catch (RedirectException e) {
-                sendRedirect(ctx, e.location);
             }
         } else if (currentExchange != null) {
             currentExchange.onMessage(ctx, msg, error -> {

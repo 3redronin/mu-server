@@ -36,13 +36,6 @@ class InvalidHttpRequestException extends Exception {
     }
 }
 
-class RedirectException extends Exception {
-    final URI location;
-    RedirectException(URI location) {
-        this.location = location;
-    }
-}
-
 /**
  * Thrown when an exchange gets a message it wasn't expected
  */

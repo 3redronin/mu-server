@@ -8,7 +8,6 @@ import org.junit.jupiter.api.Test
 import scaffolding.ClientUtils.client
 import scaffolding.call
 import scaffolding.toRequest
-import kotlin.system.measureTimeMillis
 
 class Mu3ServerImplTest {
 
@@ -22,7 +21,7 @@ class Mu3ServerImplTest {
                 val msg = request.query().get("message")
                 response.write(msg)
             }
-            .start3().use { server ->
+            .start().use { server ->
                 client.call(server.uri().resolve("?message=my-first-message").toRequest()).use { resp ->
                     assertThat(resp.code, equalTo(200))
                     assertThat(resp.headers["content-type"], equalTo("text/plain;charset=utf-8"))
@@ -46,7 +45,7 @@ class Mu3ServerImplTest {
                 val msg = request.readBodyAsString()
                 response.write(msg)
             }
-            .start3().use { server ->
+            .start().use { server ->
                 client.call(server.uri().toRequest()
                     .post("my-first-message".toRequestBody("text/plain".toMediaType()))
                 ).use { resp ->
@@ -76,7 +75,7 @@ class Mu3ServerImplTest {
                 response.sendChunk("hey: ")
                 response.sendChunk(msg)
             }
-            .start3().use { server ->
+            .start().use { server ->
                 client.call(server.uri().resolve("?message=my-first-message").toRequest()).use { resp ->
                     assertThat(resp.code, equalTo(200))
                     assertThat(resp.headers["content-type"], equalTo("text/plain;charset=utf-8"))
@@ -109,7 +108,7 @@ class Mu3ServerImplTest {
 
                 }
             }
-            .start3().use { server ->
+            .start().use { server ->
                 client.call(server.uri().resolve("?message=my-first-message").toRequest()).use { resp ->
                     assertThat(resp.code, equalTo(200))
                     assertThat(resp.body?.string(), equalTo("my-first-message"))
@@ -133,7 +132,7 @@ class Mu3ServerImplTest {
             ) { _, response, _ ->
                 response.write("Hello, world")
             }
-            .start3().use { server ->
+            .start().use { server ->
                 client.call(server.uri().toRequest()).use { resp ->
                     assertThat(resp.code, equalTo(200))
                     assertThat(resp.body?.string(), equalTo("Hello, world"))
@@ -154,7 +153,7 @@ class Mu3ServerImplTest {
             ) { _, response, _ ->
                 response.write("Hello, world")
             }
-            .start3().use { server ->
+            .start().use { server ->
                 client.call(server.uri().toRequest()).use { resp ->
                     assertThat(resp.code, equalTo(200))
                     assertThat(resp.body?.string(), equalTo("Hello, world"))

@@ -27,6 +27,12 @@ internal class Mu3Http1Connection(
     @Volatile
     private var lastIO = System.currentTimeMillis()
 
+    private val requestTimeout = if (server.requestIdleTimeoutMillis() > Int.MAX_VALUE) {
+        Int.MAX_VALUE
+    } else {
+        server.requestIdleTimeoutMillis().toInt()
+    }
+
     fun start(outputStream: OutputStream) {
 
         try {
@@ -47,68 +53,87 @@ internal class Mu3Http1Connection(
                         break
                     }
                     val request = msg as HttpRequestTemp
-                    val relativeUrl = request.normalisedUri()
+
+                    var rejectException = request.rejectRequest
+                    val relativeUrl = try {
+                        request.normalisedUri()
+                    } catch (e: HttpException) {
+                        rejectException = rejectException ?: e
+                        "/"
+                    }
 
                     val serverUri = creator.uri.resolve(relativeUrl)
-                    val headers = request.headers()
+                    val requestUri = Headtils.getUri(log, request.headers(), relativeUrl, serverUri)
                     val muRequest = Mu3Request(
                         connection = this,
                         method = request.method!!,
-                        requestUri = serverUri,
+                        requestUri = requestUri,
                         serverUri = serverUri,
                         httpVersion = request.httpVersion!!,
-                        mu3Headers = headers,
+                        mu3Headers = request.headers(),
                         bodySize = request.bodySize!!,
                         body = if (request.bodySize == BodySize.NONE) EmptyInputStream.INSTANCE else Http1BodyStream(
                             requestParser
                         )
                     )
+                    clientSocket.soTimeout = requestTimeout
 
                     val muResponse = Mu3Response(muRequest, outputStream)
                     muRequest.response = muResponse
 
-                    onRequestStarted(muRequest)
                     closeConnection = muRequest.headers().closeConnection(muRequest.httpVersion)
+                    if (rejectException != null) {
+                        server.statsImpl.onInvalidRequest()
+                        muResponse.status(rejectException.status())
+                        muResponse.headers().set(rejectException.responseHeaders())
+                        if (rejectException.message != null) {
+                            muResponse.write(rejectException.message!!)
+                        }
+                        closeConnection = cleanUpNicely(closeConnection, muResponse, muRequest)
+                    } else {
 
-                    try {
-                        log.info("Got request: $muRequest")
+                        onRequestStarted(muRequest)
+
                         try {
-                            var handled = false
-                            for (handler in server.handlers) {
-                                if (handler.handle(muRequest, muResponse)) {
-                                    handled = true
-                                    break
+                            log.info("Got request: $muRequest")
+                            try {
+                                var handled = false
+                                for (handler in server.handlers) {
+                                    if (handler.handle(muRequest, muResponse)) {
+                                        handled = true
+                                        break
+                                    }
+                                }
+                                if (!handled) throw HttpException(
+                                    HttpStatus.NOT_FOUND_404,
+                                    "This page is not available. Sorry about that."
+                                )
+
+                                if (muRequest.isAsync) {
+                                    val asyncHandle = muRequest.asyncHandle!!
+                                    // TODO set proper timeout
+                                    asyncHandle.waitForCompletion(Long.MAX_VALUE)
+                                }
+
+                            } catch (e: Exception) {
+                                if (muResponse.hasStartedSendingData()) {
+                                    // can't write a custom error at this point
+                                    throw e
+                                } else {
+                                    server.exceptionHandler.handle(muRequest, muResponse, e)
                                 }
                             }
-                            if (!handled) throw HttpException(HttpStatus.NOT_FOUND_404, "This page is not available. Sorry about that.")
-
-                            if (muRequest.isAsync) {
-                                val asyncHandle = muRequest.asyncHandle!!
-                                // TODO set proper timeout
-                                asyncHandle.waitForCompletion(Long.MAX_VALUE)
-                            }
-
+                            closeConnection = cleanUpNicely(closeConnection, muResponse, muRequest)
                         } catch (e: Exception) {
-                            if (muResponse.hasStartedSendingData()) {
-                                // can't write a custom error at this point
-                                throw e
-                            } else {
-                                server.exceptionHandler.handle(muRequest, muResponse, e)
-                            }
-                        }
-                        if (!closeConnection) {
-                            closeConnection = muResponse.headers().closeConnection(muRequest.httpVersion())
-                        }
-                        muRequest.cleanup()
-                        muResponse.cleanup()
-                    } catch (e: Exception) {
-                        closeConnection = true
-                        log.warn("Unrecoverable error for $muRequest", e)
-                        muResponse.state = ResponseState.ERRORED
-                    } finally {
-                        onRequestEnded(muRequest, muResponse)
-                    }
+                            closeConnection = true
+                            log.warn("Unrecoverable error for $muRequest", e)
+                            muResponse.state = ResponseState.ERRORED
+                        } finally {
+                            onRequestEnded(muRequest, muResponse)
+                            clientSocket.soTimeout = 0
 
+                        }
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -118,6 +143,19 @@ internal class Mu3Http1Connection(
         }
     }
 
+    private fun cleanUpNicely(
+        closeConnection: Boolean,
+        muResponse: Mu3Response,
+        muRequest: Mu3Request
+    ): Boolean {
+        var closeConnection1 = closeConnection
+        if (!closeConnection1) {
+            closeConnection1 = muResponse.headers().closeConnection(muRequest.httpVersion())
+        }
+        muRequest.cleanup()
+        muResponse.cleanup()
+        return closeConnection1
+    }
 
 
     private fun onRequestStarted(req: Mu3Request) {

@@ -108,7 +108,8 @@ internal class Http1MessageParser(type: HttpMessageType, private val requestQueu
                             request().method = try {
                                 Method.valueOf(buffer.consumeAscii())
                             } catch (e: IllegalArgumentException) {
-                                throw HttpException(HttpStatus.METHOD_NOT_ALLOWED_405)
+                                request().rejectRequest = HttpException(HttpStatus.METHOD_NOT_ALLOWED_405)
+                                Method.GET // bit weird - but we need some method
                             }
                             state = ParseState.REQUEST_TARGET
                         } else throw ParseException("state=$state b=$b", position)

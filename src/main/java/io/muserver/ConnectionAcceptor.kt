@@ -3,10 +3,12 @@ package io.muserver
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.net.*
+import java.nio.charset.StandardCharsets
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentHashMap.KeySetView
 import java.util.concurrent.ExecutorService
+import java.util.concurrent.RejectedExecutionException
 import javax.net.ssl.SSLSocket
 
 internal class ConnectionAcceptor(
@@ -34,37 +36,7 @@ internal class ConnectionAcceptor(
             try {
                 val clientSocket = socketServer.accept()
                 executorService.submit {
-                    val startTime = Instant.now()
-                    var socket = clientSocket
-                    if (httpsConfig != null) {
-                        try {
-                            val ssf = httpsConfig.sslContext().socketFactory
-                            val secureSocket = ssf.createSocket(socket, null, socket.port, true) as SSLSocket
-                            secureSocket.useClientMode = false
-                            secureSocket.addHandshakeCompletedListener { event ->
-                                log.info("Handshake complete $event")
-                            }
-                            secureSocket.startHandshake()
-                            socket = secureSocket
-                        } catch (e: Exception) {
-                            log.warn("Failed TLS handshaking", e)
-                            server.statsImpl.onFailedToConnect()
-                            return@submit
-                        }
-                    }
-                    val con = Mu3Http1Connection(server, this, socket, startTime)
-                    connections.add(con)
-                    server.statsImpl.onConnectionOpened(con)
-                    try {
-                        socket.getOutputStream().use { clientOut ->
-                            con.start(clientOut)
-                        }
-                    } catch (t: Throwable) {
-                        log.error("Unhandled exception for $con", t)
-                    } finally {
-                        server.statsImpl.onConnectionClosed(con)
-                        connections.remove(con)
-                    }
+                    handleClientSocket(clientSocket)
                 }
             } catch (e: Throwable) {
                 if (Thread.interrupted() || e is SocketException) {
@@ -95,6 +67,40 @@ internal class ConnectionAcceptor(
         socketServer.close()
         log.info("Closed")
     }, toString())
+
+    private fun handleClientSocket(clientSocket: Socket) {
+        val startTime = Instant.now()
+        var socket = clientSocket
+        if (httpsConfig != null) {
+            try {
+                val ssf = httpsConfig.sslContext().socketFactory
+                val secureSocket = ssf.createSocket(socket, null, socket.port, true) as SSLSocket
+                secureSocket.useClientMode = false
+                secureSocket.addHandshakeCompletedListener { event ->
+                    log.info("Handshake complete $event")
+                }
+                secureSocket.startHandshake()
+                socket = secureSocket
+            } catch (e: Exception) {
+                log.warn("Failed TLS handshaking", e)
+                server.statsImpl.onFailedToConnect()
+                return
+            }
+        }
+        val con = Mu3Http1Connection(server, this, socket, startTime)
+        connections.add(con)
+        server.statsImpl.onConnectionOpened(con)
+        try {
+            socket.getOutputStream().use { clientOut ->
+                con.start(clientOut)
+            }
+        } catch (t: Throwable) {
+            log.error("Unhandled exception for $con", t)
+        } finally {
+            server.statsImpl.onConnectionClosed(con)
+            connections.remove(con)
+        }
+    }
 
     private val timeoutThread = Thread( {
         while (state == State.STARTED) {
@@ -167,7 +173,9 @@ internal class ConnectionAcceptor(
             }
 
 
-            val uri = URI("http" + (if (httpsConfig == null) "" else "s") + "://localhost:" + socketServer.localPort)
+            val uriHost = address?.hostName ?: "localhost"
+
+            val uri = URI("http" + (if (httpsConfig == null) "" else "s") + "://$uriHost:" + socketServer.localPort)
             return ConnectionAcceptor(server, socketServer, socketServer.localSocketAddress as InetSocketAddress, uri, httpsConfig, executor, contentEncoders)
         }
     }

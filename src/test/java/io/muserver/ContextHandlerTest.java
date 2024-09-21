@@ -47,7 +47,7 @@ public class ContextHandlerTest {
                                 return false;
                             })
                             .addHandler(RestHandlerBuilder.restHandler(new Fruit())))
-            ).start3();
+            ).start();
 
         try (Response resp = call(request().url(server.uri().resolve("/some%20context/bl%20ah").toString()))) {
             assertThat(resp.code(), is(200));
@@ -85,7 +85,7 @@ public class ContextHandlerTest {
                                 return false;
                             })
                             .addHandler(RestHandlerBuilder.restHandler(new Fruit())))
-            ).start3();
+            ).start();
 
         try (Response resp = call(request().url(server.uri().resolve("/some%20context/bl%20ah").toString()))) {
             assertThat(resp.code(), is(200));
@@ -102,7 +102,7 @@ public class ContextHandlerTest {
     public void callsToContextNamesWithoutTrailingSlashesResultIn302() throws Exception {
         server = ServerUtils.httpsServerForTest()
             .addHandler(context("my app"))
-            .start3();
+            .start();
 
         URL url = server.uri().resolve("/my%20app").toURL();
         try (Response resp = call(request().get().url(url))) {
@@ -117,7 +117,7 @@ public class ContextHandlerTest {
     public void callsToContextNamesWithoutTrailingSlashesWithQueryStringsResultIn302() throws Exception {
         server = ServerUtils.httpsServerForTest()
             .addHandler(context("my app"))
-            .start3();
+            .start();
 
         String urlEncodedQuery = "?" + Mutils.urlEncode("some key") + "=" + Mutils.urlEncode("some value & another");
         URL url = server.uri().resolve("/my%20app" + urlEncodedQuery).toURL();
@@ -137,7 +137,7 @@ public class ContextHandlerTest {
                 Routes.route(Method.GET, "/", (request, response, pathParams) -> {
                     response.write("context=" + request.contextPath() + ";relative=" + request.relativePath());
                 }))
-            .start3();
+            .start();
 
         try (Response resp = call(request(server.uri().resolve("/")))) {
             assertThat(resp.code(), is(200));
@@ -160,7 +160,7 @@ public class ContextHandlerTest {
                             response.write("I got it. " + request.contextPath().isEmpty() + " and "
                                 + request.relativePath());
                         }))
-                .start3();
+                .start();
             try (Response resp = call(request(server.uri().resolve("/")))) {
                 assertThat(resp.code(), is(200));
                 assertThat(resp.body().string(), equalTo("I got it. true and /"));
@@ -175,7 +175,7 @@ public class ContextHandlerTest {
             .addHandler(Method.GET, "/b", (request, response, pathParams) -> {
                 response.write(request.contextPath() + " - " + request.relativePath());
             })
-            .start3();
+            .start();
         try (Response resp = call(request(server.uri().resolve("/b")))) {
             assertThat(resp.body().string(), is(" - /b"));
         }
@@ -192,7 +192,7 @@ public class ContextHandlerTest {
                     response.write(request.contextPath() + " - " + request.relativePath());
                 })
             )
-            .start3();
+            .start();
         try (Response resp = call(request(server.uri().resolve("/~.-_/~.-_")))) {
             assertThat(resp.body().string(), is("/~.-_ - /~.-_"));
             assertThat(resp.code(), is(200));
