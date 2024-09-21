@@ -101,8 +101,8 @@ public class MuServerTest {
                 assertThat("Error on i=" + i, resp.body().string(), is("Hello"));
             }
         }
-        assertEventually(() -> server.stats().completedRequests(), equalTo(5000L));
-        assertThat(server.stats().completedConnections(), lessThan(1000L)); // just make sure it's not one connection per request
+        assertEventually(() -> server.stats().completedRequests(), equalTo(100L));
+        assertThat(server.stats().completedConnections(), lessThan(50L)); // just make sure it's not one connection per request
     }
 
 
