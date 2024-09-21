@@ -5,6 +5,8 @@ import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 class Mu3AsyncHandleImpl implements AsyncHandle {
     private final Mu3Request request;
@@ -19,7 +21,12 @@ class Mu3AsyncHandleImpl implements AsyncHandle {
 
     public void waitForCompletion(long timeoutMillis) throws Throwable {
         try {
+            var before = System.currentTimeMillis();
             completionFuture.get(timeoutMillis, TimeUnit.MILLISECONDS);
+            var duration = System.currentTimeMillis() - before;
+            var newTimeout = timeoutMillis - duration;
+            if (newTimeout <= 0) throw new TimeoutException("Timeout on completion future");
+            responseFuture.get(newTimeout, TimeUnit.MILLISECONDS);
         } catch (ExecutionException e) {
             throw e.getCause();
         }

@@ -103,7 +103,7 @@ internal class Mu3Response(
         if (!status.isRedirection) {
             status(HttpStatus.FOUND_302)
         }
-        val ex = HttpException(status)
+        val ex = HttpException(status, null as String?)
         ex.responseHeaders().set(HeaderNames.LOCATION, uri.normalize().toString())
         throw ex
     }
