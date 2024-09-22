@@ -139,11 +139,12 @@ internal class Mu3Response(
             }
 
             val fixedLen = headers.getLong(HeaderNames.CONTENT_LENGTH.toString(), -1)
+            val rawOut = if (muRequest.method.isHead) DiscardingOutputStream.INSTANCE else socketOut
             if (fixedLen == -1L) {
                 headers.set(HeaderNames.TRANSFER_ENCODING, HeaderValues.CHUNKED)
-                wrappedOut = ChunkedOutputStream(socketOut)
+                wrappedOut = ChunkedOutputStream(rawOut)
             } else {
-                wrappedOut = FixedSizeOutputStream(fixedLen, socketOut)
+                wrappedOut = FixedSizeOutputStream(fixedLen, rawOut)
             }
 
             writeStatusAndHeaders()
@@ -168,10 +169,10 @@ internal class Mu3Response(
     fun cleanup() {
         if (state == ResponseState.NOTHING) {
             // empty response body
-            if (httpStatus == null) {
+            if (httpStatus == null && !muRequest.method.isHead) {
                 status(HttpStatus.NO_CONTENT_204)
             }
-            if (statusValue().canHaveContent()) {
+            if (!muRequest.method.isHead && statusValue().canHaveContent() && !headers.contains(HeaderNames.CONTENT_LENGTH)) {
                 headers.set(HeaderNames.CONTENT_LENGTH, 0L)
             }
             writeStatusAndHeaders()

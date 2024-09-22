@@ -1,8 +1,8 @@
 package io.muserver;
 
 import okhttp3.Response;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.ServerUtils;
 
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -63,7 +63,49 @@ public class HeadTest {
         }
     }
 
-    @After
+    @Test
+    public void fixedLengthThingsCanBeWrittenAndTheyAreDiscarded() throws Exception {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(Method.HEAD, "/", (request, response, pathParams) -> {
+                response.write("Hello");
+            })
+            .start();
+
+        for (int i = 0; i < 2; i++) {
+            try (Response resp = call(request(server.uri()).head())) {
+                assertThat(resp.code(), is(200));
+                assertThat(resp.headers("Content-Type"), contains("text/plain;charset=utf-8"));
+                assertThat(resp.headers("Content-Length"), contains("5"));
+                assertThat(resp.body().contentLength(), is(0L));
+            }
+        }
+    }
+
+    @Test
+    public void chunkedThingsCanBeWrittenAndTheyAreDiscarded() throws Exception {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(Method.HEAD, "/", (request, response, pathParams) -> {
+                response.contentType("text/plain;charset=utf-8");
+                try (var outputStream = response.writer()) {
+                    outputStream.write("Hello");
+                    outputStream.flush();
+                    outputStream.write("world");
+                }
+            })
+            .start();
+        for (int i = 0; i < 2; i++) {
+            try (Response resp = call(request(server.uri()).head())) {
+                assertThat(resp.code(), is(200));
+                assertThat(resp.headers("Content-Type"), contains("text/plain;charset=utf-8"));
+                assertThat(resp.headers("Content-Length"), empty());
+                assertThat(resp.headers("Transfer-Encoding"), contains("chunked"));
+                assertThat(resp.body().contentLength(), is(0L));
+            }
+        }
+    }
+
+
+    @AfterEach
     public void stopIt() {
         scaffolding.MuAssert.stopAndCheck(server);
     }
