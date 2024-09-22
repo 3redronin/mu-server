@@ -1,7 +1,8 @@
 package io.muserver
 
 import org.hamcrest.MatcherAssert.assertThat
-import org.hamcrest.Matchers.*
+import org.hamcrest.Matchers.equalTo
+import org.hamcrest.Matchers.sameInstance
 import org.junit.jupiter.api.Test
 import java.io.ByteArrayOutputStream
 import java.nio.charset.StandardCharsets

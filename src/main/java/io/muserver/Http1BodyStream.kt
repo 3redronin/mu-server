@@ -4,7 +4,6 @@ import java.io.IOException
 import java.io.InputStream
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicBoolean
-import kotlin.jvm.Throws
 
 internal class Http1BodyStream(private val parser: Http1MessageReader) : InputStream() {
 

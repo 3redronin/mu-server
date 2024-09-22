@@ -23,7 +23,8 @@ import static io.muserver.MuServerBuilder.httpServer;
 import static org.hamcrest.CoreMatchers.*;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.IsEqual.equalTo;
-import static scaffolding.ClientUtils.*;
+import static scaffolding.ClientUtils.call;
+import static scaffolding.ClientUtils.request;
 import static scaffolding.StringUtils.randomAsciiStringOfLength;
 
 public class HeadersTest {
