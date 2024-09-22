@@ -55,7 +55,7 @@ internal class ConnectionAcceptor(
         }
         log.info("Closing server with ${connections.size} connected connections")
         val waitUntil = Instant.now().plusSeconds(20)
-        while (connections.isNotEmpty() && waitUntil.isBefore(Instant.now())) {
+        while (connections.isNotEmpty() && waitUntil.isAfter(Instant.now())) {
             for (connection in connections) {
                 if (connection.isIdle) {
                     log.info("Closing idle connection $connection")

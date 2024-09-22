@@ -10,6 +10,7 @@ import java.security.cert.Certificate
 import java.time.Instant
 import java.util.*
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import javax.net.ssl.SSLSocket
@@ -30,6 +31,7 @@ internal class Mu3Http1Connection(
     private var lastIO = System.currentTimeMillis()
     private val invalidHttpRequests = AtomicLong(0)
     private val rejectedDueToOverload = AtomicLong(0)
+    private val closed = AtomicBoolean(false)
 
     private val requestTimeout = if (server.requestIdleTimeoutMillis() > Int.MAX_VALUE) {
         Int.MAX_VALUE
@@ -246,8 +248,9 @@ internal class Mu3Http1Connection(
 
     override fun clientCertificate() = Optional.ofNullable(clientCert)
 
+    fun isClosed() = closed.get()
     override fun abort() {
-        if (!clientSocket.isClosed) {
+        if (closed.compareAndSet(false, true)) {
             val cur = currentRequest.get()
             if (cur != null) {
                 cur.asyncHandle?.complete(MuException("Connection aborted"))

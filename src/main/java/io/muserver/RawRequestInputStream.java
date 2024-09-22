@@ -18,6 +18,7 @@ class RawRequestInputStream extends FilterInputStream {
 
     @Override
     public int read() throws IOException {
+        if (connection.isClosed()) throw new IOException("The connection is closed");
         try {
             int read = in.read();
             if (read >= 0) {
@@ -38,13 +39,16 @@ class RawRequestInputStream extends FilterInputStream {
     }
     @Override
     public int read(byte[] b, int off, int len) throws IOException {
-        int read = in.read(b, off, len);
-        if (read >= 0) {
-            connection.onBytesRead(b, off, read);
+        if (connection.isClosed()) throw new IOException("The connection is closed");
+        try {
+            int read = in.read(b, off, len);
+            if (read >= 0) {
+                connection.onBytesRead(b, off, read);
+            }
+            return read;
+        } catch (SocketTimeoutException e) {
+            throw new HttpException(HttpStatus.REQUEST_TIMEOUT_408);
         }
-        return read;
     }
-
-
 
 }

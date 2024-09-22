@@ -1,7 +1,6 @@
 package io.muserver
 
 import java.io.ByteArrayOutputStream
-import java.io.EOFException
 import java.io.InputStream
 import java.nio.charset.StandardCharsets
 import java.text.ParseException
