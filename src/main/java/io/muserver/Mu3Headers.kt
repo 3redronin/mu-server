@@ -197,7 +197,7 @@ internal class Mu3Headers(
     }
 
     override fun forwarded(): List<ForwardedHeader> {
-        return ForwardedHeader.fromString(get(HeaderNames.FORWARDED))
+        return Headtils.getForwardedHeaders(this)
     }
 
     override fun acceptLanguage(): List<ParameterizedHeaderWithValue> {

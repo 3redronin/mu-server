@@ -6,8 +6,7 @@ import java.io.IOException
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.URI
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
+import java.util.*
 
 internal class Mu3ServerImpl(
     private val acceptors: List<ConnectionAcceptor>,
@@ -18,6 +17,8 @@ internal class Mu3ServerImpl(
     private val contentEncoders: List<ContentEncoder>,
     private val requestIdleTimeoutMillis: Long,
     private val idleTimeoutMillis: Long,
+    private val maxUrlSize: Int,
+    private val maxHeadersSize: Int,
 ) : MuServer {
 
     val statsImpl = Mu3StatsImpl()
@@ -50,7 +51,10 @@ internal class Mu3ServerImpl(
     override fun stats(): MuStats = statsImpl
 
     override fun activeConnections(): Set<HttpConnection> {
-        return setOf()
+        if (acceptors.size == 1) return Collections.unmodifiableSet(acceptors[0].activeConnections())
+        val combined = mutableSetOf<HttpConnection>()
+        acceptors.forEach { combined.addAll(it.activeConnections()) }
+        return Collections.unmodifiableSet(combined)
     }
 
     override fun address(): InetSocketAddress {
@@ -62,9 +66,7 @@ internal class Mu3ServerImpl(
         return zippy()?.minGzipSize() ?: 0L
     }
 
-    override fun maxRequestHeadersSize(): Int {
-        return 0
-    }
+    override fun maxRequestHeadersSize() = maxHeadersSize
 
     override fun requestIdleTimeoutMillis() = requestIdleTimeoutMillis
 
@@ -72,9 +74,7 @@ internal class Mu3ServerImpl(
 
     override fun maxRequestSize(): Long = maxRequestBodySize
 
-    override fun maxUrlSize(): Int {
-        return 0
-    }
+    override fun maxUrlSize() = maxUrlSize
 
     @Deprecated("see interface")
     override fun gzipEnabled(): Boolean {
@@ -139,6 +139,8 @@ internal class Mu3ServerImpl(
                 contentEncoders = contentEncoders,
                 requestIdleTimeoutMillis = builder.requestReadTimeoutMillis(),
                 idleTimeoutMillis = builder.idleTimeoutMills(),
+                maxUrlSize = builder.maxUrlSize(),
+                maxHeadersSize = builder.maxHeadersSize(),
             )
 
             val address = builder.interfaceHost()?.let { InetAddress.getByName(it) }

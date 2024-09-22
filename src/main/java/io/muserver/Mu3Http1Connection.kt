@@ -38,7 +38,7 @@ internal class Mu3Http1Connection(
 
         try {
             RawRequestInputStream(this, clientSocket.getInputStream()).use { reqStream ->
-                val requestParser = Http1MessageParser(HttpMessageType.REQUEST, requestPipeline, reqStream)
+                val requestParser = Http1MessageParser(HttpMessageType.REQUEST, requestPipeline, reqStream, server.maxRequestHeadersSize(), server.maxUrlSize())
                 var closeConnection = false
                 while (!closeConnection) {
                     val msg = try {

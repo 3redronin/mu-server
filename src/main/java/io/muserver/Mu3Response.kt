@@ -13,7 +13,7 @@ internal class Mu3Response(
     private val socketOut: OutputStream,
 ) : MuResponse, ResponseInfo {
 
-    private var status : HttpStatus = HttpStatus.OK_200
+    private var httpStatus : HttpStatus? = null
     private val headers = Mu3Headers()
     var state : ResponseState = ResponseState.NOTHING
     @Volatile
@@ -23,14 +23,15 @@ internal class Mu3Response(
     private var endMillis : Long? = null
     private var completionListeners: ConcurrentLinkedQueue<ResponseCompleteListener>? = null
 
-    override fun status() = status.code()
-    override fun statusValue() = status
+    override fun status() = statusValue().code()
+    override fun statusValue() = httpStatus ?: HttpStatus.OK_200
 
-    override fun status(value: HttpStatus) {
-        this.status = value
+    override fun status(value: HttpStatus?) {
+        if (value == null) throw NullPointerException("status is null")
+        this.httpStatus = value
     }
     override fun status(value: Int) {
-        this.status = HttpStatus.of(value)
+        this.httpStatus = HttpStatus.of(value)
     }
     override fun addCompletionListener(listener: ResponseCompleteListener?) {
         if (listener == null) {
@@ -50,7 +51,7 @@ internal class Mu3Response(
             throw IllegalStateException("Cannot write headers multiple times")
         }
         state = ResponseState.WRITING_HEADERS
-        socketOut.write(status.http11ResponseLine())
+        socketOut.write(statusValue().http11ResponseLine())
         if (!headers.contains(HeaderNames.DATE)) {
             headers.set("date", Mutils.toHttpDate(Date()))
         }
@@ -100,6 +101,7 @@ internal class Mu3Response(
     }
 
     override fun redirect(uri: URI) {
+        val status = httpStatus ?: HttpStatus.FOUND_302
         if (!status.isRedirection) {
             status(HttpStatus.FOUND_302)
         }
@@ -166,10 +168,10 @@ internal class Mu3Response(
     fun cleanup() {
         if (state == ResponseState.NOTHING) {
             // empty response body
-            if (status == HttpStatus.OK_200) {
+            if (httpStatus == null) {
                 status(HttpStatus.NO_CONTENT_204)
             }
-            if (status.canHaveContent()) {
+            if (statusValue().canHaveContent()) {
                 headers.set(HeaderNames.CONTENT_LENGTH, 0L)
             }
             writeStatusAndHeaders()
@@ -189,6 +191,6 @@ internal class Mu3Response(
     override fun response() = this
 
     override fun toString(): String {
-        return "$status ($state)"
+        return "${statusValue()} ($state)"
     }
 }

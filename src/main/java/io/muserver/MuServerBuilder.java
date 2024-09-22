@@ -2,7 +2,7 @@ package io.muserver;
 
 import io.muserver.handlers.ResourceType;
 import io.muserver.rest.MuRuntimeDelegate;
-import io.netty.channel.*;
+import io.netty.channel.ChannelPipeline;
 import io.netty.handler.codec.http.HttpRequestDecoder;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseEncoder;
@@ -10,14 +10,14 @@ import io.netty.handler.codec.http.HttpServerKeepAliveHandler;
 import io.netty.handler.flow.FlowControlHandler;
 import io.netty.util.HashedWheelTimer;
 import io.netty.util.concurrent.DefaultThreadFactory;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -29,11 +29,10 @@ public class MuServerBuilder {
         MuRuntimeDelegate.ensureSet();
     }
 
-    private static final int LENGTH_OF_METHOD_AND_PROTOCOL = 17; // e.g. "OPTIONS HTTP/1.1 "
     private int httpPort = -1;
     private int httpsPort = -1;
     private int maxHeadersSize = 8192;
-    private int maxUrlSize = 8192 - LENGTH_OF_METHOD_AND_PROTOCOL;
+    private int maxUrlSize = 8192;
     private final List<MuHandler> handlers = new ArrayList<>();
     private boolean addShutdownHook = false;
     private String host;
@@ -196,8 +195,10 @@ public class MuServerBuilder {
      *
      * @param size The maximum size in bytes that can be used for headers.
      * @return The current Mu Server builder.
+     * @throws IllegalArgumentException if the size is less than 3
      */
     public MuServerBuilder withMaxHeadersSize(int size) {
+        if (size < 3) throw new IllegalArgumentException("The max headers size is too small");
         this.maxHeadersSize = size;
         return this;
     }
@@ -208,8 +209,10 @@ public class MuServerBuilder {
      *
      * @param size The maximum number of characters allowed in URLs sent to this server.
      * @return The current Mu Server builder
+     * @throws IllegalArgumentException if the size is less than 10
      */
     public MuServerBuilder withMaxUrlSize(int size) {
+        if (size < 10) throw new IllegalArgumentException("max URL length is too small");
         this.maxUrlSize = size;
         return this;
     }
@@ -275,7 +278,7 @@ public class MuServerBuilder {
      * @return The current Mu Server Handler.
      * @see #addHandler(Method, String, RouteHandler)
      */
-    public MuServerBuilder addHandler(MuHandlerBuilder handler) {
+    public MuServerBuilder addHandler(MuHandlerBuilder<?> handler) {
         if (handler == null) {
             return this;
         }
@@ -480,10 +483,7 @@ public class MuServerBuilder {
      * @return The current value of this property
      */
     public HttpsConfigBuilder httpsConfigBuilder() {
-        if (sslContextBuilder != null && !(sslContextBuilder instanceof HttpsConfigBuilder)) {
-            throw new IllegalStateException("Please switch to using HttpsConfigBuilder to set HTTPS config");
-        }
-        return (HttpsConfigBuilder) sslContextBuilder;
+        return sslContextBuilder;
     }
 
     /**
@@ -584,7 +584,7 @@ public class MuServerBuilder {
 
 
     static void setupHttp1Pipeline(ChannelPipeline p, NettyHandlerAdapter nettyHandlerAdapter, MuServerImpl server, String proto) {
-        p.addLast("decoder", new HttpRequestDecoder(server.settings().maxUrlSize + LENGTH_OF_METHOD_AND_PROTOCOL, server.settings().maxHeadersSize, 8192));
+        p.addLast("decoder", new HttpRequestDecoder(server.settings().maxUrlSize, server.settings().maxHeadersSize, 8192));
         p.addLast("encoder", new HttpResponseEncoder() {
             @Override
             protected boolean isContentAlwaysEmpty(HttpResponse msg) {

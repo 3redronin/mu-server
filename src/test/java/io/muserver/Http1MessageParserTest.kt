@@ -58,7 +58,7 @@ class Http1MessageParserTest {
             
         """.trimIndent().replace("\\r", "\r"))
         val bais = ByteArrayInputStream(requestString.toString().toByteArray(StandardCharsets.UTF_8))
-        val parser = Http1MessageParser(HttpMessageType.REQUEST, ConcurrentLinkedQueue(), bais)
+        val parser = Http1MessageParser(HttpMessageType.REQUEST, ConcurrentLinkedQueue(), bais, 8192, 8192)
         val req = parser.readNext() as HttpRequestTemp
         assertThat(req.headers().toString(), req.headers().size(), equalTo(1))
         assertThat(req.headers().getAll("content-length"), contains("0"))
@@ -88,7 +88,7 @@ class Http1MessageParserTest {
 
 
         val bais = ByteArrayInputStream(requestString.toString().toByteArray(StandardCharsets.UTF_8))
-        val parser = Http1MessageParser(HttpMessageType.REQUEST, ConcurrentLinkedQueue(), bais)
+        val parser = Http1MessageParser(HttpMessageType.REQUEST, ConcurrentLinkedQueue(), bais, 8192, 8192)
 
         val request = parser.readNext() as HttpRequestTemp
         assertThat(request.method, equalTo(Method.GET))
@@ -121,7 +121,7 @@ class Http1MessageParserTest {
 
         val wholeMessage = request.toString().toByteArray(StandardCharsets.UTF_8)
         val inputStream = MaxReadLengthInputStream(ByteArrayInputStream(wholeMessage), maxBytesPerRead)
-        val parser = Http1MessageParser(HttpMessageType.REQUEST, ConcurrentLinkedQueue(), inputStream)
+        val parser = Http1MessageParser(HttpMessageType.REQUEST, ConcurrentLinkedQueue(), inputStream, 8192, 8192)
 
         val req = parser.readNext() as HttpRequestTemp
         assertThat(req.method, equalTo(Method.GET))

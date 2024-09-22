@@ -23,36 +23,18 @@ internal val CRLF = byteArrayOf(CR, LF)
 private const val ZERO = 48.toByte()
 private const val NINE = 57.toByte()
 
-internal interface HttpMessageListener {
-    fun onHeaders(exchange: HttpMessageTemp)
-    fun onBodyBytes(exchange: HttpMessageTemp, type: BodyBytesType, array: ByteArray, offset: Int, length: Int)
-    fun onMessageEnded(exchange: HttpMessageTemp)
-    fun onError(exchange: HttpMessageTemp, error: Exception)
-}
-
-/**
- * The class of bytes in a message body
- */
-internal enum class BodyBytesType {
-    /**
-     * Bytes that make up the content of an HTTP request or response.
-     */
-    CONTENT,
-
-    /**
-     * The raw bytes of the trailers of a message.
-     */
-    TRAILERS,
-
-    /**
-     * Bytes of a websocket frame. Not this may be a partial frame, or a single frame, or multiple frames.
-     */
-    WEBSOCKET_FRAME,
-}
 internal interface Http1MessageReader {
     fun readNext() : Http1ConnectionMsg
 }
-internal class Http1MessageParser(type: HttpMessageType, private val requestQueue: Queue<HttpRequestTemp>, private val source: InputStream) : Http1MessageReader {
+internal class Http1MessageParser(
+    type: HttpMessageType,
+    private val requestQueue: Queue<HttpRequestTemp>,
+    private val source: InputStream,
+    private val maxHeadersLength: Int,
+    private val maxUrlLength: Int,
+) : Http1MessageReader {
+
+    private val maxBufferSize = maxOf(maxHeadersLength, maxUrlLength)
 
     /**
      * The number of bytes remaining to be sent in a fixed body size, or in the current chunk of chunked data (or MAX_LENGTH for unspecified lengths)
@@ -62,6 +44,7 @@ internal class Http1MessageParser(type: HttpMessageType, private val requestQueu
     private val buffer = ByteArrayOutputStream()
     private var exchange : HttpMessageTemp
     private var headerName : String? = null
+    private var curHeadersLen = 0
     init {
         if (type == HttpMessageType.REQUEST) {
             exchange = HttpRequestTemp.empty()
@@ -116,10 +99,18 @@ internal class Http1MessageParser(type: HttpMessageType, private val requestQueu
                     }
 
                     ParseState.REQUEST_TARGET -> {
+                        val req = request()
                         if (b.isVChar()) { // todo: only allow valid target chars
-                            buffer.append(b)
+                            val bad = req.rejectRequest?.status() == HttpStatus.URI_TOO_LONG_414
+                            if (!bad && buffer.size() < maxUrlLength) {
+                                buffer.append(b)
+                            } else if (!bad) {
+                                buffer.reset()
+                                buffer.append('/'.code.toByte()) // the request won't last long - give it a temp URL
+                                request().rejectRequest = HttpException(HttpStatus.URI_TOO_LONG_414)
+                            }
                         } else if (b == SP) {
-                            request().url = buffer.consumeAscii()
+                            req.url = buffer.consumeAscii()
                             state = ParseState.HTTP_VERSION
                         } else throw ParseException("state=$state b=$b", position)
                     }
@@ -183,6 +174,7 @@ internal class Http1MessageParser(type: HttpMessageType, private val requestQueu
                     }
 
                     ParseState.HEADER_START -> {
+                        curHeadersLen = 1
                         if (b.isTChar()) {
                             buffer.append(b.toLower())
                             state = ParseState.HEADER_NAME
@@ -192,20 +184,26 @@ internal class Http1MessageParser(type: HttpMessageType, private val requestQueu
                     }
 
                     ParseState.HEADER_NAME -> {
+                        val isOkay = onHeaderChar()
                         if (b.isTChar()) {
-                            buffer.append(b.toLower())
-                        } else if (b == 58.toByte()) {
+                            if (isOkay) {
+                                buffer.append(b.toLower())
+                            }
+                        } else if (b == COLON) {
                             headerName = buffer.consumeAscii()
-                            if (headerName!!.isEmpty()) throw ParseException("Empty header name", position)
+                            if (headerName!!.isEmpty() && isOkay) throw ParseException("Empty header name", position)
                             state = ParseState.HEADER_NAME_ENDED
                         }
                     }
 
                     ParseState.HEADER_NAME_ENDED -> {
+                        val isOkay = onHeaderChar()
                         if (b.isOWS()) {
                             // skip it
                         } else if (b.isVChar()) {
-                            buffer.append(b)
+                            if (isOkay) {
+                                buffer.append(b)
+                            }
                             state = ParseState.HEADER_VALUE
                         } else if (b.isCR()) {
                             // an empty value - ignore it
@@ -216,18 +214,24 @@ internal class Http1MessageParser(type: HttpMessageType, private val requestQueu
                     }
 
                     ParseState.HEADER_VALUE -> {
+                        val isOkay = onHeaderChar()
                         if (b.isVChar() || b.isOWS()) {
-                            buffer.append(b)
+                            if (isOkay) {
+                                buffer.append(b)
+                            }
                         } else if (b.isCR()) {
                             state = ParseState.HEADER_VALUE_ENDING
                         }
                     }
 
                     ParseState.HEADER_VALUE_ENDING -> {
+                        val isOkay = onHeaderChar()
                         if (b.isLF()) {
-                            val value = buffer.consumeAscii().trimEnd()
-                            if (value.isNotEmpty()) {
-                                exchange.headers().add(headerName!!, value)
+                            if (isOkay) {
+                                val value = buffer.consumeAscii().trimEnd()
+                                if (value.isNotEmpty()) {
+                                    exchange.headers().add(headerName!!, value)
+                                }
                             }
                             state = ParseState.HEADER_START
                         } else throw ParseException("No LF after CR at $state", position)
@@ -360,12 +364,14 @@ internal class Http1MessageParser(type: HttpMessageType, private val requestQueu
         }
     }
 
-    fun eof(listener: HttpMessageListener) {
-        if (state.eofAction == EOFAction.COMPLETE) {
-            listener.onMessageEnded(exchange)
-        } else if (state.eofAction == EOFAction.ERROR) {
-            listener.onError(exchange, EOFException("EOF when state is $state"))
+    private fun onHeaderChar(): Boolean {
+        curHeadersLen++
+        if (curHeadersLen <= maxHeadersLength) return true
+        val req = exchange
+        if (req is HttpRequestTemp && req.rejectRequest == null) {
+            req.rejectRequest = HttpException(HttpStatus.REQUEST_HEADER_FIELDS_TOO_LARGE_431)
         }
+        return false
     }
 
     private fun request() = (exchange as HttpRequestTemp)
@@ -411,10 +417,6 @@ internal class Http1MessageParser(type: HttpMessageType, private val requestQueu
         }
     }
 
-    fun error(e: Exception, messageListener: HttpMessageListener) {
-        messageListener.onError(exchange, e)
-    }
-
     private enum class ParseState(val eofAction: EOFAction) {
         REQUEST_START(EOFAction.NOTHING),
         RESPONSE_START(EOFAction.NOTHING),
@@ -452,6 +454,11 @@ internal class Http1MessageParser(type: HttpMessageType, private val requestQueu
         return javaClass.simpleName + " ${this.state}"
     }
 
+    private fun ByteArrayOutputStream.append(b: Byte) {
+        this.write(b.toInt())
+        if (this.size() > maxBufferSize) throw IllegalStateException("Buffer is ${this.size()} bytes")
+    }
+
     companion object {
         private fun Byte.isVChar() = this >= 0x21.toByte() && this <= 0x7E.toByte()
         internal fun Byte.isTChar(): Boolean {
@@ -473,10 +480,7 @@ internal class Http1MessageParser(type: HttpMessageType, private val requestQueu
         private fun Byte.toLower(): Byte = if (this < A || this > Z) this else (this + 32).toByte()
         private fun Byte.isDigit() = this in ZERO..NINE
         private fun Byte.isHexDigit() = this in A..F || this in ZERO..NINE || this in A_LOWER..F_LOWER
-        private fun ByteArrayOutputStream.append(b: Byte) {
-            this.write(b.toInt())
-            if (this.size() > 16384) throw IllegalStateException("Buffer is ${this.size()} bytes")
-        }
+
 
         private fun ByteArrayOutputStream.consumeAscii(): String {
             val v = this.toString(StandardCharsets.US_ASCII)

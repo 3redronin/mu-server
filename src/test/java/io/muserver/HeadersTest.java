@@ -3,8 +3,8 @@ package io.muserver;
 import okhttp3.Request;
 import okhttp3.Response;
 import org.hamcrest.Matchers;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.ClientUtils;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
@@ -30,7 +30,7 @@ public class HeadersTest {
 
     private MuServer server;
 
-    @After
+    @AfterEach
     public void stopIt() {
         MuAssert.stopAndCheck(server);
     }
@@ -122,7 +122,7 @@ public class HeadersTest {
         try (Response resp = call(request(server.uri().resolve("/this-is-much-longer-than-that-value-allowed-by-the-config-above-i-think")))) {
             assertThat(resp.code(), is(414));
             assertThat(resp.header("Content-Type"), is("text/plain;charset=utf-8"));
-            assertThat(resp.body().string(), is("414 Request-URI Too Long"));
+            assertThat(resp.body().string(), is("414 URI Too Long"));
         }
         assertThat(handlerHit.get(), is(false));
     }
@@ -138,11 +138,9 @@ public class HeadersTest {
 
         try (Response resp = call(xSomethingHeader(randomAsciiStringOfLength(1025)))) {
             assertThat(resp.code(), is(431));
-            if (!isHttp2(resp)) { // for HTTP2, netty sends a 431 with no body
-                assertThat(resp.body().string(), is("431 Request Header Fields Too Large"));
-                assertThat(resp.header("X-Something"), is(nullValue()));
-                assertThat(resp.header("Content-Type"), is("text/plain;charset=utf-8"));
-            }
+            assertThat(resp.body().string(), is("431 Request Header Fields Too Large"));
+            assertThat(resp.header("X-Something"), is(nullValue()));
+            assertThat(resp.header("Content-Type"), is("text/plain;charset=utf-8"));
         }
     }
 

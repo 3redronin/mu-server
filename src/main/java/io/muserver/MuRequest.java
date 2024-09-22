@@ -229,7 +229,7 @@ public interface MuRequest {
      * @return A string containing an IP address.
      */
     default String clientIP() {
-        List<ForwardedHeader> forwarded = headers().forwarded();
+        List<ForwardedHeader> forwarded = Headtils.getForwardedHeaders(headers());
         for (ForwardedHeader forwardedHeader : forwarded) {
             if (forwardedHeader.forValue() != null) {
                 return forwardedHeader.forValue();

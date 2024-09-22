@@ -26,6 +26,8 @@ internal class ConnectionAcceptor(
 
     private val connections: KeySetView<Mu3Http1Connection, Boolean> = ConcurrentHashMap.newKeySet()
 
+    fun activeConnections() : Set<HttpConnection> = connections
+
 
     @Volatile
     private var state = State.NOT_STARTED

@@ -33,12 +33,15 @@ public interface MuResponse {
     /**
      * Sets the response code for this request. Defaults to <code>200</code>
      * @param value The response code to send to the client.
+     * @throws IllegalArgumentException if the code is less than 100 or greater than 999
      */
     void status(int value);
 
     /**
-     * Sets the response code for this request. Defaults to {@link HttpStatus#OK_200}
+     * Sets the response code for this request. Defaults to {@link HttpStatus#OK_200} or {@link HttpStatus#NO_CONTENT_204}
+     * depending on whether content is written or not.
      * @param value The response code to send to the client.
+     * @throws NullPointerException if value is null
      */
     void status(HttpStatus value);
 
