@@ -1,15 +1,13 @@
 package io.muserver;
 
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import scaffolding.*;
 
 import java.io.IOException;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -22,7 +20,6 @@ public class SsePublisherTest {
 
     private MuServer server;
     private final SseClient.OkSse sseClient = new SseClient.OkSse(ClientUtils.client);
-    private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final TestSseClient listener = new TestSseClient();
     private static final Logger log = LoggerFactory.getLogger(SsePublisherTest.class);
 
@@ -40,24 +37,19 @@ public class SsePublisherTest {
         server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/streamer", (request, response, pathParams) -> {
 
-                SsePublisher ssePublisher = SsePublisher.start(request, response);
-                executor.submit(() -> {
-                    try {
-                        ssePublisher.sendComment("this is a comment");
-                        ssePublisher.send("Just a message");
-                        ssePublisher.send("A message and event", "customevent");
-                        ssePublisher.setClientReconnectTime(3, TimeUnit.SECONDS);
-                        ssePublisher.send("A message and ID", null, "myid");
-                        ssePublisher.send("A message and event and ID", "customevent", "myid");
-                        ssePublisher.sendComment("this is a comment 2");
-                        ssePublisher.send(multilineJson, null, null);
-                        ssePublisher.send(multilineJsonWithNewlines, null, null);
-                    } catch (Exception e) {
-                        log.info("Error while publishing", e);
-                    } finally {
-                        ssePublisher.close();
-                    }
-                });
+                try (var ssePublisher = SsePublisher.start(request, response)) {
+                    ssePublisher.sendComment("this is a comment");
+                    ssePublisher.send("Just a message");
+                    ssePublisher.send("A message and event", "customevent");
+                    ssePublisher.setClientReconnectTime(3, TimeUnit.SECONDS);
+                    ssePublisher.send("A message and ID", null, "myid");
+                    ssePublisher.send("A message and event and ID", "customevent", "myid");
+                    ssePublisher.sendComment("this is a comment 2");
+                    ssePublisher.send(multilineJson, null, null);
+                    ssePublisher.send(multilineJsonWithNewlines, null, null);
+                } catch (Exception e) {
+                    log.info("Error while publishing", e);
+                }
 
             })
             .start();
@@ -108,21 +100,19 @@ public class SsePublisherTest {
             .addHandler(Method.GET, "/streamer", (request, response, pathParams) -> {
 
                 SsePublisher ssePublisher = SsePublisher.start(request, response);
-                executor.submit(() -> {
-                    int i = 0;
-                    while (true) {
-                        try {
-                            ssePublisher.send("This is message " + i);
-                            somethingPublishedLatch.countDown();
-                            Thread.sleep(200);
-                        } catch (Throwable e) {
-                            thrownException.set(e);
-                            exceptionThrownLatch.countDown();
-                            break;
-                        }
-                        i++;
+                int i = 0;
+                while (true) {
+                    try {
+                        ssePublisher.send("This is message " + i);
+                        somethingPublishedLatch.countDown();
+                        Thread.sleep(200);
+                    } catch (Throwable e) {
+                        thrownException.set(e);
+                        exceptionThrownLatch.countDown();
+                        break;
                     }
-                });
+                    i++;
+                }
 
             })
             .start();
@@ -137,7 +127,7 @@ public class SsePublisherTest {
         assertThat(thrownException.get(), is(instanceOf(IOException.class)));
     }
 
-    @After
+    @AfterEach
     public void destroy() {
         scaffolding.MuAssert.stopAndCheck(server);
         listener.cleanup();

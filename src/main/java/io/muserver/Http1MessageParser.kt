@@ -207,7 +207,12 @@ internal class Http1MessageParser(type: HttpMessageType, private val requestQueu
                         } else if (b.isVChar()) {
                             buffer.append(b)
                             state = ParseState.HEADER_VALUE
-                        } else throw ParseException("Invalid header value $b", position)
+                        } else if (b.isCR()) {
+                            // an empty value - ignore it
+                            state = ParseState.HEADER_VALUE_ENDING
+                        } else {
+                            throw ParseException("Invalid header value $b", position)
+                        }
                     }
 
                     ParseState.HEADER_VALUE -> {
@@ -221,8 +226,9 @@ internal class Http1MessageParser(type: HttpMessageType, private val requestQueu
                     ParseState.HEADER_VALUE_ENDING -> {
                         if (b.isLF()) {
                             val value = buffer.consumeAscii().trimEnd()
-                            if (value.isEmpty()) throw ParseException("No header value for header $headerName", position)
-                            exchange.headers().add(headerName!!, value)
+                            if (value.isNotEmpty()) {
+                                exchange.headers().add(headerName!!, value)
+                            }
                             state = ParseState.HEADER_START
                         } else throw ParseException("No LF after CR at $state", position)
                     }

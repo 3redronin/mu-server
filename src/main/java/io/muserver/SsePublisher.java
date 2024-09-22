@@ -1,7 +1,8 @@
 package io.muserver;
 
+import java.io.Closeable;
 import java.io.IOException;
-import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -28,7 +29,7 @@ import java.util.concurrent.TimeUnit;
  *     .start();
  * </code></pre>
  */
-public interface SsePublisher {
+public interface SsePublisher extends Closeable {
 
     /**
      * Sends a message (without an ID or event type)
@@ -72,9 +73,9 @@ public interface SsePublisher {
     /**
      * <p>Stops the event stream.</p>
      * <p><strong>Warning:</strong> most clients will reconnect several seconds after this message is called. To prevent that
-     * happening, close the stream from the client or on the next request return a <code>204 No Content</code> to the client.</p>
+     * happening, close the stream from the client or on the next request return a {@link HttpStatus#NO_CONTENT_204} to the client.</p>
      */
-    void close();
+    void close() throws IOException;
 
     /**
      * Sends a comment to the client. Clients will ignore this, however it can be used as a way to keep the connection alive.
@@ -96,7 +97,8 @@ public interface SsePublisher {
     /**
      * <p>Creates a new Server-Sent Events publisher. This is designed by be called from within a MuHandler.</p>
      * <p>This will set the content type of the response to <code>text/event-stream</code> and disable caching.</p>
-     * <p>The request will also switch to async mode, which means you can use the returned publisher in another thread.</p>
+     * <p><strong>Warning:</strong> In Mu Server 2 and earlier, calling this method would put the request into async mode.
+     * This is no longer the case. If you wish to use an SSE publisher from another thread then</p>
      * <p><strong>IMPORTANT:</strong> The {@link #close()} method must be called when publishing is complete.</p>
      * @param request The current MuRequest
      * @param response The current MuResponse
@@ -105,16 +107,16 @@ public interface SsePublisher {
     static SsePublisher start(MuRequest request, MuResponse response) {
         response.contentType(ContentTypes.TEXT_EVENT_STREAM);
         response.headers().set(HeaderNames.CACHE_CONTROL, "no-cache, no-transform");
-        return new SsePublisherImpl(request.handleAsync());
+        return new SsePublisherImpl(response);
     }
 }
 
 class SsePublisherImpl implements SsePublisher {
 
-    private final AsyncHandle asyncHandle;
+    private final MuResponse response;
 
-    SsePublisherImpl(AsyncHandle asyncHandle) {
-        this.asyncHandle = asyncHandle;
+    public SsePublisherImpl(MuResponse response) {
+        this.response = response;
     }
 
     @Override
@@ -143,18 +145,12 @@ class SsePublisherImpl implements SsePublisher {
     }
 
     @Override
-    public void close() {
-        asyncHandle.complete();
+    public void close() throws IOException {
+        response.outputStream().close();
     }
 
     private void sendChunk(String text) throws IOException {
-        try {
-            ByteBuffer buf = Mutils.toByteBuffer(text);
-            asyncHandle.write(buf).get();
-        } catch (Throwable e) {
-            close();
-            throw new IOException("Error while publishing SSE message", e);
-        }
+        response.outputStream().write(text.getBytes(StandardCharsets.UTF_8));
     }
 
     private static void ensureNoLineBreaks(String value, String thing) {

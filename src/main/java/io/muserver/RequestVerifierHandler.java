@@ -5,7 +5,7 @@ class RequestVerifierHandler implements MuHandler {
     public static final RequestVerifierHandler INSTANCE = new RequestVerifierHandler();
     @Override
     public boolean handle(MuRequest request, MuResponse response) throws Exception {
-        if (!request.headers().contains(HeaderNames.HOST)) {
+        if (!request.headers().contains(HeaderNames.HOST) && request.httpVersion() != HttpVersion.HTTP_1_0) {
             throw HttpException.badRequest("No host header");
         }
         return false;

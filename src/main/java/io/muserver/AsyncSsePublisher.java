@@ -6,13 +6,13 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * <p>An interface for sending Server-Sent Events (SSE) to a client with async callbacks.</p>
- * <p>This is preferrable to the (blocking) {@link SsePublisher} when you have a large number of subscribers as
- * messages will be sent in a non-blocking fashion.</p>
  * <p>The usage is that same as for the synchronous version except that each send method returns a {@link CompletionStage}
  * which contains completion or exception info.</p>
  *
  * @see SsePublisher
+ * @deprecated As of Mu Server 3, the (blocking) {@link SsePublisher} is preferable in terms of performance
  */
+@Deprecated
 public interface AsyncSsePublisher {
 
     /**

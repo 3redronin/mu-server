@@ -1,7 +1,7 @@
 package io.muserver;
 
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.*;
 
 import java.util.concurrent.*;
@@ -127,7 +127,7 @@ public class AsyncSsePublisherTest {
     }
 
 
-    @After
+    @AfterEach
     public void destroy() {
         scaffolding.MuAssert.stopAndCheck(server);
         listener.cleanup();

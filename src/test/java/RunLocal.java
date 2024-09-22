@@ -123,20 +123,15 @@ public class RunLocal {
             .addHandler(Method.GET, "/streamer", (request, response, pathParams) -> {
                 int startValue = request.headers().getInt(HeaderNames.LAST_EVENT_ID, 1);
                 log.info("Starting event stream at " + startValue);
-                SsePublisher ssePublisher = SsePublisher.start(request, response);
-                new Thread(() -> {
-                    try {
-                        for (int i = startValue; i < startValue + 10; i++) {
-                            ssePublisher.send("This is message " + i, null, String.valueOf(i));
-                            Thread.sleep(1000);
-                        }
-                    } catch (Exception e) {
-                        // the user has probably disconnected; stop publishing
-                        log.info("Error while publishing to event stream", e);
-                    } finally {
-                        ssePublisher.close();
+                try (SsePublisher ssePublisher = SsePublisher.start(request, response)) {
+                    for (int i = startValue; i < startValue + 10; i++) {
+                        ssePublisher.send("This is message " + i, null, String.valueOf(i));
+                        Thread.sleep(1000);
                     }
-                }).start();
+                } catch (Exception e) {
+                    // the user has probably disconnected; stop publishing
+                    log.info("Error while publishing to event stream", e);
+                }
             })
             .addHandler(Method.GET, "/stats", (request, response, pathParams) -> {
                 MuStats stats = request.server().stats();

@@ -46,6 +46,25 @@ class Http1MessageParserTest {
     }
 
     @Test
+    fun `empty header values are ignored`() {
+        val requestString = StringBuilder()
+        requestString.append("""
+            GET /blah HTTP/1.1\r
+            accept-encoding:\r
+            accept-encoding-2: \r
+            accept-encoding-3:  \r
+            content-length: 0\r
+            \r
+            
+        """.trimIndent().replace("\\r", "\r"))
+        val bais = ByteArrayInputStream(requestString.toString().toByteArray(StandardCharsets.UTF_8))
+        val parser = Http1MessageParser(HttpMessageType.REQUEST, ConcurrentLinkedQueue(), bais)
+        val req = parser.readNext() as HttpRequestTemp
+        assertThat(req.headers().toString(), req.headers().size(), equalTo(1))
+        assertThat(req.headers().getAll("content-length"), contains("0"))
+    }
+
+    @Test
     fun `chunked bodies where whole body in single buffer is fine`() {
         val requestString = StringBuilder()
         requestString.append("""
