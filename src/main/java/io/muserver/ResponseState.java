@@ -83,6 +83,3 @@ public enum ResponseState {
     }
 }
 
-interface ResponseStateChangeListener {
-    void onStateChange(HttpExchange exchange, ResponseState newState);
-}

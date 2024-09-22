@@ -424,19 +424,4 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
      */
     String toString(Collection<String> toSuppress);
 
-    /**
-     * Creates new headers for HTTP1 requests
-     * @return An empty headers object.
-     */
-    static Headers http1Headers() {
-        return new Http1Headers();
-    }
-
-    /**
-     * Creates new headers for HTTP2 requests
-     * @return An empty headers object.
-     */
-    static Headers http2Headers() {
-        return new Http2Headers();
-    }
 }

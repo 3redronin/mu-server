@@ -41,11 +41,7 @@ public class Mutils {
      * @return Returns the UTF-8 URL decoded value
      */
     public static String urlDecode(String value) {
-        try {
-            return URLDecoder.decode(value, "UTF-8");
-        } catch (UnsupportedEncodingException e) {
-            throw new MuException("Error encoding " + value, e);
-        }
+        return URLDecoder.decode(value, UTF_8);
     }
 
     private Mutils() {
@@ -91,7 +87,7 @@ public class Mutils {
      * @return True if the value is null or a zero-length string.
      */
     public static boolean nullOrEmpty(String val) {
-        return val == null || val.length() == 0;
+        return val == null || val.isEmpty();
     }
 
     /**
@@ -277,5 +273,47 @@ public class Mutils {
         return pathAndQuery;
     }
 
+    static boolean isTruthy(String val) {
+        switch (val) {
+            case "true":
+            case "on":
+            case "yes":
+            case "1":
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    static String getRelativeUrl(String nettyUri) throws HttpException {
+        try {
+            URI requestUri = new URI(nettyUri).normalize();
+            if (requestUri.getScheme() == null && requestUri.getHost() != null) {
+                throw HttpException.redirect(new URI(nettyUri.substring(1)).normalize());
+            }
+
+            String s = requestUri.getRawPath();
+            if (Mutils.nullOrEmpty(s)) {
+                s = "/";
+            } else {
+                // TODO: consider a redirect if the URL is changed? Handle other percent-encoded characters?
+                s = s.replace("%7E", "~")
+                    .replace("%5F", "_")
+                    .replace("%2E", ".")
+                    .replace("%2D", "-")
+                ;
+            }
+            String q = requestUri.getRawQuery();
+            if (q != null) {
+                s += "?" + q;
+            }
+            return s;
+        } catch (Exception e) {
+            if (e instanceof HttpException) throw (HttpException) e;
+            throw new HttpException(HttpStatus.BAD_REQUEST_400, "Invalid request URL");
+        }
+    }
+
     private static final ByteBuffer EMPTY_BUFFER = ByteBuffer.allocate(0);
+
 }

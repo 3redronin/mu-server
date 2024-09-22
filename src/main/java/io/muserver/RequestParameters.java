@@ -4,8 +4,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-import static io.muserver.NettyRequestParameters.isTruthy;
-
 /**
  * Provides access to QueryString or Form values.
  */
@@ -109,7 +107,7 @@ public interface RequestParameters {
      */
     default boolean getBoolean(String name) {
         String val = get(name, "").toLowerCase();
-        return isTruthy(val);
+        return Mutils.isTruthy(val);
     }
 
     /**

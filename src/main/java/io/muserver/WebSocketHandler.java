@@ -1,8 +1,5 @@
 package io.muserver;
 
-import io.netty.handler.codec.http.DefaultHttpHeaders;
-import io.netty.handler.codec.http.HttpHeaders;
-
 /**
  * A handler that can establish a web socket based on web socket upgrade requests.
  * Create with {@link WebSocketHandlerBuilder#webSocketHandler()}
@@ -35,16 +32,18 @@ public class WebSocketHandler implements MuHandler {
         if (!isWebSocketUpgrade(request)) {
             return false;
         }
-        HttpHeaders nettyHeaders = new DefaultHttpHeaders();
-        Http1Headers responseHeaders = new Http1Headers(nettyHeaders);
+//        HttpHeaders nettyHeaders = new DefaultHttpHeaders();
+//        Http1Headers responseHeaders = new Http1Headers(nettyHeaders);
+        var responseHeaders = new Mu3Headers();
         MuWebSocket muWebSocket = factory.create(request, responseHeaders);
         if (muWebSocket == null) {
             return false;
         }
-        NettyRequestAdapter reqImpl = (NettyRequestAdapter) request;
         boolean upgraded;
         try {
-            upgraded = reqImpl.websocketUpgrade(muWebSocket, nettyHeaders, idleReadTimeoutMills, pingAfterWriteMillis, maxFramePayloadLength);
+
+//            upgraded = request.websocketUpgrade(muWebSocket, nettyHeaders, idleReadTimeoutMills, pingAfterWriteMillis, maxFramePayloadLength);
+            upgraded = false;
         } catch (UnsupportedOperationException e) {
             response.status(426);
             response.headers().set(HeaderNames.SEC_WEBSOCKET_VERSION, "13");

@@ -2,12 +2,6 @@ package io.muserver;
 
 import io.muserver.handlers.ResourceType;
 import io.muserver.rest.MuRuntimeDelegate;
-import io.netty.channel.ChannelPipeline;
-import io.netty.handler.codec.http.HttpRequestDecoder;
-import io.netty.handler.codec.http.HttpResponse;
-import io.netty.handler.codec.http.HttpResponseEncoder;
-import io.netty.handler.codec.http.HttpServerKeepAliveHandler;
-import io.netty.handler.flow.FlowControlHandler;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -575,23 +569,6 @@ public class MuServerBuilder {
         }
         return Mu3ServerImpl.start(this);
     }
-
-
-    static void setupHttp1Pipeline(ChannelPipeline p, NettyHandlerAdapter nettyHandlerAdapter, MuServerImpl server, String proto) {
-        p.addLast("decoder", new HttpRequestDecoder(server.settings().maxUrlSize, server.settings().maxHeadersSize, 8192));
-        p.addLast("encoder", new HttpResponseEncoder() {
-            @Override
-            protected boolean isContentAlwaysEmpty(HttpResponse msg) {
-                return super.isContentAlwaysEmpty(msg) || msg instanceof NettyResponseAdaptor.EmptyHttpResponse;
-            }
-        });
-        p.addLast("keepalive", new HttpServerKeepAliveHandler());
-        p.addLast("flowControl", new FlowControlHandler());
-        p.addLast(BackPressureHandler.NAME, new BackPressureHandler());
-        p.addLast("preread", new PreReader());
-        p.addLast("muhandler", new Http1Connection(nettyHandlerAdapter, server, proto));
-    }
-
 
     @Override
     public String toString() {

@@ -31,11 +31,7 @@ public class Http1AndHttp2HeadersTest {
             assertThat(headers.contains("HEader"), is(true));
             assertThat(headers.contains("HEAder", "1", false), is(true));
             assertThat(headers.containsValue("HEAder", "1", false), is(true));
-            if (headers instanceof Http1Headers) {
-                assertThat(headers.names(), contains("Header", "hEader", "heAder"));
-            } else {
-                assertThat(headers.names(), contains("header"));
-            }
+            assertThat(headers.names(), contains("header"));
             assertThat(headers.size(), is(3));
 
             assertThat(headers.isEmpty(), is(false));

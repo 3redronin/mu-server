@@ -80,7 +80,7 @@ internal class Mu3Response(
     }
 
     private fun ensureCharsetSet(): Charset {
-        val charset = NettyRequestAdapter.bodyCharset(headers, false)
+        val charset = Headtils.bodyCharset(headers, false)
         if (!headers.contains(HeaderNames.CONTENT_TYPE)) {
             headers[HeaderNames.CONTENT_TYPE] =
                 if (charset === StandardCharsets.UTF_8) ContentTypes.TEXT_PLAIN_UTF8 else "text/plain;charset=" + charset.name()

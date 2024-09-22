@@ -434,16 +434,8 @@ public class HeadersTest {
     }
 
     @Test
-    public void http1HeadersToStringDoesNotLogSensitiveHeaders() {
-        httpHeadersToStringDoesNotLogSensitiveHeaders(new Http1Headers());
-    }
-
-    @Test
-    public void http2HeadersToStringDoesNotLogSensitiveHeaders() {
-        httpHeadersToStringDoesNotLogSensitiveHeaders(new Http2Headers());
-    }
-
-    private void httpHeadersToStringDoesNotLogSensitiveHeaders(Headers headers) {
+    public void httpHeadersToStringDoesNotLogSensitiveHeaders() {
+        Headers headers = new Mu3Headers();
         headers.add("some-header", "value 1");
         headers.add("some-header", "value 2");
         headers.set(HeaderNames.AUTHORIZATION.toString().toUpperCase(), "shouldnotprint");
@@ -478,4 +470,5 @@ public class HeadersTest {
             containsStringIgnoringCase("authorization: shouldnotprint")
         ));
     }
+
 }

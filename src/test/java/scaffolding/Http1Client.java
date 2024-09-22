@@ -146,7 +146,7 @@ public class Http1Client implements AutoCloseable {
 
     public Headers readHeaders() throws IOException {
         String line;
-        var headers = Headers.http1Headers();
+        var headers = new Mu3Headers();
         while (!(line = readUntil('\r', 1000)).isEmpty()) {
             String[] bits = line.split(":", 2);
             headers.add(bits[0], bits[1].trim());

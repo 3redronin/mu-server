@@ -72,7 +72,7 @@ internal data class HttpRequestTemp(
 ) : HttpMessageTemp {
 
     fun normalisedUri(): String {
-        return HttpExchange.getRelativeUrl(url)
+        return Mutils.getRelativeUrl(url)
     }
 
     fun isWebsocketUpgrade() = headers.containsValue("upgrade", "websocket", false)

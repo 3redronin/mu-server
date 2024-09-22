@@ -2,6 +2,7 @@ package io.muserver.handlers;
 
 import io.muserver.HeaderNames;
 import io.muserver.Headers;
+import io.muserver.Mu3Headers;
 import org.junit.Test;
 
 import java.util.Map;
@@ -28,7 +29,7 @@ public class ResourceTypeTest {
 
     @Test
     public void allMimeTypesAreValid() {
-        Headers headers = Headers.http1Headers();
+        Headers headers = new Mu3Headers();
         for (ResourceType rt : ResourceType.DEFAULT_EXTENSION_MAPPINGS.values()) {
             headers.set(HeaderNames.CONTENT_TYPE, rt.mimeType());
         }

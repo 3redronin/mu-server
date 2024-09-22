@@ -55,7 +55,7 @@ internal class Mu3Headers(
 
     override fun getBoolean(name: String): Boolean {
         val s = get(name) ?: return false
-        return NettyRequestParameters.isTruthy(s)
+        return Mutils.isTruthy(s)
     }
 
     override fun getTimeMillis(name: CharSequence): Long? {
@@ -287,5 +287,6 @@ internal class MutablePairEntryAdaptor<N,V>(var pair: Pair<N,V>) : MutableMap.Mu
         pair = Pair(oldPair.first, newValue)
         return oldPair.second
     }
+
 
 }

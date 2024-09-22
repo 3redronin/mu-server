@@ -365,11 +365,9 @@ public class RequestBodyReaderStringTest {
 
         assertEventually(() -> infos, not(empty()));
         assertThat(infos.size(), equalTo(1));
-        HttpExchange ri = (HttpExchange) infos.get(0);
+        Mu3Response ri = (Mu3Response) infos.get(0);
         assertThat(ri.completedSuccessfully(), equalTo(false));
-        assertThat(ri.state(), equalTo(HttpExchangeState.ERRORED));
-        assertThat(ri.request.requestState(), equalTo(RequestState.ERRORED));
-        assertThat(ri.response.responseState(), equalTo(ResponseState.FULL_SENT));
+        assertThat(ri.response().responseState(), equalTo(ResponseState.FULL_SENT));
     }
 
     @Test
@@ -416,11 +414,9 @@ public class RequestBodyReaderStringTest {
 
         assertEventually(() -> infos, not(empty()));
         assertThat(infos.size(), equalTo(1));
-        HttpExchange ri = (HttpExchange) infos.get(0);
+        Mu3Response ri = (Mu3Response) infos.get(0);
         assertThat(ri.completedSuccessfully(), equalTo(false));
-        assertThat(ri.state(), equalTo(HttpExchangeState.ERRORED));
-        assertThat(ri.request.requestState(), equalTo(RequestState.ERRORED));
-        assertThat(ri.response.responseState(), equalTo(ResponseState.ERRORED));
+        assertThat(ri.response().responseState(), equalTo(ResponseState.ERRORED));
     }
 
     @After

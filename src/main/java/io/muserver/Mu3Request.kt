@@ -42,7 +42,7 @@ internal class Mu3Request(
     override fun body() = body
 
     override fun readBodyAsString(): String {
-        val charset = NettyRequestAdapter.bodyCharset(mu3Headers, true)
+        val charset = Headtils.bodyCharset(mu3Headers, true)
         body().reader(charset).use { reader ->
             return reader.readText()
         }

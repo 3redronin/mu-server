@@ -3,11 +3,16 @@ package io.muserver;
 import io.netty.handler.codec.HeadersUtils;
 import jakarta.ws.rs.core.MediaType;
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.net.URI;
+import java.nio.charset.Charset;
+import java.nio.charset.IllegalCharsetNameException;
+import java.nio.charset.UnsupportedCharsetException;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Arrays.asList;
 import static java.util.Collections.emptyList;
 
@@ -135,4 +140,27 @@ class Headtils {
             return defaultValue;
         }
     }
+
+    private static Logger log = LoggerFactory.getLogger(Headtils.class);
+    static Charset bodyCharset(Headers headers, boolean isRequest) {
+        MediaType mediaType = headers.contentType();
+        Charset bodyCharset = UTF_8;
+        if (mediaType != null) {
+            String charset = mediaType.getParameters().get("charset");
+            if (!Mutils.nullOrEmpty(charset)) {
+                try {
+                    bodyCharset = Charset.forName(charset);
+                } catch (IllegalCharsetNameException | UnsupportedCharsetException e) {
+                    if (isRequest) {
+                        throw HttpException.badRequest("Invalid request body charset");
+                    } else {
+                        log.error("Invalid response body charset: " + mediaType, e);
+                        throw HttpException.internalServerError("Invalid response body charset");
+                    }
+                }
+            }
+        }
+        return bodyCharset;
+    }
+
 }
