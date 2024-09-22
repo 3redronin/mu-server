@@ -1,8 +1,8 @@
 package io.muserver;
 
 import okhttp3.Response;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 
@@ -41,8 +41,7 @@ public class MuStatsImplTest {
 
     }
 
-
-    @After
+    @AfterEach
     public void destroy() {
         scaffolding.MuAssert.stopAndCheck(server);
     }

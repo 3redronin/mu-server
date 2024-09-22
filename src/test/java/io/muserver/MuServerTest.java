@@ -324,7 +324,7 @@ public class MuServerTest {
             rawClient.flushRequest();
             assertEventually(rawClient::responseString, startsWith("HTTP/1.1 400 Bad Request\r\n"));
         }
-        assertThat(server.stats().completedRequests(), is(1L));
+        assertEventually(() -> server.stats().completedRequests(), is(1L));
     }
 
     @Test
