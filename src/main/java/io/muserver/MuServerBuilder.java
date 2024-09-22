@@ -8,8 +8,6 @@ import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseEncoder;
 import io.netty.handler.codec.http.HttpServerKeepAliveHandler;
 import io.netty.handler.flow.FlowControlHandler;
-import io.netty.util.HashedWheelTimer;
-import io.netty.util.concurrent.DefaultThreadFactory;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -43,8 +41,7 @@ public class MuServerBuilder {
     private ExecutorService executor;
     private long maxRequestSize = 24 * 1024 * 1024;
     private List<ResponseCompleteListener> responseCompleteListeners;
-    private HashedWheelTimer wheelTimer;
-    private List<RateLimiterImpl> rateLimiters;
+    List<RateLimiterImpl> rateLimiters;
     private UnhandledExceptionHandler unhandledExceptionHandler;
     private boolean autoHandleExpectContinue = true;
     private List<ContentEncoder> contentEncoders = null;
@@ -362,13 +359,10 @@ public class MuServerBuilder {
      * @return This builder
      */
     public MuServerBuilder withRateLimiter(RateLimitSelector selector) {
-        if (wheelTimer == null) {
-            wheelTimer = new HashedWheelTimer(new DefaultThreadFactory("mu-limit-timer"));
-            wheelTimer.start();
+        if (rateLimiters == null) {
             rateLimiters = new ArrayList<>();
         }
-        RateLimiterImpl rateLimiter = new RateLimiterImpl(selector, wheelTimer);
-        this.rateLimiters.add(rateLimiter);
+        this.rateLimiters.add(new RateLimiterImpl(selector));
         return this;
     }
 

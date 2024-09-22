@@ -1,11 +1,11 @@
 package io.muserver;
 
-import io.netty.util.HashedWheelTimer;
 import okhttp3.Response;
-import org.junit.After;
-import org.junit.Test;
+import org.hamcrest.Matchers;
+import org.junit.jupiter.api.Test;
 import scaffolding.ServerUtils;
 
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import static io.muserver.RateLimitBuilder.rateLimit;
@@ -17,27 +17,28 @@ import static scaffolding.MuAssert.assertEventually;
 
 public class RateLimiterTest {
 
-    private final HashedWheelTimer timer = new HashedWheelTimer();
 
     @Test
-    public void returnsFalseIfLimitExceeded() throws InterruptedException {
+    public void returnsActionIfLimitExceeded() throws InterruptedException {
         RateLimiterImpl limiter = new RateLimiterImpl(
-            request -> rateLimit().withBucket("blah").withRate(3).withWindow(100, TimeUnit.MILLISECONDS).build(),
-            timer);
-        assertThat(limiter.record(null), is(true));
-        assertThat(limiter.record(null), is(true));
-        assertThat(limiter.record(null), is(true));
-        assertThat(limiter.record(null), is(false));
+            request -> rateLimit().withBucket("blah")
+                .withRate(3)
+                .withRejectionAction(RateLimitRejectionAction.SEND_429)
+                .withWindow(100, TimeUnit.MILLISECONDS).build());
+        assertThat(limiter.record(null), nullValue());
+        assertThat(limiter.record(null), nullValue());
+        assertThat(limiter.record(null), nullValue());
+        assertThat(limiter.record(null), equalTo(RateLimitRejectionAction.SEND_429));
         Thread.sleep(250);
-        assertThat(limiter.record(null), is(true));
+        assertThat(limiter.record(null), nullValue());
         assertEventually(() -> limiter.currentBuckets().keySet(), is(empty()));
     }
 
     @Test
     public void returningNullMeansAlwaysAllow() throws InterruptedException {
-        RateLimiterImpl limiter = new RateLimiterImpl(request -> null, timer);
+        RateLimiterImpl limiter = new RateLimiterImpl(request -> null);
         for (int i = 0; i < 10; i++) {
-            assertThat(limiter.record(null), is(true));
+            assertThat(limiter.record(null), is(nullValue()));
         }
         assertThat(limiter.currentBuckets().keySet(), is(empty()));
     }
@@ -46,9 +47,10 @@ public class RateLimiterTest {
     public void ignoreActionDoesNotBlock() throws InterruptedException {
         RateLimiterImpl limiter = new RateLimiterImpl(request -> rateLimit().withBucket("blah")
             .withRate(1).withRejectionAction(RateLimitRejectionAction.IGNORE)
-            .build(), timer);
-        for (int i = 0; i < 10; i++) {
-            assertThat(limiter.record(null), is(true));
+            .build());
+        assertThat(limiter.record(null), nullValue());
+        for (int i = 1; i < 10; i++) {
+            assertThat(limiter.record(null), equalTo(RateLimitRejectionAction.IGNORE));
         }
         assertEventually(() -> limiter.currentBuckets().keySet(), is(empty()));
     }
@@ -106,6 +108,8 @@ public class RateLimiterTest {
             try (Response resp = call(request(server.uri()))) {
                 assertThat(resp.code(), is(429));
                 assertThat(resp.body().string(), is("429 Too Many Requests"));
+                List<String> retryAfter = resp.headers().values("retry-after");
+                assertThat(retryAfter.toString(), retryAfter, contains(Matchers.matchesPattern("\\d{1,2}")));
             }
         }
         assertThat(server.stats().rejectedDueToOverload(), is(3L));
@@ -115,11 +119,6 @@ public class RateLimiterTest {
         assertThat(server.rateLimiters().get(1).currentBuckets().get("127.0.0.1"), equalTo(2L));
         assertThat(server.rateLimiters().get(2).currentBuckets(), aMapWithSize(1));
         assertThat(server.rateLimiters().get(2).currentBuckets().get("127.0.0.1"), equalTo(1L));
-    }
-
-    @After
-    public void cleanup() {
-        timer.stop();
     }
 
 }

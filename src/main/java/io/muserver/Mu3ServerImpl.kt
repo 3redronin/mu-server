@@ -19,6 +19,7 @@ internal class Mu3ServerImpl(
     private val idleTimeoutMillis: Long,
     private val maxUrlSize: Int,
     private val maxHeadersSize: Int,
+    val rateLimiters: List<RateLimiterImpl>,
 ) : MuServer {
 
     val statsImpl = Mu3StatsImpl()
@@ -97,9 +98,7 @@ internal class Mu3ServerImpl(
         return null
     }
 
-    override fun rateLimiters(): List<RateLimiter> {
-        return listOf()
-    }
+    override fun rateLimiters() = rateLimiters
 
     fun onRequestStarted(req: Mu3Request) {
         statsImpl.onRequestStarted(req)
@@ -141,6 +140,7 @@ internal class Mu3ServerImpl(
                 idleTimeoutMillis = builder.idleTimeoutMills(),
                 maxUrlSize = builder.maxUrlSize(),
                 maxHeadersSize = builder.maxHeadersSize(),
+                rateLimiters = builder.rateLimiters ?: emptyList(),
             )
 
             val address = builder.interfaceHost()?.let { InetAddress.getByName(it) }

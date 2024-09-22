@@ -1,7 +1,7 @@
 package io.muserver;
 
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.ServerUtils;
 
 import java.time.Instant;
@@ -26,6 +26,7 @@ public class HttpConnectionTest {
                 try {
                     HttpConnection con = request.connection();
                     assertThat(con.protocol(), is("HTTP/1.1"));
+                    assertThat(con.httpVersion(), is(HttpVersion.HTTP_1_1));
                     assertThat(con.isHttps(), is(false));
                     assertThat(con.httpsProtocol(), is(nullValue()));
                     assertThat(con.cipher(), is(nullValue()));
@@ -95,7 +96,7 @@ public class HttpConnectionTest {
         assertThat(error.get(), is(nullValue()));
     }
 
-    @After
+    @AfterEach
     public void stopIt() {
         scaffolding.MuAssert.stopAndCheck(server);
     }

@@ -12,6 +12,7 @@ import java.util.*
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
+import javax.net.ssl.SSLSocket
 
 internal class Mu3Http1Connection(
     val server: Mu3ServerImpl,
@@ -27,6 +28,8 @@ internal class Mu3Http1Connection(
     private val completedRequests = AtomicLong()
     @Volatile
     private var lastIO = System.currentTimeMillis()
+    private val invalidHttpRequests = AtomicLong(0)
+    private val rejectedDueToOverload = AtomicLong(0)
 
     private val requestTimeout = if (server.requestIdleTimeoutMillis() > Int.MAX_VALUE) {
         Int.MAX_VALUE
@@ -81,10 +84,27 @@ internal class Mu3Http1Connection(
 
                     val muResponse = Mu3Response(muRequest, outputStream)
                     muRequest.response = muResponse
-
                     closeConnection = muRequest.headers().closeConnection(muRequest.httpVersion)
+
+
+                    if (rejectException == null) {
+                        var first : RateLimitRejectionAction? = null
+                        for (rateLimiter in server.rateLimiters) {
+                            val action = rateLimiter.record(muRequest)
+                            if (action != null && first == null) {
+                                first = action
+                            }
+                        }
+                        if (first != null) {
+                            if (first == RateLimitRejectionAction.SEND_429) {
+                                rejectException = HttpException(HttpStatus.TOO_MANY_REQUESTS_429)
+                                rejectException.responseHeaders().setAll(request.headers())
+                            }
+                        }
+                    }
+
                     if (rejectException != null) {
-                        server.statsImpl.onInvalidRequest()
+                        onInvalidRequest(rejectException)
                         muResponse.status(rejectException.status())
                         muResponse.headers().set(rejectException.responseHeaders())
                         if (rejectException.message != null) {
@@ -144,6 +164,16 @@ internal class Mu3Http1Connection(
         }
     }
 
+    private fun onInvalidRequest(rejectException: HttpException) {
+        if (rejectException.status() == HttpStatus.TOO_MANY_REQUESTS_429) {
+            rejectedDueToOverload.incrementAndGet()
+            server.statsImpl.onRejectedDueToOverload()
+        } else {
+            invalidHttpRequests.incrementAndGet()
+            server.statsImpl.onInvalidRequest()
+        }
+    }
+
     private fun cleanUpNicely(
         closeConnection: Boolean,
         muResponse: Mu3Response,
@@ -181,12 +211,16 @@ internal class Mu3Http1Connection(
 
     override fun isHttps() = creator.isHttps
 
-    override fun httpsProtocol(): String {
-        TODO("Not yet implemented")
+    override fun httpsProtocol(): String? {
+        return if (clientSocket is SSLSocket) {
+            clientSocket.session.protocol
+        } else null
     }
 
-    override fun cipher(): String {
-        TODO("Not yet implemented")
+    override fun cipher(): String? {
+        return if (clientSocket is SSLSocket) {
+            clientSocket.session.cipherSuite
+        } else null
     }
 
     override fun startTime() = startTime
@@ -195,13 +229,9 @@ internal class Mu3Http1Connection(
 
     override fun completedRequests() = completedRequests.get()
 
-    override fun invalidHttpRequests(): Long {
-        TODO("Not yet implemented")
-    }
+    override fun invalidHttpRequests() = invalidHttpRequests.get()
 
-    override fun rejectedDueToOverload(): Long {
-        TODO("Not yet implemented")
-    }
+    override fun rejectedDueToOverload() = rejectedDueToOverload.get()
 
     override fun activeRequests(): Set<MuRequest> {
         val cur = currentRequest.get()

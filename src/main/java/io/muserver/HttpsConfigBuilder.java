@@ -307,6 +307,7 @@ public class HttpsConfigBuilder {
 
         String[] protocolsToUse = getHttpsProtocolsArray(context);
         params.setProtocols(protocolsToUse);
+
         return new HttpsConfig(context, params, trustManager);
     }
 

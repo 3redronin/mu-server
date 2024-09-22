@@ -81,6 +81,8 @@ internal class ConnectionAcceptor(
                 val ssf = httpsConfig.sslContext().socketFactory
                 val secureSocket = ssf.createSocket(socket, null, socket.port, true) as SSLSocket
                 secureSocket.useClientMode = false
+                secureSocket.enabledProtocols = httpsConfig.protocolsArray()
+                secureSocket.enabledCipherSuites = httpsConfig.cipherSuitesArray()
 
                 if (http2Config?.enabled == true) {
                     val sslParams = secureSocket.sslParameters

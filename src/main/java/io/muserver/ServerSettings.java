@@ -1,7 +1,6 @@
 package io.muserver;
 
 import java.util.List;
-import java.util.Set;
 
 class ServerSettings {
     final int maxHeadersSize;
@@ -22,7 +21,6 @@ class ServerSettings {
         boolean allowed = true;
         if (rateLimiters != null) {
             for (RateLimiterImpl limiter : rateLimiters) {
-                allowed &= limiter.record(request);
             }
         }
         return !allowed;

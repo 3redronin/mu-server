@@ -27,4 +27,8 @@ public class RateLimit {
     public static RateLimitBuilder builder() {
         return new RateLimitBuilder();
     }
+
+    long expiryMillis() {
+        return this.perUnit.toMillis(this.per);
+    }
 }
