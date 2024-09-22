@@ -6,6 +6,7 @@ import java.io.IOException
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.URI
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 internal class Mu3ServerImpl(
@@ -117,7 +118,7 @@ internal class Mu3ServerImpl(
 
             val exceptionHandler = UnhandledExceptionHandler.getDefault(builder.unhandledExceptionHandler())
 
-            val executor = builder.executor() ?: Executors.newCachedThreadPool()
+            val executor = builder.executor() ?: MuServerBuilder.defaultExecutor()
             val acceptors = mutableListOf<ConnectionAcceptor>()
 
             val actualHandlers = mutableListOf<MuHandler>()
@@ -152,6 +153,7 @@ internal class Mu3ServerImpl(
             impl.startListening()
             return impl
         }
+
     }
 
 }

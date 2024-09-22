@@ -669,4 +669,17 @@ public class MuServerBuilder {
         return this;
     }
 
+    /**
+     * @return a virtual-thread-per-task executor if virtual threads are available; otherwise gets a cached thread pool.
+     */
+    static ExecutorService defaultExecutor() {
+        // Executors.newVirtualThreadPerTaskExecutor()
+        try {
+            java.lang.reflect.Method newVirtualThreadPerTaskExecutor = Executors.class.getMethod("newVirtualThreadPerTaskExecutor");
+            return (ExecutorService) newVirtualThreadPerTaskExecutor.invoke(null);
+        } catch (Exception ignored) {
+            // no worries; we'll use the default
+        }
+        return Executors.newCachedThreadPool();
+    }
 }
