@@ -15,13 +15,10 @@ class HeaderString implements CharSequence {
 
     private HeaderString(CharSequence value) {
         this.s = value.toString();
-        CharsetEncoder encoder = StandardCharsets.US_ASCII.newEncoder();
-        var buffer = ByteBuffer.allocate(s.length());
-        var result = encoder.encode(CharBuffer.wrap(value), buffer, true);
-        if (result.isError() || result.isMalformed() || result.isUnmappable() || result.isOverflow() || result.isUnderflow()) {
-            throw new IllegalArgumentException("Could not convert the string to an ascii string: " + result);
+        this.bytes = s.getBytes(StandardCharsets.US_ASCII);
+        if (s.length() != bytes.length) {
+            throw new IllegalArgumentException("Non ascii characters");
         }
-        this.bytes = buffer.array();
     }
 
     public static HeaderString valueOf(String value) {
