@@ -1,6 +1,5 @@
 package io.muserver;
 
-import io.netty.handler.codec.HeadersUtils;
 import jakarta.ws.rs.core.MediaType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -9,11 +8,12 @@ import java.net.URI;
 import java.nio.charset.Charset;
 import java.nio.charset.IllegalCharsetNameException;
 import java.nio.charset.UnsupportedCharsetException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.stream.Collectors;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
-import static java.util.Arrays.asList;
 import static java.util.Collections.emptyList;
 
 class Headtils {
@@ -71,55 +71,6 @@ class Headtils {
         return values.stream().map(v -> v.split("\\s*,\\s*")).flatMap(Arrays::stream).collect(Collectors.toList());
     }
 
-    static List<ParameterizedHeaderWithValue> getParameterizedHeaderWithValues(Headers headers, CharSequence headerName) {
-        String input = headers.get(headerName);
-        if (input == null) {
-            return emptyList();
-        }
-        return ParameterizedHeaderWithValue.fromString(input);
-    }
-
-    static MediaType getMediaType(Headers headers) {
-        String value = headers.get(HeaderNames.CONTENT_TYPE);
-        if (value == null) {
-            return null;
-        }
-        return MediaTypeParser.fromString(value);
-    }
-
-    static String toString(Headers headers, Collection<String> toSuppress) {
-        return HeadersUtils.toString(headers.getClass(), new RedactorIterator(headers.iterator(), toSuppress), headers.size());
-    }
-
-    private static class RedactorIterator implements Iterator<Map.Entry<String, String>> {
-        static final List<String> sensitiveOnes = asList(HeaderNames.COOKIE.toString(), HeaderNames.SET_COOKIE.toString(), HeaderNames.AUTHORIZATION.toString());
-        private final Iterator<Map.Entry<String, String>> iterator;
-        private final Collection<String> toSuppress;
-
-        public RedactorIterator(Iterator<Map.Entry<String, String>> iterator, Collection<String> toSuppress) {
-            this.iterator = iterator;
-            if (toSuppress == null) {
-                this.toSuppress = sensitiveOnes;
-            } else {
-                this.toSuppress = toSuppress.stream().map(String::toLowerCase).collect(Collectors.toSet());
-            }
-        }
-
-        @Override
-        public boolean hasNext() {
-            return iterator.hasNext();
-        }
-
-        @Override
-        public Map.Entry<String, String> next() {
-            Map.Entry<String, String> next = iterator.next();
-            if (toSuppress.contains(next.getKey().toLowerCase())) {
-                return new AbstractMap.SimpleImmutableEntry<>(next.getKey(), "(hidden)");
-            }
-            return next;
-        }
-    }
-
     static URI getUri(Logger log, Headers h, String requestUri, URI defaultValue) {
         try {
             String hostHeader = h.get(HeaderNames.HOST);
@@ -141,7 +92,7 @@ class Headtils {
         }
     }
 
-    private static Logger log = LoggerFactory.getLogger(Headtils.class);
+    private static final Logger log = LoggerFactory.getLogger(Headtils.class);
     static Charset bodyCharset(Headers headers, boolean isRequest) {
         MediaType mediaType = headers.contentType();
         Charset bodyCharset = UTF_8;

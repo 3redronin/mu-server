@@ -10,15 +10,18 @@ import okhttp3.FormBody;
 import okhttp3.MediaType;
 import okhttp3.RequestBody;
 import okhttp3.Response;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.FileUtils;
 import scaffolding.StringUtils;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.Reader;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.List;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static java.util.stream.Collectors.toList;
@@ -197,7 +200,23 @@ public class StringEntityProvidersTest {
         }
     }
 
-    @After
+    @Test
+    public void asciiStringLengthsAreKnown() {
+        String hello = "Hello ".repeat(10000);
+        for (Charset charset : List.of(StandardCharsets.UTF_8, StandardCharsets.ISO_8859_1, StandardCharsets.US_ASCII)) {
+            assertThat(StringEntityProviders.StringMessageReaderWriter.getEncodedByteLength(hello, charset),
+                equalTo((long)hello.length()));
+        }
+    }
+
+    @Test
+    public void utf8LengthsKnown() {
+        var utf8 = "你好😊".repeat(10000);
+        assertThat(StringEntityProviders.StringMessageReaderWriter.getEncodedByteLength(utf8, StandardCharsets.UTF_8),
+            equalTo((long)utf8.getBytes(StandardCharsets.UTF_8).length));
+    }
+
+    @AfterEach
     public void stop() {
         scaffolding.MuAssert.stopAndCheck(server);
     }

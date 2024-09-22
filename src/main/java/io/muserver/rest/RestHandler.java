@@ -242,7 +242,7 @@ public class RestHandler implements MuHandler {
                     int status = jaxRSResponse.getStatus();
                     muResponse.status(status);
 
-                    boolean isHttp1 = requestContext.muRequest.protocol().equals("HTTP/1.1");
+                    boolean isHttp1 = requestContext.muRequest.httpVersion().majorVersion() == 1;
 
                     if (entity == null) {
                         if (status != 204 && status != 304 && status != 205) {

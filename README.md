@@ -3,7 +3,7 @@
 
 # mu-server
 
-A modern Java web server, based on Netty. Currently in beta.
+A modern Java web server.
 
 
 **Please visit <https://muserver.io> for full documentation.**

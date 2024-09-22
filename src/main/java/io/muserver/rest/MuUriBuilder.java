@@ -1,7 +1,7 @@
 package io.muserver.rest;
 
 import io.muserver.Mutils;
-import io.netty.handler.codec.http.QueryStringDecoder;
+import io.muserver.QueryString;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.core.MultivaluedHashMap;
 import jakarta.ws.rs.core.MultivaluedMap;
@@ -245,10 +245,9 @@ class MuUriBuilder extends UriBuilder {
             this.query.clear();
         } else {
             query = new MultivaluedHashMap<>();
-            QueryStringDecoder decoder = new QueryStringDecoder(qs, false);
-            for (Map.Entry<String, List<String>> entry : decoder.parameters().entrySet()) {
-                List<String> values = entry.getValue();
-                queryParam(entry.getKey(), values.toArray(new Object[values.size()]));
+            QueryString decoder = QueryString.parse(qs);
+            for (var entry : decoder.all().entrySet()) {
+                queryParam(entry.getKey(), entry.getValue().toArray());
             }
         }
         return this;

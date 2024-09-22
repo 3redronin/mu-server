@@ -1,6 +1,5 @@
 package io.muserver;
 
-import io.netty.handler.ssl.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -8,7 +7,6 @@ import javax.net.ssl.*;
 import java.io.*;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
-import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateParsingException;
@@ -30,8 +28,6 @@ public class HttpsConfigBuilder {
     private char[] keystorePassword = new char[0];
     private char[] keyPassword = new char[0];
     private byte[] keystoreBytes;
-    private SSLContext sslContext;
-    private CipherSuiteFilter nettyCipherSuiteFilter;
     private SSLCipherFilter sslCipherFilter;
     private KeyManagerFactory keyManagerFactory;
     private String defaultAlias;
@@ -90,23 +86,11 @@ public class HttpsConfigBuilder {
     }
 
     /**
-     * The pre-built SSL Context to use
-     * @param sslContext an SSL context
-     * @return This builder
-     */
-    HttpsConfigBuilder withSSLContext(SSLContext sslContext) {
-        keyManagerFactory = null;
-        this.sslContext = sslContext;
-        return this;
-    }
-
-    /**
      * Sets the keystore to use
      * @param is The input stream of the keystore
      * @param closeAfter Whether or not this method should close the stream
      */
     protected void setKeystoreBytes(InputStream is, boolean closeAfter) {
-        sslContext = null;
         keyManagerFactory = null;
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         try {
@@ -200,7 +184,6 @@ public class HttpsConfigBuilder {
      */
     public HttpsConfigBuilder withKeyManagerFactory(KeyManagerFactory keyManagerFactory) {
         this.keystoreBytes = null;
-        this.sslContext = null;
         this.keyManagerFactory = keyManagerFactory;
         return this;
     }
@@ -216,18 +199,6 @@ public class HttpsConfigBuilder {
      */
     public HttpsConfigBuilder withCipherFilter(SSLCipherFilter cipherFilter) {
         this.sslCipherFilter = cipherFilter;
-        if (cipherFilter == null) {
-            this.nettyCipherSuiteFilter = null;
-        } else {
-            this.nettyCipherSuiteFilter = (ciphers, defaultCiphers, supportedCiphers)
-                -> {
-                List<String> selected = cipherFilter.selectCiphers(supportedCiphers, defaultCiphers);
-                if (selected == null) {
-                    selected = defaultCiphers;
-                }
-                return selected.toArray(new String[0]);
-            };
-        }
         return this;
     }
 
@@ -392,79 +363,6 @@ public class HttpsConfigBuilder {
         }
     }
 
-    SslContext toNettySslContext(boolean http2) throws Exception {
-        CipherSuiteFilter cipherFilter = nettyCipherSuiteFilter != null ? nettyCipherSuiteFilter : IdentityCipherSuiteFilter.INSTANCE;
-
-        SslContextBuilder builder;
-        ClientAuth clientAuthSetting = trustManager == null ? ClientAuth.NONE : ClientAuth.OPTIONAL;
-        if (sslContext != null) {
-            return new JdkSslContext(sslContext, false, null, cipherFilter, ApplicationProtocolConfig.DISABLED, clientAuthSetting, getHttpsProtocolsArray(), false);
-        } else if (keystoreBytes != null) {
-            ByteArrayInputStream keystoreStream = new ByteArrayInputStream(keystoreBytes);
-            KeyManagerFactory kmf;
-            String defaultAliasToUse = this.defaultAlias;
-            Map<String, String> sanToAliasMap = new HashMap<>();
-            try {
-                KeyStore ks = KeyStore.getInstance(keystoreType);
-                ks.load(keystoreStream, keystorePassword);
-                if (defaultAliasToUse == null) {
-                    Enumeration<String> aliases = ks.aliases();
-                    if (aliases.hasMoreElements()) {
-                        defaultAliasToUse = aliases.nextElement();
-                    }
-                }
-                kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-                kmf.init(ks, keyPassword);
-                sanToAliasMap.putAll(buildSanToAliasMap(ks));
-                log.debug("keystore san to alias mapping: {}", sanToAliasMap);
-            } finally {
-                try {
-                    keystoreStream.close();
-                } catch (IOException e) {
-                    log.info("Error while closing keystore stream: " + e.getMessage());
-                }
-            }
-
-            X509ExtendedKeyManager x509KeyManager = null;
-            for (KeyManager keyManager : kmf.getKeyManagers()) {
-                if (keyManager instanceof X509ExtendedKeyManager) {
-                    x509KeyManager = (X509ExtendedKeyManager) keyManager;
-                }
-            }
-            if (x509KeyManager == null)
-                throw new Exception("KeyManagerFactory did not create an X509ExtendedKeyManager");
-            SniKeyManager sniKeyManager = new SniKeyManager(x509KeyManager, defaultAliasToUse, sanToAliasMap);
-            builder = SslContextBuilder.forServer(sniKeyManager);
-        } else if (keyManagerFactory != null) {
-            builder = SslContextBuilder.forServer(keyManagerFactory);
-        } else {
-            throw new IllegalStateException("No SSL info");
-        }
-
-        if (http2) {
-            builder.applicationProtocolConfig(new ApplicationProtocolConfig(
-                ApplicationProtocolConfig.Protocol.ALPN, ApplicationProtocolConfig.SelectorFailureBehavior.NO_ADVERTISE,
-                ApplicationProtocolConfig.SelectedListenerFailureBehavior.ACCEPT,
-                ApplicationProtocolNames.HTTP_2, ApplicationProtocolNames.HTTP_1_1
-            ));
-        }
-
-        String[] protocolsArray = getHttpsProtocolsArray();
-
-        if (trustManager != null) {
-            builder.trustManager(trustManager);
-        }
-        return builder
-            .clientAuth(clientAuthSetting)
-            .protocols(protocolsArray)
-            .ciphers(null, cipherFilter)
-            .build();
-    }
-
-    private String[] getHttpsProtocolsArray() throws NoSuchAlgorithmException {
-        return getHttpsProtocolsArray(SSLContext.getDefault());
-
-    }
     private String[] getHttpsProtocolsArray(SSLContext sslContext) {
         List<String> supportedProtocols = asList(sslContext.getSupportedSSLParameters().getProtocols());
         List<String> protocolsToUse = new ArrayList<>();

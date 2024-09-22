@@ -1,8 +1,5 @@
 package io.muserver;
 
-import io.netty.buffer.ByteBufAllocator;
-import io.netty.buffer.ByteBufAllocatorMetric;
-import io.netty.buffer.ByteBufAllocatorMetricProvider;
 import jakarta.ws.rs.ClientErrorException;
 import okhttp3.MediaType;
 import okhttp3.Request;
@@ -98,16 +95,6 @@ public class RequestBodyReaderListenerAdapterTest {
         assertEventually(() -> readListener.events, allOf(
             hasItems("data received: 7 bytes", "data written", "Error for onError: TimeoutException")
         ));
-    }
-
-    private static long getDirectMemory() {
-        ByteBufAllocator allocator = ByteBufAllocator.DEFAULT;
-        if (allocator instanceof ByteBufAllocatorMetricProvider) {
-            ByteBufAllocatorMetric metric = ((ByteBufAllocatorMetricProvider) allocator).metric();
-            return metric.usedDirectMemory();
-        } else {
-            return -1;
-        }
     }
 
     @Test

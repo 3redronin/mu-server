@@ -1,10 +1,12 @@
 package io.muserver;
 
-import io.netty.handler.codec.http.multipart.DiskFileUpload;
-import io.netty.handler.codec.http.multipart.FileUpload;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 
 import static io.muserver.Mutils.notNull;
 
@@ -13,6 +15,16 @@ import static io.muserver.Mutils.notNull;
  * input field in a multipart form.
  */
 public interface UploadedFile {
+
+    /**
+     * Gets the upload as a path.
+     * <p>This has been uploaded to the server and saved locally into a temp folder (configured with
+     * {@link MuServerBuilder#withTempDirectory(Path)}), and will be deleted after the response completes. To save the file permanently,
+     * use {@link #saveTo(Path)} instead.</p>
+     * @return Returns a Path object pointing to the uploaded file.
+     * @throws IOException If an error while saving file.
+     */
+    Path asPath() throws IOException;
 
     /**
      * Gets a copy of the file. This has been uploaded to the server and saved locally.
@@ -58,6 +70,13 @@ public interface UploadedFile {
      * @param dest The destination to save to.
      * @throws IOException If there is an error saving the file.
      */
+    void saveTo(Path dest) throws IOException;
+
+    /**
+     * Saves the file to the specified destination. Parent directories will be created if they do not exist.
+     * @param dest The destination to save to.
+     * @throws IOException If there is an error saving the file.
+     */
     void saveTo(File dest) throws IOException;
 
     /**
@@ -73,57 +92,58 @@ public interface UploadedFile {
      */
     InputStream asStream() throws IOException;
 }
-class MuUploadedFile implements UploadedFile {
-    private final FileUpload fu;
-    private File file;
+class MuUploadedFile2 implements UploadedFile {
+    private Path file;
+    private boolean shouldDeleteOnClean = true;
+    private final String contentType;
+    private final String filename;
 
-    MuUploadedFile(FileUpload fileUpload) {
-        fu = fileUpload;
+    MuUploadedFile2(Path file, String contentType, String filename) {
+        this.file = file;
+        this.contentType = contentType;
+        this.filename = filename;
     }
 
     @Override
-    public File asFile() throws IOException {
-        if (file == null) {
-            if (fu.isInMemory()) {
-                File dir = DiskFileUpload.baseDirectory == null ? null : new File(DiskFileUpload.baseDirectory);
-                File tmpFile = File.createTempFile("mufu", ".tmp", dir);
-                tmpFile.deleteOnExit();
-                fu.renameTo(tmpFile);
-                file = tmpFile;
-            } else {
-                file = fu.getFile();
-            }
-        }
+    public Path asPath() {
         return file;
     }
 
     @Override
+    public File asFile() throws IOException {
+        // todo: consider removing the IO Exception on the interface
+        return file.toFile();
+    }
+
+    @Override
     public String asString() throws IOException {
-        return fu.getString(StandardCharsets.UTF_8);
+        return new String(asBytes(), StandardCharsets.UTF_8);
     }
 
     @Override
     public byte[] asBytes() throws IOException {
-        return fu.get();
+        try (var fis = asStream()) {
+            return Mutils.toByteArray(fis, 8192);
+        }
     }
 
     @Override
     public String contentType() {
-        return fu.getContentType();
+        return contentType;
     }
 
     @Override
     public String filename() {
-        String n = fu.getFilename();
+        String n = this.filename;
         int i = n.lastIndexOf('/');
         if (i > -1) {
             n = n.substring(i + 1);
         }
         i = n.lastIndexOf('\\');
         if (i > -1) {
-            n = n .substring(i + 1);
+            n = n.substring(i + 1);
         }
-        return n;
+        return n.replaceAll("[<>:\"/|?*\\u0000-\\u001F]", " ");
     }
 
     @Override
@@ -139,24 +159,43 @@ class MuUploadedFile implements UploadedFile {
     @Override
     public void saveTo(File dest) throws IOException {
         notNull("dest", dest);
-        dest.getParentFile().mkdirs();
-        if (!fu.renameTo(dest)) {
-            throw new IOException("Failed to save file to " + dest.getCanonicalPath());
-        }
-        this.file = dest;
+        saveTo(dest.toPath());
+    }
+
+    @Override
+    public void saveTo(Path dest) throws IOException {
+        notNull("dest", dest);
+        Files.createDirectories(dest.getParent());
+        var moved = Files.move(file, dest, StandardCopyOption.REPLACE_EXISTING);
+        shouldDeleteOnClean = false;
+        this.file = moved;
     }
 
     @Override
     public long size() {
-        return fu.length();
+        try {
+            return Files.size(file);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Error loading file size", e); // todo unchecked?
+        }
     }
 
     @Override
     public InputStream asStream() throws IOException {
-        if (fu.isInMemory()) {
-            return new ByteArrayInputStream(fu.get());
-        } else {
-            return new FileInputStream(fu.getFile());
+        return Files.newInputStream(file, StandardOpenOption.READ);
+    }
+
+    void deleteFile() {
+        if (shouldDeleteOnClean) {
+            tryToDelete(file);
+        }
+    }
+
+    static void tryToDelete(Path file) {
+        try {
+            Files.deleteIfExists(file);
+        } catch (IOException e) {
+            file.toFile().deleteOnExit();
         }
     }
 }

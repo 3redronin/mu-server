@@ -1,7 +1,6 @@
 package io.muserver.rest;
 
 import io.muserver.*;
-import io.netty.util.concurrent.DefaultThreadFactory;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.container.AsyncResponse;
 import jakarta.ws.rs.container.CompletionCallback;
@@ -21,7 +20,7 @@ import java.util.concurrent.TimeUnit;
 class AsyncResponseAdapter implements AsyncResponse, ResponseCompleteListener {
     private static final Logger log = LoggerFactory.getLogger(AsyncResponseAdapter.class);
 
-    private static final ScheduledExecutorService ses = Executors.newSingleThreadScheduledExecutor(new DefaultThreadFactory("mutimeoutwatcher"));
+    private static final ScheduledExecutorService ses = Executors.newSingleThreadScheduledExecutor();
 
     private final AsyncHandle asyncHandle;
     private final Consumer resultConsumer;

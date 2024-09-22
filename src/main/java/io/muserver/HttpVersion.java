@@ -10,17 +10,19 @@ public enum HttpVersion {
     /**
      * HTTP/1.0
      */
-    HTTP_1_0("HTTP/1.0"),
+    HTTP_1_0("HTTP/1.0", 1),
 
     /**
      * HTTP/1.1
      */
-    HTTP_1_1("HTTP/1.1");
+    HTTP_1_1("HTTP/1.1", 1);
 
     private final String version;
+    private final int majorVersion;
 
-    HttpVersion(String version) {
+    HttpVersion(String version, int majorVersion) {
         this.version = version;
+        this.majorVersion = majorVersion;
     }
 
     /**
@@ -28,6 +30,14 @@ public enum HttpVersion {
      */
     public String version() {
         return version;
+    }
+
+    /**
+     * The major version, e.g. <code>1</code> for both {@link #HTTP_1_1} and {@link #HTTP_1_0}
+     * @return the major version of this HTTP version
+     */
+    public int majorVersion() {
+        return majorVersion;
     }
 
     /**

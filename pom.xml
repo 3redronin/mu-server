@@ -14,7 +14,6 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <netty.version>4.1.112.Final</netty.version>
         <slf4j.version>1.7.36</slf4j.version>
         <jetty.version>9.4.54.v20240208</jetty.version>
         <kotlin.version>2.0.20</kotlin.version>
@@ -60,41 +59,6 @@
             <scope>test</scope>
         </dependency>
 
-        <dependency>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-transport</artifactId>
-            <version>${netty.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-handler</artifactId>
-            <version>${netty.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-codec-http</artifactId>
-            <version>${netty.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-buffer</artifactId>
-            <version>${netty.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-common</artifactId>
-            <version>${netty.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-codec</artifactId>
-            <version>${netty.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-codec-http2</artifactId>
-            <version>${netty.version}</version>
-        </dependency>
         <dependency>
             <groupId>jakarta.ws.rs</groupId>
             <artifactId>jakarta.ws.rs-api</artifactId>
@@ -321,7 +285,6 @@
 <!--                                    <includes>-->
 <!--                                        <include>org.slf4j:slf4j-api</include>-->
 <!--                                        <include>jakarta.ws.rs:jakarta.ws.rs-api</include>-->
-<!--                                        <include>io.netty:*</include>-->
 <!--                                    </includes>-->
 <!--                                </bannedDependencies>-->
 <!--                                <dependencyConvergence/>-->

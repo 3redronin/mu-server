@@ -1,7 +1,7 @@
 package io.muserver.rest;
 
 import io.muserver.Mutils;
-import io.netty.handler.codec.http.QueryStringDecoder;
+import io.muserver.QueryString;
 import jakarta.ws.rs.core.*;
 
 import java.net.URI;
@@ -137,12 +137,12 @@ class MuUriInfo implements UriInfo {
 
     @Override
     public MultivaluedMap<String, String> getQueryParameters(boolean decode) {
-        QueryStringDecoder qsd = new QueryStringDecoder(requestUri);
+        QueryString qsd = QueryString.parse(requestUri.getRawQuery());
         MultivaluedHashMap<String, String> all = new MultivaluedHashMap<>();
         if (decode) {
-            all.putAll(qsd.parameters());
+            all.putAll(qsd.all());
         } else {
-            for (Map.Entry<String, List<String>> entry : qsd.parameters().entrySet()) {
+            for (Map.Entry<String, List<String>> entry : qsd.all().entrySet()) {
                 all.put(entry.getKey(), entry.getValue().stream().map(Mutils::urlEncode).collect(toList()));
             }
         }

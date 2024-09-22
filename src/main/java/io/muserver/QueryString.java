@@ -5,7 +5,10 @@ import java.util.*;
 import static io.muserver.Mutils.urlDecode;
 import static io.muserver.Mutils.urlEncode;
 
-class QueryString implements RequestParameters {
+/**
+ * A query string
+ */
+public class QueryString implements RequestParameters {
 
     private final Map<String, List<String>> map;
 
@@ -18,6 +21,11 @@ class QueryString implements RequestParameters {
         return map;
     }
 
+    /**
+     * Parses a query string into an object
+     * @param input A query string value, without '?'
+     * @return a parsed QueryString object
+     */
     public static QueryString parse(String input) {
         if (input == null || input.isEmpty()) return EMPTY;
         var map = new LinkedHashMap<String, List<String>>(); // to keep the order

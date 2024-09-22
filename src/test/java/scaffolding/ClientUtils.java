@@ -1,6 +1,5 @@
 package scaffolding;
 
-import io.netty.util.ResourceLeakDetector;
 import okhttp3.*;
 import okio.BufferedSink;
 import org.eclipse.jetty.client.HttpClient;
@@ -27,7 +26,6 @@ public class ClientUtils {
     private static volatile HttpClient jettyClient;
 
     static {
-        System.setProperty("io.netty.leakDetection.targetRecords", "1000");
         Logger.getLogger(OkHttpClient.class.getName()).setLevel(Level.FINE);
         boolean isDebug = ManagementFactory.getRuntimeMXBean().getInputArguments().toString().contains("jdwp");
         client = new OkHttpClient.Builder()
@@ -38,7 +36,6 @@ public class ClientUtils {
             .hostnameVerifier((hostname, session) -> true)
             .readTimeout(isDebug ? 180 : 20, TimeUnit.SECONDS)
             .sslSocketFactory(sslContextForTesting(veryTrustingTrustManager).getSocketFactory(), veryTrustingTrustManager).build();
-        ResourceLeakDetector.setLevel(ResourceLeakDetector.Level.PARANOID);
     }
 
     public static RequestBody largeRequestBody(StringBuffer sentData) {

@@ -1,7 +1,6 @@
 package io.muserver.rest;
 
 import io.muserver.*;
-import io.netty.handler.codec.http.HttpHeaderNames;
 import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.container.ContainerResponseContext;
@@ -520,23 +519,21 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
         @Override
         public ResponseBuilder allow(Set<String> methods) {
             if (methods == null) {
-                return setHeader(HttpHeaderNames.ALLOW, null, true);
+                return setHeader(HeaderNames.ALLOW, null, true);
             }
 
             StringBuilder allow = new StringBuilder();
             for (String m : methods) {
-                append(allow, true, m);
+                append(allow, m);
             }
-            return setHeader(HttpHeaderNames.ALLOW, allow.toString(), true);
+            return setHeader(HeaderNames.ALLOW, allow.toString(), true);
         }
 
-        private void append(StringBuilder sb, boolean v, String s) {
-            if (v) {
-                if (sb.length() > 0) {
-                    sb.append(',');
-                }
-                sb.append(s);
+        private void append(StringBuilder sb, String s) {
+            if (sb.length() > 0) {
+                sb.append(',');
             }
+            sb.append(s);
         }
 
 

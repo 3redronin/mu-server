@@ -285,11 +285,11 @@ public class Mutils {
         }
     }
 
-    static String getRelativeUrl(String nettyUri) throws HttpException {
+    static String getRelativeUrl(String requestLineUrl) throws HttpException {
         try {
-            URI requestUri = new URI(nettyUri).normalize();
+            URI requestUri = new URI(requestLineUrl).normalize();
             if (requestUri.getScheme() == null && requestUri.getHost() != null) {
-                throw HttpException.redirect(new URI(nettyUri.substring(1)).normalize());
+                throw HttpException.redirect(new URI(requestLineUrl.substring(1)).normalize());
             }
 
             String s = requestUri.getRawPath();

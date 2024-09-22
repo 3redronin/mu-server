@@ -95,6 +95,7 @@ internal class Mu3Request(
         return attributes!!
     }
 
+    @Deprecated("see interface")
     override fun handleAsync(): AsyncHandle {
         if (asyncHandle == null) {
             asyncHandle = Mu3AsyncHandleImpl(this, response)

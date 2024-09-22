@@ -1,8 +1,5 @@
 package io.muserver;
 
-import io.netty.handler.codec.http.HttpHeaderValues;
-import io.netty.util.AsciiString;
-
 /**
  * Standard HTTP header values.
  */
@@ -11,175 +8,175 @@ public final class HeaderValues {
      * {@code "attachment"}
      * See {@link HeaderNames#CONTENT_DISPOSITION}
      */
-    public static final CharSequence ATTACHMENT = HttpHeaderValues.ATTACHMENT;
+    public static final CharSequence ATTACHMENT = HeaderString.valueOf("attachment");
     /**
      * {@code "base64"}
      */
-    public static final CharSequence BASE64 = HttpHeaderValues.BASE64;
+    public static final CharSequence BASE64 = HeaderString.valueOf("base64");
     /**
      * {@code "binary"}
      */
-    public static final CharSequence BINARY = HttpHeaderValues.BINARY;
+    public static final CharSequence BINARY = HeaderString.valueOf("binary");
     /**
      * {@code "boundary"}
      */
-    public static final CharSequence BOUNDARY = HttpHeaderValues.BOUNDARY;
+    public static final CharSequence BOUNDARY = HeaderString.valueOf("boundary");
     /**
      * {@code "bytes"}
      */
-    public static final CharSequence BYTES = HttpHeaderValues.BYTES;
+    public static final CharSequence BYTES = HeaderString.valueOf("bytes");
     /**
      * {@code "charset"}
      */
-    public static final CharSequence CHARSET = HttpHeaderValues.CHARSET;
+    public static final CharSequence CHARSET = HeaderString.valueOf("charset");
     /**
      * {@code "chunked"}
      */
-    public static final CharSequence CHUNKED = HttpHeaderValues.CHUNKED;
+    public static final CharSequence CHUNKED = HeaderString.valueOf("chunked");
     /**
      * {@code "close"}
      */
-    public static final CharSequence CLOSE = HttpHeaderValues.CLOSE;
+    public static final CharSequence CLOSE = HeaderString.valueOf("close");
     /**
      * {@code "compress"}
      */
-    public static final CharSequence COMPRESS = HttpHeaderValues.COMPRESS;
+    public static final CharSequence COMPRESS = HeaderString.valueOf("compress");
     /**
      * {@code "100-continue"}
      */
-    public static final CharSequence CONTINUE = HttpHeaderValues.CONTINUE;
+    public static final CharSequence CONTINUE = HeaderString.valueOf("100-continue");
     /**
      * {@code "deflate"}
      */
-    public static final CharSequence DEFLATE = HttpHeaderValues.DEFLATE;
+    public static final CharSequence DEFLATE = HeaderString.valueOf("deflate");
     /**
      * {@code "x-deflate"}
      */
-    public static final CharSequence X_DEFLATE = HttpHeaderValues.X_DEFLATE;
+    public static final CharSequence X_DEFLATE = HeaderString.valueOf("x-deflate");
     /**
      * {@code "file"}
      * See {@link HeaderNames#CONTENT_DISPOSITION}
      */
-    public static final CharSequence FILE = HttpHeaderValues.FILE;
+    public static final CharSequence FILE = HeaderString.valueOf("file");
     /**
      * {@code "filename"}
      * See {@link HeaderNames#CONTENT_DISPOSITION}
      */
-    public static final CharSequence FILENAME = HttpHeaderValues.FILENAME;
+    public static final CharSequence FILENAME = HeaderString.valueOf("filename");
     /**
      * {@code "form-data"}
      * See {@link HeaderNames#CONTENT_DISPOSITION}
      */
-    public static final CharSequence FORM_DATA = HttpHeaderValues.FORM_DATA;
+    public static final CharSequence FORM_DATA = HeaderString.valueOf("form-data");
     /**
      * {@code "gzip"}
      */
-    public static final CharSequence GZIP = HttpHeaderValues.GZIP;
+    public static final CharSequence GZIP = HeaderString.valueOf("gzip");
     /**
      * {@code "gzip,deflate"}
      */
-    public static final CharSequence GZIP_DEFLATE = HttpHeaderValues.GZIP_DEFLATE;
+    public static final CharSequence GZIP_DEFLATE = HeaderString.valueOf("gzip,deflate");
     /**
      * {@code "x-gzip"}
      */
-    public static final CharSequence X_GZIP = HttpHeaderValues.X_GZIP;
+    public static final CharSequence X_GZIP = HeaderString.valueOf("x-gzip");
     /**
      * {@code "identity"}
      */
-    public static final CharSequence IDENTITY = HttpHeaderValues.IDENTITY;
+    public static final CharSequence IDENTITY = HeaderString.valueOf("identity");
     /**
      * {@code "keep-alive"}
      */
-    public static final CharSequence KEEP_ALIVE = HttpHeaderValues.KEEP_ALIVE;
+    public static final CharSequence KEEP_ALIVE = HeaderString.valueOf("keep-alive");
     /**
      * {@code "max-age"}
      */
-    public static final CharSequence MAX_AGE = HttpHeaderValues.MAX_AGE;
+    public static final CharSequence MAX_AGE = HeaderString.valueOf("max-age");
     /**
      * {@code "max-stale"}
      */
-    public static final CharSequence MAX_STALE = HttpHeaderValues.MAX_STALE;
+    public static final CharSequence MAX_STALE = HeaderString.valueOf("max-stale");
     /**
      * {@code "min-fresh"}
      */
-    public static final CharSequence MIN_FRESH = HttpHeaderValues.MIN_FRESH;
+    public static final CharSequence MIN_FRESH = HeaderString.valueOf("min-fresh");
     /**
      * {@code "multipart/form-data"}
      */
-    public static final CharSequence MULTIPART_FORM_DATA = HttpHeaderValues.MULTIPART_FORM_DATA;
+    public static final CharSequence MULTIPART_FORM_DATA = HeaderString.valueOf("multipart/form-data");
     /**
      * {@code "multipart/mixed"}
      */
-    public static final CharSequence MULTIPART_MIXED = HttpHeaderValues.MULTIPART_MIXED;
+    public static final CharSequence MULTIPART_MIXED = HeaderString.valueOf("multipart/mixed");
     /**
      * {@code "must-revalidate"}
      */
-    public static final CharSequence MUST_REVALIDATE = HttpHeaderValues.MUST_REVALIDATE;
+    public static final CharSequence MUST_REVALIDATE = HeaderString.valueOf("must-revalidate");
     /**
      * {@code "name"}
      * See {@link HeaderNames#CONTENT_DISPOSITION}
      */
-    public static final CharSequence NAME = HttpHeaderValues.NAME;
+    public static final CharSequence NAME = HeaderString.valueOf("name");
     /**
      * {@code "no-cache"}
      */
-    public static final CharSequence NO_CACHE = HttpHeaderValues.NO_CACHE;
+    public static final CharSequence NO_CACHE = HeaderString.valueOf("no-cache");
     /**
      * {@code "no-store"}
      */
-    public static final CharSequence NO_STORE = HttpHeaderValues.NO_STORE;
+    public static final CharSequence NO_STORE = HeaderString.valueOf("no-store");
     /**
      * {@code "nosniff"}
      */
-    public static final CharSequence NOSNIFF = AsciiString.cached("nosniff");
+    public static final CharSequence NOSNIFF = HeaderString.valueOf("nosniff");
     /**
      * {@code "no-transform"}
      */
-    public static final CharSequence NO_TRANSFORM = HttpHeaderValues.NO_TRANSFORM;
+    public static final CharSequence NO_TRANSFORM = HeaderString.valueOf("no-transform");
     /**
      * {@code "none"}
      */
-    public static final CharSequence NONE = HttpHeaderValues.NONE;
+    public static final CharSequence NONE = HeaderString.valueOf("none");
     /**
      * {@code "0"}
      */
-    public static final CharSequence ZERO = HttpHeaderValues.ZERO;
+    public static final CharSequence ZERO = HeaderString.valueOf("0");
     /**
      * {@code "only-if-cached"}
      */
-    public static final CharSequence ONLY_IF_CACHED = HttpHeaderValues.ONLY_IF_CACHED;
+    public static final CharSequence ONLY_IF_CACHED = HeaderString.valueOf("only-if-cached");
     /**
      * {@code "private"}
      */
-    public static final CharSequence PRIVATE = HttpHeaderValues.PRIVATE;
+    public static final CharSequence PRIVATE = HeaderString.valueOf("private");
     /**
      * {@code "proxy-revalidate"}
      */
-    public static final CharSequence PROXY_REVALIDATE = HttpHeaderValues.PROXY_REVALIDATE;
+    public static final CharSequence PROXY_REVALIDATE = HeaderString.valueOf("proxy-revalidate");
     /**
      * {@code "public"}
      */
-    public static final CharSequence PUBLIC = HttpHeaderValues.PUBLIC;
+    public static final CharSequence PUBLIC = HeaderString.valueOf("public");
     /**
      * {@code "quoted-printable"}
      */
-    public static final CharSequence QUOTED_PRINTABLE = HttpHeaderValues.QUOTED_PRINTABLE;
+    public static final CharSequence QUOTED_PRINTABLE = HeaderString.valueOf("quoted-printable");
     /**
      * {@code "s-maxage"}
      */
-    public static final CharSequence S_MAXAGE = HttpHeaderValues.S_MAXAGE;
+    public static final CharSequence S_MAXAGE = HeaderString.valueOf("s-maxage");
     /**
      * {@code "trailers"}
      */
-    public static final CharSequence TRAILERS = HttpHeaderValues.TRAILERS;
+    public static final CharSequence TRAILERS = HeaderString.valueOf("trailers");
     /**
      * {@code "upgrade"}
      */
-    public static final CharSequence UPGRADE = HttpHeaderValues.UPGRADE;
+    public static final CharSequence UPGRADE = HeaderString.valueOf("upgrade");
     /**
      * {@code "websocket"}
      */
-    public static final CharSequence WEBSOCKET = HttpHeaderValues.WEBSOCKET;
+    public static final CharSequence WEBSOCKET = HeaderString.valueOf("websocket");
 
     private HeaderValues() { }
 }

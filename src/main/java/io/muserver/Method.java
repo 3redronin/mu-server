@@ -44,10 +44,6 @@ public enum Method {
      */
     PATCH;
 
-    static Method fromNetty(io.netty.handler.codec.http.HttpMethod method) {
-        return Method.valueOf(method.name());
-    }
-
     /**
      * Specifies if this method is {@link #HEAD}
      * @return <code>true</code> if this is a <code>HEAD</code> request

@@ -1,10 +1,6 @@
 package io.muserver.rest;
 
-import io.muserver.Cookie;
-import io.muserver.Headers;
-import io.muserver.HeadersFactory;
-import io.muserver.Method;
-import io.netty.handler.codec.http.HttpHeaderNames;
+import io.muserver.*;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.ext.ParamConverterProvider;
@@ -375,7 +371,7 @@ public class RequestMatcherTest {
             public Headers headers() {
                 Map<String, Object> entries = new HashMap<>();
                 if (contentBodyType != null) {
-                    entries.put(HttpHeaderNames.CONTENT_TYPE.toString(), contentBodyType);
+                    entries.put(HeaderNames.CONTENT_TYPE.toString(), contentBodyType);
                 }
                 return HeadersFactory.create(entries);
             }

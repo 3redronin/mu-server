@@ -6,6 +6,7 @@ import java.io.IOException
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.URI
+import java.nio.file.Files
 import java.util.*
 
 internal class Mu3ServerImpl(
@@ -133,6 +134,8 @@ internal class Mu3ServerImpl(
             actualHandlers.addAll(builder.handlers())
 
             val contentEncoders = builder.contentEncoders() ?: listOf(gzipEncoder().build())
+
+            val tempDir = builder.tempDirectory() ?: Files.createTempDirectory("muservertemp")
 
             val impl = Mu3ServerImpl(
                 acceptors = acceptors,
