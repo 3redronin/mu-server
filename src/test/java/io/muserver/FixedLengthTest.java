@@ -2,9 +2,9 @@ package io.muserver;
 
 import okhttp3.Response;
 import okhttp3.internal.http2.StreamResetException;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 
@@ -53,7 +53,7 @@ public class FixedLengthTest {
 
         try (Response resp = call(request(server.uri().resolve("/blah")))) {
             resp.body().string();
-            Assert.fail("Should have failed due to invalid HTTP response");
+            Assertions.fail("Should have failed due to invalid HTTP response");
         } catch (Exception e) {
             assertThat(e, anyOf(instanceOf(StreamResetException.class), instanceOf(ProtocolException.class)));
         }
@@ -75,13 +75,13 @@ public class FixedLengthTest {
 
         try (Response resp = call(request(server.uri().resolve("/blah")))) {
             resp.body().string();
-            Assert.fail("Should have failed due to invalid HTTP response");
+            Assertions.fail("Should have failed due to invalid HTTP response");
         } catch (Exception e) {
             assertThat(e, anyOf(instanceOf(StreamResetException.class), instanceOf(ProtocolException.class)));
         }
     }
 
-    @After
+    @AfterEach
     public void destroy() {
         scaffolding.MuAssert.stopAndCheck(server);
     }
