@@ -1,5 +1,6 @@
 package io.muserver
 
+import io.muserver.rest.MuRuntimeDelegate
 import jakarta.ws.rs.core.MediaType
 import java.io.OutputStream
 import java.nio.charset.StandardCharsets
@@ -97,7 +98,7 @@ internal class Mu3Headers(
     override fun names(): Set<String> = headers.map { it.first }.toSet()
 
     override fun add(name: String, value: Any): Headers {
-        headers.add(Pair(name, value.toString()))
+        headers.add(Pair(name.lowercase(), value.toString()))
         return this
     }
 
@@ -122,7 +123,7 @@ internal class Mu3Headers(
     }
 
     override fun addInt(name: CharSequence, value: Int): Headers {
-        TODO("Not yet implemented")
+        return add(name, value)
     }
 
     override fun set(name: String, value: Any): Headers {
@@ -134,13 +135,14 @@ internal class Mu3Headers(
 
     override fun set(name: CharSequence, value: Any) = set(name.toString(), value)
 
-    override fun set(name: String, values: MutableIterable<*>?): Headers {
-        TODO("Not yet implemented")
+    override fun set(name: String, values: Iterable<*>): Headers {
+        val lower = name.lowercase()
+        headers.removeAll { it.first == lower }
+        add(lower, values)
+        return this
     }
 
-    override fun set(name: CharSequence, values: MutableIterable<*>?): Headers {
-        TODO("Not yet implemented")
-    }
+    override fun set(name: CharSequence, values: Iterable<*>) = set(name.toString(), values)
 
     override fun set(headers: Headers): Headers {
         clear()
@@ -150,12 +152,16 @@ internal class Mu3Headers(
         return this
     }
 
-    override fun setAll(headers: Headers?): Headers {
-        TODO("Not yet implemented")
+    override fun setAll(headers: Headers): Headers {
+
+        for (header in headers.names()) {
+            set(header, headers.getAll(header))
+        }
+        return this
     }
 
     override fun setInt(name: CharSequence, value: Int): Headers {
-        TODO("Not yet implemented")
+        return set(name, value)
     }
 
     override fun remove(name: String): Headers {
@@ -216,6 +222,7 @@ internal class Mu3Headers(
     }
 
     override fun contentType(): MediaType? {
+        MuRuntimeDelegate.ensureSet()
         val mt = get(HeaderNames.CONTENT_TYPE) ?: return null
         return MediaType.valueOf(mt)
     }

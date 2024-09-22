@@ -1,11 +1,10 @@
 package io.muserver;
 
-import io.netty.handler.codec.http2.DefaultHttp2Headers;
 import jakarta.ws.rs.core.MediaType;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.Collections;
+import java.util.Map;
 
 import static io.muserver.ForwardedHeaderTest.fwd;
 import static java.util.Arrays.asList;
@@ -14,12 +13,11 @@ import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.contains;
-import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.core.IsEqual.equalTo;
 
 public class Http1AndHttp2HeadersTest {
 
-    private Headers[] impls = { new Http1Headers(), new Http2Headers() };
+    private final Headers[] impls = { new Mu3Headers() };
 
     @Test
     public void caseIsInsensitive() {
@@ -255,27 +253,6 @@ public class Http1AndHttp2HeadersTest {
                 fwd(null, null, "internal.example.org", "http")
             ));
         }
-    }
-
-    @Test
-    public void allTheIteratorsIgnorePseudoHeaders() {
-        io.netty.handler.codec.http2.Http2Headers nettyHeady = new DefaultHttp2Headers();
-        nettyHeady.method("GET");
-        nettyHeady.path("/");
-        nettyHeady.scheme("http");
-        nettyHeady.authority("localhost");
-        nettyHeady.set("content-type", "text/html");
-        nettyHeady.set("content-length", "123");
-        Http2Headers headers = new Http2Headers(nettyHeady, false);
-        assertThat(stringsFrom(headers.iterator()), is("content-type=text/html content-length=123"));
-        assertThat(stringsFrom(headers.entries().iterator()), is("content-type=text/html content-length=123"));
-        assertThat(headers.names(), containsInAnyOrder("content-type", "content-length"));
-    }
-
-    static String stringsFrom(Iterator<Map.Entry<String, String>> iterator) {
-        List<Map.Entry<String,String>> list = new ArrayList<>();
-        iterator.forEachRemaining(list::add);
-        return list.stream().map(e -> e.getKey() + "=" + e.getValue()).collect(Collectors.joining(" "));
     }
 
     private static ParameterizedHeaderWithValue ph(String value) {
