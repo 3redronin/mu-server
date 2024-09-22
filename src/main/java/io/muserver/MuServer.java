@@ -154,8 +154,17 @@ public interface MuServer extends Closeable {
     /**
      * Changes the HTTPS certificate. This can be changed without restarting the server.
      * @param newHttpsConfig The new SSL Context to use.
+     * @deprecated use {@link #changeHttpsConfig(HttpsConfig)} instead
      */
-    void changeHttpsConfig(HttpsConfigBuilder newHttpsConfig);
+    @Deprecated
+    default void changeHttpsConfig(HttpsConfigBuilder newHttpsConfig) {
+        changeHttpsConfig(newHttpsConfig.build3());
+    }
+    /**
+     * Changes the HTTPS certificate. This can be changed without restarting the server.
+     * @param newHttpsConfig The new SSL Context to use.
+     */
+    void changeHttpsConfig(HttpsConfig newHttpsConfig);
 
     /**
      * Gets the SSL info of the server, or null if SSL is not enabled.

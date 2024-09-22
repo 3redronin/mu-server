@@ -16,7 +16,8 @@ internal class ConnectionAcceptor(
     private val socketServer: ServerSocket,
     val address: InetSocketAddress,
     val uri: URI,
-    val httpsConfig: HttpsConfig?,
+    @Volatile
+    var httpsConfig: HttpsConfig?,
     val http2Config: Http2Config?,
     val executorService: ExecutorService,
     val contentEncoders: List<ContentEncoder>,
@@ -76,13 +77,14 @@ internal class ConnectionAcceptor(
         var socket = clientSocket
         var clientCert : Certificate? = null
 
-        if (httpsConfig != null) {
+        val hc = httpsConfig
+        if (hc != null) {
             try {
-                val ssf = httpsConfig.sslContext().socketFactory
+                val ssf = hc.sslContext().socketFactory
                 val secureSocket = ssf.createSocket(socket, null, socket.port, true) as SSLSocket
                 secureSocket.useClientMode = false
-                secureSocket.enabledProtocols = httpsConfig.protocolsArray()
-                secureSocket.enabledCipherSuites = httpsConfig.cipherSuitesArray()
+                secureSocket.enabledProtocols = hc.protocolsArray()
+                secureSocket.enabledCipherSuites = hc.cipherSuitesArray()
 
                 if (http2Config?.enabled == true) {
                     val sslParams = secureSocket.sslParameters
@@ -91,7 +93,7 @@ internal class ConnectionAcceptor(
                     sslParams.applicationProtocols = arrayOf("http/1.1")
                     secureSocket.sslParameters = sslParams
                 }
-                val clientAuthTrustManager = httpsConfig.clientAuthTrustManager()
+                val clientAuthTrustManager = hc.clientAuthTrustManager()
                 secureSocket.wantClientAuth = clientAuthTrustManager != null
 
                 secureSocket.addHandshakeCompletedListener { event ->
@@ -169,6 +171,10 @@ internal class ConnectionAcceptor(
     }
 
     override fun toString() = "mu-acceptor-${address.port}"
+    fun changeHttpsConfig(newHttpsConfig: HttpsConfig) {
+        newHttpsConfig.setHttpsUri(uri)
+        this.httpsConfig  = newHttpsConfig;
+    }
 
     companion object {
         private val log : Logger = LoggerFactory.getLogger(ConnectionAcceptor::class.java)

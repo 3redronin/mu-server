@@ -1,8 +1,8 @@
 package io.muserver;
 
 import okhttp3.Response;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.MuAssert;
 import scaffolding.SSLSocketFactoryWrapper;
 import scaffolding.ServerUtils;
@@ -46,7 +46,7 @@ public class HttpsTest {
                 + server.httpsUri().getPort() + "/"));
         }
         SSLInfo sslInfo = actualSSLInfo.get();
-        assertThat(sslInfo.providerName(), oneOf("JDK", "OpenSSL"));
+        assertThat(sslInfo.providerName(), equalTo("SunJSSE"));
         assertThat(sslInfo.protocols(), hasItem("TLSv1.2"));
         assertThat(sslInfo.ciphers().size(), greaterThan(0));
 
@@ -191,7 +191,8 @@ public class HttpsTest {
         return sb.toString();
     }
 
-    @After public void stopIt() {
+    @AfterEach
+    public void stopIt() {
         MuAssert.stopAndCheck(server);
     }
 }

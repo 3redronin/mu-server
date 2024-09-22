@@ -91,7 +91,12 @@ internal class Mu3ServerImpl(
         return zippy()?.mimeTypesToGzip() ?: emptySet()
     }
 
-    override fun changeHttpsConfig(newHttpsConfig: HttpsConfigBuilder) {
+    override fun changeHttpsConfig(newHttpsConfig: HttpsConfig) {
+        for (acceptor in acceptors) {
+            if (acceptor.isHttps) {
+                acceptor.changeHttpsConfig(newHttpsConfig)
+            }
+        }
     }
 
     override fun httpsConfig(): HttpsConfig? {
@@ -147,7 +152,9 @@ internal class Mu3ServerImpl(
             if (builder.httpsPort() >= 0) {
                 val http2Config = builder.http2Config() ?: Http2Config(true)
                 val httpsConfig = (builder.httpsConfigBuilder() ?: HttpsConfigBuilder.unsignedLocalhost()).build3()
-                acceptors.add(ConnectionAcceptor.create(impl, address, builder.httpsPort(), httpsConfig, http2Config, executor, contentEncoders))
+                val acceptor = ConnectionAcceptor.create(impl, address, builder.httpsPort(), httpsConfig, http2Config, executor, contentEncoders)
+                acceptors.add(acceptor)
+                httpsConfig.setHttpsUri(acceptor.uri)
             }
             if (builder.httpPort() >= 0) {
                 acceptors.add(ConnectionAcceptor.create(impl, address, builder.httpPort(), null, null, executor, contentEncoders))
