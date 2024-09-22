@@ -3,10 +3,12 @@ package io.muserver
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.net.*
+import java.security.cert.Certificate
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentHashMap.KeySetView
 import java.util.concurrent.ExecutorService
+import javax.net.ssl.SSLPeerUnverifiedException
 import javax.net.ssl.SSLSocket
 
 internal class ConnectionAcceptor(
@@ -70,6 +72,8 @@ internal class ConnectionAcceptor(
     private fun handleClientSocket(clientSocket: Socket) {
         val startTime = Instant.now()
         var socket = clientSocket
+        var clientCert : Certificate? = null
+
         if (httpsConfig != null) {
             try {
                 val ssf = httpsConfig.sslContext().socketFactory
@@ -83,12 +87,22 @@ internal class ConnectionAcceptor(
                     sslParams.applicationProtocols = arrayOf("http/1.1")
                     secureSocket.sslParameters = sslParams
                 }
+                val clientAuthTrustManager = httpsConfig.clientAuthTrustManager()
+                secureSocket.wantClientAuth = clientAuthTrustManager != null
 
                 secureSocket.addHandshakeCompletedListener { event ->
                     log.info("Handshake complete $event")
                 }
                 secureSocket.startHandshake()
                 log.info("Selected protocol is ${secureSocket.applicationProtocol}")
+
+                if (clientAuthTrustManager != null) {
+                    try {
+                        clientCert = secureSocket.session.peerCertificates?.firstOrNull()
+                    } catch (ignored: SSLPeerUnverifiedException) {
+                    }
+                }
+
                 socket = secureSocket
             } catch (e: Exception) {
                 log.warn("Failed TLS handshaking", e)
@@ -96,7 +110,7 @@ internal class ConnectionAcceptor(
                 return
             }
         }
-        val con = Mu3Http1Connection(server, this, socket, startTime)
+        val con = Mu3Http1Connection(server, this, socket, startTime, clientCert)
         connections.add(con)
         server.statsImpl.onConnectionOpened(con)
         try {

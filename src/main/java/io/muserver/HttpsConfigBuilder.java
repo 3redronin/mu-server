@@ -278,7 +278,8 @@ public class HttpsConfigBuilder {
             final KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
             kmf.init(ks, keyPassword);
 
-            serverContext.init(kmf.getKeyManagers(), null, null);
+            var tm = trustManager == null ? null : new TrustManager[] { trustManager };
+            serverContext.init(kmf.getKeyManagers(), tm, null);
             return serverContext;
         } catch (Exception e) {
             throw new MuException("Error while setting up SSLContext", e);

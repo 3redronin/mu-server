@@ -17,7 +17,8 @@ internal class Mu3Http1Connection(
     val server: Mu3ServerImpl,
     private val creator: ConnectionAcceptor,
     private val clientSocket: Socket,
-    val startTime: Instant
+    val startTime: Instant,
+    private val clientCert : Certificate?
 ) : HttpConnection {
     private val requestPipeline : Queue<HttpRequestTemp> = ConcurrentLinkedQueue()
     private val remoteAddress = clientSocket.remoteSocketAddress as InetSocketAddress
@@ -213,9 +214,7 @@ internal class Mu3Http1Connection(
 
     override fun server() = server
 
-    override fun clientCertificate(): Optional<Certificate> {
-        TODO("Not yet implemented")
-    }
+    override fun clientCertificate() = Optional.ofNullable(clientCert)
 
     override fun abort() {
         if (!clientSocket.isClosed) {

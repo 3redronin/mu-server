@@ -2,8 +2,8 @@ package io.muserver;
 
 import okhttp3.OkHttpClient;
 import okhttp3.Response;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.ClientUtils;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
@@ -29,7 +29,8 @@ public class ClientCertTest {
     @Test
     public void clientsCertsAreAvailableToHandlers() throws Exception {
         server = ServerUtils.httpsServerForTest()
-            .withHttpsConfig(HttpsConfigBuilder.unsignedLocalhost().withClientCertificateTrustManager(veryTrustingTrustManager))
+            .withHttpsConfig(HttpsConfigBuilder.unsignedLocalhost()
+                .withClientCertificateTrustManager(veryTrustingTrustManager))
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 X509Certificate cert = (X509Certificate) request.connection().clientCertificate().get();
                 cert.checkValidity();
@@ -92,7 +93,7 @@ public class ClientCertTest {
 
 
     @Test
-    public void untrustedCertsThrowExceptions() throws Exception {
+    public void untrustedCertsAreNotReturned() throws Exception {
         // The default trust manager will not trust the cert created with a custom CA
         TrustManagerFactory trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
         trustManagerFactory.init((KeyStore)null);
@@ -118,7 +119,7 @@ public class ClientCertTest {
             .build();
     }
 
-    @After
+    @AfterEach
     public void stopIt() {
         MuAssert.stopAndCheck(server);
     }

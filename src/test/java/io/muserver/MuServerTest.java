@@ -21,6 +21,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.*;
 
@@ -42,10 +43,16 @@ public class MuServerTest {
 
     @BeforeAll
     public static void setup() {
-        try {
-            hostname = InetAddress.getLocalHost().getHostName().toLowerCase();
-        } catch (Exception e) {
+        // these tests seem to crash the JVM with certain VPNs
+        var hostnameTestDisabled = Objects.equals("true", System.getenv("HOSTNAME_TEST_DISABLED"));
+        if (hostnameTestDisabled) {
             hostname = null;
+        } else {
+            try {
+                hostname = InetAddress.getLocalHost().getHostName().toLowerCase();
+            } catch (Exception e) {
+                hostname = null;
+            }
         }
     }
 
