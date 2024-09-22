@@ -160,9 +160,18 @@ public interface MuServer extends Closeable {
     /**
      * Gets the SSL info of the server, or null if SSL is not enabled.
      * @return A description of the actual SSL settings used, or null.
+     * @deprecated Use {@link #httpsConfig()} instead
      */
-    SSLInfo sslInfo();
+    @Deprecated()
+    default SSLInfo sslInfo() {
+        return httpsConfig();
+    }
 
+    /**
+     * Gets the SSL info of the server, or null if SSL is not enabled.
+     * @return A description of the actual SSL settings used, or null.
+     */
+    HttpsConfig httpsConfig();
     /**
      * @return The rate limiters added to the server with {@link MuServerBuilder#withRateLimiter(RateLimitSelector)}, in the order they are applied.
      */

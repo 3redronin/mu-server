@@ -9,6 +9,7 @@ import java.io.*;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateParsingException;
 import java.security.cert.X509Certificate;
@@ -265,21 +266,65 @@ public class HttpsConfigBuilder {
      */
     @Deprecated
     SSLContext build() {
+        byte[] keystoreBytes = this.keystoreBytes;
+        String keystoreTypeToUse = keystoreType;
+        char[] keystorePasswordToUse = keystorePassword;
+        char[] keyPasswordToUse = keyPassword;
         if (keystoreBytes == null) {
-            throw new MuException("No keystore has been set");
+            var local = unsignedLocalhost();
+            keystoreBytes = local.keystoreBytes;
+            keystoreTypeToUse = local.keystoreType;
+            keystorePasswordToUse = local.keystorePassword;
+            keyPasswordToUse = local.keyPassword;
         }
+        TrustManager[] trustManagers = this.trustManager == null ? null : new TrustManager[] { this.trustManager };
         ByteArrayInputStream keystoreStream = new ByteArrayInputStream(keystoreBytes);
         try {
             SSLContext serverContext = SSLContext.getInstance("TLS");
 
-            final KeyStore ks = KeyStore.getInstance(keystoreType);
-            ks.load(keystoreStream, keystorePassword);
+            KeyStore ks = KeyStore.getInstance(keystoreTypeToUse);
+            ks.load(keystoreStream, keystorePasswordToUse);
 
-            final KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-            kmf.init(ks, keyPassword);
+            KeyManagerFactory kmf = keyManagerFactory;
+            SecureRandom random = new SecureRandom();
+            if (kmf == null) {
 
-            var tm = trustManager == null ? null : new TrustManager[] { trustManager };
-            serverContext.init(kmf.getKeyManagers(), tm, null);
+                String defaultAliasToUse = this.defaultAlias;
+                Map<String, String> sanToAliasMap = new HashMap<>();
+                try {
+                    if (defaultAliasToUse == null) {
+                        Enumeration<String> aliases = ks.aliases();
+                        if (aliases.hasMoreElements()) {
+                            defaultAliasToUse = aliases.nextElement();
+                        }
+                    }
+                    kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+                    kmf.init(ks, keyPasswordToUse);
+                    sanToAliasMap.putAll(buildSanToAliasMap(ks));
+                    log.debug("keystore san to alias mapping: {}", sanToAliasMap);
+                } finally {
+                    try {
+                        keystoreStream.close();
+                    } catch (IOException e) {
+                        log.info("Error while closing keystore stream: " + e.getMessage());
+                    }
+                }
+
+                X509ExtendedKeyManager x509KeyManager = null;
+                for (KeyManager keyManager : kmf.getKeyManagers()) {
+                    if (keyManager instanceof X509ExtendedKeyManager) {
+                        x509KeyManager = (X509ExtendedKeyManager) keyManager;
+                    }
+                }
+                if (x509KeyManager == null)
+                    throw new Exception("KeyManagerFactory did not create an X509ExtendedKeyManager");
+                SniKeyManager sniKeyManager = new SniKeyManager(x509KeyManager, defaultAliasToUse, sanToAliasMap);
+                serverContext.init(new KeyManager[]{sniKeyManager}, trustManagers, random);
+
+
+            } else {
+                serverContext.init(kmf.getKeyManagers(), trustManagers, random);
+            }
             return serverContext;
         } catch (Exception e) {
             throw new MuException("Error while setting up SSLContext", e);

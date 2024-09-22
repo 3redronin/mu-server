@@ -140,6 +140,11 @@ class MuServerImpl implements MuServer {
     }
 
     @Override
+    public HttpsConfig httpsConfig() {
+        return null;
+    }
+
+    @Override
     public List<RateLimiter> rateLimiters() {
         List<RateLimiterImpl> rateLimiters = settings.rateLimiters;
         return rateLimiters == null ? Collections.emptyList() : rateLimiters.stream().map(RateLimiter.class::cast).collect(Collectors.toList());

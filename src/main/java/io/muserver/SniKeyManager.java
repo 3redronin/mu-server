@@ -5,6 +5,7 @@ import java.net.Socket;
 import java.security.Principal;
 import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
+import java.util.Collection;
 import java.util.Map;
 
 class SniKeyManager extends X509ExtendedKeyManager {
@@ -42,16 +43,21 @@ class SniKeyManager extends X509ExtendedKeyManager {
 
     @Override
     public String chooseServerAlias(String keyType, Principal[] issuers, Socket socket) {
-        throw new UnsupportedOperationException("SSLSocket not expected to be used");
+        var sslSocket = (SSLSocket) socket;
+        var session = (ExtendedSSLSession)sslSocket.getHandshakeSession(); // Get the current handshake session
+        return chooseAlias(session.getRequestedServerNames());
     }
 
     @Override
     public String chooseEngineServerAlias(String keyType, Principal[] issuers, SSLEngine engine) {
         ExtendedSSLSession session = (ExtendedSSLSession) engine.getHandshakeSession();
+        return chooseAlias(session.getRequestedServerNames());
+    }
 
+    private String chooseAlias(Collection<SNIServerName> requestedServerNames) {
         // Pick first SNIHostName in the list of SNI names.
         String sniHostname = null;
-        for (SNIServerName name : session.getRequestedServerNames()) {
+        for (SNIServerName name : requestedServerNames) {
             if (name.getType() == StandardConstants.SNI_HOST_NAME) {
                 sniHostname = ((SNIHostName) name).getAsciiName();
                 break;

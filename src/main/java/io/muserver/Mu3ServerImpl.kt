@@ -94,8 +94,8 @@ internal class Mu3ServerImpl(
     override fun changeHttpsConfig(newHttpsConfig: HttpsConfigBuilder) {
     }
 
-    override fun sslInfo(): SSLInfo? {
-        return null
+    override fun httpsConfig(): HttpsConfig? {
+        return acceptors.firstOrNull { it.isHttps }?.httpsConfig
     }
 
     override fun rateLimiters() = rateLimiters
