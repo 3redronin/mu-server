@@ -1,7 +1,9 @@
 package io.muserver
 
+import jakarta.ws.rs.core.MediaType
 import java.io.InputStream
 import java.net.URI
+import java.nio.charset.StandardCharsets
 import java.util.*
 
 internal class Mu3Request(
@@ -15,6 +17,7 @@ internal class Mu3Request(
     val body: InputStream,
 ) : MuRequest {
     override fun contentType() = mu3Headers.get("content-type")
+    private var form: MuForm? = null
     lateinit var response: Mu3Response
     private val startTime = System.currentTimeMillis()
     private var query: QueryString? = null
@@ -22,6 +25,13 @@ internal class Mu3Request(
     private var contextPath = ""
     private var relativePath: String = requestUri.rawPath
     private var cookies: List<Cookie>? = null
+    private var bodyClaimed = false
+
+    private fun claimbody() {
+        if (bodyClaimed) throw IllegalStateException("The body of the request message cannot be read twice. This can happen when calling any 2 of inputStream(), readBodyAsString(), or form() methods.")
+        bodyClaimed = true
+    }
+
     var asyncHandle : Mu3AsyncHandleImpl? = null
         private set
 
@@ -42,6 +52,7 @@ internal class Mu3Request(
     override fun body() = body
 
     override fun readBodyAsString(): String {
+        claimbody()
         val charset = Headtils.bodyCharset(mu3Headers, true)
         body().reader(charset).use { reader ->
             return reader.readText()
@@ -63,8 +74,32 @@ internal class Mu3Request(
         return query!!
     }
 
-    override fun form(): RequestParameters {
-        TODO("Not yet implemented")
+    override fun form(): MuForm {
+        if (this.form == null) {
+            claimbody()
+            val bodyType: MediaType? = mu3Headers.contentType()
+            if (bodyType == null) {
+                this.form = EmptyForm.VALUE
+            } else {
+                val type = bodyType.type.lowercase()
+                val subtype = bodyType.subtype.lowercase()
+                if ("application" == type && "x-www-form-urlencoded" == subtype) {
+                    val text = body().reader(StandardCharsets.UTF_8).use { reader ->
+                        reader.readText()
+                    }
+                    this.form = UrlEncodedMuForm.parse(text)
+                } else if ("multipart" == type && "form-data" == subtype) {
+                    val charset = Headtils.bodyCharset(mu3Headers, true)
+                    val boundary = bodyType.parameters["boundary"]
+                    if (Mutils.nullOrEmpty(boundary)) throw HttpException.badRequest("No boundary specified in the multipart form-data")
+                    TODO()
+                } else {
+                    throw HttpException.badRequest("Unrecognised form type $bodyType")
+                }
+            }
+
+        }
+        return this.form!!
     }
 
     override fun cookies(): List<Cookie> {
@@ -82,7 +117,7 @@ internal class Mu3Request(
 
     override fun relativePath() = relativePath
 
-    override fun attribute(key: String): Any? = attributes()[key]
+    override fun attribute(key: String): Any? = attributes?.get(key)
 
     override fun attribute(key: String, value: Any) {
         attributes()[key] = value

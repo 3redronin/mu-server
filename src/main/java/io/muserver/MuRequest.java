@@ -130,7 +130,7 @@ public interface MuRequest {
      *                     browser before the form is fully read into memory.
      * @return Returns an object allowing you to access the form parameters of this request.
      */
-    RequestParameters form() throws IOException;
+    MuForm form() throws IOException;
 
     /**
      * Gets all the client-sent cookies
