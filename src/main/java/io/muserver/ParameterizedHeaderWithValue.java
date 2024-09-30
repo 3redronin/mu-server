@@ -3,6 +3,7 @@ package io.muserver;
 import java.util.*;
 
 import static io.muserver.Mutils.notNull;
+import static io.muserver.Mutils.urlDecode;
 import static java.util.Collections.emptyList;
 
 /**
@@ -21,7 +22,7 @@ public class ParameterizedHeaderWithValue {
      * @param value The value such as <code>text/plain</code>
      * @param parameters A map of parameters, such as <code>charset: UTF-8</code>
      */
-    ParameterizedHeaderWithValue(String value, Map<String, String> parameters) {
+    public ParameterizedHeaderWithValue(String value, Map<String, String> parameters) {
         notNull("value", value);
         notNull("parameters", parameters);
         this.value = value;
@@ -104,7 +105,7 @@ public class ParameterizedHeaderWithValue {
                     }
                 } else if (state == State.PARAM_NAME) {
                     if (c == ',' && buffer.length() == 0) {
-                        i++; // a semi-colon without an parameter, like "something;"
+                        i++; // a semicolon without a parameter, like "something;"
                         break headerValueLoop;
                     } else if (c == '=') {
                         paramName = buffer.toString();
@@ -146,7 +147,7 @@ public class ParameterizedHeaderWithValue {
                                 if (parameters == null) {
                                     parameters = new LinkedHashMap<>(); // keeps insertion order
                                 }
-                                parameters.put(paramName, buffer.toString());
+                                parameters.put(paramName, urlDecode(buffer.toString()));
                                 buffer.setLength(0);
                                 paramName = null;
                                 state = State.PARAM_NAME;
@@ -171,7 +172,7 @@ public class ParameterizedHeaderWithValue {
                     if (parameters == null) {
                         parameters = new LinkedHashMap<>(); // keeps insertion order
                     }
-                    parameters.put(paramName, buffer.toString());
+                    parameters.put(paramName, urlDecode(buffer.toString()));
                     buffer.setLength(0);
                     break;
                 default:

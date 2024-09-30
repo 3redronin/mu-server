@@ -498,6 +498,5 @@ internal enum class HttpMessageType { REQUEST, RESPONSE }
 
 internal interface Http1ConnectionMsg
 class MessageBodyBit(val bytes: ByteArray, val offset: Int, val length: Int, val isLast: Boolean) : Http1ConnectionMsg
-object EmptyMessageBodyBit : Http1ConnectionMsg
 object EndOfBodyBit : Http1ConnectionMsg
 object EOFMsg : Http1ConnectionMsg

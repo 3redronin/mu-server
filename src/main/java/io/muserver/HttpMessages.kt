@@ -3,7 +3,6 @@ package io.muserver
 import io.muserver.Mu3Headers.Companion.headerBytes
 import java.io.OutputStream
 
-
 internal sealed interface HttpMessageTemp : Http1ConnectionMsg {
     var httpVersion: HttpVersion?
     fun headers() : Mu3Headers
