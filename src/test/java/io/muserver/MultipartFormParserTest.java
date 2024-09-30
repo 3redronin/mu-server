@@ -7,8 +7,12 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.*;
+import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Base64;
 import java.util.UUID;
 
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -22,7 +26,7 @@ class MultipartFormParserTest {
     public void emptyBodiesSupported(String type) throws IOException {
         var inputStream = getInput(type,
             "-----------------------------40328356438088973481959884063--\r\n");
-        var parser = new MultipartFormParser(
+        var parser = new MultipartFormParser(tempDir(),
             "---------------------------40328356438088973481959884063", inputStream, 8192);
         parser.discardPreamble();
         assertThat(parser.readPartHeaders(), nullValue());
@@ -34,7 +38,7 @@ class MultipartFormParserTest {
     public void preambleAndEpilogueIsIgnored(String type) throws IOException {
         var inputStream = getInput(type,
             "Hi there. Welcome to the preamble\r\n-----------------------------40328356438088973481959884063--\r\nThis is the epilogue.");
-        var parser = new MultipartFormParser(
+        var parser = new MultipartFormParser(tempDir(),
             "---------------------------40328356438088973481959884063", inputStream, 8192);
         parser.discardPreamble();
         assertThat(parser.readPartHeaders(), nullValue());
@@ -46,7 +50,7 @@ class MultipartFormParserTest {
     public void linearWhiteSpaceCharsAfterBoundaryIsAllowed(String type) throws IOException {
         var inputStream = getInput(type,
             "Hi there. Welcome to the preamble\r\n-----------------------------40328356438088973481959884063-- \t \r\nThis is the epilogue.");
-        var parser = new MultipartFormParser(
+        var parser = new MultipartFormParser(tempDir(),
             "---------------------------40328356438088973481959884063", inputStream, 8192);
         parser.discardPreamble();
         assertThat(parser.readPartHeaders(), nullValue());
@@ -81,7 +85,7 @@ class MultipartFormParserTest {
                 "--simple boundary--\r\n" +
                 "\r\n" +
                 "This is the epilogue.  It is also to be ignored.");
-        var parser = new MultipartFormParser("simple boundary", inputStream, 8192);
+        var parser = new MultipartFormParser(tempDir(),"simple boundary", inputStream, 8192);
         parser.discardPreamble();
         Mu3Headers part1Headers = parser.readPartHeaders();
         assertThat(part1Headers, notNullValue());
@@ -115,7 +119,7 @@ class MultipartFormParserTest {
                 "\r\n" +
                 "ЧАСТЬ ПЕРВАЯ.\r\n" +
                 "------WebKitFormBoundary688vjJHOokza5SAR--", Charset.forName("ISO-8859-5"));
-        var parser = new MultipartFormParser("----WebKitFormBoundary688vjJHOokza5SAR", inputStream, 8192);
+        var parser = new MultipartFormParser(tempDir(),"----WebKitFormBoundary688vjJHOokza5SAR", inputStream, 8192);
         var form = parser.parseFully();
         assertThat(form.getAll("_charset_"), contains("ISO-8859-5"));
         assertThat(form.getAll("inputBox"), contains("ЧАСТЬ ПЕРВАЯ."));
@@ -128,7 +132,7 @@ class MultipartFormParserTest {
     public void browserStyleEmptiesAreEmpty(String type) throws IOException {
         var boundary = UUID.randomUUID().toString();
         var inputStream = getInput(type, "--" + boundary + "--");
-        var form = new MultipartFormParser(boundary, inputStream, 8192).parseFully();
+        var form = new MultipartFormParser(tempDir(),boundary, inputStream, 8192).parseFully();
         assertThat(form.all().entrySet(), empty());
     }
 
@@ -137,7 +141,7 @@ class MultipartFormParserTest {
     public void aSinglePartWithNoHeadersAndEmptyBodyReturnsEmptyForm(String type) throws IOException {
         var boundary = UUID.randomUUID().toString();
         var inputStream = getInput(type, "--" + boundary + "\r\n\r\n\r\n--" + boundary + "--");
-        var form = new MultipartFormParser(boundary, inputStream, 8192).parseFully();
+        var form = new MultipartFormParser(tempDir(),boundary, inputStream, 8192).parseFully();
         assertThat(form.all().entrySet(), empty());
     }
 
@@ -147,7 +151,7 @@ class MultipartFormParserTest {
     public void partWithNoBodyReturnsEmptyForm(String type) throws IOException {
         var boundary = UUID.randomUUID().toString();
         var inputStream = getInput(type, "--" + boundary + "\r\n\r\n--" + boundary + "--");
-        var form = new MultipartFormParser(boundary, inputStream, 8192).parseFully();
+        var form = new MultipartFormParser(tempDir(),boundary, inputStream, 8192).parseFully();
         assertThat(form.all().entrySet(), empty());
     }
 
@@ -239,6 +243,87 @@ class MultipartFormParserTest {
         assertThat(form.uploadedFiles().entrySet(), hasSize(1));
         var file = form.uploadedFile("hello");
         assertThat(file, notNullValue());
+        assertThat(file.filename(), equalTo("my file.txt"));
+        assertThat(file.contentType(), equalTo("text/plain;charset=us-ascii"));
+        assertThat(file.asString(), equalTo("hello\r\nyou"));
+        assertThat(file.size(), equalTo(10L));
+        assertThat(file.extension(), equalTo("txt"));
+        assertThat(file.asBytes(), equalTo("hello\r\nyou".getBytes(StandardCharsets.US_ASCII)));
+        assertThat(file.asFile().isFile(), equalTo(true));
+        assertThat(file.asPath().toFile().isFile(), equalTo(true));
+        var newDest = tempDir().resolve("saved" + UUID.randomUUID() + ".txt");
+        file.saveTo(newDest);
+        assertThat(Files.isRegularFile(newDest), equalTo(true));
+        assertThat(Files.readString(newDest, StandardCharsets.US_ASCII), equalTo("hello\r\nyou"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"full", "one-by-one"})
+    public void individualSectionsCanHaveTheirOwnCharsets(String type) throws Throwable {
+        var input = ("--boundary00000000000000000000000000000000000000123\r\n" +
+                "Content-Disposition: form-data; name=\"hello\"\r\n" +
+                "content-type: text/plain;charset=utf-16\r\n" +
+                "\r\n" +
+                "tobereplaced\r\n" +
+                "--boundary00000000000000000000000000000000000000123\r\n" +
+                "Content-Disposition: form-data; name=\"hello\"\r\n" +
+                "\r\n" +
+                "hello you\r\n" +
+                "--boundary00000000000000000000000000000000000000123--\r\n"
+        ).split("tobereplaced");
+
+        var baos = new ByteArrayOutputStream();
+        baos.writeBytes(input[0].getBytes(StandardCharsets.UTF_8));
+        baos.writeBytes("Hello in utf-16".getBytes(StandardCharsets.UTF_16));
+        baos.writeBytes(input[1].getBytes(StandardCharsets.UTF_8));
+
+        try (var inputStream = inputStream(type, baos.toByteArray())) {
+            var parser = new MultipartFormParser(tempDir(), "boundary00000000000000000000000000000000000000123", inputStream, 100);
+            var form = parser.parseFully();
+            assertThat(form.getAll("hello"), contains("Hello in utf-16", "hello you"));
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"full", "one-by-one"})
+    public void mulitpleFieldsCanBeUploaded(String type) throws Throwable {
+        var input = ("--boundary00000000000000000000000000000000000000123\r\n" +
+            "Content-Disposition: form-data; name=\"image\"; filename=\"/tmp/广州, china <>:?\\\"|*.jpeg\"\r\n" +
+            "Content-Type: image/jpeg\r\n" +
+            "\r\n" +
+            "Binary image data goes here\r\n" +
+            "--boundary00000000000000000000000000000000000000123\r\n" +
+            "Content-Disposition: form-data; name=\"hello\"\r\n" +
+            "\r\n" +
+            "hello you\r\n" +
+            "--boundary00000000000000000000000000000000000000123--\r\n").split("Binary image data goes here");
+
+        var baos = new ByteArrayOutputStream();
+        baos.writeBytes(input[0].getBytes(StandardCharsets.UTF_8));
+        baos.writeBytes(Files.readAllBytes(UploadTest.guangzhouChina.toPath()));
+        baos.writeBytes(input[1].getBytes(StandardCharsets.UTF_8));
+
+        try (var inputStream = inputStream(type, baos.toByteArray())) {
+            var parser = new MultipartFormParser(tempDir(), "boundary00000000000000000000000000000000000000123", inputStream, 100);
+            var form = parser.parseFully();
+            assertThat(form.getAll("hello"), contains("hello you"));
+            assertThat(form.uploadedFiles().entrySet(), hasSize(1));
+            var image = form.uploadedFile("image");
+            assertThat(image, notNullValue());
+            assertThat(image.size(), equalTo(372_987L));
+            assertThat(image.filename(), equalTo("广州, china        .jpeg"));
+            assertThat(image.extension(), equalTo("jpeg"));
+            var tempFile = image.asPath();
+            assertThat(image.asFile().isFile(), equalTo(true));
+            assertThat(Files.size(tempFile), equalTo(372_987L));
+
+            var b64 = Base64.getEncoder();
+            assertThat(b64.encodeToString(image.asBytes()),
+                equalTo(b64.encodeToString(Files.readAllBytes(UploadTest.guangzhouChina.toPath()))));
+
+            ((MuUploadedFile2) image).deleteFile();
+            assertThat(Files.exists(tempFile), equalTo(false));
+        }
     }
 
 
@@ -247,8 +332,12 @@ class MultipartFormParserTest {
     }
     private MultipartForm multipartForm(String type, String message, String boundary) throws IOException {
         var inputStream = getInput(type, message);
-        var form = new MultipartFormParser(boundary, inputStream, 8192).parseFully();
+        var form = new MultipartFormParser(tempDir(), boundary, inputStream, 8192).parseFully();
         return form;
+    }
+
+    private static Path tempDir() throws IOException {
+        return Files.createTempDirectory("muservertests");
     }
 
 
@@ -256,7 +345,7 @@ class MultipartFormParserTest {
     @ValueSource(strings = {"full", "one-by-one"})
     public void ifThereAreNoBoundariesThenItCrashesWithSmallMessage(String type) throws IOException {
         var inputStream = getInput(type, "nope");
-        var parser = new MultipartFormParser(
+        var parser = new MultipartFormParser(tempDir(),
             "---------------------------40328356438088973481959884063", inputStream, 8192);
         assertThrows(EOFException.class, parser::discardPreamble);
     }
@@ -265,7 +354,7 @@ class MultipartFormParserTest {
     @ValueSource(strings = {"full", "one-by-one"})
     public void ifThereAreNoBoundariesThenItCrashesWithLargeMessage(String type) throws IOException {
         var inputStream = getInput(type, "longerthanboundaryanyway".repeat(1000));
-        var parser = new MultipartFormParser(
+        var parser = new MultipartFormParser(tempDir(),
             "---------------------------40328356438088973481959884063", inputStream, 8192);
         assertThrows(EOFException.class, parser::discardPreamble);
     }
@@ -278,6 +367,10 @@ class MultipartFormParserTest {
     }
     private InputStream getInput(String type, String message, Charset charset) {
         var bytes = message.getBytes(charset);
+        return inputStream(type, bytes);
+    }
+
+    private static InputStream inputStream(String type, byte[] bytes) {
         if (type.equals("full")) {
             return new ByteArrayInputStream(bytes);
         } else if (type.equals("one-by-one")) {

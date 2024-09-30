@@ -175,6 +175,9 @@ internal class Mu3Request(
 
     fun cleanup() {
         body.close()
+        if (form != null && form is MultipartForm) {
+            (form as MultipartForm).cleanup()
+        }
     }
 
 }

@@ -46,4 +46,14 @@ class MultipartForm implements MuForm {
         return params == null ? emptyMap() : params;
     }
 
+    void cleanup() {
+        if (fileParams != null) {
+            for (List<UploadedFile> value : fileParams.values()) {
+                for (UploadedFile uploadedFile : value) {
+                    ((MuUploadedFile2)uploadedFile).deleteFile();
+                }
+            }
+        }
+    }
+
 }

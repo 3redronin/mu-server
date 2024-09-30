@@ -191,6 +191,7 @@ class MuUploadedFile2 implements UploadedFile {
     void deleteFile() {
         if (shouldDeleteOnClean) {
             tryToDelete(file);
+            shouldDeleteOnClean = false;
         }
     }
 
