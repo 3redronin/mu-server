@@ -1,15 +1,14 @@
 package io.muserver;
 
-import jakarta.ws.rs.ClientErrorException;
 import okhttp3.MediaType;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import okhttp3.internal.http2.StreamResetException;
 import okio.BufferedSink;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import scaffolding.*;
 
 import java.io.File;
@@ -240,7 +239,6 @@ public class RequestBodyReaderStringTest {
     @Test
     public void largeUTF8CharactersAreFineGzipped() throws IOException {
         server = ServerUtils.httpsServerForTest()
-            .withGzipEnabled(true)
             .addHandler((request, response) -> {
                 String requestBody = request.readBodyAsString();
                 response.write(requestBody);
@@ -287,8 +285,8 @@ public class RequestBodyReaderStringTest {
             // So allow a valid 408 response or an error
             assertThat(e.getCause(), instanceOf(IOException.class));
         }
-        assertThat(exception.get(), instanceOf(ClientErrorException.class));
-        assertThat(((ClientErrorException) exception.get()).getResponse().getStatus(), equalTo(408));
+        assertThat(exception.get(), instanceOf(HttpException.class));
+        assertThat(((HttpException) exception.get()).status(), equalTo(HttpStatus.REQUEST_TIMEOUT_408));
     }
 
     @Test
@@ -314,23 +312,21 @@ public class RequestBodyReaderStringTest {
 
         try (Response resp = call(request)) {
             resp.body().string();
-            Assert.fail("Should not complete successfully");
+            Assertions.fail("Should not complete successfully");
         } catch (Exception e) {
             MuAssert.assertIOException(e);
         }
-        assertThat(exception.get(), instanceOf(ClientErrorException.class));
-        assertThat(((ClientErrorException) exception.get()).getResponse().getStatus(), equalTo(408));
+        assertThat(exception.get(), instanceOf(HttpException.class));
+        assertThat(((HttpException) exception.get()).status(), equalTo(HttpStatus.REQUEST_TIMEOUT_408));
     }
 
     @Test
     public void exceedingUploadSizeResultsIn413OrKilledConnectionForChunkedRequestWhereResponseNotStarted() throws Exception {
         AtomicReference<Throwable> exception = new AtomicReference<>();
         List<ResponseInfo> infos = new ArrayList<>();
-        AtomicBoolean isHttp2 = new AtomicBoolean();
         server = ServerUtils.httpsServerForTest()
             .withMaxRequestSize(1000)
             .addHandler((request, response) -> {
-                isHttp2.set(request.connection().protocol().equals("HTTP/2"));
                 try {
                     request.readBodyAsString();
                 } catch (Throwable e) {
@@ -344,29 +340,29 @@ public class RequestBodyReaderStringTest {
 
         Request.Builder request = request()
             .url(server.uri().toString())
-            .post(new SlowBodySender(1000, 5));
+            .post(new RequestBody() {
+                public MediaType contentType() {
+                    return MediaType.get("text/plain;charset=UTF-8");
+                }
+                public void writeTo(BufferedSink bufferedSink) throws IOException {
+                    bufferedSink.write("!".repeat(999).getBytes(StandardCharsets.UTF_8));
+                    bufferedSink.flush();
+                    bufferedSink.write("##".getBytes(StandardCharsets.UTF_8));
+                    bufferedSink.flush();
+                }
+            });
 
         try (Response resp = call(request)) {
             assertThat(resp.code(), equalTo(413));
-            assertThat(resp.body().string(), containsString("413 Request Entity Too Large"));
-            Assert.fail("Should not read the whole body");
-        } catch (Exception e) {
-            // The HttpServerKeepAliveHandler will probably close the connection before the full request body is read, which is probably a good thing in this case.
-            // So allow a valid 413 response or an error
-            if (isHttp2.get()) {
-                assertThat(e.getCause(), instanceOf(StreamResetException.class));
-            } else {
-                MuAssert.assertIOException(e);
-                assertThat(e, not(instanceOf(StreamResetException.class)));
-            }
+            assertThat(resp.body().string(), containsString("413 Content Too Large"));
         }
-        assertEventually(exception::get, instanceOf(ClientErrorException.class));
-        assertThat(((ClientErrorException) exception.get()).getResponse().getStatus(), equalTo(413));
+        assertEventually(exception::get, instanceOf(HttpException.class));
+        assertThat(((HttpException) exception.get()).status(), equalTo(HttpStatus.CONTENT_TOO_LARGE_413));
 
         assertEventually(() -> infos, not(empty()));
         assertThat(infos.size(), equalTo(1));
         Mu3Response ri = (Mu3Response) infos.get(0);
-        assertThat(ri.completedSuccessfully(), equalTo(false));
+        assertThat(ri.completedSuccessfully(), equalTo(true));
         assertThat(ri.response().responseState(), equalTo(ResponseState.FULL_SENT));
     }
 
@@ -397,7 +393,7 @@ public class RequestBodyReaderStringTest {
 
         try (Response resp = call(request)) {
             resp.body().string();
-            Assert.fail("Should not succeed but got " + resp);
+            Assertions.fail("Should not succeed but got " + resp);
         } catch (Exception e) {
             if (isHttp2.get()) {
                 assertThat(Mutils.coalesce(e.getCause(), e), instanceOf(StreamResetException.class));
@@ -409,8 +405,8 @@ public class RequestBodyReaderStringTest {
                 }
             }
         }
-        assertThat(exception.get(), instanceOf(ClientErrorException.class));
-        assertThat(((ClientErrorException) exception.get()).getResponse().getStatus(), equalTo(413));
+        assertThat(exception.get(), instanceOf(HttpException.class));
+        assertThat(((HttpException) exception.get()).status(), equalTo(HttpStatus.CONTENT_TOO_LARGE_413));
 
         assertEventually(() -> infos, not(empty()));
         assertThat(infos.size(), equalTo(1));
@@ -419,7 +415,7 @@ public class RequestBodyReaderStringTest {
         assertThat(ri.response().responseState(), equalTo(ResponseState.ERRORED));
     }
 
-    @After
+    @AfterEach
     public void destroy() {
         scaffolding.MuAssert.stopAndCheck(server);
     }

@@ -5,7 +5,7 @@ import java.io.InputStream
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicBoolean
 
-internal class Http1BodyStream(private val parser: Http1MessageReader, private var maxBodySize: Long) : InputStream() {
+internal class Http1BodyStream(private val parser: Http1MessageReader, private val maxBodySize: Long) : InputStream() {
 
     private var bb : ByteBuffer? = null
     private var lastBitReceived = false
@@ -13,9 +13,7 @@ internal class Http1BodyStream(private val parser: Http1MessageReader, private v
 
     private val eof = AtomicBoolean(false)
 
-    fun ignoreBodySize() {
-        maxBodySize = Long.MAX_VALUE
-    }
+    fun bytesReceived() = bytesReceived
 
     override fun read(): Int {
         blockUntilData()
@@ -65,9 +63,7 @@ internal class Http1BodyStream(private val parser: Http1MessageReader, private v
                                 bb = ByteBuffer.wrap(next.bytes, next.offset, next.length)
                                 bytesReceived += next.length
                                 if (bytesReceived > maxBodySize) {
-                                    val ex = HttpException(HttpStatus.CONTENT_TOO_LARGE_413)
-                                    ex.responseHeaders().set(HeaderNames.CONNECTION, HeaderValues.CLOSE)
-                                    throw ex
+                                    throw HttpException(HttpStatus.CONTENT_TOO_LARGE_413)
                                 }
                                 ready = true
                             }
@@ -117,9 +113,6 @@ internal class Http1BodyStream(private val parser: Http1MessageReader, private v
                 if (last is MessageBodyBit) {
                     drained = last.isLast
                     bytesReceived += last.length
-                    if  (bytesReceived > maxBodySize) {
-                        throw HttpException(HttpStatus.CONTENT_TOO_LARGE_413)
-                    }
                 } else if (last is EndOfBodyBit) {
                     drained = true
                 } else {
