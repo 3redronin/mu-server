@@ -1,7 +1,7 @@
 package io.muserver.openapi;
 
 import io.muserver.UploadedFile;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.io.*;
 import java.time.Instant;
@@ -14,6 +14,7 @@ import static io.muserver.openapi.SchemaObjectBuilder.schemaObjectFrom;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class SchemaObjectTest {
 
@@ -22,14 +23,16 @@ public class SchemaObjectTest {
         schemaObject().build().writeJson(new StringWriter());
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void youCannotHaveReadAndWriteOnly() {
-        schemaObject().withReadOnly(true).withWriteOnly(true).build();
+        assertThrows(IllegalArgumentException.class, () ->
+            schemaObject().withReadOnly(true).withWriteOnly(true).build());
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void ifTypeIsArrayThenItemsIsRequired() {
-        schemaObject().withType("array").build();
+        assertThrows(IllegalArgumentException.class, () ->
+            schemaObject().withType("array").build());
     }
 
     @Test
@@ -276,19 +279,22 @@ public class SchemaObjectTest {
     }
 
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void defaultsMustMatchTypeForNumber() {
-        schemaObject().withType("number").withDefaultValue("1").build();
+        assertThrows(IllegalArgumentException.class, () ->
+            schemaObject().withType("number").withDefaultValue("1").build());
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void defaultsMustMatchTypeForBoolean() {
-        schemaObject().withType("boolean").withDefaultValue("1").build();
+        assertThrows(IllegalArgumentException.class, () ->
+            schemaObject().withType("boolean").withDefaultValue("1").build());
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void defaultsMustMatchTypeForArray() {
-        schemaObject().withType("array").withItems(schemaObject().build()).withDefaultValue("something").build();
+        assertThrows(IllegalArgumentException.class, () ->
+            schemaObject().withType("array").withItems(schemaObject().build()).withDefaultValue("something").build());
     }
 
     @Test

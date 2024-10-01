@@ -1,6 +1,6 @@
 package io.muserver.openapi;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.io.StringWriter;
@@ -19,6 +19,7 @@ import static java.util.Collections.emptyMap;
 import static java.util.Collections.singletonMap;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class OpenAPIObjectTest {
 
@@ -59,16 +60,17 @@ public class OpenAPIObjectTest {
         }
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void duplicateTagsNotAllowed() {
-        openAPIObject()
-            .withInfo(infoObject().withTitle("test").withVersion("1.0").build())
-            .withPaths(pathsObject().withPathItemObjects(emptyMap()).build())
-            .withTags(asList(
-                tagObject().withName("something").build(),
-                tagObject().withName("something").build()
-            ))
-            .build();
+        assertThrows(IllegalArgumentException.class, () ->
+            openAPIObject()
+                .withInfo(infoObject().withTitle("test").withVersion("1.0").build())
+                .withPaths(pathsObject().withPathItemObjects(emptyMap()).build())
+                .withTags(asList(
+                    tagObject().withName("something").build(),
+                    tagObject().withName("something").build()
+                ))
+                .build());
     }
 
 }

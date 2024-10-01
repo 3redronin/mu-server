@@ -1,6 +1,6 @@
 package io.muserver.openapi;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.io.StringWriter;
@@ -18,6 +18,7 @@ import static io.muserver.openapi.SchemaObjectBuilder.schemaObject;
 import static java.util.Arrays.asList;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class PathItemObjectTest {
 
@@ -70,14 +71,15 @@ public class PathItemObjectTest {
             .build();
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void duplicateParametersWithSameLocationNotAllowed() {
-        pathItemObject()
-            .withParameters(asList(
-                parameterObject().withName("something").withIn("path").withSchema(schemaObject().build()).build(),
-                parameterObject().withName("something").withIn("path").withSchema(schemaObject().build()).build()
-            ))
-            .build();
+        assertThrows(IllegalArgumentException.class, () ->
+            pathItemObject()
+                .withParameters(asList(
+                    parameterObject().withName("something").withIn("path").withSchema(schemaObject().build()).build(),
+                    parameterObject().withName("something").withIn("path").withSchema(schemaObject().build()).build()
+                ))
+                .build());
     }
 
 }

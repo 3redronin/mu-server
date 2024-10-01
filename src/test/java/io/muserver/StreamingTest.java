@@ -4,8 +4,8 @@ import okhttp3.Response;
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.api.ContentResponse;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 
@@ -29,7 +29,8 @@ public class StreamingTest {
 
 	private MuServer server;
 
-	@Test public void textCanBeWrittenWithThePrintWriter() throws Exception {
+	@Test
+    public void textCanBeWrittenWithThePrintWriter() throws Exception {
         server = ServerUtils.httpsServerForTest()
 				.addHandler((request, response) -> {
                     response.contentType(ContentTypes.TEXT_PLAIN);
@@ -203,7 +204,8 @@ public class StreamingTest {
         }
     }
 
-	@After public void stopIt() {
+	@AfterEach
+    public void stopIt() {
         MuAssert.stopAndCheck(server);
 	}
 }
