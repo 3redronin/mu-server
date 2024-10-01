@@ -1,19 +1,20 @@
 package io.muserver;
 
-import jakarta.ws.rs.ClientErrorException;
 import okhttp3.MediaType;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Test;
+import okio.BufferedSink;
+import org.junit.jupiter.api.*;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 import scaffolding.SlowBodySender;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.net.SocketException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
@@ -21,6 +22,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 import static scaffolding.MuAssert.assertEventually;
@@ -52,7 +54,8 @@ public class RequestBodyReaderListenerAdapterTest {
         assertThat("All: " + readListener.events.toString(), readListener.events, contains("data received: 7 bytes", "data written", "data received: 7 bytes", "data written", "onComplete"));
     }
 
-    @Test(timeout = 10000)
+    @Test
+    @Timeout(30)
     public void emptyBodiesAreOkay() {
         server = ServerUtils.httpsServerForTest()
             .withRequestTimeout(100, TimeUnit.MILLISECONDS)
@@ -65,12 +68,13 @@ public class RequestBodyReaderListenerAdapterTest {
             .start();
 
         try (Response resp = call(request(server.uri()))) {
-            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.code(), equalTo(204));
         }
-        assertThat("All: " + readListener.events.toString(), readListener.events, hasItems("onComplete"));
+        assertThat("All: " + readListener.events, readListener.events, hasItems("onComplete"));
     }
 
     @Test
+    @Timeout(20)
     public void ifTheRequestBodyIsTooSlowAnErrorIsReturnedOrConnectionIsKilled() throws IOException {
         server = ServerUtils.httpsServerForTest()
             .withRequestTimeout(100, TimeUnit.MILLISECONDS)
@@ -92,13 +96,68 @@ public class RequestBodyReaderListenerAdapterTest {
             MuAssert.assertIOException(ex);
         }
 
-        assertEventually(() -> readListener.events, allOf(
-            hasItems("data received: 7 bytes", "data written", "Error for onError: TimeoutException")
+        assertEventually(() -> {
+            System.out.println("readListener.events = " + readListener.events);
+            return readListener.events;
+        }, allOf(
+            hasItems("data received: 7 bytes", "data written", "Error for onError: 408 Request Timeout")
         ));
     }
 
     @Test
-    public void exceedingMaxContentLengthWillResultIn413() {
+    public void exceedingMaxContentLengthWillResultIn413WithFixedSize() throws IOException {
+        int contentLength = 1024;
+
+        server = ServerUtils.httpsServerForTest()
+            .withMaxRequestSize(1000)
+            .start();
+
+        final String bigString = randomAsciiStringOfLength(contentLength);
+
+        Request.Builder request = request()
+            .url(server.uri().toString())
+            .post(RequestBody.create(bigString, MediaType.get("text/plain")));
+
+        try (Response resp = call(request)) {
+            assertThat(resp.code(), equalTo(413));
+            assertThat(resp.body().string(), containsString("413 Content Too Large"));
+        }
+    }
+    @Test
+    public void exceedingMaxContentLengthWillResultIn413WithChunkedIfBodyIsReadInHandler() throws IOException {
+        int contentLength = 1024;
+
+        server = ServerUtils.httpsServerForTest()
+            .withMaxRequestSize(1000)
+            .addHandler((request, response) -> {
+                request.readBodyAsString();
+                response.write("hello");
+                return true;
+            })
+            .start();
+
+        final String bigString = randomAsciiStringOfLength(contentLength);
+
+        Request.Builder request = request()
+            .url(server.uri().toString())
+            .post(new RequestBody() {
+                public MediaType contentType() {
+                    return MediaType.parse("text/plain");
+                }
+                public void writeTo(BufferedSink bufferedSink) throws IOException {
+                    bufferedSink.write(bigString.getBytes(StandardCharsets.UTF_8));
+                    bufferedSink.flush();
+                }
+            });
+
+        try (Response resp = call(request)) {
+            assertThat(resp.code(), equalTo(413));
+            assertThat(resp.body().string(), containsString("413 Content Too Large"));
+        }
+    }
+
+    @Test
+    public void exceedingMaxContentLengthWillResultInClosedConnectionIfRequestBodyChunkedAndResponseAlreadyStarted() throws IOException {
         int contentLength = 1024;
 
         server = ServerUtils.httpsServerForTest()
@@ -113,18 +172,31 @@ public class RequestBodyReaderListenerAdapterTest {
 
         Request.Builder request = request()
             .url(server.uri().toString())
-            .post(RequestBody.create(bigString, MediaType.get("text/plain")));
+            .post(new RequestBody() {
+                public MediaType contentType() {
+                    return MediaType.parse("text/plain");
+                }
+                public void writeTo(BufferedSink bufferedSink) throws IOException {
+                    for (int i = 0; i < 100; i++) {
+                        bufferedSink.write(bigString.getBytes(StandardCharsets.UTF_8));
+                        bufferedSink.flush();
+                        try {
+                            Thread.sleep(10);
+                        } catch (InterruptedException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }
+                }
+            });
 
-        try (Response resp = call(request)) {
-            assertThat(resp.code(), equalTo(413));
-            assertThat(resp.body().string(), containsString("413 Payload Too Large"));
-        } catch (Exception e) {
-            // The HttpServerKeepAliveHandler will probably close the connection before the full request body is read, which is probably a good thing in this case.
-            // So allow a valid 413 response or an error
-            MuAssert.assertIOException(e);
-        }
-
+        var uioe = assertThrows(UncheckedIOException.class, () -> {
+            try (var resp = call(request)) {
+                Assertions.fail("Got a valid response " + resp);
+            }
+        });
+        assertThat(uioe.getCause(), instanceOf(SocketException.class));
     }
+
 
     @Test
     public void exceedingUploadSizeResultsIn413OrKilledConnectionForChunkedRequestWhereResponseNotStarted() throws Exception {
@@ -154,20 +226,17 @@ public class RequestBodyReaderListenerAdapterTest {
             })
             .start();
 
-        Request.Builder request = request()
-            .url(server.uri().toString())
+        Request.Builder request = request(server.uri().resolve("/?debug=here"))
             .post(new SlowBodySender(1000, 0));
 
         try (Response resp = call(request)) {
             assertThat(resp.code(), equalTo(413));
-            assertThat(resp.body().string(), containsString("413 Request Entity Too Large"));
+            assertThat(resp.body().string(), containsString("413 Content Too Large"));
         } catch (Exception e) {
-            // The HttpServerKeepAliveHandler will probably close the connection before the full request body is read, which is probably a good thing in this case.
-            // So allow a valid 413 response or an error
-            MuAssert.assertIOException(e);
+            assertThat(e.getCause(), instanceOf(SocketException.class));
         }
-        assertEventually(exception::get, instanceOf(ClientErrorException.class));
-        assertThat(((ClientErrorException) exception.get()).getResponse().getStatus(), equalTo(413));
+        assertEventually(exception::get, instanceOf(HttpException.class));
+        assertThat(((HttpException) exception.get()).status(), equalTo(HttpStatus.CONTENT_TOO_LARGE_413));
     }
 
     @Test
@@ -205,14 +274,14 @@ public class RequestBodyReaderListenerAdapterTest {
 
         try (Response resp = call(request)) {
             String read = resp.body().string();
-            Assert.fail("Should not be able to read body but got " + read + " and " + resp.isSuccessful());
+            Assertions.fail("Should not be able to read body but got " + read + " and " + resp.isSuccessful());
         } catch (Exception ex) {
             MuAssert.assertIOException(ex);
         }
     }
 
 
-    @After
+    @AfterEach
     public void destroy() {
         scaffolding.MuAssert.stopAndCheck(server);
     }

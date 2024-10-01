@@ -61,7 +61,9 @@ internal class Http1BodyStream(private val parser: Http1MessageReader, private v
                                 bb = ByteBuffer.wrap(next.bytes, next.offset, next.length)
                                 bytesReceived += next.length
                                 if (bytesReceived > maxBodySize) {
-                                    throw HttpException(HttpStatus.CONTENT_TOO_LARGE_413)
+                                    val ex = HttpException(HttpStatus.CONTENT_TOO_LARGE_413)
+                                    ex.responseHeaders().set(HeaderNames.CONNECTION, HeaderValues.CLOSE)
+                                    throw ex
                                 }
                                 ready = true
                             }
@@ -110,6 +112,10 @@ internal class Http1BodyStream(private val parser: Http1MessageReader, private v
                 val last = parser.readNext()
                 if (last is MessageBodyBit) {
                     drained = last.isLast
+                    bytesReceived += last.length
+                    if  (bytesReceived > maxBodySize) {
+                        throw HttpException(HttpStatus.CONTENT_TOO_LARGE_413)
+                    }
                 } else if (last is EndOfBodyBit) {
                     drained = true
                 } else {

@@ -33,7 +33,7 @@ internal class Mu3Http1Connection(
     private val rejectedDueToOverload = AtomicLong(0)
     private val closed = AtomicBoolean(false)
 
-    private val requestTimeout = if (server.requestIdleTimeoutMillis() > Int.MAX_VALUE) {
+    private val requestTimeout = if (server.requestIdleTimeoutMillis() >= Int.MAX_VALUE) {
         Int.MAX_VALUE
     } else {
         server.requestIdleTimeoutMillis().toInt()
@@ -181,13 +181,13 @@ internal class Mu3Http1Connection(
         muResponse: Mu3Response,
         muRequest: Mu3Request
     ): Boolean {
-        var closeConnection1 = closeConnection
-        if (!closeConnection1) {
-            closeConnection1 = muResponse.headers().closeConnection(muRequest.httpVersion())
+        var reallyClose = closeConnection
+        if (!reallyClose) {
+            reallyClose = muResponse.headers().closeConnection(muRequest.httpVersion())
         }
         muRequest.cleanup()
         muResponse.cleanup()
-        return closeConnection1
+        return reallyClose
     }
 
 
