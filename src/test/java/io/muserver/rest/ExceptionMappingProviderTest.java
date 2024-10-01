@@ -10,8 +10,8 @@ import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.ext.ExceptionMapper;
 import jakarta.ws.rs.ext.MessageBodyWriter;
 import okhttp3.Response;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.ServerUtils;
 
 import java.io.IOException;
@@ -153,7 +153,7 @@ public class ExceptionMappingProviderTest {
         }
     }
 
-    @After
+    @AfterEach
     public void stop() {
         stopAndCheck(server);
     }

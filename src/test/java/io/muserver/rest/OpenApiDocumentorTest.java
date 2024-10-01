@@ -15,8 +15,8 @@ import org.example.petstore.resource.UserResource;
 import org.example.petstore.resource.VehicleResource;
 import org.json.JSONArray;
 import org.json.JSONObject;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.MuAssert;
 
 import java.io.File;
@@ -890,7 +890,7 @@ public class OpenApiDocumentorTest {
     }
 
 
-    @After
+    @AfterEach
     public void cleanup() {
         MuAssert.stopAndCheck(server);
     }

@@ -8,8 +8,8 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.ext.MessageBodyWriter;
 import org.json.JSONObject;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.MuAssert;
 
 import java.io.IOException;
@@ -223,7 +223,7 @@ public class OpenApiCustomSchemaTest {
         }
     }
 
-    @After
+    @AfterEach
     public void cleanup() {
         MuAssert.stopAndCheck(server);
     }

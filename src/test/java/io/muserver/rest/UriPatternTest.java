@@ -1,6 +1,6 @@
 package io.muserver.rest;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.net.URI;
 
@@ -8,6 +8,7 @@ import static io.muserver.rest.UriPattern.MATRIX_PARAMETERS_PATTERN;
 import static io.muserver.rest.UriPattern.uriTemplateToRegex;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class UriPatternTest {
 
@@ -60,10 +61,10 @@ public class UriPatternTest {
         assertThat(pattern.namedGroups(), containsInAnyOrder("name", "version"));
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test
     public void throwsIfRegexPatternIsInvalid() {
         // TODO: make the error message easy to understand for app developers
-        uriTemplateToRegex("/fruit/{version : v[12](?<blah}");
+        assertThrows(IllegalArgumentException.class, () -> uriTemplateToRegex("/fruit/{version : v[12](?<blah}"));
     }
 
     @Test

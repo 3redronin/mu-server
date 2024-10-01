@@ -3,7 +3,7 @@ package io.muserver.rest;
 import io.muserver.ParameterizedHeaderWithValue;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Variant;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Locale;
@@ -13,6 +13,7 @@ import static java.util.Collections.emptyList;
 import static java.util.Collections.singletonList;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class MuVariantListBuilderTest {
     static {
@@ -25,9 +26,9 @@ public class MuVariantListBuilderTest {
         assertThat(builder.build(), is(empty()));
     }
 
-    @Test(expected = IllegalStateException.class)
+    @Test
     public void throwsIfNothingToAdd() {
-        builder.add();
+        assertThrows(IllegalStateException.class, builder::add);
     }
 
     @Test

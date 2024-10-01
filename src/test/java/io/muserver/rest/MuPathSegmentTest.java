@@ -3,7 +3,7 @@ package io.muserver.rest;
 import io.muserver.Mutils;
 import jakarta.ws.rs.core.MultivaluedHashMap;
 import jakarta.ws.rs.core.MultivaluedMap;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 

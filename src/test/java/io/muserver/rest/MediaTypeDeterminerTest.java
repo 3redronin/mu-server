@@ -5,7 +5,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.MultivaluedHashMap;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.MessageBodyWriter;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.lang.annotation.Annotation;
 import java.util.List;
@@ -19,6 +19,7 @@ import static java.util.Collections.emptyList;
 import static java.util.Collections.singletonList;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class MediaTypeDeterminerTest {
     static {
@@ -58,11 +59,11 @@ public class MediaTypeDeterminerTest {
         assertThat(mediaType.toString(), equalTo("application/octet-stream"));
     }
 
-    @Test(expected = NotAcceptableException.class)
+    @Test
     public void a406IsThrownIfNothingSuitable() {
         List<MessageBodyWriter> writers = singletonList(new StringEntityProviders.FormUrlEncodedWriter());
         List<MediaType> clientAccepts = singletonList(MediaType.valueOf("application/json"));
-        determine(objType(new MultivaluedHashMap<>()), emptyList(), emptyList(), wrapped(writers), clientAccepts, new Annotation[0]);
+        assertThrows(NotAcceptableException.class, () -> determine(objType(new MultivaluedHashMap<>()), emptyList(), emptyList(), wrapped(writers), clientAccepts, new Annotation[0]));
     }
 
     @Test

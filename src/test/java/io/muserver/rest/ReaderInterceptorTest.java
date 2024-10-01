@@ -9,8 +9,8 @@ import jakarta.ws.rs.ext.ReaderInterceptorContext;
 import okhttp3.MediaType;
 import okhttp3.RequestBody;
 import okhttp3.Response;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.ServerUtils;
 
 import java.io.ByteArrayInputStream;
@@ -251,7 +251,7 @@ public class ReaderInterceptorTest {
         }
     }
 
-    @After
+    @AfterEach
     public void stop() {
         stopAndCheck(server);
     }

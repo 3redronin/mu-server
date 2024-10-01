@@ -1,7 +1,7 @@
 package io.muserver.rest;
 
 import jakarta.ws.rs.core.GenericEntity;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.ParameterizedType;
 import java.util.ArrayList;

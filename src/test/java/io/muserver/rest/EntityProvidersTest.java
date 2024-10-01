@@ -14,8 +14,8 @@ import okhttp3.Response;
 import okio.BufferedSink;
 import org.example.MyStringReaderWriter;
 import org.hamcrest.Matchers;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.StringUtils;
 
 import java.io.*;
@@ -482,7 +482,7 @@ public class EntityProvidersTest {
         this.server = httpsServerForTest().addHandler(restHandler(restResource).build()).start();
     }
 
-    @After
+    @AfterEach
     public void stop() {
         scaffolding.MuAssert.stopAndCheck(server);
     }

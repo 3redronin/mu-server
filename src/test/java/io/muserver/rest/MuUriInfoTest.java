@@ -12,8 +12,8 @@ import jakarta.ws.rs.core.MultivaluedHashMap;
 import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.core.UriInfo;
 import org.hamcrest.Matchers;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 
 import java.net.URI;
 import java.util.concurrent.atomic.AtomicReference;
@@ -257,7 +257,7 @@ public class MuUriInfoTest {
         return URI.create(baseUri);
     }
 
-    @After
+    @AfterEach
     public void stop() {
         stopAndCheck(server);
     }

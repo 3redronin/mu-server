@@ -11,8 +11,8 @@ import jakarta.ws.rs.core.EntityTag;
 import jakarta.ws.rs.core.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 
 import java.net.URI;
 import java.util.Date;
@@ -308,7 +308,7 @@ public class PreconditionsTest {
     }
 
 
-    @After
+    @AfterEach
     public void stop() {
         scaffolding.MuAssert.stopAndCheck(server);
     }

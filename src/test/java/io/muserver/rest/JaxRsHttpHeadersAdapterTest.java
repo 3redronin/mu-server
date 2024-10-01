@@ -6,7 +6,7 @@ import io.muserver.Headers;
 import io.muserver.Mu3Headers;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.MultivaluedHashMap;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.util.*;
 

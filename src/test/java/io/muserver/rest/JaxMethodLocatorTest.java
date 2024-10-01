@@ -2,7 +2,7 @@ package io.muserver.rest;
 
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.Path;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
 

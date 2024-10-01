@@ -4,8 +4,8 @@ import io.muserver.*;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.ext.ParamConverterProvider;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import scaffolding.NotImplementedMuRequest;
 
 import java.io.ByteArrayInputStream;
@@ -22,6 +22,7 @@ import static java.util.Collections.singletonList;
 import static java.util.stream.Collectors.toList;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class RequestMatcherTest {
     private final SchemaObjectCustomizer customizer = new CompositeSchemaObjectCustomizer(emptyList());
@@ -34,9 +35,9 @@ public class RequestMatcherTest {
     private final ResourceClass resourceAnother = ResourceClass.fromObject(new ResourceAnother(), paramConverterProviders, customizer);
     private final RequestMatcher rm = new RequestMatcher(asList(resourceOne, resourceOneV2, resourceSomething, resourceAnother, resourceSomethingYeah));
 
-    @Test(expected = NotMatchedException.class)
-    public void throwsIfNoValidCandidates() throws NotMatchedException {
-        assertThat(stepOneMatches(URI.create("api/three"), rm), empty());
+    @Test
+    public void throwsIfNoValidCandidates() {
+        assertThrows(NotMatchedException.class, () -> stepOneMatches(URI.create("api/three"), rm));
     }
 
     @Test
@@ -60,9 +61,9 @@ public class RequestMatcherTest {
             .stream().map(rm -> rm.resourceClass).collect(toList());
     }
 
-    @Test(expected = NotMatchedException.class)
-    public void ifJustThePrefixMatchesThenItDoesNotMatchIfThereAreNoSubResourceMethods() throws NotMatchedException {
-        rm.stepOneIdentifyASetOfCandidateRootResourceClassesMatchingTheRequest("/api/widgets/something-else-yeah/uhuh");
+    @Test
+    public void ifJustThePrefixMatchesThenItDoesNotMatchIfThereAreNoSubResourceMethods() {
+        assertThrows(NotMatchedException.class, () -> rm.stepOneIdentifyASetOfCandidateRootResourceClassesMatchingTheRequest("/api/widgets/something-else-yeah/uhuh"));
     }
 
     @Test
@@ -206,7 +207,7 @@ public class RequestMatcherTest {
         try {
             RequestMatcher.MatchedMethod actual = findResourceMethod(rm2, Method.OPTIONS, "foo", emptyList(), null);
             // NOTE that in this case, default OPTIONS handling should happen, but that's not supported yet so throw an exception instead
-            Assert.fail("Should not have gotten a value, but got " + actual);
+            Assertions.fail("Should not have gotten a value, but got " + actual);
         } catch (NotAllowedException e) {
             assertThat(e.getMessage(), equalTo("HTTP 405 Method Not Allowed"));
         }
@@ -342,11 +343,11 @@ public class RequestMatcherTest {
     private static void assertNotAcceptable(RequestMatcher rm, List<MediaType> acceptHeaders, String requestBodyContentType) {
         try {
             RequestMatcher.MatchedMethod found = findResourceMethod(rm, Method.GET, "pictures", acceptHeaders, requestBodyContentType);
-            Assert.fail("Should have thrown exception but instead got " + found);
+            Assertions.fail("Should have thrown exception but instead got " + found);
         } catch (NotAcceptableException e) {
             assertThat(e.getMessage(), equalTo("HTTP 406 Not Acceptable"));
         } catch (Exception ex) {
-            Assert.fail("Should not throw this type of exception: " + ex);
+            Assertions.fail("Should not throw this type of exception: " + ex);
         }
     }
 

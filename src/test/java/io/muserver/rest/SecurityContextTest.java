@@ -6,8 +6,8 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.SecurityContext;
 import okhttp3.Response;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.ServerUtils;
 
 import java.io.IOException;
@@ -156,7 +156,7 @@ public class SecurityContextTest {
         }
     }
 
-    @After
+    @AfterEach
     public void stop() {
         stopAndCheck(server);
     }

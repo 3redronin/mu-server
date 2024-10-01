@@ -6,8 +6,8 @@ import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.MuAssert;
 
 import static io.muserver.ContextHandlerBuilder.context;
@@ -68,7 +68,7 @@ public class HtmlDocumentorTest {
         }
     }
 
-    @After
+    @AfterEach
     public void cleanup() {
         MuAssert.stopAndCheck(server);
     }

@@ -98,7 +98,8 @@ internal class Mu3Headers(
     override fun names(): Set<String> = headers.map { it.first }.toSet()
 
     override fun add(name: String, value: Any): Headers {
-        headers.add(Pair(name.lowercase(), value.toString()))
+        val s = if (value is Date) Mutils.toHttpDate(value) else value.toString()
+        headers.add(Pair(name.lowercase(), s))
         return this
     }
 

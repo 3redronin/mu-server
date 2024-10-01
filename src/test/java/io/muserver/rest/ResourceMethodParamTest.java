@@ -11,9 +11,9 @@ import okhttp3.MediaType;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.json.JSONObject;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.lang.annotation.Annotation;
@@ -255,7 +255,7 @@ public class ResourceMethodParamTest {
                 @GET public void getIt(@QueryParam("something") Something something) { }
             }
             restHandler(new Sample()).build();
-            Assert.fail("Should have thrown");
+            Assertions.fail("Should have thrown");
         } catch (MuException e) {
             assertThat(e.getMessage(), startsWith("Could not find a suitable ParamConverter for class " + Something.class.getName()));
         }
@@ -269,7 +269,7 @@ public class ResourceMethodParamTest {
                 @GET public void getIt(@QueryParam("something") List<Something> something) { }
             }
             restHandler(new Sample()).build();
-            Assert.fail("Should have thrown");
+            Assertions.fail("Should have thrown");
         } catch (MuException e) {
             assertThat(e.getMessage(), startsWith("Could not find a suitable ParamConverter for java.util.List<" + Something.class.getName() + ">"));
         }
@@ -282,7 +282,7 @@ public class ResourceMethodParamTest {
                 @GET public void getIt(@QueryParam("something") List<?> something) { }
             }
             restHandler(new Sample()).build();
-            Assert.fail("Should have thrown");
+            Assertions.fail("Should have thrown");
         } catch (MuException e) {
             assertThat(e.getMessage(), startsWith("Could not find a suitable ParamConverter for java.util.List<?>"));
         }
@@ -1092,7 +1092,7 @@ public class ResourceMethodParamTest {
 
 
 
-    @After
+    @AfterEach
     public void stop() {
         scaffolding.MuAssert.stopAndCheck(server);
     }

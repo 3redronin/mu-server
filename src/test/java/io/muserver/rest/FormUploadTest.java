@@ -4,8 +4,8 @@ import io.muserver.MuServer;
 import io.muserver.UploadedFile;
 import jakarta.ws.rs.*;
 import okhttp3.*;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.ServerUtils;
 
 import java.io.File;
@@ -206,13 +206,13 @@ public class FormUploadTest {
                     .build())
             )) {
                 assertThat(resp.code(), is(200));
-                assertThat(resp.body().string(), is("filename is guangzhou  china.jpeg and size is 372987\n" +
+                assertThat(resp.body().string(), is("filename is guangzhou, china.jpeg and size is 372987\n" +
                     "filename is friends.jpg and size is 1712954\n"));
             }
         }
     }
 
-    @After
+    @AfterEach
     public void stopIt() {
         scaffolding.MuAssert.stopAndCheck(server);
     }

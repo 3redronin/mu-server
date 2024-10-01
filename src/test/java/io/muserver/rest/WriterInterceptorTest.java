@@ -7,8 +7,8 @@ import jakarta.ws.rs.container.ResourceInfo;
 import jakarta.ws.rs.ext.WriterInterceptor;
 import jakarta.ws.rs.ext.WriterInterceptorContext;
 import okhttp3.Response;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.ServerUtils;
 
 import java.io.FilterOutputStream;
@@ -264,7 +264,7 @@ public class WriterInterceptorTest {
     }
 
 
-    @After
+    @AfterEach
     public void stop() {
         stopAndCheck(server);
     }

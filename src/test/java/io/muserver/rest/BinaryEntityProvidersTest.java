@@ -9,8 +9,8 @@ import okhttp3.MediaType;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.hamcrest.Matchers;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 import scaffolding.StringUtils;
@@ -203,7 +203,7 @@ public class BinaryEntityProvidersTest {
         this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(restResource).build()).start();
     }
 
-    @After
+    @AfterEach
     public void stop() {
         MuAssert.stopAndCheck(server);
     }

@@ -11,9 +11,9 @@ import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.SecurityContext;
 import okhttp3.Response;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 
@@ -148,7 +148,7 @@ public class BasicAuthTest {
         return Base64.getEncoder().encodeToString(value.getBytes("UTF-8"));
     }
 
-    @Before
+    @BeforeEach
     public void setup() {
 
 
@@ -191,7 +191,7 @@ public class BasicAuthTest {
     }
 
 
-    @After
+    @AfterEach
     public void stop() {
         MuAssert.stopAndCheck(server);
     }

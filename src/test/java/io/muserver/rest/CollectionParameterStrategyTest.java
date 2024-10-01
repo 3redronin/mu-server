@@ -5,9 +5,9 @@ import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.QueryParam;
 import okhttp3.Response;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import scaffolding.ServerUtils;
 
 import java.util.List;
@@ -120,7 +120,7 @@ public class CollectionParameterStrategyTest {
             server = ServerUtils.httpsServerForTest()
                 .addHandler(restHandler(new ValuesResource()))
                 .start();
-            Assert.fail("Exception should have been thrown");
+            Assertions.fail("Exception should have been thrown");
         } catch (Exception e) {
             assertThat(e, instanceOf(IllegalStateException.class));
             assertThat(e.getMessage(), containsString("Please specify a string handling strategy for collections for querystring and header parameters"));
@@ -128,7 +128,7 @@ public class CollectionParameterStrategyTest {
 
     }
 
-    @After
+    @AfterEach
     public void stop() {
         scaffolding.MuAssert.stopAndCheck(server);
     }

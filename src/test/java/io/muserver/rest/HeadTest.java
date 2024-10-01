@@ -4,8 +4,8 @@ import io.muserver.MuServer;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.StreamingOutput;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.ServerUtils;
 
 import java.io.IOException;
@@ -142,7 +142,7 @@ public class HeadTest {
     }
 
 
-    @After
+    @AfterEach
     public void stop() {
         stopAndCheck(server);
     }

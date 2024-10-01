@@ -4,7 +4,7 @@ import jakarta.ws.rs.GET;
 import jakarta.ws.rs.OPTIONS;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import static java.net.URI.create;
 import static java.util.Collections.emptyList;

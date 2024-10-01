@@ -3,8 +3,8 @@ package io.muserver.rest;
 import io.muserver.MuServer;
 import jakarta.ws.rs.*;
 import okhttp3.Response;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.MuAssert;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
@@ -182,7 +182,7 @@ public class SubResourceLocatorTest {
         }
     }
 
-    @After
+    @AfterEach
     public void stop() {
         MuAssert.stopAndCheck(server);
     }

@@ -3,7 +3,7 @@ package io.muserver.rest;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import static io.muserver.rest.JaxClassLocator.getClassWithJaxRSAnnotations;
 import static org.hamcrest.MatcherAssert.assertThat;
