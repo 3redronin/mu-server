@@ -80,6 +80,24 @@ internal class Http1BodyStream(private val parser: Http1MessageReader, private v
         }
     }
 
+
+    override fun skip(n: Long): Long {
+        if (eof.get()) return 0L
+        if (n <= 0L) return 0L
+        var rem = n
+        while (rem > 0) {
+            blockUntilData()
+            val s = minOf(bb!!.remaining().toLong(), rem)
+            bb!!.position(bb!!.position() + s.toInt())
+            rem -= s
+        }
+        return n
+    }
+
+    override fun available(): Int {
+        return bb?.remaining() ?: 0
+    }
+
     /**
      * Discards any remaining bits of this stream and closes the stream.
      * <p>This can be called multiple times</p>

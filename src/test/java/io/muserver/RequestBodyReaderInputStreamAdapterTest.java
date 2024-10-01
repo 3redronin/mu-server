@@ -1,6 +1,5 @@
 package io.muserver;
 
-import jakarta.ws.rs.ClientErrorException;
 import okhttp3.MediaType;
 import okhttp3.Request;
 import okhttp3.RequestBody;
@@ -8,8 +7,9 @@ import okhttp3.Response;
 import okio.BufferedSink;
 import org.eclipse.jetty.client.api.Result;
 import org.eclipse.jetty.client.util.InputStreamContentProvider;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 import scaffolding.SlowBodySender;
@@ -80,7 +80,8 @@ public class RequestBodyReaderInputStreamAdapterTest {
         }
     }
 
-    @Test(timeout = 30000)
+    @Test
+    @Timeout(30)
     public void hugeBodiesCanBeStreamedWithJetty() throws Exception {
 
         long loops = 1000;
@@ -301,17 +302,13 @@ public class RequestBodyReaderInputStreamAdapterTest {
 
         try (Response resp = call(request)) {
             assertThat(resp.code(), equalTo(413));
-            assertThat(resp.body().string(), containsString("413 Request Entity Too Large"));
-        } catch (Exception e) {
-            // The HttpServerKeepAliveHandler will probably close the connection before the full request body is read, which is probably a good thing in this case.
-            // So allow a valid 413 response or an error
-            MuAssert.assertIOException(e);
+            assertThat(resp.body().string(), containsString("413 Content Too Large"));
         }
-        assertEventually(exception::get, instanceOf(ClientErrorException.class));
-        assertThat(((ClientErrorException) exception.get()).getResponse().getStatus(), equalTo(413));
+        assertEventually(exception::get, instanceOf(HttpException.class));
+        assertThat(((HttpException) exception.get()).status(), equalTo(HttpStatus.CONTENT_TOO_LARGE_413));
     }
 
-    @After
+    @AfterEach
     public void destroy() throws Exception {
         MuAssert.stopAndCheck(server);
     }
