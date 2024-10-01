@@ -5,13 +5,17 @@ import java.io.InputStream
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicBoolean
 
-internal class Http1BodyStream(private val parser: Http1MessageReader, private val maxBodySize: Long) : InputStream() {
+internal class Http1BodyStream(private val parser: Http1MessageReader, private var maxBodySize: Long) : InputStream() {
 
     private var bb : ByteBuffer? = null
     private var lastBitReceived = false
     private var bytesReceived = 0L
 
     private val eof = AtomicBoolean(false)
+
+    fun ignoreBodySize() {
+        maxBodySize = Long.MAX_VALUE
+    }
 
     override fun read(): Int {
         blockUntilData()

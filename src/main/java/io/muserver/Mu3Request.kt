@@ -171,7 +171,14 @@ internal class Mu3Request(
         return httpVersion.version() + " " + method + " " + serverUri
     }
 
-    fun cleanup() {
+    fun cleanup(responseStatus: HttpStatus) {
+        if (body is Http1BodyStream && !responseStatus.isSuccessful) {
+            // Let's say we have an error - perhaps a 413 for example - we want to send that error
+            // back to the user even if the body size is too large.
+            // But if the response claims success, but in fact the unread request body was too large,
+            // then we keep tracking body size (and throw exception) in body.close() below
+            body.ignoreBodySize()
+        }
         body.close()
         if (form != null && form is MultipartForm) {
             (form as MultipartForm).cleanup()

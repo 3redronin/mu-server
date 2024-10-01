@@ -90,7 +90,7 @@ public class ExpectContinueTest {
 
 
     @Test
-    @Timeout(value = 20, unit = TimeUnit.SECONDS)
+    @Timeout(value = 20)
     public void a413IsReturnedIfExpectationFails() throws IOException {
         var received = new ArrayList<ResponseInfo>();
         server = httpServer()
