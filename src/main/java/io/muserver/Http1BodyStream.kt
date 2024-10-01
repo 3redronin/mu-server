@@ -104,7 +104,7 @@ internal class Http1BodyStream(private val parser: Http1MessageReader, private v
      * Discards any remaining bits of this stream and closes the stream.
      * <p>This can be called multiple times</p>
      */
-    fun discardRemaining() {
+    fun discardRemaining(throwIfContentTooLarge: Boolean) {
         if (eof.compareAndSet(false, true)) {
             var drained = lastBitReceived
             while (!drained) {
@@ -112,7 +112,7 @@ internal class Http1BodyStream(private val parser: Http1MessageReader, private v
                 if (last is MessageBodyBit) {
                     drained = last.isLast
                     bytesReceived += last.length
-                    if (bytesReceived > maxBodySize) {
+                    if (throwIfContentTooLarge && bytesReceived > maxBodySize) {
                         throw HttpException(HttpStatus.CONTENT_TOO_LARGE_413)
                     }
                 } else if (last is EndOfBodyBit) {

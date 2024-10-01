@@ -173,16 +173,10 @@ internal class Mu3Request(
 
     fun cleanup(responseStatus: HttpStatus) {
         if (body is Http1BodyStream) {
-            body.discardRemaining()
+            body.discardRemaining(responseStatus.code() != HttpStatus.CONTENT_TOO_LARGE_413.code())
         }
         if (form != null && form is MultipartForm) {
             (form as MultipartForm).cleanup()
-        }
-        if (body is Http1BodyStream && body.bytesReceived() > server().maxRequestSize() && responseStatus.isSuccessful) {
-            // So we thought everything was successful, but in the act of cleaning up the max body we find
-            // the body is too large.
-            // Note an exception time. An exception here will cause the connection to close
-            throw HttpException(HttpStatus.CONTENT_TOO_LARGE_413)
         }
     }
 

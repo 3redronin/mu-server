@@ -75,11 +75,13 @@ class Http1BodyStreamTest {
         val parser = HardCodedMessageReader(LinkedList(listOf(message1, message2, message3, message4)))
         Http1BodyStream(parser, Long.MAX_VALUE).use { stream ->
             stream.read()
+            stream.discardRemaining(true)
         }
         assertThat(parser.readNext(), sameInstance(message4))
     }
+
     @Test
-    fun `closing consumes and discards any remaining body bits with non-empty last body`() {
+    fun `discarding consumes and discards any remaining body bits with non-empty last body`() {
         val message1 = "Hi ".toByteArray(StandardCharsets.UTF_8).toBodyMessage(false)
         val message2 = "world".toByteArray(StandardCharsets.UTF_8).toBodyMessage(false)
         val message3 = "wide camp champions".toByteArray(StandardCharsets.UTF_8).toBodyMessage(true)
@@ -87,6 +89,7 @@ class Http1BodyStreamTest {
         val parser = HardCodedMessageReader(LinkedList(listOf(message1, message2, message3, message4)))
         Http1BodyStream(parser, Long.MAX_VALUE).use { stream ->
             stream.read()
+            stream.discardRemaining(true)
         }
         assertThat(parser.readNext(), sameInstance(message4))
     }
@@ -100,6 +103,7 @@ class Http1BodyStreamTest {
         val parser = HardCodedMessageReader(LinkedList(listOf(message1, message2, message3, message4)))
         Http1BodyStream(parser, Long.MAX_VALUE).use { stream ->
             stream.read()
+            stream.discardRemaining(true)
         }
         assertThat(parser.readNext(), sameInstance(message4))
     }

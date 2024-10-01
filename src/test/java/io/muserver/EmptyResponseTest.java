@@ -16,7 +16,7 @@ public class EmptyResponseTest {
     private MuServer server;
 
     @Test
-    public void a204IsDefaultIfNoResponseWritten() throws IOException {
+    public void a200IsDefaultIfNoResponseWritten() throws IOException {
         server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.headers().set("hello", "world");
@@ -24,10 +24,10 @@ public class EmptyResponseTest {
             .start();
 
         try (Response resp = ClientUtils.call(request(server.uri()))) {
-            assertThat(resp.code(), is(204));
+            assertThat(resp.code(), is(200));
             assertThat(resp.header("Date"), is(notNullValue()));
             assertThat(resp.header("hello"), equalTo("world"));
-            assertThat(resp.header("Content-Length"), is(nullValue()));
+            assertThat(resp.header("Content-Length"), is("0"));
             assertThat(resp.body().bytes().length, is(0));
         }
     }
