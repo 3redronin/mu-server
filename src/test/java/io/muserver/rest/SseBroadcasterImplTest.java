@@ -13,9 +13,9 @@ import jakarta.ws.rs.sse.Sse;
 import jakarta.ws.rs.sse.SseBroadcaster;
 import jakarta.ws.rs.sse.SseEventSink;
 import okhttp3.Dispatcher;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.*;
 
 import java.io.IOException;
@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -40,7 +41,7 @@ public class SseBroadcasterImplTest {
     public MuServer server;
     private SseClient.OkSse sseClient;
 
-    @Before
+    @BeforeEach
     public void setup() {
         Dispatcher dispatcher = new Dispatcher();
         dispatcher.setMaxRequests(1000);
@@ -265,6 +266,22 @@ public class SseBroadcasterImplTest {
             exceptionThrownLatch.countDown();
         });
 
+
+        var commentException = new AtomicReference<Throwable>();
+        var awakener = new Thread(() -> {
+            try {
+                while (true) {
+                    broadcaster.broadcast(sse.newEventBuilder().comment("hi").build()).toCompletableFuture().get();
+                    Thread.sleep(1000);
+                }
+            } catch (InterruptedException e) {
+                // stopping
+            } catch (Throwable e) {
+                commentException.set(e);
+            }
+        });
+        awakener.start();
+
         @Path("/streamer")
         class Streamer {
             @GET
@@ -288,9 +305,13 @@ public class SseBroadcasterImplTest {
 
         assertThat(MuRuntimeDelegate.connectedSinksCount(broadcaster), is(0));
 
+        awakener.interrupt();
+        awakener.join();
+        assertThat(commentException.get(), nullValue());
+
     }
 
-    @After
+    @AfterEach
     public void stop() {
         MuAssert.stopAndCheck(server);
     }

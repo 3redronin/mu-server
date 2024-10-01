@@ -68,10 +68,9 @@ class SseBroadcasterImpl implements SseBroadcaster {
         Mutils.notNull("event", event);
         throwIfClosed();
 
-
-        CompletableFuture<?> completableFuture = new CompletableFuture<>();
-
         AtomicInteger count = new AtomicInteger(sinks.size());
+        if (count.get() == 0) return CompletableFuture.completedFuture(null);
+        CompletableFuture<?> completableFuture = new CompletableFuture<>();
         for (SseEventSink sink : sinks) {
             if (sink.isClosed()) {
                 sinks.remove(sink);

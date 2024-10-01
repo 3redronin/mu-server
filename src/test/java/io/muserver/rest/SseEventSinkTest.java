@@ -1,6 +1,5 @@
 package io.muserver.rest;
 
-
 import io.muserver.MuServer;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.Context;
@@ -9,8 +8,8 @@ import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.ext.MessageBodyWriter;
 import jakarta.ws.rs.sse.Sse;
 import jakarta.ws.rs.sse.SseEventSink;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.*;
 
 import java.io.IOException;
@@ -177,7 +176,11 @@ public class SseEventSinkTest {
                     .whenCompleteAsync((o, throwable) -> {
                         if (throwable == null) {
                             oneSentLatch.countDown();
-                            MuAssert.assertNotTimedOut("Waiting for response to close", responseClosedLatch);
+                            try {
+                                Thread.sleep(10);
+                            } catch (InterruptedException e) {
+                                throw new RuntimeException(e);
+                            }
                             sendStuff(sink, sse);
                         } else {
                             failureLatch.countDown();
@@ -202,6 +205,7 @@ public class SseEventSinkTest {
         try (SseClient.ServerSentEvent ignored = sseClient.newServerSentEvent(request(server.uri().resolve("/streamer/eventStream")).build(), listener)) {
             assertNotTimedOut("Waiting for one message", oneSentLatch);
         }
+        assertNotTimedOut("Timed out waiting for responseClosedLatch", responseClosedLatch);
         assertNotTimedOut("Timed out waiting for error", failureLatch);
     }
 
@@ -221,6 +225,11 @@ public class SseEventSinkTest {
                     if (throwable == null) {
                         oneSentLatch.countDown();
                         for (int i = 0; i < 1000; i++) {
+                            try {
+                                eventSink.send(sse.newEventBuilder().comment("!").build()).toCompletableFuture().get();
+                            } catch (Throwable e) {
+                                // don't care for this test
+                            }
                             if (eventSink.isClosed()) {
                                 closedLatch.countDown();
                                 break;
@@ -247,8 +256,7 @@ public class SseEventSinkTest {
         assertNotTimedOut("Timed out waiting for closedLatch", closedLatch);
     }
 
-
-    @After
+    @AfterEach
     public void stop() {
         MuAssert.stopAndCheck(server);
         listener.cleanup();

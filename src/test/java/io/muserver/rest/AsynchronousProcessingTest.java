@@ -14,9 +14,10 @@ import okhttp3.OkHttpClient;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import okio.BufferedSink;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import scaffolding.ClientUtils;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
@@ -238,9 +239,11 @@ public class AsynchronousProcessingTest {
 
 
     @Test
+    @Timeout(30)
     public void completionCallbacksCanBeRegistered() throws Exception {
-        CountDownLatch completedLatch = new CountDownLatch(1);
-        CountDownLatch disconnectedLatch = new CountDownLatch(1);
+        var completedLatch = new CountDownLatch(1);
+        var disconnectedLatch = new CountDownLatch(1);
+        var clientTimeoutLatch = new CountDownLatch(1);
         AtomicReference<Map<Class<?>, Collection<Class<?>>>> registered = new AtomicReference<>();
 
         @Path("samples")
@@ -249,8 +252,14 @@ public class AsynchronousProcessingTest {
             public void go(@Suspended AsyncResponse ar, @QueryParam("retryDate") Long retryDate, @QueryParam("retrySeconds") Integer retrySeconds) {
                 registered.set(ar.register(
                     (ConnectionCallback) disconnected -> disconnectedLatch.countDown(),
-                    (CompletionCallback) disconnected -> completedLatch.countDown())
+                    (CompletionCallback) completed -> completedLatch.countDown())
                 );
+                try {
+                    clientTimeoutLatch.await();
+                    ar.resume("Oh hello");
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
             }
         }
         this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Sample())).start();
@@ -258,8 +267,9 @@ public class AsynchronousProcessingTest {
             .readTimeout(200, TimeUnit.MILLISECONDS)
             .build();
         try (Response ignored = impatientClient.newCall(request().url(server.uri().resolve("/samples").toString()).build()).execute()) {
-            Assert.fail("This test expected a client timeout");
+            Assertions.fail("This test expected a client timeout");
         } catch (SocketTimeoutException te) {
+            clientTimeoutLatch.countDown();
             assertNotTimedOut("waiting for disconnect callback", disconnectedLatch);
             assertNotTimedOut("waiting for completed callback", completedLatch);
         }
@@ -289,7 +299,7 @@ public class AsynchronousProcessingTest {
         assertThat("Invalid request, but method was called", methodCalled.get(), is(false));
     }
 
-    @After
+    @AfterEach
     public void stop() {
         MuAssert.stopAndCheck(server);
     }

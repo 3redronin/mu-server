@@ -6,9 +6,9 @@ import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.*;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 
@@ -124,8 +124,7 @@ public class JaxRSResponseTest {
             ));
             assertThat(resp.headers("etag"), contains(equalTo("W/\"WEAKTAG\"")));
             assertThat(resp.headers("allow"), contains(equalTo("HEAD,GET")));
-            assertThat(resp.headers("set-cookie"), contains(containsString("token=SLDKFJKLEWJRIOEWURIOD289374; Max-Age=10000; Expires=")));
-            assertThat(resp.headers("set-cookie"), contains(containsString("Path=/complex; Secure; HTTPOnly")));
+            assertThat(resp.headers("set-cookie"), contains("token=SLDKFJKLEWJRIOEWURIOD289374; Path=/complex; Max-Age=10000; Secure; HttpOnly"));
             assertThat(resp.headers("arb"), contains(equalTo("bitrary")));
         } finally {
             server.stop();
@@ -191,7 +190,7 @@ public class JaxRSResponseTest {
             assertThat(resp.getEntity(), equalTo("Hello world"));
             try {
                 resp.readEntity(String.class);
-                Assert.fail("Should fail because it wasn't buffered before being read");
+                Assertions.fail("Should fail because it wasn't buffered before being read");
             } catch (IllegalStateException e) {
                 // expected
             }
@@ -278,7 +277,7 @@ public class JaxRSResponseTest {
         return cc;
     }
 
-    @After
+    @AfterEach
     public void stop() {
         MuAssert.stopAndCheck(server);
     }
