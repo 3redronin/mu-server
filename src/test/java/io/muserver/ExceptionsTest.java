@@ -164,7 +164,7 @@ public class ExceptionsTest {
         this.server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.sendChunk(StringUtils.randomAsciiStringOfLength(16389));
-                throw new RuntimeException("I'm an exception from " + request.connection().protocol());
+                throw new RuntimeException("I'm an exception from " + request.connection().httpVersion());
             })
             .start();
         // This test passes in OkHttpClient 4.9 as it doesn't seem to care about a truncated chunked response

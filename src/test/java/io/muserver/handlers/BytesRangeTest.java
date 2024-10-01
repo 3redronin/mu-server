@@ -1,12 +1,12 @@
 package io.muserver.handlers;
 
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
-import static org.junit.Assert.fail;
 
 public class BytesRangeTest {
 
@@ -70,7 +70,7 @@ public class BytesRangeTest {
         for (String bad : bads) {
             try {
                 BytesRange.parse(1000L, bad);
-                fail(bad + " should have thrown an exception");
+                Assertions.fail(bad + " should have thrown an exception");
             } catch (Exception e) {
                 assertThat("Wrong exception type for " + bad, e, instanceOf(IllegalArgumentException.class));
             }

@@ -1,11 +1,11 @@
 package io.muserver;
 
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import static io.muserver.ParameterizedHeader.fromString;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
-import static org.junit.Assert.fail;
 
 public class ParameterizedHeaderTest {
 
@@ -44,7 +44,7 @@ public class ParameterizedHeaderTest {
         for (String bad : bads) {
             try {
                 ParameterizedHeader parameterizedHeader = fromString(bad);
-                fail(bad + " should have thrown an exception but was " + parameterizedHeader);
+                Assertions.fail(bad + " should have thrown an exception but was " + parameterizedHeader);
             } catch (Exception e) {
                 assertThat("Wrong exception type for " + bad, e, instanceOf(IllegalArgumentException.class));
             }
