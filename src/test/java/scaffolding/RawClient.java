@@ -114,11 +114,7 @@ public class RawClient implements Closeable {
     }
 
     public String responseString() {
-        try {
-            return baos.toString("UTF-8");
-        } catch (UnsupportedEncodingException e) {
-            throw new RuntimeException(e);
-        }
+        return baos.toString(UTF_8);
     }
 
     public byte[] asBytes() {

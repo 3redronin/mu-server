@@ -2,10 +2,10 @@ package io.muserver;
 
 import okhttp3.Headers;
 import okhttp3.*;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.ServerUtils;
 
 import java.io.File;
@@ -14,6 +14,7 @@ import java.util.List;
 
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.equalTo;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 
@@ -24,10 +25,10 @@ public class UploadTest {
     public static File guangzhouChina = new File("src/test/resources/sample-static/images/guangzhou, china.jpeg");
     public static File friends = new File("src/test/resources/sample-static/images/friends.jpg");
 
-    @Before
+    @BeforeEach
     public void check() throws IOException {
         if (!guangzhou.exists()) {
-            Assert.fail("Could not find an image at " + guangzhou.getCanonicalPath());
+            Assertions.fail("Could not find an image at " + guangzhou.getCanonicalPath());
         }
     }
 
@@ -89,14 +90,13 @@ public class UploadTest {
                     RequestBody.create(friends, MediaType.parse("image/jpeg")))
                 .build())
         )) {
-            assertThat(resp.code(), is(200));
-            assertThat(resp.body().string(), is("guangzhou.jpeg is 372987 bytes\n" +
-                "guangzhou  china.jpeg is 372987 bytes\n" +
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.body().string(), equalTo("guangzhou.jpeg is 372987 bytes\n" +
+                "guangzhou, china.jpeg is 372987 bytes\n" +
                 "friends.jpg is 1712954 bytes\n\n" +
                 "non-existent: 0"));
         }
     }
-
 
     @Test
     public void nothingUploadedResultsInNoFilesAvailable() throws IOException {
@@ -136,7 +136,7 @@ public class UploadTest {
         }
     }
 
-    @After
+    @AfterEach
     public void stopIt() {
         scaffolding.MuAssert.stopAndCheck(server);
     }

@@ -5,10 +5,11 @@ import java.io.InputStream
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicBoolean
 
-internal class Http1BodyStream(private val parser: Http1MessageReader) : InputStream() {
+internal class Http1BodyStream(private val parser: Http1MessageReader, private val maxBodySize: Long) : InputStream() {
 
     private var bb : ByteBuffer? = null
     private var lastBitReceived = false
+    private var bytesReceived = 0L
 
     private val eof = AtomicBoolean(false)
 
@@ -58,6 +59,10 @@ internal class Http1BodyStream(private val parser: Http1MessageReader) : InputSt
                                 ready = true
                             } else if (next.length > 0) {
                                 bb = ByteBuffer.wrap(next.bytes, next.offset, next.length)
+                                bytesReceived += next.length
+                                if (bytesReceived > maxBodySize) {
+                                    throw HttpException(HttpStatus.CONTENT_TOO_LARGE_413)
+                                }
                                 ready = true
                             }
                         } else if (next is EndOfBodyBit) {

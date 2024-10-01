@@ -21,13 +21,14 @@ class MultipartFormParser {
     private final ByteBuffer bb;
     private static final ByteBuffer emptyBuffer = ByteBuffer.allocate(0);
     private State state = State.PREAMBLE_SOL;
-    private Charset formCharset = StandardCharsets.UTF_8;
+    private Charset formCharset;
 
     public State state() {
         return state;
     }
 
-    MultipartFormParser(Path fileUploadDir, String boundary, InputStream body, int bufferSize) {
+    MultipartFormParser(Path fileUploadDir, String boundary, InputStream body, int bufferSize, Charset formCharset) {
+        this.formCharset = formCharset;
         this.fileUploadDir = fileUploadDir;
         this.array = new byte[bufferSize];
         this.body = body;

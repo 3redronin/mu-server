@@ -17,6 +17,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
+import static scaffolding.MuAssert.assertEventually;
 
 public class RequestQueryTest {
 
@@ -108,12 +109,9 @@ public class RequestQueryTest {
             client.endHeaders();
             client.flushRequest();
 
-            while (client.bytesReceived() == 0) {
-                Thread.sleep(10);
-            }
+            assertEventually(client::responseString, containsString("|a space=[a value, a value2]|"));
             r = client.responseString();
         }
-        assertThat(r, containsString("|a space=[a value, a value2]|"));
         assertThat(r, containsString("|a+plus=[a+plus]|"));
         assertThat(r, containsString("|serverQS=a space=a value&a+space=a+value2&a+plus=a+plus|"));
         assertThat(r, containsString("|serverRawQS=a%20space=a%20value&a+space=a+value2&a%2Bplus=a%2Bplus|"));

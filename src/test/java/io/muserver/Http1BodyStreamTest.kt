@@ -73,7 +73,7 @@ class Http1BodyStreamTest {
         val message3 = "".toByteArray(StandardCharsets.UTF_8).toBodyMessage(true)
         val message4 = "campire".toByteArray(StandardCharsets.UTF_8).toBodyMessage(false)
         val parser = HardCodedMessageReader(LinkedList(listOf(message1, message2, message3, message4)))
-        Http1BodyStream(parser).use { stream ->
+        Http1BodyStream(parser, Long.MAX_VALUE).use { stream ->
             stream.read()
         }
         assertThat(parser.readNext(), sameInstance(message4))
@@ -85,7 +85,7 @@ class Http1BodyStreamTest {
         val message3 = "wide camp champions".toByteArray(StandardCharsets.UTF_8).toBodyMessage(true)
         val message4 = "campire".toByteArray(StandardCharsets.UTF_8).toBodyMessage(false)
         val parser = HardCodedMessageReader(LinkedList(listOf(message1, message2, message3, message4)))
-        Http1BodyStream(parser).use { stream ->
+        Http1BodyStream(parser, Long.MAX_VALUE).use { stream ->
             stream.read()
         }
         assertThat(parser.readNext(), sameInstance(message4))
@@ -98,7 +98,7 @@ class Http1BodyStreamTest {
         val message3 = EndOfBodyBit
         val message4 = "campire".toByteArray(StandardCharsets.UTF_8).toBodyMessage(false)
         val parser = HardCodedMessageReader(LinkedList(listOf(message1, message2, message3, message4)))
-        Http1BodyStream(parser).use { stream ->
+        Http1BodyStream(parser, Long.MAX_VALUE).use { stream ->
             stream.read()
         }
         assertThat(parser.readNext(), sameInstance(message4))
@@ -119,7 +119,7 @@ class Http1BodyStreamTest {
     private fun streamOf(vararg bits: Http1ConnectionMsg): Http1BodyStream {
         val q : Queue<Http1ConnectionMsg> = LinkedList()
         bits.forEach { q.add(it) }
-        return Http1BodyStream(HardCodedMessageReader(q))
+        return Http1BodyStream(HardCodedMessageReader(q), Long.MAX_VALUE)
     }
 
 }

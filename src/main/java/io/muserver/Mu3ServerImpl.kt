@@ -7,6 +7,7 @@ import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.URI
 import java.nio.file.Files
+import java.nio.file.Path
 import java.util.*
 
 internal class Mu3ServerImpl(
@@ -21,6 +22,7 @@ internal class Mu3ServerImpl(
     private val maxUrlSize: Int,
     private val maxHeadersSize: Int,
     val rateLimiters: List<RateLimiterImpl>,
+    val tempDir: Path,
 ) : MuServer {
 
     val statsImpl = Mu3StatsImpl()
@@ -105,6 +107,7 @@ internal class Mu3ServerImpl(
     }
 
     override fun rateLimiters() = rateLimiters
+    override fun tempDir(): Path = tempDir
 
     fun onRequestStarted(req: Mu3Request) {
         statsImpl.onRequestStarted(req)
@@ -149,6 +152,7 @@ internal class Mu3ServerImpl(
                 maxUrlSize = builder.maxUrlSize(),
                 maxHeadersSize = builder.maxHeadersSize(),
                 rateLimiters = builder.rateLimiters ?: emptyList(),
+                tempDir = tempDir,
             )
 
             val address = builder.interfaceHost()?.let { InetAddress.getByName(it) }

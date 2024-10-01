@@ -104,7 +104,10 @@ public interface MuRequest {
      * @throws IOException Thrown when there is an error while reading the file, e.g. if a user closes their
      *                     browser before the upload is complete.
      */
-    List<UploadedFile> uploadedFiles(String name) throws IOException;
+    default List<UploadedFile> uploadedFiles(String name) throws IOException {
+        if (name == null) throw new NullPointerException("name");
+        return form().uploadedFiles(name);
+    }
 
     /**
      * <p>Gets the uploaded file with the given name, or null if there is no upload with that name.</p>
@@ -115,7 +118,10 @@ public interface MuRequest {
      * @throws IOException Thrown when there is an error while reading the file, e.g. if a user closes their
      *                     browser before the upload is complete.
      */
-    UploadedFile uploadedFile(String name) throws IOException;
+    default UploadedFile uploadedFile(String name) throws IOException {
+        if (name == null) throw new NullPointerException("name");
+        return form().uploadedFile(name);
+    }
 
     /**
      * <p>Gets the querystring parameters for this request.</p>
@@ -241,7 +247,9 @@ public interface MuRequest {
     /**
      * @return Returns a reference to the mu server instance.
      */
-    MuServer server();
+    default MuServer server() {
+        return connection().server();
+    }
 
     /**
      * @return Returns try if {@link #handleAsync()} has been called and this is an async response

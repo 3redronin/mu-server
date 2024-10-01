@@ -79,7 +79,7 @@ internal class Mu3Http1Connection(
                         mu3Headers = request.headers(),
                         bodySize = request.bodySize!!,
                         body = if (request.bodySize == BodySize.NONE) EmptyInputStream.INSTANCE else Http1BodyStream(
-                            requestParser
+                            requestParser, server.maxRequestBodySize
                         )
                     )
                     clientSocket.soTimeout = requestTimeout

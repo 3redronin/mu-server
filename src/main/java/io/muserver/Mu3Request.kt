@@ -5,6 +5,7 @@ import java.io.InputStream
 import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.util.*
+import kotlin.math.min
 
 internal class Mu3Request(
     val connection: HttpConnection,
@@ -59,14 +60,6 @@ internal class Mu3Request(
         }
     }
 
-    override fun uploadedFiles(name: String?): MutableList<UploadedFile> {
-        TODO("Not yet implemented")
-    }
-
-    override fun uploadedFile(name: String?): UploadedFile {
-        TODO("Not yet implemented")
-    }
-
     override fun query(): RequestParameters {
         if (this.query == null) {
             this.query = QueryString.parse(serverUri.rawQuery)
@@ -91,8 +84,14 @@ internal class Mu3Request(
                 } else if ("multipart" == type && "form-data" == subtype) {
                     val charset = Headtils.bodyCharset(mu3Headers, true)
                     val boundary = bodyType.parameters["boundary"]
-                    if (Mutils.nullOrEmpty(boundary)) throw HttpException.badRequest("No boundary specified in the multipart form-data")
-                    TODO()
+                    if (boundary != null) {
+                        val bufferSize = min(8192, mu3Headers.contentLength() ?: 8192).toInt()
+                        if (Mutils.nullOrEmpty(boundary)) throw HttpException.badRequest("No boundary specified in the multipart form-data")
+                        val formParser = MultipartFormParser(server().tempDir(), boundary, body(), bufferSize, charset)
+                        this.form = formParser.parseFully()
+                    } else {
+                        this.form = UrlEncodedMuForm(QueryString.EMPTY)
+                    }
                 } else {
                     throw HttpException.badRequest("Unrecognised form type $bodyType")
                 }
@@ -137,8 +136,6 @@ internal class Mu3Request(
         }
         return asyncHandle!!
     }
-
-    override fun server() = connection.server()!!
 
     override fun isAsync(): Boolean = asyncHandle != null
 
