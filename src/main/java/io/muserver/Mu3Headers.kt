@@ -88,7 +88,7 @@ internal class Mu3Headers(
     }
 
     override fun contains(name: CharSequence, value: CharSequence, ignoreCase: Boolean): Boolean {
-        return contains(name.toString(), value, ignoreCase)
+        return contains(name.toString(), value.toString(), ignoreCase)
     }
 
     override fun isEmpty() = headers.isEmpty()

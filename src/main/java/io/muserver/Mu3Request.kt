@@ -119,8 +119,12 @@ internal class Mu3Request(
 
     override fun attribute(key: String): Any? = attributes?.get(key)
 
-    override fun attribute(key: String, value: Any) {
-        attributes()[key] = value
+    override fun attribute(key: String, value: Any?) {
+        if (value == null ) {
+            attributes().remove(key)
+        } else {
+            attributes()[key] = value
+        }
     }
 
     override fun attributes(): MutableMap<String, Any> {

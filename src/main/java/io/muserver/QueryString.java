@@ -27,7 +27,11 @@ public class QueryString implements RequestParameters {
      * @return a parsed QueryString object
      */
     public static QueryString parse(String input) {
-        if (input == null || input.isEmpty()) return EMPTY;
+        if (input == null) return EMPTY;
+        if (input.charAt(0) == '?') {
+            input = input.substring(1);
+        }
+        if (input.isEmpty()) return EMPTY;
         var map = new LinkedHashMap<String, List<String>>(); // to keep the order
         String[] pairs = input.split("&");
         for (String pair : pairs) {

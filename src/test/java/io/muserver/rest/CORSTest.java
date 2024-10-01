@@ -5,8 +5,8 @@ import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import okhttp3.internal.Util;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.ServerUtils;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
@@ -129,7 +129,7 @@ public class CORSTest {
             assertThat(resp.header("Access-Control-Allow-Headers"), is(nullValue()));
             assertThat(resp.header("Access-Control-Expose-Headers"), is("X-EXPOSED, X-BLAH"));
             assertThat(resp.header("Access-Control-Max-Age"), is(nullValue()));
-            assertThat(resp.header("Vary"), is("origin"));
+            assertThat(resp.header("Vary"), is("origin, accept-encoding"));
         }
 
     }
@@ -249,8 +249,7 @@ public class CORSTest {
         }
     }
 
-
-    @After
+    @AfterEach
     public void stop() {
         stopAndCheck(server);
     }

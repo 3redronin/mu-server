@@ -10,9 +10,9 @@ import okhttp3.MediaType;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import okio.BufferedSink;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -126,7 +126,7 @@ public class FilterTest {
                         try {
                             try {
                                 requestContext.getPropertyNames().add("shouldnothappen");
-                                Assert.fail("Should not have worked");
+                                Assertions.fail("Should not have worked");
                             } catch (UnsupportedOperationException e) {
                                 // expected
                             }
@@ -144,6 +144,7 @@ public class FilterTest {
 
         assertThat(error.get(), is(nullValue()));
         try (Response resp = call(request(server.uri().resolve("/blah")))) {
+            assertThat(error.get(), is(nullValue()));
             assertThat(resp.body().string(), is("MUR: GET null null hello3 CRC: GET null null hello3"));
         }
         assertThat(error.get(), is(nullValue()));
@@ -636,8 +637,7 @@ public class FilterTest {
         }
     }
 
-
-    @After
+    @AfterEach
     public void stopIt() {
         scaffolding.MuAssert.stopAndCheck(server);
     }

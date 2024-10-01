@@ -10,7 +10,7 @@ import jakarta.ws.rs.core.UriBuilder;
 import jakarta.ws.rs.core.UriInfo;
 import okhttp3.Response;
 import org.hamcrest.Matchers;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import scaffolding.ServerUtils;
 
 import java.io.IOException;

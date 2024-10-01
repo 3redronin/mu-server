@@ -161,8 +161,10 @@ class AsyncResponseAdapter implements AsyncResponse, ResponseCompleteListener {
     @Override
     public Map<Class<?>, Collection<Class<?>>> register(Object callback, Object... callbacks) {
         Map<Class<?>, Collection<Class<?>>> added = new HashMap<>();
+        if (callback == null) throw new NullPointerException("callback");
         register(callback, added);
         for (Object cb : callbacks) {
+            if (cb == null) throw new NullPointerException("callback");
             register(cb, added);
         }
         return added;

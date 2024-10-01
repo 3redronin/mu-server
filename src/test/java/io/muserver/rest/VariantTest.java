@@ -11,8 +11,8 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Request;
 import jakarta.ws.rs.core.Variant;
 import okhttp3.Response;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 
 import java.net.URI;
 import java.util.Collections;
@@ -235,7 +235,7 @@ public class VariantTest {
         }
     }
 
-    @After
+    @AfterEach
     public void stop() {
         scaffolding.MuAssert.stopAndCheck(server);
     }
