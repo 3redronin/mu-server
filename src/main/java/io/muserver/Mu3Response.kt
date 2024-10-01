@@ -157,6 +157,9 @@ internal class Mu3Response(
 
     override fun writer(): PrintWriter {
         if (writer == null) {
+            if (!headers.contains(HeaderNames.CONTENT_TYPE)) {
+                headers.set(HeaderNames.CONTENT_TYPE, ContentTypes.TEXT_PLAIN_UTF8)
+            }
             writer = PrintWriter(outputStream(), false, ensureCharsetSet())
         }
         return writer!!
@@ -169,9 +172,6 @@ internal class Mu3Response(
     fun cleanup() {
         if (state == ResponseState.NOTHING) {
             // empty response body
-            if (httpStatus == null && !muRequest.method.isHead) {
-                status(HttpStatus.NO_CONTENT_204)
-            }
             if (!muRequest.method.isHead && statusValue().canHaveContent() && !headers.contains(HeaderNames.CONTENT_LENGTH)) {
                 headers.set(HeaderNames.CONTENT_LENGTH, 0L)
             }

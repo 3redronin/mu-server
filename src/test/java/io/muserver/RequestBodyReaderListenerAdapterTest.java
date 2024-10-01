@@ -5,6 +5,8 @@ import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import okio.BufferedSink;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.junit.jupiter.api.*;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
@@ -68,7 +70,7 @@ public class RequestBodyReaderListenerAdapterTest {
             .start();
 
         try (Response resp = call(request(server.uri()))) {
-            assertThat(resp.code(), equalTo(204));
+            assertThat(resp.code(), equalTo(200));
         }
         assertThat("All: " + readListener.events, readListener.events, hasItems("onComplete"));
     }
@@ -164,6 +166,7 @@ public class RequestBodyReaderListenerAdapterTest {
             .withMaxRequestSize(1000)
             .addHandler((request, response) -> {
                 response.write("hello");
+                request.readBodyAsString();
                 return true;
             })
             .start();
@@ -270,7 +273,21 @@ public class RequestBodyReaderListenerAdapterTest {
 
         Request.Builder request = request()
             .url(server.uri().toString())
-            .post(new SlowBodySender(1000, 10));
+            .post(new RequestBody() {
+                public MediaType contentType() {
+                    return MediaType.parse("text/plain");
+                }
+                public void writeTo(BufferedSink bufferedSink) throws IOException {
+                    for (int i = 0; i < 100; i++) {
+                        bufferedSink.write("!".repeat(999).getBytes(StandardCharsets.UTF_8));
+                        bufferedSink.flush();
+                        try {
+                            Thread.sleep(10);
+                        } catch (InterruptedException e) {
+                        }
+                    }
+                }
+            });
 
         try (Response resp = call(request)) {
             String read = resp.body().string();

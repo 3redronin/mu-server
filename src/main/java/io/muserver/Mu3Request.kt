@@ -172,8 +172,9 @@ internal class Mu3Request(
     }
 
     fun cleanup(responseStatus: HttpStatus) {
-
-        body.close()
+        if (body is Http1BodyStream) {
+            body.discardRemaining()
+        }
         if (form != null && form is MultipartForm) {
             (form as MultipartForm).cleanup()
         }
