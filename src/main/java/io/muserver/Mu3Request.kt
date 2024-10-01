@@ -51,6 +51,7 @@ internal class Mu3Request(
     }
 
     override fun body() = body
+    override fun declaredBodySize() = bodySize
 
     override fun readBodyAsString(): String {
         claimbody()

@@ -51,6 +51,11 @@ public class NotImplementedMuRequest implements MuRequest {
     }
 
     @Override
+    public BodySize declaredBodySize() {
+        return throwIt();
+    }
+
+    @Override
     public String readBodyAsString() throws IOException {
         return throwIt();
     }

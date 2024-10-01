@@ -85,6 +85,20 @@ public interface MuRequest {
     }
 
     /**
+     * The type and size of the declared request body, for example:
+     *
+     * <ul>
+     *     <li>{@link BodySize#NONE} if there is no body</li>
+     *     <li>{@link BodySize#CHUNKED} if there is body sent in chunks where the size is not known upfront</li>
+     *     <li>A body with {@link BodySize#type()} equal to {@link BodyType#FIXED_SIZE} where the known size of the
+     *     request body in bytes is available in {@link BodySize#size()}</li>
+     * </ul>
+     *
+     * @return an object specifying the type of request body there is.
+     */
+    BodySize declaredBodySize();
+
+    /**
      * Returns the request body as a string.
      * <p>This is a blocking call which waits until the whole request is available. If you need the raw bytes, or to stream
      * the request body, then use the {@link #inputStream()} instead.</p>

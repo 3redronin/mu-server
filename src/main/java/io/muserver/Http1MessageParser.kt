@@ -241,9 +241,9 @@ internal class Http1MessageParser(
                             val exc = exchange
                             val body = exc.bodyTransferSize()
                             exc.bodySize = body
-                            when (body.type) {
+                            when (body.type()) {
                                 BodyType.FIXED_SIZE -> {
-                                    val len = body.bytes!!
+                                    val len = body.size()!!
                                     state = ParseState.FIXED_SIZE_BODY
                                     remainingBytesToProxy = len
                                 }
@@ -416,38 +416,37 @@ internal class Http1MessageParser(
         }
     }
 
-    private enum class ParseState(val eofAction: EOFAction) {
-        REQUEST_START(EOFAction.NOTHING),
-        RESPONSE_START(EOFAction.NOTHING),
-        METHOD(EOFAction.ERROR),
-        REQUEST_TARGET(EOFAction.ERROR),
-        HTTP_VERSION(EOFAction.ERROR),
-        REQUEST_LINE_ENDING(EOFAction.ERROR),
-        STATUS_CODE(EOFAction.ERROR),
-        REASON_PHRASE(EOFAction.ERROR),
-        STATUS_LINE_ENDING(EOFAction.ERROR),
-        HEADER_START(EOFAction.ERROR),
-        HEADER_NAME(EOFAction.ERROR),
-        HEADER_NAME_ENDED(EOFAction.ERROR),
-        HEADER_VALUE(EOFAction.ERROR),
-        HEADER_VALUE_ENDING(EOFAction.ERROR),
-        HEADERS_ENDING(EOFAction.ERROR),
-        FIXED_SIZE_BODY(EOFAction.ERROR),
-        UNSPECIFIED_BODY(EOFAction.COMPLETE),
-        CHUNK_START(EOFAction.ERROR),
-        CHUNK_SIZE(EOFAction.ERROR),
-        CHUNK_EXTENSIONS(EOFAction.ERROR),
-        CHUNK_HEADER_ENDING(EOFAction.ERROR),
-        CHUNK_DATA(EOFAction.ERROR),
-        LAST_CHUNK(EOFAction.ERROR),
-        CHUNKED_BODY_ENDING(EOFAction.ERROR),
-        TRAILERS(EOFAction.ERROR),
-        WEBSOCKET(EOFAction.COMPLETE),
-        CHUNK_DATA_READ(EOFAction.ERROR),
-        CHUNK_DATA_ENDING(EOFAction.ERROR),
+    private enum class ParseState {
+        REQUEST_START,
+        RESPONSE_START,
+        METHOD,
+        REQUEST_TARGET,
+        HTTP_VERSION,
+        REQUEST_LINE_ENDING,
+        STATUS_CODE,
+        REASON_PHRASE,
+        STATUS_LINE_ENDING,
+        HEADER_START,
+        HEADER_NAME,
+        HEADER_NAME_ENDED,
+        HEADER_VALUE,
+        HEADER_VALUE_ENDING,
+        HEADERS_ENDING,
+        FIXED_SIZE_BODY,
+        UNSPECIFIED_BODY,
+        CHUNK_START,
+        CHUNK_SIZE,
+        CHUNK_EXTENSIONS,
+        CHUNK_HEADER_ENDING,
+        CHUNK_DATA,
+        LAST_CHUNK,
+        CHUNKED_BODY_ENDING,
+        TRAILERS,
+        WEBSOCKET,
+        CHUNK_DATA_READ,
+        CHUNK_DATA_ENDING,
     }
 
-    private enum class EOFAction { NOTHING, ERROR, COMPLETE }
 
     override fun toString(): String {
         return javaClass.simpleName + " ${this.state}"

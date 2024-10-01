@@ -28,38 +28,6 @@ internal sealed interface HttpMessageTemp : Http1ConnectionMsg {
 
 }
 
-/**
- * The type of request or response body
- */
-enum class BodyType {
-
-    /**
-     * The size of the body is known
-     */
-    FIXED_SIZE,
-
-    /**
-     * The body is sent with `transfer-encoding: chunked`
-     */
-    CHUNKED,
-
-    /**
-     * There is a body, but the size is not known and it is not chunked, so the body are all bytes until the connection closes
-     */
-    UNSPECIFIED,
-
-    /**
-     * There is no body
-     */
-    NONE
-}
-data class BodySize(val type: BodyType, val bytes: Long?) {
-    companion object {
-        val NONE = BodySize(BodyType.NONE, null)
-        val CHUNKED = BodySize(BodyType.CHUNKED, null)
-        val UNSPECIFIED = BodySize(BodyType.UNSPECIFIED, null)
-    }
-}
 
 internal data class HttpRequestTemp(
     var method: Method?,
