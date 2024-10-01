@@ -27,7 +27,7 @@ public class QueryString implements RequestParameters {
      * @return a parsed QueryString object
      */
     public static QueryString parse(String input) {
-        if (input == null) return EMPTY;
+        if (input == null || input.isEmpty()) return EMPTY;
         if (input.charAt(0) == '?') {
             input = input.substring(1);
         }
