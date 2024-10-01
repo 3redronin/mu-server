@@ -3,7 +3,7 @@ package io.muserver.handlers;
 import io.muserver.HeaderNames;
 import io.muserver.Headers;
 import io.muserver.Mu3Headers;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 import java.util.Set;

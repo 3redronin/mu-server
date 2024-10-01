@@ -4,8 +4,8 @@ import io.muserver.Method;
 import io.muserver.MuServer;
 import okhttp3.Response;
 import okhttp3.internal.Util;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.ServerUtils;
 import scaffolding.StringUtils;
 
@@ -25,6 +25,7 @@ public class CORSHandlerTest {
             .addHandler(corsHandler()
                 .withCORSConfig(CORSHandlerBuilder.config().withAllOriginsAllowed())
             )
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {})
             .start();
         try (Response resp = call(request(server.uri()))) {
             assertThat(resp.headers("Vary"), contains("origin"));
@@ -41,6 +42,7 @@ public class CORSHandlerTest {
     public void aHandlerCanBeCreatedFromConfig() {
         server = ServerUtils.httpsServerForTest()
             .addHandler(CORSHandlerBuilder.config().withAllOriginsAllowed().toHandler(Method.GET, Method.HEAD))
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {})
             .start();
         try (Response resp = call(request(server.uri()).header("Origin", "http://example.org"))) {
             assertThat(resp.headers("Vary"), contains("origin"));
@@ -82,6 +84,7 @@ public class CORSHandlerTest {
                 )
                 .withAllowedMethods(Method.POST, Method.GET, Method.OPTIONS)
             )
+            .addHandler(null, "/", (request, response, pathParams) -> {})
             .start();
         try (Response resp = call(request(server.uri()).post(Util.EMPTY_REQUEST).header("Origin", "http://example.org"))) {
             assertThat(resp.headers("Vary"), contains("origin"));
@@ -103,7 +106,7 @@ public class CORSHandlerTest {
         }
     }
 
-    @After
+    @AfterEach
     public void destroy() {
         scaffolding.MuAssert.stopAndCheck(server);
     }

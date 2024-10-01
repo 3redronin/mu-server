@@ -3,8 +3,8 @@ package io.muserver.handlers;
 import io.muserver.MuServer;
 import io.muserver.Mutils;
 import okhttp3.Response;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 import scaffolding.StringUtils;
@@ -151,7 +151,7 @@ public class AsyncFileProviderTest {
         }
     }
 
-    @After
+    @AfterEach
     public void stop() {
         MuAssert.stopAndCheck(server);
     }

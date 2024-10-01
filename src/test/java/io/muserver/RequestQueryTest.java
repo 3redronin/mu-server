@@ -70,22 +70,19 @@ public class RequestQueryTest {
                     "|serverRawPath=" + request.serverURI().getRawPath() + "|\n");
                 return true;
             }).start();
-        String r;
         try (RawClient client = RawClient.create(server.uri())) {
             client.sendStartLine("GET", "/a%20space/a+plus?a%20space=a%20value&a+space=a+value2&a%2Bplus=s%2Bplus");
             client.sendHeader("Host", server.uri().getAuthority());
             client.endHeaders();
             client.flushRequest();
 
-            while (client.bytesReceived() == 0) {
-                Thread.sleep(10);
-            }
-            r = client.responseString();
+
+            assertEventually(client::responseString, containsString("|path=/a space/a+plus|"));
+            assertEventually(client::responseString, containsString("|rawPath=/a%20space/a+plus|"));
+            assertEventually(client::responseString, containsString("|serverPath=/a space/a+plus|"));
+            assertEventually(client::responseString, containsString("|serverRawPath=/a%20space/a+plus|"));
+
         }
-        assertThat(r, containsString("|path=/a space/a+plus|"));
-        assertThat(r, containsString("|rawPath=/a%20space/a+plus|"));
-        assertThat(r, containsString("|serverPath=/a space/a+plus|"));
-        assertThat(r, containsString("|serverRawPath=/a%20space/a+plus|"));
     }
 
     @Test
@@ -102,7 +99,6 @@ public class RequestQueryTest {
                     "");
                 return true;
             }).start();
-        String r;
         try (RawClient client = RawClient.create(server.uri())) {
             client.sendStartLine("GET", "/a%20space/a+plus?a%20space=a%20value&a+space=a+value2&a%2Bplus=a%2Bplus");
             client.sendHeader("Host", server.uri().getAuthority());
@@ -110,13 +106,13 @@ public class RequestQueryTest {
             client.flushRequest();
 
             assertEventually(client::responseString, containsString("|a space=[a value, a value2]|"));
-            r = client.responseString();
+            assertEventually(client::responseString, containsString("|a+plus=[a+plus]|"));
+            assertEventually(client::responseString, containsString("|serverQS=a space=a value&a+space=a+value2&a+plus=a+plus|"));
+            assertEventually(client::responseString, containsString("|serverRawQS=a%20space=a%20value&a+space=a+value2&a%2Bplus=a%2Bplus|"));
+            assertEventually(client::responseString, containsString("|qs=a space=a value&a+space=a+value2&a+plus=a+plus|"));
+            assertEventually(client::responseString, containsString("|rawQS=a%20space=a%20value&a+space=a+value2&a%2Bplus=a%2Bplus|"));
+
         }
-        assertThat(r, containsString("|a+plus=[a+plus]|"));
-        assertThat(r, containsString("|serverQS=a space=a value&a+space=a+value2&a+plus=a+plus|"));
-        assertThat(r, containsString("|serverRawQS=a%20space=a%20value&a+space=a+value2&a%2Bplus=a%2Bplus|"));
-        assertThat(r, containsString("|qs=a space=a value&a+space=a+value2&a+plus=a+plus|"));
-        assertThat(r, containsString("|rawQS=a%20space=a%20value&a+space=a+value2&a%2Bplus=a%2Bplus|"));
     }
 
     @AfterEach
