@@ -54,7 +54,7 @@ class WebsocketConnection implements MuWebSocketSession {
 
 
     private void startPinging() {
-        httpConnection.server().getScheduledExecutor().schedule(() -> {
+        httpConnection.serverImpl().getScheduledExecutor().schedule(() -> {
             writeLock.lock();
             try {
                 if (state == WebsocketSessionState.OPEN) {

@@ -90,6 +90,7 @@ internal class ConnectionAcceptor(
         var clientCert : Certificate? = null
 
         val hc = httpsConfig
+        var httpVersion = HttpVersion.HTTP_1_1
         if (hc != null) {
             try {
                 val ssf = hc.sslContext().socketFactory
@@ -100,9 +101,7 @@ internal class ConnectionAcceptor(
 
                 if (http2Config?.enabled == true) {
                     val sslParams = secureSocket.sslParameters
-                    // TODO: advertise h2
 //                    sslParams.applicationProtocols = arrayOf("h2", "http/1.1")
-                    sslParams.applicationProtocols = arrayOf("http/1.1")
                     secureSocket.sslParameters = sslParams
                 }
                 val clientAuthTrustManager = hc.clientAuthTrustManager()
@@ -113,6 +112,9 @@ internal class ConnectionAcceptor(
                 }
                 secureSocket.startHandshake()
                 log.info("Selected protocol is ${secureSocket.applicationProtocol}")
+                if (secureSocket.applicationProtocol == "h2") {
+                    httpVersion = HttpVersion.HTTP_2
+                }
 
                 if (clientAuthTrustManager != null) {
                     try {
@@ -133,7 +135,9 @@ internal class ConnectionAcceptor(
         server.statsImpl.onConnectionOpened(con)
         try {
             socket.getOutputStream().use { clientOut ->
-                con.start(clientOut)
+                socket.getInputStream().use { clientIn ->
+                    con.start(clientIn, clientOut)
+                }
             }
         } catch (t: Throwable) {
             log.error("Unhandled exception for $con", t)

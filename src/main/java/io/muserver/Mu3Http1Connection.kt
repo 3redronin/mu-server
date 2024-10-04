@@ -3,47 +3,29 @@ package io.muserver
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.io.IOException
+import java.io.InputStream
 import java.io.OutputStream
-import java.net.InetSocketAddress
 import java.net.Socket
 import java.security.cert.Certificate
 import java.time.Instant
 import java.util.*
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.TimeoutException
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
-import javax.net.ssl.SSLSocket
 
 internal class Mu3Http1Connection(
-    val server: Mu3ServerImpl,
-    private val creator: ConnectionAcceptor,
-    private val clientSocket: Socket,
-    val startTime: Instant,
-    private val clientCert : Certificate?
-) : HttpConnection {
+    server: Mu3ServerImpl,
+    creator: ConnectionAcceptor,
+    clientSocket: Socket,
+    startTime: Instant,
+    clientCert : Certificate?
+) : BaseHttpConnection(server, creator, clientSocket, clientCert, startTime) {
     private val requestPipeline : Queue<HttpRequestTemp> = ConcurrentLinkedQueue()
-    private val remoteAddress = clientSocket.remoteSocketAddress as InetSocketAddress
-    private val localAddress = clientSocket.localSocketAddress as InetSocketAddress
     private val currentRequest = AtomicReference<Any?>()
-    private val completedRequests = AtomicLong()
-    @Volatile
-    private var lastIO = System.currentTimeMillis()
-    private val invalidHttpRequests = AtomicLong(0)
-    private val rejectedDueToOverload = AtomicLong(0)
-    private val closed = AtomicBoolean(false)
-
-    private val requestTimeout = if (server.requestIdleTimeoutMillis() >= Int.MAX_VALUE) {
-        Int.MAX_VALUE
-    } else {
-        server.requestIdleTimeoutMillis().toInt()
-    }
-
-    fun start(outputStream: OutputStream) {
+    override fun start(inputStream: InputStream, outputStream: OutputStream) {
 
         try {
-            RawRequestInputStream(this, clientSocket.getInputStream()).use { reqStream ->
+            RawRequestInputStream(this, inputStream).use { reqStream ->
                 val requestParser = Http1MessageParser(HttpMessageType.REQUEST, requestPipeline, reqStream, server.maxRequestHeadersSize(), server.maxUrlSize())
                 var closeConnection = false
                 while (!closeConnection) {
@@ -160,7 +142,7 @@ internal class Mu3Http1Connection(
                         if (!closeConnection && websocket != null) {
                             currentRequest.set(websocket)
                             clientSocket.soTimeout = websocket.settings.idleReadTimeoutMillis
-                            websocket.runAndBlockUntilDone(clientSocket.getInputStream(), outputStream, requestParser.readBuffer)
+                            websocket.runAndBlockUntilDone(inputStream, outputStream, requestParser.readBuffer)
                             closeConnection = true
                         }
                     }
@@ -170,16 +152,6 @@ internal class Mu3Http1Connection(
             log.error("Unhandled error at the socket", e)
         } finally {
             clientSocket.closeQuietly()
-        }
-    }
-
-    private fun onInvalidRequest(rejectException: HttpException) {
-        if (rejectException.status() == HttpStatus.TOO_MANY_REQUESTS_429) {
-            rejectedDueToOverload.incrementAndGet()
-            server.statsImpl.onRejectedDueToOverload()
-        } else {
-            invalidHttpRequests.incrementAndGet()
-            server.statsImpl.onInvalidRequest()
         }
     }
 
@@ -198,49 +170,18 @@ internal class Mu3Http1Connection(
     }
 
 
-    private fun onRequestStarted(req: Mu3Request) {
+    override fun onRequestStarted(req: Mu3Request) {
         currentRequest.set(req)
-        server.onRequestStarted(req)
+        super.onRequestStarted(req)
     }
 
-    private fun onRequestEnded(req: Mu3Request, resp: Mu3Response) {
+    override fun onRequestEnded(req: Mu3Request, resp: Mu3Response) {
         currentRequest.set(null)
-        completedRequests.incrementAndGet()
-        for (listener in resp.completionListeners()) {
-            listener.onComplete(resp)
-        }
-        server.onRequestEnded(req, resp)
+        super.onRequestEnded(req, resp)
     }
 
-    override fun toString() = "HTTP1 connection from $remoteAddress to $localAddress"
 
     override fun httpVersion(): HttpVersion = HttpVersion.HTTP_1_1
-
-    override fun idleTimeMillis(): Long = System.currentTimeMillis() - lastIO
-
-    override fun isHttps() = creator.isHttps
-
-    override fun httpsProtocol(): String? {
-        return if (clientSocket is SSLSocket) {
-            clientSocket.session.protocol
-        } else null
-    }
-
-    override fun cipher(): String? {
-        return if (clientSocket is SSLSocket) {
-            clientSocket.session.cipherSuite
-        } else null
-    }
-
-    override fun startTime() = startTime
-
-    override fun remoteAddress() = remoteAddress
-
-    override fun completedRequests() = completedRequests.get()
-
-    override fun invalidHttpRequests() = invalidHttpRequests.get()
-
-    override fun rejectedDueToOverload() = rejectedDueToOverload.get()
 
     override fun activeRequests(): Set<MuRequest> {
         val cur = currentRequest.get()
@@ -252,9 +193,7 @@ internal class Mu3Http1Connection(
         return if (cur == null || cur !is MuWebSocket) emptySet() else setOf(cur)
     }
 
-    override fun server() = server
 
-    override fun clientCertificate() = Optional.ofNullable(clientCert)
 
     fun isClosed() = closed.get()
     override fun abort() {
@@ -281,6 +220,7 @@ internal class Mu3Http1Connection(
     }
 
     override fun isIdle() = activeRequests().isEmpty() && activeWebsockets().isEmpty()
+
 
     fun onBytesRead(read: Int) {
         onIO()

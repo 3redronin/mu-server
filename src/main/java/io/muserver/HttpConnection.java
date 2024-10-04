@@ -1,5 +1,8 @@
 package io.muserver;
 
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
 import javax.net.ssl.TrustManager;
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -28,6 +31,7 @@ public interface HttpConnection {
      * The HTTP protocol for the connection.
      * @return the version of HTTP supported.
      */
+    @NotNull
     HttpVersion httpVersion();
 
     /**
@@ -44,21 +48,32 @@ public interface HttpConnection {
      * Gets the HTTPS protocol, for example "TLSv1.2" or "TLSv1.3"
      * @return The HTTPS protocol being used, or <code>null</code> if this connection is not over HTTPS.
      */
+    @Nullable
     String httpsProtocol();
 
     /**
      * @return The HTTPS cipher used on this connection, or <code>null</code> if this connection is not over HTTPS.
      */
+    @Nullable
     String cipher();
 
     /**
      * @return The time that this connection was established.
      */
+    @NotNull
     Instant startTime();
+
+    /**
+     * This is the time taken between a socket being accepted from the client and it being ready to use.
+     * <p>This may include things such as TLS handshake time, or HTTP2 handshaking.</p>
+     * @return The time taken to perform any necessary handshakes
+     */
+    long handshakeDurationMillis();
 
     /**
      * @return The socket address of the client.
      */
+    @NotNull
     InetSocketAddress remoteAddress();
 
     /**
@@ -80,6 +95,7 @@ public interface HttpConnection {
     /**
      * @return A readonly connection of requests that are in progress on this connection
      */
+    @NotNull
     Set<MuRequest> activeRequests();
 
     /**
@@ -88,11 +104,13 @@ public interface HttpConnection {
      * a websocket and an HTTP Connection. This means the returned set is either empty or has a size of 1.</p>
      * @return A readonly set of active websockets being used on this connection
      */
+    @NotNull
     Set<MuWebSocket> activeWebsockets();
 
     /**
      * @return The server that this connection belongs to
      */
+    @NotNull
     MuServer server();
 
     /**
@@ -120,3 +138,4 @@ public interface HttpConnection {
      */
     boolean isIdle();
 }
+

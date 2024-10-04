@@ -15,7 +15,12 @@ public enum HttpVersion {
     /**
      * HTTP/1.1
      */
-    HTTP_1_1("HTTP/1.1", 1);
+    HTTP_1_1("HTTP/1.1", 1),
+
+    /**
+     * HTTP/2
+     */
+    HTTP_2("HTTP/2", 2);
 
     private final String version;
     private final int majorVersion;
