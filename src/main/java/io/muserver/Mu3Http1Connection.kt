@@ -195,7 +195,6 @@ internal class Mu3Http1Connection(
 
 
 
-    fun isClosed() = closed.get()
     override fun abort() {
         if (closed.compareAndSet(false, true)) {
             val cur = currentRequest.get()
@@ -218,25 +217,6 @@ internal class Mu3Http1Connection(
             clientSocket.close()
         }
     }
-
-    override fun isIdle() = activeRequests().isEmpty() && activeWebsockets().isEmpty()
-
-
-    fun onBytesRead(read: Int) {
-        onIO()
-        server.statsImpl.onBytesRead(read.toLong())
-    }
-
-    fun onBytesRead(buffer: ByteArray, off: Int, len: Int) {
-        onIO()
-        server.statsImpl.onBytesRead(len.toLong())
-    }
-
-    private fun onIO() {
-        lastIO = System.currentTimeMillis()
-    }
-
-    fun lastIO() = lastIO
 
     companion object {
         private val log: Logger = LoggerFactory.getLogger(Mu3Http1Connection::class.java)

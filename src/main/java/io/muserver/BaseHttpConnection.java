@@ -139,6 +139,33 @@ abstract class BaseHttpConnection implements HttpConnection {
         return Optional.ofNullable(clientCertificate);
     }
 
+    public boolean isClosed() {
+        return closed.get();
+    }
+
+    @Override
+    public boolean isIdle() {
+        return activeRequests().isEmpty() && activeWebsockets().isEmpty();
+    }
+
+    protected void onBytesRead(int read) {
+        onIO();
+        server.getStatsImpl().onBytesRead(read);
+    }
+
+    protected void onBytesRead(byte[] buffer, int off, int len) {
+        onIO();
+        server.getStatsImpl().onBytesRead(len);
+    }
+
+    private void onIO() {
+        lastIO = System.currentTimeMillis();
+    }
+
+    public long lastIO() {
+        return lastIO;
+    }
+
     @Override
     public String toString() {
         return httpVersion().version() + " connection from " + remoteAddress + " to " + localAddress;
