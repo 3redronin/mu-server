@@ -144,7 +144,11 @@ public class ResourceHandlerTest {
         }
         try (Response resp = call(request().head().url(url))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.headers().toMultimap(), equalTo(headersFromGET));
+
+            var headersFromHEAD = resp.headers().toMultimap();
+            headersFromHEAD.remove("Date");
+            headersFromGET.remove("Date");
+            assertThat(headersFromHEAD, equalTo(headersFromGET));
             assertThat(resp.body().contentLength(), is(0L));
         }
         try (Response resp = call(request(server.uri().resolve("/a/b/")))) {
