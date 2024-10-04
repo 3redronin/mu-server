@@ -237,8 +237,8 @@ public class WebSocketsDeprecatedTest {
         ClientListener listener = new ClientListener();
         WebSocket clientSocket = client.newWebSocket(webSocketRequest(server.uri().resolve("/routed-websocket")), listener);
         clientSocket.send("Hey hey");
-        clientSocket.close(1000, "Done");
         assertThat(result.get(10, TimeUnit.SECONDS), is("Success"));
+        clientSocket.close(1000, "Done");
         assertNotTimedOut("Client closed", listener.closedLatch);
         assertThat(listener.toString(), listener.events, contains(
             "onOpen", "onMessage text: This is message one",
