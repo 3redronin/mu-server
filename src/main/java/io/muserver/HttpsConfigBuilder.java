@@ -257,7 +257,6 @@ public class HttpsConfigBuilder {
             ks.load(keystoreStream, keystorePasswordToUse);
 
             KeyManagerFactory kmf = keyManagerFactory;
-            SecureRandom random = new SecureRandom();
             if (kmf == null) {
 
                 String defaultAliasToUse = this.defaultAlias;
@@ -424,5 +423,7 @@ public class HttpsConfigBuilder {
             .withKeyPassword("Very5ecure")
             .withKeystoreFromClasspath("/io/muserver/resources/localhost.p12");
     }
+
+    static SecureRandom random = new SecureRandom();
 
 }

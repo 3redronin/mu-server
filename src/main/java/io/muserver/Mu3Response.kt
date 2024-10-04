@@ -13,6 +13,9 @@ internal class Mu3Response(
     private val socketOut: OutputStream,
 ) : MuResponse, ResponseInfo {
 
+    var websocket: WebsocketConnection? = null
+        private set
+
     private var httpStatus : HttpStatus? = null
     private val headers = Mu3Headers()
     var state : ResponseState = ResponseState.NOTHING
@@ -193,5 +196,9 @@ internal class Mu3Response(
 
     override fun toString(): String {
         return "${statusValue()} ($state)"
+    }
+
+    fun upgrade(websocket: WebsocketConnection) {
+        this.websocket = websocket
     }
 }

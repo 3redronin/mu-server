@@ -60,6 +60,18 @@ internal class ConnectionAcceptor(
                 if (connection.isIdle) {
                     log.info("Closing idle connection $connection")
                     connection.abort()
+                } else if (connection.activeWebsockets().isNotEmpty()) {
+                    for (activeWebsocket in connection.activeWebsockets()) {
+                        try {
+                            activeWebsocket.onServerShuttingDown()
+                        } catch (e: Exception) {
+                            try {
+                                connection.abort()
+                            } catch (e: Exception) {
+                                log.info("Error while aborting websocket: " + e.message)
+                            }
+                        }
+                    }
                 }
             }
             Thread.sleep(10)
@@ -137,8 +149,8 @@ internal class ConnectionAcceptor(
                 val cutoff = System.currentTimeMillis() - server.idleTimeoutMillis()
                 for (con in connections) {
                     if (con.lastIO() < cutoff) {
-                        log.info("Aborting it")
-                        con.abort()
+                        log.info("Timing out " + con)
+                        con.abortWithTimeout()
                     }
                 }
                 Thread.sleep(200)

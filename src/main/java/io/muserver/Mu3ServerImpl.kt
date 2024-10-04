@@ -9,6 +9,7 @@ import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.*
+import java.util.concurrent.ExecutorService
 
 internal class Mu3ServerImpl(
     private val acceptors: List<ConnectionAcceptor>,
@@ -23,7 +24,10 @@ internal class Mu3ServerImpl(
     private val maxHeadersSize: Int,
     val rateLimiters: List<RateLimiterImpl>,
     val tempDir: Path,
+    executorService: ExecutorService,
 ) : MuServer {
+
+    val scheduledExecutor = OffloadingScheduledExecutorService(executorService)
 
     val statsImpl = Mu3StatsImpl()
 
@@ -153,6 +157,7 @@ internal class Mu3ServerImpl(
                 maxHeadersSize = builder.maxHeadersSize(),
                 rateLimiters = builder.rateLimiters ?: emptyList(),
                 tempDir = tempDir,
+                executorService = executor,
             )
 
             val address = builder.interfaceHost()?.let { InetAddress.getByName(it) }

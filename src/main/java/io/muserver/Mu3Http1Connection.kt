@@ -10,6 +10,7 @@ import java.security.cert.Certificate
 import java.time.Instant
 import java.util.*
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
@@ -25,7 +26,7 @@ internal class Mu3Http1Connection(
     private val requestPipeline : Queue<HttpRequestTemp> = ConcurrentLinkedQueue()
     private val remoteAddress = clientSocket.remoteSocketAddress as InetSocketAddress
     private val localAddress = clientSocket.localSocketAddress as InetSocketAddress
-    private val currentRequest = AtomicReference<Mu3Request?>()
+    private val currentRequest = AtomicReference<Any?>()
     private val completedRequests = AtomicLong()
     @Volatile
     private var lastIO = System.currentTimeMillis()
@@ -154,7 +155,12 @@ internal class Mu3Http1Connection(
                         } finally {
                             onRequestEnded(muRequest, muResponse)
                             clientSocket.soTimeout = 0
-
+                        }
+                        val websocket: WebsocketConnection? = muResponse.websocket
+                        if (!closeConnection && websocket != null) {
+                            currentRequest.set(websocket)
+                            websocket.runAndBlockUntilDone(clientSocket.getInputStream(), outputStream, requestParser.readBuffer)
+                            closeConnection = true
                         }
                     }
                 }
@@ -237,11 +243,12 @@ internal class Mu3Http1Connection(
 
     override fun activeRequests(): Set<MuRequest> {
         val cur = currentRequest.get()
-        return if (cur == null) emptySet() else setOf(cur)
+        return if (cur == null || cur !is MuRequest) emptySet() else setOf(cur)
     }
 
     override fun activeWebsockets(): Set<MuWebSocket> {
-        return emptySet()
+        val cur = currentRequest.get()
+        return if (cur == null || cur !is MuWebSocket) emptySet() else setOf(cur)
     }
 
     override fun server() = server
@@ -252,8 +259,21 @@ internal class Mu3Http1Connection(
     override fun abort() {
         if (closed.compareAndSet(false, true)) {
             val cur = currentRequest.get()
-            if (cur != null) {
+            if (cur != null && cur is Mu3Request) {
                 cur.asyncHandle?.complete(MuException("Connection aborted"))
+            }
+            clientSocket.close()
+        }
+    }
+    fun abortWithTimeout() {
+        if (closed.compareAndSet(false, true)) {
+            val cur = currentRequest.get()
+            if (cur != null) {
+                if (cur is Mu3Request) {
+                    cur.asyncHandle?.complete(TimeoutException("Idle timeout exceeded"))
+                } else if (cur is WebsocketConnection) {
+                    cur.onTimeout()
+                }
             }
             clientSocket.close()
         }
@@ -261,9 +281,9 @@ internal class Mu3Http1Connection(
 
     override fun isIdle() = activeRequests().isEmpty() && activeWebsockets().isEmpty()
 
-    fun onByteRead(read: Int) {
+    fun onBytesRead(read: Int) {
         onIO()
-        server.statsImpl.onBytesRead(1)
+        server.statsImpl.onBytesRead(read.toLong())
     }
 
     fun onBytesRead(buffer: ByteArray, off: Int, len: Int) {

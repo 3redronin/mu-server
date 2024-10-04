@@ -54,7 +54,7 @@ internal class Http1MessageParser(
         }
     }
     
-    private var bytes = ByteArray(8192)
+    val readBuffer = ByteArray(8192)
     private var position = 0
     private var limit = 0
     private fun remaining() = limit - position
@@ -64,7 +64,7 @@ internal class Http1MessageParser(
         while (true) {
             if (!hasRemaining()) {
                 position = 0
-                limit = source.read(bytes)
+                limit = source.read(readBuffer)
                 if (limit == -1) {
                     if (state == ParseState.UNSPECIFIED_BODY) {
                         return EndOfBodyBit
@@ -73,7 +73,7 @@ internal class Http1MessageParser(
                 }
             }
             while (hasRemaining()) {
-                val b = bytes[position]
+                val b = readBuffer[position]
                 when (state) {
                     ParseState.REQUEST_START -> {
                         if (b.isUpperCase()) {
@@ -394,7 +394,7 @@ internal class Http1MessageParser(
         if (isLast) {
             onMessageEnded()
         }
-        return MessageBodyBit(bytes, start, numberToTransfer, isLast)
+        return MessageBodyBit(readBuffer, start, numberToTransfer, isLast)
     }
 
     private fun onMessageEnded() {

@@ -142,6 +142,10 @@ public final class HeaderValues {
      */
     public static final CharSequence ZERO = HeaderString.valueOf("0");
     /**
+     * {@code "13"}
+     */
+    public static final CharSequence THIRTEEN = HeaderString.valueOf("13");
+    /**
      * {@code "only-if-cached"}
      */
     public static final CharSequence ONLY_IF_CACHED = HeaderString.valueOf("only-if-cached");

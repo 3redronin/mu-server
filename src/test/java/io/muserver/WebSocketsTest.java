@@ -19,9 +19,11 @@ import scaffolding.RawClient;
 import scaffolding.ServerUtils;
 import scaffolding.StringUtils;
 
+import java.io.IOException;
 import java.net.ProtocolException;
 import java.net.URI;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.*;
 
@@ -34,7 +36,6 @@ import static scaffolding.ClientUtils.*;
 import static scaffolding.MuAssert.assertEventually;
 import static scaffolding.MuAssert.assertNotTimedOut;
 
-@Disabled("No websockets yet")
 public class WebSocketsTest {
 
     private MuServer server;
@@ -95,7 +96,7 @@ public class WebSocketsTest {
     }
 
     @Test
-    public void ifMaxFrameLengthExceededThenSocketIsClosed() throws Exception {
+    public void ifMaxFrameLengthExceededThenClose3008ReturnedAndSocketIsClosed() throws Exception {
         server = ServerUtils.httpsServerForTest()
             .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket)
                 .withPath("/routed-websocket")
@@ -111,10 +112,10 @@ public class WebSocketsTest {
         String largeText = StringUtils.randomStringOfLength(2000);
         clientSocket.send(largeText);
 
-        assertNotTimedOut("Erroring", listener.failureLatch);
-        assertEventually(() -> serverSocket.state(), equalTo(WebsocketSessionState.ERRORED));
-
-        clientSocket.close(1000, "Finished");
+        assertEventually(() -> server.activeConnections(), empty());
+        assertThat(serverSocket.state(), equalTo(WebsocketSessionState.ERRORED));
+        int length = largeText.getBytes(UTF_8).length;
+        assertEventually(() -> listener.events, contains("onOpen", "onClosing 1009 Max payload length of 1024 exceeded with frame size " + length, "onClosed 1009 Max payload length of 1024 exceeded with frame size " + length));
     }
 
     @Test
@@ -139,7 +140,7 @@ public class WebSocketsTest {
     }
 
     @Test
-    public void splitFramesAreSentWithIsLastFalse() throws Exception {
+    public void splitFramesAreAggregatedByBaseWebsocket() throws Exception {
         serverSocket.logErrors = true;
         server = ServerUtils.httpsServerForTest()
             .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket).withPath("/routed-websocket"))
@@ -175,17 +176,28 @@ public class WebSocketsTest {
 
             session.getRemote().sendPartialString("Hello, ", false);
             session.getRemote().sendPartialString("How you doin? ", false);
+            session.getRemote().sendPing(ByteBuffer.wrap("I can do this".getBytes(UTF_8)));
             session.getRemote().sendPartialString("Sorry you can't get through.", true);
             session.getRemote().sendString("Goodbye");
-            session.getRemote().sendPartialBytes(Mutils.toByteBuffer("binary1"), false);
+            session.getRemote().sendPartialBytes(Mutils.toByteBuffer("binary1 "), false);
+            session.getRemote().sendPong(ByteBuffer.wrap("Pongs should be ignored".getBytes(UTF_8)));
             session.getRemote().sendPartialBytes(Mutils.toByteBuffer("binary2"), true);
             session.getRemote().flush();
 
-            assertEventually(() -> serverSocket.received, contains("connected", "onText (false): Hello, ", "onText (false): How you doin? ", "onText (true): Sorry you can't get through.", "onText (true): Goodbye", "onBinary (false): binary1", "onBinary (true): binary2"));
+            var expected = List.of(
+                "connected",
+                "onPing: I can do this",
+                "onText (true): Hello, How you doin? Sorry you can't get through.",
+                "onText (true): Goodbye",
+                "onPong: Pongs should be ignored",
+                "onBinary (true): binary1 binary2");
+            assertEventually(() -> serverSocket.received, contains(expected.toArray()));
             session.close(1000, "Finished");
             socket.awaitClosure();
             assertNotTimedOut("Closing", serverSocket.closedLatch);
-            assertThat(serverSocket.received.toString(), serverSocket.received, contains("connected", "onText (false): Hello, ", "onText (false): How you doin? ", "onText (true): Sorry you can't get through.", "onText (true): Goodbye", "onBinary (false): binary1", "onBinary (true): binary2", "onClientClosed: 1000 Finished"));
+            var expectedWithClose = new ArrayList<>(expected);
+            expectedWithClose.add("onClientClosed: 1000 Finished");
+            assertThat(serverSocket.received.toString(), serverSocket.received, contains(expectedWithClose.toArray()));
         } finally {
             client.stop();
             httpClient.stop();
@@ -407,9 +419,10 @@ public class WebSocketsTest {
     @Test
     public void ifNoMessagesSentOrReceivedExceedIdleTimeoutThenItDisconnects() throws Exception {
         server = ServerUtils.httpsServerForTest()
+            .withIdleTimeout(100, TimeUnit.MILLISECONDS)
             .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket)
                 .withPath("/routed-websocket")
-                .withIdleReadTimeout(100, TimeUnit.MILLISECONDS)
+                .withPingInterval(0, TimeUnit.MILLISECONDS)
             )
             .start();
         client.newWebSocket(webSocketRequest(server.uri().resolve("/routed-websocket")), new ClientListener());
@@ -434,25 +447,6 @@ public class WebSocketsTest {
         assertNotTimedOut("onError", serverSocket.errorLatch);
         assertThat(serverSocket.received, contains("connected", "onError MuException"));
         assertEventually(() -> serverSocket.state(), equalTo(WebsocketSessionState.ERRORED));
-    }
-
-    @Test
-    public void ifAWriteTimeoutIsSetThenPingsAreSent() throws Exception {
-        server = ServerUtils.httpsServerForTest()
-            .addHandler(
-                webSocketHandler((request, responseHeaders) -> serverSocket)
-                    .withPingSentAfterNoWritesFor(50, TimeUnit.MILLISECONDS)
-            )
-            .start();
-        ClientListener listener = new ClientListener();
-        client.newWebSocket(webSocketRequest(server.uri()), listener);
-        assertNotTimedOut("Connecting", serverSocket.connectedLatch);
-        serverSocket.session.sendText("Hi", DoneCallback.NoOp);
-        Thread.sleep(200);
-        serverSocket.session.sendText("Bye", DoneCallback.NoOp);
-        serverSocket.session.close(1000, "Done");
-        assertNotTimedOut("Closing", listener.closedLatch);
-        assertThat(serverSocket.received, hasItem("onPong: mu"));
     }
 
     private static Request webSocketRequest(URI httpVersionOfUri) {
@@ -506,17 +500,17 @@ public class WebSocketsTest {
         }
 
         @Override
-        public void onPing(ByteBuffer payload, DoneCallback onComplete) {
+        public void onPing(ByteBuffer payload) throws IOException {
             received.add("onPing: " + UTF_8.decode(payload));
-            session.sendPong(payload, onComplete);
+            session.sendPong(payload);
             pingLatch.countDown();
         }
 
         @Override
-        public void onPong(ByteBuffer payload, DoneCallback onComplete) throws Exception {
+        public void onPong(ByteBuffer payload) throws Exception {
+            super.onPong(payload);
             received.add("onPong: " + UTF_8.decode(payload));
             pongLatch.countDown();
-            onComplete.onComplete(null);
         }
 
         @Override

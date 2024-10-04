@@ -1,5 +1,10 @@
 package io.muserver;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Base64;
+
 /**
  * A handler that can establish a web socket based on web socket upgrade requests.
  * Create with {@link WebSocketHandlerBuilder#webSocketHandler()}
@@ -8,16 +13,12 @@ public class WebSocketHandler implements MuHandler {
 
     private final MuWebSocketFactory factory;
     private final String path;
-    private final long idleReadTimeoutMills;
-    private final long pingAfterWriteMillis;
-    private final int maxFramePayloadLength;
+    private final WebSocketHandlerBuilder.Settings settings;
 
-    WebSocketHandler(MuWebSocketFactory factory, String path, long idleReadTimeoutMills, long pingAfterWriteMillis, int maxFramePayloadLength) {
+    public WebSocketHandler(MuWebSocketFactory factory, String path, WebSocketHandlerBuilder.Settings settings) {
         this.factory = factory;
         this.path = path;
-        this.idleReadTimeoutMills = idleReadTimeoutMills;
-        this.pingAfterWriteMillis = pingAfterWriteMillis;
-        this.maxFramePayloadLength = maxFramePayloadLength;
+        this.settings = settings;
     }
 
     @Override
@@ -28,42 +29,55 @@ public class WebSocketHandler implements MuHandler {
         if (Mutils.hasValue(path) && !path.equals(request.relativePath())) {
             return false;
         }
-
-        if (!isWebSocketUpgrade(request)) {
+        if (!request.headers().contains(HeaderNames.UPGRADE, HeaderValues.WEBSOCKET, true)) {
             return false;
         }
-//        HttpHeaders nettyHeaders = new DefaultHttpHeaders();
-//        Http1Headers responseHeaders = new Http1Headers(nettyHeaders);
-        var responseHeaders = new Mu3Headers();
-        MuWebSocket muWebSocket = factory.create(request, responseHeaders);
+        if (request.httpVersion() != HttpVersion.HTTP_1_1) {
+            throw new HttpException(HttpStatus.HTTP_VERSION_NOT_SUPPORTED_505, "Websockets not supported for " + request.httpVersion());
+        }
+        if (!request.headers().connection().contains(HeaderValues.UPGRADE.toString(), true)) {
+            throw HttpException.badRequest("No upgrade token in the connection header");
+        }
+
+        if (!request.headers().contains(HeaderNames.SEC_WEBSOCKET_VERSION, HeaderValues.THIRTEEN, false)) {
+            HttpException nope = new HttpException(HttpStatus.UPGRADE_REQUIRED_426);
+            nope.responseHeaders().set(HeaderNames.SEC_WEBSOCKET_VERSION, HeaderValues.THIRTEEN);
+            throw nope;
+        }
+
+        MuWebSocket muWebSocket = factory.create(request, response.headers());
         if (muWebSocket == null) {
             return false;
         }
-        boolean upgraded;
-        try {
 
-//            upgraded = request.websocketUpgrade(muWebSocket, nettyHeaders, idleReadTimeoutMills, pingAfterWriteMillis, maxFramePayloadLength);
-            upgraded = false;
-        } catch (UnsupportedOperationException e) {
-            response.status(426);
-            response.headers().set(HeaderNames.SEC_WEBSOCKET_VERSION, "13");
-            return true;
-        }
-        return upgraded;
+        response.status(HttpStatus.SWITCHING_PROTOCOLS_101);
+        var responseKey = acceptKey(request.headers().get(HeaderNames.SEC_WEBSOCKET_KEY));
+        response.headers().set(HeaderNames.SEC_WEBSOCKET_ACCEPT, responseKey);
+        response.headers().set(HeaderNames.SEC_WEBSOCKET_VERSION, HeaderValues.THIRTEEN);
+        response.headers().set(HeaderNames.UPGRADE, HeaderValues.WEBSOCKET);
+        response.headers().set(HeaderNames.CONNECTION, HeaderValues.UPGRADE);
+
+        var wsConnection = new WebsocketConnection((Mu3Http1Connection) request.connection(), muWebSocket, settings);
+        ((Mu3Response)response).upgrade(wsConnection);
+
+        return true;
     }
 
-    static boolean isWebSocketUpgrade(MuRequest request) {
-        return request.headers().contains(HeaderNames.UPGRADE, HeaderValues.WEBSOCKET, true);
+    static String acceptKey(String clientKey) throws NoSuchAlgorithmException {
+        if (clientKey == null || clientKey.isBlank()) {
+            throw HttpException.badRequest("No valid SEC_WEBSOCKET_KEY");
+        }
+        String concat = clientKey + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+        MessageDigest digest = MessageDigest.getInstance("SHA1");
+        var bytes = digest.digest(concat.getBytes(StandardCharsets.US_ASCII));
+        return Base64.getEncoder().encodeToString(bytes);
     }
 
     @Override
     public String toString() {
         return "WebSocketHandler{" +
             "path='" + path + '\'' +
-            ", idleReadTimeoutMills=" + idleReadTimeoutMills +
-            ", pingAfterWriteMillis=" + pingAfterWriteMillis +
-            ", maxFramePayloadLength=" + maxFramePayloadLength +
+            ", settings=" + settings +
             '}';
     }
 }
-

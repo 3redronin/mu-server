@@ -22,7 +22,7 @@ class RawRequestInputStream extends FilterInputStream {
         try {
             int read = in.read();
             if (read >= 0) {
-                connection.onByteRead(read);
+                connection.onBytesRead(read);
             }
             return read;
         } catch (SocketTimeoutException e) {
