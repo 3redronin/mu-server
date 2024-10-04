@@ -3,6 +3,7 @@ package io.muserver;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -27,8 +28,17 @@ public interface MuWebSocketSession {
     /**
      * Sends a text message to the client
      * @param message The message to be sent
+     * @throws IllegalStateException if a partial write is in progress
      */
     void sendText(String message) throws IOException;
+
+    /**
+     * Sends a partial text message to the client
+     * @param textFragment The partial text message, as a byte buffer containing a substring of UTF-8 encoded bytes
+     * @param isLastFragment <code>true</code> if this is the last fragment of a partial text message
+     * @throws IllegalStateException if a partial binary write is in progress
+     */
+    void sendTextFragment(ByteBuffer textFragment, boolean isLastFragment) throws IOException;
 
     /**
      * Sends a message to the client asynchronously
@@ -53,12 +63,6 @@ public interface MuWebSocketSession {
         });
     }
 
-    /**
-     * Sends a full or partial message to the client asynchronously with an optional parameter allowing partial fragments to be sent
-     * @param message The message to be sent
-     * @param isLastFragment If <code>false</code> then this message will be sent as a partial fragment
-     */
-    void sendText(String message, boolean isLastFragment) throws IOException;
 
     /**
      * Sends a full or partial message to the client asynchronously with an optional parameter allowing partial fragments to be sent
@@ -73,7 +77,7 @@ public interface MuWebSocketSession {
     default void sendText(String message, boolean isLastFragment, DoneCallback doneCallback) {
         CompletableFuture.runAsync(() -> {
             try {
-                sendText(message, isLastFragment);
+                sendTextFragment(ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8)), isLastFragment);
                 doneCallback.onComplete(null);
             } catch (Exception e) {
                 try {
@@ -86,8 +90,9 @@ public interface MuWebSocketSession {
 
 
     /**
-     * Sends a message to the client asynchronously
+     * Sends a full binary message to the client
      * @param message The message to be sent
+     * @throws IllegalStateException if a partial write is in progress
      */
     void sendBinary(ByteBuffer message) throws IOException;
 
@@ -115,11 +120,12 @@ public interface MuWebSocketSession {
     }
 
     /**
-     * Sends a full or partial message to the client asynchronously with an optional parameter allowing partial fragments to be sent
+     * Sends a partial message to the client
      * @param message The message to be sent
-     * @param isLastFragment If <code>false</code> then this message will be sent as a partial fragment
+     * @param isLastFragment <code>true</code> if this is the last fragment of a message
+     * @throws IllegalStateException if a partial text write is in progress
      */
-    void sendBinary(ByteBuffer message, boolean isLastFragment) throws IOException;
+    void sendBinaryFragment(ByteBuffer message, boolean isLastFragment) throws IOException;
 
     /**
      * Sends a full or partial message to the client asynchronously with an optional parameter allowing partial fragments to be sent
@@ -134,7 +140,7 @@ public interface MuWebSocketSession {
     default void sendBinary(ByteBuffer message, boolean isLastFragment, DoneCallback doneCallback) {
         CompletableFuture.runAsync(() -> {
             try {
-                sendBinary(message, isLastFragment);
+                sendBinaryFragment(message, isLastFragment);
                 doneCallback.onComplete(null);
             } catch (Exception e) {
                 try {

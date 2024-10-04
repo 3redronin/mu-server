@@ -88,7 +88,7 @@ public abstract class BaseWebSocket implements MuWebSocket {
      * @param isLast       Returns <code>true</code> if this message is the last fragment of the complete message.
      */
     @Override
-    public void onPartialText(ByteBuffer textFragment, boolean isLast) throws Exception {
+    public void onTextFragment(ByteBuffer textFragment, boolean isLast) throws Exception {
         bufferIt(textFragment);
         if (isLast) {
             onText(fragmentBuffer.decodeUTF8());
@@ -103,7 +103,7 @@ public abstract class BaseWebSocket implements MuWebSocket {
      * @param isLast     Returns <code>true</code> if this is the last fragment of the complete message.
      */
     @Override
-    public void onPartialBinary(ByteBuffer buffer, boolean isLast) throws Exception {
+    public void onBinaryFragment(ByteBuffer buffer, boolean isLast) throws Exception {
         bufferIt(buffer);
 
         if (isLast) {

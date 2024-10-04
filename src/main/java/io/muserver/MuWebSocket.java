@@ -46,7 +46,7 @@ public interface MuWebSocket {
      * @param isLast       Returns <code>true</code> if this message is the last fragment of the complete message.
      * @throws Exception   Any exceptions thrown will result in the onError method being called with the thrown exception being used as the <code>cause</code> parameter.
      */
-    void onPartialText(ByteBuffer textFragment, boolean isLast) throws Exception;
+    void onTextFragment(ByteBuffer textFragment, boolean isLast) throws Exception;
 
     /**
      * Called when a complete binary message is received from the client.
@@ -63,7 +63,7 @@ public interface MuWebSocket {
      * @param isLast     Returns <code>true</code> if this is the last fragment of the complete message.
      * @throws Exception Any exceptions thrown will result in the onError method being called with the thrown exception being used as the <code>cause</code> parameter.
      */
-    void onPartialBinary(ByteBuffer buffer, boolean isLast) throws Exception;
+    void onBinaryFragment(ByteBuffer buffer, boolean isLast) throws Exception;
 
     /**
      * Called when the client has sent a close frame.

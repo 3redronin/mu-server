@@ -139,9 +139,9 @@ class WebsocketConnection implements MuWebSocketSession {
                 } else if (opcode == 0x0) {
                     // continuation frame
                     if (readState == ReadState.TEXT) {
-                        webSocket.onPartialText(slice, fin);
+                        webSocket.onTextFragment(slice, fin);
                     } else if (readState == ReadState.BINARY) {
-                        webSocket.onPartialBinary(slice, fin);
+                        webSocket.onBinaryFragment(slice, fin);
                     } else {
                         // If there was ever a new continuable message type, this would fail rather than ignore it
                         throw frameError(1002, "Continuation frame received unexpectedly");
@@ -159,7 +159,7 @@ class WebsocketConnection implements MuWebSocketSession {
                         webSocket.onText(text);
                     } else {
                         readState = ReadState.TEXT;
-                        webSocket.onPartialText(slice, false);
+                        webSocket.onTextFragment(slice, false);
                     }
                 } else if (opcode == 0x2) {
                     // binary frame
@@ -170,7 +170,7 @@ class WebsocketConnection implements MuWebSocketSession {
                         webSocket.onBinary(slice);
                     } else {
                         readState = ReadState.BINARY;
-                        webSocket.onPartialBinary(slice, false);
+                        webSocket.onBinaryFragment(slice, false);
                     }
                 } else if (opcode == 0x8) {
                     if (state == WebsocketSessionState.OPEN) {
@@ -303,24 +303,26 @@ class WebsocketConnection implements MuWebSocketSession {
     }
 
     @Override
-    public void sendText(String message, boolean isLastFragment) throws IOException {
+    public void sendTextFragment(ByteBuffer fragment, boolean isLastFragment) throws IOException {
         writeLock.lock();
         try {
             if (isLastFragment && messageWritingState == MessageWritingState.NONE) {
                 // this is just a non-fragmented full message, so use the plain send
-                sendText(message);
-            } else if (!isLastFragment && messageWritingState == MessageWritingState.NONE) {
-                // the first message of a fragmented text message
-                var payload = message.getBytes(StandardCharsets.UTF_8);
-                writeFragment((byte)0b00000001, payload, 0, payload.length, MessageWritingState.NONE, MessageWritingState.TEXT);
-            } else if (!isLastFragment && messageWritingState == MessageWritingState.TEXT) {
-                // a middle fragment of a text message
-                var payload = message.getBytes(StandardCharsets.UTF_8);
-                writeFragment((byte)0b00000000, payload, 0, payload.length, MessageWritingState.TEXT, MessageWritingState.TEXT);
-            } else if (isLastFragment && messageWritingState == MessageWritingState.TEXT) {
-                // the last fragment of a text message
-                var payload = message.getBytes(StandardCharsets.UTF_8);
-                writeFragment((byte)0b10000000, payload, 0, payload.length, MessageWritingState.TEXT, MessageWritingState.NONE);
+                sendText(StandardCharsets.UTF_8.decode(fragment).toString());
+            } else {
+                var payload = arrayBuffer(fragment);
+                int off = payload.arrayOffset() + payload.position();
+                int len = payload.remaining();
+                if (!isLastFragment && messageWritingState == MessageWritingState.NONE) {
+                    // the first message of a fragmented text message
+                    writeFragment((byte) 0b00000001, payload.array(), off, len, MessageWritingState.NONE, MessageWritingState.TEXT);
+                } else if (!isLastFragment && messageWritingState == MessageWritingState.TEXT) {
+                    // a middle fragment of a text message
+                    writeFragment((byte) 0b00000000, payload.array(), off, len, MessageWritingState.TEXT, MessageWritingState.TEXT);
+                } else if (isLastFragment && messageWritingState == MessageWritingState.TEXT) {
+                    // the last fragment of a text message
+                    writeFragment((byte) 0b10000000, payload.array(), off, len, MessageWritingState.TEXT, MessageWritingState.NONE);
+                }
             }
         } finally {
             writeLock.unlock();
@@ -334,24 +336,26 @@ class WebsocketConnection implements MuWebSocketSession {
     }
 
     @Override
-    public void sendBinary(ByteBuffer message, boolean isLastFragment) throws IOException {
+    public void sendBinaryFragment(ByteBuffer message, boolean isLastFragment) throws IOException {
         writeLock.lock();
         try {
             if (isLastFragment && messageWritingState == MessageWritingState.NONE) {
                 // this is just a non-fragmented full message, so use the plain send
                 sendBinary(message);
-            } else if (!isLastFragment && messageWritingState == MessageWritingState.NONE) {
-                // the first message of a fragmented binary message
+            } else {
                 var payload = arrayBuffer(message);
-                writeFragment((byte)0b00000010, payload.array(), payload.arrayOffset() + payload.position(), payload.remaining(), MessageWritingState.NONE, MessageWritingState.BINARY);
-            } else if (!isLastFragment && messageWritingState == MessageWritingState.BINARY) {
-                // a middle fragment of a binary message
-                var payload = arrayBuffer(message);
-                writeFragment((byte)0b00000000, payload.array(), payload.arrayOffset() + payload.position(), payload.remaining(), MessageWritingState.BINARY, MessageWritingState.BINARY);
-            } else if (isLastFragment && messageWritingState == MessageWritingState.BINARY) {
-                // the last fragment of a binary message
-                var payload = arrayBuffer(message);
-                writeFragment((byte)0b10000000, payload.array(), payload.arrayOffset() + payload.position(), payload.remaining(), MessageWritingState.BINARY, MessageWritingState.NONE);
+                int off = payload.arrayOffset() + payload.position();
+                int len = payload.remaining();
+                if (!isLastFragment && messageWritingState == MessageWritingState.NONE) {
+                    // the first message of a fragmented binary message
+                    writeFragment((byte) 0b00000010, payload.array(), off, len, MessageWritingState.NONE, MessageWritingState.BINARY);
+                } else if (!isLastFragment && messageWritingState == MessageWritingState.BINARY) {
+                    // a middle fragment of a binary message
+                    writeFragment((byte) 0b00000000, payload.array(), off, len, MessageWritingState.BINARY, MessageWritingState.BINARY);
+                } else if (isLastFragment && messageWritingState == MessageWritingState.BINARY) {
+                    // the last fragment of a binary message
+                    writeFragment((byte) 0b10000000, payload.array(), off, len, MessageWritingState.BINARY, MessageWritingState.NONE);
+                }
             }
         } finally {
             writeLock.unlock();
