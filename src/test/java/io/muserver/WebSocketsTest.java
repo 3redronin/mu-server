@@ -19,10 +19,12 @@ import scaffolding.RawClient;
 import scaffolding.ServerUtils;
 import scaffolding.StringUtils;
 
-import java.io.IOException;
+import java.io.*;
 import java.net.ProtocolException;
+import java.net.Socket;
 import java.net.URI;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.*;
@@ -96,6 +98,118 @@ public class WebSocketsTest {
         assertThat(listener.events, contains("onOpen", "onMessage text: " + largeText.toUpperCase()));
         clientSocket.close(1000, "Done");
     }
+
+    @Test
+    public void unmaskedClientMessagesAreRejectedWithA1002() throws Exception {
+        server = MuServerBuilder.httpServer()
+            .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket))
+            .start();
+
+        Socket socket = new Socket(server.uri().getHost(), server.uri().getPort());
+        try (OutputStream out = socket.getOutputStream();
+             InputStream in = socket.getInputStream()) {
+
+            handshake(out, in);
+
+            var frame = new ByteArrayOutputStream();
+            frame.write(0b10000001);  // FIN + text frame opcode (0x1)
+            frame.write(0b00000010);  // No masking key, so just length
+            frame.write("hi".getBytes(StandardCharsets.US_ASCII));  // Payload
+
+            out.write(frame.toByteArray());
+            out.flush();
+
+            // Read the expected close frame
+            // Read the close frame (should expect opcode 0x88 for close frame)
+            int opcode = in.read();  // First byte contains FIN and opcode
+            assertThat(opcode, equalTo(0b10001000));
+            int length = in.read();  // Second byte contains the payload length
+            byte[] payload = new byte[length];
+            in.read(payload);  // Read the payload (status code + optional reason)
+
+            int closeCode = ((payload[0] & 0xFF) << 8) | (payload[1] & 0xFF);
+            String closeReason = "";
+            if (length > 2) {
+                closeReason = new String(payload, 2, length - 2, StandardCharsets.UTF_8);
+            }
+
+            assertThat(closeCode, equalTo(1002));
+            assertThat(closeReason, equalTo("Unmasked client data"));
+        }
+
+    }
+
+    @Test
+    public void invalidUTF8MessagesResultInErrors() throws Exception {
+        server = MuServerBuilder.httpServer()
+            .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket))
+            .start();
+
+        Socket socket = new Socket(server.uri().getHost(), server.uri().getPort());
+        try (OutputStream out = socket.getOutputStream();
+             InputStream in = socket.getInputStream()) {
+
+            handshake(out, in);
+
+            byte[] maskKey = new byte[]{0x12, 0x34, 0x56, 0x78};
+
+            // Send invalid UTF-8 message
+            byte[] invalidUtf8 = new byte[]{(byte) 0xC3, (byte) 0x28};  // Invalid continuation byte
+
+            // Construct WebSocket text frame with invalid UTF-8
+            var frame = new ByteArrayOutputStream();
+            frame.write(0b10000001);  // FIN + text frame opcode (0x1)
+            frame.write(0b10000000 | invalidUtf8.length);  // No masking key, so just length
+            frame.write(maskKey);
+
+            for (int i = 0; i < invalidUtf8.length; i++) {
+                invalidUtf8[i] ^= maskKey[i % 4];
+            }
+            frame.write(invalidUtf8);  // Payload with invalid UTF-8
+
+            // Send the frame
+            out.write(frame.toByteArray());
+            out.flush();
+
+            // Read the expected close frame
+            // Read the close frame (should expect opcode 0x88 for close frame)
+            int opcode = in.read();  // First byte contains FIN and opcode
+            assertThat(opcode, equalTo(0b10001000));
+            int length = in.read();  // Second byte contains the payload length
+            byte[] payload = new byte[length];
+            in.read(payload);  // Read the payload (status code + optional reason)
+
+            int closeCode = ((payload[0] & 0xFF) << 8) | (payload[1] & 0xFF);
+            String closeReason = "";
+            if (length > 2) {
+                closeReason = new String(payload, 2, length - 2, StandardCharsets.UTF_8);
+            }
+
+            assertThat(closeCode, equalTo(1007));
+            assertThat(closeReason, equalTo("Non UTF-8 data in text frame"));
+
+        }
+
+    }
+
+    private void handshake(OutputStream out, InputStream in) throws IOException {
+        // Perform WebSocket handshake
+        String request = "GET / HTTP/1.1\r\n" +
+            "Host: " + server.uri().getAuthority() + "\r\n" +
+            "Upgrade: websocket\r\n" +
+            "Connection: Upgrade\r\n" +
+            "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n" +
+            "Sec-WebSocket-Version: 13\r\n\r\n";
+
+        out.write(request.getBytes(StandardCharsets.US_ASCII));
+        out.flush();
+
+        var reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.US_ASCII));
+        while (!reader.readLine().isEmpty()) {
+        }
+    }
+
+
 
     @Test
     public void ifMaxFrameLengthExceededThenClose3008ReturnedAndSocketIsClosed() {

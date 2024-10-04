@@ -205,9 +205,9 @@ class WebsocketConnection implements MuWebSocketSession {
                 }
                 // ignore unknown types
 
-
             }
-            log.info("It's over");
+
+            // it's finished - the TCP connection will be closed
         } catch (Throwable e) {
             if (state != WebsocketSessionState.TIMED_OUT) {
                 webSocket.onError(e);

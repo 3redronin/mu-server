@@ -265,7 +265,7 @@ public abstract class BaseWebSocket implements MuWebSocket {
             if (cause instanceof TimeoutException || cause instanceof SocketTimeoutException) {
                 session().close(3008, WebsocketSessionState.TIMED_OUT.name());
             } else if (cause instanceof CharacterCodingException) {
-                session().close(1007, "");
+                session().close(1007, "Non UTF-8 data in text frame");
             } else if (session != null && !(cause instanceof ClientDisconnectedException)) {
                 session().close(1011, WebsocketSessionState.ERRORED.name());
             }
