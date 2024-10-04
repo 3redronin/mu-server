@@ -11,6 +11,7 @@ import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.eclipse.jetty.websocket.api.Session;
 import org.eclipse.jetty.websocket.api.WebSocketAdapter;
 import org.eclipse.jetty.websocket.client.WebSocketClient;
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -98,6 +99,94 @@ public class WebSocketsTest {
         assertThat(listener.events, contains("onOpen", "onMessage text: " + largeText.toUpperCase()));
         clientSocket.close(1000, "Done");
     }
+
+
+    @Test
+    public void theBaseWebsocketAggregatesFramesByDefault() throws Exception {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(webSocketHandler((request, responseHeaders) -> new BaseWebSocket() {
+                public void onText(String message) throws Exception {
+                    session().sendText(message);
+                }
+                public void onBinary(ByteBuffer buffer) throws Exception {
+                    session().sendBinary(buffer);
+                }
+            }))
+            .start();
+
+        var received = new ArrayList<String>();
+        try (JettyClients result = startJettyClient()) {
+            var socket = new WebSocketAdapter() {
+                public void onWebSocketText(String message) {
+                    received.add(message);
+                }
+                public void onWebSocketBinary(byte[] payload, int offset, int len) {
+                    received.add(new String(payload, offset, len, UTF_8));
+                }
+            };
+            Session session = result.client.connect(socket, URI.create(server.uri().resolve("/routed-websocket").toString().replace("http", "ws"))).get();
+
+            session.getRemote().sendPartialString("Hello, ", false);
+            session.getRemote().sendPartialString("How you doin? ", false);
+            session.getRemote().sendPing(ByteBuffer.wrap("I can do this".getBytes(UTF_8)));
+            session.getRemote().sendPartialString("Sorry you can't get through.", true);
+            session.getRemote().sendString("Goodbye ".repeat(1000));
+            session.getRemote().sendPartialBytes(Mutils.toByteBuffer("binary1 "), false);
+            session.getRemote().sendPong(ByteBuffer.wrap("Pongs should be ignored".getBytes(UTF_8)));
+            session.getRemote().sendPartialBytes(Mutils.toByteBuffer("binary2"), true);
+            session.getRemote().flush();
+
+            assertEventually(() -> received, contains(
+                "Hello, How you doin? Sorry you can't get through.",
+                "Goodbye ".repeat(1000),
+                "binary1 binary2"));
+        }
+
+    }
+
+    @Test
+    public void ifFragmentsExceedAllowedMessageSizeThen1009Returned() throws Exception {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(webSocketHandler((request, responseHeaders) -> new BaseWebSocket() {
+                public void onText(String message) throws Exception {
+                    session().sendText(message);
+                }
+                public void onBinary(ByteBuffer buffer) throws Exception {
+                    session().sendBinary(buffer);
+                }
+            })
+                .withMaxFramePayloadLength(1024)
+                .withMaxMessageLength(2048))
+            .start();
+
+        var received = new ArrayList<String>();
+        try (JettyClients result = startJettyClient()) {
+            var socket = new WebSocketAdapter() {
+                public void onWebSocketText(String message) {
+                    received.add(message);
+                }
+                public void onWebSocketBinary(byte[] payload, int offset, int len) {
+                    received.add(new String(payload, offset, len, UTF_8));
+                }
+
+                @Override
+                public void onWebSocketClose(int statusCode, String reason) {
+                    received.add("Closed " + statusCode + " " + reason);
+                }
+            };
+            Session session = result.client.connect(socket, URI.create(server.uri().resolve("/routed-websocket").toString().replace("http", "ws"))).get();
+
+            session.getRemote().sendPartialString("!".repeat(1000), false);
+            session.getRemote().sendPartialString("@".repeat(24), false);
+            session.getRemote().sendPartialString("#".repeat(1024), false);
+            session.getRemote().sendPartialString("%".repeat(1), true);
+            session.getRemote().flush();
+
+            assertEventually(() -> received, contains("Closed 1009 Max message length of 2048 exceeded"));
+        }
+
+    }
+
 
     @Test
     public void unmaskedClientMessagesAreRejectedWithA1002() throws Exception {
@@ -189,7 +278,6 @@ public class WebSocketsTest {
             assertThat(closeReason, equalTo("Non UTF-8 data in text frame"));
 
         }
-
     }
 
     private void handshake(OutputStream out, InputStream in) throws IOException {
@@ -286,11 +374,7 @@ public class WebSocketsTest {
             .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket).withPath("/routed-websocket"))
             .start();
 
-        SslContextFactory.Client sslContextFactory = new SslContextFactory.Client(true);
-        sslContextFactory.setEndpointIdentificationAlgorithm("https");
-        HttpClient httpClient = new HttpClient(sslContextFactory);
-
-        WebSocketClient client = new WebSocketClient(httpClient);
+        JettyClients result = startJettyClient();
 
         class TestWebSocketClient extends WebSocketAdapter {
             private final CountDownLatch closureLatch = new CountDownLatch(1);
@@ -307,9 +391,8 @@ public class WebSocketsTest {
         }
 
         try {
-            client.start();
             TestWebSocketClient socket = new TestWebSocketClient();
-            Future<Session> fut = client.connect(socket, URI.create(server.uri().resolve("/routed-websocket").toString().replace("http", "ws")));
+            Future<Session> fut = result.client.connect(socket, URI.create(server.uri().resolve("/routed-websocket").toString().replace("http", "ws")));
             Session session = fut.get();
             assertNotTimedOut("Connecting", serverSocket.connectedLatch);
 
@@ -342,6 +425,33 @@ public class WebSocketsTest {
             expectedWithClose.add("onClientClosed: 1000 Finished");
             assertThat(serverSocket.received.toString(), serverSocket.received, contains(expectedWithClose.toArray()));
         } finally {
+            result.client.stop();
+            result.httpClient.stop();
+        }
+    }
+
+    @NotNull
+    private static JettyClients startJettyClient() throws Exception {
+        SslContextFactory.Client sslContextFactory = new SslContextFactory.Client(true);
+        sslContextFactory.setEndpointIdentificationAlgorithm("https");
+        HttpClient httpClient = new HttpClient(sslContextFactory);
+        WebSocketClient client = new WebSocketClient(httpClient);
+        client.start();
+        JettyClients result = new JettyClients(httpClient, client);
+        return result;
+    }
+
+    private static class JettyClients implements AutoCloseable {
+        public final HttpClient httpClient;
+        public final WebSocketClient client;
+
+        public JettyClients(HttpClient httpClient, WebSocketClient client) {
+            this.httpClient = httpClient;
+            this.client = client;
+        }
+
+        @Override
+        public void close() throws Exception {
             client.stop();
             httpClient.stop();
         }

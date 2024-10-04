@@ -93,6 +93,7 @@ class WebsocketConnection implements MuWebSocketSession {
                 startPinging();
             }
 
+            long messageLength = 0;
             while (!closeReceived) {
 
                 // make sure we at least have the minimum sized buffer
@@ -125,6 +126,9 @@ class WebsocketConnection implements MuWebSocketSession {
                 if (payloadLength > settings.maxFramePayloadLength) {
                     throw frameError(1009, "Max payload length of " + settings.maxFramePayloadLength + " exceeded with frame size " + payloadLength);
                 }
+                if (messageLength + payloadLength > settings.maxMessageLength) {
+                    throw frameError(1009, "Max message length of " + settings.maxMessageLength + " exceeded");
+                }
 
                 byte[] maskingKey = new byte[4];
                 readAtLeast(4);
@@ -139,6 +143,7 @@ class WebsocketConnection implements MuWebSocketSession {
                     log.info("Ignoring " + opcode + " message as close received already");
                 } else if (opcode == 0x0) {
                     // continuation frame
+                    messageLength += payloadLength;
                     if (readState == ReadState.TEXT) {
                         webSocket.onTextFragment(slice, fin);
                     } else if (readState == ReadState.BINARY) {
@@ -148,6 +153,7 @@ class WebsocketConnection implements MuWebSocketSession {
                         throw frameError(1002, "Continuation frame received unexpectedly");
                     }
                     if (fin) {
+                        messageLength = 0L;
                         readState = ReadState.NONE;
                     }
                 } else if (opcode == 0x1) {
@@ -155,6 +161,7 @@ class WebsocketConnection implements MuWebSocketSession {
                     if (readState != ReadState.NONE) {
                         throw frameError(1002, "New text message sent while expecting continuation frame");
                     }
+                    messageLength = payloadLength;
                     if (fin) {
                         var text = StandardCharsets.UTF_8.newDecoder().decode(slice).toString();
                         webSocket.onText(text);
@@ -167,6 +174,7 @@ class WebsocketConnection implements MuWebSocketSession {
                     if (readState != ReadState.NONE) {
                         throw frameError(1002, "New binary message received while expecting continuation frame");
                     }
+                    messageLength = payloadLength;
                     if (fin) {
                         webSocket.onBinary(slice);
                     } else {
