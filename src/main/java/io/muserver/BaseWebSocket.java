@@ -2,6 +2,7 @@ package io.muserver;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
@@ -261,7 +262,7 @@ public abstract class BaseWebSocket implements MuWebSocket {
     @Override
     public void onError(Throwable cause) throws Exception {
         if (!state().endState() && !session().closeSent()) {
-            if (cause instanceof TimeoutException) {
+            if (cause instanceof TimeoutException || cause instanceof SocketTimeoutException) {
                 session().close(3008, WebsocketSessionState.TIMED_OUT.name());
             } else if (cause instanceof CharacterCodingException) {
                 session().close(1007, "");

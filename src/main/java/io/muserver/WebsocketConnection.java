@@ -8,6 +8,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.ProtocolException;
+import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
@@ -20,7 +21,7 @@ class WebsocketConnection implements MuWebSocketSession {
     private ByteBuffer buffer;
     private InputStream inputStream;
     private OutputStream outputStream;
-    private final WebSocketHandlerBuilder.Settings settings;
+    final WebSocketHandlerBuilder.Settings settings;
 
     private WebsocketSessionState state = WebsocketSessionState.NOT_STARTED;
     private final Mu3Http1Connection httpConnection;
@@ -210,7 +211,8 @@ class WebsocketConnection implements MuWebSocketSession {
         } catch (Throwable e) {
             if (state != WebsocketSessionState.TIMED_OUT) {
                 webSocket.onError(e);
-                state = WebsocketSessionState.ERRORED;
+                state = (e instanceof TimeoutException || e instanceof SocketTimeoutException) ?
+                    WebsocketSessionState.TIMED_OUT : WebsocketSessionState.ERRORED;
             }
         }
     }

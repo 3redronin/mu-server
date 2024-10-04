@@ -27,6 +27,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.*;
 
+import static io.muserver.ContextHandlerBuilder.context;
 import static io.muserver.MuServerBuilder.httpServer;
 import static io.muserver.WebSocketHandlerBuilder.webSocketHandler;
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -141,6 +142,30 @@ public class WebSocketsTest {
     }
 
     @Test
+    public void pathsWorkForWebsocketsOnAContext() {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(context("blah")
+                .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket).withPath("routed-websocket"))
+            )
+            .start();
+
+        WebSocket clientSocket = client.newWebSocket(webSocketRequest(server.uri().resolve("/blah/routed-websocket")), new ClientListener());
+
+        assertNotTimedOut("Connecting", serverSocket.connectedLatch);
+
+        String largeText = StringUtils.randomStringOfLength(10000);
+
+        clientSocket.send(largeText);
+        clientSocket.send(ByteString.encodeUtf8(largeText));
+        clientSocket.send("Another text");
+        clientSocket.close(1000, "Finished");
+        assertNotTimedOut("Closing", serverSocket.closedLatch);
+        assertThat(serverSocket.received, contains("connected", "onText: " + largeText,
+            "onBinary: " + largeText, "onText: Another text", "onClientClosed: 1000 Finished"));
+    }
+
+
+    @Test
     public void fragmentsCanBeSentAndReceivedOneByOne() throws Exception {
         serverSocket.logErrors = true;
         server = ServerUtils.httpsServerForTest()
@@ -161,7 +186,6 @@ public class WebSocketsTest {
                 super.onWebSocketClose(statusCode, reason);
                 closureLatch.countDown();
             }
-
 
             public void awaitClosure() throws InterruptedException {
                 closureLatch.await();
@@ -402,17 +426,34 @@ public class WebSocketsTest {
     }
 
     @Test
-    public void ifNoMessagesSentOrReceivedExceedIdleTimeoutThenItDisconnects() {
+    public void ifNoMessagesSentOrReceivedExceedServerIdleTimeoutThenItDisconnects() {
         server = ServerUtils.httpsServerForTest()
             .withIdleTimeout(100, TimeUnit.MILLISECONDS)
             .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket)
                 .withPath("/routed-websocket")
                 .withPingInterval(0, TimeUnit.MILLISECONDS)
+                .withIdleReadTimeout(0, TimeUnit.MINUTES)
             )
             .start();
         client.newWebSocket(webSocketRequest(server.uri().resolve("/routed-websocket")), new ClientListener());
         assertNotTimedOut("onError", serverSocket.errorLatch);
         assertThat(serverSocket.received, contains("connected", "onError TimeoutException"));
+        assertEventually(() -> serverSocket.state(), equalTo(WebsocketSessionState.TIMED_OUT));
+    }
+
+    @Test
+    public void ifNoMessagesSentOrReceivedExceedWebsocketIdleReadTimeoutThenItDisconnects() {
+        server = ServerUtils.httpsServerForTest()
+            .withIdleTimeout(0, TimeUnit.MILLISECONDS)
+            .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket)
+                .withPath("/routed-websocket")
+                .withPingInterval(0, TimeUnit.MILLISECONDS)
+                .withIdleReadTimeout(100, TimeUnit.MILLISECONDS)
+            )
+            .start();
+        client.newWebSocket(webSocketRequest(server.uri().resolve("/routed-websocket")), new ClientListener());
+        assertNotTimedOut("onError", serverSocket.errorLatch);
+        assertThat(serverSocket.received, contains("connected", "onError SocketTimeoutException"));
         assertEventually(() -> serverSocket.state(), equalTo(WebsocketSessionState.TIMED_OUT));
     }
 

@@ -143,7 +143,7 @@ internal class ConnectionAcceptor(
         }
     }
 
-    private val timeoutThread = Thread( {
+    private val timeoutThread = if (server.idleTimeoutMillis() == 0L) null else Thread( {
         while (state == State.STARTED) {
             try {
                 val cutoff = System.currentTimeMillis() - server.idleTimeoutMillis()
@@ -167,13 +167,13 @@ internal class ConnectionAcceptor(
         acceptorThread.isDaemon = false
         state = State.STARTED
         acceptorThread.start()
-        timeoutThread.start()
+        timeoutThread?.start()
     }
 
     fun stop(timeoutMillis: Long) {
         log.info("Stopping server 1")
         state = State.STOPPING
-        timeoutThread.interrupt()
+        timeoutThread?.interrupt()
         socketServer.close()
         acceptorThread.join(timeoutMillis)
         if (acceptorThread.isAlive) {

@@ -159,6 +159,7 @@ internal class Mu3Http1Connection(
                         val websocket: WebsocketConnection? = muResponse.websocket
                         if (!closeConnection && websocket != null) {
                             currentRequest.set(websocket)
+                            clientSocket.soTimeout = websocket.settings.idleReadTimeoutMillis
                             websocket.runAndBlockUntilDone(clientSocket.getInputStream(), outputStream, requestParser.readBuffer)
                             closeConnection = true
                         }
