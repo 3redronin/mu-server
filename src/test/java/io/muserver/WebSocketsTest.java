@@ -12,7 +12,9 @@ import org.eclipse.jetty.websocket.api.Session;
 import org.eclipse.jetty.websocket.api.WebSocketAdapter;
 import org.eclipse.jetty.websocket.client.WebSocketClient;
 import org.jetbrains.annotations.NotNull;
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import scaffolding.MuAssert;
@@ -97,6 +99,40 @@ public class WebSocketsTest {
         clientSocket.send(largeText);
         assertNotTimedOut("messageLatch", listener.messageLatch);
         assertThat(listener.events, contains("onOpen", "onMessage text: " + largeText.toUpperCase()));
+        clientSocket.close(1000, "Done");
+    }
+
+    @Test
+    public void averagePingTimesCanBeCalculated() {
+        var results = new ArrayList<String>();
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(webSocketHandler((request, responseHeaders) -> new SimpleWebSocket() {
+                @Override
+                public void onConnect(MuWebSocketSession session) throws Exception {
+                    super.onConnect(session);
+                    results.add("avg: " + this.averagePingPongLatencyMillis());
+
+                }
+                public void onText(String message) throws Exception {
+                }
+                public void onBinary(ByteBuffer buffer) throws Exception {
+                }
+
+                    @Override
+                    public void onPong(ByteBuffer payload) throws Exception {
+                        super.onPong(payload);
+                        results.add("pong: " + this.averagePingPongLatencyMillis());
+                        session().close();
+                    }
+                })
+                    .withPingInterval(10, TimeUnit.MILLISECONDS)
+            )
+            .start();
+        ClientListener listener = new ClientListener();
+        WebSocket clientSocket = client.newWebSocket(webSocketRequest(server.uri()), listener);
+        assertEventually(results::size, greaterThanOrEqualTo(2));
+        assertThat(results.get(0), equalTo("avg: null"));
+        assertThat(results.get(1), matchesPattern("pong: [0-9]+"));
         clientSocket.close(1000, "Done");
     }
 

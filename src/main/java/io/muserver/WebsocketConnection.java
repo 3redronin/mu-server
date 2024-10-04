@@ -57,11 +57,13 @@ class WebsocketConnection implements MuWebSocketSession {
         httpConnection.server().getScheduledExecutor().schedule(() -> {
             writeLock.lock();
             try {
-                pingBuffer.position(8)
-                    .limit(16)
-                    .putLong(System.currentTimeMillis())
-                    .flip();
-                sendPing(pingBuffer);
+                if (state == WebsocketSessionState.OPEN) {
+                    pingBuffer.position(8)
+                        .limit(16)
+                        .putLong(System.currentTimeMillis())
+                        .flip();
+                    sendPing(pingBuffer);
+                }
                 if (state == WebsocketSessionState.OPEN) {
                     startPinging();
                 }
