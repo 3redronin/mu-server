@@ -6,24 +6,28 @@ import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * <p>A base class for server-side web sockets, that takes care of capturing the web socket session, responding
- * to pings, and closure events.</p>
+ * A base class for server-side web sockets, that takes care of capturing the web socket session, responding
+ * to pings, and closure events.
+ *
+ * <p>The {@link #session()} method can be used to access the session object that allows the sending of messages
+ * to clients.</p>
+ *
+ * <p>Implementers of this class just need to override {@link #onBinary(ByteBuffer)} and {@link #onText(String)}
+ * methods. Other methods can be overridden for more advanced control.</p>
+ *
+ * <p>By default, fragments are aggregated into complete messages unless {@link #onTextFragment(ByteBuffer, boolean)}
+ * or {@link #onBinaryFragment(ByteBuffer, boolean)} are overriden</p>
+ *
  * <p>This is an alternative to implementing the {@link MuWebSocket} interface and is recommended so that any
  * additions to the interface are non-breaking to implementors.</p>
- * @deprecated As part of the Mu Server 3 move to blocking IO over non-blocking IO, this websocket is no longer
- * supported. Implementors should now override the simpler {@link SimpleWebSocket}. Note that this base socket
- * will continue to work until Mu Server 4.
  */
 @SuppressWarnings("RedundantThrows") // because implementing classes might throw exceptions
-@Deprecated
-public abstract class BaseWebSocket implements MuWebSocket {
+public abstract class SimpleWebSocket implements MuWebSocket {
     private MuWebSocketSession session;
     private NiceByteArrayOutputStream fragmentBuffer;
 
@@ -61,30 +65,6 @@ public abstract class BaseWebSocket implements MuWebSocket {
         }
     }
 
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public void onText(String message) throws Exception {
-        // Adapter code for old-style implementations that rely on non-blocking behaviour.
-        // This calls the old-style methods in a new thread and blocks until the done callback is invoked.
-        // Overriders of this base class should just override this method and block until the data is finished with.
-        var result = new CompletableFuture<Void>();
-        CompletableFuture.runAsync(() -> {
-            try {
-                onText(message, true, error -> {
-                    if (error == null) {
-                        result.complete(null);
-                    } else {
-                        result.completeExceptionally(error);
-                    }
-                });
-            } catch (Exception e) {
-                result.completeExceptionally(e);
-            }
-        });
-        blockUntilDone(result);
-    }
 
     /**
      * Buffers the fragment in memory until the last fragment is received, whereby {@link #onText(String)} with
@@ -129,92 +109,6 @@ public abstract class BaseWebSocket implements MuWebSocket {
             buffer.get(temp);
             fragmentBuffer.write(temp);
         }
-    }
-
-    /**
-     * Called when a text message is received from the client.
-     *
-     * @param message    The message as a string.
-     * @param isLast     Returns <code>true</code> if this message is the last part of the complete message. This is only <code>false</code>
-     *                   when clients send fragmented messages in which case only the last part of the fragmented message will return <code>true</code>.
-     * @param onComplete A callback that must be run with <code>onComplete.run()</code> when the byte buffer is no longer needed.
-     * @throws Exception Any exceptions thrown will result in the onError method being called with the thrown exception being used as the <code>cause</code> parameter.
-     * @deprecated The more efficient {@link #onText(String)} should be used instead. Note that for that use case
-     * the byte buffer will be reused after the method call returns, so implementations needing to keep a reference
-     * to the byte buffer for a longer period of time will need to either copy the data or block the onText method
-     * until it is no longer needed.
-     */
-    @Deprecated
-    public void onText(String message, boolean isLast, DoneCallback onComplete) throws Exception {
-        onComplete.onComplete(null);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public void onBinary(ByteBuffer buffer) throws Exception {
-        // Adapter code for old-style implementations that rely on non-blocking behaviour.
-        // This calls the old-style methods in a new thread and blocks until the done callback is invoked.
-        // Overriders of this base class should just override this method and block until the data is finished with.
-        var result = new CompletableFuture<Void>();
-        CompletableFuture.runAsync(() -> {
-            try {
-                onBinary(buffer, true, error -> {
-                    if (error == null) {
-                        result.complete(null);
-                    } else {
-                        result.completeExceptionally(error);
-                    }
-                }, () -> {});
-            } catch (Exception e) {
-                result.completeExceptionally(e);
-            }
-        });
-        blockUntilDone(result);
-    }
-
-    private static void blockUntilDone(CompletableFuture<Void> result) throws Exception {
-        try {
-            result.get();
-        } catch (ExecutionException e) {
-            throw e.getCause() instanceof Exception ? (Exception) e.getCause() : e;
-        }
-    }
-
-    /**
-     * Called when a message is received from the client.
-     *
-     * @param buffer     The message as a byte buffer.
-     * @param isLast     Returns <code>true</code> if this message is the last part of the complete message. This is only <code>false</code>
-     *                   when clients send fragmented messages in which case only the last part of the fragmented message will return <code>true</code>.
-     * @param onComplete A callback that must be run with <code>onComplete.run()</code> when the byte buffer is no longer needed. Failure to call this will result in memory leaks.
-     * @throws Exception Any exceptions thrown will result in the onError method being called with the thrown exception being used as the <code>cause</code> parameter.
-     * @deprecated non-blocking callbacks no longer supported. For best efficiency override {@link #onBinary(ByteBuffer)} and block until data is no longer needed.
-     */
-    @Deprecated
-    public void onBinary(ByteBuffer buffer, boolean isLast, DoneCallback onComplete) throws Exception {
-        onComplete.onComplete(null);
-    }
-
-    /**
-     * Called when a message is received from the client. Consider using this API when separation of control for pulling data and releasing buffer are required.
-     * Otherwise, please use {@link #onBinary(ByteBuffer, boolean, DoneCallback)} instead.
-     *
-     * @param buffer     The message as a byte buffer.
-     * @param isLast     Returns <code>true</code> if this message is the last part of the complete message. This is only <code>false</code>
-     *                   when clients send fragmented messages in which case only the last part of the fragmented message will return <code>true</code>.
-     * @param doneAndPullData A callback that must be run with <code>doneAndPullData.onComplete()</code> when ready to pull more data from websocket.
-     * @param releaseBuffer A callback that must be run with <code>releaseBuffer.run()</code> when the byte buffer is no longer needed. Failure to call this will result in memory leaks.
-     * @throws Exception Any exceptions thrown will result in the onError method being called with the thrown exception being used as the <code>cause</code> parameter.
-     * @deprecated non-blocking callbacks no longer supported. For best efficiency override {@link #onBinary(ByteBuffer)} and block until data is no longer needed.
-     */
-    @Deprecated
-    public void onBinary(ByteBuffer buffer, boolean isLast, DoneCallback doneAndPullData, Runnable releaseBuffer) throws Exception {
-        onBinary(buffer, isLast, error -> {
-            releaseBuffer.run();
-            doneAndPullData.onComplete(error);
-        });
     }
 
     /**

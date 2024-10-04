@@ -5,15 +5,15 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * <p>A low-level interface defining the callbacks received on a websocket which is returned by {@link MuWebSocketFactory#create(MuRequest, Headers)}.</p>
- * <p><strong>Note:</strong> Rather than implementing this, you may wish to extend the {@link BaseWebSocket} class which
- * aggregates partial messages into full messaages, handles ping and pong events and captures the socket session, exposing
- * it via the {@link BaseWebSocket#session()} method.</p>
+ * <p><strong>Note:</strong> Rather than implementing this, you may wish to extend the {@link SimpleWebSocket} class which
+ * aggregates partial messages into full messages, handles ping and pong events and captures the socket session, exposing
+ * it via the {@link SimpleWebSocket#session()} method.</p>
  * <p>In order to listen to events, extend the base class or implement this interface and store the reference to the {@link MuWebSocketSession} when
  * {@link #onConnect(MuWebSocketSession)} is called.</p>
- * <h2>Choosing between implementing this interface or extending the base websocket class:</h2>
+ * <h2>Choosing between implementing this interface or extending <code>SimpleWebSocket</code>:</h2>
  * <ul>
  *     <li>For most cases where you just want to send and receive text and/or binary messages, extend
- *     {@link BaseWebSocket}</li>
+ *     {@link SimpleWebSocket}</li>
  *     <li>For cases where you desire lower level control over aspects such as handling message fragments,
  *     handling pings and pongs, and handling close events, implement this interface.</li>
  * </ul>

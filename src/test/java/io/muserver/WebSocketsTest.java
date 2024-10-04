@@ -102,9 +102,9 @@ public class WebSocketsTest {
 
 
     @Test
-    public void theBaseWebsocketAggregatesFramesByDefault() throws Exception {
+    public void theSimpleWebsocketAggregatesFramesByDefault() throws Exception {
         server = ServerUtils.httpsServerForTest()
-            .addHandler(webSocketHandler((request, responseHeaders) -> new BaseWebSocket() {
+            .addHandler(webSocketHandler((request, responseHeaders) -> new SimpleWebSocket() {
                 public void onText(String message) throws Exception {
                     session().sendText(message);
                 }
@@ -147,7 +147,7 @@ public class WebSocketsTest {
     @Test
     public void ifFragmentsExceedAllowedMessageSizeThen1009Returned() throws Exception {
         server = ServerUtils.httpsServerForTest()
-            .addHandler(webSocketHandler((request, responseHeaders) -> new BaseWebSocket() {
+            .addHandler(webSocketHandler((request, responseHeaders) -> new SimpleWebSocket() {
                 public void onText(String message) throws Exception {
                     session().sendText(message);
                 }
@@ -194,8 +194,9 @@ public class WebSocketsTest {
             .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket))
             .start();
 
-        Socket socket = new Socket(server.uri().getHost(), server.uri().getPort());
-        try (OutputStream out = socket.getOutputStream();
+
+        try (Socket socket = new Socket(server.uri().getHost(), server.uri().getPort());
+             OutputStream out = socket.getOutputStream();
              InputStream in = socket.getInputStream()) {
 
             handshake(out, in);
@@ -234,8 +235,9 @@ public class WebSocketsTest {
             .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket))
             .start();
 
-        Socket socket = new Socket(server.uri().getHost(), server.uri().getPort());
-        try (OutputStream out = socket.getOutputStream();
+
+        try (Socket socket = new Socket(server.uri().getHost(), server.uri().getPort());
+             OutputStream out = socket.getOutputStream();
              InputStream in = socket.getInputStream()) {
 
             handshake(out, in);
@@ -461,7 +463,7 @@ public class WebSocketsTest {
     public void asyncWritesWork() throws InterruptedException, ExecutionException, TimeoutException {
         CompletableFuture<String> result = new CompletableFuture<>();
         server = ServerUtils.httpsServerForTest()
-            .addHandler(webSocketHandler((request, responseHeaders) -> new BaseWebSocket() {
+            .addHandler(webSocketHandler((request, responseHeaders) -> new SimpleWebSocket() {
                 public void onText(String message) throws IOException {
                     session().sendText("This is message one");
                     new Thread(() -> {
@@ -472,6 +474,11 @@ public class WebSocketsTest {
                             result.completeExceptionally(e);
                         }
                     }).start();
+                }
+
+                @Override
+                public void onBinary(ByteBuffer buffer) throws Exception {
+
                 }
             }).withPath("/routed-websocket"))
             .start();
@@ -491,7 +498,7 @@ public class WebSocketsTest {
     public void partialWritesArePossible() throws InterruptedException, ExecutionException, TimeoutException {
         CompletableFuture<String> result = new CompletableFuture<>();
         server = ServerUtils.httpsServerForTest()
-            .addHandler(webSocketHandler((request, responseHeaders) -> new BaseWebSocket() {
+            .addHandler(webSocketHandler((request, responseHeaders) -> new SimpleWebSocket() {
                 @Override
                 public void onConnect(MuWebSocketSession session) throws Exception {
                     super.onConnect(session);
@@ -501,6 +508,16 @@ public class WebSocketsTest {
                     session.sendBinaryFragment(Mutils.toByteBuffer("Hello "),false);
                     session.sendBinaryFragment(Mutils.toByteBuffer("from binary"),true);
                     result.complete("Success");
+                }
+
+                @Override
+                public void onText(String message) throws Exception {
+
+                }
+
+                @Override
+                public void onBinary(ByteBuffer buffer) throws Exception {
+
                 }
             }).withPath("/routed-websocket"))
             .start();
@@ -556,11 +573,21 @@ public class WebSocketsTest {
     public void sendingMessagesAfterTheClientsCloseResultInFailureCallBacksForAsyncCalls() throws Exception {
         CompletableFuture<MuWebSocketSession> sessionFuture = new CompletableFuture<>();
         server = ServerUtils.httpsServerForTest()
-            .addHandler(webSocketHandler((request, responseHeaders) -> new BaseWebSocket() {
+            .addHandler(webSocketHandler((request, responseHeaders) -> new SimpleWebSocket() {
                 @Override
                 public void onConnect(MuWebSocketSession session) throws Exception {
                     super.onConnect(session);
                     sessionFuture.complete(session);
+                }
+
+                @Override
+                public void onText(String message) throws Exception {
+
+                }
+
+                @Override
+                public void onBinary(ByteBuffer buffer) throws Exception {
+
                 }
             }).withPath("/routed-websocket"))
             .start();
@@ -709,7 +736,7 @@ public class WebSocketsTest {
         MuAssert.stopAndCheck(server);
     }
 
-    private static class RecordingMuWebSocket extends BaseWebSocket {
+    private static class RecordingMuWebSocket extends SimpleWebSocket {
         private static final Logger log = LoggerFactory.getLogger(RecordingMuWebSocket.class);
         private MuWebSocketSession session;
         List<String> received = new CopyOnWriteArrayList<>();

@@ -30,7 +30,7 @@ to run.
 The implication is that:
 
 * If you extend from `BaseWebSocket` this should be a non-breaking change for receving messages, however you are encouraged to move to the
-  blocking versions of the callbacks for a more efficient implementation.
+  blocking versions of the callbacks for a more efficient implementation. The new base class recommended to be overriden is `SimpleWebSocket`.
     * Note though that the callback versions of `onPing` and `onPong` have been removed, so expect compilation errors if
       overriding these two methods.
 * If you implement `MuWebSocket` (without extending the base socket) you will need to convert to blocking versions
