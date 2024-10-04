@@ -68,7 +68,7 @@ public interface MuWebSocket {
     /**
      * Called when the client has sent a close frame.
      * <p>The connection should be closed on the server side when this is received, unless the server initiated the
-     * close sequence in which case it can be ignored. If overriding {@link BaseWebSocket} this occurs automatically.</p>
+     * close sequence in which case it can be ignored. If overriding {@link SimpleWebSocket} this occurs automatically.</p>
      *
      * @param statusCode The closure code. See <a href="https://tools.ietf.org/html/rfc6455#section-7.4">https://tools.ietf.org/html/rfc6455#section-7.4</a>
      * @param reason     An optional reason for the closure.
@@ -78,7 +78,7 @@ public interface MuWebSocket {
 
     /**
      * Called when a ping message is sent from a client.
-     * <p>When received, a websocket should send the data back in a <code>pong</code> message. If overriding {@link BaseWebSocket} this occurs automatically.</p>
+     * <p>When received, a websocket should send the data back in a <code>pong</code> message. If overriding {@link SimpleWebSocket} this occurs automatically.</p>
      *
      * @param payload    The ping payload.
      * @throws Exception Any exceptions thrown will result in the onError method being called with the thrown exception being used as the <code>cause</code> parameter.
@@ -99,7 +99,7 @@ public interface MuWebSocket {
      *     <li>The client shuts down non-gracefully in which case the cause will be a {@link ClientDisconnectedException}
      *     (note that if the client initiates a graceful shutdown,
      *     then {@link #onClientClosed(int, String)} will be called instead)</li>
-     *     <li>No messages have been received within the time specified by {@link WebSocketHandlerBuilder#withIdleReadTimeout(long, TimeUnit)},
+     *     <li>No messages have been received within the time specified by {@link WebSocketHandlerBuilder#withIdleReadTimeout(int, TimeUnit)},
      *     in which case the cause will be a {@link java.util.concurrent.TimeoutException}</li>
      *     <li>An Exception is thrown by any of the methods that implement this interface, such as
      *     {@link #onText(String)} etc (but not onError itself).</li>
