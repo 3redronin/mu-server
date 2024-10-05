@@ -289,9 +289,7 @@ public class WebSocketsTest {
             frame.write(0b10000000 | invalidUtf8.length);  // No masking key, so just length
             frame.write(maskKey);
 
-            for (int i = 0; i < invalidUtf8.length; i++) {
-                invalidUtf8[i] ^= maskKey[i % 4];
-            }
+            maskPayload(invalidUtf8.length, invalidUtf8, maskKey);
             frame.write(invalidUtf8);  // Payload with invalid UTF-8
 
             // Send the frame
@@ -317,6 +315,134 @@ public class WebSocketsTest {
 
         }
     }
+
+    @Test
+    public void messagesWithUnknownOpcodesAreJustIgnored() throws Exception {
+        server = MuServerBuilder.httpServer()
+            .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket)
+                .withPingInterval(0,TimeUnit.MILLISECONDS))
+            .start();
+
+
+        try (Socket socket = new Socket(server.uri().getHost(), server.uri().getPort());
+             OutputStream out = socket.getOutputStream();
+             InputStream in = socket.getInputStream()) {
+
+            handshake(out, in);
+
+            var frame = new ByteArrayOutputStream();
+
+            // first frame - an unknown opcode with fin=1
+            frame.write(0b10000011); // fin=1; opcode=3 (unused opcode)
+            byte[] maskKey = new byte[]{0x12, 0x34, 0x56, 0x78};
+            byte[] payload = "Ignored fragment".getBytes(StandardCharsets.UTF_8);  // Test payload
+
+            int payloadLength = payload.length;
+            frame.write(0b10000000 | payloadLength);
+            frame.write(maskKey);
+            maskPayload(payloadLength, payload, maskKey);
+            frame.write(payload);
+            out.write(frame.toByteArray());
+            out.flush();
+
+            // now we just see if we can send and receive text messages
+            frame.write(0x81);  // FIN + text frame (opcode 0x01)
+            maskKey = new byte[]{0x14, 0x34, 0x56, 0x78};
+            payload = "Echo this".getBytes(StandardCharsets.UTF_8);
+            payloadLength = payload.length;
+            frame.write(0x80 | payloadLength);  // Masking bit (0x80) + payload length
+            frame.write(maskKey);
+            maskPayload(payloadLength, payload, maskKey);
+            frame.write(payload);
+
+            out.write(frame.toByteArray());
+            out.flush();
+
+            // Read the expected text frame
+            int opcode = in.read();  // First byte contains FIN and opcode
+            assertThat(opcode, equalTo(0b10000001));
+            int length = in.read();
+            payload = new byte[length];
+            in.read(payload);
+            var responseText = new String(payload, StandardCharsets.UTF_8);
+            assertThat(responseText, equalTo("ECHO THIS")); // because it uppercases
+        }
+
+    }
+
+    @Test
+    public void messagesWithUnknownOpcodesWithFragmentsAreJustIgnored() throws Exception {
+        server = MuServerBuilder.httpServer()
+            .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket)
+                .withPingInterval(0,TimeUnit.MILLISECONDS))
+            .start();
+
+
+        try (Socket socket = new Socket(server.uri().getHost(), server.uri().getPort());
+             OutputStream out = socket.getOutputStream();
+             InputStream in = socket.getInputStream()) {
+
+            handshake(out, in);
+
+            var frame = new ByteArrayOutputStream();
+
+            // first frame - an unknown opcode with fin=0
+            frame.write(0b00000011); // fin=0; opcode=3 (unused opcode)
+            byte[] maskKey = new byte[]{0x12, 0x34, 0x56, 0x78};
+            byte[] payload = "Ignored fragment".getBytes(StandardCharsets.UTF_8);  // Test payload
+
+            int payloadLength = payload.length;
+            frame.write(0b10000000 | payloadLength);
+            frame.write(maskKey);
+            maskPayload(payloadLength, payload, maskKey);
+            frame.write(payload);
+            out.write(frame.toByteArray());
+            out.flush();
+
+            // second frame - the continuation of the first, with fin=1
+            frame.write(0b10000000);
+            maskKey = new byte[]{0x13, 0x34, 0x56, 0x78};
+            payload = "Continuation fragment".getBytes(StandardCharsets.UTF_8);
+
+            payloadLength = payload.length;
+            frame.write(0b10000000 | payloadLength);
+            frame.write(maskKey);
+            maskPayload(payloadLength, payload, maskKey);
+            frame.write(payload);
+            out.write(frame.toByteArray());
+            out.flush();
+
+            // now we just see if we can send and receive text messages
+            frame.write(0b10000001);  // FIN + text frame (opcode 0x01)
+            maskKey = new byte[]{0x14, 0x34, 0x56, 0x78};
+            payload = "Echo this".getBytes(StandardCharsets.UTF_8);
+            payloadLength = payload.length;
+            frame.write(0x80 | payloadLength);  // Masking bit (0x80) + payload length
+            frame.write(maskKey);
+            maskPayload(payloadLength, payload, maskKey);
+            frame.write(payload);
+
+            out.write(frame.toByteArray());
+            out.flush();
+
+            // Read the expected text frame
+            int opcode = in.read();  // First byte contains FIN and opcode
+            assertThat(opcode, equalTo(0b10000001));
+            int length = in.read();
+            payload = new byte[length];
+            in.read(payload);
+            var responseText = new String(payload, StandardCharsets.UTF_8);
+            assertThat(responseText, equalTo("ECHO THIS"));
+        }
+
+    }
+
+    private static void maskPayload(int payloadLength, byte[] payload, byte[] maskKey) {
+        for (int i = 0; i < payloadLength; i++) {
+            payload[i] ^= maskKey[i % 4];
+        }
+    }
+
 
     private void handshake(OutputStream out, InputStream in) throws IOException {
         // Perform WebSocket handshake

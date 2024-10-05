@@ -33,7 +33,11 @@ class WebsocketConnection implements MuWebSocketSession {
     private ReadState readState = ReadState.NONE;
 
     private enum ReadState {
-        NONE, TEXT, BINARY
+        NONE, TEXT, BINARY,
+        /**
+         * We are reading a fragmented message of a type we don't recognise, which is fine. We ignore it.
+         */
+        UNKNOWN
     }
 
     WebsocketConnection(Mu3Http1Connection httpConnection, MuWebSocket webSocket, WebSocketHandlerBuilder.Settings settings) {
@@ -150,8 +154,7 @@ class WebsocketConnection implements MuWebSocketSession {
                         webSocket.onTextFragment(slice, fin);
                     } else if (readState == ReadState.BINARY) {
                         webSocket.onBinaryFragment(slice, fin);
-                    } else {
-                        // If there was ever a new continuable message type, this would fail rather than ignore it
+                    } else if (readState != ReadState.UNKNOWN) {
                         throw frameError(1002, "Continuation frame received unexpectedly");
                     }
                     if (fin) {
@@ -212,8 +215,10 @@ class WebsocketConnection implements MuWebSocketSession {
                     webSocket.onPing(slice);
                 } else if (opcode == 0xA) {
                     webSocket.onPong(slice);
+                } else if (!fin) {
+                    // ignore unknown types, but do allow continuation frames for them
+                    readState = ReadState.UNKNOWN;
                 }
-                // ignore unknown types
 
             }
 
