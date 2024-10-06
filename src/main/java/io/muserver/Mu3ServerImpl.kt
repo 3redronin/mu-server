@@ -162,7 +162,11 @@ internal class Mu3ServerImpl(
 
             val address = builder.interfaceHost()?.let { InetAddress.getByName(it) }
             if (builder.httpsPort() >= 0) {
-                val http2Config = builder.http2Config() ?: Http2Config(true)
+                var http2Config = builder.http2Config() ?: Http2ConfigBuilder().withMaxHeaderListSize(builder.maxHeadersSize()).build()
+                if (http2Config.maxHeaderListSize() == -1) {
+                    http2Config = http2Config.toBuilder().withMaxHeaderListSize(builder.maxHeadersSize()).build()
+                }
+
                 val httpsConfig = (builder.httpsConfigBuilder() ?: HttpsConfigBuilder.unsignedLocalhost()).build3()
                 val acceptor = ConnectionAcceptor.create(impl, address, builder.httpsPort(), httpsConfig, http2Config, executor, contentEncoders)
                 acceptors.add(acceptor)

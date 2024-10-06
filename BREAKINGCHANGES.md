@@ -1,6 +1,14 @@
 Version 3
 =========
 
+Required Java version
+---------------------
+
+Java 8 is no longer supported. Java 11 or later must be used.
+
+Note it is highly recommended to use Java 21 or later to take advantage of virtual threads (earlier versions of Java
+will result in a larger number of threads being used).
+
 SSE
 ---
 
@@ -37,4 +45,9 @@ The implication is that:
   of the websocket listening methods.
 
 
+Mu 3 todo
+---------
+
+* Websocket permessage-deflate
+* Better HTTP 103 Early Hints support (especially for creating links)
 

@@ -495,7 +495,7 @@ public class MuServerBuilder {
     }
 
     /**
-     * @return The current value of this property
+     * @return The current HTTP2 configuration
      */
     public Http2Config http2Config() {
         return http2Config;

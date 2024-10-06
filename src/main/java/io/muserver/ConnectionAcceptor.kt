@@ -19,13 +19,13 @@ internal class ConnectionAcceptor(
     @Volatile
     var httpsConfig: HttpsConfig?,
     val http2Config: Http2Config?,
-    val executorService: ExecutorService,
+    private val executorService: ExecutorService,
     val contentEncoders: List<ContentEncoder>,
 ) {
 
     private enum class State { NOT_STARTED, STARTED, STOPPING, STOPPED }
 
-    private val connections: KeySetView<Mu3Http1Connection, Boolean> = ConcurrentHashMap.newKeySet()
+    private val connections: KeySetView<BaseHttpConnection, Boolean> = ConcurrentHashMap.newKeySet()
 
     fun activeConnections() : Set<HttpConnection> = connections
 
@@ -39,8 +39,9 @@ internal class ConnectionAcceptor(
         while (state == State.STARTED) {
             try {
                 val clientSocket = socketServer.accept()
+                val startTime = Instant.now()
                 executorService.submit {
-                    handleClientSocket(clientSocket)
+                    handleClientSocket(clientSocket, startTime)
                 }
             } catch (e: Throwable) {
                 if (Thread.interrupted() || e is SocketException) {
@@ -84,8 +85,7 @@ internal class ConnectionAcceptor(
         log.info("Closed")
     }, toString())
 
-    private fun handleClientSocket(clientSocket: Socket) {
-        val startTime = Instant.now()
+    private fun handleClientSocket(clientSocket: Socket, startTime: Instant) {
         var socket = clientSocket
         var clientCert : Certificate? = null
 
@@ -99,9 +99,10 @@ internal class ConnectionAcceptor(
                 secureSocket.enabledProtocols = hc.protocolsArray()
                 secureSocket.enabledCipherSuites = hc.cipherSuitesArray()
 
-                if (http2Config?.enabled == true) {
+                if (http2Config?.enabled() == true) {
                     val sslParams = secureSocket.sslParameters
 //                    sslParams.applicationProtocols = arrayOf("h2", "http/1.1")
+                    sslParams.applicationProtocols = arrayOf("http/1.1")
                     secureSocket.sslParameters = sslParams
                 }
                 val clientAuthTrustManager = hc.clientAuthTrustManager()
@@ -130,12 +131,14 @@ internal class ConnectionAcceptor(
                 return
             }
         }
-        val con = Mu3Http1Connection(server, this, socket, startTime, clientCert)
+        val con : BaseHttpConnection = if (httpVersion == HttpVersion.HTTP_2)
+            Http2Connection(server, this, socket, clientCert, startTime)
+            else Mu3Http1Connection(server, this, socket, startTime, clientCert)
         connections.add(con)
         server.statsImpl.onConnectionOpened(con)
         try {
             socket.getOutputStream().use { clientOut ->
-                socket.getInputStream().use { clientIn ->
+                HttpConnectionInputStream(con, socket.getInputStream()).use { clientIn ->
                     con.start(clientIn, clientOut)
                 }
             }
