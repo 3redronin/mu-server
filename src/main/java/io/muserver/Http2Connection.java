@@ -26,27 +26,11 @@ class Http2Connection extends BaseHttpConnection {
     private final Http2FlowController connectionFlowControl = new Http2FlowController(0, 65535);
     private final ConcurrentLinkedQueue<Long> settingsAckQueue = new ConcurrentLinkedQueue<>();
 
-    Http2Connection(@NotNull Mu3ServerImpl server, @NotNull ConnectionAcceptor creator, @NotNull Socket clientSocket, @Nullable Certificate clientCertificate, @NotNull Instant handshakeStartTime) {
+    Http2Connection(@NotNull Mu3ServerImpl server, @NotNull ConnectionAcceptor creator, @NotNull Socket clientSocket, @Nullable Certificate clientCertificate, @NotNull Instant handshakeStartTime, Http2Settings initialServerSettings) {
         super(server, creator, clientSocket, clientCertificate, handshakeStartTime);
-        this.serverSettings = creator.getHttp2Config().initialSettings();
+        this.serverSettings = initialServerSettings;
         this.buffer = ByteBuffer.allocate(serverSettings.maxFrameSize).flip();
     }
-
-    static void readAtLeast(ByteBuffer buffer, InputStream inputStream, int minBytes) throws IOException {
-        if (minBytes > buffer.capacity()) throw new IllegalArgumentException("This buffer is not big enough");
-        while (buffer.remaining() < minBytes) {
-            if (buffer.capacity() - buffer.limit() < minBytes) {
-                buffer.compact().flip();
-            }
-            int read = inputStream.read(buffer.array(), buffer.arrayOffset() + buffer.position(), buffer.capacity() - buffer.limit());
-            if (read == -1) {
-                throw new ClientDisconnectedException();
-            }
-            buffer.limit(buffer.limit() + read);
-        }
-    }
-
-
 
 
     @Override
@@ -55,17 +39,23 @@ class Http2Connection extends BaseHttpConnection {
         clientSettings = Http2Handshaker.handshake(serverSettings, clientSettings, buffer, clientIn,  clientOut);
         settingsAckQueue.add(System.currentTimeMillis());
 
+        var headerTable = new HpackTable();
+
         // and now just read frames
         while (!closed) {
-            Http2Connection.readAtLeast(buffer, clientIn, Http2FrameHeader.FRAME_HEADER_LENGTH);
+            Mutils.readAtLeast(buffer, clientIn, Http2FrameHeader.FRAME_HEADER_LENGTH);
             var fh = Http2FrameHeader.readFrom(buffer);
             var len = fh.length();
-            Http2Connection.readAtLeast(buffer, clientIn, len);
+            Mutils.readAtLeast(buffer, clientIn, len);
 
             System.out.println("fh = " + fh);
 
             switch (fh.frameType()) {
-
+                case HEADERS: {
+                    var headerFragment = Http2HeaderFragment.readFirstFragment(fh, headerTable, buffer);
+                    log.info("Got headers " + headerFragment);
+                    break;
+                }
                 case SETTINGS: {
                     var settingsDiff = Http2Settings.readFrom(fh, buffer);
                     if (settingsDiff.isAck) {
@@ -101,7 +91,10 @@ class Http2Connection extends BaseHttpConnection {
                     System.out.println(goaway);
                     break;
                 }
-                default: discardPayload(buffer, clientIn, len);
+                default: {
+                    log.info("Discarding " + len + " bytes for unsupported type " + fh);
+                    discardPayload(buffer, clientIn, len);
+                }
             }
 
             // TODO: end if pending settings ack not received
@@ -125,12 +118,12 @@ class Http2Connection extends BaseHttpConnection {
             }
             if (len > 0) {
                 while (len > buffer.capacity()) {
-                    readAtLeast(buffer, clientIn, buffer.capacity());
+                    Mutils.readAtLeast(buffer, clientIn, buffer.capacity());
                     buffer.clear();
                     len -= buffer.capacity();
                 }
                 if (len > 0) {
-                    readAtLeast(buffer, clientIn, len);
+                    Mutils.readAtLeast(buffer, clientIn, len);
                     buffer.flip();
                     len = 0;
                 }

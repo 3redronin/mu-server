@@ -2,7 +2,7 @@ package io.muserver;
 
 enum Http2FrameType {
     DATA((byte) 0x00, false, null, -1),
-    HEADERS((byte) 0x01, true, null, -1),
+    HEADERS((byte) 0x01, true, true, -1),
     PRIORITY((byte) 0x02, false, null, 0x05),
     RST_STREAM((byte) 0x03, false, null, 0x04),
     SETTINGS((byte) 0x04, false, false, -1),

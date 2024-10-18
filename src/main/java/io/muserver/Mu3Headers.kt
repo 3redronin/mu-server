@@ -276,6 +276,10 @@ internal class PairEntryAdaptor<N,V>(private val pair: Pair<N,V>) : Map.Entry<N,
     override val value: V
         get() = pair.second
 
+    override fun toString(): String {
+        return "PairEntryAdaptor(key=$key, value=$value)"
+    }
+
 }
 
 internal class MutablePairEntryAdaptor<N,V>(var pair: Pair<N,V>) : MutableMap.MutableEntry<N,V> {

@@ -7,10 +7,14 @@ import java.util.stream.IntStream;
 
 class HeaderString implements CharSequence {
 
+    enum Type {
+        HEADER, VALUE
+    }
+
     private final String s;
     final byte[] bytes;
 
-    private HeaderString(CharSequence value) {
+    HeaderString(CharSequence value) {
         this.s = value.toString();
         this.bytes = s.getBytes(StandardCharsets.US_ASCII);
         if (s.length() != bytes.length) {
@@ -18,13 +22,43 @@ class HeaderString implements CharSequence {
         }
     }
 
-    public static HeaderString valueOf(String value) {
-        return new HeaderString(value);
+    private HeaderString(String s, byte[] bytes) {
+        this.s = s;
+        this.bytes = bytes;
+    }
+
+    static HeaderString valueOf(Object value, Type type) {
+        if (value instanceof HeaderString) {
+            return (HeaderString) value;
+        }
+        CharSequence s = value instanceof CharSequence ? (CharSequence) value : value.toString();
+        if (s.length() == 0) {
+            if (type != Type.VALUE) throw new IllegalArgumentException("Empty header names not allowed");
+            return EMPTY_VALUE;
+        }
+        if (type != Type.VALUE) {
+            var builtIn = HeaderNames.findBuiltIn(s);
+            if (builtIn != null) {
+                return builtIn;
+            }
+        }
+        return new HeaderString(s);
+    }
+    static HeaderString valueOf(byte[] ascii, Type type) {
+        if (ascii.length == 0) return EMPTY_VALUE;
+        var s = new String(ascii, StandardCharsets.US_ASCII);
+        if (type != Type.VALUE) {
+            var builtIn = HeaderNames.findBuiltIn(s);
+            if (builtIn != null) {
+                return builtIn;
+            }
+        }
+        return new HeaderString(s, ascii);
     }
 
     @Override
     public int length() {
-        return s.length();
+        return bytes.length;
     }
 
     @Override
@@ -61,7 +95,8 @@ class HeaderString implements CharSequence {
             return true;
         }
         if (obj instanceof HeaderString) {
-            return ((HeaderString) obj).s.equals(s);
+            HeaderString hs = (HeaderString) obj;
+            return hs.s.equals(s);
         }
         return false;
     }
@@ -71,4 +106,37 @@ class HeaderString implements CharSequence {
     public String toString() {
         return s;
     }
+
+    public boolean contentEquals(CharSequence other) {
+        if (other == null) return false;
+        if (other instanceof HeaderString) {
+            return equals(other);
+        } else {
+            return this.s.contentEquals(other);
+        }
+    }
+
+    public boolean contentEquals(CharSequence other, boolean ignoreCase) {
+        if (other == null) return false;
+        if (other instanceof HeaderString) {
+            HeaderString hs = (HeaderString) other;
+            if (!ignoreCase) {
+                return this.equals(hs);
+            }
+        }
+        if (ignoreCase) {
+            return this.s.equalsIgnoreCase(other.toString());
+        } else {
+            return this.s.contentEquals(other);
+        }
+    }
+
+    boolean containsChar(byte c) {
+        for (byte b : bytes) {
+            if (b == c) return true;
+        }
+        return false;
+    }
+
+    static HeaderString EMPTY_VALUE = new HeaderString("");
 }

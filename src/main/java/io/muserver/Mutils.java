@@ -316,4 +316,29 @@ public class Mutils {
 
     private static final ByteBuffer EMPTY_BUFFER = ByteBuffer.allocate(0);
 
+    /**
+     * Ensures the given buffer has at least the amount of bytes requested.
+     *
+     * <p>The amount to read must be able to fit into the buffer, i.e. must be less than or equal to the buffer's capacity.</p>
+     *
+     * <p>If the buffer's remaining() value enough to satisfy the request, nothing is changed. Otherwise, the input
+     * stream will be read into the buffer. The buffer will be compacted if required.</p>
+     *
+     * @throws IllegalArgumentException if the buffer's capacity is less than minBytes
+     * @throws IOException there is an error while reading
+     * @throws EOFException the stream ends before min bytes are available
+     */
+    static void readAtLeast(ByteBuffer buffer, InputStream inputStream, int minBytes) throws IOException {
+        if (minBytes > buffer.capacity()) throw new IllegalArgumentException("This buffer is not big enough");
+        while (buffer.remaining() < minBytes) {
+            if (buffer.capacity() - buffer.limit() < minBytes) {
+                buffer.compact().flip();
+            }
+            int read = inputStream.read(buffer.array(), buffer.arrayOffset() + buffer.position(), buffer.capacity() - buffer.limit());
+            if (read == -1) {
+                throw new EOFException();
+            }
+            buffer.limit(buffer.limit() + read);
+        }
+    }
 }

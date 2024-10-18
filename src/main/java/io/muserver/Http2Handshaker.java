@@ -48,12 +48,12 @@ class Http2Handshaker {
     }
 
     private static Http2Settings readClientSettings(ByteBuffer buffer, InputStream clientIn, Http2Settings existingSettings) throws IOException, Http2Exception {
-        Http2Connection.readAtLeast(buffer, clientIn, Http2FrameHeader.FRAME_HEADER_LENGTH);
+        Mutils.readAtLeast(buffer, clientIn, Http2FrameHeader.FRAME_HEADER_LENGTH);
         var header = Http2FrameHeader.readFrom(buffer);
         if (header.frameType() != Http2FrameType.SETTINGS) {
             throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "Received " + header + " during client connection preface");
         }
-        Http2Connection.readAtLeast(buffer, clientIn, header.length());
+        Mutils.readAtLeast(buffer, clientIn, header.length());
         var settingsFrame = Http2Settings.readFrom(header, buffer);
         if (settingsFrame.isAck){
             throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "Client acked settings before sent");
