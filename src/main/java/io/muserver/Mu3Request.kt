@@ -176,11 +176,14 @@ internal class Mu3Request(
     }
 
     fun cleanup(responseStatus: HttpStatus) {
-        if (body is Http1BodyStream) {
-            body.discardRemaining(responseStatus.code() != HttpStatus.CONTENT_TOO_LARGE_413.code())
-        }
-        if (form != null && form is MultipartForm) {
-            (form as MultipartForm).cleanup()
+        try {
+            if (body is Http1BodyStream) {
+                body.discardRemaining(responseStatus.code() != HttpStatus.CONTENT_TOO_LARGE_413.code())
+            }
+        } finally {
+            if (form != null && form is MultipartForm) {
+                (form as MultipartForm).cleanup()
+            }
         }
     }
 

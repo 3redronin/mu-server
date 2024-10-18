@@ -2,6 +2,7 @@ package io.muserver
 
 import java.io.IOException
 import java.io.InputStream
+import java.net.SocketTimeoutException
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -50,7 +51,11 @@ internal class Http1BodyStream(private val parser: Http1MessageReader, private v
                         ready = true
                     } else {
                         // ...we expect more body, so read the next bit
-                        val next = parser.readNext()
+                        val next = try {
+                            parser.readNext()
+                        } catch (ste: SocketTimeoutException) {
+                            throw HttpException(HttpStatus.REQUEST_TIMEOUT_408)
+                        }
                         if (next is MessageBodyBit) {
                             // we have more body data
                             lastBitReceived = next.isLast

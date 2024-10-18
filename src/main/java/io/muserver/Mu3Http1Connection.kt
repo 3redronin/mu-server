@@ -171,8 +171,16 @@ internal class Mu3Http1Connection(
         if (!reallyClose) {
             reallyClose = muResponse.headers().closeConnection(muRequest.httpVersion())
         }
-        muRequest.cleanup(muResponse.statusValue())
-        muResponse.cleanup()
+        try {
+            muRequest.cleanup(muResponse.statusValue())
+        } catch (e: Exception) {
+            reallyClose = true
+        }
+        try {
+            muResponse.cleanup()
+        } catch (e: Exception) {
+            reallyClose = true
+        }
         return reallyClose
     }
 

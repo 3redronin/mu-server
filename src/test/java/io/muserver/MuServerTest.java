@@ -413,6 +413,7 @@ public class MuServerTest {
         };
         try (Response resp = call(request(server.uri()).post(slowBodhy))) {
             assertThat(resp.code(), equalTo(408));
+            assertThat(resp.headers("connection"), contains("close"));
         } catch (UncheckedIOException se) {
             assertThat(se.getCause(), instanceOf(SocketException.class));
         }
