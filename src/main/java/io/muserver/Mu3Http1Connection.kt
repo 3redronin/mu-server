@@ -38,7 +38,7 @@ internal class Mu3Http1Connection(
                 val msg = try {
                     requestParser.readNext()
                 } catch (ste: SocketTimeoutException) {
-                    throw HttpException(HttpStatus.REQUEST_TIMEOUT_408)
+                    throw HttpException.requestTimeout()
                 } catch (e: IOException) {
                     log.info("Error reading from client input stream ${e.javaClass} ${e.message}")
                     break

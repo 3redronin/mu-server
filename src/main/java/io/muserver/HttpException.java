@@ -63,4 +63,10 @@ public class HttpException extends RuntimeException {
         return new HttpException(HttpStatus.INTERNAL_SERVER_ERROR_500, message);
     }
 
+    static HttpException requestTimeout() {
+        var e = new HttpException(HttpStatus.REQUEST_TIMEOUT_408);
+        e.headers.set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
+        return e;
+    }
+
 }

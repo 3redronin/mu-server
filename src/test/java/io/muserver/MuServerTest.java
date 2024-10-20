@@ -391,7 +391,7 @@ public class MuServerTest {
     @Test
     public void idleTimeoutCanBeConfiguredAndConnectionIsClosedWhenBreachedOr408() throws Exception {
         server = ServerUtils.httpsServerForTest()
-            .withRequestTimeout(50, TimeUnit.MILLISECONDS)
+            .withRequestTimeout(200, TimeUnit.MILLISECONDS)
             .addHandler(Method.POST, "/", (request, response, pathParams) -> {
                 String text = request.readBodyAsString();
                 response.sendChunk(text);

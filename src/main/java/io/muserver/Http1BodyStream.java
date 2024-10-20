@@ -58,7 +58,7 @@ class Http1BodyStream extends InputStream {
             case TOO_BIG:
                 throw new HttpException(HttpStatus.CONTENT_TOO_LARGE_413);
             case TIMED_OUT:
-                throw new HttpException(HttpStatus.REQUEST_TIMEOUT_408);
+                throw HttpException.requestTimeout();
         }
         throw new IllegalStateException(status.get().toString());
     }
@@ -98,7 +98,7 @@ class Http1BodyStream extends InputStream {
                             next = parser.readNext();
                         } catch (SocketTimeoutException ste) {
                             status.set(State.TIMED_OUT);
-                            throw new HttpException(HttpStatus.REQUEST_TIMEOUT_408);
+                            throw HttpException.requestTimeout();
                         } catch (IOException | ParseException pe) {
                             status.set(State.IO_EXCEPTION);
                             throw (pe instanceof IOException) ? (IOException) pe : new IOException("Parse error in request body", pe);
