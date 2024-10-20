@@ -260,6 +260,7 @@ public class RequestBodyReaderStringTest {
     @Test
     public void aSlowReadResultsInACompleted408OrKilledConnectionIfResponseNotStarted() {
         AtomicReference<Throwable> exception = new AtomicReference<>();
+        AtomicReference<ResponseInfo> responseInfo = new AtomicReference<>();
         server = ServerUtils.httpsServerForTest()
             .withRequestTimeout(100, TimeUnit.MILLISECONDS)
             .addHandler((request, response) -> {
@@ -271,6 +272,7 @@ public class RequestBodyReaderStringTest {
                 }
                 return true;
             })
+            .addResponseCompleteListener(responseInfo::set)
             .start();
 
         Request.Builder request = request()
@@ -287,6 +289,8 @@ public class RequestBodyReaderStringTest {
         }
         assertThat(exception.get(), instanceOf(HttpException.class));
         assertThat(((HttpException) exception.get()).status(), equalTo(HttpStatus.REQUEST_TIMEOUT_408));
+        assertThat(responseInfo.get(), notNullValue());
+        assertThat(responseInfo.get().completedSuccessfully(), equalTo(false));
     }
 
     @Test

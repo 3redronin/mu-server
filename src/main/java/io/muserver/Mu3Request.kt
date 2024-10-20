@@ -175,16 +175,26 @@ internal class Mu3Request(
         return httpVersion.version() + " " + method + " " + serverUri
     }
 
-    fun cleanup(responseStatus: HttpStatus) {
+    fun cleanup(): Boolean {
         try {
             if (body is Http1BodyStream) {
-                body.discardRemaining(responseStatus.code() != HttpStatus.CONTENT_TOO_LARGE_413.code())
+                val bodyState = body.discardRemaining()
+                return bodyState == Http1BodyStream.State.EOF
+            } else {
+                return true
             }
         } finally {
             if (form != null && form is MultipartForm) {
                 (form as MultipartForm).cleanup()
             }
         }
+    }
+
+    fun completedSuccessfully(): Boolean {
+        if (body is Http1BodyStream) {
+            return body.state() == Http1BodyStream.State.EOF
+        }
+        return true
     }
 
 }

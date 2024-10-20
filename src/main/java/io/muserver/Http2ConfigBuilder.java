@@ -255,6 +255,15 @@ public class Http2ConfigBuilder {
     }
 
     /**
+     * Creates a new config where HTTP2 is disabled
+     * @return A new builder
+     */
+    public static Http2ConfigBuilder http2Disabled() {
+        return new Http2ConfigBuilder().enabled(false);
+    }
+
+
+    /**
      * <p>Creates a new config where HTTP2 is enabled if supported by the Java version.</p>
      * <p>The current logic may not always return the correct results. It does not actually test for availability
      * and instead tries to detect the Java version, and enables HTTP2 for Java 9 or later.</p>

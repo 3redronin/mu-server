@@ -19,8 +19,11 @@ public class MuUploadedFileTest {
 
     @Test
     public void canGetAsString() throws IOException {
-        var path = Path.of("src", "test", "resources", "sample-static", "a, tricky - dir Name", "ooh ah", "a, tricket - file name.txt");
-        assertThat(path.toAbsolutePath().toString(), Files.isRegularFile(path), equalTo(true));
+        var original = Path.of("src", "test", "resources", "sample-static", "a, tricky - dir Name", "ooh ah", "a, tricket - file name.txt");
+        assertThat(original.toAbsolutePath().toString(), Files.isRegularFile(original), equalTo(true));
+        var path = Path.of("target/testouput/a, tricket - file name.txt." + UUID.randomUUID());
+        Files.createDirectories(path.getParent());
+        Files.copy(original, path);
 
         MuUploadedFile2 muf = new MuUploadedFile2(path, "text/plain", "a, tricket - file name.txt");
 

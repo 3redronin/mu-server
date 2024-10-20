@@ -1,10 +1,12 @@
 package io.muserver
 
 import java.io.ByteArrayOutputStream
+import java.io.IOException
 import java.io.InputStream
 import java.nio.charset.StandardCharsets
 import java.text.ParseException
 import java.util.*
+import kotlin.jvm.Throws
 
 internal const val SP = 32.toByte()
 internal const val CR = 13.toByte()
@@ -23,6 +25,7 @@ private const val ZERO = 48.toByte()
 private const val NINE = 57.toByte()
 
 internal interface Http1MessageReader {
+    @Throws(IOException::class, ParseException::class)
     fun readNext() : Http1ConnectionMsg
 }
 internal class Http1MessageParser(

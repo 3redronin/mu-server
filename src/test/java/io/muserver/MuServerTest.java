@@ -6,7 +6,10 @@ import okhttp3.Response;
 import okhttp3.internal.http2.ErrorCode;
 import okhttp3.internal.http2.StreamResetException;
 import okio.BufferedSink;
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import scaffolding.FileUtils;
 import scaffolding.MuAssert;
 import scaffolding.RawClient;
@@ -535,16 +538,23 @@ public class MuServerTest {
 
     }
 
-
-    @Test
-    @Disabled("Connection is closed currently")
-    public void aifRequestsCannotBeSubmittedToTheExecutorTheyAreRejectedWithA503() throws Exception {
+    @ParameterizedTest
+    @ValueSource(strings = {"http", "https", "h2"})
+    public void aifRequestsCannotBeSubmittedToTheExecutorTheyAreRejectedWithA503(String protocol) throws Exception {
         CountDownLatch firstRequestStartedLatch = new CountDownLatch(1);
         CountDownLatch thirdRequestFinishedLatch = new CountDownLatch(1);
-        server = ServerUtils.httpsServerForTest()
+
+        MuServerBuilder builder;
+        switch (protocol) {
+            case "http": builder = MuServerBuilder.httpServer(); break;
+            case "https": builder = MuServerBuilder.httpsServer().withHttp2Config(Http2ConfigBuilder.http2Disabled()); break;
+            case "h2": builder = MuServerBuilder.httpsServer(); break;
+            default: throw new IllegalArgumentException("Unsupported protocol: " + protocol);
+        }
+        server = builder
             .withHandlerExecutor(new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
-                new LinkedBlockingQueue<Runnable>() {
-                    public synchronized boolean offer(Runnable runnable) {
+                new LinkedBlockingQueue<>() {
+                    public synchronized boolean offer(@NotNull Runnable runnable) {
                         // The first request will go to the waiting thread; only the second will be offered
                         return false;
                     }
@@ -577,7 +587,7 @@ public class MuServerTest {
         thirdRequestFinishedLatch.countDown();
         MuAssert.assertNotTimedOut("responseLatch", responseFinishedLatch);
         assertThat(responses, containsInAnyOrder("First bit of first and second bit of first"));
-        assertEventually(() -> server.stats().completedRequests(), is(2L)); // should be 1, but due to some race conditions an extra completed request is added
+        assertEventually(() -> server.stats().completedRequests(), is(1L));
         assertThat(server.stats().rejectedDueToOverload(), is(1L));
         assertThat(executor.shutdownNow(), hasSize(0));
     }

@@ -3,11 +3,13 @@ package io.muserver
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.net.*
+import java.nio.charset.StandardCharsets
 import java.security.cert.Certificate
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentHashMap.KeySetView
 import java.util.concurrent.ExecutorService
+import java.util.concurrent.RejectedExecutionException
 import javax.net.ssl.SSLPeerUnverifiedException
 import javax.net.ssl.SSLSocket
 
@@ -40,8 +42,21 @@ internal class ConnectionAcceptor(
             try {
                 val clientSocket = socketServer.accept()
                 val startTime = Instant.now()
-                executorService.submit {
-                    handleClientSocket(clientSocket, startTime)
+                try {
+                    executorService.submit {
+                        val h2 = false // http2Config?.enabled() == true
+                        handleClientSocket(clientSocket, startTime, h2, false)
+                    }
+                } catch (e: RejectedExecutionException) {
+                    try {
+                        // Send a 503, blocking the acceptor thread. We can't schedule this on the executor. We are
+                        // so overloaded it's good to have a pause here. But still have a tight timeout so a really
+                        // slow consumer doesn't hold things up.
+                        clientSocket.soTimeout = 2000
+                        handleClientSocket(clientSocket, startTime, false, true)
+                    } catch (e2: Exception) {
+                        log.info("Exception while writing 503 when executor is full: ${e.message}")
+                    }
                 }
             } catch (e: Throwable) {
                 if (Thread.interrupted() || e is SocketException) {
@@ -85,7 +100,7 @@ internal class ConnectionAcceptor(
         log.info("Closed")
     }, toString())
 
-    private fun handleClientSocket(clientSocket: Socket, startTime: Instant) {
+    private fun handleClientSocket(clientSocket: Socket, startTime: Instant, http2Enabled: Boolean, rejectDueToOverload: Boolean) {
         var socket = clientSocket
         var clientCert : Certificate? = null
 
@@ -99,10 +114,9 @@ internal class ConnectionAcceptor(
                 secureSocket.enabledProtocols = hc.protocolsArray()
                 secureSocket.enabledCipherSuites = hc.cipherSuitesArray()
 
-                if (http2Config?.enabled() == true) {
+                if (http2Enabled) {
                     val sslParams = secureSocket.sslParameters
-//                    sslParams.applicationProtocols = arrayOf("h2", "http/1.1")
-                    sslParams.applicationProtocols = arrayOf("http/1.1")
+                    sslParams.applicationProtocols = arrayOf("h2", "http/1.1")
                     secureSocket.sslParameters = sslParams
                 }
                 val clientAuthTrustManager = hc.clientAuthTrustManager()
@@ -131,22 +145,44 @@ internal class ConnectionAcceptor(
                 return
             }
         }
-        val con : BaseHttpConnection = if (httpVersion == HttpVersion.HTTP_2)
-            Http2Connection(server, this, socket, clientCert, startTime, http2Config!!.initialSettings())
-            else Mu3Http1Connection(server, this, socket, startTime, clientCert)
-        connections.add(con)
-        server.statsImpl.onConnectionOpened(con)
-        try {
-            socket.getOutputStream().use { clientOut ->
-                HttpConnectionInputStream(con, socket.getInputStream()).use { clientIn ->
-                    con.start(clientIn, clientOut)
+
+        if (rejectDueToOverload) {
+            server.statsImpl.onRejectedDueToOverload()
+            socket.soTimeout = 2000
+            socket.getInputStream().use { inputStream ->
+                socket.getOutputStream().use { os ->
+                    os.write(serverUnavailableResponse)
+                    os.flush()
+                    val buf = ByteArray(1024)
+                    var reads = 0
+                    while (inputStream.read(buf) != -1 && reads < 10) {
+                        reads++
+                        log.info("read $reads")
+                    }
+                    log.info("Reads done "+ reads);
                 }
             }
-        } catch (t: Throwable) {
-            log.error("Unhandled exception for $con", t)
-        } finally {
-            server.statsImpl.onConnectionClosed(con)
-            connections.remove(con)
+        } else {
+
+            val con: BaseHttpConnection = if (httpVersion == HttpVersion.HTTP_2)
+                Http2Connection(server, this, socket, clientCert, startTime, http2Config!!.initialSettings())
+            else Mu3Http1Connection(server, this, socket, startTime, clientCert)
+
+
+            connections.add(con)
+            server.statsImpl.onConnectionOpened(con)
+            try {
+                socket.getOutputStream().use { clientOut ->
+                    HttpConnectionInputStream(con, socket.getInputStream()).use { clientIn ->
+                        con.start(clientIn, clientOut)
+                    }
+                }
+            } catch (t: Throwable) {
+                log.error("Unhandled exception for $con", t)
+            } finally {
+                server.statsImpl.onConnectionClosed(con)
+                connections.remove(con)
+            }
         }
     }
 
@@ -231,6 +267,14 @@ internal class ConnectionAcceptor(
             val uri = URI("http" + (if (httpsConfig == null) "" else "s") + "://$uriHost:" + socketServer.localPort)
             return ConnectionAcceptor(server, socketServer, socketServer.localSocketAddress as InetSocketAddress, uri, httpsConfig, http2Config, executor, contentEncoders)
         }
+
+        val serverUnavailableResponse = ("HTTP/1.1 503 Service Unavailable\r\n" +
+                "connection: close\r\n" +
+                "content-type: text/plain;charset=utf-8\r\n" +
+                "content-length: 23\r\n" +
+                "\r\n" +
+                "503 Service Unavailable").toByteArray(StandardCharsets.US_ASCII)
+
     }
 
 }

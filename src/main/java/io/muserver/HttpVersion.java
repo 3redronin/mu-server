@@ -31,7 +31,7 @@ public enum HttpVersion {
     }
 
     /**
-     * @return The version as a string in the way it appears in the HTTP Protocol, for example <code>HTTP/1.0</code>
+     * @return The version as a string in the way it appears in the HTTP Protocol, for example <code>HTTP/1.1</code>
      */
     public String version() {
         return version;

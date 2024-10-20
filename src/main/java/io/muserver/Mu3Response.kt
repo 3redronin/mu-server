@@ -190,7 +190,7 @@ internal class Mu3Response(
     }
 
     override fun duration() = (endMillis ?: System.currentTimeMillis()) - muRequest.startTime()
-    override fun completedSuccessfully() = state.completedSuccessfully()
+    override fun completedSuccessfully() = state.completedSuccessfully() && muRequest.completedSuccessfully()
     override fun request() = muRequest
     override fun response() = this
 

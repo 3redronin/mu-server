@@ -116,7 +116,7 @@ public class ExpectContinueTest {
                 .flushRequest();
         }
         assertEventually(received::size, equalTo(1));
-        assertThat(received.get(0).completedSuccessfully(), is(true));
+        assertThat(received.get(0).completedSuccessfully(), is(false));
         assertThat(received.get(0).response().statusValue(), is(HttpStatus.CONTENT_TOO_LARGE_413));
     }
 
