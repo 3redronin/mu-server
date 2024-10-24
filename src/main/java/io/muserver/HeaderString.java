@@ -63,7 +63,7 @@ class HeaderString implements CharSequence {
 
     @Override
     public char charAt(int index) {
-        return s.charAt(index);
+        return (char)bytes[index];
     }
 
     @NotNull
