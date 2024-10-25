@@ -143,9 +143,74 @@ class FieldBlockDecoderTest {
         assertThat(table.getValue(63), equalTo(fieldLine("cache-control", "no-cache")));
         assertThat(table.getValue(64), equalTo(fieldLine(":authority", "www.example.com")));
         assertThat(table.dynamicTableSizeInBytes(), equalTo(164));
-
-
     }
+
+    @Test
+    public void rfc7541_c_4_Request_Examples_with_Huffman_Coding() throws Exception {
+        /*
+           C.4.1.  First Request
+           :method: GET
+           :scheme: http
+           :path: /
+           :authority: www.example.com
+         */
+        var firstBlock = decoder.decodeFrom(ByteBuffer.wrap(hexToByteArray(
+            "8286 8441 8cf1 e3c2 e5f2 3a6b a0ab 90f4 ff")));
+        assertThat(firstBlock.get(":method"), equalTo("GET"));
+        assertThat(firstBlock.get(":scheme"), equalTo("http"));
+        assertThat(firstBlock.get(":path"), equalTo("/"));
+        assertThat(firstBlock.get(":authority"), equalTo("www.example.com"));
+        assertThat(firstBlock.entries(), hasSize(4));
+
+        assertThat(table.getValue(62), equalTo(fieldLine(":authority", "www.example.com")));
+        assertThat(table.dynamicTableSizeInBytes(), equalTo(57));
+
+        /*
+        C.4.2.  Second Request
+           :method: GET
+           :scheme: http
+           :path: /
+           :authority: www.example.com
+           cache-control: no-cache
+         */
+
+        var secondBlock = decoder.decodeFrom(ByteBuffer.wrap(hexToByteArray(
+            "8286 84be 5886 a8eb 1064 9cbf")));
+        assertThat(secondBlock.get(":method"), equalTo("GET"));
+        assertThat(secondBlock.get(":scheme"), equalTo("http"));
+        assertThat(secondBlock.get(":path"), equalTo("/"));
+        assertThat(secondBlock.get(":authority"), equalTo("www.example.com"));
+        assertThat(secondBlock.get("cache-control"), equalTo("no-cache"));
+        assertThat(secondBlock.entries(), hasSize(5));
+
+        assertThat(table.getValue(62), equalTo(fieldLine("cache-control", "no-cache")));
+        assertThat(table.getValue(63), equalTo(fieldLine(":authority", "www.example.com")));
+        assertThat(table.dynamicTableSizeInBytes(), equalTo(110));
+
+        /*
+        C.4.3.  Third Request
+           :method: GET
+           :scheme: https
+           :path: /index.html
+           :authority: www.example.com
+           custom-key: custom-value
+         */
+
+        var thirdBlock = decoder.decodeFrom(ByteBuffer.wrap(hexToByteArray(
+            "8287 85bf 4088 25a8 49e9 5ba9 7d7f 8925 a849 e95b b8e8 b4bf")));
+        assertThat(thirdBlock.get(":method"), equalTo("GET"));
+        assertThat(thirdBlock.get(":scheme"), equalTo("https"));
+        assertThat(thirdBlock.get(":path"), equalTo("/index.html"));
+        assertThat(thirdBlock.get(":authority"), equalTo("www.example.com"));
+        assertThat(thirdBlock.get("custom-key"), equalTo("custom-value"));
+        assertThat(thirdBlock.entries(), hasSize(5));
+
+        assertThat(table.getValue(62), equalTo(fieldLine("custom-key", "custom-value")));
+        assertThat(table.getValue(63), equalTo(fieldLine("cache-control", "no-cache")));
+        assertThat(table.getValue(64), equalTo(fieldLine(":authority", "www.example.com")));
+        assertThat(table.dynamicTableSizeInBytes(), equalTo(164));
+    }
+
 
     @NotNull
     private static FieldLine fieldLine(String name, String value) {

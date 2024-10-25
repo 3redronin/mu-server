@@ -5,32 +5,24 @@ import java.nio.ByteBuffer;
 class HuffmanDecoder {
 
     static HeaderString decodeFrom(ByteBuffer bb, int len, HeaderString.Type type) {
-        var ascii = new byte[len];
-        int i = 0;
+        var sb = new StringBuilder();
         var node = root;
-        var isFinished = false;
-        while (!isFinished) {
+        while (len > 0) {
+            len--;
+
             int b = bb.get() & 0xff;
             for (int j = 7; j >= 0; j--) {
                 var isLeft = (b & (1 << j)) == 0;
-                var child = isLeft ? node.left : node.right;
-                if (child == null) {
-                    break;
-                }
-                node = child;
+                node = isLeft ? node.left : node.right;
                 if (node.leaf) {
-                    ascii[i] = (byte) node.c;
-                    i++;
-                    if (i == len) {
-                        isFinished = true;
-                        break;
-                    }
+                    char c = node.c;
+                    sb.append(c);
                     node = root;
                 }
             }
         }
 
-        return HeaderString.valueOf(ascii, type);
+        return HeaderString.valueOf(sb, type);
     }
 
     private HuffmanDecoder() {}

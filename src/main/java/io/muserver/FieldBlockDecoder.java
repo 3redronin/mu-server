@@ -91,11 +91,11 @@ class FieldBlockDecoder {
 
     private static HeaderString readHeaderString(ByteBuffer buffer, HeaderString.Type type) throws Http2Exception {
         byte decl = buffer.get();
-        int stringLen = readHpackInt(7, decl, buffer);
+        int codeLen = readHpackInt(7, decl, buffer);
         if ((decl & 0b10000000) > 0) {
-            throw new UnsupportedOperationException("Huffman!");
+            return HuffmanDecoder.decodeFrom(buffer, codeLen, type);
         } else {
-            var nameBuf = new byte[stringLen];
+            var nameBuf = new byte[codeLen];
             buffer.get(nameBuf);
             return HeaderString.valueOf(nameBuf, type);
         }
