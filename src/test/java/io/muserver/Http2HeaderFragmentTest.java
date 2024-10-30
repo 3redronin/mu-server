@@ -13,7 +13,7 @@ public class Http2HeaderFragmentTest {
     @Test
     void emptyHeadersAreTinyYo() throws Http2Exception {
         var frameHeader = new Http2FrameHeader(0, Http2FrameType.HEADERS, 0b00000101, 1);
-        var headers = Http2HeaderFragment.readFirstFragment(frameHeader, new HpackTable(), ByteBuffer.allocate(0));
+        var headers = Http2HeaderFragment.readFirstFragment(frameHeader, new FieldBlockDecoder(4096), ByteBuffer.allocate(0));
         assertThat(headers.endHeaders(), equalTo(true));
         assertThat(headers.endStream(), equalTo(true));
         assertThat(headers.exclusive(), equalTo(false));
@@ -64,7 +64,7 @@ public class Http2HeaderFragmentTest {
 
         byteBuffer.flip();
         var frameHeader = new Http2FrameHeader(byteBuffer.remaining(), Http2FrameType.HEADERS, 0b00000101, 1);
-        var headers = Http2HeaderFragment.readFirstFragment(frameHeader, new HpackTable(), byteBuffer);
+        var headers = Http2HeaderFragment.readFirstFragment(frameHeader, new FieldBlockDecoder(4096), byteBuffer);
         assertThat(headers.endHeaders(), equalTo(true));
         assertThat(headers.endStream(), equalTo(true));
         assertThat(headers.exclusive(), equalTo(false));

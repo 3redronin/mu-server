@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class FieldBlockDecoderTest {
 
     public static final ByteBuffer empty = ByteBuffer.allocate(0);
-    private final HpackTable table = new HpackTable();
+    private final HpackTable table = new HpackTable(4096);
     private final FieldBlockDecoder decoder = new FieldBlockDecoder(table);
 
     @Test

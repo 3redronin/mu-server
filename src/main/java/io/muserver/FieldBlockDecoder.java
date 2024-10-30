@@ -6,6 +6,9 @@ class FieldBlockDecoder {
 
     private final HpackTable table;
 
+    FieldBlockDecoder(int maxTableSize) {
+        table = new HpackTable(maxTableSize);
+    }
     FieldBlockDecoder(HpackTable table) {
         this.table = table;
     }

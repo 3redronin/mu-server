@@ -9,6 +9,12 @@ Java 8 is no longer supported. Java 11 or later must be used.
 Note it is highly recommended to use Java 21 or later to take advantage of virtual threads (earlier versions of Java
 will result in a larger number of threads being used).
 
+MuRequest and MuResponse API
+----------------------------
+
+* `MuResponse.status()` now returns a `HttpStatus` value rather than an `int`. For the int, call
+  `MuResponse.status().code()`
+
 SSE
 ---
 

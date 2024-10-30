@@ -112,7 +112,7 @@ class BuiltInExceptionHandler implements UnhandledExceptionHandler {
                     response.headers().set(httpException.responseHeaders());
                     body = httpException.getMessage();
                 }
-                HttpStatus newStatus = response.statusValue();
+                HttpStatus newStatus = response.status();
                 String encodedTitle = Mutils.htmlEncode(newStatus.toString());
                 response.headers().set(HeaderNames.DATE, Mutils.toHttpDate(new Date()));
                 if (newStatus.canHaveContent()) {

@@ -196,7 +196,7 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
             return Response.status(412).entity(new ClientErrorException("Precondition failed: if-match failed due to weak eTag", 412));
         }
         for (String suppliedEtag : ifMatches) {
-            EntityTag supplied = EntityTag.valueOf(suppliedEtag);
+            EntityTag supplied = MuRuntimeDelegate.entityTagDelegate.fromString(suppliedEtag);
             if (supplied.equals(eTag)) {
                 anyMatch = true;
                 break;
@@ -218,7 +218,7 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
 
         boolean noneMatch = true;
         for (String suppliedEtag : ifNoneMatchTags) {
-            EntityTag supplied = EntityTag.valueOf(suppliedEtag);
+            EntityTag supplied = MuRuntimeDelegate.entityTagDelegate.fromString(suppliedEtag);
             if (supplied.equals(eTag) || (getOrHead && supplied.getValue().equals(eTag.getValue()))) {
                 noneMatch = false;
                 break;

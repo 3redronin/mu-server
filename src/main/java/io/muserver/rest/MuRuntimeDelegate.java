@@ -25,6 +25,9 @@ import java.util.Map;
 public class MuRuntimeDelegate extends RuntimeDelegate {
 
     private static MuRuntimeDelegate singleton;
+    final static NewCookieHeaderDelegate newCookieHeaderDelegate = new NewCookieHeaderDelegate();
+    final static EntityTagDelegate entityTagDelegate = new EntityTagDelegate();
+    static final CacheControlHeaderDelegate cacheControlHeaderDelegate = new CacheControlHeaderDelegate();
 
     /**
      * Registers the mu RuntimeDelegate with jax-rs, if it was not already.
@@ -42,10 +45,10 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
 
     private MuRuntimeDelegate() {
         headerDelegates.put(MediaType.class, new MediaTypeHeaderDelegate());
-        headerDelegates.put(CacheControl.class, new CacheControlHeaderDelegate());
-        headerDelegates.put(NewCookie.class, new NewCookieHeaderDelegate());
+        headerDelegates.put(CacheControl.class, cacheControlHeaderDelegate);
+        headerDelegates.put(NewCookie.class, newCookieHeaderDelegate);
         headerDelegates.put(Cookie.class, new CookieHeaderDelegate());
-        headerDelegates.put(EntityTag.class, new EntityTagDelegate());
+        headerDelegates.put(EntityTag.class, entityTagDelegate);
         headerDelegates.put(Link.class, new LinkHeaderDelegate());
         headerDelegates.put(Date.class, new DateHeaderDelegate());
     }
@@ -92,8 +95,11 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
                 }
             }
         }
-        for (NewCookie cookie : from.getCookies().values()) {
-            to.headers().add(HeaderNames.SET_COOKIE, cookie.toString());
+        Map<String, NewCookie> cookieMap = from.getCookies();
+        if (!cookieMap.isEmpty()) {
+            for (NewCookie cookie : cookieMap.values()) {
+                to.headers().add(HeaderNames.SET_COOKIE, newCookieHeaderDelegate.toString(cookie));
+            }
         }
     }
 

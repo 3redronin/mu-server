@@ -7,7 +7,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 
 /**
- * Implementation of section 3.4 of RFC9113 https://www.rfc-editor.org/rfc/rfc9113.html#name-http-2-connection-preface
+ * Implementation of section 3.4 of RFC9113 <a href="https://www.rfc-editor.org/rfc/rfc9113.html#name-http-2-connection-preface">rfc9113.html#name-http-2-connection-preface</a>
  */
 class Http2Handshaker {
 

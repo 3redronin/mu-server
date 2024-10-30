@@ -16,7 +16,7 @@ import static org.hamcrest.Matchers.*;
 
 class FieldBlockEncoderTest {
 
-    private final HpackTable table = new HpackTable();
+    private final HpackTable table = new HpackTable(4096);
     private final FieldBlockEncoder encoder = new FieldBlockEncoder(table);
     private final FieldBlockDecoder decoder = new FieldBlockDecoder(table);
 

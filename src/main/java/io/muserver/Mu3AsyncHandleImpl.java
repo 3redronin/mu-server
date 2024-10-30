@@ -8,11 +8,11 @@ import java.util.concurrent.atomic.AtomicReference;
 
 class Mu3AsyncHandleImpl implements AsyncHandle {
     private final Mu3Request request;
-    private final Mu3Response response;
+    private final Http1Response response;
     private CompletableFuture<Void> responseFuture = CompletableFuture.completedFuture(null);
     private final CompletableFuture<Void> completionFuture = new CompletableFuture<>();
 
-    Mu3AsyncHandleImpl(Mu3Request request, Mu3Response response) {
+    Mu3AsyncHandleImpl(Mu3Request request, Http1Response response) {
         this.request = request;
         this.response = response;
     }

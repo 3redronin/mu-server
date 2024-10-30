@@ -518,6 +518,23 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
     }
 
     /**
+     * Tests whether the connection should be closed based on the current header values and HTTP version.
+     * @param httpVersion The HTTP version
+     * @return <code>true</code> if the underlying TCP connection should be closed at the conclusion of the request and response.
+     */
+    default boolean closeConnectionRequested(HttpVersion httpVersion) {
+        switch (httpVersion) {
+            case HTTP_2:
+                return false;
+            case HTTP_1_1:
+                return containsValue(HeaderNames.CONNECTION, HeaderValues.CLOSE.toString(), true);
+            case HTTP_1_0:
+                return !connection().contains(HeaderValues.KEEP_ALIVE.toString(), true);
+        }
+        throw new IllegalArgumentException("Invalid version: " + httpVersion);
+    }
+
+    /**
      * Returns a string representation of the headers.
      * <p><strong>Note:</strong> The following headers will have their actual values replaced with the string <code>(hidden)</code>
      * in order to protect potentially sensitive information: <code>authorization</code>, <code>cookie</code> and <code>set-cookie</code>.</p>

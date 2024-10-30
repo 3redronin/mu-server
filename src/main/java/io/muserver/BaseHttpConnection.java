@@ -62,7 +62,7 @@ abstract class BaseHttpConnection implements HttpConnection {
         server.onRequestStarted(req);
     }
 
-    protected void onRequestEnded(Mu3Request req, Mu3Response resp) {
+    protected void onRequestEnded(Mu3Request req, Http1Response resp) {
         completedRequests.incrementAndGet();
         for (var listener : resp.completionListeners()) {
             listener.onComplete(resp);

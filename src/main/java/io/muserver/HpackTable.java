@@ -76,7 +76,27 @@ class HpackTable {
 
     }
 
+    /**
+     * The maximum size of the dynamic table
+     */
+    private int maxSize;
+
     private final Set<FieldLine> neverIndex = new HashSet<>();
+
+    HpackTable(int maxSize) {
+        this.maxSize = maxSize;
+    }
+
+    void changeMaxSize(int newSize) {
+        maxSize = newSize;
+        trimSize();
+    }
+
+    private void trimSize() {
+        while (dynamicTableSizeInBytes() > maxSize) {
+            dynamicQueue.removeLast();
+        }
+    }
 
     @NotNull
     private static FieldLine line(HeaderString name) {
@@ -94,11 +114,10 @@ class HpackTable {
         if (code <= 0) throw new Http2Exception(Http2ErrorCode.COMPRESSION_ERROR, "Invalid code");
         if (code < staticMap.length) return staticMap[code];
         int dIndex = code - staticMap.length;
-        var dynamicVal = dynamicQueue.get(dIndex);
-        if (dynamicVal == null) {
+        if (dIndex >= dynamicQueue.size()) {
             throw new Http2Exception(Http2ErrorCode.COMPRESSION_ERROR, "Invalid dynamic code");
         }
-        return dynamicVal;
+        return dynamicQueue.get(dIndex);
     }
 
     int codeFor(FieldLine line) {
@@ -131,6 +150,7 @@ class HpackTable {
 
     public void indexField(FieldLine line) {
         dynamicQueue.add(0, line);
+        trimSize();
     }
 
     void neverIndex(FieldLine line) {

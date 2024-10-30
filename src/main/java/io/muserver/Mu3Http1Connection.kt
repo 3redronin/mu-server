@@ -75,9 +75,9 @@ internal class Mu3Http1Connection(
                 )
                 clientSocket.soTimeout = requestTimeout
 
-                val muResponse = Mu3Response(muRequest, outputStream)
+                val muResponse = Http1Response(muRequest, outputStream)
                 muRequest.response = muResponse
-                closeConnection = muRequest.headers().closeConnection(muRequest.httpVersion)
+                closeConnection = muRequest.headers().closeConnectionRequested(muRequest.httpVersion)
 
 
                 if (rejectException == null) {
@@ -141,7 +141,7 @@ internal class Mu3Http1Connection(
                     } catch (e: Exception) {
                         closeConnection = true
                         log.warn("Unrecoverable error for $muRequest", e)
-                        muResponse.state = ResponseState.ERRORED
+                        muResponse.setState(ResponseState.ERRORED)
                     } finally {
                         onRequestEnded(muRequest, muResponse)
                         clientSocket.soTimeout = 0
@@ -164,12 +164,12 @@ internal class Mu3Http1Connection(
 
     private fun cleanUpNicely(
         closeConnection: Boolean,
-        muResponse: Mu3Response,
+        muResponse: Http1Response,
         muRequest: Mu3Request
     ): Boolean {
         var reallyClose = closeConnection
         if (!reallyClose) {
-            reallyClose = muResponse.headers().closeConnection(muRequest.httpVersion())
+            reallyClose = muResponse.headers().closeConnectionRequested(muRequest.httpVersion())
         }
         try {
             if (!muRequest.cleanup()) {
@@ -192,7 +192,7 @@ internal class Mu3Http1Connection(
         super.onRequestStarted(req)
     }
 
-    override fun onRequestEnded(req: Mu3Request, resp: Mu3Response) {
+    override fun onRequestEnded(req: Mu3Request, resp: Http1Response) {
         currentRequest.set(null)
         super.onRequestEnded(req, resp)
     }

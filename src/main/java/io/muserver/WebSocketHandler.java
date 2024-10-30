@@ -58,7 +58,7 @@ public class WebSocketHandler implements MuHandler {
         response.headers().set(HeaderNames.CONNECTION, HeaderValues.UPGRADE);
 
         var wsConnection = new WebsocketConnection((Mu3Http1Connection) request.connection(), muWebSocket, settings);
-        ((Mu3Response)response).upgrade(wsConnection);
+        ((Http1Response)response).upgrade(wsConnection);
 
         return true;
     }

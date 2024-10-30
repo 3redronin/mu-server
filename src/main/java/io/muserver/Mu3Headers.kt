@@ -31,12 +31,6 @@ internal class Mu3Headers(
         }
     }
 
-    fun closeConnection(version: HttpVersion) = when (version) {
-        HttpVersion.HTTP_2 -> false
-        HttpVersion.HTTP_1_1 -> containsValue(HeaderNames.CONNECTION, HeaderValues.CLOSE.toString(), true)
-        HttpVersion.HTTP_1_0 -> !connection().contains(HeaderValues.KEEP_ALIVE.toString(), true)
-    }
-
     override fun get(name: String): String? {
         val lowered = name.lowercase()
         return headers.firstOrNull { it.first == lowered }?.second

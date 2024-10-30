@@ -13,13 +13,13 @@ internal class Mu3Request(
     val requestUri: URI,
     val serverUri: URI,
     val httpVersion: HttpVersion,
-    val mu3Headers: Mu3Headers,
+    val mu3Headers: Headers,
     val bodySize: BodySize,
     val body: InputStream,
 ) : MuRequest {
     override fun contentType() = mu3Headers.get("content-type")
     private var form: MuForm? = null
-    lateinit var response: Mu3Response
+    lateinit var response: Http1Response
     private val startTime = System.currentTimeMillis()
     private var query: QueryString? = null
     private var attributes: MutableMap<String, Any>? = null
@@ -86,7 +86,7 @@ internal class Mu3Request(
                     val charset = Headtils.bodyCharset(mu3Headers, true)
                     val boundary = bodyType.parameters["boundary"]
                     if (boundary != null) {
-                        val bufferSize = min(8192, mu3Headers.contentLength() ?: 8192).toInt()
+                        val bufferSize = min(8192, bodySize.size() ?: 8192).toInt()
                         if (Mutils.nullOrEmpty(boundary)) throw HttpException.badRequest("No boundary specified in the multipart form-data")
                         val formParser = MultipartFormParser(server().tempDir(), boundary, body(), bufferSize, charset)
                         this.form = formParser.parseFully()

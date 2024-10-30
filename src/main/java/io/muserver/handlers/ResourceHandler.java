@@ -93,7 +93,7 @@ public class ResourceHandler implements MuHandler {
 
             String rh = request.headers().get("range");
             long maxAmountToSend = totalSize != null ? totalSize : Long.MAX_VALUE;
-            if (rh != null && totalSize != null && response.status() != 304) {
+            if (rh != null && totalSize != null && response.status() != HttpStatus.NOT_MODIFIED_304) {
                 try {
                     List<BytesRange> requestedRanges = BytesRange.parse(totalSize, rh);
                     if (requestedRanges.size() == 1) {

@@ -23,12 +23,7 @@ public interface MuResponse {
     /**
      * @return The HTTP status of this response.
      */
-    int status();
-
-    /**
-     * @return The HTTP status of this response
-     */
-    HttpStatus statusValue();
+    HttpStatus status();
 
     /**
      * Sets the response code for this request. Defaults to <code>200</code>

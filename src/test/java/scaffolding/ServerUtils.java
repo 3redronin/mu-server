@@ -21,7 +21,7 @@ public class ServerUtils {
             builder.withHttpsPort(0);
         } else throw new IllegalArgumentException("Unsupported protocol: " + protocol);
         if (preferredProtocol.equals("HTTP2")) {
-            builder.withHttp2Config(Http2ConfigBuilder.http2EnabledIfAvailable());
+            builder.withHttp2Config(Http2ConfigBuilder.http2Enabled());
         }
         return builder;
     }

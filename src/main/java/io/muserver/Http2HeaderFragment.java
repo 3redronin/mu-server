@@ -5,6 +5,7 @@ import java.util.Objects;
 
 class Http2HeaderFragment {
 
+    private final int streamId;
     private final boolean exclusive;
     private boolean endHeaders;
     private final boolean endStream;
@@ -13,7 +14,8 @@ class Http2HeaderFragment {
     private final FieldBlock headers;
 
 
-    Http2HeaderFragment(boolean exclusive, boolean endHeaders, boolean endStream, int streamDependencyId, int weight, FieldBlock headers) {
+    Http2HeaderFragment(int streamId, boolean exclusive, boolean endHeaders, boolean endStream, int streamDependencyId, int weight, FieldBlock headers) {
+        this.streamId = streamId;
         this.exclusive = exclusive;
         this.endHeaders = endHeaders;
         this.endStream = endStream;
@@ -22,7 +24,7 @@ class Http2HeaderFragment {
         this.headers = headers;
     }
 
-    static Http2HeaderFragment readFirstFragment(Http2FrameHeader frameHeader, HpackTable headerTable, ByteBuffer buffer) throws Http2Exception {
+    static Http2HeaderFragment readFirstFragment(Http2FrameHeader frameHeader, FieldBlockDecoder fieldBlockDecoder, ByteBuffer buffer) throws Http2Exception {
         // figure out the fields
         var priority = (frameHeader.flags() & 0b00100000) > 0;
         var padded = (frameHeader.flags() & 0b00001000) > 0;
@@ -52,40 +54,20 @@ class Http2HeaderFragment {
         }
 
         // add name/value strings as:
-        var headers = new FieldBlock();
+        FieldBlock headers;
 
-        while (hpackLength > 0) {
-
-            var firstByte = buffer.get();
-            hpackLength--;
-
-            var isIndexed = (firstByte & 0b10000000) > 0;
-            if (isIndexed) {
-                var index = firstByte & 0b01111111;
-                var field = headerTable.getValue(index);
-                System.out.println("field = " + field);
-                if (field.value().length() == 0) {
-                } else {
-                    // TOOD set boolean neverIndex;
-                    headers.add(field.name(), field.value());
-                }
-            } else {
-                System.out.println("not indexed");
-            }
+        if (hpackLength > 0) {
+            var slice = buffer.slice().limit(hpackLength);
+            headers = fieldBlockDecoder.decodeFrom(slice);
+            buffer.position(buffer.position() + hpackLength);
+        } else {
+            headers = new FieldBlock();
         }
-
-
 
         if (padLength > 0) {
             buffer.position(buffer.position() + padLength);
         }
-        return new Http2HeaderFragment(exclusive, endHeaders, endStream, streamDependency, weight, headers);
-    }
-
-    boolean appendContinuationFragment(Http2FrameHeader frameHeader, HpackTable headerTable, ByteBuffer buffer) {
-        // extract more header fields and add to the existing headers
-
-        return endHeaders;
+        return new Http2HeaderFragment(frameHeader.streamId(), exclusive, endHeaders, endStream, streamDependency, weight, headers);
     }
 
     public boolean exclusive() {
@@ -135,5 +117,9 @@ class Http2HeaderFragment {
             ", weight=" + weight +
             ", headers=" + headers +
             '}';
+    }
+
+    public int streamId() {
+        return streamId;
     }
 }

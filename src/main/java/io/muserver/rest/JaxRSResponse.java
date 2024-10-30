@@ -304,7 +304,7 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
     public EntityTag getEntityTag() {
         Object first = headers.getFirst(HeaderNames.ETAG.toString());
         if (first == null || first instanceof  EntityTag) return (EntityTag)first;
-        return EntityTag.valueOf(first.toString());
+        return MuRuntimeDelegate.entityTagDelegate.fromString(first.toString());
     }
 
     @Override
@@ -539,7 +539,7 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
 
         @Override
         public ResponseBuilder cacheControl(CacheControl cacheControl) {
-            return setHeader(HeaderNames.CACHE_CONTROL, cacheControl.toString(), false);
+            return setHeader(HeaderNames.CACHE_CONTROL, MuRuntimeDelegate.cacheControlHeaderDelegate.toString(cacheControl), false);
         }
 
         @Override
