@@ -98,7 +98,8 @@ class Http2Stream {
         }
         var request = new Mu3Request(connection, method, requestUri, serverUri, HttpVersion.HTTP_2, headers, bodySize, body);
 
-        var response = new Http2Response();
+        var response = new Http2Response(new FieldBlock(), request);
+        throw new UnsupportedOperationException("Not done");
     }
 
 }

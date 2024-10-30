@@ -117,7 +117,7 @@ public class ExpectContinueTest {
         }
         assertEventually(received::size, equalTo(1));
         assertThat(received.get(0).completedSuccessfully(), is(false));
-        assertThat(received.get(0).response().statusValue(), is(HttpStatus.CONTENT_TOO_LARGE_413));
+        assertThat(received.get(0).response().status(), is(HttpStatus.CONTENT_TOO_LARGE_413));
     }
 
     @Test
@@ -143,7 +143,7 @@ public class ExpectContinueTest {
         } // close the connection - the request was closed early
         assertEventually(received::size, equalTo(1));
         assertThat(received.get(0).completedSuccessfully(), is(false));
-        assertThat(received.get(0).response().statusValue(), is(HttpStatus.CONTENT_TOO_LARGE_413));
+        assertThat(received.get(0).response().status(), is(HttpStatus.CONTENT_TOO_LARGE_413));
     }
 
 

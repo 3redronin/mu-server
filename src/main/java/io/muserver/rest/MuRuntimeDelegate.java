@@ -24,10 +24,24 @@ import java.util.Map;
  */
 public class MuRuntimeDelegate extends RuntimeDelegate {
 
-    private static MuRuntimeDelegate singleton;
+
+    private static final Map<Class<?>, HeaderDelegate<?>> headerDelegates = new HashMap<>();
     final static NewCookieHeaderDelegate newCookieHeaderDelegate = new NewCookieHeaderDelegate();
     final static EntityTagDelegate entityTagDelegate = new EntityTagDelegate();
     static final CacheControlHeaderDelegate cacheControlHeaderDelegate = new CacheControlHeaderDelegate();
+    static final LinkHeaderDelegate linkHeaderDelegate = new LinkHeaderDelegate();
+
+    static {
+        headerDelegates.put(MediaType.class, new MediaTypeHeaderDelegate());
+        headerDelegates.put(CacheControl.class, cacheControlHeaderDelegate);
+        headerDelegates.put(NewCookie.class, newCookieHeaderDelegate);
+        headerDelegates.put(Cookie.class, new CookieHeaderDelegate());
+        headerDelegates.put(EntityTag.class, entityTagDelegate);
+        headerDelegates.put(Link.class, linkHeaderDelegate);
+        headerDelegates.put(Date.class, new DateHeaderDelegate());
+    }
+
+    private static MuRuntimeDelegate singleton;
 
     /**
      * Registers the mu RuntimeDelegate with jax-rs, if it was not already.
@@ -41,16 +55,7 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
         return singleton;
     }
 
-    private final Map<Class<?>, HeaderDelegate> headerDelegates = new HashMap<>();
-
     private MuRuntimeDelegate() {
-        headerDelegates.put(MediaType.class, new MediaTypeHeaderDelegate());
-        headerDelegates.put(CacheControl.class, cacheControlHeaderDelegate);
-        headerDelegates.put(NewCookie.class, newCookieHeaderDelegate);
-        headerDelegates.put(Cookie.class, new CookieHeaderDelegate());
-        headerDelegates.put(EntityTag.class, entityTagDelegate);
-        headerDelegates.put(Link.class, new LinkHeaderDelegate());
-        headerDelegates.put(Date.class, new DateHeaderDelegate());
     }
 
     /**
@@ -126,9 +131,9 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
     @Override
     @SuppressWarnings("unchecked")
     public <T> HeaderDelegate<T> createHeaderDelegate(Class<T> type) throws IllegalArgumentException {
-        HeaderDelegate<T> headerDelegate = headerDelegates.get(type);
+        HeaderDelegate<T> headerDelegate = (HeaderDelegate<T>)headerDelegates.get(type);
         if (headerDelegate != null) {
-            return (HeaderDelegate<T>) headerDelegate;
+            return headerDelegate;
         }
         throw new MuException("MuServer does not support converting " + type.getName());
     }
