@@ -55,9 +55,6 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
         return singleton;
     }
 
-    private MuRuntimeDelegate() {
-    }
-
     /**
      * @param broadcaster A MuServer SSE broadcaster
      * @return the number of SSE clients currently connected to the broadcaster
