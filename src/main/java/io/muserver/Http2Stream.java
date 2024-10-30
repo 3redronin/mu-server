@@ -11,10 +11,10 @@ class Http2Stream {
 
     private final int id;
     final Mu3Request request;
-    final Http1Response response;
+    final Http2Response response;
     private State state = State.IDLE;
 
-    Http2Stream(int id, Mu3Request request, Http1Response response) {
+    Http2Stream(int id, Mu3Request request, Http2Response response) {
         this.id = id;
         this.request = request;
         this.response = response;
@@ -99,7 +99,7 @@ class Http2Stream {
         var request = new Mu3Request(connection, method, requestUri, serverUri, HttpVersion.HTTP_2, headers, bodySize, body);
 
         var response = new Http2Response(new FieldBlock(), request);
-        throw new UnsupportedOperationException("Not done");
+        return new Http2Stream(id, request, response);
     }
 
 }

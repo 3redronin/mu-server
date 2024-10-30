@@ -62,6 +62,33 @@ abstract class BaseHttpConnection implements HttpConnection {
         server.onRequestStarted(req);
     }
 
+    protected void handleExchange(Mu3Request muRequest, BaseResponse muResponse) throws Throwable {
+        try {
+            var handled = false;
+            for (var handler : server.getHandlers()) {
+                if (handler.handle(muRequest, muResponse)) {
+                    handled = true;
+                    break;
+                }
+            }
+            if (!handled) throw new HttpException(HttpStatus.NOT_FOUND_404, "This page is not available. Sorry about that.");
+
+            if (muRequest.isAsync()) {
+                var asyncHandle = muRequest.getAsyncHandle();
+                    // TODO set proper timeout
+                asyncHandle.waitForCompletion(Long.MAX_VALUE);
+            }
+
+        } catch (Exception e) {
+            if (muResponse.hasStartedSendingData()) {
+                // can't write a custom error at this point
+                throw e;
+            } else {
+                server.getExceptionHandler().handle(muRequest, muResponse, e);
+            }
+        }
+    }
+
     protected void onRequestEnded(Mu3Request req, Http1Response resp) {
         completedRequests.incrementAndGet();
         for (var listener : resp.completionListeners()) {

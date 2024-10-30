@@ -109,34 +109,7 @@ internal class Mu3Http1Connection(
                     onRequestStarted(muRequest)
 
                     try {
-                        log.info("Got request: $muRequest")
-                        try {
-                            var handled = false
-                            for (handler in server.handlers) {
-                                if (handler.handle(muRequest, muResponse)) {
-                                    handled = true
-                                    break
-                                }
-                            }
-                            if (!handled) throw HttpException(
-                                HttpStatus.NOT_FOUND_404,
-                                "This page is not available. Sorry about that."
-                            )
-
-                            if (muRequest.isAsync) {
-                                val asyncHandle = muRequest.asyncHandle!!
-                                // TODO set proper timeout
-                                asyncHandle.waitForCompletion(Long.MAX_VALUE)
-                            }
-
-                        } catch (e: Exception) {
-                            if (muResponse.hasStartedSendingData()) {
-                                // can't write a custom error at this point
-                                throw e
-                            } else {
-                                server.exceptionHandler.handle(muRequest, muResponse, e)
-                            }
-                        }
+                        handleExchange(muRequest, muResponse)
                         closeConnection = cleanUpNicely(closeConnection, muResponse, muRequest)
                     } catch (e: Exception) {
                         closeConnection = true

@@ -16,6 +16,7 @@ import java.util.Collections;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
 
 class Http2Connection extends BaseHttpConnection {
@@ -28,10 +29,12 @@ class Http2Connection extends BaseHttpConnection {
     private final Http2FlowController connectionFlowControl = new Http2FlowController(0, 65535);
     private final ConcurrentLinkedQueue<Long> settingsAckQueue = new ConcurrentLinkedQueue<>();
     private final ConcurrentHashMap<Integer, Http2Stream> streams = new ConcurrentHashMap<>();
+    private final ExecutorService executorService;
 
-    Http2Connection(@NotNull Mu3ServerImpl server, @NotNull ConnectionAcceptor creator, @NotNull Socket clientSocket, @Nullable Certificate clientCertificate, @NotNull Instant handshakeStartTime, Http2Settings initialServerSettings) {
+    Http2Connection(@NotNull Mu3ServerImpl server, @NotNull ConnectionAcceptor creator, @NotNull Socket clientSocket, @Nullable Certificate clientCertificate, @NotNull Instant handshakeStartTime, Http2Settings initialServerSettings, ExecutorService executorService) {
         super(server, creator, clientSocket, clientCertificate, handshakeStartTime);
         this.serverSettings = initialServerSettings;
+        this.executorService = executorService;
         this.buffer = ByteBuffer.allocate(serverSettings.maxFrameSize).flip();
     }
 
@@ -124,6 +127,12 @@ class Http2Connection extends BaseHttpConnection {
         var stream = Http2Stream.start(this, frame, frame.headers());
         streams.put(frame.streamId(), stream);
         onRequestStarted(stream.request);
+        executorService.submit(new Runnable() {
+            @Override
+            public void run() {
+
+            }
+        });
     }
 
     private void discardPayload(ByteBuffer buffer, InputStream clientIn, int len) throws IOException {
