@@ -40,7 +40,7 @@ public class EventsTest {
         assertThat(info, notNullValue());
         assertThat(info.completedSuccessfully(), is(true));
         assertThat(info.duration(), greaterThan(-1L));
-        assertThat(info.response().status(), is(400));
+        assertThat(info.response().status(), is(HttpStatus.BAD_REQUEST_400));
         assertThat(info.response().headers().get("Hello"), is("World"));
         assertThat(info.request().uri(), equalTo(server.uri().resolve("/blah")));
     }
