@@ -1,9 +1,13 @@
 package io.muserver;
 
+import org.jetbrains.annotations.NotNull;
+
+import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.Objects;
 
-class Http2HeaderFragment {
+class Http2HeaderFragment implements LogicalHttp2Frame {
 
     private final int streamId;
     private final boolean exclusive;
@@ -92,6 +96,36 @@ class Http2HeaderFragment {
 
     public FieldBlock headers() {
         return headers;
+    }
+
+    @Override
+    public void writeTo(@NotNull Http2Connection connection, @NotNull OutputStream out) throws IOException {
+
+        var baos = new NiceByteArrayOutputStream(32);
+        baos.write(new byte[] { 0, 0, 0,
+            /* type */ 0x01,
+            /* flags */ 0b00000101,
+            (byte)(streamId >> 24),
+            (byte)(streamId >> 16),
+            (byte)(streamId >> 8),
+            (byte)(streamId),
+        });
+
+        int size = baos.size();
+
+        connection.fieldBlockEncoder.encodeTo(headers, baos);
+
+        size = baos.size() - size;
+
+        // todo: continuations if it is bigger than frame size
+
+        byte[] toWrite = baos.rawBuffer();
+        toWrite[0] = (byte)(size >> 16);
+        toWrite[1] = (byte)(size >> 8);
+        toWrite[2] = (byte)size;
+
+        out.write(toWrite, 0, baos.size());
+
     }
 
     @Override

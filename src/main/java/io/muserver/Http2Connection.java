@@ -17,6 +17,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.LinkedBlockingDeque;
 import java.util.stream.Collectors;
 
 class Http2Connection extends BaseHttpConnection {
@@ -30,22 +31,42 @@ class Http2Connection extends BaseHttpConnection {
     private final ConcurrentLinkedQueue<Long> settingsAckQueue = new ConcurrentLinkedQueue<>();
     private final ConcurrentHashMap<Integer, Http2Stream> streams = new ConcurrentHashMap<>();
     private final ExecutorService executorService;
+    private final LinkedBlockingDeque<LogicalHttp2Frame> writeQueue = new LinkedBlockingDeque<>();
+
+    final FieldBlockEncoder fieldBlockEncoder;
 
     Http2Connection(@NotNull Mu3ServerImpl server, @NotNull ConnectionAcceptor creator, @NotNull Socket clientSocket, @Nullable Certificate clientCertificate, @NotNull Instant handshakeStartTime, Http2Settings initialServerSettings, ExecutorService executorService) {
         super(server, creator, clientSocket, clientCertificate, handshakeStartTime);
         this.serverSettings = initialServerSettings;
         this.executorService = executorService;
         this.buffer = ByteBuffer.allocate(serverSettings.maxFrameSize).flip();
+        this.fieldBlockEncoder = new FieldBlockEncoder(new HpackTable(clientSettings.headerTableSize));
     }
 
 
     @Override
     public void start(InputStream clientIn, OutputStream clientOut) throws Http2Exception, IOException {
         // do the handshake
-        clientSettings = Http2Handshaker.handshake(serverSettings, clientSettings, buffer, clientIn,  clientOut);
+        clientSettings = Http2Handshaker.handshake(this, serverSettings, clientSettings, buffer, clientIn,  clientOut);
+        fieldBlockEncoder.changeTableSize(clientSettings.headerTableSize);
         settingsAckQueue.add(System.currentTimeMillis());
 
         var fieldBlockDecoder = new FieldBlockDecoder(serverSettings.headerTableSize);
+
+        var writerJob = executorService.submit(() -> {
+            try {
+                while (!closed) {
+                    var frame = writeQueue.take();
+                    log.info("Writing " + frame);
+                    frame.writeTo(this, clientOut);
+                    if (writeQueue.isEmpty()) {
+                        clientOut.flush();
+                    }
+                }
+            } catch (Exception e) {
+                log.error("Error in write thread", e);
+            }
+        });
 
         // and now just read frames
         while (!closed) {
@@ -93,6 +114,7 @@ class Http2Connection extends BaseHttpConnection {
                             if (newSettings.initialWindowSize != oldSettings.initialWindowSize) {
                                 // todo: apply diff settings on existing streams
                             }
+
                         }
                     }
                     break;
@@ -124,12 +146,18 @@ class Http2Connection extends BaseHttpConnection {
     }
 
     private void startRequest(Http2HeaderFragment frame) throws Http2Exception {
-        var stream = Http2Stream.start(this, frame, frame.headers());
+        var stream = Http2Stream.start(this, frame, frame.headers(), writeQueue);
         streams.put(frame.streamId(), stream);
         onRequestStarted(stream.request);
         executorService.submit(new Runnable() {
             @Override
             public void run() {
+                try {
+                    handleExchange(stream.request, stream.response());
+                    stream.cleanup();
+                } catch (Throwable e) {
+                    throw new RuntimeException(e);
+                }
 
             }
         });

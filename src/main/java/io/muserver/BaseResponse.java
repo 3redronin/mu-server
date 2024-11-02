@@ -149,7 +149,7 @@ abstract class BaseResponse implements MuResponse {
         return state;
     }
 
-    protected abstract void cleanup();
+    protected abstract void cleanup() throws InterruptedException;
 
     protected void closeWriter() {
         if (writer != null) {

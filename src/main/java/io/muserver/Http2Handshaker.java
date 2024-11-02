@@ -19,12 +19,12 @@ class Http2Handshaker {
     /*
     Processes the client connection  preface
      */
-    static Http2Settings handshake(Http2Settings serverSettings, Http2Settings clientSettings, ByteBuffer buffer, InputStream clientIn, OutputStream clientOut) throws IOException, Http2Exception {
+    static Http2Settings handshake(Http2Connection connection, Http2Settings serverSettings, Http2Settings clientSettings, ByteBuffer buffer, InputStream clientIn, OutputStream clientOut) throws IOException, Http2Exception {
         // handshake start
         readClientPreface(clientIn);
         var newClientSettings = readClientSettings(buffer, clientIn, clientSettings);
-        serverSettings.writeTo(clientOut);
-        Http2Settings.ACK.writeTo(clientOut);
+        serverSettings.writeTo(connection, clientOut);
+        Http2Settings.ACK.writeTo(connection, clientOut);
         clientOut.flush();
         return newClientSettings;
     }

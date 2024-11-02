@@ -1,11 +1,9 @@
 package io.muserver;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
-import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -297,21 +295,4 @@ public abstract class BaseWebSocket implements MuWebSocket {
         onClientClosed(1001, null);
     }
 
-    /**
-     * A BAOS that lets you get the raw buffer without making a copy of it
-     */
-    private static class NiceByteArrayOutputStream extends ByteArrayOutputStream {
-        public NiceByteArrayOutputStream(int size) {
-            super(size);
-        }
-
-        ByteBuffer toByteBuffer() {
-            return ByteBuffer.wrap(buf, 0, count);
-        }
-
-        String decodeUTF8() throws CharacterCodingException {
-            var charBuffer = StandardCharsets.UTF_8.newDecoder().decode(toByteBuffer());
-            return charBuffer.toString();
-        }
-    }
 }

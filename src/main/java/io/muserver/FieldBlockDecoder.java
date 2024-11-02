@@ -104,4 +104,7 @@ class FieldBlockDecoder {
         }
     }
 
+    public void changeTableSize(int headerTableSize) {
+        table.changeMaxSize(headerTableSize);
+    }
 }

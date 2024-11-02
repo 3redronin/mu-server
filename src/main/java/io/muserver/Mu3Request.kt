@@ -19,7 +19,7 @@ internal class Mu3Request(
 ) : MuRequest {
     override fun contentType() = mu3Headers.get("content-type")
     private var form: MuForm? = null
-    lateinit var response: Http1Response
+    lateinit var response: BaseResponse
     private val startTime = System.currentTimeMillis()
     private var query: QueryString? = null
     private var attributes: MutableMap<String, Any>? = null

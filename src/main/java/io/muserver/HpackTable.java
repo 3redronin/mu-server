@@ -88,8 +88,10 @@ class HpackTable {
     }
 
     void changeMaxSize(int newSize) {
-        maxSize = newSize;
-        trimSize();
+        if (newSize != maxSize) {
+            maxSize = newSize;
+            trimSize();
+        }
     }
 
     private void trimSize() {

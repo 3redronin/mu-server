@@ -1,26 +1,38 @@
 package io.muserver;
 
+import org.jetbrains.annotations.NotNull;
+
+import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.URI;
+import java.util.concurrent.LinkedBlockingDeque;
 
 class Http2Stream {
 
     private enum State {
-        IDLE, RESERVED_LOCAL, RESERVED_REMOTE, OPEN, HALF_CLOSED_LOCAL, HALF_CLOSED_REMOTE, CLOSED
+        /* IDLE, RESERVED_LOCAL, RESERVED_REMOTE, */ OPEN, HALF_CLOSED_LOCAL, HALF_CLOSED_REMOTE, CLOSED;
+
     }
+    private final LinkedBlockingDeque<LogicalHttp2Frame> writeQueue;
 
-    private final int id;
+    final int id;
+
     final Mu3Request request;
-    final Http2Response response;
-    private State state = State.IDLE;
+    private Http2Response response;
+    private State state = State.OPEN;
 
-    Http2Stream(int id, Mu3Request request, Http2Response response) {
+    Http2Stream(int id, Mu3Request request, LinkedBlockingDeque<LogicalHttp2Frame> writeQueue) {
+        this.writeQueue = writeQueue;
         this.id = id;
         this.request = request;
-        this.response = response;
     }
 
-    static Http2Stream start(Http2Connection connection, Http2HeaderFragment headerFrame, FieldBlock headers) throws Http2Exception {
+    public BaseResponse response() {
+        return response;
+    }
+
+    static Http2Stream start(Http2Connection connection, Http2HeaderFragment headerFrame, FieldBlock headers, LinkedBlockingDeque<LogicalHttp2Frame> writeQueue) throws Http2Exception {
         var id = headerFrame.streamId();
 
         var iter = headers.lineIterator().iterator();
@@ -79,6 +91,8 @@ class Http2Stream {
         }
         if (authority == null) {
             authority = host;
+        } else if (host == null) {
+            headers.add(HeaderNames.HOST, authority);
         }
 
         BodySize bodySize;
@@ -98,8 +112,29 @@ class Http2Stream {
         }
         var request = new Mu3Request(connection, method, requestUri, serverUri, HttpVersion.HTTP_2, headers, bodySize, body);
 
-        var response = new Http2Response(new FieldBlock(), request);
-        return new Http2Stream(id, request, response);
+        Http2Stream stream = new Http2Stream(id, request, writeQueue);
+        stream.response = new Http2Response(stream, new FieldBlock(), request);
+        return stream;
     }
 
+
+    void cleanup() throws InterruptedException {
+        request.cleanup();
+        response.cleanup();
+    }
+
+    /**
+     * Writes a frame, blocking if needed until there is enough flow control credit.
+     */
+    void blockingWrite(LogicalHttp2Frame frame) throws InterruptedException {
+        writeQueue.put(frame);
+    }
+
+}
+
+/**
+ * An HTTP2 frame, where continuations are treated together as a single frame
+ */
+interface LogicalHttp2Frame {
+    void writeTo(@NotNull Http2Connection connection, @NotNull OutputStream out) throws IOException;
 }

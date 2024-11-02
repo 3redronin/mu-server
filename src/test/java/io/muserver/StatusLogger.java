@@ -11,8 +11,7 @@ public class StatusLogger {
         int count = 0;
         for (MuRequest muRequest : muRequests) {
             Mu3Request req = (Mu3Request) muRequest;
-            var info = req.response;
-            log.info(count + ": exchange state "+ info.status() + " with duration " + info.duration() + "ms. Req: " + req + " with response " + info.response() + " ");
+            log.info(count + ": response "+ req.response);
             count++;
         }
     }

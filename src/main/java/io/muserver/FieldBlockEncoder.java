@@ -73,4 +73,7 @@ class FieldBlockEncoder {
         }
     }
 
+    public void changeTableSize(int headerTableSize) {
+        table.changeMaxSize(headerTableSize);
+    }
 }

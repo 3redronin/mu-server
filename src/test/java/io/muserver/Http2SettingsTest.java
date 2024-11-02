@@ -15,7 +15,7 @@ public class Http2SettingsTest {
     public void canWriteAckSettingsFrame() throws Exception {
         Http2Settings settings = Http2Settings.ACK;
         ByteArrayOutputStream out = new ByteArrayOutputStream();
-        settings.writeTo(out);
+        settings.writeTo(null, out);
 
         // Expecting a type 4 settings frame with ACK and no body
         byte[] expectedBytes = new byte[]{0, 0, 0, 4, 1, 0, 0, 0, 0};
@@ -26,7 +26,7 @@ public class Http2SettingsTest {
     public void canWriteSettingsFrame() throws Exception {
         Http2Settings settings = new Http2Settings(false, 4096, 100, 65535, 16384, 32 * 1024);
         ByteArrayOutputStream out = new ByteArrayOutputStream();
-        settings.writeTo(out);
+        settings.writeTo(null, out);
 
         byte[] expectedBytes = new byte[]{
             0, 0, 5 * 6, 4, 0, 0, 0, 0, 0,
