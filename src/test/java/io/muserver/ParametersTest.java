@@ -21,6 +21,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
+import static scaffolding.MuAssert.assertEventually;
 
 public class ParametersTest {
 
@@ -197,7 +198,7 @@ public class ParametersTest {
                     "|serverRawQS=" + request.serverURI().getRawQuery() + "|\n" +
                     "|a space=" + q.getAll("a space") + "|\n" +
                     "|a+plus=" + q.getAll("a+plus") + "|\n" +
-                    "");
+                    "$end$");
                 return true;
             }).start();
         String r;
@@ -207,9 +208,7 @@ public class ParametersTest {
             client.endHeaders();
             client.flushRequest();
 
-            while (client.bytesReceived() == 0) {
-                Thread.sleep(10);
-            }
+            assertEventually(client::responseString, endsWith("$end$"));
             r = client.responseString();
         }
         assertThat(r, containsString("|a space=[a value, a value2]|"));
