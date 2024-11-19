@@ -7,6 +7,7 @@ import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.handler.codec.haproxy.HAProxyMessageDecoder;
 import io.netty.handler.codec.http.HttpRequestDecoder;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseEncoder;
@@ -707,8 +708,8 @@ public class MuServerBuilder {
                     p.addLast("idle", new IdleStateHandler(0, 0, idleTimeoutMills, TimeUnit.MILLISECONDS));
                     p.addLast(trafficShapingHandler);
                     if (haProxyProtocolEnabled) {
-                        OptionalHAProxyMessageDecoder haProxyMessageDecoder = new OptionalHAProxyMessageDecoder();
-                        p.addLast(OptionalHAProxyMessageDecoder.CHANNEL_NAME, haProxyMessageDecoder);
+                        HAProxyMessageDecoder haProxyMessageDecoder = new HAProxyMessageDecoder();
+                        p.addLast("HAProxyMessageDecoder", haProxyMessageDecoder);
                     }
                     if (usesSsl) {
                         SslHandler sslHandler = sslContextProvider.get().newHandler(socketChannel.alloc());

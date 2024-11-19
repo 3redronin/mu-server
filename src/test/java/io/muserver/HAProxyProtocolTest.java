@@ -15,10 +15,12 @@ import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
+import static org.junit.Assert.assertThrows;
 import static scaffolding.ClientUtils.*;
 
 public class HAProxyProtocolTest {
@@ -26,7 +28,7 @@ public class HAProxyProtocolTest {
     private MuServer server;
 
     @Test
-    public void ifItsOptionalAndNotSentThenValueIsNull() throws IOException {
+    public void ifEnabledButNotSentThereIsAnException() throws IOException {
         server = ServerUtils.httpsServerForTest()
             .withHttpsPort(-1)
             .withHttpPort(0)
@@ -38,9 +40,7 @@ public class HAProxyProtocolTest {
         OkHttpClient client = ClientUtils.client.newBuilder()
             .addNetworkInterceptor(chain -> chain.proceed(chain.request()))
             .build();
-        try (Response resp = call(client, request(server.uri()))) {
-            assertThat(resp.body().string(), is("original IP: "));
-        }
+        assertThrows(Exception.class, () -> call(client, request(server.uri())).close());
     }
 
     @Test
@@ -55,7 +55,7 @@ public class HAProxyProtocolTest {
             .start();
 
         SSLContext sslContext = sslContextForTesting(veryTrustingTrustManager());
-        HAProxySSLSocketFactory sslSocketFactory = new HAProxySSLSocketFactory(sslContext.getSocketFactory(), "PROXY TCP4 192.0.2.0 192.0.2.1 20567 443\r\n");
+        HAProxySSLSocketFactory sslSocketFactory = new HAProxySSLSocketFactory(sslContext.getSocketFactory(), "PROXY TCP4 192.0.2.0 192.0.2.1 20567 443\r\n".getBytes(StandardCharsets.US_ASCII));
 
         OkHttpClient client = ClientUtils.client.newBuilder()
             .sslSocketFactory(sslSocketFactory, veryTrustingTrustManager())
@@ -64,6 +64,54 @@ public class HAProxyProtocolTest {
             assertThat(resp.body().string(), is("Source: 192.0.2.0:20567 Destination: 192.0.2.1:443"));
         }
     }
+
+    @Test
+    public void clientConfigCanBeGottenFromHAProxyProtocolV2OverHttps() throws IOException {
+        server = ServerUtils.httpsServerForTest()
+            .withHAProxyProtocolEnabled(true)
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                ProxiedConnectionInfo pi = request.connection().proxyInfo().get();
+                response.sendChunk("Source: " + pi.sourceAddress() + ":" + pi.sourcePort());
+                response.sendChunk(" Destination: " + pi.destinationAddress() + ":" + pi.destinationPort());
+            })
+            .start();
+
+        SSLContext sslContext = sslContextForTesting(veryTrustingTrustManager());
+
+        byte[] signature = "\r\n\r\n\0\r\nQUIT\n".getBytes(StandardCharsets.US_ASCII);
+        byte protocolVersionCommand = 0x21; // Version 2, PROXY command
+        byte addressFamilyTransport = 0x11; // IPv4, STREAM
+        short length = 12; // 12 bytes for IPv4 addresses and ports
+
+        // IPv4 addresses and ports
+        byte[] sourceAddress = new byte[]{(byte) 192, 0, 2, 0}; // 192.0.2.0
+        byte[] destinationAddress = new byte[]{(byte) 192, 0, 2, 1}; // 192.0.2.1
+        short sourcePort = (short) 20567; // Port 20567
+        short destinationPort = (short) 443; // Port 443
+
+        // Create buffer for full message
+        ByteBuffer buffer = ByteBuffer.allocate(16 + length);
+        buffer.put(signature); // 12 bytes signature
+        buffer.put(protocolVersionCommand); // 1 byte version and command
+        buffer.put(addressFamilyTransport); // 1 byte family and transport
+        buffer.putShort(length); // 2 bytes length
+        buffer.put(sourceAddress); // 4 bytes source address
+        buffer.put(destinationAddress); // 4 bytes destination address
+        buffer.putShort(sourcePort); // 2 bytes source port
+        buffer.putShort(destinationPort); // 2 bytes destination port
+
+        byte[] haproxyMessage = buffer.array();
+
+        HAProxySSLSocketFactory sslSocketFactory = new HAProxySSLSocketFactory(sslContext.getSocketFactory(), haproxyMessage);
+
+        OkHttpClient client = ClientUtils.client.newBuilder()
+            .sslSocketFactory(sslSocketFactory, veryTrustingTrustManager())
+            .build();
+        try (Response resp = call(client, request(server.uri()))) {
+            assertThat(resp.body().string(), is("Source: 192.0.2.0:20567 Destination: 192.0.2.1:443"));
+        }
+    }
+
 
     @Test
     public void clientConfigCanBeGottenFromHAProxyProtocolV1OverPlaintext() throws IOException {
@@ -98,9 +146,9 @@ public class HAProxyProtocolTest {
 
     private static class HAProxySSLSocketFactory extends SSLSocketFactory {
         private final SSLSocketFactory delegate;
-        private final String proxyHeader;
+        private final byte[] proxyHeader;
 
-        public HAProxySSLSocketFactory(SSLSocketFactory delegate, String proxyHeader) {
+        public HAProxySSLSocketFactory(SSLSocketFactory delegate, byte[] proxyHeader) {
             this.delegate = delegate;
             this.proxyHeader = proxyHeader;
         }
@@ -124,7 +172,7 @@ public class HAProxyProtocolTest {
 
         private void writeProxyHeader(Socket s) throws IOException {
             OutputStream os = s.getOutputStream();
-            os.write(proxyHeader.getBytes(StandardCharsets.US_ASCII));
+            os.write(proxyHeader);
             os.flush();
         }
 
