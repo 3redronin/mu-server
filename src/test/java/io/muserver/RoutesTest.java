@@ -2,13 +2,13 @@ package io.muserver;
 
 import io.muserver.rest.PathMatch;
 import io.muserver.rest.UriPattern;
+import jakarta.ws.rs.core.PathSegment;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.ClientUtils;
 import scaffolding.ServerUtils;
 
-import javax.ws.rs.core.PathSegment;
 import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;

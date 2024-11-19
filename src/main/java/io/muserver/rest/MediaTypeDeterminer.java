@@ -1,10 +1,11 @@
 package io.muserver.rest;
 
-import javax.ws.rs.Consumes;
-import javax.ws.rs.NotAcceptableException;
-import javax.ws.rs.Produces;
-import javax.ws.rs.core.MediaType;
-import javax.ws.rs.ext.MessageBodyWriter;
+import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.NotAcceptableException;
+import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.ext.MessageBodyWriter;
+
 import java.lang.annotation.Annotation;
 import java.lang.reflect.GenericDeclaration;
 import java.util.*;

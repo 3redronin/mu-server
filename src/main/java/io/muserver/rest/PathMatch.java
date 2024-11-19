@@ -1,6 +1,7 @@
 package io.muserver.rest;
 
-import javax.ws.rs.core.PathSegment;
+import jakarta.ws.rs.core.PathSegment;
+
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;

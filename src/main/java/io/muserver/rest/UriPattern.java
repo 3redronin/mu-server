@@ -1,8 +1,8 @@
 package io.muserver.rest;
 
 import io.muserver.Mutils;
+import jakarta.ws.rs.core.PathSegment;
 
-import javax.ws.rs.core.PathSegment;
 import java.net.URI;
 import java.util.*;
 import java.util.regex.Matcher;
@@ -95,7 +95,7 @@ public class UriPattern {
      * Converts a URI Template to a regular expression, following the
      * <a href="http://download.oracle.com/otn-pub/jcp/jaxrs-2_0-fr-eval-spec/jsr339-jaxrs-2.0-final-spec.pdf">JAX-RS:
      * Java™ API for RESTful Web Services specification Version 2.0</a> section <code>3.7.3</code>
-     * @param template A string as passed to a {@link javax.ws.rs.Path} annotation, such as <code>/fruit/{name}</code>
+     * @param template A string as passed to a {@link jakarta.ws.rs.Path} annotation, such as <code>/fruit/{name}</code>
      * @return Returns a compiled regex Pattern for the given template that will match relevant URI paths, for example <code>/\Qfruit\E/(?&lt;name&gt;[ˆ/]+?)(/.*)?</code>
      * @throws IllegalArgumentException If the template contains invalid regular expression, or template is null, or other errors
      */

@@ -3,6 +3,9 @@ package io.muserver.rest;
 import io.muserver.MuRequest;
 import io.muserver.MuServer;
 import io.muserver.Mutils;
+import jakarta.ws.rs.*;
+import jakarta.ws.rs.container.*;
+import jakarta.ws.rs.core.*;
 import okhttp3.MediaType;
 import okhttp3.RequestBody;
 import okhttp3.Response;
@@ -11,9 +14,6 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 
-import javax.ws.rs.*;
-import javax.ws.rs.container.*;
-import javax.ws.rs.core.*;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -263,7 +263,7 @@ public class FilterTest {
         class MethodChangingFilter implements ContainerRequestFilter {
             @Override
             public void filter(ContainerRequestContext requestContext) throws IOException {
-                requestContext.abortWith(javax.ws.rs.core.Response.status(409).entity("Blocked!").build());
+                requestContext.abortWith(jakarta.ws.rs.core.Response.status(409).entity("Blocked!").build());
             }
         }
         server = httpsServerForTest()
@@ -318,14 +318,14 @@ public class FilterTest {
         class AbortFilter implements ContainerRequestFilter {
             @Override
             public void filter(ContainerRequestContext requestContext) throws IOException {
-                requestContext.abortWith(javax.ws.rs.core.Response.status(401).entity("No auth!!").build());
+                requestContext.abortWith(jakarta.ws.rs.core.Response.status(401).entity("No auth!!").build());
             }
         }
         server = httpsServerForTest()
             .addHandler(
                 restHandler(new TheWay())
                     .addRequestFilter(new AbortFilter())
-                    .addExceptionMapper(Exception.class, exception -> javax.ws.rs.core.Response.serverError().entity("Server error").build())
+                    .addExceptionMapper(Exception.class, exception -> jakarta.ws.rs.core.Response.serverError().entity("Server error").build())
             )
             .start();
         try (Response resp = call(request().url(server.uri().resolve("/something").toString()))) {
@@ -342,8 +342,8 @@ public class FilterTest {
         class TheWay {
             @GET
             @Produces("text/html")
-            public javax.ws.rs.core.Response itMoves() {
-                return javax.ws.rs.core.Response.status(200)
+            public jakarta.ws.rs.core.Response itMoves() {
+                return jakarta.ws.rs.core.Response.status(200)
                     .header("My-Header", "was-lowercase")
                     .entity("a lowercase string")
                     .cookie(new NewCookie("my-cookie", "cooke-value"))
@@ -359,7 +359,7 @@ public class FilterTest {
                         @Override
                         public void filter(ContainerRequestContext requestContext, ContainerResponseContext responseContext) throws IOException {
                             responseContext.setStatus(400);
-                            responseContext.setEntity(12, new Annotation[0], javax.ws.rs.core.MediaType.TEXT_PLAIN_TYPE);
+                            responseContext.setEntity(12, new Annotation[0], jakarta.ws.rs.core.MediaType.TEXT_PLAIN_TYPE);
                             responseContext.getStringHeaders().putSingle("My-Header", responseContext.getHeaderString("My-Header").toUpperCase());
                             responseContext.getHeaders().put("My-Number", asList(1, 2, 3));
                         }
@@ -418,7 +418,7 @@ public class FilterTest {
             public void filter(ContainerRequestContext requestContext) throws IOException {
                 MuRequest muRequest = (MuRequest) requestContext.getProperty(MU_REQUEST_PROPERTY);
                 ResourceInfo resourceInfo = (ResourceInfo) requestContext.getProperty(MuRuntimeDelegate.RESOURCE_INFO_PROPERTY);
-                requestContext.abortWith(javax.ws.rs.core.Response.ok()
+                requestContext.abortWith(jakarta.ws.rs.core.Response.ok()
                     .entity(
                         "properties=" + requestContext.getPropertyNames().stream().sorted().collect(Collectors.joining(", ")) +
                             " and method=" + muRequest.method() + " and "
@@ -454,7 +454,7 @@ public class FilterTest {
             public void filter(ContainerRequestContext requestContext) throws IOException {
                 MuRequest muRequest = (MuRequest) requestContext.getProperty(MU_REQUEST_PROPERTY);
                 ResourceInfo resourceInfo = (ResourceInfo) requestContext.getProperty(MuRuntimeDelegate.RESOURCE_INFO_PROPERTY);
-                requestContext.abortWith(javax.ws.rs.core.Response.ok()
+                requestContext.abortWith(jakarta.ws.rs.core.Response.ok()
                     .entity(
                         "properties=" + requestContext.getPropertyNames().stream().sorted().collect(Collectors.joining(", ")) +
                             " and method=" + muRequest.method() + " and "

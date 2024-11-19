@@ -1,9 +1,9 @@
 package io.muserver.rest;
 
+import jakarta.ws.rs.core.MediaType;
 import org.hamcrest.MatcherAssert;
 import org.junit.Test;
 
-import javax.ws.rs.core.MediaType;
 import java.util.List;
 
 import static java.util.Arrays.asList;

@@ -1,16 +1,14 @@
 package io.muserver.rest;
 
+import jakarta.ws.rs.core.GenericEntity;
 import org.junit.Test;
 
-import javax.ws.rs.core.GenericEntity;
 import java.lang.reflect.ParameterizedType;
 import java.util.ArrayList;
 import java.util.List;
 
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.instanceOf;
-import static org.hamcrest.Matchers.sameInstance;
+import static org.hamcrest.Matchers.*;
 
 public class ObjWithTypeTest {
 

@@ -1,7 +1,7 @@
 package io.muserver.rest;
 
-import javax.ws.rs.core.EntityTag;
-import javax.ws.rs.ext.RuntimeDelegate;
+import jakarta.ws.rs.core.EntityTag;
+import jakarta.ws.rs.ext.RuntimeDelegate;
 
 class EntityTagDelegate implements RuntimeDelegate.HeaderDelegate<EntityTag> {
     @Override

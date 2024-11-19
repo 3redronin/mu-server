@@ -1,14 +1,13 @@
 package io.muserver.rest;
 
 import io.muserver.MuServer;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.POST;
+import jakarta.ws.rs.Path;
 import okhttp3.internal.Util;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.ServerUtils;
-
-import javax.ws.rs.GET;
-import javax.ws.rs.POST;
-import javax.ws.rs.Path;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static java.util.Arrays.asList;
@@ -159,7 +158,7 @@ public class CORSTest {
             .url(server.uri().resolve("/things").toString()))
         ) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.header("Access-Control-Allow-Origin"), is("null"));
+            assertThat(resp.header("Access-Control-Allow-Origin"), is(nullValue()));
             assertThat(resp.header("Access-Control-Allow-Methods"), is(nullValue()));
             assertThat(resp.header("Access-Control-Allow-Headers"), is(nullValue()));
             assertThat(resp.header("Access-Control-Max-Age"), is(nullValue()));
@@ -219,7 +218,7 @@ public class CORSTest {
             .url(server.uri().resolve("/things").toString()))
         ) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.header("Access-Control-Allow-Origin"), is("null"));
+            assertThat(resp.header("Access-Control-Allow-Origin"), is(nullValue()));
         }
     }
 

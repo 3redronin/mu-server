@@ -44,9 +44,9 @@ https://github.com/jersey/jersey/blob/12e5d8bdf22bcd2676a1032ed69473cf2bbc48c7/c
 package io.muserver.rest;
 
 import io.muserver.ParameterizedHeader;
+import jakarta.ws.rs.core.CacheControl;
+import jakarta.ws.rs.ext.RuntimeDelegate;
 
-import javax.ws.rs.core.CacheControl;
-import javax.ws.rs.ext.RuntimeDelegate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;

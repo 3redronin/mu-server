@@ -32,6 +32,10 @@ public class SsePublisherTest {
             "    \"value2\": \"Something \\n more\",\n" +
             "    \"value1\": \"Something\"\n" +
             "}";
+        String multilineJsonWithNewlines = "{\r\n" +
+            "    \"value2\": \"Something \\n more\",\r\n" +
+            "    \"value1\": \"Something\"\r\n" +
+            "}";
 
         server = ServerUtils.httpsServerForTest()
             .addHandler(Method.GET, "/streamer", (request, response, pathParams) -> {
@@ -47,6 +51,7 @@ public class SsePublisherTest {
                         ssePublisher.send("A message and event and ID", "customevent", "myid");
                         ssePublisher.sendComment("this is a comment 2");
                         ssePublisher.send(multilineJson, null, null);
+                        ssePublisher.send(multilineJsonWithNewlines, null, null);
                     } catch (Exception e) {
                         log.info("Error while publishing", e);
                     } finally {
@@ -70,6 +75,7 @@ public class SsePublisherTest {
             "message=A message and event and ID        event=customevent        id=myid",
             "comment=this is a comment 2",
             "message=" + multilineJson + "        event=message        id=myid",
+            "message=" + multilineJsonWithNewlines.replaceAll("\\r\\n", "\n") + "        event=message        id=myid",
             "retryError",
             "closed")));
     }
@@ -129,9 +135,7 @@ public class SsePublisherTest {
 
         assertThat(thrownException.get(), is(notNullValue()));
         assertThat(thrownException.get(), is(instanceOf(IOException.class)));
-
     }
-
 
     @After
     public void destroy() {

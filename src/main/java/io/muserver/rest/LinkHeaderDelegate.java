@@ -2,11 +2,11 @@ package io.muserver.rest;
 
 import io.muserver.Mutils;
 import io.muserver.ParameterizedHeaderWithValue;
+import jakarta.ws.rs.core.Link;
+import jakarta.ws.rs.core.UriBuilder;
+import jakarta.ws.rs.core.UriBuilderException;
+import jakarta.ws.rs.ext.RuntimeDelegate;
 
-import javax.ws.rs.core.Link;
-import javax.ws.rs.core.UriBuilder;
-import javax.ws.rs.core.UriBuilderException;
-import javax.ws.rs.ext.RuntimeDelegate;
 import java.net.URI;
 import java.util.*;
 

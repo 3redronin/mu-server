@@ -1,6 +1,7 @@
 package io.muserver;
 
 import io.netty.channel.Channel;
+import jakarta.ws.rs.RedirectionException;
 import okhttp3.*;
 import okio.BufferedSink;
 import org.junit.After;
@@ -10,7 +11,6 @@ import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 import scaffolding.StringUtils;
 
-import javax.ws.rs.RedirectionException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.SocketTimeoutException;

@@ -1,13 +1,13 @@
 package io.muserver.rest;
 
 import io.muserver.MuServer;
+import jakarta.ws.rs.*;
+import jakarta.ws.rs.core.Response;
 import okhttp3.internal.Util;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.ServerUtils;
 
-import javax.ws.rs.*;
-import javax.ws.rs.core.Response;
 import java.io.IOException;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;

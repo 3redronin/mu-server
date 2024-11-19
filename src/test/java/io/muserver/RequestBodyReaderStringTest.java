@@ -1,5 +1,6 @@
 package io.muserver;
 
+import jakarta.ws.rs.ClientErrorException;
 import okhttp3.MediaType;
 import okhttp3.Request;
 import okhttp3.RequestBody;
@@ -11,7 +12,6 @@ import org.junit.Assert;
 import org.junit.Test;
 import scaffolding.*;
 
-import javax.ws.rs.ClientErrorException;
 import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;

@@ -1,7 +1,8 @@
 package io.muserver;
-import io.muserver.rest.MuRuntimeDelegate;
 
-import javax.ws.rs.core.MediaType;
+import io.muserver.rest.MuRuntimeDelegate;
+import jakarta.ws.rs.core.MediaType;
+
 import java.util.List;
 
 import static io.muserver.Mutils.notNull;

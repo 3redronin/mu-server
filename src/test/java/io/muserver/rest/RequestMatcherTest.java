@@ -5,13 +5,13 @@ import io.muserver.Headers;
 import io.muserver.HeadersFactory;
 import io.muserver.Method;
 import io.netty.handler.codec.http.HttpHeaderNames;
+import jakarta.ws.rs.*;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.ext.ParamConverterProvider;
 import org.junit.Assert;
 import org.junit.Test;
 import scaffolding.NotImplementedMuRequest;
 
-import javax.ws.rs.*;
-import javax.ws.rs.core.MediaType;
-import javax.ws.rs.ext.ParamConverterProvider;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.net.URI;

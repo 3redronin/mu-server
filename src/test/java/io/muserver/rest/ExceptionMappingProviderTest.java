@@ -1,19 +1,19 @@
 package io.muserver.rest;
 
 import io.muserver.MuServer;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.NotFoundException;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.WebApplicationException;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.MultivaluedMap;
+import jakarta.ws.rs.ext.ExceptionMapper;
+import jakarta.ws.rs.ext.MessageBodyWriter;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.ServerUtils;
 
-import javax.ws.rs.GET;
-import javax.ws.rs.NotFoundException;
-import javax.ws.rs.Path;
-import javax.ws.rs.WebApplicationException;
-import javax.ws.rs.core.MediaType;
-import javax.ws.rs.core.MultivaluedMap;
-import javax.ws.rs.ext.ExceptionMapper;
-import javax.ws.rs.ext.MessageBodyWriter;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.lang.annotation.Annotation;
@@ -50,14 +50,14 @@ public class ExceptionMappingProviderTest {
                 restHandler(new Sample())
                     .addExceptionMapper(UpdateException.class, new ExceptionMapper<UpdateException>() {
                         @Override
-                        public javax.ws.rs.core.Response toResponse(UpdateException exception) {
-                            return javax.ws.rs.core.Response.status(400).entity("Could not update").build();
+                        public jakarta.ws.rs.core.Response toResponse(UpdateException exception) {
+                            return jakarta.ws.rs.core.Response.status(400).entity("Could not update").build();
                         }
                     })
                     .addExceptionMapper(ConcurrentUpdateException.class, new ExceptionMapper<ConcurrentUpdateException>() {
                         @Override
-                        public javax.ws.rs.core.Response toResponse(ConcurrentUpdateException exception) {
-                            return javax.ws.rs.core.Response.status(409).entity("There was a concurrent update").build();
+                        public jakarta.ws.rs.core.Response toResponse(ConcurrentUpdateException exception) {
+                            return jakarta.ws.rs.core.Response.status(409).entity("There was a concurrent update").build();
                         }
                     })
             ).start();
@@ -96,7 +96,7 @@ public class ExceptionMappingProviderTest {
         this.server = ServerUtils.httpsServerForTest()
             .addHandler(
                 restHandler(new Sample())
-                    .addExceptionMapper(Throwable.class, exception -> javax.ws.rs.core.Response.status(555)
+                    .addExceptionMapper(Throwable.class, exception -> jakarta.ws.rs.core.Response.status(555)
                         .entity(exception.getMessage())
                         .type(MediaType.TEXT_PLAIN_TYPE)
                         .build())
@@ -131,8 +131,8 @@ public class ExceptionMappingProviderTest {
                 restHandler(new Sample())
                     .addExceptionMapper(UpdateException.class, new ExceptionMapper<UpdateException>() {
                         @Override
-                        public javax.ws.rs.core.Response toResponse(UpdateException exception) {
-                            return javax.ws.rs.core.Response.status(400).entity(new Dog()).build();
+                        public jakarta.ws.rs.core.Response toResponse(UpdateException exception) {
+                            return jakarta.ws.rs.core.Response.status(400).entity(new Dog()).build();
                         }
                     })
                     .addCustomWriter(new MessageBodyWriter<Dog>() {

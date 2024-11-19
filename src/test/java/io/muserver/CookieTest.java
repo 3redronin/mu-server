@@ -1,6 +1,11 @@
 package io.muserver;
 
 import io.muserver.rest.MuRuntimeDelegate;
+import jakarta.ws.rs.CookieParam;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.core.NewCookie;
+import jakarta.ws.rs.ext.RuntimeDelegate;
 import okhttp3.CookieJar;
 import okhttp3.HttpUrl;
 import okhttp3.OkHttpClient;
@@ -13,11 +18,6 @@ import scaffolding.MuAssert;
 import scaffolding.RawClient;
 import scaffolding.ServerUtils;
 
-import javax.ws.rs.CookieParam;
-import javax.ws.rs.GET;
-import javax.ws.rs.Path;
-import javax.ws.rs.core.NewCookie;
-import javax.ws.rs.ext.RuntimeDelegate;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
@@ -75,9 +75,9 @@ public class CookieTest {
         class Biscuits {
             @GET
             @Path("set")
-            public javax.ws.rs.core.Response setCookie() {
+            public jakarta.ws.rs.core.Response setCookie() {
                 NewCookie cookie = new NewCookie("Something", "123456", "/", null, "some comment", 360, false);
-                return javax.ws.rs.core.Response.noContent().cookie(cookie).build();
+                return jakarta.ws.rs.core.Response.noContent().cookie(cookie).build();
             }
 
             @GET
@@ -94,13 +94,13 @@ public class CookieTest {
 
             @GET
             @Path("getCookie")
-            public String getCookie(@CookieParam("Something") javax.ws.rs.core.Cookie cookie) {
+            public String getCookie(@CookieParam("Something") jakarta.ws.rs.core.Cookie cookie) {
                 return cookie.getName() + "=" + cookie.getValue();
             }
 
             @GET
             @Path("nullCookie")
-            public String getNullCookie(@CookieParam("SomethingElse") javax.ws.rs.core.Cookie cookie) {
+            public String getNullCookie(@CookieParam("SomethingElse") jakarta.ws.rs.core.Cookie cookie) {
                 return "cookie=" + cookie;
             }
 

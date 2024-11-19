@@ -1,9 +1,10 @@
 package io.muserver.rest;
 
-import javax.ws.rs.core.GenericType;
-import javax.ws.rs.core.MediaType;
-import javax.ws.rs.sse.OutboundSseEvent;
-import javax.ws.rs.sse.SseEvent;
+import jakarta.ws.rs.core.GenericType;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.sse.OutboundSseEvent;
+import jakarta.ws.rs.sse.SseEvent;
+
 import java.lang.reflect.Type;
 
 class JaxOutboundSseEvent implements OutboundSseEvent {

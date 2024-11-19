@@ -366,7 +366,7 @@ public class ContentTypes {
     /**
      * Web App Manifest files {@code "application/manifest+json"}
      */
-    public static final CharSequence WEB_APP_MANIFEST = AsciiString.cached(" application/manifest+json");
+    public static final CharSequence WEB_APP_MANIFEST = AsciiString.cached("application/manifest+json");
 
     private ContentTypes() {}
 }

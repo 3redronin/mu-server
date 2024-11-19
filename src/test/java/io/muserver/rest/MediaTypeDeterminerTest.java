@@ -1,12 +1,12 @@
 package io.muserver.rest;
 
+import jakarta.ws.rs.NotAcceptableException;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.MultivaluedHashMap;
+import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.ext.MessageBodyWriter;
 import org.junit.Test;
 
-import javax.ws.rs.NotAcceptableException;
-import javax.ws.rs.core.MediaType;
-import javax.ws.rs.core.MultivaluedHashMap;
-import javax.ws.rs.core.Response;
-import javax.ws.rs.ext.MessageBodyWriter;
 import java.lang.annotation.Annotation;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -14,9 +14,9 @@ import java.util.stream.Collectors;
 import static io.muserver.rest.EntityProviders.builtInWriters;
 import static io.muserver.rest.MediaTypeDeterminer.determine;
 import static io.muserver.rest.ObjWithType.objType;
+import static jakarta.ws.rs.core.MediaType.WILDCARD_TYPE;
 import static java.util.Collections.emptyList;
 import static java.util.Collections.singletonList;
-import static javax.ws.rs.core.MediaType.WILDCARD_TYPE;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 

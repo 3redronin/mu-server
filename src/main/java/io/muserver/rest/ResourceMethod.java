@@ -2,9 +2,9 @@ package io.muserver.rest;
 
 import io.muserver.Method;
 import io.muserver.openapi.*;
+import jakarta.ws.rs.HttpMethod;
+import jakarta.ws.rs.core.MediaType;
 
-import javax.ws.rs.HttpMethod;
-import javax.ws.rs.core.MediaType;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Type;
