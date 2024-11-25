@@ -1,4 +1,4 @@
-package io.muserver;
+package io.muserver.handlers;
 
 /**
  * An action to take for a request to a directory where the path does not have a trailing slash.
