@@ -29,8 +29,9 @@ public class ResourceHandler implements MuHandler {
     private final String directoryListingCss;
     private final DateTimeFormatter dateFormatter;
     private final ResourceCustomizer resourceCustomizer;
+    private final BareDirectoryRequestAction bareDirectoryRequestAction;
 
-    ResourceHandler(ResourceProviderFactory resourceProviderFactory, String defaultFile, Map<String, ResourceType> extensionToResourceType, boolean directoryListingEnabled, String directoryListingCss, DateTimeFormatter dateFormatter, ResourceCustomizer resourceCustomizer) {
+    ResourceHandler(ResourceProviderFactory resourceProviderFactory, String defaultFile, Map<String, ResourceType> extensionToResourceType, boolean directoryListingEnabled, String directoryListingCss, DateTimeFormatter dateFormatter, ResourceCustomizer resourceCustomizer, BareDirectoryRequestAction bareDirectoryRequestAction) {
         this.resourceProviderFactory = resourceProviderFactory;
         this.extensionToResourceType = extensionToResourceType;
         this.defaultFile = defaultFile;
@@ -38,6 +39,7 @@ public class ResourceHandler implements MuHandler {
         this.directoryListingCss = directoryListingCss;
         this.dateFormatter = dateFormatter;
         this.resourceCustomizer = resourceCustomizer;
+        this.bareDirectoryRequestAction = bareDirectoryRequestAction;
     }
 
     @Override
@@ -62,8 +64,14 @@ public class ResourceHandler implements MuHandler {
 
         if (provider.isDirectory()) {
             if (!request.relativePath().endsWith("/")) {
-                response.redirect(request.uri().getRawPath() + "/");
-                return true;
+                switch (bareDirectoryRequestAction) {
+                    case REDIRECT_WITH_TRAILING_SLASH:
+                        response.redirect(request.uri().getRawPath() + "/");
+                        return true;
+                    case TREAT_AS_NOT_FOUND:
+                        return false;
+                    default: throw new IllegalStateException("Unreachable");
+                }
             }
             if (directoryListingEnabled) {
                 listDirectory(request, response, provider);
