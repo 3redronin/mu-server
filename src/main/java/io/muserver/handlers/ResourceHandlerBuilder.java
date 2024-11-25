@@ -1,5 +1,7 @@
 package io.muserver.handlers;
 
+import io.muserver.BareDirectoryRequestAction;
+import io.muserver.MuHandler;
 import io.muserver.MuHandlerBuilder;
 import io.muserver.rest.RestHandlerBuilder;
 
@@ -31,6 +33,7 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
     private boolean directoryListingEnabled = false;
     private String directoryListingCss = null;
     private ResourceCustomizer resourceCustomizer = null;
+    private BareDirectoryRequestAction bareDirectoryRequestAction = BareDirectoryRequestAction.REDIRECT_WITH_TRAILING_SLASH;
 
     /**
      * Specify custom filename extension to mime-type mappings. By default {@link ResourceType#DEFAULT_EXTENSION_MAPPINGS}
@@ -144,6 +147,31 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
     }
 
     /**
+     * @return The action to take when a directory is requested without a trailing slash
+     */
+    public BareDirectoryRequestAction bareDirectoryRequestAction() {
+        return bareDirectoryRequestAction;
+    }
+
+    /**
+     * Specifies the action to take when a directory is requested without a trailing slash.
+     *
+     * <p>The default is {@link BareDirectoryRequestAction#REDIRECT_WITH_TRAILING_SLASH} which means a request
+     * to <code>/{dirname}</code> will be redirected to <code>/{dirname}/</code></p>
+     * @param action The action to take
+     * @return this builder
+     */
+    public ResourceHandlerBuilder withBareDirectoryRequestAction(BareDirectoryRequestAction action) {
+        if (action == null) {
+            throw new IllegalArgumentException("BareDirectoryRequestAction cannot be null");
+        }
+        this.bareDirectoryRequestAction = action;
+        return this;
+    }
+
+
+
+    /**
      * Creates the handler
      * @return The built handler
      */
@@ -166,7 +194,7 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
                 .withZone(ZoneId.systemDefault());
         }
 
-        return new ResourceHandler(resourceProviderFactory, defaultFile, extensionToResourceType, directoryListingEnabled, css, formatterToUse, this.resourceCustomizer);
+        return new ResourceHandler(resourceProviderFactory, defaultFile, extensionToResourceType, directoryListingEnabled, css, formatterToUse, this.resourceCustomizer, this.bareDirectoryRequestAction);
     }
 
 

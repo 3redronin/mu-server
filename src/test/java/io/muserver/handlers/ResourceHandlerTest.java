@@ -1,9 +1,6 @@
 package io.muserver.handlers;
 
-import io.muserver.Headers;
-import io.muserver.MuRequest;
-import io.muserver.MuServer;
-import io.muserver.Mutils;
+import io.muserver.*;
 import okhttp3.Protocol;
 import okhttp3.Response;
 import org.junit.After;
@@ -169,7 +166,7 @@ public class ResourceHandlerTest {
     }
 
     @Test
-    public void directoriesResultIn302s() throws Exception {
+    public void directoriesWithoutTrailingSlashResultIn302sByDefault() throws Exception {
         server = ServerUtils.httpsServerForTest()
             .withGzipEnabled(false)
             .addHandler(context("/classpath").addHandler(classpathHandler("/sample-static")))
@@ -188,6 +185,26 @@ public class ResourceHandlerTest {
             assertThat(resp.body().contentLength(), equalTo(0L));
         }
     }
+
+    @Test
+    public void directoriesWithoutTrailingSlashCanBeTreatedAs404() throws Exception {
+        server = ServerUtils.httpsServerForTest()
+            .withGzipEnabled(false)
+            .addHandler(context("/classpath").addHandler(classpathHandler("/sample-static").withBareDirectoryRequestAction(BareDirectoryRequestAction.TREAT_AS_NOT_FOUND)))
+            .addHandler(context("/file").addHandler(fileHandler("src/test/resources/sample-static").withBareDirectoryRequestAction(BareDirectoryRequestAction.TREAT_AS_NOT_FOUND)))
+            .start();
+
+        String encodedDir = urlEncode("a, tricky - dir Name");
+        try (Response resp = call(request(server.uri().resolve("/classpath/" + encodedDir)))) {
+            assertThat(resp.code(), equalTo(404));
+            assertThat(resp.body().string(), containsString("404 Not Found"));
+        }
+        try (Response resp = call(request(server.uri().resolve("/file/" + encodedDir)))) {
+            assertThat(resp.code(), equalTo(404));
+            assertThat(resp.body().string(), containsString("404 Not Found"));
+        }
+    }
+
 
     @Test
     public void callsToContextNamesWithoutTrailingSlashesResultIn302() throws Exception {
