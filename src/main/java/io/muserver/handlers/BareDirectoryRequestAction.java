@@ -1,4 +1,4 @@
-package io.muserver;
+package io.muserver.handlers;
 
 /**
  * An action to take for a request to a directory where the path does not have a trailing slash.
@@ -7,7 +7,7 @@ package io.muserver;
  */
 public enum BareDirectoryRequestAction {
     /**
-     * The request to <code>/{dirname}</code> should have an HTTP redirect to <code>/{dirname}/</code></code>
+     * The request to <code>/{dirname}</code> should have an HTTP redirect to <code>/{dirname}/</code>
      */
     REDIRECT_WITH_TRAILING_SLASH,
     /**

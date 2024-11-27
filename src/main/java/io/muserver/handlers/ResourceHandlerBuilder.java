@@ -1,7 +1,5 @@
 package io.muserver.handlers;
 
-import io.muserver.BareDirectoryRequestAction;
-import io.muserver.MuHandler;
 import io.muserver.MuHandlerBuilder;
 import io.muserver.rest.RestHandlerBuilder;
 

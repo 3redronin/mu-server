@@ -22,6 +22,7 @@ import static io.muserver.Mutils.urlEncode;
 import static io.muserver.handlers.ResourceHandlerBuilder.*;
 import static io.muserver.handlers.ResourceType.getResourceTypes;
 import static io.muserver.handlers.ResourceType.gzippableMimeTypes;
+import static java.util.Collections.emptyList;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
@@ -193,7 +194,7 @@ public class ResourceHandlerTest {
     @Test
     public void directoriesWithoutTrailingSlashCanBeTreatedAs404() throws Exception {
         server = ServerUtils.httpsServerForTest()
-            .withGzipEnabled(false)
+            .withContentEncoders(emptyList())
             .addHandler(context("/classpath").addHandler(classpathHandler("/sample-static").withBareDirectoryRequestAction(BareDirectoryRequestAction.TREAT_AS_NOT_FOUND)))
             .addHandler(context("/file").addHandler(fileHandler("src/test/resources/sample-static").withBareDirectoryRequestAction(BareDirectoryRequestAction.TREAT_AS_NOT_FOUND)))
             .start();
