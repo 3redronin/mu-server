@@ -20,7 +20,7 @@ internal class Mu3Http1Connection(
     clientSocket: Socket,
     startTime: Instant,
     clientCert : Certificate?
-) : BaseHttpConnection(server, creator, clientSocket, clientCert, startTime) {
+) : Http1Connection(server, creator, clientSocket, clientCert, startTime) {
     private val requestPipeline : Queue<HttpRequestTemp> = ConcurrentLinkedQueue()
     private val currentRequest = AtomicReference<Any?>()
     override fun start(inputStream: InputStream, outputStream: OutputStream) {
@@ -116,7 +116,7 @@ internal class Mu3Http1Connection(
                         log.warn("Unrecoverable error for $muRequest", e)
                         muResponse.setState(ResponseState.ERRORED)
                     } finally {
-                        onRequestEnded(muRequest, muResponse)
+                        onExchangeEnded(muResponse)
                         clientSocket.soTimeout = 0
                     }
                     val websocket: WebsocketConnection? = muResponse.websocket
@@ -127,6 +127,7 @@ internal class Mu3Http1Connection(
                         closeConnection = true
                     }
                 }
+                closeConnection = closeConnection || state != HttpConnectionState.OPEN
             }
         } catch (e: Exception) {
             log.error("Unhandled error at the socket", e)
@@ -165,9 +166,9 @@ internal class Mu3Http1Connection(
         super.onRequestStarted(req)
     }
 
-    override fun onRequestEnded(req: Mu3Request, resp: Http1Response) {
+    override fun onExchangeEnded(exchange: ResponseInfo) {
         currentRequest.set(null)
-        super.onRequestEnded(req, resp)
+        super.onExchangeEnded(exchange)
     }
 
 
@@ -207,6 +208,7 @@ internal class Mu3Http1Connection(
             clientSocket.close()
         }
     }
+
 
     companion object {
         private val log: Logger = LoggerFactory.getLogger(Mu3Http1Connection::class.java)

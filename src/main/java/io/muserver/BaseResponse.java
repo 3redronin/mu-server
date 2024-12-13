@@ -1,7 +1,7 @@
 package io.muserver;
 
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -14,22 +14,27 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 
 import static java.util.Collections.emptyList;
 
+@NullMarked
 abstract class BaseResponse implements MuResponse {
 
+    protected final Mu3Request request;
     private final Headers headers;
+    @Nullable
     private volatile PrintWriter writer = null;
-
+    @Nullable
+    protected volatile OutputStream wrappedOut;
 
     @Nullable
     private ConcurrentLinkedQueue<ResponseCompleteListener> completionListeners = null;
 
     private ResponseState state = ResponseState.NOTHING;
 
-    BaseResponse(Headers headers) {
+    BaseResponse(Mu3Request request, Headers headers) {
+        this.request = request;
         this.headers = headers;
     }
 
-    void setState(@NotNull ResponseState newState) {
+    void setState(ResponseState newState) {
         state = newState;
     }
 
@@ -110,7 +115,7 @@ abstract class BaseResponse implements MuResponse {
     }
 
     @Override
-    public void contentType(CharSequence contentType) {
+    public void contentType(@Nullable CharSequence contentType) {
         if (contentType == null) {
             headers.remove(HeaderNames.CONTENT_TYPE);
         } else {
@@ -125,8 +130,22 @@ abstract class BaseResponse implements MuResponse {
 
     @Override
     public OutputStream outputStream() {
-        return outputStream(8192);
+        if (wrappedOut == null) {
+            wrappedOut = outputStream(8192);
+        }
+        return wrappedOut;
     }
+
+    protected @Nullable ContentEncoder contentEncoder() {
+        for (var contentEncoder : request.server().contentEncoders()) {
+            var theOne = contentEncoder.prepare(request, this);
+            if (theOne) {
+                return contentEncoder;
+            }
+        }
+        return null;
+    }
+
 
     @Override
     public PrintWriter writer() {
@@ -134,7 +153,7 @@ abstract class BaseResponse implements MuResponse {
             if (!headers.contains(HeaderNames.CONTENT_TYPE)) {
                 headers.set(HeaderNames.CONTENT_TYPE, ContentTypes.TEXT_PLAIN_UTF8);
             }
-            writer = new  PrintWriter(outputStream(), false, ensureCharsetSet());
+            writer = new PrintWriter(outputStream(), false, ensureCharsetSet());
         }
         return writer;
     }
@@ -149,16 +168,21 @@ abstract class BaseResponse implements MuResponse {
         return state;
     }
 
-    protected abstract void cleanup() throws InterruptedException;
+    abstract void cleanup() throws IOException, InterruptedException;
 
-    protected void closeWriter() {
-        if (writer != null) {
-            writer.close();
+    protected void closeWriter() throws IOException {
+        PrintWriter w = writer;
+        if (w != null) {
+            w.close();
+        }
+        OutputStream os = wrappedOut;
+        if (os != null) {
+            os.close();
         }
     }
 
     @Override
-    public void sendInformationalResponse(HttpStatus status, Headers headers) {
+    public void sendInformationalResponse(HttpStatus status, @Nullable Headers headers) {
 
     }
 

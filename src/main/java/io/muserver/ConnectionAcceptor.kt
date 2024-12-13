@@ -44,10 +44,11 @@ internal class ConnectionAcceptor(
                 val startTime = Instant.now()
                 try {
                     executorService.submit {
-                        val h2 = false // http2Config?.enabled() == true
+                        val h2 = http2Config?.enabled() == true
                         handleClientSocket(clientSocket, startTime, h2, false)
                     }
                 } catch (e: RejectedExecutionException) {
+                    val oldTimeout = clientSocket.soTimeout
                     try {
                         // Send a 503, blocking the acceptor thread. We can't schedule this on the executor. We are
                         // so overloaded it's good to have a pause here. But still have a tight timeout so a really
@@ -56,6 +57,8 @@ internal class ConnectionAcceptor(
                         handleClientSocket(clientSocket, startTime, false, true)
                     } catch (e2: Exception) {
                         log.info("Exception while writing 503 when executor is full: ${e.message}")
+                    } finally {
+                        clientSocket.soTimeout = oldTimeout
                     }
                 }
             } catch (e: Throwable) {
@@ -71,25 +74,10 @@ internal class ConnectionAcceptor(
         }
         log.info("Closing server with ${connections.size} connected connections")
         val waitUntil = Instant.now().plusSeconds(20)
+        for (connection in connections) {
+            connection.initiateGracefulShutdown()
+        }
         while (connections.isNotEmpty() && waitUntil.isAfter(Instant.now())) {
-            for (connection in connections) {
-                if (connection.isIdle) {
-                    log.info("Closing idle connection $connection")
-                    connection.abort()
-                } else if (connection.activeWebsockets().isNotEmpty()) {
-                    for (activeWebsocket in connection.activeWebsockets()) {
-                        try {
-                            activeWebsocket.onServerShuttingDown()
-                        } catch (e: Exception) {
-                            try {
-                                connection.abort()
-                            } catch (e: Exception) {
-                                log.info("Error while aborting websocket: " + e.message)
-                            }
-                        }
-                    }
-                }
-            }
             Thread.sleep(10)
         }
         for (connection in connections) {

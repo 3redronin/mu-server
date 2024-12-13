@@ -18,7 +18,8 @@ public class ServerUtils {
         if (protocol.equals("http")) {
             builder.withHttpPort(0);
         } else if (protocol.equals("https")) {
-            builder.withHttpsPort(0);
+            builder.withHttpsPort(0)
+                .withHttp2Config(Http2ConfigBuilder.http2Disabled());
         } else throw new IllegalArgumentException("Unsupported protocol: " + protocol);
         if (preferredProtocol.equals("HTTP2")) {
             builder.withHttp2Config(Http2ConfigBuilder.http2Enabled());

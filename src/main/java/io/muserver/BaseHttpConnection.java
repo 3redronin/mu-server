@@ -4,6 +4,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.net.ssl.SSLSocket;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
@@ -89,12 +90,13 @@ abstract class BaseHttpConnection implements HttpConnection {
         }
     }
 
-    protected void onRequestEnded(Mu3Request req, Http1Response resp) {
+    protected void onExchangeEnded(ResponseInfo exchange) {
         completedRequests.incrementAndGet();
+        BaseResponse resp = (BaseResponse) exchange.response();
         for (var listener : resp.completionListeners()) {
-            listener.onComplete(resp);
+            listener.onComplete(exchange);
         }
-        server.onRequestEnded(req, resp);
+        server.onExchangeEnded(exchange);
     }
 
 
@@ -199,4 +201,9 @@ abstract class BaseHttpConnection implements HttpConnection {
     }
 
     public abstract void abortWithTimeout();
+    
+    abstract void initiateGracefulShutdown() throws IOException;
+    abstract boolean isShutdown();
+    abstract void forceShutdown();
+
 }

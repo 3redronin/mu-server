@@ -117,10 +117,10 @@ internal class Mu3ServerImpl(
         statsImpl.onRequestStarted(req)
     }
 
-    fun onRequestEnded(req: Mu3Request, resp: Http1Response) {
-        statsImpl.onRequestEnded(req)
+    fun onExchangeEnded(exchange: ResponseInfo) {
+        statsImpl.onRequestEnded(exchange)
         for (listener in responseCompleteListeners) {
-            listener.onComplete(resp)
+            listener.onComplete(exchange)
         }
     }
 

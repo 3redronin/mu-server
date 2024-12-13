@@ -1,5 +1,7 @@
 package io.muserver;
 
+import org.jetbrains.annotations.Nullable;
+
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.URI;
@@ -133,12 +135,12 @@ public interface MuResponse {
      * <p>Note that mu-server automatically handles responses to `expect: 100-continue` and websocket
      * upgrades. This may therefore be most useful a {@link HttpStatus#EARLY_HINTS_103} response.</p>
      * @param status The informational status to send to the client
-     * @param headers The headers to send with the informational response (these are independent from
+     * @param headers The headers to send with the informational response (these are independent of
      *                the main response headers). May be empty or null.
      * @throws IllegalArgumentException if the status is not {@link HttpStatus#isInformational()}
      * @throws IllegalStateException if the main response headers have already been sent
      */
-    void sendInformationalResponse(HttpStatus status, Headers headers);
+    void sendInformationalResponse(HttpStatus status, @Nullable Headers headers);
 
     /**
      * Adds a completion listener which will be called at the end of this response

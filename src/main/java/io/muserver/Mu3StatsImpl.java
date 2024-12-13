@@ -70,11 +70,11 @@ class Mu3StatsImpl implements MuStats {
     }
 
     private static final Logger log = LoggerFactory.getLogger(Mu3StatsImpl.class);
-    void onRequestEnded(MuRequest request) {
-        if (activeRequests.remove(request)) {
+    void onRequestEnded(ResponseInfo exchange) {
+        if (activeRequests.remove(exchange.request())) {
             completedRequests.incrementAndGet();
         } else {
-            log.info("Asked to remove " + request + " but it wasn't active");
+            log.info("Asked to remove " + exchange.request() + " but it wasn't active");
         }
     }
 

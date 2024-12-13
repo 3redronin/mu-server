@@ -4,15 +4,13 @@ import java.io.OutputStream
 import java.util.*
 
 internal class Http1Response(
-    private val muRequest: Mu3Request,
+    muRequest: Mu3Request,
     private val socketOut: OutputStream,
-) : BaseResponse(Mu3Headers()), MuResponse, ResponseInfo {
+) : BaseResponse(muRequest, Mu3Headers()), MuResponse, ResponseInfo {
 
     var websocket: WebsocketConnection? = null
         private set
 
-    @Volatile
-    private var wrappedOut: OutputStream? = null
 
     private var endMillis : Long? = null
 
@@ -45,19 +43,11 @@ internal class Http1Response(
 
 
     override fun outputStream(bufferSize: Int): OutputStream {
-
         if (wrappedOut == null) {
-            var responseEncoder : ContentEncoder? = null
-            for (contentEncoder in request().server().contentEncoders()) {
-                val theOne = contentEncoder.prepare(muRequest, this)
-                if (theOne) {
-                    responseEncoder = contentEncoder
-                    break
-                }
-            }
+            var responseEncoder: ContentEncoder? = contentEncoder()
 
             val fixedLen = headers().getLong(HeaderNames.CONTENT_LENGTH.toString(), -1)
-            val rawOut = if (muRequest.method.isHead) DiscardingOutputStream.INSTANCE else socketOut
+            val rawOut = if (request.method.isHead) DiscardingOutputStream.INSTANCE else socketOut
             if (fixedLen == -1L) {
                 headers().set(HeaderNames.TRANSFER_ENCODING, HeaderValues.CHUNKED)
                 wrappedOut = ChunkedOutputStream(rawOut)
@@ -67,19 +57,17 @@ internal class Http1Response(
 
             writeStatusAndHeaders()
             if (responseEncoder != null) {
-                wrappedOut = responseEncoder.wrapStream(muRequest, this, wrappedOut)
+                wrappedOut = responseEncoder.wrapStream(request, this, wrappedOut)
             }
-        }
+        } else throw IllegalStateException("Cannot specify buffer size for response output stream when it has already been created")
         return wrappedOut!!
     }
 
 
-
-
-    public override fun cleanup() {
+    override internal fun cleanup() {
         if (responseState() == ResponseState.NOTHING) {
             // empty response body
-            if (!muRequest.method.isHead && status().canHaveContent() && !headers().contains(HeaderNames.CONTENT_LENGTH)) {
+            if (!request.method.isHead && status().canHaveContent() && !headers().contains(HeaderNames.CONTENT_LENGTH)) {
                 headers().set(HeaderNames.CONTENT_LENGTH, 0L)
             }
             writeStatusAndHeaders()
@@ -93,16 +81,16 @@ internal class Http1Response(
         }
     }
 
-    public override fun setState(newState: ResponseState) {
+    override internal fun setState(newState: ResponseState) {
         super.setState(newState)
         if  (newState.endState()) {
             endMillis = System.currentTimeMillis()
         }
     }
 
-    override fun duration() = (endMillis ?: System.currentTimeMillis()) - muRequest.startTime()
-    override fun completedSuccessfully() = responseState().completedSuccessfully() && muRequest.completedSuccessfully()
-    override fun request() = muRequest
+    override fun duration() = (endMillis ?: System.currentTimeMillis()) - request.startTime()
+    override fun completedSuccessfully() = responseState().completedSuccessfully() && request.completedSuccessfully()
+    override fun request() = request
     override fun response() = this
 
     override fun toString(): String {

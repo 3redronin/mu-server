@@ -128,7 +128,8 @@ public interface HttpConnection {
 
     /**
      * Closes this connection immediately, causing a connection reset on the client side.
-     * <p>It is not recommended to use this as Mu Server will clean up connections automatically.</p>
+     * <p>Generally, it is not recommended to use this as it may result in EOF errors for clients due to
+     * skipping shutdown protocols.</p>
      */
     void abort() throws IOException;
 

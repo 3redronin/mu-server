@@ -104,7 +104,7 @@ class Http2HeaderFragment implements LogicalHttp2Frame {
         var baos = new NiceByteArrayOutputStream(32);
         baos.write(new byte[] { 0, 0, 0,
             /* type */ 0x01,
-            /* flags */ 0b00000101,
+            /* flags */ endStream ? (byte)0b00000101 : (byte)0b00000100,
             (byte)(streamId >> 24),
             (byte)(streamId >> 16),
             (byte)(streamId >> 8),

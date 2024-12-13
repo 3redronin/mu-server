@@ -14,24 +14,36 @@ import java.security.cert.Certificate;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.LinkedBlockingDeque;
+import java.util.concurrent.*;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 class Http2Connection extends BaseHttpConnection {
+
+    private OutputStream clientOut;
+
+    private enum State {
+        OPEN(true), HALF_CLOSED_LOCAL(true), HALF_CLOSED_REMOTE(false), CLOSED(false);
+
+        final boolean canRead;
+
+        State(boolean canRead) {
+            this.canRead = canRead;
+        }
+    }
     private static final Logger log = LoggerFactory.getLogger(Http2Connection.class);
 
     private final Http2Settings serverSettings;
     private Http2Settings clientSettings = Http2Settings.DEFAULT_CLIENT_SETTINGS;
     private final ByteBuffer buffer;
-    private volatile boolean closed = false;
+    private volatile State state = State.OPEN;
+    private volatile int lastStreamId;
     private final Http2FlowController connectionFlowControl = new Http2FlowController(0, 65535);
     private final ConcurrentLinkedQueue<Long> settingsAckQueue = new ConcurrentLinkedQueue<>();
     private final ConcurrentHashMap<Integer, Http2Stream> streams = new ConcurrentHashMap<>();
     private final ExecutorService executorService;
-    private final LinkedBlockingDeque<LogicalHttp2Frame> writeQueue = new LinkedBlockingDeque<>();
+    private final Lock writeLock = new ReentrantLock();
 
     final FieldBlockEncoder fieldBlockEncoder;
 
@@ -44,8 +56,36 @@ class Http2Connection extends BaseHttpConnection {
     }
 
 
+    private synchronized void onRemoteClose() {
+        if (state == State.OPEN) {
+            state = State.HALF_CLOSED_REMOTE;
+        } else if (state == State.HALF_CLOSED_LOCAL) {
+            state = State.CLOSED;
+        }
+        log.info("State is now " + state);
+    }
+
+    private synchronized State state() {
+        return state;
+    }
+
+    void write(LogicalHttp2Frame frame) throws IOException {
+        writeLock.lock();
+        try {
+            log.info("Writing " + frame);
+            frame.writeTo(this, clientOut);
+        } finally {
+            writeLock.unlock();
+        }
+    }
+
+    void flush() throws IOException {
+        clientOut.flush();
+    }
+
     @Override
-    public void start(InputStream clientIn, OutputStream clientOut) throws Http2Exception, IOException {
+    public void start(InputStream clientIn, OutputStream clientOut) throws Http2Exception, IOException, ExecutionException, InterruptedException, TimeoutException {
+        this.clientOut = clientOut;
         // do the handshake
         clientSettings = Http2Handshaker.handshake(this, serverSettings, clientSettings, buffer, clientIn,  clientOut);
         fieldBlockEncoder.changeTableSize(clientSettings.headerTableSize);
@@ -53,100 +93,92 @@ class Http2Connection extends BaseHttpConnection {
 
         var fieldBlockDecoder = new FieldBlockDecoder(serverSettings.headerTableSize);
 
-        var writerJob = executorService.submit(() -> {
-            try {
-                while (!closed) {
-                    var frame = writeQueue.take();
-                    log.info("Writing " + frame);
-                    frame.writeTo(this, clientOut);
-                    if (writeQueue.isEmpty()) {
-                        clientOut.flush();
-                    }
-                }
-            } catch (Exception e) {
-                log.error("Error in write thread", e);
-            }
-        });
-
         // and now just read frames
-        while (!closed) {
+        while (state().canRead) {
             Mutils.readAtLeast(buffer, clientIn, Http2FrameHeader.FRAME_HEADER_LENGTH);
             var fh = Http2FrameHeader.readFrom(buffer);
             var len = fh.length();
             Mutils.readAtLeast(buffer, clientIn, len);
-
             System.out.println("fh = " + fh);
 
-            switch (fh.frameType()) {
-                case HEADERS: {
-                    var headerFragment = Http2HeaderFragment.readFirstFragment(fh, fieldBlockDecoder, buffer);
-                    if (headerFragment.endHeaders()) {
-                        try {
-                            startRequest(headerFragment);
-                        } catch (Http2Exception e) {
-                            if (e.errorType() == Http2Level.STREAM) {
-                                throw new UnsupportedOperationException("Stream reset");
-                            } else {
-                                throw e;
-                            }
+            if (state == State.HALF_CLOSED_LOCAL && fh.streamId() > lastStreamId) {
+                discardPayload(buffer, clientIn, len);
+            } else {
 
+
+                switch (fh.frameType()) {
+                    case HEADERS: {
+                        var headerFragment = Http2HeaderFragment.readFirstFragment(fh, fieldBlockDecoder, buffer);
+                        if (state == State.OPEN) {
+                            lastStreamId = headerFragment.streamId();
                         }
-                    } else {
-                        throw new UnsupportedOperationException("Need to support Continuation frames");
-                    }
-                    log.info("Got headers " + headerFragment);
-                    break;
-                }
-                case SETTINGS: {
-                    var settingsDiff = Http2Settings.readFrom(fh, buffer);
-                    if (settingsDiff.isAck) {
-                        var ackedOne = settingsAckQueue.poll();
-                        if (ackedOne == null) {
-                            throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "Settings ack without pending settings");
+                        if (headerFragment.endHeaders()) {
+                            try {
+                                startRequest(headerFragment);
+                            } catch (Http2Exception e) {
+                                if (e.errorType() == Http2Level.STREAM) {
+                                    throw new UnsupportedOperationException("Stream reset");
+                                } else {
+                                    throw e;
+                                }
+
+                            }
                         } else {
-                            log.info("Settings acked after " + (System.currentTimeMillis() - ackedOne) + "ms");
+                            throw new UnsupportedOperationException("Need to support Continuation frames");
                         }
-                    } else {
-                        var oldSettings = clientSettings;
-                        var newSettings = settingsDiff.copyIfChanged(clientSettings);
-                        if (newSettings != oldSettings) {
-                            clientSettings = newSettings;
-                            if (newSettings.initialWindowSize != oldSettings.initialWindowSize) {
-                                // todo: apply diff settings on existing streams
+                        log.info("Got headers " + headerFragment);
+                        break;
+                    }
+                    case SETTINGS: {
+                        var settingsDiff = Http2Settings.readFrom(fh, buffer);
+                        if (settingsDiff.isAck) {
+                            var ackedOne = settingsAckQueue.poll();
+                            if (ackedOne == null) {
+                                throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "Settings ack without pending settings");
+                            } else {
+                                log.info("Settings acked after " + (System.currentTimeMillis() - ackedOne) + "ms");
                             }
+                        } else {
+                            var oldSettings = clientSettings;
+                            var newSettings = settingsDiff.copyIfChanged(clientSettings);
+                            if (newSettings != oldSettings) {
+                                clientSettings = newSettings;
+                                if (newSettings.initialWindowSize != oldSettings.initialWindowSize) {
+                                    // todo: apply diff settings on existing streams
+                                }
 
+                            }
                         }
+                        break;
                     }
-                    break;
-                }
-                case WINDOW_UPDATE: {
-                    var windowUpdate = Http2WindowUpdate.readFrom(fh, buffer);
-                    connectionFlowControl.applyWindowUpdate(windowUpdate);
-                    if (windowUpdate.level() == Http2Level.STREAM) {
-                        // todo: update relevant stream
+                    case WINDOW_UPDATE: {
+                        var windowUpdate = Http2WindowUpdate.readFrom(fh, buffer);
+                        connectionFlowControl.applyWindowUpdate(windowUpdate);
+                        if (windowUpdate.level() == Http2Level.STREAM) {
+                            // todo: update relevant stream
+                        }
+                        break;
                     }
-                    break;
-                }
-                case GOAWAY: {
-                    var goaway = Http2GoAway.readFrom(fh, buffer);
-                    closed = true;
-                    System.out.println(goaway);
-                    break;
-                }
-                default: {
-                    log.info("Discarding " + len + " bytes for unsupported type " + fh);
-                    discardPayload(buffer, clientIn, len);
+                    case GOAWAY: {
+                        var goaway = Http2GoAway.readFrom(fh, buffer);
+                        onRemoteClose();
+                        System.out.println(goaway);
+                        break;
+                    }
+                    default: {
+                        log.info("Discarding " + len + " bytes for unsupported type " + fh);
+                        discardPayload(buffer, clientIn, len);
+                    }
                 }
             }
 
             // TODO: end if pending settings ack not received
         }
 
-        // TODO: wait for output queue to drain
     }
 
     private void startRequest(Http2HeaderFragment frame) throws Http2Exception {
-        var stream = Http2Stream.start(this, frame, frame.headers(), writeQueue);
+        var stream = Http2Stream.start(this, frame, frame.headers());
         streams.put(frame.streamId(), stream);
         onRequestStarted(stream.request);
         executorService.submit(new Runnable() {
@@ -157,6 +189,8 @@ class Http2Connection extends BaseHttpConnection {
                     stream.cleanup();
                 } catch (Throwable e) {
                     throw new RuntimeException(e);
+                } finally {
+                    onExchangeEnded(stream);
                 }
 
             }
@@ -194,7 +228,42 @@ class Http2Connection extends BaseHttpConnection {
 
     @Override
     public void abortWithTimeout() {
-        throw new UnsupportedOperationException("Abort with timeout not supported");
+        abort();
+    }
+
+    @Override
+    void initiateGracefulShutdown() throws IOException {
+        // TODO thread safety
+        if (state == State.OPEN) {
+            state = State.HALF_CLOSED_LOCAL;
+            var goaway = new Http2GoAway(lastStreamId, Http2ErrorCode.NO_ERROR.code(), null);
+            write(goaway);
+            flush();
+        } else if (state == State.HALF_CLOSED_REMOTE) {
+            // TODO!!
+            log.warn("graceful shutdown with state " + state);
+        } else {
+            log.warn("graceful shutdown with state " + state);
+        }
+    }
+
+    @Override
+    boolean isShutdown() {
+        return state == State.CLOSED;
+    }
+
+    @Override
+    void forceShutdown() {
+        // todo: thread safety
+        if (state != State.CLOSED) {
+            try {
+                clientSocket.close();
+            } catch (IOException e) {
+                log.info("Error force closing http2 socket", e);
+            } finally {
+                state = State.CLOSED;
+            }
+        }
     }
 
     @NotNull
@@ -217,7 +286,13 @@ class Http2Connection extends BaseHttpConnection {
 
     @Override
     public void abort() {
-        throw new UnsupportedOperationException("Abort not supported");
+        forceShutdown();
     }
 
+    @Override
+    protected void onExchangeEnded(ResponseInfo exchange) {
+        var stream = (Http2Stream) exchange;
+        streams.remove(stream.id);
+        super.onExchangeEnded(exchange);
+    }
 }
