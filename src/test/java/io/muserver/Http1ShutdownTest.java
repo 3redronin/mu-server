@@ -1,22 +1,16 @@
 package io.muserver;
 
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-import scaffolding.ClientUtils;
 import scaffolding.ServerUtils;
 
-import java.util.Map;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.TimeUnit;
 
-import static io.muserver.Http2ConfigBuilder.http2Disabled;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
-import static scaffolding.ClientUtils.*;
+import static scaffolding.ClientUtils.call;
+import static scaffolding.ClientUtils.request;
 
 @Timeout(30)
 public class Http1ShutdownTest {

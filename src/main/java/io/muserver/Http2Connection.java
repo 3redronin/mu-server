@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
+import java.net.SocketException;
 import java.nio.ByteBuffer;
 import java.security.cert.Certificate;
 import java.time.Instant;
@@ -80,7 +81,12 @@ class Http2Connection extends BaseHttpConnection {
     }
 
     void flush() throws IOException {
-        clientOut.flush();
+        writeLock.lock();
+        try {
+            clientOut.flush();
+        } finally {
+            writeLock.unlock();
+        }
     }
 
     @Override
@@ -95,7 +101,14 @@ class Http2Connection extends BaseHttpConnection {
 
         // and now just read frames
         while (state().canRead) {
-            Mutils.readAtLeast(buffer, clientIn, Http2FrameHeader.FRAME_HEADER_LENGTH);
+            try {
+                Mutils.readAtLeast(buffer, clientIn, Http2FrameHeader.FRAME_HEADER_LENGTH);
+            } catch (SocketException e) {
+                if (state() == State.CLOSED) {
+                    log.info("Socket closed gracefully");
+                    break;
+                } else throw e;
+            }
             var fh = Http2FrameHeader.readFrom(buffer);
             var len = fh.length();
             Mutils.readAtLeast(buffer, clientIn, len);
@@ -104,7 +117,6 @@ class Http2Connection extends BaseHttpConnection {
             if (state == State.HALF_CLOSED_LOCAL && fh.streamId() > lastStreamId) {
                 discardPayload(buffer, clientIn, len);
             } else {
-
 
                 switch (fh.frameType()) {
                     case HEADERS: {
@@ -239,6 +251,9 @@ class Http2Connection extends BaseHttpConnection {
             var goaway = new Http2GoAway(lastStreamId, Http2ErrorCode.NO_ERROR.code(), null);
             write(goaway);
             flush();
+            if (activeRequests().isEmpty()) {
+                forceShutdown();
+            }
         } else if (state == State.HALF_CLOSED_REMOTE) {
             // TODO!!
             log.warn("graceful shutdown with state " + state);
@@ -294,5 +309,8 @@ class Http2Connection extends BaseHttpConnection {
         var stream = (Http2Stream) exchange;
         streams.remove(stream.id);
         super.onExchangeEnded(exchange);
+        if (state == State.HALF_CLOSED_LOCAL && streams.isEmpty()) {
+            forceShutdown();
+        }
     }
 }
