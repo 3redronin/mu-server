@@ -50,7 +50,7 @@ class Http2FlowController {
         if (bytes == 0) return true;
         lock.lock();
         try {
-            if (bytes >= credit) {
+            if (bytes <= credit) {
                 credit -= bytes;
                 return true;
             }

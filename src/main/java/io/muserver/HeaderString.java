@@ -1,10 +1,13 @@
 package io.muserver;
 
 import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 import java.nio.charset.StandardCharsets;
 import java.util.stream.IntStream;
 
+@NullMarked
 class HeaderString implements CharSequence {
 
     enum Type {
@@ -93,7 +96,7 @@ class HeaderString implements CharSequence {
     }
 
     @Override
-    public boolean equals(Object obj) {
+    public boolean equals(@Nullable Object obj) {
         if (this == obj) {
             return true;
         }
@@ -110,7 +113,7 @@ class HeaderString implements CharSequence {
         return s;
     }
 
-    public boolean contentEquals(CharSequence other) {
+    public boolean contentEquals(@Nullable CharSequence other) {
         if (other == null) return false;
         if (other instanceof HeaderString) {
             return equals(other);
@@ -119,7 +122,7 @@ class HeaderString implements CharSequence {
         }
     }
 
-    public boolean contentEquals(CharSequence other, boolean ignoreCase) {
+    public boolean contentEquals(@Nullable CharSequence other, boolean ignoreCase) {
         if (other == null) return false;
         if (other instanceof HeaderString) {
             HeaderString hs = (HeaderString) other;

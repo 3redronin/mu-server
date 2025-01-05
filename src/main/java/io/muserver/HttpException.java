@@ -1,7 +1,10 @@
 package io.muserver;
 
+import org.jspecify.annotations.NullMarked;
+
 import java.net.URI;
 
+@NullMarked
 public class HttpException extends RuntimeException {
     private final HttpStatus status;
     private final Mu3Headers headers = Mu3Headers.newWithDate();

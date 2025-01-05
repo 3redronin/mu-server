@@ -11,6 +11,7 @@ import java.io.OutputStream;
 import java.net.Socket;
 import java.net.SocketException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.security.cert.Certificate;
 import java.time.Instant;
 import java.util.Collections;
@@ -23,9 +24,7 @@ import java.util.stream.Collectors;
 class Http2Connection extends BaseHttpConnection {
     private enum State {
         OPEN(true), HALF_CLOSED_LOCAL(true), HALF_CLOSED_REMOTE(false), CLOSED(false);
-
         final boolean canRead;
-
         State(boolean canRead) {
             this.canRead = canRead;
         }
@@ -99,7 +98,7 @@ class Http2Connection extends BaseHttpConnection {
         fieldBlockEncoder.changeTableSize(clientSettings.headerTableSize);
         settingsAckQueue.add(System.currentTimeMillis());
 
-        var fieldBlockDecoder = new FieldBlockDecoder(serverSettings.headerTableSize);
+        var fieldBlockDecoder = new FieldBlockDecoder(new HpackTable(serverSettings.headerTableSize), server.maxUrlSize(), server.maxRequestHeadersSize());
 
         // and now just read frames
         while (state().canRead) {
@@ -122,11 +121,12 @@ class Http2Connection extends BaseHttpConnection {
 
                 switch (fh.frameType()) {
                     case HEADERS: {
-                        var headerFragment = Http2HeadersFrame.readLogicalFrame(fh, fieldBlockDecoder, buffer, clientIn);
                         if (state == State.OPEN) {
-                            lastStreamId = headerFragment.streamId();
+                            lastStreamId = fh.streamId();
                         }
                         try {
+                            var headerFragment = Http2HeadersFrame.readLogicalFrame(fh, fieldBlockDecoder, buffer, clientIn);
+                            log.info("Got headers " + headerFragment);
                             startRequest(headerFragment);
                         } catch (Http2Exception e) {
                             if (e.errorType() == Http2Level.STREAM) {
@@ -134,8 +134,22 @@ class Http2Connection extends BaseHttpConnection {
                             } else {
                                 throw e;
                             }
+                        } catch (HttpException e) {
+                            // return an http response
+                            FieldBlock errorHeaders = new FieldBlock();
+                            errorHeaders.add(HeaderNames.PSEUDO_STATUS, e.status());
+                            errorHeaders.add(e.responseHeaders());
+                            byte[] message = e.getMessage().getBytes(StandardCharsets.UTF_8);
+                            if (outgoingFlowControl.withdrawIfCan(message.length)) {
+                                errorHeaders.set(HeaderNames.CONTENT_TYPE, "text/plain;charset=utf-8");
+                                errorHeaders.set(HeaderNames.CONTENT_LENGTH, message.length);
+                                server.getStatsImpl().onInvalidRequest();
+                                write(new Http2HeadersFrame(fh.streamId(), false, false, 0, 0, errorHeaders));
+                                write(new Http2DataFrame(fh.streamId(), true, message, 0, message.length));
+                            } else {
+                                write(new Http2HeadersFrame(fh.streamId(), false, true, 0, 0, errorHeaders));
+                            }
                         }
-                        log.info("Got headers " + headerFragment);
                         break;
                     }
                     case SETTINGS: {

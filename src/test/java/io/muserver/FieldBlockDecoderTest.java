@@ -16,7 +16,7 @@ class FieldBlockDecoderTest {
 
     public static final ByteBuffer empty = ByteBuffer.allocate(0);
     private final HpackTable table = new HpackTable(4096);
-    private final FieldBlockDecoder decoder = new FieldBlockDecoder(table);
+    private final FieldBlockDecoder decoder = new FieldBlockDecoder(table, 8192, 4 * 8192);
 
     @Test
     void canDecodeNBitPrefixedValues() throws Http2Exception {

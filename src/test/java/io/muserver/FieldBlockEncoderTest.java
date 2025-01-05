@@ -18,7 +18,7 @@ class FieldBlockEncoderTest {
 
     private final HpackTable table = new HpackTable(4096);
     private final FieldBlockEncoder encoder = new FieldBlockEncoder(table);
-    private final FieldBlockDecoder decoder = new FieldBlockDecoder(table);
+    private final FieldBlockDecoder decoder = new FieldBlockDecoder(table, 8192, 4 * 8192);
 
     @Test
     public void rfc7541ExampleC_2_1_literalHeaderWithIndexing() throws IOException, Http2Exception {

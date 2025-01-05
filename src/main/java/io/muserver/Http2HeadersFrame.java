@@ -30,7 +30,19 @@ class Http2HeadersFrame implements LogicalHttp2Frame {
         this.headers = headers;
     }
 
-    static Http2HeadersFrame readLogicalFrame(Http2FrameHeader frameHeader, FieldBlockDecoder fieldBlockDecoder, ByteBuffer buffer, InputStream clientIn) throws Http2Exception, IOException {
+    /**
+     * Reads a logical headers frame, combining multiple fragments into one if needed.
+     *
+     * @param frameHeader the HTTP2 frame header ("header" refers to the first 9 bytes all H2 frames have in common rather than HTTP headers)
+     * @param fieldBlockDecoder the decoder
+     * @param buffer the buffer with the current frame at least loaded
+     * @param clientIn the input to read from when continuation frames are used - used to get fragments to build a full header
+     * @return parsed HTTP2 headers
+     * @throws HttpException if the request is invalid due to things like headers or URI being too long
+     * @throws Http2Exception if there is an H2/HPACK protocol exception
+     * @throws IOException if there is an error reading from the client input during processing
+     */
+    static Http2HeadersFrame readLogicalFrame(Http2FrameHeader frameHeader, FieldBlockDecoder fieldBlockDecoder, ByteBuffer buffer, InputStream clientIn) throws HttpException, Http2Exception, IOException {
         // figure out the fields
         var priority = (frameHeader.flags() & 0b00100000) > 0;
         var padded = (frameHeader.flags() & 0b00001000) > 0;
@@ -63,11 +75,18 @@ class Http2HeadersFrame implements LogicalHttp2Frame {
         FieldBlock headers;
 
         NiceByteArrayOutputStream baos = null;
+        HttpException invalidRequestException = null;
 
         if (hpackLength > 0) {
             if (endHeaders) {
                 var slice = buffer.slice().limit(hpackLength);
-                headers = fieldBlockDecoder.decodeFrom(slice);
+                try {
+                    headers = fieldBlockDecoder.decodeFrom(slice);
+                } catch (HttpException e) {
+                    // we need to process everything and get the buffer in the right place, which is why it is not thrown
+                    invalidRequestException = e;
+                    headers = new FieldBlock();
+                }
             } else {
                 baos = new NiceByteArrayOutputStream(hpackLength * 2);
                 if (buffer.hasArray()) {
@@ -103,7 +122,16 @@ class Http2HeadersFrame implements LogicalHttp2Frame {
                 baos.write(cf.fragment());
                 ended = cf.endHeaders();
             }
-            headers = fieldBlockDecoder.decodeFrom(baos.toByteBuffer());
+            try {
+                headers = fieldBlockDecoder.decodeFrom(baos.toByteBuffer());
+            } catch (HttpException e) {
+                invalidRequestException = e;
+                headers = new FieldBlock();
+            }
+        }
+
+        if (invalidRequestException != null) {
+            throw invalidRequestException;
         }
 
         return new Http2HeadersFrame(frameHeader.streamId(), exclusive, endStream, streamDependency, weight, headers);

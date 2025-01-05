@@ -1,20 +1,26 @@
 package io.muserver;
 
+import org.jspecify.annotations.NullMarked;
+
 import java.nio.ByteBuffer;
 
+@NullMarked
 class FieldBlockDecoder {
 
+    private final int maxUriLength;
+    private final int maxHeadersSize;
     private final HpackTable table;
 
-    FieldBlockDecoder(int maxTableSize) {
-        table = new HpackTable(maxTableSize);
-    }
-    FieldBlockDecoder(HpackTable table) {
+    FieldBlockDecoder(HpackTable table, int maxUriLength, int maxHeadersSize) {
         this.table = table;
+        this.maxUriLength = maxUriLength;
+        this.maxHeadersSize = maxHeadersSize;
     }
 
-    FieldBlock decodeFrom(ByteBuffer buffer) throws Http2Exception {
+    FieldBlock decodeFrom(ByteBuffer buffer) throws HttpException, Http2Exception {
         var fb = new FieldBlock();
+        int totalLen = 0;
+        int uriLen = 0;
 
         while (buffer.hasRemaining()) {
             byte b = buffer.get();
@@ -42,13 +48,24 @@ class FieldBlockDecoder {
                         // indexed name
                         name = table.getValue(nameIndex).name();
                     }
-                    var value = readHeaderString(buffer, HeaderString.Type.VALUE);
-                    FieldLine line = new FieldLine(name, value);
-                    fb.add(line);
+
+                    boolean isUri = name == HeaderNames.PSEUDO_PATH;
+                    HeaderString value = readHeaderString(buffer, HeaderString.Type.VALUE);
+                    if (isUri) {
+                        uriLen += value.length();
+                    }
+
+                    totalLen += name.length() + value.length();
+
+                    var line = new FieldLine(name, value);
+                    if (totalLen <= maxHeadersSize) {
+                        fb.add(line);
+                        if (litNever) {
+                            table.neverIndex(line);
+                        }
+                    }
                     if (litWith) {
                         table.indexField(line);
-                    } else if (litNever) {
-                        table.neverIndex(line);
                     }
                 } else {
                     throw new Http2Exception(Http2ErrorCode.COMPRESSION_ERROR, "Unrecognised field line type");
@@ -57,6 +74,12 @@ class FieldBlockDecoder {
 
         }
 
+        if (uriLen  > maxUriLength) {
+            throw new HttpException(HttpStatus.URI_TOO_LONG_414);
+        }
+        if (totalLen > maxHeadersSize) {
+            throw new HttpException(HttpStatus.REQUEST_HEADER_FIELDS_TOO_LARGE_431);
+        }
         return fb;
     }
 

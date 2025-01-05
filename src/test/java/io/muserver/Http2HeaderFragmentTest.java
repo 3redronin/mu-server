@@ -1,5 +1,6 @@
 package io.muserver;
 
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
@@ -15,13 +16,18 @@ public class Http2HeaderFragmentTest {
     @Test
     void emptyHeadersAreTinyYo() throws Http2Exception, IOException {
         var frameHeader = new Http2FrameHeader(0, Http2FrameType.HEADERS, 0b00000101, 1);
-        var headers = Http2HeadersFrame.readLogicalFrame(frameHeader, new FieldBlockDecoder(4096), ByteBuffer.allocate(0), InputStream.nullInputStream());
+        var headers = Http2HeadersFrame.readLogicalFrame(frameHeader, getFieldBlockDecoder(), ByteBuffer.allocate(0), InputStream.nullInputStream());
         assertThat(headers.endStream(), equalTo(true));
         assertThat(headers.exclusive(), equalTo(false));
         assertThat(headers.streamDependencyId(), equalTo(0));
         assertThat(headers.weight(), equalTo(0));
         assertThat(headers.headers().iterator().hasNext(), equalTo(false));
         // this is not actually valid as there are no pseudo headers but something else can deal with that
+    }
+
+    @NotNull
+    private static FieldBlockDecoder getFieldBlockDecoder() {
+        return new FieldBlockDecoder(new HpackTable(4096), 8192, 4 * 8192);
     }
 
     @Test
@@ -65,7 +71,7 @@ public class Http2HeaderFragmentTest {
 
         byteBuffer.flip();
         var frameHeader = new Http2FrameHeader(byteBuffer.remaining(), Http2FrameType.HEADERS, 0b00000101, 1);
-        var headers = Http2HeadersFrame.readLogicalFrame(frameHeader, new FieldBlockDecoder(4096), byteBuffer, InputStream.nullInputStream());
+        var headers = Http2HeadersFrame.readLogicalFrame(frameHeader, getFieldBlockDecoder(), byteBuffer, InputStream.nullInputStream());
         assertThat(headers.endStream(), equalTo(true));
         assertThat(headers.exclusive(), equalTo(false));
         assertThat(headers.streamDependencyId(), equalTo(0));

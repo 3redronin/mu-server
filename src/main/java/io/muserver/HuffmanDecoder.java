@@ -1,7 +1,11 @@
 package io.muserver;
 
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
+
 import java.nio.ByteBuffer;
 
+@NullMarked
 class HuffmanDecoder {
 
     static HeaderString decodeFrom(ByteBuffer bb, int len, HeaderString.Type type) {
@@ -57,9 +61,10 @@ class HuffmanDecoder {
     private static class Node {
         private final boolean leaf;
         private final char c;
+        @Nullable
         private Node left, right;
 
-        private Node(boolean leaf, char c, Node left, Node right) {
+        private Node(boolean leaf, char c, @Nullable Node left, @Nullable Node right) {
             this.leaf = leaf;
             this.c = c;
             this.left = left;
