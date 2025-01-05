@@ -32,6 +32,11 @@ class Http2Stream implements ResponseInfo {
         this.incomingFlowControl = incomingFlowControl;
         this.outgoingFlowControl = outgoingFlowControl;
     }
+
+    int maxFrameSize() {
+        return connection.maxFrameSize();
+    }
+
     @Override
     public long duration() {
         var end = endTime;
