@@ -1,12 +1,14 @@
 package io.muserver;
 
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.Objects;
 
+@NullMarked
 class Http2Settings implements LogicalHttp2Frame {
     static Http2Settings DEFAULT_CLIENT_SETTINGS = new Http2Settings(false,
         4096, 100, 65535, 16384, 32 * 1024
@@ -33,7 +35,7 @@ class Http2Settings implements LogicalHttp2Frame {
      */
     private static final byte[] ackBytes = new byte[] { 0, 0, 0, 4, 1, 0, 0, 0, 0 };
 
-    public void writeTo(@NotNull Http2Connection connectiono, @NotNull OutputStream out) throws IOException {
+    public void writeTo(@Nullable Http2Connection connection, OutputStream out) throws IOException {
         if (isAck) {
             out.write(ackBytes);
         } else {

@@ -9,6 +9,10 @@ import java.util.stream.Stream;
 public class ServerTypeArgs implements ArgumentsProvider {
     @Override
     public Stream<? extends Arguments> provideArguments(ExtensionContext context) throws Exception {
-        return Stream.of(Arguments.of("http"), Arguments.of("https"));
+        return Stream.of(
+            Arguments.of("http"),
+            Arguments.of("https"),
+            Arguments.of("h2")
+            );
     }
 }

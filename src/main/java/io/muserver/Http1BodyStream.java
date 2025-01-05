@@ -181,11 +181,13 @@ class Http1BodyStream extends InputStream {
                     drained = mbb.isLast();
                     bytesReceived += mbb.getLength();
                     if (bytesReceived > maxBodySize) {
-                        status.set(State.TOO_BIG);
-                        // At this point, it is too late to send a 408 probably as the response has ended.
-                        // So we stop draining the request body, causing the client to realise something
-                        // went wrong when we close the connection.
-                        return State.TOO_BIG;
+                        if (status.get() != State.TOO_BIG) {
+                            status.set(State.TOO_BIG);
+                            // At this point, it is too late to send a 408 probably as the response has ended.
+                            // So we stop draining the request body, causing the client to realise something
+                            // went wrong when we close the connection.
+                            return State.TOO_BIG;
+                        }
                     }
                 } else if (last instanceof EndOfBodyBit) {
                     drained = true;
