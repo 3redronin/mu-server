@@ -138,6 +138,12 @@ class FieldBlockEncoderTest {
         assertThat(writeBytes(1, (byte)0b10101010, Integer.MAX_VALUE), contains((byte)-85, (byte)-2, (byte)-1, (byte)-1, (byte)-1, (byte)7));
     }
 
+    @Test
+    void canEncodeWithPrefix7() throws IOException {
+        assertThat(writeBytes(7, (byte)127, 26000),
+            contains((byte) 127, (byte)145, (byte)202, (byte)1));
+    }
+
     static int writeOneByte(int n, byte prefix, int value) throws IOException {
         var baos = new ByteArrayOutputStream();
         int bytesWritten = writeHpackInt(n, prefix, baos, value);

@@ -9,9 +9,11 @@ import java.util.Date;
 public class Http2Response extends BaseResponse {
 
     private final Http2Stream stream;
+    private final FieldBlock fields;
 
-    Http2Response(Http2Stream stream, Headers headers, Mu3Request request) {
+    Http2Response(Http2Stream stream, FieldBlock headers, Mu3Request request) {
         super(request, headers);
+        this.fields = headers;
         this.stream = stream;
     }
 
@@ -36,14 +38,15 @@ public class Http2Response extends BaseResponse {
             throw new IllegalStateException("Cannot write headers multiple times");
         }
         setState(ResponseState.WRITING_HEADERS);
-        headers().set(HeaderNames.PSEUDO_STATUS, Integer.toString(status().code()));
+        fields.add(0, new FieldLine(HeaderNames.PSEUDO_STATUS, HeaderString.valueOf(Integer.toString(status().code()), HeaderString.Type.VALUE)));
 
         if (!headers().contains(HeaderNames.DATE)) {
-            headers().set("date", Mutils.toHttpDate(new Date()));
+            fields.add(1, new FieldLine((HeaderString) HeaderNames.DATE,
+                HeaderString.valueOf(Mutils.toHttpDate(new Date()), HeaderString.Type.VALUE)));
         }
 
-        var headerFragment = new Http2HeaderFragment(
-            stream.id, false, true, endOfStream, 0, 0, (FieldBlock) headers()
+        var headerFragment = new Http2HeadersFrame(
+            stream.id, false, endOfStream, 0, 0, (FieldBlock) headers()
         );
         stream.blockingWrite(headerFragment);
     }

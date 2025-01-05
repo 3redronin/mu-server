@@ -3,6 +3,8 @@ package io.muserver;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -11,10 +13,9 @@ import static org.hamcrest.Matchers.*;
 public class Http2HeaderFragmentTest {
 
     @Test
-    void emptyHeadersAreTinyYo() throws Http2Exception {
+    void emptyHeadersAreTinyYo() throws Http2Exception, IOException {
         var frameHeader = new Http2FrameHeader(0, Http2FrameType.HEADERS, 0b00000101, 1);
-        var headers = Http2HeaderFragment.readFirstFragment(frameHeader, new FieldBlockDecoder(4096), ByteBuffer.allocate(0));
-        assertThat(headers.endHeaders(), equalTo(true));
+        var headers = Http2HeadersFrame.readLogicalFrame(frameHeader, new FieldBlockDecoder(4096), ByteBuffer.allocate(0), InputStream.nullInputStream());
         assertThat(headers.endStream(), equalTo(true));
         assertThat(headers.exclusive(), equalTo(false));
         assertThat(headers.streamDependencyId(), equalTo(0));
@@ -25,7 +26,7 @@ public class Http2HeaderFragmentTest {
 
     @Test
     @Disabled("Not sure it will work like this")
-    void getWithHostAndAcceptCanBeParsed() throws Http2Exception {
+    void getWithHostAndAcceptCanBeParsed() throws Http2Exception, IOException {
 
         /*
         The HTTP1 equiv:
@@ -64,8 +65,7 @@ public class Http2HeaderFragmentTest {
 
         byteBuffer.flip();
         var frameHeader = new Http2FrameHeader(byteBuffer.remaining(), Http2FrameType.HEADERS, 0b00000101, 1);
-        var headers = Http2HeaderFragment.readFirstFragment(frameHeader, new FieldBlockDecoder(4096), byteBuffer);
-        assertThat(headers.endHeaders(), equalTo(true));
+        var headers = Http2HeadersFrame.readLogicalFrame(frameHeader, new FieldBlockDecoder(4096), byteBuffer, InputStream.nullInputStream());
         assertThat(headers.endStream(), equalTo(true));
         assertThat(headers.exclusive(), equalTo(false));
         assertThat(headers.streamDependencyId(), equalTo(0));

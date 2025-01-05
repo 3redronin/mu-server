@@ -1,36 +1,45 @@
 package io.muserver;
 
 import org.jspecify.annotations.NullMarked;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.URI;
 
 class Http2Stream implements ResponseInfo {
 
+    private static final Logger log = LoggerFactory.getLogger(Http2Stream.class);
+
     private enum State {
-        /* IDLE, RESERVED_LOCAL, RESERVED_REMOTE, */ OPEN, HALF_CLOSED_LOCAL, HALF_CLOSED_REMOTE, CLOSED
+        /* IDLE, RESERVED_LOCAL, RESERVED_REMOTE, */ OPEN, HALF_CLOSED_LOCAL, HALF_CLOSED_REMOTE, CLOSED;
 
     }
     final int id;
-
     private final Http2Connection connection;
 
     final Mu3Request request;
+    private final Http2FlowController incomingFlowControl;
+    private final Http2FlowController outgoingFlowControl;
     private Http2Response response;
     private State state = State.OPEN;
     private long endTime = 0;
-    Http2Stream(int id, Http2Connection connection, Mu3Request request) {
+    Http2Stream(int id, Http2Connection connection, Mu3Request request, Http2FlowController incomingFlowControl, Http2FlowController outgoingFlowControl) {
         this.id = id;
         this.connection = connection;
         this.request = request;
+        this.incomingFlowControl = incomingFlowControl;
+        this.outgoingFlowControl = outgoingFlowControl;
     }
-
     @Override
     public long duration() {
         var end = endTime;
         return (end == 0L ? System.currentTimeMillis() : end) - request.startTime();
+    }
+
+    public void applyWindowUpdate(Http2WindowUpdate windowUpdate) throws Http2Exception {
+        outgoingFlowControl.applyWindowUpdate(windowUpdate);
     }
 
     @Override
@@ -47,8 +56,9 @@ class Http2Stream implements ResponseInfo {
         return response;
     }
 
-    static Http2Stream start(Http2Connection connection, Http2HeaderFragment headerFrame, FieldBlock headers) throws Http2Exception {
+    static Http2Stream start(Http2Connection connection, Http2HeadersFrame headerFrame, Http2Settings serverSettings, Http2Settings clientSettings) throws Http2Exception {
         var id = headerFrame.streamId();
+        FieldBlock headers = headerFrame.headers();
 
         var iter = headers.lineIterator().iterator();
         Long cl = null;
@@ -105,6 +115,7 @@ class Http2Stream implements ResponseInfo {
             throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "missing required pseudo header", id);
         }
         if (authority == null) {
+            // TODO: use this somehow
             authority = host;
         } else if (host == null) {
             headers.add(HeaderNames.HOST, authority);
@@ -119,15 +130,19 @@ class Http2Stream implements ResponseInfo {
             bodySize = BodySize.UNSPECIFIED;
         }
 
-        URI serverUri = URI.create(scheme + "://" + authority + path).normalize();
-        URI requestUri = serverUri;
+        var serverUri = connection.creator.getUri().resolve(path.toString());
+        var requestUri = Headtils.getUri(log, headers, path.toString(), serverUri);
+
         InputStream body = bodySize == BodySize.NONE ? EmptyInputStream.INSTANCE : null;
         if (body == null) {
             throw new UnsupportedOperationException("Request bodies");
         }
         var request = new Mu3Request(connection, method, requestUri, serverUri, HttpVersion.HTTP_2, headers, bodySize, body);
 
-        Http2Stream stream = new Http2Stream(id, connection, request);
+        var outgoingFlowControl = new Http2FlowController(id, clientSettings.initialWindowSize);
+        var incomingFlowControl = new Http2FlowController(id, serverSettings.initialWindowSize);
+
+        Http2Stream stream = new Http2Stream(id, connection, request, incomingFlowControl, outgoingFlowControl);
         stream.response = new Http2Response(stream, new FieldBlock(), request);
         return stream;
     }

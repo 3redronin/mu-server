@@ -51,6 +51,12 @@ class FieldBlockDecoderTest {
     }
 
     @Test
+    void canEncodeWithPrefix7() throws Http2Exception {
+        assertThat(readHpackInt(7, (byte)127,
+            buffed((byte)145, (byte)202, (byte)1)), equalTo(26000));
+    }
+
+    @Test
     public void http2ExceptionIfTooManyBytes() throws Http2Exception {
         var ex = assertThrows(Http2Exception.class, () -> readHpackInt(8, (byte) 0b11111111, buffed(
             // each of these just adds 0, so an attacker can just send a whole load to waste precious time

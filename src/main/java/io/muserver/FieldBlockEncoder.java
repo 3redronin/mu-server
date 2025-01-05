@@ -58,13 +58,14 @@ class FieldBlockEncoder {
 
             // I = I - (2^N - 1)
             I = I - maxPrefixedSize;
-            while (I > 256) {
+            while (I >= 128) {
                 // encode (I % 128 + 128) on 8 bits
-                var next = (I % 128) + 128;
-                out.write(next);
+                var next = I & 0x7f;
+                out.write(next | 0b10000000);
                 bytesWritten++;
 
-                I = I / 128;
+                // I = I / 128;
+                I = I >>> 7;
             }
 
             // encode I on 8 bits

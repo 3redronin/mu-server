@@ -228,6 +228,7 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
      * @param name The header name
      * @param value The value
      * @return This headers object
+     * @throws NullPointerException if name or value is <code>null</code>
      */
     Headers add(CharSequence name, Object value);
 
@@ -283,9 +284,11 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
 
     /**
      * Sets a header value. If a header with the given name already exists then this replaces it.
+     * <p>If the value is <code>null</code> then the header is removed</p>
      * @param name The header name
      * @param value The value
      * @return This headers object
+     * @throws NullPointerException if name is <code>null</code>
      */
     Headers set(CharSequence name, Object value);
 
@@ -305,6 +308,7 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
      * @param name The header name
      * @param values The value
      * @return This headers object
+     * @throws NullPointerException if name or values is <code>null</code>
      */
     Headers set(CharSequence name, Iterable<?> values);
 
@@ -347,6 +351,7 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
      * Removes a header. Does nothing if the header is not set.
      * @param name The header to remove
      * @return This headers object
+     * @throws NullPointerException if name is <code>null</code>
      */
     Headers remove(CharSequence name);
 

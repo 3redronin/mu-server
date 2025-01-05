@@ -33,13 +33,16 @@ class HeaderString implements CharSequence {
         }
         CharSequence s = value instanceof CharSequence ? (CharSequence) value : value.toString();
         if (s.length() == 0) {
-            if (type != Type.VALUE) throw new IllegalArgumentException("Empty header names not allowed");
+            if (type == Type.HEADER) throw new IllegalArgumentException("Empty header names not allowed");
             return EMPTY_VALUE;
         }
-        if (type != Type.VALUE) {
+        if (type == Type.HEADER) {
             var builtIn = HeaderNames.findBuiltIn(s);
             if (builtIn != null) {
                 return builtIn;
+            }
+            if (s instanceof String) {
+                s = ((String) s).toLowerCase();
             }
         }
         return new HeaderString(s);

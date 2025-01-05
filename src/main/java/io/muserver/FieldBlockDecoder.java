@@ -78,7 +78,7 @@ class FieldBlockDecoder {
         int B;
         do {
             // B = next octet
-            B = buffer.get();
+            B = buffer.get() & 0xFF;
 
             // I = I + (B & 127) * 2^M
             I = I + ((B & 127) * (1 << M));

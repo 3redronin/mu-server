@@ -25,4 +25,5 @@ class NiceByteArrayOutputStream extends ByteArrayOutputStream {
         var charBuffer = StandardCharsets.UTF_8.newDecoder().decode(toByteBuffer());
         return charBuffer.toString();
     }
+
 }

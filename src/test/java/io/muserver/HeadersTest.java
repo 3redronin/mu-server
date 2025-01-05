@@ -4,9 +4,11 @@ import okhttp3.Request;
 import okhttp3.Response;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ArgumentsSource;
 import scaffolding.ClientUtils;
 import scaffolding.MuAssert;
+import scaffolding.ServerTypeArgs;
 import scaffolding.ServerUtils;
 
 import java.io.IOException;
@@ -19,7 +21,6 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static io.muserver.MuServerBuilder.httpServer;
 import static org.hamcrest.CoreMatchers.*;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.IsEqual.equalTo;
@@ -36,9 +37,10 @@ public class HeadersTest {
         MuAssert.stopAndCheck(server);
     }
 
-    @Test
-    public void canGetAndSetThem() throws IOException {
-        server = ServerUtils.httpsServerForTest()
+    @ParameterizedTest
+    @ArgumentsSource(ServerTypeArgs.class)
+    public void canGetAndSetThem(String protocol) throws IOException {
+        server = ServerUtils.httpsServerForTest(protocol)
             .addHandler((request, response) -> {
                 String something = request.headers().get("X-Something");
                 response.headers().add("X-Response", something);
@@ -54,9 +56,10 @@ public class HeadersTest {
         }
     }
 
-    @Test
-    public void pseudoHeadersAreNotPresentInHeaders() throws IOException {
-        server = ServerUtils.httpsServerForTest()
+    @ParameterizedTest
+    @ArgumentsSource(ServerTypeArgs.class)
+    public void pseudoHeadersAreNotPresentInHeaders(String protocol) throws IOException {
+        server = ServerUtils.httpsServerForTest(protocol)
             .addHandler((request, response) -> {
                 for (Map.Entry<String, String> header : request.headers()) {
                     if (header.getKey().startsWith(":")) {
@@ -73,11 +76,12 @@ public class HeadersTest {
         }
     }
 
-    @Test
-    public void aHandlerCanChangeTheHeadersOfASubsequentHandler() {
+    @ParameterizedTest
+    @ArgumentsSource(ServerTypeArgs.class)
+    public void aHandlerCanChangeTheHeadersOfASubsequentHandler(String protocol) {
         String randomValue = UUID.randomUUID().toString();
 
-        server = ServerUtils.httpsServerForTest()
+        server = ServerUtils.httpsServerForTest(protocol)
             .addHandler((request, response) -> {
                 request.headers().set("X-Something", randomValue);
                 return false;
@@ -95,9 +99,10 @@ public class HeadersTest {
         }
     }
 
-    @Test
-    public void largeHeadersAreFineIfConfigured() {
-        server = ServerUtils.httpsServerForTest()
+    @ParameterizedTest
+    @ArgumentsSource(ServerTypeArgs.class)
+    public void largeHeadersAreFineIfConfigured(String protocol) {
+        server = ServerUtils.httpsServerForTest(protocol)
             .withMaxHeadersSize(33000)
             .addHandler((request, response) -> {
                 response.headers().add(request.headers());
@@ -110,10 +115,11 @@ public class HeadersTest {
         }
     }
 
-    @Test
-    public void urlsThatAreTooLongAreRejected() throws IOException {
+    @ParameterizedTest
+    @ArgumentsSource(ServerTypeArgs.class)
+    public void urlsThatAreTooLongAreRejected(String protocol) throws IOException {
         AtomicBoolean handlerHit = new AtomicBoolean(false);
-        server = ServerUtils.httpsServerForTest()
+        server = ServerUtils.httpsServerForTest(protocol)
             .withMaxUrlSize(30)
             .addHandler((request, response) -> {
                 handlerHit.set(true);
@@ -128,9 +134,10 @@ public class HeadersTest {
         assertThat(handlerHit.get(), is(false));
     }
 
-    @Test
-    public void a431IsReturnedIfTheHeadersAreTooLarge() throws IOException {
-        server = ServerUtils.httpsServerForTest()
+    @ParameterizedTest
+    @ArgumentsSource(ServerTypeArgs.class)
+    public void a431IsReturnedIfTheHeadersAreTooLarge(String protocol) throws IOException {
+        server = ServerUtils.httpsServerForTest(protocol)
             .withMaxHeadersSize(1024)
             .addHandler((request, response) -> {
                 response.headers().add(request.headers());
@@ -145,31 +152,30 @@ public class HeadersTest {
         }
     }
 
-    @Test
-    public void largeHeadersCanBeConfigured() throws Exception {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < 26000; i++) {
-            sb.append("a");
-        }
-        String value = sb.toString();
-        server = httpServer()
+    @ParameterizedTest
+    @ArgumentsSource(ServerTypeArgs.class)
+    public void largeHeadersCanBeConfigured(String protocol) throws Exception {
+        String value = "a".repeat(26000);
+        server = ServerUtils.httpsServerForTest(protocol)
             .withMaxHeadersSize(value.length() + 1000)
             .addHandler(Method.GET, "/", (req, resp, pp) -> {
+                resp.headers().set("X-Large-Response", req.headers().get("x-large"));
                 resp.write(req.headers().get("X-Large"));
             })
             .start();
 
-
         try (Response resp = call(request(server.uri()).header("x-Large", value))) {
+            assertThat(resp.header("x-large-response"), equalTo(value));
             assertThat(resp.body().string(), equalTo(value));
         }
 
     }
 
-    @Test
-    public void ifXForwardedHeadersAreSpecifiedThenRequestUriUsesThem() {
+    @ParameterizedTest
+    @ArgumentsSource(ServerTypeArgs.class)
+    public void ifXForwardedHeadersAreSpecifiedThenRequestUriUsesThem(String protocol) {
         URI[] actual = new URI[2];
-        server = ServerUtils.httpsServerForTest()
+        server = ServerUtils.httpsServerForTest(protocol)
             .withHttpPort(12752)
             .addHandler((request, response) -> {
                 actual[0] = request.uri();
@@ -186,11 +192,12 @@ public class HeadersTest {
         assertThat(actual[0].toString(), equalTo("https://www.example.org/blah?query=value"));
     }
 
-    @Test
-    public void ifMultipleXForwardedHeadersAreSpecifiedThenRequestUriUsesTheFirst() {
+    @ParameterizedTest
+    @ArgumentsSource(ServerTypeArgs.class)
+    public void ifMultipleXForwardedHeadersAreSpecifiedThenRequestUriUsesTheFirst(String protocol) {
         AtomicReference<List<ForwardedHeader>> forwardedHeaders = new AtomicReference<>();
         URI[] actual = new URI[2];
-        server = ServerUtils.httpsServerForTest()
+        server = ServerUtils.httpsServerForTest(protocol)
             .withHttpPort(12753)
             .addHandler((request, response) -> {
                 actual[0] = request.uri();
@@ -214,9 +221,10 @@ public class HeadersTest {
         ));
     }
 
-    @Test
-    public void ifNoResponseDataThenContentLengthIsZero() {
-        server = ServerUtils.httpsServerForTest()
+    @ParameterizedTest
+    @ArgumentsSource(ServerTypeArgs.class)
+    public void ifNoResponseDataThenContentLengthIsZero(String protocol) {
+        server = ServerUtils.httpsServerForTest(protocol)
             .addHandler((request, response) -> {
                 response.status(200);
                 response.headers().add("X-Blah", "ha");
@@ -233,9 +241,10 @@ public class HeadersTest {
         }
     }
 
-    @Test
-    public void ifOutputStreamUsedThenTransferEncodingIsUnknown() throws IOException {
-        server = ServerUtils.httpsServerForTest()
+    @ParameterizedTest
+    @ArgumentsSource(ServerTypeArgs.class)
+    public void ifOutputStreamUsedThenTransferEncodingIsUnknown(String protocol) throws IOException {
+        server = ServerUtils.httpsServerForTest(protocol)
             .addHandler((request, response) -> {
                 response.status(200);
                 try (PrintWriter writer = response.writer()) {
@@ -256,9 +265,10 @@ public class HeadersTest {
         }
     }
 
-    @Test
-    public void aRequestHasXForwardHostHeaderDontThrowException() throws IOException {
-        server = ServerUtils.httpsServerForTest()
+    @ParameterizedTest
+    @ArgumentsSource(ServerTypeArgs.class)
+    public void aRequestHasXForwardHostHeaderDontThrowException(String protocol) throws IOException {
+        server = ServerUtils.httpsServerForTest(protocol)
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
                 response.writer().print(request.uri());
@@ -267,13 +277,15 @@ public class HeadersTest {
         try (Response resp = call(request(server.uri())
             .header(HeaderNames.X_FORWARDED_HOST.toString(), "mu-server-io:1234"))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.body().string(), equalTo("https://mu-server-io:1234/"));
+            var scheme = protocol.equals("http") ? "http" : "https";
+            assertThat(resp.body().string(), equalTo(scheme + "://mu-server-io:1234/"));
         }
     }
 
-    @Test
-    public void aRequestHasXForwardHostAndHasNoPortDontThrowException() throws IOException {
-        server = ServerUtils.httpsServerForTest()
+    @ParameterizedTest
+    @ArgumentsSource(ServerTypeArgs.class)
+    public void aRequestHasXForwardHostAndHasNoPortDontThrowException(String protocol) throws IOException {
+        server = ServerUtils.httpsServerForTest(protocol)
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
                 response.writer().print(request.uri());
@@ -282,15 +294,17 @@ public class HeadersTest {
         try (Response resp = call(request(server.uri())
             .header(HeaderNames.X_FORWARDED_HOST.toString(), "mu-server-io"))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.body().string(), equalTo("https://mu-server-io/"));
+            var scheme = protocol.equals("http") ? "http" : "https";
+            assertThat(resp.body().string(), equalTo(scheme + "://mu-server-io/"));
         }
     }
 
-    @Test
-    public void aRequestHasXForwardHostAndXForwardedPortDontThrowExceptionAndUsePort() throws IOException {
+    @ParameterizedTest
+    @ArgumentsSource(ServerTypeArgs.class)
+    public void aRequestHasXForwardHostAndXForwardedPortDontThrowExceptionAndUsePort(String protocol) throws IOException {
         final String host = "mu-server-io:9999";
         final String port = "8888";
-        server = ServerUtils.httpsServerForTest()
+        server = ServerUtils.httpsServerForTest(protocol)
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
                 response.writer().print(request.uri());
@@ -300,13 +314,15 @@ public class HeadersTest {
             .header(HeaderNames.X_FORWARDED_HOST.toString(), host)
             .header(HeaderNames.X_FORWARDED_PORT.toString(), port))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.body().string(), equalTo("https://mu-server-io:8888/"));
+            var scheme = protocol.equals("http") ? "http" : "https";
+            assertThat(resp.body().string(), equalTo(scheme + "://mu-server-io:8888/"));
         }
     }
 
-    @Test
-    public void forwardedHostsCanHaveColons() throws IOException {
-        server = ServerUtils.httpsServerForTest()
+    @ParameterizedTest
+    @ArgumentsSource(ServerTypeArgs.class)
+    public void forwardedHostsCanHaveColons(String protocol) throws IOException {
+        server = ServerUtils.httpsServerForTest(protocol)
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
                 PrintWriter writer = response.writer();
@@ -326,9 +342,10 @@ public class HeadersTest {
     }
 
 
-    @Test
-    public void clientIPUsesForwardedValueIfSpecified() throws IOException {
-        server = ServerUtils.httpsServerForTest()
+    @ParameterizedTest
+    @ArgumentsSource(ServerTypeArgs.class)
+    public void clientIPUsesForwardedValueIfSpecified(String protocol) throws IOException {
+        server = ServerUtils.httpsServerForTest(protocol)
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
                 response.write(request.clientIP());
@@ -351,9 +368,10 @@ public class HeadersTest {
     }
 
 
-    @Test
-    public void aRquestWithErrorXForwardHostHeaderDontThrowException() throws IOException {
-        server = ServerUtils.httpsServerForTest()
+    @ParameterizedTest
+    @ArgumentsSource(ServerTypeArgs.class)
+    public void aRquestWithErrorXForwardHostHeaderDontThrowException(String protocol) throws IOException {
+        server = ServerUtils.httpsServerForTest(protocol)
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
                 response.writer().print(request.uri());
@@ -367,10 +385,11 @@ public class HeadersTest {
         }
     }
 
-    @Test
-    public void aRequestHasIPv6XForwardHostHeaderDontThrowException() throws IOException {
+    @ParameterizedTest
+    @ArgumentsSource(ServerTypeArgs.class)
+    public void aRequestHasIPv6XForwardHostHeaderDontThrowException(String protocol) throws IOException {
         final String host = "[2001:0db8:85a3:08d3:1319:8a2e:0370:7344]:1234";
-        server = ServerUtils.httpsServerForTest()
+        server = ServerUtils.httpsServerForTest(protocol)
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
                 response.writer().print(request.uri());
@@ -380,14 +399,16 @@ public class HeadersTest {
             .header(HeaderNames.X_FORWARDED_HOST.toString(), host)
         )) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.body().string(), equalTo("https://" + host + "/"));
+            var scheme = protocol.equals("http") ? "http" : "https";
+            assertThat(resp.body().string(), equalTo(scheme + "://" + host + "/"));
         }
     }
 
-    @Test
-    public void anIPv6XForwardHostHeaderHasNoPortDontThrowException() throws IOException {
+    @ParameterizedTest
+    @ArgumentsSource(ServerTypeArgs.class)
+    public void anIPv6XForwardHostHeaderHasNoPortDontThrowException(String protocol) throws IOException {
         final String host = "[2001:0db8:85a3:08d3:1319:8a2e:0370:7344]";
-        server = ServerUtils.httpsServerForTest()
+        server = ServerUtils.httpsServerForTest(protocol)
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
                 response.writer().print(request.uri());
@@ -396,13 +417,15 @@ public class HeadersTest {
         try (Response resp = call(request(server.uri())
             .header(HeaderNames.X_FORWARDED_HOST.toString(), host))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.body().string(), equalTo("https://" + host + "/"));
+            var scheme = protocol.equals("http") ? "http" : "https";
+            assertThat(resp.body().string(), equalTo(scheme + "://" + host + "/"));
         }
     }
 
-    @Test
-    public void anIPv4XForwardHostHeaderDontThrowException() throws IOException {
-        server = ServerUtils.httpsServerForTest()
+    @ParameterizedTest
+    @ArgumentsSource(ServerTypeArgs.class)
+    public void anIPv4XForwardHostHeaderDontThrowException(String protocol) throws IOException {
+        server = ServerUtils.httpsServerForTest(protocol)
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
                 response.writer().print(request.uri());
@@ -411,13 +434,15 @@ public class HeadersTest {
         try (Response resp = call(request(server.uri())
             .header(HeaderNames.X_FORWARDED_HOST.toString(), "192.168.1.1:1234"))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.body().string(), equalTo("https://192.168.1.1:1234/"));
+            var scheme = protocol.equals("http") ? "http" : "https";
+            assertThat(resp.body().string(), equalTo(scheme + "://192.168.1.1:1234/"));
         }
     }
 
-    @Test
-    public void anIPv4XForwardHostHeaderHasNoPortDontThrowException() throws IOException {
-        server = ServerUtils.httpsServerForTest()
+    @ParameterizedTest
+    @ArgumentsSource(ServerTypeArgs.class)
+    public void anIPv4XForwardHostHeaderHasNoPortDontThrowException(String protocol) throws IOException {
+        server = ServerUtils.httpsServerForTest(protocol)
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
                 response.writer().print(request.uri());
@@ -426,7 +451,8 @@ public class HeadersTest {
         try (Response resp = call(request(server.uri())
             .header(HeaderNames.X_FORWARDED_HOST.toString(), "192.168.1.1"))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.body().string(), equalTo("https://192.168.1.1/"));
+            var scheme = protocol.equals("http") ? "http" : "https";
+            assertThat(resp.body().string(), equalTo(scheme + "://192.168.1.1/"));
         }
     }
 
@@ -434,8 +460,9 @@ public class HeadersTest {
         return request().header("X-Something", value).url(server.uri().toString());
     }
 
-    @Test
-    public void httpHeadersToStringDoesNotLogSensitiveHeaders() {
+    @ParameterizedTest
+    @ArgumentsSource(ServerTypeArgs.class)
+    public void httpHeadersToStringDoesNotLogSensitiveHeaders(String protocol) {
         Headers headers = new Mu3Headers();
         headers.add("some-header", "value 1");
         headers.add("some-header", "value 2");

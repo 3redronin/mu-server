@@ -21,9 +21,6 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 class Http2Connection extends BaseHttpConnection {
-
-    private OutputStream clientOut;
-
     private enum State {
         OPEN(true), HALF_CLOSED_LOCAL(true), HALF_CLOSED_REMOTE(false), CLOSED(false);
 
@@ -39,8 +36,10 @@ class Http2Connection extends BaseHttpConnection {
     private Http2Settings clientSettings = Http2Settings.DEFAULT_CLIENT_SETTINGS;
     private final ByteBuffer buffer;
     private volatile State state = State.OPEN;
-    private volatile int lastStreamId;
-    private final Http2FlowController connectionFlowControl = new Http2FlowController(0, 65535);
+    private volatile int lastStreamId = Integer.MAX_VALUE;
+    private OutputStream clientOut;
+    private final Http2FlowController incomingFlowControl = new Http2FlowController(0, 65535);
+    private final Http2FlowController outgoingFlowControl = new Http2FlowController(0, 65535);
     private final ConcurrentLinkedQueue<Long> settingsAckQueue = new ConcurrentLinkedQueue<>();
     private final ConcurrentHashMap<Integer, Http2Stream> streams = new ConcurrentHashMap<>();
     private final ExecutorService executorService;
@@ -56,6 +55,9 @@ class Http2Connection extends BaseHttpConnection {
         this.fieldBlockEncoder = new FieldBlockEncoder(new HpackTable(clientSettings.headerTableSize));
     }
 
+    int maxFrameSize() {
+        return clientSettings.maxFrameSize;
+    }
 
     private synchronized void onRemoteClose() {
         if (state == State.OPEN) {
@@ -112,7 +114,7 @@ class Http2Connection extends BaseHttpConnection {
             var fh = Http2FrameHeader.readFrom(buffer);
             var len = fh.length();
             Mutils.readAtLeast(buffer, clientIn, len);
-            System.out.println("fh = " + fh);
+            log.info("read fh = " + fh);
 
             if (state == State.HALF_CLOSED_LOCAL && fh.streamId() > lastStreamId) {
                 discardPayload(buffer, clientIn, len);
@@ -120,23 +122,18 @@ class Http2Connection extends BaseHttpConnection {
 
                 switch (fh.frameType()) {
                     case HEADERS: {
-                        var headerFragment = Http2HeaderFragment.readFirstFragment(fh, fieldBlockDecoder, buffer);
+                        var headerFragment = Http2HeadersFrame.readLogicalFrame(fh, fieldBlockDecoder, buffer, clientIn);
                         if (state == State.OPEN) {
                             lastStreamId = headerFragment.streamId();
                         }
-                        if (headerFragment.endHeaders()) {
-                            try {
-                                startRequest(headerFragment);
-                            } catch (Http2Exception e) {
-                                if (e.errorType() == Http2Level.STREAM) {
-                                    throw new UnsupportedOperationException("Stream reset");
-                                } else {
-                                    throw e;
-                                }
-
+                        try {
+                            startRequest(headerFragment);
+                        } catch (Http2Exception e) {
+                            if (e.errorType() == Http2Level.STREAM) {
+                                throw new UnsupportedOperationException("Stream reset");
+                            } else {
+                                throw e;
                             }
-                        } else {
-                            throw new UnsupportedOperationException("Need to support Continuation frames");
                         }
                         log.info("Got headers " + headerFragment);
                         break;
@@ -165,9 +162,12 @@ class Http2Connection extends BaseHttpConnection {
                     }
                     case WINDOW_UPDATE: {
                         var windowUpdate = Http2WindowUpdate.readFrom(fh, buffer);
-                        connectionFlowControl.applyWindowUpdate(windowUpdate);
+                        incomingFlowControl.applyWindowUpdate(windowUpdate);
                         if (windowUpdate.level() == Http2Level.STREAM) {
-                            // todo: update relevant stream
+                            Http2Stream stream = streams.get(windowUpdate.streamId());
+                            if (stream != null) {
+                                stream.applyWindowUpdate(windowUpdate);
+                            }
                         }
                         break;
                     }
@@ -189,8 +189,8 @@ class Http2Connection extends BaseHttpConnection {
 
     }
 
-    private void startRequest(Http2HeaderFragment frame) throws Http2Exception {
-        var stream = Http2Stream.start(this, frame, frame.headers());
+    private void startRequest(Http2HeadersFrame frame) throws Http2Exception {
+        var stream = Http2Stream.start(this, frame, serverSettings, clientSettings);
         streams.put(frame.streamId(), stream);
         onRequestStarted(stream.request);
         executorService.submit(new Runnable() {
@@ -240,6 +240,7 @@ class Http2Connection extends BaseHttpConnection {
 
     @Override
     public void abortWithTimeout() {
+        // TODO do something with this
         abort();
     }
 

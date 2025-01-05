@@ -1,10 +1,12 @@
 package io.muserver;
 
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
+@NullMarked
 class FieldBlock implements Headers, Iterable<Map.Entry<String, String>> {
 
     private final List<FieldLine> lines = new LinkedList<>();
@@ -13,8 +15,12 @@ class FieldBlock implements Headers, Iterable<Map.Entry<String, String>> {
         lines.add(line);
     }
 
+    void add(int index, FieldLine line) {
+        lines.add(index, line);
+    }
+
     @Override
-    public String get(CharSequence name) {
+    public @Nullable String get(CharSequence name) {
         var header = HeaderString.valueOf(name, HeaderString.Type.HEADER);
         for (FieldLine line : lines) {
             if (line.name().equals(header)) {
@@ -52,7 +58,6 @@ class FieldBlock implements Headers, Iterable<Map.Entry<String, String>> {
         return false;
     }
 
-    @NotNull
     @Override
     public Iterator<Map.Entry<String, String>> iterator() {
         return new MapEntryStringIterator(lines.iterator());
@@ -75,6 +80,8 @@ class FieldBlock implements Headers, Iterable<Map.Entry<String, String>> {
 
     @Override
     public Headers add(CharSequence name, Object value) {
+        Objects.requireNonNull(name, "name is null");
+        Objects.requireNonNull(value, "value is null");
         return add(HeaderString.valueOf(name, HeaderString.Type.HEADER), value);
     }
 
@@ -107,7 +114,8 @@ class FieldBlock implements Headers, Iterable<Map.Entry<String, String>> {
     }
 
     @Override
-    public Headers set(CharSequence name, Object value) {
+    public Headers set(CharSequence name, @Nullable Object value) {
+        Objects.requireNonNull(name, "name is null");
         var header = HeaderString.valueOf(name, HeaderString.Type.HEADER);
         if (value == null) {
             remove(header);
@@ -121,6 +129,8 @@ class FieldBlock implements Headers, Iterable<Map.Entry<String, String>> {
 
     @Override
     public Headers set(CharSequence name, Iterable<?> values) {
+        Objects.requireNonNull(name, "name is null");
+        Objects.requireNonNull(values, "values is null");
         var header = HeaderString.valueOf(name, HeaderString.Type.HEADER);
         remove(header);
         for (Object value : values) {
@@ -144,6 +154,7 @@ class FieldBlock implements Headers, Iterable<Map.Entry<String, String>> {
 
     @Override
     public Headers remove(CharSequence name) {
+        Objects.requireNonNull(name, "name is null");
         var header = HeaderString.valueOf(name, HeaderString.Type.HEADER);
         remove(header);
         return this;
@@ -201,7 +212,7 @@ class FieldBlock implements Headers, Iterable<Map.Entry<String, String>> {
 
 
     @Override
-    public String toString(Collection<String> toSuppress) {
+    public String toString(@Nullable Collection<String> toSuppress) {
         // TODO keep track of what to suppress based on never-index in the hpack
         var sup = toSuppress == null ? Set.of("authorization", "cookie", "set-cookie") : toSuppress;
         var sb = new StringBuilder("HttpHeaders[");
@@ -224,7 +235,7 @@ class FieldBlock implements Headers, Iterable<Map.Entry<String, String>> {
     }
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equals(@Nullable Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         FieldBlock entries = (FieldBlock) o;
@@ -236,6 +247,7 @@ class FieldBlock implements Headers, Iterable<Map.Entry<String, String>> {
         return Objects.hashCode(lines);
     }
 
+    @NullMarked
     private static class MapEntryStringIterator implements Iterator<Map.Entry<String, String>> {
 
         private final Iterator<FieldLine> lineIterator;
