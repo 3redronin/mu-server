@@ -1,5 +1,7 @@
 package io.muserver;
 
+import java.io.IOException;
+
 /**
  * Sends a `100-continue` if appropriate, or throws if the declared length is too long
  * (whether or not there is an `expect` header)
@@ -23,9 +25,17 @@ class ExpectContinueHandler implements MuHandler {
         return false;
     }
 
-    private void throwIfDeclaredSizeTooLarge(MuRequest request) {
+    private void throwIfDeclaredSizeTooLarge(MuRequest request) throws IOException {
         var declaredSize = request.declaredBodySize().size();
         if (declaredSize != null && declaredSize > maxRequestBodySize) {
+            // one has to consume the body for it to be a valid HTTP response
+            try (var body = request.body()) {
+                var buf = new byte[8192];
+                while (body.read(buf) != -1) {
+                    // ignore it
+                }
+            }
+
             HttpException ex = new HttpException(HttpStatus.CONTENT_TOO_LARGE_413);
             ex.responseHeaders().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
             throw ex;
