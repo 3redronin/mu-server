@@ -1,9 +1,10 @@
 package io.muserver;
 
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NullMarked;
 
 import java.nio.ByteBuffer;
 
+@NullMarked
 class Http2FrameHeader {
 
     private final int length;
@@ -22,7 +23,6 @@ class Http2FrameHeader {
         return length;
     }
 
-    @NotNull
     public Http2FrameType frameType() {
         return frameType;
     }
@@ -36,8 +36,8 @@ class Http2FrameHeader {
     }
 
     static final int FRAME_HEADER_LENGTH = 9;
-    @NotNull
-    static Http2FrameHeader readFrom(@NotNull ByteBuffer buffer) throws Http2Exception {
+
+    static Http2FrameHeader readFrom(ByteBuffer buffer) throws Http2Exception {
         int length = ((buffer.get() & 0xFF) << 16) | ((buffer.get() & 0xFF) << 8) | (buffer.get() & 0xFF);
         var frameType = Http2FrameType.fromByte(buffer.get());
         int flags = buffer.get() & 0xFF;

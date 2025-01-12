@@ -1,7 +1,7 @@
 package io.muserver;
 
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -10,11 +10,12 @@ import java.net.Socket;
 import java.security.cert.Certificate;
 import java.time.Instant;
 
+@NullMarked
 abstract class Http1Connection extends BaseHttpConnection {
 
     private static final Logger log = LoggerFactory.getLogger(Http1Connection.class);
 
-    Http1Connection(@NotNull Mu3ServerImpl server, @NotNull ConnectionAcceptor creator, @NotNull Socket clientSocket, @Nullable Certificate clientCertificate, @NotNull Instant handshakeStartTime) {
+    Http1Connection(Mu3ServerImpl server, ConnectionAcceptor creator, Socket clientSocket, @Nullable Certificate clientCertificate, Instant handshakeStartTime) {
         super(server, creator, clientSocket, clientCertificate, handshakeStartTime);
     }
 
@@ -34,7 +35,7 @@ abstract class Http1Connection extends BaseHttpConnection {
                 try {
                     activeWebsocket.onServerShuttingDown();
                 } catch (Exception e) {
-                    log.info("Error while aborting websocket: " + e.getMessage());
+                    log.info("Error while aborting websocket: {}", e.getMessage());
                     forceShutdown();
                 }
             }

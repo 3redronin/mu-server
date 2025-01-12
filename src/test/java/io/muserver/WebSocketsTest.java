@@ -11,7 +11,7 @@ import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.eclipse.jetty.websocket.api.Session;
 import org.eclipse.jetty.websocket.api.WebSocketAdapter;
 import org.eclipse.jetty.websocket.client.WebSocketClient;
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -594,8 +594,7 @@ public class WebSocketsTest {
         }
     }
 
-    @NotNull
-    private static JettyClients startJettyClient() throws Exception {
+    private static @NonNull JettyClients startJettyClient() throws Exception {
         SslContextFactory.Client sslContextFactory = new SslContextFactory.Client(true);
         sslContextFactory.setEndpointIdentificationAlgorithm("https");
         HttpClient httpClient = new HttpClient(sslContextFactory);

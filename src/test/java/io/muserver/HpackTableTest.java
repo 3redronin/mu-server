@@ -1,6 +1,6 @@
 package io.muserver;
 
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Test;
 
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -48,7 +48,7 @@ class HpackTableTest {
 
     }
 
-    @NotNull
+    @NonNull
     private static FieldLine line(CharSequence name, String value) {
         return new FieldLine((HeaderString) name, HeaderString.valueOf(value, HeaderString.Type.VALUE));
     }

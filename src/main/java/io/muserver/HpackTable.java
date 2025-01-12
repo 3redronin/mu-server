@@ -1,12 +1,14 @@
 package io.muserver;
 
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 import java.util.*;
 
+@NullMarked
 class HpackTable {
 
-    private static final FieldLine[] staticMap;
+    private static final @Nullable FieldLine[] staticMap;
 
     static {
         staticMap = new FieldLine[]{
@@ -100,12 +102,10 @@ class HpackTable {
         }
     }
 
-    @NotNull
     private static FieldLine line(HeaderString name) {
         return new FieldLine(name, HeaderString.EMPTY_VALUE);
     }
 
-    @NotNull
     private static FieldLine line(HeaderString name, String value) {
         return new FieldLine(name, HeaderString.valueOf(value, HeaderString.Type.VALUE));
     }

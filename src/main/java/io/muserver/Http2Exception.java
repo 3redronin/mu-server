@@ -1,8 +1,9 @@
 package io.muserver;
 
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
+@NullMarked
 class Http2Exception extends Exception {
     private final Http2Level errorType;
     private final Http2ErrorCode errorCode;
@@ -13,7 +14,7 @@ class Http2Exception extends Exception {
      * @param errorCode the code
      * @param message optional message
      */
-    Http2Exception(@NotNull Http2ErrorCode errorCode, @Nullable String message) {
+    Http2Exception(Http2ErrorCode errorCode, @Nullable String message) {
         this(Http2Level.CONNECTION, errorCode, message, 0);
     }
 
@@ -23,10 +24,10 @@ class Http2Exception extends Exception {
      * @param message optional message
      * @param streamId the stream ID, or 0 for connection errors
      */
-    Http2Exception(@NotNull Http2ErrorCode errorCode, @Nullable String message, int streamId) {
+    Http2Exception(Http2ErrorCode errorCode, @Nullable String message, int streamId) {
         this(streamId == 0 ? Http2Level.CONNECTION : Http2Level.STREAM, errorCode, message, streamId);
     }
-    private Http2Exception(@NotNull Http2Level errorType, @NotNull Http2ErrorCode errorCode, @Nullable String message, int streamId) {
+    private Http2Exception(Http2Level errorType, Http2ErrorCode errorCode, @Nullable String message, int streamId) {
         super(message != null ? message : errorType + " " + errorCode);
         this.errorType = errorType;
         this.errorCode = errorCode;
@@ -35,12 +36,10 @@ class Http2Exception extends Exception {
 
 
 
-    @NotNull
     public Http2Level errorType() {
         return errorType;
     }
 
-    @NotNull
     public Http2ErrorCode errorCode() {
         return errorCode;
     }
@@ -54,6 +53,7 @@ enum Http2Level {
     CONNECTION, STREAM
 }
 
+@NullMarked
 enum Http2ErrorCode {
     NO_ERROR (0x00),
     PROTOCOL_ERROR (0x01),
@@ -79,7 +79,7 @@ enum Http2ErrorCode {
         return code;
     }
 
-    public static Http2ErrorCode fromCode(int code) {
+    public static @Nullable Http2ErrorCode fromCode(int code) {
         for (Http2ErrorCode errorCode : values()) {
             if (errorCode.code() == code) {
                 return errorCode;

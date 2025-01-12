@@ -1,12 +1,13 @@
 package io.muserver;
 
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NullMarked;
 
 import java.util.List;
 import java.util.Map;
 
 import static java.util.Collections.emptyMap;
 
+@NullMarked
 class UrlEncodedMuForm implements MuForm {
     private final QueryString qs;
 
@@ -29,7 +30,7 @@ class UrlEncodedMuForm implements MuForm {
         return qs.all();
     }
 
-    public static UrlEncodedMuForm parse(@NotNull String text) {
+    public static UrlEncodedMuForm parse(String text) {
         return new UrlEncodedMuForm(QueryString.parse(text));
     }
 }

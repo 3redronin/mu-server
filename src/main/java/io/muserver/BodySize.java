@@ -1,15 +1,18 @@
 package io.muserver;
 
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Objects;
 
 /**
  * The declared size of a request or response body
  */
+@NullMarked
 public class BodySize {
 
     private final BodyType type;
+    @Nullable
     private final Long size;
 
     /**
@@ -25,7 +28,7 @@ public class BodySize {
      */
     public static BodySize UNSPECIFIED = new BodySize(BodyType.UNSPECIFIED, null);
 
-    BodySize(BodyType type, Long size) {
+    BodySize(BodyType type, @Nullable Long size) {
         this.type = type;
         this.size = size;
     }
@@ -33,7 +36,6 @@ public class BodySize {
     /**
      * @return the type of body size declaration
      */
-    @NotNull
     public BodyType type() {
         return type;
     }
@@ -41,6 +43,7 @@ public class BodySize {
     /**
      * @return the size of the body in bytes if known; or <code>null</code> if unknown (e.g. for a chunked body)
      */
+    @Nullable
     public Long size() {
         return size;
     }

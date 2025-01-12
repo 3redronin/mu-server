@@ -1,7 +1,8 @@
 package io.muserver;
 
 import jakarta.ws.rs.WebApplicationException;
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -14,6 +15,7 @@ import java.util.*;
  * <p>This is registered with {@link MuServerBuilder#withExceptionHandler(UnhandledExceptionHandler)}.</p>
  * <p>Note: redirect exceptions and exceptions after the response has already started will not get routed to this handler.</p>
  */
+@NullMarked
 public interface UnhandledExceptionHandler {
 
     /**
@@ -48,6 +50,7 @@ public interface UnhandledExceptionHandler {
     }
 }
 
+@NullMarked
 class BuiltInExceptionHandler implements UnhandledExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(BuiltInExceptionHandler.class);
 
@@ -63,7 +66,7 @@ class BuiltInExceptionHandler implements UnhandledExceptionHandler {
         return true;
     }
 
-    private void handleIt(MuRequest request, MuResponse response, Throwable cause, UnhandledExceptionHandler customHandler) throws Exception {
+    private void handleIt(MuRequest request, MuResponse response, Throwable cause, @Nullable UnhandledExceptionHandler customHandler) {
         HttpException httpException;
         if (cause instanceof HttpException) {
             httpException = (HttpException) cause;
@@ -122,7 +125,7 @@ class BuiltInExceptionHandler implements UnhandledExceptionHandler {
                 }
             } else {
                 // There is a custom error renderer
-                Boolean handled;
+                boolean handled;
                 try {
                     // ask the custom handler to handle it - if it returns false we need to handle it
                     handled = customHandler.handle(request, response, cause);
@@ -142,7 +145,6 @@ class BuiltInExceptionHandler implements UnhandledExceptionHandler {
         }
     }
 
-    @NotNull
     private static HttpException convertToMu(WebApplicationException cause) {
         HttpStatus status = HttpStatus.of(cause.getResponse().getStatus());
         String message = cause.getMessage();

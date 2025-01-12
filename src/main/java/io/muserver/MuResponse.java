@@ -1,6 +1,7 @@
 package io.muserver;
 
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 import java.io.OutputStream;
 import java.io.PrintWriter;
@@ -20,6 +21,7 @@ import java.net.URI;
  * <p><strong>Note:</strong> only one of the above methods can be used per response, and aside from <code>sendChunk</code>
  * it is not allowed to call the same method more than once..</p>
  */
+@NullMarked
 public interface MuResponse {
 
     /**
@@ -80,11 +82,11 @@ public interface MuResponse {
     Headers headers();
 
     /**
-     * Sets the Content-Type response header.
+     * Sets the Content-Type response header, for example <code>application/json</code>.
      * @see ContentTypes
-     * @param contentType The content type of the response, for example <code>application/json</code>
+     * @param contentType The content type of the response or <code>null</code> to have no content type.
      */
-    void contentType(CharSequence contentType);
+    void contentType(@Nullable CharSequence contentType);
 
     /**
      * <p>Sends a cookie to the client.</p>

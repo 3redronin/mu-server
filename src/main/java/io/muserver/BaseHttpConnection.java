@@ -1,7 +1,7 @@
 package io.muserver;
 
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 import javax.net.ssl.SSLSocket;
 import java.io.IOException;
@@ -15,17 +15,14 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
+@NullMarked
 abstract class BaseHttpConnection implements HttpConnection {
 
-    @NotNull
     protected final Mu3ServerImpl server;
-    @NotNull
     protected final ConnectionAcceptor creator;
-    @NotNull
     protected final Socket clientSocket;
     @Nullable
     protected final Certificate clientCertificate;
-    @NotNull
     protected final Instant handshakeStartTime;
     protected final long connectionStartTime = System.currentTimeMillis();
     protected final InetSocketAddress remoteAddress;
@@ -37,7 +34,7 @@ abstract class BaseHttpConnection implements HttpConnection {
     protected final AtomicBoolean closed = new AtomicBoolean(false);
     protected final int requestTimeout;
 
-    BaseHttpConnection(@NotNull Mu3ServerImpl server, @NotNull ConnectionAcceptor creator, @NotNull Socket clientSocket, @Nullable Certificate clientCertificate, @NotNull Instant handshakeStartTime) {
+    BaseHttpConnection(Mu3ServerImpl server, ConnectionAcceptor creator, Socket clientSocket, @Nullable Certificate clientCertificate, Instant handshakeStartTime) {
         this.server = server;
         this.creator = creator;
         this.clientSocket = clientSocket;
@@ -47,6 +44,7 @@ abstract class BaseHttpConnection implements HttpConnection {
         localAddress = (InetSocketAddress) clientSocket.getLocalSocketAddress();
         requestTimeout = (int) Math.min(Integer.MAX_VALUE, server.requestIdleTimeoutMillis());
     }
+
     public abstract void start(InputStream clientIn, OutputStream clientOut) throws Throwable;
 
     protected void onInvalidRequest(HttpException rejectException) {
@@ -109,7 +107,7 @@ abstract class BaseHttpConnection implements HttpConnection {
         return creator.isHttps();
     }
     @Override
-    public String httpsProtocol() {
+    public @Nullable String httpsProtocol() {
         if (clientSocket instanceof SSLSocket) {
             return ((SSLSocket)clientSocket).getSession().getProtocol();
         } else {
@@ -117,30 +115,29 @@ abstract class BaseHttpConnection implements HttpConnection {
         }
     }
     @Override
-    public String cipher() {
+    public @Nullable String cipher() {
         if (clientSocket instanceof SSLSocket) {
             return ((SSLSocket)clientSocket).getSession().getCipherSuite();
         } else {
             return null;
         }
     }
-    @NotNull
+
     @Override
     public Instant startTime() {
         return this.handshakeStartTime;
     }
-
 
     @Override
     public long handshakeDurationMillis() {
         return connectionStartTime - handshakeStartTime.toEpochMilli();
     }
 
-    @NotNull
     @Override
     public InetSocketAddress remoteAddress() {
         return remoteAddress;
     }
+
     @Override
     public long completedRequests() {
         return completedRequests.get();
@@ -156,12 +153,10 @@ abstract class BaseHttpConnection implements HttpConnection {
         return rejectedDueToOverload.get();
     }
 
-    @NotNull
     @Override
     public MuServer server() { return server; }
 
-    @NotNull
-    public Mu3ServerImpl serverImpl() { return server; }
+    Mu3ServerImpl serverImpl() { return server; }
 
     @Override
     public Optional<Certificate> clientCertificate() {

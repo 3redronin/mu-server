@@ -6,7 +6,7 @@ import okhttp3.Response;
 import okhttp3.internal.http2.ErrorCode;
 import okhttp3.internal.http2.StreamResetException;
 import okio.BufferedSink;
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -555,7 +555,7 @@ public class MuServerTest {
         server = builder
             .withHandlerExecutor(new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
                 new LinkedBlockingQueue<>() {
-                    public synchronized boolean offer(@NotNull Runnable runnable) {
+                    public synchronized boolean offer(@NonNull Runnable runnable) {
                         // The first request will go to the waiting thread; only the second will be offered
                         return false;
                     }

@@ -1,6 +1,7 @@
 package io.muserver;
 
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -9,13 +10,14 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Objects;
 
+@NullMarked
 class Http2GoAway implements LogicalHttp2Frame {
 
     private final int lastStreamId;
     private final int errorCode;
-    private final byte[] debugData;
+    private final byte @Nullable [] debugData;
 
-    public Http2GoAway(int lastStreamId, int errorCode, byte[] debugData) {
+    public Http2GoAway(int lastStreamId, int errorCode, byte @Nullable [] debugData) {
         this.lastStreamId = lastStreamId;
         this.errorCode = errorCode;
         this.debugData = debugData;
@@ -29,16 +31,19 @@ class Http2GoAway implements LogicalHttp2Frame {
         return errorCode;
     }
 
-    public byte[] debugData() {
+    public byte @Nullable [] debugData() {
         return debugData;
     }
 
+    @Nullable
     public Http2ErrorCode errorCodeEnum() {
         return Http2ErrorCode.fromCode(errorCode);
     }
 
     public String debugDataAsUTF8String() {
-        return new String(debugData, StandardCharsets.UTF_8);
+        var data = debugData;
+        if (data == null) return "";
+        return new String(data, StandardCharsets.UTF_8);
     }
 
     static Http2GoAway readFrom(Http2FrameHeader header, ByteBuffer buffer) throws Http2Exception {
@@ -73,7 +78,7 @@ class Http2GoAway implements LogicalHttp2Frame {
     }
 
     @Override
-    public void writeTo(@NotNull Http2Connection connection, @NotNull OutputStream out) throws IOException {
+    public void writeTo(Http2Connection connection, OutputStream out) throws IOException {
         if (debugData != null) {
             throw new IllegalStateException("Debug data not supported");
         }

@@ -1,6 +1,5 @@
 package io.muserver;
 
-import org.jetbrains.annotations.NotNull;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
@@ -72,19 +71,16 @@ class HeaderString implements CharSequence {
         return (char)bytes[index];
     }
 
-    @NotNull
     @Override
     public CharSequence subSequence(int start, int end) {
         return s.subSequence(start, end);
     }
 
-    @NotNull
     @Override
     public IntStream chars() {
         return s.chars();
     }
 
-    @NotNull
     @Override
     public IntStream codePoints() {
         return s.codePoints();
@@ -108,7 +104,6 @@ class HeaderString implements CharSequence {
     }
 
     @Override
-    @NotNull
     public String toString() {
         return s;
     }

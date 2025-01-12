@@ -1,7 +1,7 @@
 package io.muserver;
 
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 import javax.net.ssl.TrustManager;
 import java.io.IOException;
@@ -15,6 +15,7 @@ import java.util.concurrent.ExecutorService;
 /**
  * A connection between a server and a client.
  */
+@NullMarked
 public interface HttpConnection {
 
     /**
@@ -31,7 +32,6 @@ public interface HttpConnection {
      * The HTTP protocol for the connection.
      * @return the version of HTTP supported.
      */
-    @NotNull
     HttpVersion httpVersion();
 
     /**
@@ -60,7 +60,6 @@ public interface HttpConnection {
     /**
      * @return The time that this connection was established.
      */
-    @NotNull
     Instant startTime();
 
     /**
@@ -73,7 +72,6 @@ public interface HttpConnection {
     /**
      * @return The socket address of the client.
      */
-    @NotNull
     InetSocketAddress remoteAddress();
 
     /**
@@ -95,7 +93,6 @@ public interface HttpConnection {
     /**
      * @return A readonly connection of requests that are in progress on this connection
      */
-    @NotNull
     Set<MuRequest> activeRequests();
 
     /**
@@ -104,13 +101,11 @@ public interface HttpConnection {
      * a websocket and an HTTP Connection. This means the returned set is either empty or has a size of 1.</p>
      * @return A readonly set of active websockets being used on this connection
      */
-    @NotNull
     Set<MuWebSocket> activeWebsockets();
 
     /**
      * @return The server that this connection belongs to
      */
-    @NotNull
     MuServer server();
 
     /**

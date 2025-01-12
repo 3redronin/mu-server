@@ -1,7 +1,7 @@
 package io.muserver;
 
 import jakarta.ws.rs.core.MediaType;
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -375,7 +375,7 @@ class MultipartFormParserTest {
         } else if (type.equals("one-by-one")) {
             return new FilterInputStream(new ByteArrayInputStream(bytes)) {
                 @Override
-                public int read(@NotNull byte[] b, int off, int len) throws IOException {
+                public int read(byte @NonNull[] b, int off, int len) throws IOException {
                     if (len == 0) return 0;
                     var one = in.read();
                     if (one == -1) return -1;

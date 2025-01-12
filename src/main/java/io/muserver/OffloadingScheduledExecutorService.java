@@ -1,6 +1,6 @@
 package io.muserver;
 
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NullMarked;
 
 import java.util.Collection;
 import java.util.List;
@@ -15,6 +15,7 @@ import java.util.concurrent.*;
  * <p>Note this maintains its own single threaded scheduler and operations such as shutdown close the
  * scheduler but not the worker.</p>
  */
+@NullMarked
 class OffloadingScheduledExecutorService implements ScheduledExecutorService, AutoCloseable {
 
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
@@ -24,27 +25,23 @@ class OffloadingScheduledExecutorService implements ScheduledExecutorService, Au
         this.worker = worker;
     }
 
-    @NotNull
     @Override
-    public ScheduledFuture<?> schedule(@NotNull Runnable command, long delay, @NotNull TimeUnit unit) {
+    public ScheduledFuture<?> schedule(Runnable command, long delay, TimeUnit unit) {
         return scheduler.schedule(() -> worker.execute(command), delay, unit);
     }
 
-    @NotNull
     @Override
-    public <V> ScheduledFuture<V> schedule(@NotNull Callable<V> callable, long delay, @NotNull TimeUnit unit) {
+    public <V> ScheduledFuture<V> schedule(Callable<V> callable, long delay, TimeUnit unit) {
         return scheduler.schedule(callable, delay, unit);
     }
 
-    @NotNull
     @Override
-    public ScheduledFuture<?> scheduleAtFixedRate(@NotNull Runnable command, long initialDelay, long period, @NotNull TimeUnit unit) {
+    public ScheduledFuture<?> scheduleAtFixedRate(Runnable command, long initialDelay, long period, TimeUnit unit) {
         return scheduler.scheduleAtFixedRate(command, initialDelay, period, unit);
     }
 
-    @NotNull
     @Override
-    public ScheduledFuture<?> scheduleWithFixedDelay(@NotNull Runnable command, long initialDelay, long delay, @NotNull TimeUnit unit) {
+    public ScheduledFuture<?> scheduleWithFixedDelay(Runnable command, long initialDelay, long delay, TimeUnit unit) {
         throw new UnsupportedOperationException();
     }
 
@@ -53,7 +50,6 @@ class OffloadingScheduledExecutorService implements ScheduledExecutorService, Au
         scheduler.shutdown();
     }
 
-    @NotNull
     @Override
     public List<Runnable> shutdownNow() {
         return scheduler.shutdownNow();
@@ -70,53 +66,47 @@ class OffloadingScheduledExecutorService implements ScheduledExecutorService, Au
     }
 
     @Override
-    public boolean awaitTermination(long timeout, @NotNull TimeUnit unit) throws InterruptedException {
+    public boolean awaitTermination(long timeout, TimeUnit unit) throws InterruptedException {
         return scheduler.awaitTermination(timeout, unit);
     }
 
-    @NotNull
     @Override
-    public <T> Future<T> submit(@NotNull Callable<T> task) {
+    public <T> Future<T> submit(Callable<T> task) {
         return worker.submit(task);
     }
 
-    @NotNull
     @Override
-    public <T> Future<T> submit(@NotNull Runnable task, T result) {
+    public <T> Future<T> submit(Runnable task, T result) {
         return worker.submit(task, result);
     }
 
-    @NotNull
     @Override
-    public Future<?> submit(@NotNull Runnable task) {
+    public Future<?> submit(Runnable task) {
         return worker.submit(task);
     }
 
-    @NotNull
     @Override
-    public <T> List<Future<T>> invokeAll(@NotNull Collection<? extends Callable<T>> tasks) throws InterruptedException {
+    public <T> List<Future<T>> invokeAll(Collection<? extends Callable<T>> tasks) throws InterruptedException {
         return worker.invokeAll(tasks);
     }
 
-    @NotNull
     @Override
-    public <T> List<Future<T>> invokeAll(@NotNull Collection<? extends Callable<T>> tasks, long timeout, @NotNull TimeUnit unit) throws InterruptedException {
+    public <T> List<Future<T>> invokeAll(Collection<? extends Callable<T>> tasks, long timeout, TimeUnit unit) throws InterruptedException {
         return worker.invokeAll(tasks, timeout, unit);
     }
 
-    @NotNull
     @Override
-    public <T> T invokeAny(@NotNull Collection<? extends Callable<T>> tasks) throws InterruptedException, ExecutionException {
+    public <T> T invokeAny(Collection<? extends Callable<T>> tasks) throws InterruptedException, ExecutionException {
         return worker.invokeAny(tasks);
     }
 
     @Override
-    public <T> T invokeAny(@NotNull Collection<? extends Callable<T>> tasks, long timeout, @NotNull TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException {
+    public <T> T invokeAny(Collection<? extends Callable<T>> tasks, long timeout, TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException {
         return worker.invokeAny(tasks, timeout, unit);
     }
 
     @Override
-    public void execute(@NotNull Runnable command) {
+    public void execute(Runnable command) {
         worker.execute(command);
     }
 

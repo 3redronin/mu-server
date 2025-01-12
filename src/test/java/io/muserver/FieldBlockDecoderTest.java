@@ -1,6 +1,6 @@
 package io.muserver;
 
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
@@ -218,13 +218,13 @@ class FieldBlockDecoderTest {
     }
 
 
-    @NotNull
+    @NonNull
     private static FieldLine fieldLine(String name, String value) {
         return new FieldLine(HeaderString.valueOf(name, HeaderString.Type.HEADER), HeaderString.valueOf(value, HeaderString.Type.VALUE));
     }
 
 
-    @NotNull
+    @NonNull
     private static ByteBuffer buffed(byte ...bytes) {
         return ByteBuffer.wrap(bytes);
     }

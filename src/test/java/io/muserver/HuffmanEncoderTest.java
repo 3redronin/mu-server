@@ -1,7 +1,7 @@
 package io.muserver;
 
 
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Test;
 import scaffolding.StringUtils;
 
@@ -65,12 +65,11 @@ class HuffmanEncoderTest {
 
     }
 
-    @NotNull
+    @NonNull
     private static ArrayList<Byte> encode(String value) throws IOException {
         var out = new ByteArrayOutputStream();
         HuffmanEncoder.encodeTo(out, value);
-        var byteList = toByteList(out);
-        return byteList;
+        return toByteList(out);
     }
 
 

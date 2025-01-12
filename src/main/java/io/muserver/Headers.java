@@ -2,13 +2,15 @@ package io.muserver;
 
 import io.muserver.rest.MuRuntimeDelegate;
 import jakarta.ws.rs.core.MediaType;
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 import java.util.*;
 
 /**
  * HTTP headers
  */
+@NullMarked
 public interface Headers extends Iterable<Map.Entry<String, String>> {
     /**
      * <p>Gets the value with the given name, or null if there is no parameter with that name.</p>
@@ -17,6 +19,7 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
      * @param name The name of the parameter to get
      * @return The value, or null
      */
+    @Nullable
     default String get(String name) {
         return get((CharSequence) name);
     }
@@ -28,6 +31,7 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
      * @param name The name of the parameter to get
      * @return The value, or null
      */
+    @Nullable
     String get(CharSequence name);
 
     /**
@@ -38,7 +42,8 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
      * @param defaultValue The default value to use if there is no given value
      * @return The value of the parameter, or the default value
      */
-    default String get(CharSequence name, String defaultValue) {
+    @Nullable
+    default String get(CharSequence name, @Nullable String defaultValue) {
         String v = get(name);
         return v == null ? defaultValue : v;
     }
@@ -130,6 +135,7 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
      * @param name The header name
      * @return The value in milliseconds of the date header, or null if not found
      */
+    @Nullable
     default Long getTimeMillis(CharSequence name) {
         var s = get(name);
         if (s == null) return null;
@@ -193,7 +199,7 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
     /**
      * @return An iterator to iterate through the headers
      */
-    @NotNull Iterator<Map.Entry<String, String>> iterator();
+    Iterator<Map.Entry<String, String>> iterator();
 
     /**
      * @return True if there are no headers
@@ -467,7 +473,7 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
      * Gets the <code>Cache-Control</code> header value.
      *
      * @return A map of cache control directives to their optional values. If no cache-control
-     * is in the header, then the resulting map will be empty.
+     * is in the header, then a ParameterizedHeader with an empty map is returned.
      */
     default ParameterizedHeader cacheControl() {
         return ParameterizedHeader.fromString(get(HeaderNames.CACHE_CONTROL));
@@ -478,6 +484,7 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
      *
      * @return The media type of the content specified by the headers, or <code>null</code> if not set.
      */
+    @Nullable
     default MediaType contentType() {
         MuRuntimeDelegate.ensureSet();
         var mt = get(HeaderNames.CONTENT_TYPE);
@@ -486,9 +493,10 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
     }
 
     /**
-     * Returns the parsed <code>Connection</code> header value.
+     * Returns the parsed <code>connection</code> header value.
      * <p>Duplicate values are removed.</p>
      * <p>Where there are multiple connection fields they are combined</p>
+     * <p>If there is no corresponding header then the returned object will have an empty list.</p>
      *
      * @return a list of connection tokens.
      */
@@ -500,6 +508,7 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
      * Returns the parsed <code>Vary</code> header value.
      * <p>Duplicate values are removed.</p>
      * <p>Where there are multiple vary fields they are combined</p>
+     * <p>If there is no corresponding header then the returned object will have an empty list.</p>
      *
      * @return a list of vary tokens.
      */
@@ -559,6 +568,6 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
      *                   the header values as defined on {@link #toString()}.
      * @return a string representation of these headers
      */
-    String toString(Collection<String> toSuppress);
+    String toString(@Nullable Collection<String> toSuppress);
 
 }

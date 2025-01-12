@@ -1,6 +1,6 @@
 package io.muserver;
 
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayOutputStream;
@@ -158,7 +158,7 @@ class FieldBlockEncoderTest {
         return toByteList(baos);
     }
 
-    @NotNull
+    @NonNull
     static ArrayList<Byte> toByteList(ByteArrayOutputStream baos) {
         var list = new ArrayList<Byte>();
         for (byte b : baos.toByteArray()) {

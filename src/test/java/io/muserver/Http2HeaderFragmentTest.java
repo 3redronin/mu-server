@@ -1,6 +1,6 @@
 package io.muserver;
 
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
@@ -25,7 +25,7 @@ public class Http2HeaderFragmentTest {
         // this is not actually valid as there are no pseudo headers but something else can deal with that
     }
 
-    @NotNull
+    @NonNull
     private static FieldBlockDecoder getFieldBlockDecoder() {
         return new FieldBlockDecoder(new HpackTable(4096), 8192, 4 * 8192);
     }

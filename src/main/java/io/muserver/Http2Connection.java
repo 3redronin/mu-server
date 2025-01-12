@@ -1,7 +1,7 @@
 package io.muserver;
 
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -21,6 +21,7 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
+@NullMarked
 class Http2Connection extends BaseHttpConnection {
     private enum State {
         OPEN(true), HALF_CLOSED_LOCAL(true), HALF_CLOSED_REMOTE(false), CLOSED(false);
@@ -36,6 +37,7 @@ class Http2Connection extends BaseHttpConnection {
     private final ByteBuffer buffer;
     private volatile State state = State.OPEN;
     private volatile int lastStreamId = Integer.MAX_VALUE;
+    @Nullable
     private OutputStream clientOut;
     private final Http2FlowController incomingFlowControl = new Http2FlowController(0, 65535);
     private final Http2FlowController outgoingFlowControl = new Http2FlowController(0, 65535);
@@ -46,7 +48,7 @@ class Http2Connection extends BaseHttpConnection {
 
     final FieldBlockEncoder fieldBlockEncoder;
 
-    Http2Connection(@NotNull Mu3ServerImpl server, @NotNull ConnectionAcceptor creator, @NotNull Socket clientSocket, @Nullable Certificate clientCertificate, @NotNull Instant handshakeStartTime, Http2Settings initialServerSettings, ExecutorService executorService) {
+    Http2Connection(Mu3ServerImpl server, ConnectionAcceptor creator, Socket clientSocket, @Nullable Certificate clientCertificate, Instant handshakeStartTime, Http2Settings initialServerSettings, ExecutorService executorService) {
         super(server, creator, clientSocket, clientCertificate, handshakeStartTime);
         this.serverSettings = initialServerSettings;
         this.executorService = executorService;
@@ -296,19 +298,16 @@ class Http2Connection extends BaseHttpConnection {
         }
     }
 
-    @NotNull
     @Override
     public HttpVersion httpVersion() {
         return HttpVersion.HTTP_2;
     }
 
-    @NotNull
     @Override
     public Set<MuRequest> activeRequests() {
         return streams.values().stream().map(s -> s.request).collect(Collectors.toSet());
     }
 
-    @NotNull
     @Override
     public Set<MuWebSocket> activeWebsockets() {
         return Collections.emptySet();
