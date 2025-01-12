@@ -52,15 +52,21 @@ class JaxSseEventSinkImpl implements SseEventSink {
             if (event.getComment() != null) {
                 stage = ssePublisher.sendComment(event.getComment());
             }
-            if (event.getData() != null) {
+            Object data = event.getData();
+            if (data != null) {
                 MessageBodyWriter messageBodyWriter = entityProviders.selectWriter(event.getType(), event.getGenericType(),
                     JaxRSResponse.Builder.EMPTY_ANNOTATIONS, event.getMediaType());
-                try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-                    messageBodyWriter.writeTo(event.getData(), event.getType(), event.getGenericType(), JaxRSResponse.Builder.EMPTY_ANNOTATIONS,
-                        event.getMediaType(), muHeadersToJaxObj(response.headers()), out);
-                    String data = new String(out.toByteArray(), UTF_8);
-                    stage = ssePublisher.send(data, event.getName(), event.getId());
+                String dataString;
+                if (data instanceof String && messageBodyWriter instanceof StringEntityProviders.StringMessageReaderWriter) {
+                    dataString = (String) data;
+                } else {
+                    try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+                        messageBodyWriter.writeTo(data, event.getType(), event.getGenericType(), JaxRSResponse.Builder.EMPTY_ANNOTATIONS,
+                            event.getMediaType(), muHeadersToJaxObj(response.headers()), out);
+                        dataString = out.toString(UTF_8);
+                    }
                 }
+                stage = ssePublisher.send(dataString, event.getName(), event.getId());
             }
             if (stage == null) {
                 throw new IllegalArgumentException("The event had nothing to send");

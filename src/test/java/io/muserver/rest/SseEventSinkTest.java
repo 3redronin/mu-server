@@ -92,6 +92,9 @@ public class SseEventSinkTest {
         try (SseClient.ServerSentEvent ignored = sseClient.newServerSentEvent(request().url(server.uri().resolve("/streamer/eventStream").toString()).build(), listener)) {
             listener.assertListenerIsClosed();
         }
+        for (String receivedMessage : listener.receivedMessages) {
+            System.out.println(">> " + receivedMessage);
+        }
         assertThat(listener.receivedMessages.subList(0, 7), equalTo(asList(
             "open",
             "retryTime=100000",

@@ -5,12 +5,15 @@ import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 class Mu3AsyncHandleImpl implements AsyncHandle {
     private final Mu3Request request;
     private final BaseResponse response;
     private CompletableFuture<Void> responseFuture = CompletableFuture.completedFuture(null);
     private final CompletableFuture<Void> completionFuture = new CompletableFuture<>();
+    private final Lock lock = new ReentrantLock();
 
     Mu3AsyncHandleImpl(Mu3Request request, BaseResponse response) {
         this.request = request;
@@ -24,7 +27,12 @@ class Mu3AsyncHandleImpl implements AsyncHandle {
             var duration = System.currentTimeMillis() - before;
             var newTimeout = timeoutMillis - duration;
             if (newTimeout <= 0) throw new TimeoutException("Timeout on completion future");
-            responseFuture.get(newTimeout, TimeUnit.MILLISECONDS);
+            try {
+                lock.lock();
+                responseFuture.get(newTimeout, TimeUnit.MILLISECONDS);
+            } finally {
+                lock.unlock();
+            }
         } catch (ExecutionException e) {
             throw e.getCause();
         }
@@ -102,33 +110,43 @@ class Mu3AsyncHandleImpl implements AsyncHandle {
 
     @Override
     public void write(ByteBuffer data, DoneCallback callback) {
-        responseFuture = responseFuture.thenRunAsync(() -> {
-            try {
-                copyBufferToResponseOutput(data);
-                callback.onComplete(null);
-            } catch (Throwable e) {
+        try {
+            lock.lock();
+            responseFuture = responseFuture.thenRunAsync(() -> {
                 try {
-                    callback.onComplete(e);
-                } catch (Exception ignored) {
+                    copyBufferToResponseOutput(data);
+                    callback.onComplete(null);
+                } catch (Throwable e) {
+                    try {
+                        callback.onComplete(e);
+                    } catch (Exception ignored) {
+                    }
+                    complete(e);
+                    throw e instanceof RuntimeException ? (RuntimeException) e : new RuntimeException("Error while writing body", e);
                 }
-                complete(e);
-                throw e instanceof RuntimeException ? (RuntimeException) e : new RuntimeException("Error while writing body", e);
-            }
-        });
+            });
+        } finally {
+            lock.unlock();
+        }
     }
 
     @Override
     public Future<Void> write(ByteBuffer data) {
-        var writeFuture = responseFuture.thenRunAsync(() -> {
-            try {
-                copyBufferToResponseOutput(data);
-            } catch (Throwable e) {
-                complete(e);
-                throw e instanceof RuntimeException ? (RuntimeException) e : new RuntimeException("Error while writing body", e);
-            }
-        });
-        responseFuture = writeFuture;
-        return writeFuture;
+        try {
+            lock.lock();
+            var writeFuture = responseFuture.thenRunAsync(() -> {
+                try {
+                    copyBufferToResponseOutput(data);
+                } catch (Throwable e) {
+                    complete(e);
+                    throw e instanceof RuntimeException ? (RuntimeException) e : new RuntimeException("Error while writing body", e);
+                }
+            });
+            responseFuture = writeFuture;
+            return writeFuture;
+        } finally {
+            lock.unlock();
+        }
     }
 
     private void copyBufferToResponseOutput(ByteBuffer data) throws IOException {
