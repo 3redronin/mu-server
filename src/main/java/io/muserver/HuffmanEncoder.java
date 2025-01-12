@@ -6,17 +6,6 @@ import java.io.OutputStream;
 class HuffmanEncoder {
 
     public static final int INITIAL = 0;
-    static void encodeTo2(OutputStream out, CharSequence value) throws IOException {
-        for (int i = 0; i < value.length(); i++) {
-            char c = value.charAt(i);
-//            if (c > 255) throw new IllegalArgumentException("Non Ascii being huffman encoded");
-            HuffmanChar huff = mapping[c];
-            int data = huff.lsb;
-            int numToWrite = huff.bitLength;
-
-        }
-
-    }
 
     static void encodeTo(OutputStream out, CharSequence value) throws IOException {
 

@@ -1,5 +1,7 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.IOException;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
@@ -22,8 +24,8 @@ import java.util.concurrent.atomic.AtomicLong;
 @SuppressWarnings("RedundantThrows") // because implementing classes might throw exceptions
 @Deprecated
 public abstract class BaseWebSocket implements MuWebSocket {
-    private MuWebSocketSession session;
-    private NiceByteArrayOutputStream fragmentBuffer;
+    private @Nullable MuWebSocketSession session;
+    private @Nullable NiceByteArrayOutputStream fragmentBuffer;
 
     /**
      * @return The state of the current session
@@ -48,13 +50,14 @@ public abstract class BaseWebSocket implements MuWebSocket {
      * <p>If the close event is in response to the server closing the websocket the event is ignored.</p>
      */
     @Override
-    public void onClientClosed(int statusCode, String reason) throws Exception {
-        if (!session().closeSent()) {
+    public void onClientClosed(int statusCode, @Nullable String reason) throws Exception {
+        MuWebSocketSession sesh = session();
+        if (!sesh.closeSent()) {
             if (statusCode == 1005) {
                 // the client didn't send a code so we won't either
-                session.close();
+                sesh.close();
             } else {
-                session.close(statusCode, reason);
+                sesh.close(statusCode, reason);
             }
         }
     }
@@ -67,7 +70,7 @@ public abstract class BaseWebSocket implements MuWebSocket {
         // Adapter code for old-style implementations that rely on non-blocking behaviour.
         // This calls the old-style methods in a new thread and blocks until the done callback is invoked.
         // Overriders of this base class should just override this method and block until the data is finished with.
-        var result = new CompletableFuture<Void>();
+        var result = new CompletableFuture<@Nullable Void>();
         CompletableFuture.runAsync(() -> {
             try {
                 onText(message, true, error -> {
@@ -155,7 +158,7 @@ public abstract class BaseWebSocket implements MuWebSocket {
         // Adapter code for old-style implementations that rely on non-blocking behaviour.
         // This calls the old-style methods in a new thread and blocks until the done callback is invoked.
         // Overriders of this base class should just override this method and block until the data is finished with.
-        var result = new CompletableFuture<Void>();
+        var result = new CompletableFuture<@Nullable Void>();
         CompletableFuture.runAsync(() -> {
             try {
                 onBinary(buffer, true, error -> {
@@ -249,7 +252,7 @@ public abstract class BaseWebSocket implements MuWebSocket {
      * are included.</p>
      * @return The average time in latency, or <code>null</code> if unknown
      */
-    public Long averagePingPongLatencyMillis() {
+    public @Nullable Long averagePingPongLatencyMillis() {
         var pongs = latencyChecks.get();
         if (pongs == 0L) return null;
         return latencyTime.get() / pongs;

@@ -2,7 +2,6 @@ package io.muserver;
 
 import io.muserver.rest.MuRuntimeDelegate;
 import jakarta.ws.rs.core.MediaType;
-import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 import java.util.*;
@@ -10,7 +9,6 @@ import java.util.*;
 /**
  * HTTP headers
  */
-@NullMarked
 public interface Headers extends Iterable<Map.Entry<String, String>> {
     /**
      * <p>Gets the value with the given name, or null if there is no parameter with that name.</p>

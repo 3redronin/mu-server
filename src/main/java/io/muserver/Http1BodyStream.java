@@ -1,6 +1,5 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
@@ -10,7 +9,6 @@ import java.nio.ByteBuffer;
 import java.text.ParseException;
 import java.util.concurrent.atomic.AtomicReference;
 
-@NullMarked
 class Http1BodyStream extends InputStream {
 
     enum State {

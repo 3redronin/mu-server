@@ -1,6 +1,5 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Objects;
@@ -8,7 +7,6 @@ import java.util.Objects;
 /**
  * The declared size of a request or response body
  */
-@NullMarked
 public class BodySize {
 
     private final BodyType type;

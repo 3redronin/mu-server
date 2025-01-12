@@ -95,6 +95,7 @@ public interface UploadedFile {
      */
     InputStream asStream() throws IOException;
 }
+
 class MuUploadedFile2 implements UploadedFile {
     private Path file;
     private boolean shouldDeleteOnClean = true;
@@ -113,7 +114,7 @@ class MuUploadedFile2 implements UploadedFile {
     }
 
     @Override
-    public File asFile() throws IOException {
+    public File asFile() {
         // todo: consider removing the IO Exception on the interface
         return file.toFile();
     }

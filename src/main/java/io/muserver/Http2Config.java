@@ -1,14 +1,11 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
-
 import java.util.Objects;
 
 /**
  * Configuration settings for HTTP2
  * @see Http2ConfigBuilder
  */
-@NullMarked
 public class Http2Config {
     private final boolean enabled;
     private final Http2Settings initialSettings;

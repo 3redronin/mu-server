@@ -1,6 +1,5 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
@@ -13,7 +12,6 @@ import java.util.Set;
  *
  * <p>For example a GZIP encoder is used to compress text-based response bodies.</p>
  */
-@NullMarked
 public interface ContentEncoder {
 
     /**

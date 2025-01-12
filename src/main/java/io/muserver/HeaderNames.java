@@ -1,7 +1,6 @@
 package io.muserver;
 
 
-import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 import java.util.HashMap;
@@ -12,7 +11,6 @@ import java.util.Map;
  * <p>These are all defined as lowercase to support HTTP/2 requirements while also not
  * violating HTTP/1.x requirements.  New header names should always be lowercase.</p>
  */
-@NullMarked
 public final class HeaderNames {
 
     static final Map<CharSequence, HeaderString> builtIn = new HashMap<>();

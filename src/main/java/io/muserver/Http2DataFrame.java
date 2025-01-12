@@ -1,11 +1,8 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
-
 import java.io.IOException;
 import java.io.OutputStream;
 
-@NullMarked
 class Http2DataFrame implements LogicalHttp2Frame {
 
     private final int streamId;

@@ -1,5 +1,6 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,18 +24,19 @@ import static java.util.Arrays.asList;
 public class HttpsConfigBuilder {
 
     private static final Logger log = LoggerFactory.getLogger(HttpsConfigBuilder.class);
-    private String[] protocols = null;
+    private String@Nullable [] protocols = null;
     private String keystoreType = "JKS";
     private char[] keystorePassword = new char[0];
     private char[] keyPassword = new char[0];
-    private byte[] keystoreBytes;
-    private SSLCipherFilter sslCipherFilter;
-    private KeyManagerFactory keyManagerFactory;
-    private String defaultAlias;
+    private byte@Nullable[] keystoreBytes;
+    private @Nullable SSLCipherFilter sslCipherFilter;
+    private @Nullable KeyManagerFactory keyManagerFactory;
+    private @Nullable String defaultAlias;
 
     /**
      * Only used by HttpsConfigBuilder
      */
+    @Nullable
     protected X509TrustManager trustManager;
 
     /**
@@ -177,12 +179,12 @@ public class HttpsConfigBuilder {
 
     /**
      * Sets the key manager factory to use for SSL.
-     * <p>Note this is an alternative to setting a keystore directory.</p>
+     * <p>Note this is an alternative to setting a keystore directly.</p>
      *
      * @param keyManagerFactory The key manager factory to use
      * @return This builder
      */
-    public HttpsConfigBuilder withKeyManagerFactory(KeyManagerFactory keyManagerFactory) {
+    public HttpsConfigBuilder withKeyManagerFactory(@Nullable KeyManagerFactory keyManagerFactory) {
         this.keystoreBytes = null;
         this.keyManagerFactory = keyManagerFactory;
         return this;
@@ -197,7 +199,7 @@ public class HttpsConfigBuilder {
      *                     order.
      * @return This builder
      */
-    public HttpsConfigBuilder withCipherFilter(SSLCipherFilter cipherFilter) {
+    public HttpsConfigBuilder withCipherFilter(@Nullable SSLCipherFilter cipherFilter) {
         this.sslCipherFilter = cipherFilter;
         return this;
     }
@@ -211,7 +213,7 @@ public class HttpsConfigBuilder {
      * @param protocols The protocols to use, or null to use the default.
      * @return This builder.
      */
-    public HttpsConfigBuilder withProtocols(String... protocols) {
+    public HttpsConfigBuilder withProtocols(String@Nullable... protocols) {
         this.protocols = protocols;
         return this;
     }
@@ -226,7 +228,7 @@ public class HttpsConfigBuilder {
      *                  cert to be picked (normally the first one).
      * @return This builder
      */
-    public HttpsConfigBuilder withDefaultAlias(String certAlias) {
+    public HttpsConfigBuilder withDefaultAlias(@Nullable String certAlias) {
         this.defaultAlias = certAlias;
         return this;
     }
@@ -400,7 +402,7 @@ public class HttpsConfigBuilder {
      * @param trustManager The trust manager to use to validate client certificates
      * @return This builder.
      */
-    public HttpsConfigBuilder withClientCertificateTrustManager(TrustManager trustManager) {
+    public HttpsConfigBuilder withClientCertificateTrustManager(@Nullable TrustManager trustManager) {
         if (trustManager != null && !(trustManager instanceof X509TrustManager)) {
             throw new IllegalArgumentException("Only X509 trust managers are supported");
         }

@@ -1,14 +1,11 @@
 package io.muserver;
 
 
-import org.jspecify.annotations.NullMarked;
-
 import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.io.OutputStream;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-@NullMarked
 class Http2DataFrameOutputStream extends OutputStream {
 
     private final Http2Stream stream;

@@ -1,5 +1,7 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -22,7 +24,7 @@ public interface RequestParameters {
      * @param name The name of the parameter to get
      * @return The value, or null
      */
-    default String get(String name) {
+    default @Nullable String get(String name) {
         return get(name, null);
     }
 
@@ -35,7 +37,7 @@ public interface RequestParameters {
      * @param defaultValue The default value to use if there is no given value
      * @return The value of the parameter, or the default value
      */
-    default String get(String name, String defaultValue) {
+    default @Nullable String get(String name, @Nullable String defaultValue) {
         List<String> matches = getAll(name);
         return matches.isEmpty() ? defaultValue : matches.get(0);
     }
@@ -48,7 +50,9 @@ public interface RequestParameters {
      */
     default int getInt(String name, int defaultValue) {
         try {
-            return Integer.parseInt(get(name, ""), 10);
+            var v = get(name);
+            if (v == null) return defaultValue;
+            return Integer.parseInt(v, 10);
         } catch (NumberFormatException e) {
             return defaultValue;
         }
@@ -63,7 +67,9 @@ public interface RequestParameters {
      */
     default long getLong(String name, long defaultValue) {
         try {
-            return Long.parseLong(get(name, ""), 10);
+            var v = get(name);
+            if (v == null) return defaultValue;
+            return Long.parseLong(v, 10);
         } catch (NumberFormatException e) {
             return defaultValue;
         }
@@ -78,7 +84,9 @@ public interface RequestParameters {
      */
     default float getFloat(String name, float defaultValue) {
         try {
-            return Float.parseFloat(get(name, ""));
+            var v = get(name);
+            if (v == null) return defaultValue;
+            return Float.parseFloat(v);
         } catch (NumberFormatException e) {
             return defaultValue;
         }
@@ -92,7 +100,9 @@ public interface RequestParameters {
      */
     default double getDouble(String name, double defaultValue) {
         try {
-            return Double.parseDouble(get(name, ""));
+            var v = get(name);
+            if (v == null) return defaultValue;
+            return Double.parseDouble(v);
         } catch (NumberFormatException e) {
             return defaultValue;
         }
@@ -106,7 +116,7 @@ public interface RequestParameters {
      * @return Returns true if the value was truthy, or false if it was falsy or not specified.
      */
     default boolean getBoolean(String name) {
-        String val = get(name, "").toLowerCase();
+        String val = get(name);
         return Mutils.isTruthy(val);
     }
 

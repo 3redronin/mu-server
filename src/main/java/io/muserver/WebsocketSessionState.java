@@ -47,7 +47,7 @@ public enum WebsocketSessionState {
 
     /**
      * The session was disconnected because no messages were received in the time period configured
-     * with {@link WebSocketHandlerBuilder#withIdleReadTimeout(long, TimeUnit)}
+     * with {@link WebSocketHandlerBuilder#withIdleReadTimeout(int, TimeUnit)}
      */
     TIMED_OUT(true, false);
 

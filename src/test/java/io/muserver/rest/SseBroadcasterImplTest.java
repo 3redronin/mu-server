@@ -177,7 +177,8 @@ public class SseBroadcasterImplTest {
 
             public Streamer() {
                 broadcaster.onError((sseEventSink, throwable) -> {
-                    errors.add(throwable.getMessage());
+                    String error = throwable.getMessage();
+                    errors.add(error == null ? throwable.toString() : error);
                 });
             }
 

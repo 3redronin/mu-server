@@ -1,7 +1,5 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
-
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.*;
@@ -15,7 +13,6 @@ import java.util.concurrent.*;
  * <p>Note this maintains its own single threaded scheduler and operations such as shutdown close the
  * scheduler but not the worker.</p>
  */
-@NullMarked
 class OffloadingScheduledExecutorService implements ScheduledExecutorService, AutoCloseable {
 
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();

@@ -1,9 +1,7 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
-@NullMarked
 class Http2Exception extends Exception {
     private final Http2Level errorType;
     private final Http2ErrorCode errorCode;
@@ -53,7 +51,6 @@ enum Http2Level {
     CONNECTION, STREAM
 }
 
-@NullMarked
 enum Http2ErrorCode {
     NO_ERROR (0x00),
     PROTOCOL_ERROR (0x01),

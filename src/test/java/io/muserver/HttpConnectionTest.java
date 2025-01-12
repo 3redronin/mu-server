@@ -28,7 +28,7 @@ public class HttpConnectionTest {
                     assertThat(con.protocol(), is("HTTP/1.1"));
                     assertThat(con.httpVersion(), is(HttpVersion.HTTP_1_1));
                     assertThat(con.isHttps(), is(false));
-                    assertThat(con.httpsProtocol(), is(nullValue()));
+                    assertThat(con.httpsProtocol(), nullValue());
                     assertThat(con.cipher(), is(nullValue()));
                 } catch (Throwable t) {
                     error.set(t);
@@ -49,6 +49,7 @@ public class HttpConnectionTest {
                 try {
                     HttpConnection con = request.connection();
                     assertThat(con.protocol(), oneOf("HTTP/1.1", "HTTP/2"));
+                    assertThat(con.httpVersion(), oneOf(HttpVersion.HTTP_1_1, HttpVersion.HTTP_2));
                     assertThat(con.isHttps(), is(true));
                     assertThat(con.httpsProtocol(), is("TLSv1.2"));
                     assertThat(con.cipher(), is(not(nullValue())));

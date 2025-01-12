@@ -1,5 +1,7 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.List;
 import java.util.Map;
 
@@ -31,16 +33,16 @@ public interface MuForm extends RequestParameters {
     default List<UploadedFile> uploadedFiles(String name) {
         List<UploadedFile> list = uploadedFiles().get(name);
         return list == null ? emptyList() : list;
-    };
+    }
 
     /**
-     * <p>Gets the uploaded file with the given name, or null if there is no upload with that name.</p>
+     * <p>Gets the uploaded file with the given name, or <code>null</code> if there is no upload with that name.</p>
      * <p>If there are multiple files with the same name, the first one is returned.</p>
      *
      * @param name The querystring parameter name to get
      * @return The querystring value, or an empty string
      */
-    default UploadedFile uploadedFile(String name) {
+    default @Nullable UploadedFile uploadedFile(String name) {
         var list = uploadedFiles().get(name);
         return list == null || list.isEmpty() ? null : list.get(0);
     }

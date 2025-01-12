@@ -1,7 +1,6 @@
 package io.muserver;
 
 import jakarta.ws.rs.WebApplicationException;
-import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,7 +14,6 @@ import java.util.*;
  * <p>This is registered with {@link MuServerBuilder#withExceptionHandler(UnhandledExceptionHandler)}.</p>
  * <p>Note: redirect exceptions and exceptions after the response has already started will not get routed to this handler.</p>
  */
-@NullMarked
 public interface UnhandledExceptionHandler {
 
     /**
@@ -50,7 +48,6 @@ public interface UnhandledExceptionHandler {
     }
 }
 
-@NullMarked
 class BuiltInExceptionHandler implements UnhandledExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(BuiltInExceptionHandler.class);
 

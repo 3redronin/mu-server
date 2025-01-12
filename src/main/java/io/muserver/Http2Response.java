@@ -1,14 +1,11 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
-
 import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.UncheckedIOException;
 import java.util.Date;
 
-@NullMarked
 class Http2Response extends BaseResponse {
 
     private final Http2Stream stream;

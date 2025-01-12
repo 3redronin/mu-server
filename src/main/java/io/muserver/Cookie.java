@@ -1,7 +1,6 @@
 package io.muserver;
 
 
-import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Objects;
@@ -10,7 +9,6 @@ import java.util.Objects;
  * A cookie that is sent from the server to the client.
  * <p>To create cookies, you can create a builder by calling {@link #builder()}.</p>
  */
-@NullMarked
 public class Cookie {
 
     private final String name;
@@ -133,8 +131,7 @@ public class Cookie {
     /**
      * A value of a <code>SameSite</code> cookie attribute.
      */
-    @NullMarked
-    public enum SameSite {
+        public enum SameSite {
 
         /**
          * The cookie will be sent with both cross-site and same-site requests.

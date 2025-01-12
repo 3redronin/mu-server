@@ -1,5 +1,7 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.Closeable;
 import java.io.InputStream;
 import java.net.InetAddress;
@@ -32,13 +34,15 @@ public interface MuServer extends Closeable {
     URI uri();
 
     /**
-     * @return The HTTP URI of the web server, if HTTP is supported; otherwise null
+     * @return The HTTP URI of the web server, if HTTP is supported; otherwise <code>null</code>
      */
+    @Nullable
     URI httpUri();
 
     /**
-     * @return The HTTPS URI of the web server, if HTTPS is supported; otherwise null
+     * @return The HTTPS URI of the web server, if HTTPS is supported; otherwise <code>null</code>
      */
+    @Nullable
     URI httpsUri();
 
     /**
@@ -65,13 +69,11 @@ public interface MuServer extends Closeable {
         try {
             Properties props = new Properties();
             InputStream in = MuServer.class.getResourceAsStream("/META-INF/maven/io.muserver/mu-server/pom.properties");
-            if (in == null) {
-                return "0.x";
-            }
-            try {
+            try (in) {
+                if (in == null) {
+                    return "0.x";
+                }
                 props.load(in);
-            } finally {
-                in.close();
             }
             return props.getProperty("version");
         } catch (Exception ex) {

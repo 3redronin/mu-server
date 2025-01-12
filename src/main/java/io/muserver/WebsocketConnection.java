@@ -1,5 +1,6 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -18,9 +19,9 @@ import java.util.concurrent.locks.ReentrantLock;
 
 class WebsocketConnection implements MuWebSocketSession {
     private static final Logger log = LoggerFactory.getLogger(WebsocketConnection.class);
-    private ByteBuffer buffer;
-    private InputStream inputStream;
-    private OutputStream outputStream;
+    private @Nullable ByteBuffer buffer;
+    private @Nullable InputStream inputStream;
+    private @Nullable OutputStream outputStream;
     final WebSocketHandlerBuilder.Settings settings;
 
     private WebsocketSessionState state = WebsocketSessionState.NOT_STARTED;
@@ -29,7 +30,7 @@ class WebsocketConnection implements MuWebSocketSession {
     private boolean closeReceived = false;
     private boolean closeSent = false;
     private final Lock writeLock = new ReentrantLock();
-    private final ByteBuffer pingBuffer;
+    private final @Nullable ByteBuffer pingBuffer;
     private ReadState readState = ReadState.NONE;
 
     private enum ReadState {
@@ -62,6 +63,7 @@ class WebsocketConnection implements MuWebSocketSession {
             writeLock.lock();
             try {
                 if (state == WebsocketSessionState.OPEN) {
+                    assert pingBuffer != null;
                     pingBuffer.position(8)
                         .limit(16)
                         .putLong(System.currentTimeMillis())
@@ -74,10 +76,7 @@ class WebsocketConnection implements MuWebSocketSession {
             } catch (IOException e) {
                 if (state == WebsocketSessionState.OPEN) {
                     // force an IO exception on the read operation in runAndBlockUntilDone()
-                    try {
-                        inputStream.close();
-                    } catch (IOException ignore) {
-                    }
+                    Mutils.closeSilently(inputStream);
                 }
             } finally {
                 writeLock.unlock();
@@ -244,6 +243,7 @@ class WebsocketConnection implements MuWebSocketSession {
     }
 
     private ByteBuffer readAndUnmaskPayload(int len, byte[] maskingKey) throws IOException {
+        assert buffer != null;
         if (len <= buffer.capacity()) {
             readAtLeast(len);
             unmask(buffer, maskingKey, len);
@@ -267,6 +267,8 @@ class WebsocketConnection implements MuWebSocketSession {
     }
 
     private void readAtLeast(int minBytes) throws IOException {
+        assert buffer != null;
+        assert inputStream != null;
         if (minBytes > buffer.capacity()) throw new IllegalArgumentException("This buffer is not big enough");
         while (buffer.remaining() < minBytes) {
             if (buffer.capacity() - buffer.limit() < minBytes) {
@@ -408,7 +410,7 @@ class WebsocketConnection implements MuWebSocketSession {
     }
 
     @Override
-    public void close(int statusCode, String reason) throws IOException {
+    public void close(int statusCode, @Nullable String reason) throws IOException {
         if (statusCode < 1000 || statusCode > 4999) {
             throw new IllegalArgumentException("Websocket closure codes must be between 1000 and 4999 (inclusive)");
         }
@@ -447,8 +449,9 @@ class WebsocketConnection implements MuWebSocketSession {
         return ByteBuffer.wrap(arr);
     }
 
-    private void writeFragment(byte firstByte, byte[] payload, int payloadOffset, int payloadLen, MessageWritingState expectedState, MessageWritingState endState) throws IOException {
+    private void writeFragment(byte firstByte, byte@Nullable[] payload, int payloadOffset, int payloadLen, @Nullable MessageWritingState expectedState, @Nullable MessageWritingState endState) throws IOException {
         var header = header(firstByte, payloadLen);
+        assert outputStream != null;
         writeLock.lock();
         try {
             if (expectedState != null && messageWritingState != expectedState) {
@@ -519,7 +522,7 @@ class WebsocketConnection implements MuWebSocketSession {
     }
 
     @Override
-    public Long pongLatencyMillis(ByteBuffer pongPayload) {
+    public @Nullable Long pongLatencyMillis(ByteBuffer pongPayload) {
         if (pongPayload == null) throw new NullPointerException("pongPayload");
         if (pingBuffer == null) return null;
         if (pongPayload.remaining() != 16) return null;

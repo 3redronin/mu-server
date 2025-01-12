@@ -1,5 +1,7 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -12,8 +14,8 @@ import static java.util.Collections.emptyMap;
  */
 class MultipartForm implements MuForm {
 
-    private Map<String, List<String>> params;
-    private Map<String, List<UploadedFile>> fileParams;
+    private @Nullable Map<String, List<String>> params;
+    private @Nullable Map<String, List<UploadedFile>> fileParams;
 
     void addFile(String name, UploadedFile file) {
         if (fileParams == null) {

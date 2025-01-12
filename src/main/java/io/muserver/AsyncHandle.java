@@ -1,6 +1,5 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 import java.nio.ByteBuffer;
@@ -12,7 +11,6 @@ import java.util.concurrent.Future;
  * write data, this interface provides asynchronous write operations, or alternatively you can use the
  * blocking write operations on the original {@link MuResponse}.</p>
  */
-@NullMarked
 public interface AsyncHandle {
 
     /**

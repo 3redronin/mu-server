@@ -1,11 +1,8 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
-
 import java.io.IOException;
 import java.io.OutputStream;
 
-@NullMarked
 class FieldBlockEncoder {
 
     private final HpackTable table;

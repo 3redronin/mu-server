@@ -1,6 +1,5 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,7 +20,6 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
-@NullMarked
 class Http2Connection extends BaseHttpConnection {
     private enum State {
         OPEN(true), HALF_CLOSED_LOCAL(true), HALF_CLOSED_REMOTE(false), CLOSED(false);

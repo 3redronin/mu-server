@@ -55,14 +55,6 @@ class HuffmanEncoderTest {
         }
         duration = System.currentTimeMillis() - start;
         System.out.println("huffman = " + duration);
-
-        start = System.currentTimeMillis();
-        for (int i = 0; i < 100000; i++) {
-            HuffmanEncoder.encodeTo2(out, hs);
-        }
-        duration = System.currentTimeMillis() - start;
-        System.out.println("huffman2 = " + duration);
-
     }
 
     @NonNull

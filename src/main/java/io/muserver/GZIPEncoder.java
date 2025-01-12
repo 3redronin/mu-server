@@ -1,7 +1,5 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
-
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.Objects;
@@ -12,7 +10,6 @@ import java.util.zip.GZIPOutputStream;
  * A response body content encoder that compresses response bodies with gzip.
  * @see GZIPEncoderBuilder
  */
-@NullMarked
 public class GZIPEncoder implements ContentEncoder {
 
     private final Set<String> mimeTypesToGzip;

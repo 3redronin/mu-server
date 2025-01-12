@@ -1,12 +1,10 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 import java.nio.charset.StandardCharsets;
 import java.util.stream.IntStream;
 
-@NullMarked
 class HeaderString implements CharSequence {
 
     enum Type {

@@ -1,5 +1,7 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.*;
 import java.net.URI;
 import java.net.URLDecoder;
@@ -10,8 +12,6 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.Date;
-import java.util.Objects;
-import java.util.stream.Stream;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
@@ -86,7 +86,7 @@ public class Mutils {
      * @param val The value to check
      * @return True if the value is null or a zero-length string.
      */
-    public static boolean nullOrEmpty(String val) {
+    public static boolean nullOrEmpty(@Nullable String val) {
         return val == null || val.isEmpty();
     }
 
@@ -96,7 +96,7 @@ public class Mutils {
      * @param val The value to check
      * @return True if the string is 1 or more characters.
      */
-    public static boolean hasValue(String val) {
+    public static boolean hasValue(@Nullable String val) {
         return !nullOrEmpty(val);
     }
 
@@ -112,7 +112,7 @@ public class Mutils {
      * @param two The suffix
      * @return The joined strings
      */
-    public static String join(String one, String sep, String two) {
+    public static String join(@Nullable String one, String sep, @Nullable String two) {
         one = one == null ? "" : one;
         two = two == null ? "" : two;
         boolean oneEnds = one.endsWith(sep);
@@ -150,7 +150,7 @@ public class Mutils {
      * @param name  The name of the variable to check
      * @param value The value to check
      */
-    public static void notNull(String name, Object value) {
+    public static void notNull(String name, @Nullable Object value) {
         if (value == null) {
             throw new IllegalArgumentException(name + " cannot be null");
         }
@@ -210,7 +210,7 @@ public class Mutils {
      * @param value A value
      * @return A value that can be safely included inside HTML tags.
      */
-    public static String htmlEncode(String value) {
+    public static String htmlEncode(@Nullable String value) {
         if (value == null) {
             return "";
         }
@@ -231,11 +231,17 @@ public class Mutils {
      * @param <T>    The type of the value
      * @return The first object in the list that is not null (or null, if all are null)
      */
-    public static <T> T coalesce(T... values) {
-        return Stream.of(values).filter(Objects::nonNull).findFirst().orElse(null);
+    @SafeVarargs
+    public static <T> @Nullable T coalesce(@Nullable T... values) {
+        for (@Nullable T value : values) {
+            if (value != null) {
+                return value;
+            }
+        }
+        return null;
     }
 
-    static void closeSilently(Closeable closeable) {
+    static void closeSilently(@Nullable Closeable closeable) {
         if (closeable != null) {
             try {
                 closeable.close();
@@ -273,8 +279,9 @@ public class Mutils {
         return pathAndQuery;
     }
 
-    static boolean isTruthy(String val) {
-        switch (val) {
+    static boolean isTruthy(@Nullable String val) {
+        if (val == null) { return false;}
+        switch (val.toLowerCase()) {
             case "true":
             case "on":
             case "yes":

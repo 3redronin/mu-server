@@ -1,5 +1,7 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.SocketTimeoutException;
@@ -28,8 +30,9 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 @SuppressWarnings("RedundantThrows") // because implementing classes might throw exceptions
 public abstract class SimpleWebSocket implements MuWebSocket {
-    private MuWebSocketSession session;
-    private NiceByteArrayOutputStream fragmentBuffer;
+    
+    private @Nullable MuWebSocketSession session;
+    private @Nullable NiceByteArrayOutputStream fragmentBuffer;
 
     /**
      * @return The state of the current session
@@ -54,13 +57,14 @@ public abstract class SimpleWebSocket implements MuWebSocket {
      * <p>If the close event is in response to the server closing the websocket the event is ignored.</p>
      */
     @Override
-    public void onClientClosed(int statusCode, String reason) throws Exception {
-        if (!session().closeSent()) {
+    public void onClientClosed(int statusCode, @Nullable String reason) throws Exception {
+        MuWebSocketSession sesh = session();
+        if (!sesh.closeSent()) {
             if (statusCode == 1005) {
                 // the client didn't send a code so we won't either
-                session.close();
+                sesh.close();
             } else {
-                session.close(statusCode, reason);
+                sesh.close(statusCode, reason);
             }
         }
     }
@@ -145,7 +149,7 @@ public abstract class SimpleWebSocket implements MuWebSocket {
      * are included.</p>
      * @return The average time in latency, or <code>null</code> if unknown
      */
-    public Long averagePingPongLatencyMillis() {
+    public @Nullable Long averagePingPongLatencyMillis() {
         var pongs = latencyChecks.get();
         if (pongs == 0L) return null;
         return latencyTime.get() / pongs;

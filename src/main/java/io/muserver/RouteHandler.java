@@ -1,14 +1,11 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
-
 import java.util.Map;
 
 /**
  * A handler for a Route created with {@link MuServerBuilder#addHandler(Method, String, RouteHandler)}
  * or {@link Routes#route(Method, String, RouteHandler)}
  */
-@NullMarked
 public interface RouteHandler {
 
     /**

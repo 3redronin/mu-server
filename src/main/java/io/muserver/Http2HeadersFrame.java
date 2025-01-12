@@ -1,7 +1,5 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -11,7 +9,6 @@ import java.util.Objects;
 /**
  * A logical header frame - so in data it may be represented as multiple frames (i.e. with continuations)
  */
-@NullMarked
 class Http2HeadersFrame implements LogicalHttp2Frame {
 
     private final int streamId;

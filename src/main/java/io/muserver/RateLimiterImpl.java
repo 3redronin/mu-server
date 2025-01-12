@@ -1,5 +1,6 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -19,7 +20,7 @@ class RateLimiterImpl implements RateLimiter {
         this.selector = selector;
     }
 
-    private void removeExpired(String bucket, Queue<Instant> queue) {
+    private void removeExpired(String bucket, @Nullable Queue<Instant> queue) {
         if (queue == null) {
             return;
         }
@@ -40,7 +41,7 @@ class RateLimiterImpl implements RateLimiter {
         }
     }
 
-    RateLimitRejectionAction record(MuRequest request) {
+    @Nullable RateLimitRejectionAction record(MuRequest request) {
         RateLimit rateLimit = selector.select(request);
         if (rateLimit == null || rateLimit.bucket == null) {
             return null;

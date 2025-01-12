@@ -1,5 +1,7 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
@@ -11,8 +13,8 @@ import java.util.concurrent.locks.ReentrantLock;
 class Mu3AsyncHandleImpl implements AsyncHandle {
     private final Mu3Request request;
     private final BaseResponse response;
-    private CompletableFuture<Void> responseFuture = CompletableFuture.completedFuture(null);
-    private final CompletableFuture<Void> completionFuture = new CompletableFuture<>();
+    private CompletableFuture<@Nullable Void> responseFuture = CompletableFuture.completedFuture(null);
+    private final CompletableFuture<@Nullable Void> completionFuture = new CompletableFuture<>();
     private final Lock lock = new ReentrantLock();
 
     Mu3AsyncHandleImpl(Mu3Request request, BaseResponse response) {
@@ -41,7 +43,7 @@ class Mu3AsyncHandleImpl implements AsyncHandle {
     @Override
     public void setReadListener(RequestBodyListener readListener) {
         var requestFuture = CompletableFuture.runAsync(() -> {
-            var requestException = new AtomicReference<Throwable>();
+            var requestException = new AtomicReference<@Nullable Throwable>();
             try (var clientIn = request.body()) {
                 var buffer = new byte[8192];
                 int read;
@@ -71,8 +73,9 @@ class Mu3AsyncHandleImpl implements AsyncHandle {
                         }
                     }
                 }
-                if (requestException.get() != null) {
-                    throw requestException.get();
+                var toThrow = requestException.get();
+                if (toThrow != null) {
+                    throw toThrow;
                 } else {
                     readListener.onComplete();
                 }
@@ -98,7 +101,7 @@ class Mu3AsyncHandleImpl implements AsyncHandle {
     }
 
     @Override
-    public void complete(Throwable throwable) {
+    public void complete(@Nullable Throwable throwable) {
         if (throwable == null) {
             complete();
         } else {

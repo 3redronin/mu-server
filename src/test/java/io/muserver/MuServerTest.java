@@ -288,9 +288,8 @@ public class MuServerTest {
             while (client.responseString().isEmpty()) {
                 Thread.sleep(100);
             }
-            String body = client.responseString();
-            assertThat(body, endsWith("\r\n\r\n" + expectedBody));
-            return body;
+            assertEventually(client::responseString, endsWith("\r\n\r\n" + expectedBody));
+            return client.responseString();
         }
     }
 

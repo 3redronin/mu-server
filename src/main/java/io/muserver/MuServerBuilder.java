@@ -2,6 +2,7 @@ package io.muserver;
 
 import io.muserver.handlers.ResourceType;
 import io.muserver.rest.MuRuntimeDelegate;
+import org.jspecify.annotations.Nullable;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -28,19 +29,19 @@ public class MuServerBuilder {
     private int maxUrlSize = 8192;
     private final List<MuHandler> handlers = new ArrayList<>();
     private boolean addShutdownHook = false;
-    private String host;
-    private HttpsConfigBuilder sslContextBuilder;
-    private Http2Config http2Config;
+    private @Nullable String host;
+    private @Nullable HttpsConfigBuilder sslContextBuilder;
+    private @Nullable Http2Config http2Config;
     private long requestReadTimeoutMillis = TimeUnit.MINUTES.toMillis(2);
     private long idleTimeoutMills = TimeUnit.MINUTES.toMillis(20);
-    private ExecutorService executor;
+    private @Nullable ExecutorService executor;
     private long maxRequestSize = 24 * 1024 * 1024;
-    private List<ResponseCompleteListener> responseCompleteListeners;
-    List<RateLimiterImpl> rateLimiters;
-    private UnhandledExceptionHandler unhandledExceptionHandler;
+    private @Nullable List<ResponseCompleteListener> responseCompleteListeners;
+    @Nullable List<RateLimiterImpl> rateLimiters;
+    private @Nullable UnhandledExceptionHandler unhandledExceptionHandler;
     private boolean autoHandleExpectContinue = true;
-    private List<ContentEncoder> contentEncoders = null;
-    private Path tempDirectory;
+    private @Nullable List<ContentEncoder> contentEncoders = null;
+    private @Nullable Path tempDirectory;
 
     /**
      * @param port The HTTP port to use. A value of 0 will have a random port assigned; a value of -1 will
@@ -59,7 +60,7 @@ public class MuServerBuilder {
      *             only, or <code>"0.0.0.0"</code> to allow connections from the local network.
      * @return The current Mu Server Builder
      */
-    public MuServerBuilder withInterface(String host) {
+    public MuServerBuilder withInterface(@Nullable String host) {
         this.host = host;
         return this;
     }
@@ -114,7 +115,7 @@ public class MuServerBuilder {
      * @param httpsConfig An HTTPS Config builder.
      * @return The current Mu Server Builder
      */
-    public MuServerBuilder withHttpsConfig(HttpsConfigBuilder httpsConfig) {
+    public MuServerBuilder withHttpsConfig(@Nullable HttpsConfigBuilder httpsConfig) {
         this.sslContextBuilder = httpsConfig;
         return this;
     }
@@ -125,7 +126,7 @@ public class MuServerBuilder {
      * of a request, or <code>null</code> to use the default java temporary location
      * @return This builder
      */
-    public MuServerBuilder withTempDirectory(Path tempDirectory) {
+    public MuServerBuilder withTempDirectory(@Nullable Path tempDirectory) {
         this.tempDirectory = tempDirectory;
         return this;
     }
@@ -133,7 +134,7 @@ public class MuServerBuilder {
      * @return The directory for temporary storage of data, for example uploaded files that exist on disk for the lifetime
      * of a request, or <code>null</code> to use the default java temporary location
      */
-    public Path tempDirectory() {
+    public @Nullable Path tempDirectory() {
         return tempDirectory;
     }
 
@@ -157,7 +158,7 @@ public class MuServerBuilder {
      * @return The current Mu Server builder
      * @see Http2ConfigBuilder
      */
-    public MuServerBuilder withHttp2Config(Http2Config http2Config) {
+    public MuServerBuilder withHttp2Config(@Nullable Http2Config http2Config) {
         this.http2Config = http2Config;
         return this;
     }
@@ -169,7 +170,10 @@ public class MuServerBuilder {
      * @return The current Mu Server builder
      * @see Http2ConfigBuilder
      */
-    public MuServerBuilder withHttp2Config(Http2ConfigBuilder http2Config) {
+    public MuServerBuilder withHttp2Config(@Nullable Http2ConfigBuilder http2Config) {
+        if (http2Config == null) {
+            return this;
+        }
         return withHttp2Config(http2Config.build());
     }
 
@@ -180,7 +184,7 @@ public class MuServerBuilder {
      * @param executor The executor service to use to handle requests
      * @return The current Mu Server builder
      */
-    public MuServerBuilder withHandlerExecutor(ExecutorService executor) {
+    public MuServerBuilder withHandlerExecutor(@Nullable ExecutorService executor) {
         this.executor = executor;
         return this;
     }
@@ -285,11 +289,11 @@ public class MuServerBuilder {
      * handlers are executed before synchronous handlers.</p>
      *
      * @param handler A handler builder. The <code>build()</code> method will be called on this
-     *                to create the handler. If null, then no handler is added.
+     *                to create the handler. If <code>null</code>, then no handler is added.
      * @return The current Mu Server Handler.
      * @see #addHandler(Method, String, RouteHandler)
      */
-    public MuServerBuilder addHandler(MuHandlerBuilder<?> handler) {
+    public MuServerBuilder addHandler(@Nullable MuHandlerBuilder<?> handler) {
         if (handler == null) {
             return this;
         }
@@ -301,11 +305,11 @@ public class MuServerBuilder {
      * <p>Note that handlers are executed in the order added to the builder, but all async
      * handlers are executed before synchronous handlers.</p>
      *
-     * @param handler The handler to add. If null, then no handler is added.
+     * @param handler The handler to add. If <code>null</code>, then no handler is added.
      * @return The current Mu Server Handler.
      * @see #addHandler(Method, String, RouteHandler)
      */
-    public MuServerBuilder addHandler(MuHandler handler) {
+    public MuServerBuilder addHandler(@Nullable MuHandler handler) {
         if (handler != null) {
             handlers.add(handler);
         }
@@ -321,10 +325,11 @@ public class MuServerBuilder {
      *                    with regexes such as <code>/abc/{id : [0-9]+}</code> where the named
      *                    parameter values can be accessed with the <code>pathParams</code>
      *                    parameter in the route handler.
-     * @param handler     The handler to invoke if the method and URI matches. If null, then no handler is added.
+     * @param handler     The handler to invoke if the method and URI matches. If <code>null</code>,
+     *                    then no handler is added.
      * @return Returns the server builder
      */
-    public MuServerBuilder addHandler(Method method, String uriTemplate, RouteHandler handler) {
+    public MuServerBuilder addHandler(Method method, String uriTemplate, @Nullable RouteHandler handler) {
         if (handler == null) {
             return this;
         }
@@ -334,10 +339,10 @@ public class MuServerBuilder {
     /**
      * Adds a listener that is notified when each response completes
      *
-     * @param listener A listener. If null, then nothing is added.
+     * @param listener A listener. If <code>null</code>, then nothing is added.
      * @return Returns the server builder
      */
-    public MuServerBuilder addResponseCompleteListener(ResponseCompleteListener listener) {
+    public MuServerBuilder addResponseCompleteListener(@Nullable ResponseCompleteListener listener) {
         if (listener != null) {
             if (this.responseCompleteListeners == null) {
                 this.responseCompleteListeners = new ArrayList<>();
@@ -397,7 +402,7 @@ public class MuServerBuilder {
      * @param exceptionHandler The handler to be called when an unhandled exception is encountered
      * @return This builder
      */
-    public MuServerBuilder withExceptionHandler(UnhandledExceptionHandler exceptionHandler) {
+    public MuServerBuilder withExceptionHandler(@Nullable UnhandledExceptionHandler exceptionHandler) {
         this.unhandledExceptionHandler = exceptionHandler;
         return this;
     }
@@ -483,21 +488,21 @@ public class MuServerBuilder {
     /**
      * @return The current value of this property
      */
-    public String interfaceHost() {
+    public @Nullable String interfaceHost() {
         return host;
     }
 
     /**
      * @return The current value of this property
      */
-    public HttpsConfigBuilder httpsConfigBuilder() {
+    public @Nullable HttpsConfigBuilder httpsConfigBuilder() {
         return sslContextBuilder;
     }
 
     /**
      * @return The current HTTP2 configuration
      */
-    public Http2Config http2Config() {
+    public @Nullable Http2Config http2Config() {
         return http2Config;
     }
 
@@ -518,7 +523,7 @@ public class MuServerBuilder {
     /**
      * @return The current value of this property
      */
-    public ExecutorService executor() {
+    public @Nullable ExecutorService executor() {
         return executor;
     }
 
@@ -540,13 +545,17 @@ public class MuServerBuilder {
      * @return The current value of this property
      */
     public List<RateLimiter> rateLimiters() {
-        return rateLimiters.stream().map(RateLimiter.class::cast).collect(Collectors.toList());
+        var rl = rateLimiters;
+        if (rl == null) {
+            return Collections.emptyList();
+        }
+        return rl.stream().map(RateLimiter.class::cast).collect(Collectors.toList());
     }
 
     /**
      * @return The current value of this property
      */
-    public UnhandledExceptionHandler unhandledExceptionHandler() {
+    public @Nullable UnhandledExceptionHandler unhandledExceptionHandler() {
         return unhandledExceptionHandler;
     }
 
@@ -645,7 +654,7 @@ public class MuServerBuilder {
      * The response body content encoders in priority order, for example a GZIP compressor
      * @return the list of encoders to use, or null to use the default (GZIP only)
      */
-    public List<ContentEncoder> contentEncoders() {
+    public @Nullable List<ContentEncoder> contentEncoders() {
         return contentEncoders;
     }
 
@@ -655,7 +664,7 @@ public class MuServerBuilder {
      * @param contentEncoders the list of encoders to use, or null to use the default (GZIP only)
      * @return this builder
      */
-    public MuServerBuilder withContentEncoders(List<ContentEncoder> contentEncoders) {
+    public MuServerBuilder withContentEncoders(@Nullable List<ContentEncoder> contentEncoders) {
         this.contentEncoders = contentEncoders;
         return this;
     }

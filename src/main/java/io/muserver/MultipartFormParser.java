@@ -1,5 +1,7 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
@@ -206,7 +208,7 @@ class MultipartFormParser {
         }
     }
 
-    public Mu3Headers readPartHeaders() throws IOException {
+    public @Nullable Mu3Headers readPartHeaders() throws IOException {
         if (state != State.BOUNDARY_END) throw new IllegalStateException("state is " + state);
         while (bb.remaining() < 2) {
             readMore(true);

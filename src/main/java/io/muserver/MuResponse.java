@@ -1,6 +1,5 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 import java.io.OutputStream;
@@ -19,9 +18,8 @@ import java.net.URI;
  *     <li>{@link #writer()} to send text as an output stream.</li>
  * </ul>
  * <p><strong>Note:</strong> only one of the above methods can be used per response, and aside from <code>sendChunk</code>
- * it is not allowed to call the same method more than once..</p>
+ * it is not allowed to call the same method more than once.</p>
  */
-@NullMarked
 public interface MuResponse {
 
     /**
@@ -121,7 +119,7 @@ public interface MuResponse {
     PrintWriter writer();
 
     /**
-     * Specifies whether or not any response data has already been sent to the client. Note that once any data is sent to
+     * Specifies whether any response data has already been sent to the client. Note that once any data is sent to
      * the client then {@link #status(int)} and {@link #headers()} can no longer be changed.
      * @return Returns <code>true</code> if any data has been sent to the client; otherwise <code>false</code>.
      */

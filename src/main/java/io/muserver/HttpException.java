@@ -1,10 +1,9 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 import java.net.URI;
 
-@NullMarked
 public class HttpException extends RuntimeException {
     private final HttpStatus status;
     private final Mu3Headers headers = Mu3Headers.newWithDate();
@@ -19,12 +18,12 @@ public class HttpException extends RuntimeException {
         this.status = status;
     }
 
-    public HttpException(HttpStatus status, String message) {
+    public HttpException(HttpStatus status, @Nullable String message) {
         super(message);
         this.status = status;
     }
 
-    public HttpException(HttpStatus status, String message, Throwable cause) {
+    public HttpException(HttpStatus status, @Nullable String message, @Nullable Throwable cause) {
         super(message, cause);
         this.status = status;
     }

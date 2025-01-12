@@ -1,5 +1,7 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -11,7 +13,7 @@ public class RateLimitBuilder {
     private long rate = 100;
     private long per = 1;
     private TimeUnit perUnit = TimeUnit.SECONDS;
-    private String bucket;
+    private @Nullable String bucket;
     private RateLimitRejectionAction action = RateLimitRejectionAction.SEND_429;
 
     /**
@@ -51,7 +53,7 @@ public class RateLimitBuilder {
      * @param name The bucket, for example when limiting by IP address this would be an IP address.
      * @return This builder.
      */
-    public RateLimitBuilder withBucket(String name) {
+    public RateLimitBuilder withBucket(@Nullable String name) {
         this.bucket = name;
         return this;
     }

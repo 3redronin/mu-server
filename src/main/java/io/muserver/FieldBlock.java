@@ -1,12 +1,10 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
-@NullMarked
 class FieldBlock implements Headers, Iterable<Map.Entry<String, String>> {
 
     private final List<FieldLine> lines = new LinkedList<>();
@@ -247,8 +245,7 @@ class FieldBlock implements Headers, Iterable<Map.Entry<String, String>> {
         return Objects.hashCode(lines);
     }
 
-    @NullMarked
-    private static class MapEntryStringIterator implements Iterator<Map.Entry<String, String>> {
+        private static class MapEntryStringIterator implements Iterator<Map.Entry<String, String>> {
 
         private final Iterator<FieldLine> lineIterator;
 

@@ -1,10 +1,7 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
-
 import java.nio.ByteBuffer;
 
-@NullMarked
 class FieldBlockDecoder {
 
     private final int maxUriLength;

@@ -1,6 +1,8 @@
 package scaffolding;
 
 import io.muserver.*;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -9,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+@NullMarked
 public class NotImplementedMuRequest implements MuRequest {
     
     private <T> T throwIt() {
@@ -61,11 +64,6 @@ public class NotImplementedMuRequest implements MuRequest {
     }
 
     @Override
-    public UploadedFile uploadedFile(String name) throws IOException {
-        return throwIt();
-    }
-
-    @Override
     public RequestParameters query() {
         return throwIt();
     }
@@ -101,7 +99,7 @@ public class NotImplementedMuRequest implements MuRequest {
     }
 
     @Override
-    public void attribute(String key, Object value) {
+    public void attribute(String key, @Nullable Object value) {
         throwIt();
     }
 
@@ -126,17 +124,7 @@ public class NotImplementedMuRequest implements MuRequest {
     }
 
     @Override
-    public MuServer server() {
-        return throwIt();
-    }
-
-    @Override
     public boolean isAsync() {
-        return throwIt();
-    }
-
-    @Override
-    public String protocol() {
         return throwIt();
     }
 

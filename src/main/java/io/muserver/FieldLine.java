@@ -1,12 +1,10 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Map;
 import java.util.Objects;
 
-@NullMarked
 class FieldLine implements Map.Entry<String,String> {
 
     private final HeaderString name;

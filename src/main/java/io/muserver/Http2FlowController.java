@@ -1,13 +1,11 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
-@NullMarked
 class Http2FlowController {
     private static final Logger log = LoggerFactory.getLogger(Http2FlowController.class);
 

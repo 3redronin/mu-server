@@ -1,6 +1,5 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 import java.util.*;
@@ -11,7 +10,6 @@ import static java.util.Collections.emptyMap;
 /**
  * <p>Represents a <code>Forwarded</code> header as described by RFC-7239.</p>
  */
-@NullMarked
 public class ForwardedHeader {
 
     private final @Nullable String by;
@@ -250,7 +248,7 @@ public class ForwardedHeader {
             if (sb.length() > 0) {
                 sb.append(", ");
             }
-            sb.append(header.toString());
+            sb.append(header);
         }
         return sb.toString();
     }

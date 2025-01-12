@@ -1,7 +1,5 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -11,7 +9,6 @@ import java.nio.charset.StandardCharsets;
 /**
  * Implementation of section 3.4 of RFC9113 <a href="https://www.rfc-editor.org/rfc/rfc9113.html#name-http-2-connection-preface">rfc9113.html#name-http-2-connection-preface</a>
  */
-@NullMarked
 class Http2Handshaker {
 
     private Http2Handshaker() {}

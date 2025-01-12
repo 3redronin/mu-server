@@ -1,7 +1,6 @@
 package io.muserver;
 
 import kotlin.NotImplementedError;
-import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
@@ -21,7 +20,6 @@ import java.util.Optional;
  * <p>Getting the value of a cookie by name is done by calling {@link #cookie(String)}</p>
  * <p>If you need to share request-specific data between handlers, use {@link #attribute(String, Object)} to set and {@link #attribute(String)} to get.</p>
  */
-@NullMarked
 public interface MuRequest {
 
     /**
@@ -255,8 +253,9 @@ public interface MuRequest {
     default String clientIP() {
         List<ForwardedHeader> forwarded = Headtils.getForwardedHeaders(headers());
         for (ForwardedHeader forwardedHeader : forwarded) {
-            if (forwardedHeader.forValue() != null) {
-                return forwardedHeader.forValue();
+            String fv = forwardedHeader.forValue();
+            if (fv != null) {
+                return fv;
             }
         }
         return this.connection().remoteAddress().getHostString();

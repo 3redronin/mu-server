@@ -12,6 +12,8 @@ import org.eclipse.jetty.websocket.api.Session;
 import org.eclipse.jetty.websocket.api.WebSocketAdapter;
 import org.eclipse.jetty.websocket.client.WebSocketClient;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -796,7 +798,7 @@ public class WebSocketsTest {
 
         assertThat(serverSocket.received, contains("connected", "onPing: "));
 
-        serverSocket.session.sendPing(Mutils.toByteBuffer("pingping"));
+        serverSocket.session().sendPing(Mutils.toByteBuffer("pingping"));
         assertNotTimedOut("Pong wait", serverSocket.pongLatch);
         assertThat(serverSocket.received, hasItem("onPong: pingping"));
 
@@ -813,7 +815,7 @@ public class WebSocketsTest {
         client.newWebSocket(webSocketRequest(server.uri().resolve("/ws")), clientListener);
         assertNotTimedOut("Connecting", serverSocket.connectedLatch);
         assertEventually(() -> serverSocket.state(), equalTo(WebsocketSessionState.OPEN));
-        serverSocket.session.close(1001, "Umm");
+        serverSocket.session().close(1001, "Umm");
         assertNotTimedOut("Closing", clientListener.closedLatch);
         assertThat(clientListener.toString(), clientListener.events,
             contains("onOpen", "onClosing 1001 Umm", "onClosed 1001 Umm"));
@@ -828,7 +830,7 @@ public class WebSocketsTest {
 
         CompletableFuture<Throwable> failure = new CompletableFuture<>();
         client.newWebSocket(webSocketRequest(server.uri().resolve("/non-existant")), new WebSocketListener() {
-            public void onFailure(WebSocket webSocket, Throwable t, Response response) {
+            public void onFailure(@NonNull WebSocket webSocket, @NonNull Throwable t, Response response) {
                 failure.complete(t);
             }
         });
@@ -872,7 +874,7 @@ public class WebSocketsTest {
     @Test
     public void exceptionsThrownByHandlersResultInOnErrorBeingCalled() {
         serverSocket = new RecordingMuWebSocket() {
-            public void onText(String message) {
+            public void onText(@NonNull String message) {
                 throw new MuException("Oops");
             }
         };
@@ -897,9 +899,9 @@ public class WebSocketsTest {
         MuAssert.stopAndCheck(server);
     }
 
+    @NullMarked
     private static class RecordingMuWebSocket extends SimpleWebSocket {
         private static final Logger log = LoggerFactory.getLogger(RecordingMuWebSocket.class);
-        private MuWebSocketSession session;
         List<String> received = new CopyOnWriteArrayList<>();
         CountDownLatch connectedLatch = new CountDownLatch(1);
         CountDownLatch closedLatch = new CountDownLatch(1);
@@ -911,7 +913,6 @@ public class WebSocketsTest {
         @Override
         public void onConnect(MuWebSocketSession session) throws Exception {
             super.onConnect(session);
-            this.session = session;
             received.add("connected");
             connectedLatch.countDown();
         }
@@ -919,7 +920,7 @@ public class WebSocketsTest {
         @Override
         public void onText(String message) throws IOException {
             received.add("onText: " + message);
-            session.sendText(message.toUpperCase());
+            session().sendText(message.toUpperCase());
         }
 
         @Override
@@ -932,7 +933,7 @@ public class WebSocketsTest {
             int initial = buffer.position();
             received.add("onBinary: " + UTF_8.decode(buffer));
             buffer.position(initial);
-            session.sendBinary(buffer);
+            session().sendBinary(buffer);
         }
 
         @Override
@@ -940,7 +941,7 @@ public class WebSocketsTest {
             int initial = buffer.position();
             received.add("onBinaryFragment (" + isLast + "): " + UTF_8.decode(buffer));
             buffer.position(initial);
-            session.sendBinaryFragment(buffer, isLast);
+            session().sendBinaryFragment(buffer, isLast);
         }
 
         @Override
@@ -953,7 +954,7 @@ public class WebSocketsTest {
         @Override
         public void onPing(ByteBuffer payload) throws IOException {
             received.add("onPing: " + UTF_8.decode(payload));
-            session.sendPong(payload);
+            session().sendPong(payload);
             pingLatch.countDown();
         }
 

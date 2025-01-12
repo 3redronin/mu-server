@@ -1,12 +1,9 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
-
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
-@NullMarked
 class HttpConnectionInputStream extends FilterInputStream {
     private final BaseHttpConnection httpConnection;
 

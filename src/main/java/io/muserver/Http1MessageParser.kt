@@ -6,7 +6,7 @@ import java.io.InputStream
 import java.nio.charset.StandardCharsets
 import java.text.ParseException
 import java.util.*
-import kotlin.jvm.Throws
+import kotlin.Throws
 
 internal const val SP = 32.toByte()
 internal const val CR = 13.toByte()

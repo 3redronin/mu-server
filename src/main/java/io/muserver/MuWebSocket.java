@@ -1,5 +1,7 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
+
 import java.nio.ByteBuffer;
 import java.util.concurrent.TimeUnit;
 
@@ -74,7 +76,7 @@ public interface MuWebSocket {
      * @param reason     An optional reason for the closure.
      * @throws Exception Any exceptions thrown will result in the onError method being called with the thrown exception being used as the <code>cause</code> parameter.
      */
-    void onClientClosed(int statusCode, String reason) throws Exception;
+    void onClientClosed(int statusCode, @Nullable String reason) throws Exception;
 
     /**
      * Called when a ping message is sent from a client.

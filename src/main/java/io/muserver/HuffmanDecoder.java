@@ -1,11 +1,9 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 import java.nio.ByteBuffer;
 
-@NullMarked
 class HuffmanDecoder {
 
     static HeaderString decodeFrom(ByteBuffer bb, int len, HeaderString.Type type) {

@@ -1,17 +1,17 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
-import java.util.*;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.Set;
 
-@NullMarked
 class HpackTable {
 
     private static final @Nullable FieldLine[] staticMap;
 
     static {
-        staticMap = new FieldLine[]{
+        staticMap = new @Nullable FieldLine[]{
             null,
             line(HeaderNames.PSEUDO_AUTHORITY),
             line(HeaderNames.PSEUDO_METHOD, "GET"),

@@ -1,6 +1,5 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 import java.util.concurrent.CompletableFuture;
@@ -15,7 +14,6 @@ import java.util.concurrent.TimeUnit;
  * @see SsePublisher
  * @deprecated As of Mu Server 3, the (blocking) {@link SsePublisher} is preferable in terms of performance
  */
-@NullMarked
 @Deprecated
 public interface AsyncSsePublisher {
 
@@ -125,7 +123,6 @@ public interface AsyncSsePublisher {
     }
 }
 
-@NullMarked
 class AsyncSsePublisherImpl implements AsyncSsePublisher {
 
     private final AsyncHandle asyncHandle;

@@ -1,7 +1,6 @@
 package io.muserver;
 
 import io.muserver.handlers.ResourceType;
-import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
@@ -15,7 +14,6 @@ import java.util.Set;
  * However if you wish to set the encoders with {@link MuServerBuilder#withContentEncoders(List)}
  * you may wish to add a GZIP encoder using this builder.</p>
  */
-@NullMarked
 public class GZIPEncoderBuilder {
     private @Nullable Set<String> mimeTypesToGzip;
     private long minGzipSize = 1400;

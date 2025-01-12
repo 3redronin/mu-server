@@ -1,18 +1,20 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.concurrent.TimeUnit;
 
 /**
  * Specifies the limits allowed for a single value, such as an IP address.
  */
 public class RateLimit {
-    final String bucket;
+    final @Nullable String bucket;
     final long allowed;
     final RateLimitRejectionAction action;
     final long per;
     final TimeUnit perUnit;
 
-    RateLimit(String bucket, long allowed, RateLimitRejectionAction action, long per, TimeUnit perUnit) {
+    RateLimit(@Nullable String bucket, long allowed, RateLimitRejectionAction action, long per, TimeUnit perUnit) {
         this.bucket = bucket;
         this.allowed = allowed;
         this.action = action;

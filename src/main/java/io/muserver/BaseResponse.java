@@ -1,6 +1,5 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
@@ -14,7 +13,6 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 
 import static java.util.Collections.emptyList;
 
-@NullMarked
 abstract class BaseResponse implements MuResponse {
 
     protected final Mu3Request request;

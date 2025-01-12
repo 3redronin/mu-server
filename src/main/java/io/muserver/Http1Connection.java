@@ -1,6 +1,5 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,7 +9,6 @@ import java.net.Socket;
 import java.security.cert.Certificate;
 import java.time.Instant;
 
-@NullMarked
 abstract class Http1Connection extends BaseHttpConnection {
 
     private static final Logger log = LoggerFactory.getLogger(Http1Connection.class);

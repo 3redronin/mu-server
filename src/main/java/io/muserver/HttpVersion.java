@@ -1,5 +1,7 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
+
 import java.nio.charset.StandardCharsets;
 
 /**
@@ -51,7 +53,7 @@ public enum HttpVersion {
      * @param value A value such as <code>HTTP/1.1</code>
      * @return The protocol version, or <code>null</code> if it is not a protocol version recognised by mu-server
      */
-    public static HttpVersion fromVersion(String value) {
+    public static @Nullable HttpVersion fromVersion(String value) {
         switch (value) {
             case "HTTP/1.1": return HTTP_1_1;
             case "HTTP/1.0": return HTTP_1_0;

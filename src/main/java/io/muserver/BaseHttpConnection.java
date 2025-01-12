@@ -1,6 +1,5 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 import javax.net.ssl.SSLSocket;
@@ -15,7 +14,6 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
-@NullMarked
 abstract class BaseHttpConnection implements HttpConnection {
 
     protected final Mu3ServerImpl server;

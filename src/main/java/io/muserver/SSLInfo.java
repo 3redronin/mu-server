@@ -29,7 +29,7 @@ public interface SSLInfo {
      * <code>https://localhost:{port}/</code> and if any exceptions are thrown while
      * doing the lookup then an empty array is returned.</p>
      * <p>Using this information, you can find information such as the expiry date of your
-     * certiticates by calling {@link X509Certificate#getNotAfter()}.</p>
+     * certificates by calling {@link X509Certificate#getNotAfter()}.</p>
      * @return An ordered list of server certificates, with the server's own certificate first followed by any certificate authorities.
      */
     List<X509Certificate> certificates();

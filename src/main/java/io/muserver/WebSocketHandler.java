@@ -1,5 +1,7 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
+
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -12,10 +14,10 @@ import java.util.Base64;
 public class WebSocketHandler implements MuHandler {
 
     private final MuWebSocketFactory factory;
-    private final String path;
+    private final @Nullable String path;
     private final WebSocketHandlerBuilder.Settings settings;
 
-    public WebSocketHandler(MuWebSocketFactory factory, String path, WebSocketHandlerBuilder.Settings settings) {
+    WebSocketHandler(MuWebSocketFactory factory, @Nullable String path, WebSocketHandlerBuilder.Settings settings) {
         this.factory = factory;
         this.path = path;
         this.settings = settings;
@@ -63,7 +65,7 @@ public class WebSocketHandler implements MuHandler {
         return true;
     }
 
-    static String acceptKey(String clientKey) throws NoSuchAlgorithmException {
+    static String acceptKey(@Nullable String clientKey) throws NoSuchAlgorithmException {
         if (clientKey == null || clientKey.isBlank()) {
             throw HttpException.badRequest("No valid SEC_WEBSOCKET_KEY");
         }

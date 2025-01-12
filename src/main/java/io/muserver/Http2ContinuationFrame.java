@@ -1,14 +1,11 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
-
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Objects;
 
-@NullMarked
 class Http2ContinuationFrame implements LogicalHttp2Frame {
 
     private final int streamId;

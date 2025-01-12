@@ -1,7 +1,6 @@
 package io.muserver;
 
 import jakarta.ws.rs.core.MediaType;
-import org.jspecify.annotations.NullMarked;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,7 +16,6 @@ import java.util.stream.Collectors;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Collections.emptyList;
 
-@NullMarked
 class Headtils {
     static List<ForwardedHeader> getForwardedHeaders(Headers headers) {
         List<String> all = headers.getAll(HeaderNames.FORWARDED);

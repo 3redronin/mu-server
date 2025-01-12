@@ -1,5 +1,7 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.Closeable;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -51,7 +53,7 @@ public interface SsePublisher extends Closeable {
      * @param event An event name. If <code>null</code> is specified, clients default to a message type of <code>message</code>
      * @throws IOException Thrown if there is an error writing to the client, for example if the user has closed their browser.
      */
-    void send(String message, String event) throws IOException;
+    void send(String message, @Nullable String event) throws IOException;
 
     /**
      * <p>Sends a message with an event type and ID.</p>
@@ -68,7 +70,7 @@ public interface SsePublisher extends Closeable {
      *                sent by the browser in the <code>Last-Event-ID</code> request header.
      * @throws IOException Thrown if there is an error writing to the client, for example if the user has closed their browser.
      */
-    void send(String message, String event, String eventID) throws IOException;
+    void send(String message, @Nullable String event, @Nullable String eventID) throws IOException;
 
     /**
      * <p>Stops the event stream.</p>
@@ -125,12 +127,12 @@ class SsePublisherImpl implements SsePublisher {
     }
 
     @Override
-    public void send(String message, String event) throws IOException {
+    public void send(String message, @Nullable String event) throws IOException {
         send(message, event, null);
     }
 
     @Override
-    public void send(String message, String event, String eventID) throws IOException {
+    public void send(String message, @Nullable String event, @Nullable String eventID) throws IOException {
         sendChunk(dataText(message, event, eventID));
     }
 
@@ -163,7 +165,7 @@ class SsePublisherImpl implements SsePublisher {
         return value.contains("\n") || value.contains("\r");
     }
 
-    static String dataText(String message, String event, String eventID) {
+    static String dataText(String message, @Nullable String event, @Nullable String eventID) {
         StringBuilder raw = new StringBuilder();
         if (eventID != null) {
             ensureNoLineBreaks(eventID, "SSE IDs");

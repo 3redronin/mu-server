@@ -1,12 +1,10 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 /**
  * A callback for async operations that calls when an operation completes.
  */
-@NullMarked
 public interface DoneCallback {
 
     /**

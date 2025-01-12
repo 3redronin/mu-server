@@ -1,7 +1,5 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
-
 import java.util.Objects;
 
 /**
@@ -13,7 +11,6 @@ import java.util.Objects;
  * <p>Note that any fields prefixed with &quot;initial&quot; are just that: the initial settings of a connection.
  * These settings may change during the life of an HTTP2 connection.</p>
  */
-@NullMarked
 public class Http2ConfigBuilder {
 
     private boolean enabled = false;

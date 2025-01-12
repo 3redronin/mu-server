@@ -1,6 +1,5 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -9,13 +8,12 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 
-@NullMarked
 class Http2Stream implements ResponseInfo {
 
     private static final Logger log = LoggerFactory.getLogger(Http2Stream.class);
 
     private enum State {
-        /* IDLE, RESERVED_LOCAL, RESERVED_REMOTE, */ OPEN, HALF_CLOSED_LOCAL, HALF_CLOSED_REMOTE, CLOSED;
+        /* IDLE, RESERVED_LOCAL, RESERVED_REMOTE, */ OPEN, HALF_CLOSED_LOCAL, HALF_CLOSED_REMOTE, CLOSED
 
     }
     final int id;
@@ -181,7 +179,6 @@ class Http2Stream implements ResponseInfo {
 /**
  * An HTTP2 frame, where continuations are treated together as a single frame
  */
-@NullMarked
 interface LogicalHttp2Frame {
     void writeTo(Http2Connection connection, OutputStream out) throws IOException;
 }

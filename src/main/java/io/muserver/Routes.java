@@ -2,14 +2,12 @@ package io.muserver;
 
 import io.muserver.rest.PathMatch;
 import io.muserver.rest.UriPattern;
-import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 /**
  * A helper class to create a handler for a specific URL. See{@link MuServerBuilder#addHandler(Method, String, RouteHandler)}
  * for a simple way to add a routed handler to a server.
  */
-@NullMarked
 public class Routes {
 
     /**

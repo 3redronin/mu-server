@@ -1,5 +1,7 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * <p>A factory that can convert an upgrade request into a web socket.</p>
  * <p>This is registered with the {@link WebSocketHandlerBuilder#withWebSocketFactory(MuWebSocketFactory)} method.</p>
@@ -20,6 +22,6 @@ public interface MuWebSocketFactory {
      *                   exceptions such as {@link jakarta.ws.rs.ClientErrorException} can be used in order to
      *                   control the HTTP response codes.
      */
-    MuWebSocket create(MuRequest request, Headers responseHeaders) throws Exception;
+    @Nullable MuWebSocket create(MuRequest request, Headers responseHeaders) throws Exception;
 
 }

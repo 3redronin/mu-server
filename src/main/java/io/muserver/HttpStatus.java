@@ -1,5 +1,7 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
+
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
@@ -13,7 +15,7 @@ public class HttpStatus {
 
     private final int code;
     private final String reason;
-    private byte[] responseLineBytes;
+    private byte@Nullable[] responseLineBytes;
 
     HttpStatus(int code, String reason) {
         if (code < 100 || code > 999) throw new IllegalArgumentException("Status codes must be 3 digits");
@@ -96,7 +98,7 @@ public class HttpStatus {
     }
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equals(@Nullable Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         HttpStatus that = (HttpStatus) o;

@@ -1,6 +1,5 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 import java.util.*;
@@ -10,7 +9,6 @@ import static java.util.Collections.emptyList;
 /**
  * A builder to create cookies that will be sent on a Response with {@link MuResponse#addCookie(Cookie)}
  */
-@NullMarked
 public class CookieBuilder {
 
     private @Nullable String name;
@@ -96,7 +94,7 @@ public class CookieBuilder {
         if (path != null && path.isEmpty()) path = null;
 
         if (path != null) {
-            boolean matches = value.matches("^[\\x20-\\x7E&&[^;]]+$");
+            boolean matches = path.matches("^[\\x20-\\x7E&&[^;]]+$");
             if (!matches) {
                 throw new IllegalArgumentException("The path parameter can only include ASCII characters (excluding ';' and control characters).");
             }

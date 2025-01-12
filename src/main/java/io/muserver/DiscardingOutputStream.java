@@ -1,11 +1,8 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
-
 import java.io.IOException;
 import java.io.OutputStream;
 
-@NullMarked
 class DiscardingOutputStream extends OutputStream {
     private DiscardingOutputStream() {}
     public static final DiscardingOutputStream INSTANCE = new DiscardingOutputStream();

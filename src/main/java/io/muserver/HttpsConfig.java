@@ -1,5 +1,6 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -19,11 +20,15 @@ public class HttpsConfig implements SSLInfo {
     private static final Logger log = LoggerFactory.getLogger(HttpsConfig.class);
     private final SSLContext sslContext;
     private final SSLParameters sslParameters;
+
+    @Nullable
     private final X509TrustManager clientAuthTrustManager;
+    @Nullable
     private List<X509Certificate> cachedCerts;
+    @Nullable
     private URI httpsUri;
 
-    HttpsConfig(SSLContext sslContext, SSLParameters sslParameters, X509TrustManager clientAuthTrustManager) {
+    HttpsConfig(SSLContext sslContext, SSLParameters sslParameters, @Nullable X509TrustManager clientAuthTrustManager) {
         this.sslContext = sslContext;
         this.sslParameters = sslParameters;
         this.clientAuthTrustManager = clientAuthTrustManager;
@@ -39,7 +44,7 @@ public class HttpsConfig implements SSLInfo {
     /**
      * @return The SSL parameters
      */
-    public SSLParameters sslParameters() { return sslParameters; };
+    public SSLParameters sslParameters() { return sslParameters; }
 
     String[] protocolsArray() {
         return sslParameters.getProtocols();
@@ -50,7 +55,8 @@ public class HttpsConfig implements SSLInfo {
      */
     @Override
     public List<String> ciphers() {
-        return List.of(cipherSuitesArray());
+        String[] cs = cipherSuitesArray();
+        return cs == null ? Collections.emptyList() : List.of(cs);
     }
 
     /**
@@ -93,7 +99,7 @@ public class HttpsConfig implements SSLInfo {
                     }
                     public void checkServerTrusted(X509Certificate[] x509Certificates, String s) {
                     }
-                    public X509Certificate[] getAcceptedIssuers() {
+                    public X509Certificate@Nullable[] getAcceptedIssuers() {
                         return null;
                     }
                 }},
@@ -122,7 +128,7 @@ public class HttpsConfig implements SSLInfo {
         }
     }
 
-    String[] cipherSuitesArray() {
+    String@Nullable[] cipherSuitesArray() {
         return sslParameters.getCipherSuites();
     }
 
@@ -134,7 +140,7 @@ public class HttpsConfig implements SSLInfo {
      * @return The trust manager to verify client certs when client certs are requested, or <code>null</code>
      *         if client certs not used.
      */
-    public X509TrustManager clientAuthTrustManager() {
+    public @Nullable X509TrustManager clientAuthTrustManager() {
         return clientAuthTrustManager;
     }
 }

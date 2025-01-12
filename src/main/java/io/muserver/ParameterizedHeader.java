@@ -1,5 +1,7 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.*;
 
 import static io.muserver.Mutils.notNull;
@@ -14,14 +16,14 @@ import static java.util.Collections.emptyMap;
  */
 public class ParameterizedHeader {
 
-    private final Map<String, String> parameters;
+    private final Map<String, @Nullable String> parameters;
 
     /**
      * Creates a value with parameters
      *
      * @param parameters A map of parameters, such as <code>charset: UTF-8</code>
      */
-    private ParameterizedHeader(Map<String, String> parameters) {
+    private ParameterizedHeader(Map<String, @Nullable String> parameters) {
         notNull("parameters", parameters);
         this.parameters = parameters;
     }
@@ -29,24 +31,24 @@ public class ParameterizedHeader {
     /**
      * @return Gets all the parameters
      */
-    public Map<String, String> parameters() {
+    public Map<String, @Nullable String> parameters() {
         return parameters;
     }
 
     /**
      * @param name The name of the parameter to get
-     * @return Gets a single parameter, or null if there is no value
+     * @return Gets a single parameter, or <code>null</code> if there is no value
      */
-    public String parameter(String name) {
+    public @Nullable String parameter(String name) {
         return parameters.get(name);
     }
 
     /**
      * @param name The name of the parameter to get
      * @param defaultValue The value to return if no parameter was set
-     * @return Gets a single parameter, or null if there is no value
+     * @return Gets a single parameter, or the default value, if there is no value
      */
-    public String parameter(String name, String defaultValue) {
+    public @Nullable String parameter(String name, @Nullable String defaultValue) {
         return parameters.getOrDefault(name, defaultValue);
     }
 
@@ -74,13 +76,13 @@ public class ParameterizedHeader {
      * @return An object containing a map of name/value pairs (where values may be null)
      * @throws IllegalArgumentException The value cannot be parsed
      */
-    public static ParameterizedHeader fromString(String input) {
+    public static ParameterizedHeader fromString(@Nullable String input) {
         if (input == null || input.trim().isEmpty()) {
             return new ParameterizedHeader(emptyMap());
         }
         StringBuilder buffer = new StringBuilder();
 
-        Map<String, String> parameters = new LinkedHashMap<>(); // keeps insertion order
+        Map<String, @Nullable String> parameters = new LinkedHashMap<>(); // keeps insertion order
         State state = State.PARAM_NAME;
         String paramName = null;
         boolean isQuotedString = false;
@@ -165,8 +167,8 @@ public class ParameterizedHeader {
      */
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        Map<String, String> parameters = this.parameters();
-        for (Map.Entry<String, String> entry : parameters.entrySet()) {
+        Map<String, @Nullable String> parameters = this.parameters();
+        for (Map.Entry<String, @Nullable String> entry : parameters.entrySet()) {
             if (sb.length() > 0) {
                 sb.append(", ");
             }

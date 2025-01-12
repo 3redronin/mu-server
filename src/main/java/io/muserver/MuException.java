@@ -1,5 +1,7 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * A generic exception raised by mu-server
  */
@@ -18,7 +20,7 @@ public class MuException extends RuntimeException {
      * @param message The exception message
      * @param cause The cause of the exception
      */
-	public MuException(String message, Throwable cause) {
+	public MuException(String message, @Nullable Throwable cause) {
 		super(message, cause);
 	}
 }

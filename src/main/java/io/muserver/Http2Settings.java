@@ -1,6 +1,5 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
@@ -8,7 +7,6 @@ import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.Objects;
 
-@NullMarked
 class Http2Settings implements LogicalHttp2Frame {
     static Http2Settings DEFAULT_CLIENT_SETTINGS = new Http2Settings(false,
         4096, 100, 65535, 16384, 32 * 1024

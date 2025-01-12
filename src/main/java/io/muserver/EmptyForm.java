@@ -1,13 +1,10 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
-
 import java.util.List;
 import java.util.Map;
 
 import static java.util.Collections.emptyMap;
 
-@NullMarked
 class EmptyForm implements MuForm {
 
     static final MuForm VALUE = new EmptyForm();

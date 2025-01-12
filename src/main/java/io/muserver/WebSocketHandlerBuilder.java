@@ -1,5 +1,7 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -7,8 +9,8 @@ import java.util.concurrent.TimeUnit;
  */
 public class WebSocketHandlerBuilder implements MuHandlerBuilder<WebSocketHandler> {
 
-    private MuWebSocketFactory factory;
-    private String path;
+    private @Nullable MuWebSocketFactory factory;
+    private @Nullable String path;
     private int readTimeoutMills = (int)TimeUnit.MINUTES.toMillis(5);
     private long pingIntervalMillis = TimeUnit.SECONDS.toMillis(60);
     private int maxFramePayloadLength = 65536;
@@ -35,7 +37,7 @@ public class WebSocketHandlerBuilder implements MuHandlerBuilder<WebSocketHandle
      * @param path The path of this web socket endpoint.
      * @return This builder
      */
-    public WebSocketHandlerBuilder withPath(String path) {
+    public WebSocketHandlerBuilder withPath(@Nullable String path) {
         if (Mutils.nullOrEmpty(path)) {
             this.path = null;
         } else if (path.startsWith("/")) {

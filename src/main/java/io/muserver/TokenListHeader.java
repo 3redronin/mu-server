@@ -1,5 +1,7 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -103,7 +105,7 @@ public class TokenListHeader {
      * @return a list of tokens, or an empty list if there are none
      * @throws IllegalArgumentException The value cannot be parsed
      */
-    public static TokenListHeader parse(List<String> input, boolean allowDuplicates) {
+    public static TokenListHeader parse(@Nullable List<String> input, boolean allowDuplicates) {
         if (input == null || input.isEmpty()) {
             return new TokenListHeader(emptyList());
         }
@@ -142,7 +144,7 @@ public class TokenListHeader {
     }
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equals(@Nullable Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         TokenListHeader that = (TokenListHeader) o;

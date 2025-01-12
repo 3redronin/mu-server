@@ -1,9 +1,7 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
-@NullMarked
 enum Http2FrameType {
     DATA((byte) 0x00, false, null, -1),
     HEADERS((byte) 0x01, true, true, -1),

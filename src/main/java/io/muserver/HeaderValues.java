@@ -1,11 +1,8 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
-
 /**
  * Standard HTTP header values.
  */
-@NullMarked
 public final class HeaderValues {
     private static HeaderString headerValue(String attachment) {
         return HeaderString.valueOf(attachment, HeaderString.Type.VALUE);

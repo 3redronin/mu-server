@@ -1,12 +1,10 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 import java.nio.ByteBuffer;
 import java.util.Objects;
 
-@NullMarked
 class Http2WindowUpdate {
 
     private final int streamId;

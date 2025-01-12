@@ -1,6 +1,5 @@
 package io.muserver;
 
-import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 
 import javax.net.ssl.TrustManager;
@@ -15,7 +14,6 @@ import java.util.concurrent.ExecutorService;
 /**
  * A connection between a server and a client.
  */
-@NullMarked
 public interface HttpConnection {
 
     /**

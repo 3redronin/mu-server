@@ -1,5 +1,7 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.*;
 
 import static io.muserver.Mutils.urlDecode;
@@ -26,7 +28,7 @@ public class QueryString implements RequestParameters {
      * @param input A query string value, without '?'
      * @return a parsed QueryString object
      */
-    public static QueryString parse(String input) {
+    public static QueryString parse(@Nullable String input) {
         if (input == null || input.isEmpty()) return EMPTY;
         if (input.charAt(0) == '?') {
             input = input.substring(1);
@@ -53,7 +55,7 @@ public class QueryString implements RequestParameters {
     static final QueryString EMPTY = new QueryString(Collections.emptyMap());
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equals(@Nullable Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         QueryString that = (QueryString) o;
