@@ -1,5 +1,8 @@
 package io.muserver;
 
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
+
 import java.util.*;
 
 import static java.util.Collections.emptyList;
@@ -8,12 +11,13 @@ import static java.util.Collections.emptyMap;
 /**
  * <p>Represents a <code>Forwarded</code> header as described by RFC-7239.</p>
  */
+@NullMarked
 public class ForwardedHeader {
 
-    private final String by;
-    private final String forValue;
-    private final String host;
-    private final String proto;
+    private final @Nullable String by;
+    private final @Nullable String forValue;
+    private final @Nullable String host;
+    private final @Nullable String proto;
     private final Map<String,String> extensions;
 
     /**
@@ -24,7 +28,7 @@ public class ForwardedHeader {
      * @param proto The protocol the client used, or null
      * @param extensions Any extensions, or null
      */
-    public ForwardedHeader(String by, String forValue, String host, String proto, Map<String, String> extensions) {
+    public ForwardedHeader(@Nullable String by, @Nullable String forValue, @Nullable String host, @Nullable String proto, @Nullable Map<String, String> extensions) {
         this.by = by;
         this.forValue = forValue;
         this.host = host;
@@ -36,7 +40,7 @@ public class ForwardedHeader {
      * @return The interface where the request came in to the proxy server (e.g. the IP address of the reverse
      * proxy that forwarded this request), or <code>null</code> if not specified.
      */
-    public String by() {
+    public @Nullable String by() {
         return by;
     }
 
@@ -44,7 +48,7 @@ public class ForwardedHeader {
      * @return The interface where the request came in to the proxy server, e.g. the IP address of the client
      * that originated the request), or <code>null</code> if not specified.
      */
-    public String forValue() {
+    public @Nullable String forValue() {
         return forValue;
     }
 
@@ -52,7 +56,7 @@ public class ForwardedHeader {
      * @return The Host request header field as received by the proxy (e.g. the hostname used on the original
      * request), or <code>null</code> if not specified.
      */
-    public String host() {
+    public @Nullable String host() {
         return host;
     }
 
@@ -60,20 +64,18 @@ public class ForwardedHeader {
      * @return Indicates which protocol was used to make the request (typically "http" or "https"), or
      * <code>null</code> if not specified.
      */
-    public String proto() {
+    public @Nullable String proto() {
         return proto;
     }
 
     /**
-     * @return Values not covered by by, for, host, or proto.
+     * @return Values not covered by <code>by</code>, <code>for</code>, <code>host</code>, or <code>proto</code>.
      */
     public Map<String, String> extensions() {
         return extensions;
     }
 
-
-
-    private enum State {PARAM_NAME, PARAM_VALUE;}
+    private enum State {PARAM_NAME, PARAM_VALUE}
     /**
      * <p>Parses the value of a <code>Forwarded</code> header into an object.</p>
      * <p>Where multiple reverse proxies have resulted in multiple Forwarded headers, the first
@@ -83,7 +85,7 @@ public class ForwardedHeader {
      * @return A list of ForwardedHeader objects
      * @throws IllegalArgumentException The value cannot be parsed
      */
-    public static List<ForwardedHeader> fromString(String input) {
+    public static List<ForwardedHeader> fromString(@Nullable String input) {
         if (input == null || input.trim().isEmpty()) {
             return emptyList();
         }
@@ -253,7 +255,7 @@ public class ForwardedHeader {
         return sb.toString();
     }
 
-    private static void appendString(StringBuilder sb, String key, String value) {
+    private static void appendString(StringBuilder sb, String key, @Nullable String value) {
         if (value == null) {
             return;
         }

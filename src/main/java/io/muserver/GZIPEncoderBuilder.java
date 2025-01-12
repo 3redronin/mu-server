@@ -1,6 +1,8 @@
 package io.muserver;
 
 import io.muserver.handlers.ResourceType;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 import java.util.Objects;
@@ -13,18 +15,19 @@ import java.util.Set;
  * However if you wish to set the encoders with {@link MuServerBuilder#withContentEncoders(List)}
  * you may wish to add a GZIP encoder using this builder.</p>
  */
+@NullMarked
 public class GZIPEncoderBuilder {
-    private Set<String> mimeTypesToGzip;
+    private @Nullable Set<String> mimeTypesToGzip;
     private long minGzipSize = 1400;
     private int bufferSize = 512;
 
     /**
      * Sets the mime types which should be gzipped.
      * @param mimeTypesToGzip mime types such as <code>text/plain</code> (note there is no need to specify
-     *                        the charset on the mimetypes)
+     *                        the charset on the mimetypes), or <code>null</code> for the mu-server defaults.
      * @return this builder
      */
-    public GZIPEncoderBuilder withMimeTypesToGzip(Set<String> mimeTypesToGzip) {
+    public GZIPEncoderBuilder withMimeTypesToGzip(@Nullable Set<String> mimeTypesToGzip) {
         Objects.requireNonNull(mimeTypesToGzip, "mimeTypesToGzip must not be null");
         this.mimeTypesToGzip = mimeTypesToGzip;
         return this;

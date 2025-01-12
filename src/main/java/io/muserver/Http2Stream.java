@@ -1,6 +1,7 @@
 package io.muserver;
 
 import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -8,6 +9,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 
+@NullMarked
 class Http2Stream implements ResponseInfo {
 
     private static final Logger log = LoggerFactory.getLogger(Http2Stream.class);
@@ -22,6 +24,7 @@ class Http2Stream implements ResponseInfo {
     final Mu3Request request;
     private final Http2FlowController incomingFlowControl;
     private final Http2FlowController outgoingFlowControl;
+    @Nullable
     private Http2Response response;
     private State state = State.OPEN;
     private long endTime = 0;

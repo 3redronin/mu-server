@@ -1,5 +1,8 @@
 package io.muserver;
 
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
+
 import java.net.URI;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -9,6 +12,7 @@ import java.util.stream.Stream;
  * A handler that wraps a list of other handlers and serves them at a certain path prefix (or context).
  * <p>Use this when you want to serve multiple handlers with the same path prefix.</p>
  */
+@NullMarked
 public class ContextHandler implements MuHandler {
 
     private final boolean hasContext;
@@ -22,7 +26,7 @@ public class ContextHandler implements MuHandler {
      * @param contextPath The patch
      * @param muHandlers The handlers
      */
-    ContextHandler(String contextPath, List<MuHandler> muHandlers) {
+    ContextHandler(@Nullable String contextPath, List<MuHandler> muHandlers) {
         String slashTrimmed = Mutils.trim(Mutils.coalesce(contextPath, "").trim(), "/");
         this.hasContext = !slashTrimmed.isEmpty();
         this.contextPath = Stream.of(slashTrimmed.split("/"))

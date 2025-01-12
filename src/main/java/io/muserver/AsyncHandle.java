@@ -1,5 +1,8 @@
 package io.muserver;
 
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
+
 import java.nio.ByteBuffer;
 import java.util.concurrent.Future;
 
@@ -9,6 +12,7 @@ import java.util.concurrent.Future;
  * write data, this interface provides asynchronous write operations, or alternatively you can use the
  * blocking write operations on the original {@link MuResponse}.</p>
  */
+@NullMarked
 public interface AsyncHandle {
 
     /**
@@ -29,7 +33,7 @@ public interface AsyncHandle {
      * a <code>500 Internal Server Error</code> message will be sent to the client.
      * @param throwable an exception to log, or null if there was no problem
      */
-    void complete(Throwable throwable);
+    void complete(@Nullable Throwable throwable);
 
     /**
      * <p>Writes data to the response asynchronously.</p>

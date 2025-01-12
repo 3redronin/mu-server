@@ -1,5 +1,8 @@
 package io.muserver;
 
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
+
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.List;
@@ -10,6 +13,7 @@ import java.util.Set;
  *
  * <p>For example a GZIP encoder is used to compress text-based response bodies.</p>
  */
+@NullMarked
 public interface ContentEncoder {
 
     /**
@@ -50,6 +54,7 @@ public interface ContentEncoder {
      * @param stream The response stream, which should be wrapped by an encoding stream if supported.
      * @return An encoding output stream if this encoder supports it, otherwise <code>null</code>
      */
+    @Nullable
     OutputStream wrapStream(MuRequest request, MuResponse response, OutputStream stream) throws IOException;
 
     /**

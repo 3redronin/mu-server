@@ -1,5 +1,8 @@
 package io.muserver;
 
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
+
 import java.util.*;
 
 import static java.util.Collections.emptyList;
@@ -7,16 +10,17 @@ import static java.util.Collections.emptyList;
 /**
  * A builder to create cookies that will be sent on a Response with {@link MuResponse#addCookie(Cookie)}
  */
+@NullMarked
 public class CookieBuilder {
 
-    private String name;
-    private String value;
-    private String domain;
-    private String path;
-    private Long maxAge = null;
+    private @Nullable String name;
+    private @Nullable String value;
+    private @Nullable String domain;
+    private @Nullable String path;
+    private @Nullable Long maxAge = null;
     private boolean secure;
     private boolean httpOnly;
-    private Cookie.SameSite sameSite;
+    private Cookie.@Nullable SameSite sameSite;
 
     /**
      * Sets the name of the cookie.
@@ -73,7 +77,7 @@ public class CookieBuilder {
      * @param domain The host part of a URL (without scheme or port), e.g. <code>example.org</code>
      * @return This builder
      */
-    public CookieBuilder withDomain(String domain) {
+    public CookieBuilder withDomain(@Nullable String domain) {
         if (domain != null && domain.contains(":")) {
             throw new IllegalArgumentException("The domain value should only be a host name (and should not include the scheme or the port)");
         }
@@ -88,7 +92,7 @@ public class CookieBuilder {
      *             to paths such as <code>/order</code> and <code>/order/checkout</code> etc.
      * @return This builder
      */
-    public CookieBuilder withPath(String path) {
+    public CookieBuilder withPath(@Nullable String path) {
         if (path != null && path.isEmpty()) path = null;
 
         if (path != null) {
@@ -111,7 +115,7 @@ public class CookieBuilder {
      * @param maxAge The age to live in seconds, or <code>null</code> to make it a session cookie
      * @return This builder
      */
-    public CookieBuilder withMaxAgeInSeconds(Long maxAge) {
+    public CookieBuilder withMaxAgeInSeconds(@Nullable Long maxAge) {
         this.maxAge = maxAge;
         return this;
     }
@@ -214,7 +218,7 @@ public class CookieBuilder {
      * @return A cookie builder
      * @throws IllegalArgumentException if the value is not a valid cookie string
      */
-    public static List<CookieBuilder> fromCookieHeader(String input) {
+    public static List<CookieBuilder> fromCookieHeader(@Nullable String input) {
         if (input == null || input.trim().isEmpty()) {
             return emptyList();
         }
@@ -314,7 +318,7 @@ public class CookieBuilder {
      * @return A cookie builder
      * @throws IllegalArgumentException if the value is not a valid set-cookie string
      */
-    public static Optional<CookieBuilder> fromSetCookieHeader(String input) {
+    public static Optional<CookieBuilder> fromSetCookieHeader(@Nullable String input) {
         if (input == null || input.trim().isEmpty()) {
             return Optional.empty();
         }

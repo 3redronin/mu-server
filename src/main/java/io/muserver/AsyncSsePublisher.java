@@ -1,5 +1,8 @@
 package io.muserver;
 
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
+
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.TimeUnit;
@@ -12,6 +15,7 @@ import java.util.concurrent.TimeUnit;
  * @see SsePublisher
  * @deprecated As of Mu Server 3, the (blocking) {@link SsePublisher} is preferable in terms of performance
  */
+@NullMarked
 @Deprecated
 public interface AsyncSsePublisher {
 
@@ -38,7 +42,7 @@ public interface AsyncSsePublisher {
      * @return completion stage that completes when the event has been sent. If there is a problem during sending of
      * an event, completion stage will be completed exceptionally.
      */
-    CompletionStage<?> send(String message, String event);
+    CompletionStage<?> send(String message, @Nullable String event);
 
     /**
      * <p>Sends a message with an event type and ID.</p>
@@ -56,7 +60,7 @@ public interface AsyncSsePublisher {
      * @return completion stage that completes when the event has been sent. If there is a problem during sending of
      * an event, completion stage will be completed exceptionally.
      */
-    CompletionStage<?> send(String message, String event, String eventID);
+    CompletionStage<?> send(String message, @Nullable String event, @Nullable String eventID);
 
     /**
      * <p>Stops the event stream.</p>
@@ -121,6 +125,7 @@ public interface AsyncSsePublisher {
     }
 }
 
+@NullMarked
 class AsyncSsePublisherImpl implements AsyncSsePublisher {
 
     private final AsyncHandle asyncHandle;
@@ -136,12 +141,12 @@ class AsyncSsePublisherImpl implements AsyncSsePublisher {
     }
 
     @Override
-    public CompletionStage<?> send(String message, String event) {
+    public CompletionStage<?> send(String message, @Nullable String event) {
         return send(message, event, null);
     }
 
     @Override
-    public CompletionStage<?> send(String message, String event, String eventID) {
+    public CompletionStage<?> send(String message, @Nullable String event, @Nullable String eventID) {
         return write(SsePublisherImpl.dataText(message, event, eventID));
     }
 
@@ -188,6 +193,5 @@ class AsyncSsePublisherImpl implements AsyncSsePublisher {
             asyncHandle.complete();
         }
     }
-
 
 }

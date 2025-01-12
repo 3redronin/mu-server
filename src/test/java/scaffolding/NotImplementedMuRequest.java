@@ -61,11 +61,6 @@ public class NotImplementedMuRequest implements MuRequest {
     }
 
     @Override
-    public List<UploadedFile> uploadedFiles(String name) throws IOException {
-        return throwIt();
-    }
-
-    @Override
     public UploadedFile uploadedFile(String name) throws IOException {
         return throwIt();
     }

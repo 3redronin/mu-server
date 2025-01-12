@@ -1,5 +1,9 @@
 package io.muserver;
 
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
+
+@NullMarked
 enum Http2FrameType {
     DATA((byte) 0x00, false, null, -1),
     HEADERS((byte) 0x01, true, true, -1),
@@ -15,10 +19,10 @@ enum Http2FrameType {
 
     private final byte b;
     private final boolean hasFieldBlock;
-    private final Boolean hasStream;
+    private final @Nullable Boolean hasStream;
     private final int fixedSize;
 
-    Http2FrameType(byte b, boolean hasFieldBlock, Boolean hasStream, int fixedSize) {
+    Http2FrameType(byte b, boolean hasFieldBlock, @Nullable Boolean hasStream, int fixedSize) {
         this.b = b;
         this.hasFieldBlock = hasFieldBlock;
         this.hasStream = hasStream;
@@ -37,7 +41,7 @@ enum Http2FrameType {
         return hasFieldBlock;
     }
 
-    public Boolean hasStream() {
+    public @Nullable Boolean hasStream() {
         return hasStream;
     }
 

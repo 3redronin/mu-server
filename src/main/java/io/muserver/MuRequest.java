@@ -1,6 +1,8 @@
 package io.muserver;
 
 import kotlin.NotImplementedError;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -19,6 +21,7 @@ import java.util.Optional;
  * <p>Getting the value of a cookie by name is done by calling {@link #cookie(String)}</p>
  * <p>If you need to share request-specific data between handlers, use {@link #attribute(String, Object)} to set and {@link #attribute(String)} to get.</p>
  */
+@NullMarked
 public interface MuRequest {
 
     /**
@@ -30,6 +33,7 @@ public interface MuRequest {
      * or <code>null</code> if there is no body.
      * @see Headers#contentType()
      */
+    @Nullable
     String contentType();
 
     /**
@@ -77,7 +81,7 @@ public interface MuRequest {
 
     /**
      * <p>The input stream of the request body.</p>
-     * <p>If there is </p>
+     * <p>If there is no body then an empty input stream is returned.</p>
      * @return the input stream of the request body
      */
     default InputStream body() {
@@ -132,7 +136,7 @@ public interface MuRequest {
      * @throws IOException Thrown when there is an error while reading the file, e.g. if a user closes their
      *                     browser before the upload is complete.
      */
-    default UploadedFile uploadedFile(String name) throws IOException {
+    default @Nullable UploadedFile uploadedFile(String name) throws IOException {
         if (name == null) throw new NullPointerException("name");
         return form().uploadedFile(name);
     }
@@ -172,7 +176,7 @@ public interface MuRequest {
      * will return the value of the context pre-pended with a '<code>/</code>'.</p>
      * <p>For example,
      * if this handler was added to <code>ContextHandlerBuilder.context(&quot;some context&quot;)</code>
-     * this this method will return <code>/some%20context</code></p>
+     * this method will return <code>/some%20context</code></p>
      *
      * @return The context of the current handler or '<code>/</code>' if there is no context.
      * @see #relativePath()
@@ -198,7 +202,7 @@ public interface MuRequest {
      * @param key The key the object is associated with.
      * @return An object previously set by {@link #attribute(String, Object)}, or <code>null</code> if it was never set.
      */
-    Object attribute(String key);
+    @Nullable Object attribute(String key);
 
     /**
      * <p>Sets the given object as state associated with the given key that is bound to this request which any subsequent handlers can access.</p>
@@ -207,7 +211,7 @@ public interface MuRequest {
      * @param key The key to associate the value with.
      * @param value Any object to store as state.
      */
-    void attribute(String key, Object value);
+    void attribute(String key, @Nullable Object value);
 
     /**
      * <p>Returns the map containing all the attributes.</p>

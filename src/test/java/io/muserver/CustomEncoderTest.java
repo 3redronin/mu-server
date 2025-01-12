@@ -4,6 +4,7 @@ import com.github.luben.zstd.ZstdInputStream;
 import com.github.luben.zstd.ZstdOutputStream;
 import io.muserver.handlers.ResourceType;
 import okhttp3.Response;
+import org.jspecify.annotations.NullMarked;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import scaffolding.MuAssert;
@@ -27,6 +28,7 @@ public class CustomEncoderTest {
     private static final String LOTS_OF_TEXT = StringUtils.randomAsciiStringOfLength(20000);
     private MuServer server;
 
+    @NullMarked
     private static class ZstdEncoder implements ContentEncoder {
 
         @Override

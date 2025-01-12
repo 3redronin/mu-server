@@ -1,24 +1,34 @@
 package io.muserver;
 
 
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
+
 import java.util.Objects;
 
 /**
  * A cookie that is sent from the server to the client.
  * <p>To create cookies, you can create a builder by calling {@link #builder()}.</p>
  */
+@NullMarked
 public class Cookie {
 
     private final String name;
+
+    @Nullable
     private final String value;
+    @Nullable
     private final String domain;
+    @Nullable
     private final String path;
+    @Nullable
     private final Long maxAge;
+    @Nullable
     private final SameSite sameSite;
     private final boolean isSecure;
     private final boolean isHttpOnly;
 
-    Cookie(String name, String value, String domain, String path, Long maxAge, SameSite sameSite, boolean isSecure, boolean isHttpOnly) {
+    Cookie(String name, @Nullable String value, @Nullable String domain, @Nullable String path, @Nullable Long maxAge, @Nullable SameSite sameSite, boolean isSecure, boolean isHttpOnly) {
         this.name = name;
         this.value = value;
         this.domain = domain;
@@ -28,7 +38,6 @@ public class Cookie {
         this.isSecure = isSecure;
         this.isHttpOnly = isHttpOnly;
     }
-
 
     /**
      * @return The cookie name
@@ -40,35 +49,35 @@ public class Cookie {
     /**
      * @return The cookie value
      */
-    public String value() {
+    public @Nullable String value() {
         return value;
     }
 
     /**
      * @return The domain this cookie is valid for
      */
-    public String domain() {
+    public @Nullable String domain() {
         return domain;
     }
 
     /**
      * @return The path this cookie applies to
      */
-    public String path() {
+    public @Nullable String path() {
         return path;
     }
 
     /**
      * @return The max age in seconds of this cookie
      */
-    public Long maxAge() {
+    public @Nullable Long maxAge() {
         return maxAge;
     }
 
     /**
      * @return The SameSite value of the cookie, for example "Strict", "Lax", or "None"
      */
-    public SameSite sameSite() {
+    public @Nullable SameSite sameSite() {
         return sameSite;
     }
 
@@ -124,6 +133,7 @@ public class Cookie {
     /**
      * A value of a <code>SameSite</code> cookie attribute.
      */
+    @NullMarked
     public enum SameSite {
 
         /**

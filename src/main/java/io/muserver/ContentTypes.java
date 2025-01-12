@@ -1,8 +1,11 @@
 package io.muserver;
 
+import org.jspecify.annotations.NullMarked;
+
 /**
  * String constants for content-types
  */
+@NullMarked
 public class ContentTypes {
 
     /**
