@@ -31,6 +31,6 @@ jobs:
               "configuration": {}
             }]
       - name: Verify package
-        run: mvn --batch-mode verify
+        run: mvn -Dstyle.color=always --batch-mode verify
       - name: Release package
-        run: mvn --batch-mode -DskipTests=true releaser:release
+        run: mvn -Dstyle.color=always --batch-mode -DskipTests=true releaser:release
