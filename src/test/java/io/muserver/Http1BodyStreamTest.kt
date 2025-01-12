@@ -75,7 +75,7 @@ class Http1BodyStreamTest {
         val parser = HardCodedMessageReader(LinkedList(listOf(message1, message2, message3, message4)))
         val bodyState = Http1BodyStream(parser, Long.MAX_VALUE).use { stream ->
             stream.read()
-            stream.discardRemaining()
+            stream.discardRemaining(false)
         }
         assertThat(parser.readNext(), sameInstance(message4))
         assertThat(bodyState, equalTo(Http1BodyStream.State.EOF))
@@ -90,7 +90,7 @@ class Http1BodyStreamTest {
         val parser = HardCodedMessageReader(LinkedList(listOf(message1, message2, message3, message4)))
         Http1BodyStream(parser, Long.MAX_VALUE).use { stream ->
             stream.read()
-            assertThat(stream.discardRemaining(), equalTo(Http1BodyStream.State.EOF))
+            assertThat(stream.discardRemaining(false), equalTo(Http1BodyStream.State.EOF))
         }
         assertThat(parser.readNext(), sameInstance(message4))
     }
@@ -104,7 +104,7 @@ class Http1BodyStreamTest {
         val parser = HardCodedMessageReader(LinkedList(listOf(message1, message2, message3, message4)))
         Http1BodyStream(parser, Long.MAX_VALUE).use { stream ->
             stream.read()
-            assertThat(stream.discardRemaining(), equalTo(Http1BodyStream.State.EOF))
+            assertThat(stream.discardRemaining(false), equalTo(Http1BodyStream.State.EOF))
         }
         assertThat(parser.readNext(), sameInstance(message4))
     }

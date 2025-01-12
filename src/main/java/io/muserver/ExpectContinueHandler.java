@@ -16,23 +16,29 @@ class ExpectContinueHandler implements MuHandler {
     @Override
     public boolean handle(MuRequest request, MuResponse response) throws Exception {
         Headers h = request.headers();
-        if (h.containsValue(HeaderNames.EXPECT, HeaderValues.CONTINUE, true)) {
-            throwIfDeclaredSizeTooLarge(request);
-            response.sendInformationalResponse(HttpStatus.CONTINUE_100, null);
+        if (h.contains(HeaderNames.EXPECT) && request.httpVersion() != HttpVersion.HTTP_1_0) {
+            if (h.containsValue(HeaderNames.EXPECT, HeaderValues.CONTINUE, true)) {
+                throwIfDeclaredSizeTooLarge(request, false);
+                response.sendInformationalResponse(HttpStatus.CONTINUE_100, null);
+            } else {
+                throw new HttpException(HttpStatus.EXPECTATION_FAILED_417, "Unknown expectation");
+            }
         } else {
-            throwIfDeclaredSizeTooLarge(request);
+            throwIfDeclaredSizeTooLarge(request, true);
         }
         return false;
     }
 
-    private void throwIfDeclaredSizeTooLarge(MuRequest request) throws IOException {
+    private void throwIfDeclaredSizeTooLarge(MuRequest request, boolean consumeBody) throws IOException {
         var declaredSize = request.declaredBodySize().size();
         if (declaredSize != null && declaredSize > maxRequestBodySize) {
             // one has to consume the body for it to be a valid HTTP response
-            try (var body = request.body()) {
-                var buf = new byte[8192];
-                while (body.read(buf) != -1) {
-                    // ignore it
+            if (consumeBody) {
+                try (var body = request.body()) {
+                    var buf = new byte[8192];
+                    while (body.read(buf) != -1) {
+                        // ignore it
+                    }
                 }
             }
 

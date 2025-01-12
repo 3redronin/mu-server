@@ -1,7 +1,7 @@
 package io.muserver;
 
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -10,10 +10,11 @@ import java.nio.ByteBuffer;
 import java.text.ParseException;
 import java.util.concurrent.atomic.AtomicReference;
 
+@NullMarked
 class Http1BodyStream extends InputStream {
 
     enum State {
-        READING, EOF, IO_EXCEPTION, TOO_BIG, TIMED_OUT
+        READING, EOF, IO_EXCEPTION, TIMED_OUT
     }
 
     private final Http1MessageReader parser;
@@ -26,9 +27,13 @@ class Http1BodyStream extends InputStream {
 
     private final AtomicReference<State> status = new AtomicReference<>(State.READING);
 
-    Http1BodyStream(@NotNull Http1MessageReader parser, long maxBodySize) {
+    Http1BodyStream(Http1MessageReader parser, long maxBodySize) {
         this.parser = parser;
         this.maxBodySize = maxBodySize;
+    }
+
+    boolean tooBig() {
+        return bytesReceived > maxBodySize;
     }
 
     long bytesReceived() {
@@ -48,6 +53,7 @@ class Http1BodyStream extends InputStream {
     }
 
     private int stateOrThrow() throws IOException {
+        if (tooBig()) throw new HttpException(HttpStatus.CONTENT_TOO_LARGE_413);
         switch (status.get()) {
             case READING:
                 return 0;
@@ -55,8 +61,6 @@ class Http1BodyStream extends InputStream {
                 return -1;
             case IO_EXCEPTION:
                 throw new IOException("Read on a broken stream");
-            case TOO_BIG:
-                throw new HttpException(HttpStatus.CONTENT_TOO_LARGE_413);
             case TIMED_OUT:
                 throw HttpException.requestTimeout();
         }
@@ -115,9 +119,6 @@ class Http1BodyStream extends InputStream {
                             } else if (mbb.getLength() > 0) {
                                 bb = ByteBuffer.wrap(mbb.getBytes(), mbb.getOffset(), mbb.getLength());
                                 bytesReceived += mbb.getLength();
-                                if (bytesReceived > maxBodySize) {
-                                    status.set(State.TOO_BIG);
-                                }
                                 ready = true;
                             }
                         } else if (next instanceof EndOfBodyBit) {
@@ -165,8 +166,8 @@ class Http1BodyStream extends InputStream {
      * Discards any remaining bits of this stream and closes the stream.
      * <p>This can be called multiple times</p>
      */
-    State discardRemaining() {
-        if (status.compareAndSet(State.READING, State.EOF) || status.compareAndSet(State.TOO_BIG, State.EOF)) {
+    State discardRemaining(boolean throwIfTooBig) {
+        if (status.compareAndSet(State.READING, State.EOF)) {
             var drained = lastBitReceived;
             while (!drained) {
                 Http1ConnectionMsg last;
@@ -180,14 +181,8 @@ class Http1BodyStream extends InputStream {
                     var mbb = (MessageBodyBit) last;
                     drained = mbb.isLast();
                     bytesReceived += mbb.getLength();
-                    if (bytesReceived > maxBodySize) {
-                        if (status.get() != State.TOO_BIG) {
-                            status.set(State.TOO_BIG);
-                            // At this point, it is too late to send a 408 probably as the response has ended.
-                            // So we stop draining the request body, causing the client to realise something
-                            // went wrong when we close the connection.
-                            return State.TOO_BIG;
-                        }
+                    if (throwIfTooBig && tooBig()) {
+                        throw new HttpException(HttpStatus.CONTENT_TOO_LARGE_413);
                     }
                 } else if (last instanceof EndOfBodyBit) {
                     drained = true;

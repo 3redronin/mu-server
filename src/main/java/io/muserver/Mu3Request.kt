@@ -175,11 +175,22 @@ internal class Mu3Request(
         return httpVersion.version() + " " + method + " " + serverUri
     }
 
+    /**
+     * Makes sure the body is fully read and cleans up resources (such as form data)
+     *
+     * @return `true` if the cleanup was successful; `false` if it wasn't (resulting in invalid request)
+     */
     fun cleanup(): Boolean {
         try {
             if (body is Http1BodyStream) {
-                val bodyState = body.discardRemaining()
-                return bodyState == Http1BodyStream.State.EOF
+                val throwIfTooBig = response.status() != HttpStatus.CONTENT_TOO_LARGE_413
+                // If we know it's too big, that means we want to tell the client so, in which case we need to
+                // consume all the body, so don't throw when read amount is too large.
+                // However if we didn't realise the request body is too large, and are doing something like returning
+                // a 200, we want to close the connection to the client before reading all the data which causes
+                // the client to detect an error.
+                val bodyState = body.discardRemaining(throwIfTooBig)
+                return bodyState == Http1BodyStream.State.EOF && !body.tooBig()
             } else {
                 return true
             }

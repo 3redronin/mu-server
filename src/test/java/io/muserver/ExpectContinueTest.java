@@ -20,12 +20,12 @@ import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 import static scaffolding.MuAssert.assertEventually;
 
+@Timeout(20)
 public class ExpectContinueTest {
 
     private MuServer server;
 
     @Test
-    @Timeout(value = 20, unit = TimeUnit.SECONDS)
     public void continueIsReturnedIfExpectIsSent() throws IOException {
         server = httpServer()
             .addHandler(Method.GET, "/", (request, response, pathParams) -> response.write(request.readBodyAsString()))
@@ -55,7 +55,6 @@ public class ExpectContinueTest {
     }
 
     @Test
-    @Timeout(value = 20, unit = TimeUnit.SECONDS)
     public void ifAutoHandlingIsOffThenItCanBeManual() throws IOException {
         server = httpServer()
             .withAutoHandleExpectContinue(false)
@@ -90,14 +89,12 @@ public class ExpectContinueTest {
 
 
     @Test
-    @Timeout(value = 20)
     public void a413IsReturnedIfExpectationFails() throws IOException {
         var received = new ArrayList<ResponseInfo>();
         server = httpServer()
             .withMaxRequestSize(1023)
             .addResponseCompleteListener(received::add)
             .start();
-
 
         try (RawClient rawClient = RawClient.create(server.uri())) {
             rawClient.sendStartLine("POST", "/")
@@ -107,21 +104,17 @@ public class ExpectContinueTest {
                 .endHeaders()
                 .flushRequest();
 
-
             assertEventually(rawClient::responseString, startsWith("HTTP/1.1 413 Content Too Large\r\n"));
 
             String toSend = StringUtils.randomAsciiStringOfLength(1024);
-            rawClient
-                .sendUTF8(toSend)
-                .flushRequest();
+            rawClient.sendUTF8(toSend).flushRequest();
         }
         assertEventually(received::size, equalTo(1));
-        assertThat(received.get(0).completedSuccessfully(), is(false));
+        assertThat(received.get(0).completedSuccessfully(), is(true));
         assertThat(received.get(0).response().status(), is(HttpStatus.CONTENT_TOO_LARGE_413));
     }
 
     @Test
-    @Timeout(value = 20, unit = TimeUnit.SECONDS)
     public void a413IsReturnedIfExpectationFailsAndSuccessIsFalseIfClientAborts() throws IOException {
         var received = new ArrayList<ResponseInfo>();
         server = httpServer()
