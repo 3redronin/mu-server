@@ -62,7 +62,7 @@ public class ResourceType {
      *
      * @param mimeType   The mime type
      * @param headers    The headers to respond with
-     * @param gzip       Whether or not to gzip when serving
+     * @param gzip       Whether to gzip when serving
      * @param extensions The file extensions for this resource
      */
     public ResourceType(CharSequence mimeType, Headers headers, boolean gzip, List<String> extensions) {

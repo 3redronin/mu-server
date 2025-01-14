@@ -1,5 +1,7 @@
 package io.muserver.handlers;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -18,7 +20,7 @@ class BytesRange {
             throw new IllegalArgumentException("The range " + from + " and " + to + " is invalid for length " + total);
         }
     }
-    static List<BytesRange> parse(long totalBytes, String value) {
+    static List<BytesRange> parse(long totalBytes, @Nullable String value) {
         if (value == null || value.trim().isEmpty() || !value.startsWith("bytes=")) {
             return emptyList();
         }

@@ -1,6 +1,7 @@
 package io.muserver.handlers;
 
 import io.muserver.*;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,9 +23,9 @@ interface ResourceProvider {
 
     boolean isDirectory();
 
-    Long fileSize();
+    @Nullable Long fileSize();
 
-    Date lastModified();
+    @Nullable Date lastModified();
 
     boolean skipIfPossible(long bytes);
 
@@ -153,11 +154,11 @@ class ClasspathCache implements ResourceProviderFactory {
             return false;
         }
 
-        public Long fileSize() {
+        public @Nullable Long fileSize() {
             return null;
         }
 
-        public Date lastModified() {
+        public @Nullable Date lastModified() {
             return null;
         }
 
@@ -178,10 +179,10 @@ class ClasspathCache implements ResourceProviderFactory {
 class AsyncFileProvider implements ResourceProvider, CompletionHandler<Integer, Object> {
     private static final Logger log = LoggerFactory.getLogger(AsyncFileProvider.class);
     private final Path localPath;
-    private AsynchronousFileChannel channel;
+    private @Nullable AsynchronousFileChannel channel;
     private long curPos = 0;
-    private ByteBuffer buf;
-    private AsyncHandle handle;
+    private @Nullable ByteBuffer buf;
+    private @Nullable AsyncHandle handle;
     private long maxLen;
     private long bytesSent = 0;
 
@@ -201,7 +202,7 @@ class AsyncFileProvider implements ResourceProvider, CompletionHandler<Integer, 
         return Files.isDirectory(localPath);
     }
 
-    public Long fileSize() {
+    public @Nullable Long fileSize() {
         try {
             long size = Files.size(localPath);
             if (size == 0L && isDirectory()) {
@@ -215,7 +216,7 @@ class AsyncFileProvider implements ResourceProvider, CompletionHandler<Integer, 
     }
 
     @Override
-    public Date lastModified() {
+    public @Nullable Date lastModified() {
         try {
             return new Date(Files.getLastModifiedTime(localPath).toMillis());
         } catch (IOException e) {
@@ -291,12 +292,12 @@ class AsyncFileProvider implements ResourceProvider, CompletionHandler<Integer, 
 class ClasspathResourceProvider implements ResourceProvider {
     private final boolean exists;
     private final boolean isDir;
-    private final Long fileSize;
-    private final Date lastModified;
+    private final @Nullable Long fileSize;
+    private final @Nullable Date lastModified;
     private final Path path;
-    private final InputStream inputStream;
+    private final @Nullable InputStream inputStream;
 
-    ClasspathResourceProvider(boolean exists, boolean isDir, Long fileSize, Date lastModified, Path path, InputStream inputStream) {
+    ClasspathResourceProvider(boolean exists, boolean isDir, @Nullable Long fileSize, @Nullable Date lastModified, Path path, @Nullable InputStream inputStream) {
         this.exists = exists;
         this.isDir = isDir;
         this.path = path;
@@ -325,17 +326,18 @@ class ClasspathResourceProvider implements ResourceProvider {
     }
 
     @Override
-    public Long fileSize() {
+    public @Nullable Long fileSize() {
         return fileSize;
     }
 
     @Override
-    public Date lastModified() {
+    public @Nullable Date lastModified() {
         return lastModified;
     }
 
     @Override
     public boolean skipIfPossible(long bytes) {
+        assert inputStream != null; // only null for directories where this isn't used
         if (bytes > 0) {
             long totalSkipped = 0;
             while (totalSkipped < bytes) {
@@ -366,7 +368,7 @@ class ClasspathResourceProvider implements ResourceProvider {
                     while (soFar < maxLen && (read = inputStream.read(buffer)) > -1) {
                         soFar += read;
                         if (soFar > maxLen) {
-                            read -= soFar - maxLen;
+                            read -= (soFar - maxLen);
                         }
                         if (read > 0) {
                             out.write(buffer, 0, read);

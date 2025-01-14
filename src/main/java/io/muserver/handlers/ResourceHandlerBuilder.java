@@ -2,9 +2,11 @@ package io.muserver.handlers;
 
 import io.muserver.MuHandlerBuilder;
 import io.muserver.rest.RestHandlerBuilder;
+import org.jspecify.annotations.Nullable;
 
 import java.io.File;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -24,13 +26,13 @@ import static io.muserver.handlers.ResourceType.DEFAULT_EXTENSION_MAPPINGS;
  */
 public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler> {
 
-    private DateTimeFormatter directoryListingDateFormatter;
+    private @Nullable DateTimeFormatter directoryListingDateFormatter;
     private Map<String, ResourceType> extensionToResourceType = DEFAULT_EXTENSION_MAPPINGS;
-    private String defaultFile = "index.html";
-    private ResourceProviderFactory resourceProviderFactory;
+    private @Nullable String defaultFile = "index.html";
+    private @Nullable ResourceProviderFactory resourceProviderFactory;
     private boolean directoryListingEnabled = false;
-    private String directoryListingCss = null;
-    private ResourceCustomizer resourceCustomizer = null;
+    private @Nullable String directoryListingCss = null;
+    private @Nullable ResourceCustomizer resourceCustomizer = null;
     private BareDirectoryRequestAction bareDirectoryRequestAction = BareDirectoryRequestAction.REDIRECT_WITH_TRAILING_SLASH;
 
     /**
@@ -49,7 +51,7 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
      * @param defaultFile The default file to use when a directory is requested, or <code>null</code> for no default.
      * @return This builder
      */
-    public ResourceHandlerBuilder withDefaultFile(String defaultFile) {
+    public ResourceHandlerBuilder withDefaultFile(@Nullable String defaultFile) {
         this.defaultFile = defaultFile;
         return this;
     }
@@ -77,7 +79,7 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
      * @param dateTimeFormatter A format object, or null to use the default
      * @return This builder
      */
-    public ResourceHandlerBuilder withDirectoryListingDateFormatter(DateTimeFormatter dateTimeFormatter) {
+    public ResourceHandlerBuilder withDirectoryListingDateFormatter(@Nullable DateTimeFormatter dateTimeFormatter) {
         this.directoryListingDateFormatter = dateTimeFormatter;
         return this;
     }
@@ -87,7 +89,7 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
      * @param css CSS styles to use, or null for the default
      * @return This builder
      */
-    public ResourceHandlerBuilder withDirectoryListingCSS(String css) {
+    public ResourceHandlerBuilder withDirectoryListingCSS(@Nullable String css) {
         this.directoryListingCss = css;
         return this;
     }
@@ -97,7 +99,7 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
      * @param resourceCustomizer A class to intercept responses
      * @return This builder
      */
-    public ResourceHandlerBuilder withResourceCustomizer(ResourceCustomizer resourceCustomizer) {
+    public ResourceHandlerBuilder withResourceCustomizer(@Nullable ResourceCustomizer resourceCustomizer) {
         this.resourceCustomizer = resourceCustomizer;
         return this;
     }
@@ -105,7 +107,7 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
     /**
      * @return The current value of this property
      */
-    public DateTimeFormatter directoryListingDateFormatter() {
+    public @Nullable DateTimeFormatter directoryListingDateFormatter() {
         return directoryListingDateFormatter;
     }
 
@@ -119,7 +121,7 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
     /**
      * @return The current value of this property
      */
-    public String defaultFile() {
+    public @Nullable String defaultFile() {
         return defaultFile;
     }
 
@@ -133,14 +135,14 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
     /**
      * @return The current value of this property
      */
-    public String directoryListingCss() {
+    public @Nullable String directoryListingCss() {
         return directoryListingCss;
     }
 
     /**
      * @return The current value of this property
      */
-    public ResourceCustomizer resourceCustomizer() {
+    public @Nullable ResourceCustomizer resourceCustomizer() {
         return resourceCustomizer;
     }
 
@@ -180,7 +182,8 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
         String css = this.directoryListingCss;
         if (directoryListingEnabled && css == null) {
             InputStream cssStream = RestHandlerBuilder.class.getResourceAsStream("/io/muserver/resources/api.css");
-            Scanner scanner = new Scanner(cssStream, "UTF-8").useDelimiter("\\A");
+            assert cssStream != null;
+            Scanner scanner = new Scanner(cssStream, StandardCharsets.UTF_8).useDelimiter("\\A");
             css = scanner.next();
             scanner.close();
         }
