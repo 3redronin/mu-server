@@ -1,6 +1,7 @@
 package io.muserver
 
 import io.muserver.Mu3Headers.Companion.headerBytes
+import io.muserver.ParseUtils.CRLF
 import java.io.OutputStream
 
 internal sealed interface HttpMessageTemp : Http1ConnectionMsg {

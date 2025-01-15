@@ -11,8 +11,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-import static io.muserver.Http1MessageParserKt.CR;
-import static io.muserver.Http1MessageParserKt.LF;
+import static io.muserver.ParseUtils.CR;
+import static io.muserver.ParseUtils.LF;
 
 class MultipartFormParser {
 

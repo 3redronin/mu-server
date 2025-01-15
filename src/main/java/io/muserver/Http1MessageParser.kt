@@ -1,28 +1,24 @@
 package io.muserver
 
+import io.muserver.ParseUtils.A
+import io.muserver.ParseUtils.A_LOWER
+import io.muserver.ParseUtils.COLON
+import io.muserver.ParseUtils.CR
+import io.muserver.ParseUtils.F
+import io.muserver.ParseUtils.F_LOWER
+import io.muserver.ParseUtils.HTAB
+import io.muserver.ParseUtils.LF
+import io.muserver.ParseUtils.NINE
+import io.muserver.ParseUtils.SEMICOLON
+import io.muserver.ParseUtils.SP
+import io.muserver.ParseUtils.Z
+import io.muserver.ParseUtils.ZERO
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.nio.charset.StandardCharsets
 import java.text.ParseException
 import java.util.*
-import kotlin.Throws
-
-internal const val SP = 32.toByte()
-internal const val CR = 13.toByte()
-internal const val LF = 10.toByte()
-private const val HTAB = 9.toByte()
-private const val A = 65.toByte()
-private const val A_LOWER = 97.toByte()
-private const val F = 70.toByte()
-private const val F_LOWER = 102.toByte()
-private const val Z = 90.toByte()
-internal const val COLON = 58.toByte()
-private const val SEMICOLON = 59.toByte()
-internal val COLON_SP = byteArrayOf(COLON, SP)
-internal val CRLF = byteArrayOf(CR, LF)
-private const val ZERO = 48.toByte()
-private const val NINE = 57.toByte()
 
 internal interface Http1MessageReader {
     @Throws(IOException::class, ParseException::class)
