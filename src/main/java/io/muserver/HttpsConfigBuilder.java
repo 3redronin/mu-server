@@ -341,8 +341,11 @@ public class HttpsConfigBuilder {
                 ks.load(keystoreStream, keystorePassword);
                 if (defaultAliasToUse == null) {
                     Enumeration<String> aliases = ks.aliases();
-                    if (aliases.hasMoreElements()) {
-                        defaultAliasToUse = aliases.nextElement();
+                    while (aliases.hasMoreElements() && defaultAliasToUse == null) {
+                        String al = aliases.nextElement();
+                        if (ks.isKeyEntry(al)) {
+                            defaultAliasToUse = al;
+                        }
                     }
                 }
                 kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
