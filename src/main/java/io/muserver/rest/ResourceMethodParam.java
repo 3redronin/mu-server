@@ -356,6 +356,8 @@ abstract class ResourceMethodParam {
                 return converter instanceof HasDefaultValue
                     ? ((HasDefaultValue) converter).getDefault()
                     : null;
+            } catch (WebApplicationException e) {
+                throw e;
             } catch (Exception e) {
                 throw new BadRequestException("Could not convert String value \"" + value + "\" to a " + parameterHandle.getType() + " using " + converter + " on parameter " + parameterHandle, e);
             }
