@@ -691,6 +691,36 @@ public class ResourceMethodParamTest {
     }
 
     @Test
+    public void paramConverterWebExceptionsGetReturnedToClient() throws IOException {
+        class Tail {
+        }
+        @Path("tails")
+        class Dogs {
+            @GET
+            @Path("{tail}")
+            public String getIt(@PathParam("tail") Tail tail) {
+                return "not called";
+            }
+        }
+        ParamConverter<Tail> converter = new ParamConverter<Tail>() {
+            public Tail fromString(String value) {
+                throw new ClientErrorException("A message huh", 402);
+            }
+            public String toString(Tail value) {
+                return "A tail";
+            }
+        };
+
+        server = httpsServerForTest()
+            .addHandler(restHandler(new Dogs()).addCustomParamConverter(Tail.class, converter)).start();
+        try (Response resp = call(request().url(server.uri().resolve("/tails/30-true").toString()))) {
+            assertThat(resp.code(), equalTo(402));
+            assertThat(resp.body().string(), containsString("A message huh"));
+        }
+    }
+
+
+    @Test
     public void instantParamsAreAllowed() throws IOException {
         @Path("/time")
         class TimeResource {
