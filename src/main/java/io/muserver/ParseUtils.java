@@ -1,5 +1,8 @@
 package io.muserver;
 
+import java.io.IOException;
+import java.text.ParseException;
+
 class ParseUtils {
 
     static final byte SP = 32;
@@ -56,4 +59,43 @@ class ParseUtils {
         }
         return needsQuoting ? '"' + value.replace("\"", "\\\"") + '"' : value;
     }
+}
+
+enum HttpMessageType { REQUEST, RESPONSE }
+
+interface Http1ConnectionMsg {}
+
+class MessageBodyBit implements Http1ConnectionMsg {
+    static final MessageBodyBit EndOfBodyBit = new MessageBodyBit(new byte[0], 0, 0, true);
+    static final MessageBodyBit EOFMsg = new MessageBodyBit(new byte[0], 0, 0, false);
+    private final byte[] bytes;
+    private final int offset;
+    private final int length;
+    private final boolean isLast;
+    MessageBodyBit(byte[] bytes, int offset, int length, boolean isLast) {
+        this.bytes = bytes;
+        this.offset = offset;
+        this.length = length;
+        this.isLast = isLast;
+    }
+
+    public byte[] bytes() {
+        return bytes;
+    }
+
+    public int offset() {
+        return offset;
+    }
+
+    public int length() {
+        return length;
+    }
+
+    public boolean isLast() {
+        return isLast;
+    }
+}
+
+interface Http1MessageReader {
+    Http1ConnectionMsg readNext() throws IOException, ParseException;
 }

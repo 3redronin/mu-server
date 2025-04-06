@@ -105,24 +105,24 @@ class Http1BodyStream extends InputStream {
                             status.set(State.IO_EXCEPTION);
                             throw (pe instanceof IOException) ? (IOException) pe : new IOException("Parse error in request body", pe);
                         }
-                        if (next instanceof MessageBodyBit) {
+                        if (next == MessageBodyBit.EndOfBodyBit) {
+                            bb = null;
+                            status.set(State.EOF);
+                            ready = true;
+                        } else if (next instanceof MessageBodyBit) {
                             var mbb = (MessageBodyBit) next;
                             // we have more body data
                             lastBitReceived = mbb.isLast();
                             // this is an empty last-data message, so it is EOF time
-                            if (mbb.isLast() && mbb.getLength() == 0) {
+                            if (mbb.isLast() && mbb.length() == 0) {
                                 status.set(State.EOF);
                                 bb = null;
                                 ready = true;
-                            } else if (mbb.getLength() > 0) {
-                                bb = ByteBuffer.wrap(mbb.getBytes(), mbb.getOffset(), mbb.getLength());
-                                bytesReceived += mbb.getLength();
+                            } else if (mbb.length() > 0) {
+                                bb = ByteBuffer.wrap(mbb.bytes(), mbb.offset(), mbb.length());
+                                bytesReceived += mbb.length();
                                 ready = true;
                             }
-                        } else if (next instanceof EndOfBodyBit) {
-                            bb = null;
-                            status.set(State.EOF);
-                            ready = true;
                         } else {
                             status.set(State.IO_EXCEPTION);
                             throw new IOException("Unexpected message: " + next.getClass().getName());
@@ -175,15 +175,15 @@ class Http1BodyStream extends InputStream {
                     status.set(State.IO_EXCEPTION);
                     break;
                 }
-                if (last instanceof MessageBodyBit) {
+                if (last == MessageBodyBit.EndOfBodyBit) {
+                    drained = true;
+                } else if (last instanceof MessageBodyBit) {
                     var mbb = (MessageBodyBit) last;
                     drained = mbb.isLast();
-                    bytesReceived += mbb.getLength();
+                    bytesReceived += mbb.length();
                     if (throwIfTooBig && tooBig()) {
                         throw new HttpException(HttpStatus.CONTENT_TOO_LARGE_413);
                     }
-                } else if (last instanceof EndOfBodyBit) {
-                    drained = true;
                 } else {
                     status.set(State.IO_EXCEPTION);
                     break;

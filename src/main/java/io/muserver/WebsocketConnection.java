@@ -25,7 +25,7 @@ class WebsocketConnection implements MuWebSocketSession {
     final WebSocketHandlerBuilder.Settings settings;
 
     private WebsocketSessionState state = WebsocketSessionState.NOT_STARTED;
-    private final Mu3Http1Connection httpConnection;
+    private final BaseHttpConnection httpConnection;
     private final MuWebSocket webSocket;
     private boolean closeReceived = false;
     private boolean closeSent = false;
@@ -41,7 +41,7 @@ class WebsocketConnection implements MuWebSocketSession {
         UNKNOWN
     }
 
-    WebsocketConnection(Mu3Http1Connection httpConnection, MuWebSocket webSocket, WebSocketHandlerBuilder.Settings settings) {
+    WebsocketConnection(Http1Connection httpConnection, MuWebSocket webSocket, WebSocketHandlerBuilder.Settings settings) {
         this.httpConnection = httpConnection;
         this.webSocket = webSocket;
         this.settings = settings;

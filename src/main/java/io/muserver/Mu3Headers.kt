@@ -181,7 +181,7 @@ internal class Mu3Headers(
         return headers.any { h -> name.contentEquals(h.first, true) && value.contentEquals(h.second, ignoreCase) }
     }
     fun contentLength(): Long? = get("content-length")?.toLongOrNull()
-    internal fun hasChunkedBody() = containsValue("transfer-encoding", "chunked", false)
+    fun hasChunkedBody() = containsValue("transfer-encoding", "chunked", false)
 
     override fun hasBody(): Boolean {
         val cl = contentLength()
@@ -225,7 +225,7 @@ internal class Mu3Headers(
         return MediaType.valueOf(mt)
     }
 
-    internal fun writeTo(out: OutputStream) {
+    fun writeTo(out: OutputStream) {
         for (header in headers) {
             out.write(header.first.headerBytes())
             out.write(COLON_SP)

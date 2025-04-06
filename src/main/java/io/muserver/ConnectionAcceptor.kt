@@ -154,7 +154,7 @@ internal class ConnectionAcceptor(
 
             val con: BaseHttpConnection = if (httpVersion == HttpVersion.HTTP_2)
                 Http2Connection(server, this, socket, clientCert, startTime, http2Config!!.initialSettings(), executorService)
-            else Mu3Http1Connection(server, this, socket, startTime, clientCert)
+            else Http1Connection(server, this, socket, clientCert, startTime)
 
 
             connections.add(con)

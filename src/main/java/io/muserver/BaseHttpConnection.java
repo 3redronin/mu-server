@@ -193,7 +193,7 @@ abstract class BaseHttpConnection implements HttpConnection {
         return httpVersion().version() + " connection from " + remoteAddress + " to " + localAddress;
     }
 
-    public abstract void abortWithTimeout();
+    public abstract void abortWithTimeout() throws IOException;
     
     abstract void initiateGracefulShutdown() throws IOException;
     abstract boolean isShutdown();

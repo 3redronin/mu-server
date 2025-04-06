@@ -4,7 +4,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public class FixedSizeOutputStream extends OutputStream {
+class FixedSizeOutputStream extends OutputStream {
     private final long declaredLen;
     private final OutputStream out;
     private final AtomicBoolean isClosed = new AtomicBoolean(false);

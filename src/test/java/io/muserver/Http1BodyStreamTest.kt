@@ -1,5 +1,6 @@
 package io.muserver
 
+import io.muserver.MessageBodyBit.EOFMsg
 import org.hamcrest.MatcherAssert.assertThat
 import org.hamcrest.Matchers.equalTo
 import org.hamcrest.Matchers.sameInstance
@@ -13,7 +14,7 @@ class Http1BodyStreamTest {
     @Test
     fun `messages are converted to byte reads`() {
         val message = "Hello, world".toByteArray(StandardCharsets.UTF_8)
-        streamOf(MessageBodyBit(message, 0, message.size, false), EndOfBodyBit).use { stream ->
+        streamOf(MessageBodyBit(message, 0, message.size, false), MessageBodyBit.EndOfBodyBit).use { stream ->
             val myBuffer = ByteArray(message.size + 10)
             val read = stream.read(myBuffer, 5, message.size + 5)
             assertThat(read, equalTo(message.size))
@@ -25,7 +26,7 @@ class Http1BodyStreamTest {
     @Test
     fun `if the buffer length is too small then multiple reads occur`() {
         val message = "Hello, world".toByteArray(StandardCharsets.UTF_8)
-        streamOf(MessageBodyBit(message, 0, message.size, false), EndOfBodyBit).use { stream ->
+        streamOf(MessageBodyBit(message, 0, message.size, false), MessageBodyBit.EndOfBodyBit).use { stream ->
             val myBuffer = ByteArray(7)
             assertThat(stream.read(myBuffer), equalTo(7))
             assertThat(String(myBuffer, 0, 7), equalTo("Hello, "))
@@ -42,7 +43,7 @@ class Http1BodyStreamTest {
     fun `messages can be read a byte at a time with separate end of body message`() {
         val message1 = "Hi ".toByteArray(StandardCharsets.UTF_8).toBodyMessage(false)
         val message2 = "world".toByteArray(StandardCharsets.UTF_8).toBodyMessage(false)
-        streamOf(message1, message2, EndOfBodyBit).use { stream ->
+        streamOf(message1, message2, MessageBodyBit.EndOfBodyBit).use { stream ->
             assertThat(readStringByteByByte(stream), equalTo("Hi world"))
         }
     }
@@ -99,7 +100,7 @@ class Http1BodyStreamTest {
     fun `closing consumes and discards any remaining body bits with EOF message`() {
         val message1 = "Hi ".toByteArray(StandardCharsets.UTF_8).toBodyMessage(false)
         val message2 = "world".toByteArray(StandardCharsets.UTF_8).toBodyMessage(false)
-        val message3 = EndOfBodyBit
+        val message3 = MessageBodyBit.EndOfBodyBit
         val message4 = "campire".toByteArray(StandardCharsets.UTF_8).toBodyMessage(false)
         val parser = HardCodedMessageReader(LinkedList(listOf(message1, message2, message3, message4)))
         Http1BodyStream(parser, Long.MAX_VALUE).use { stream ->

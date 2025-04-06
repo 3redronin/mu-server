@@ -1,6 +1,7 @@
 package io.muserver
 
-import io.muserver.Http1MessageParser.Companion.isTChar
+import io.muserver.Http1MessageParser.isTChar
+import io.muserver.MessageBodyBit.EndOfBodyBit
 import org.hamcrest.MatcherAssert.assertThat
 import org.hamcrest.Matchers.*
 import org.junit.jupiter.api.Test
@@ -20,28 +21,28 @@ class Http1MessageParserTest {
     fun tcharsAreValid() {
         val chars = arrayOf('!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~', '0', '9', 'a', 'z', 'A', 'Z')
         for (char in chars) {
-            assertThat(char.code.toByte().isTChar(), equalTo(true))
+            assertThat(isTChar(char.code.toByte()), equalTo(true))
         }
         for (c in '0'..'9') {
-            assertThat(c.code.toByte().isTChar(), equalTo(true))
+            assertThat(isTChar(c.code.toByte()), equalTo(true))
         }
 
         for (c in 'a'..'z') {
-            assertThat(c.code.toByte().isTChar(), equalTo(true))
+            assertThat(isTChar(c.code.toByte()), equalTo(true))
         }
         for (c in 'A'..'Z') {
-            assertThat(c.code.toByte().isTChar(), equalTo(true))
+            assertThat(isTChar(c.code.toByte()), equalTo(true))
         }
         for (i in 0..32) {
-            assertThat(i.toByte().isTChar(), equalTo(false))
+            assertThat(isTChar(i.toByte()), equalTo(false))
         }
         val nots = arrayOf(34, 40, 41, 44, 47, 58, 59, 60, 61, 62, 63, 64, 91, 92, 93, 123, 125)
         for (not in nots) {
-            assertThat(34.toByte().isTChar(), equalTo(false))
+            assertThat(isTChar(not.toByte()), equalTo(false))
         }
 
         for (i in 127..256) {
-            assertThat(i.toByte().isTChar(), equalTo(false))
+            assertThat(isTChar(i.toByte()), equalTo(false))
         }
     }
 
@@ -95,13 +96,13 @@ class Http1MessageParserTest {
         assertThat(request.url, equalTo("/blah"))
         assertThat(request.httpVersion, equalTo(HttpVersion.HTTP_1_1))
         val body = parser.readNext() as MessageBodyBit
-        var bodyContent = String(body.bytes, body.offset, body.length)
+        var bodyContent = String(body.bytes(), body.offset(), body.length())
         assertThat(body.isLast, equalTo(false))
         val body2 = parser.readNext() as MessageBodyBit
-        bodyContent += String(body2.bytes, body2.offset, body2.length)
+        bodyContent += String(body2.bytes(), body2.offset(), body2.length())
         assertThat(bodyContent, equalTo(chunk))
         assertThat(body2.isLast, equalTo(false))
-        assertThat(parser.readNext(), instanceOf(EndOfBodyBit::class.java))
+        assertThat(parser.readNext(), equalTo(EndOfBodyBit))
     }
 
     @ParameterizedTest
@@ -132,7 +133,7 @@ class Http1MessageParserTest {
         val contentReceived = ByteArrayOutputStream()
         while (parser.readNext().also { bit = it } is MessageBodyBit) {
             val body = bit as MessageBodyBit
-            contentReceived.write(body.bytes, body.offset, body.length)
+            contentReceived.write(body.bytes(), body.offset(), body.length())
         }
         assertThat(contentReceived.toString(StandardCharsets.UTF_8), equalTo(chunk))
         assertThat(bit, instanceOf(EndOfBodyBit::class.java))
