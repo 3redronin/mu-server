@@ -12,7 +12,6 @@ import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.security.cert.Certificate;
-import java.text.ParseException;
 import java.time.Instant;
 import java.util.Queue;
 import java.util.Set;
@@ -80,7 +79,7 @@ class Http1Connection extends BaseHttpConnection {
                 assert method != null;
                 assert httpVersion != null;
                 assert bodySize != null;
-                InputStream requestBody = (bodySize == BodySize.NONE) ? EmptyInputStream.INSTANCE : new Http1BodyStream(requestParser, server.getMaxRequestBodySize());
+                InputStream requestBody = (bodySize == BodySize.NONE) ? EmptyInputStream.INSTANCE : new Http1BodyStream(requestParser, server.maxRequestBodySize());
                 var muRequest = new Mu3Request(this, method, requestUri, serverUri, httpVersion, request.headers(), bodySize, requestBody);
                 clientSocket.setSoTimeout(requestTimeout);
 
@@ -90,7 +89,7 @@ class Http1Connection extends BaseHttpConnection {
 
                 if (rejectException == null) {
                     RateLimitRejectionAction first = null;
-                    for (@NotNull RateLimiterImpl rateLimiter : server.getRateLimiters()) {
+                    for (@NotNull RateLimiterImpl rateLimiter : server.rateLimiters) {
                         var action = rateLimiter.record(muRequest);
                         if (action != null && first == null) {
                             first = action;

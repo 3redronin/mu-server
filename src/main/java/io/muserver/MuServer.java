@@ -175,7 +175,7 @@ public interface MuServer extends Closeable {
      * @deprecated Use {@link #httpsConfig()} instead
      */
     @Deprecated()
-    default SSLInfo sslInfo() {
+    default @Nullable SSLInfo sslInfo() {
         return httpsConfig();
     }
 
@@ -183,7 +183,7 @@ public interface MuServer extends Closeable {
      * Gets the SSL info of the server, or null if SSL is not enabled.
      * @return A description of the actual SSL settings used, or null.
      */
-    HttpsConfig httpsConfig();
+    @Nullable HttpsConfig httpsConfig();
     /**
      * @return The rate limiters added to the server with {@link MuServerBuilder#withRateLimiter(RateLimitSelector)}, in the order they are applied.
      */
@@ -193,4 +193,19 @@ public interface MuServer extends Closeable {
      * @return The directory used to store temp files such as files uploaded on forms
      */
     Path tempDir();
+
+    /**
+     * @return The handlers on this server
+     */
+    List<MuHandler> handlers();
+
+    /**
+     * @return The unhandled exception handler
+     */
+    UnhandledExceptionHandler exceptionHandler();
+
+    /**
+     * @return The max size in bytes for request bodies
+     */
+    long maxRequestBodySize();
 }

@@ -221,6 +221,7 @@ internal class ConnectionAcceptor(
 
     companion object {
         private val log : Logger = LoggerFactory.getLogger(ConnectionAcceptor::class.java)
+        @JvmStatic
         fun create(
             server: Mu3ServerImpl,
             address: InetAddress?,

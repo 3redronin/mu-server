@@ -62,7 +62,7 @@ abstract class BaseHttpConnection implements HttpConnection {
     protected void handleExchange(Mu3Request muRequest, BaseResponse muResponse) throws Throwable {
         try {
             var handled = false;
-            for (var handler : server.getHandlers()) {
+            for (var handler : server.handlers()) {
                 if (handler.handle(muRequest, muResponse)) {
                     handled = true;
                     break;
@@ -81,7 +81,7 @@ abstract class BaseHttpConnection implements HttpConnection {
                 // can't write a custom error at this point
                 throw e;
             } else {
-                server.getExceptionHandler().handle(muRequest, muResponse, e);
+                server.exceptionHandler().handle(muRequest, muResponse, e);
             }
         }
     }

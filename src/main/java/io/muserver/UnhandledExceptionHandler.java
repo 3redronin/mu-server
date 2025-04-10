@@ -43,7 +43,7 @@ public interface UnhandledExceptionHandler {
      * @param custom a custom handler
      * @return the default handler
      */
-    static UnhandledExceptionHandler getDefault(UnhandledExceptionHandler custom) {
+    static UnhandledExceptionHandler getDefault(@Nullable UnhandledExceptionHandler custom) {
         return new BuiltInExceptionHandler(custom);
     }
 }
@@ -51,9 +51,9 @@ public interface UnhandledExceptionHandler {
 class BuiltInExceptionHandler implements UnhandledExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(BuiltInExceptionHandler.class);
 
-    private final UnhandledExceptionHandler customHandler;
+    private final @Nullable UnhandledExceptionHandler customHandler;
 
-    BuiltInExceptionHandler(UnhandledExceptionHandler customHandler) {
+    BuiltInExceptionHandler(@Nullable UnhandledExceptionHandler customHandler) {
         this.customHandler = customHandler;
     }
 

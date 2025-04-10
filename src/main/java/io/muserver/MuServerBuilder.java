@@ -4,6 +4,7 @@ import io.muserver.handlers.ResourceType;
 import io.muserver.rest.MuRuntimeDelegate;
 import org.jspecify.annotations.Nullable;
 
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -596,7 +597,11 @@ public class MuServerBuilder {
         if (httpPort < 0 && httpsPort < 0) {
             throw new IllegalArgumentException("No ports were configured. Please call MuServerBuilder.withHttpPort(int) or MuServerBuilder.withHttpsPort(int)");
         }
-        return Mu3ServerImpl.start(this);
+        try {
+            return Mu3ServerImpl.start(this);
+        } catch (IOException e) {
+            throw new MuException("Error starting server", e);
+        }
     }
 
     @Override
