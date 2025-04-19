@@ -51,6 +51,9 @@ class Http1Connection extends BaseHttpConnection {
                     msg = requestParser.readNext();
                 } catch (SocketTimeoutException ste) {
                     throw HttpException.requestTimeout();
+                } catch (IOException e) {
+                    log.info("Error reading from client input stream " + e.getClass() + " " + e.getMessage());
+                    break;
                 }
                 if (msg == EOFMsg) {
                     log.info("EOF detected");
