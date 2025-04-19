@@ -44,7 +44,7 @@ class MultipartFormParser {
         try {
             discardPreamble();
 
-            Mu3Headers headers = readPartHeaders();
+            Headers headers = readPartHeaders();
             while (headers != null) {
 
                 String keyName = null;
@@ -208,7 +208,7 @@ class MultipartFormParser {
         }
     }
 
-    public @Nullable Mu3Headers readPartHeaders() throws IOException {
+    public @Nullable FieldBlock readPartHeaders() throws IOException {
         if (state != State.BOUNDARY_END) throw new IllegalStateException("state is " + state);
         while (bb.remaining() < 2) {
             readMore(true);
@@ -225,7 +225,7 @@ class MultipartFormParser {
             throw HttpException.badRequest("Invalid characters after boundary " + (int) next1 + " and " + (int) next2);
         }
 
-        var headers = new Mu3Headers();
+        var headers = new FieldBlock();
 
         while (state != State.BODY) {
 

@@ -3,7 +3,7 @@ package io.muserver.rest;
 import io.muserver.Cookie;
 import io.muserver.HeaderNames;
 import io.muserver.Headers;
-import io.muserver.Mu3Headers;
+import io.muserver.HeadersFactory;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.MultivaluedHashMap;
 import org.junit.jupiter.api.Test;
@@ -20,7 +20,7 @@ public class JaxRsHttpHeadersAdapterTest {
         MuRuntimeDelegate.ensureSet();
     }
 
-    private final Headers reqHeaders = new Mu3Headers();
+    private final Headers reqHeaders = Headers.create();
     private final List<Cookie> cookies = new ArrayList<>();
     private final JaxRsHttpHeadersAdapter httpHeaders = new JaxRsHttpHeadersAdapter(reqHeaders, cookies);
 

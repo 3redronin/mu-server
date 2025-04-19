@@ -2,12 +2,14 @@ package io.muserver;
 
 import org.jspecify.annotations.Nullable;
 
+import java.io.IOException;
+import java.io.OutputStream;
 import java.util.*;
 import java.util.stream.Collectors;
 
 class FieldBlock implements Headers, Iterable<Map.Entry<String, String>> {
 
-    private final List<FieldLine> lines = new LinkedList<>();
+    private final List<FieldLine> lines = new ArrayList<>();
 
     void add(FieldLine line) {
         lines.add(line);
@@ -245,7 +247,29 @@ class FieldBlock implements Headers, Iterable<Map.Entry<String, String>> {
         return Objects.hashCode(lines);
     }
 
-        private static class MapEntryStringIterator implements Iterator<Map.Entry<String, String>> {
+    static FieldBlock newWithDate() {
+        var headers = new FieldBlock();
+        headers.set(HeaderNames.DATE, Mutils.toHttpDate(new Date()));
+        return headers;
+    }
+
+    void writeAsHttp1(OutputStream out) throws IOException {
+        for (FieldLine line : lines) {
+            out.write(line.name().bytes);
+            out.write(ParseUtils.COLON_SP);
+            out.write(line.value().bytes);
+            out.write(ParseUtils.CRLF);
+        }
+    }
+
+    boolean hasChunkedBody() {
+        return containsValue("transfer-encoding", "chunked", false);
+    }
+
+
+
+
+    private static class MapEntryStringIterator implements Iterator<Map.Entry<String, String>> {
 
         private final Iterator<FieldLine> lineIterator;
 

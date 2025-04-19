@@ -15,7 +15,7 @@ interface HttpMessageTemp extends Http1ConnectionMsg {
     void setHttpVersion(HttpVersion httpVersion);
 
 
-    Mu3Headers headers();
+    FieldBlock headers();
 
     @Nullable
     BodySize getBodySize();
@@ -52,7 +52,7 @@ class HttpRequestTemp implements HttpMessageTemp {
     private String url = "";
     private @Nullable HttpVersion httpVersion;
     private @Nullable BodySize bodySize;
-    private final Mu3Headers headers = new Mu3Headers();
+    private final FieldBlock headers = new FieldBlock();
     private @Nullable HttpException rejectRequest = null;
 
     public @Nullable Method getMethod() {
@@ -104,7 +104,7 @@ class HttpRequestTemp implements HttpMessageTemp {
     }
 
     @Override
-    public Mu3Headers headers() {
+    public FieldBlock headers() {
         return headers;
     }
 
@@ -134,7 +134,7 @@ class HttpRequestTemp implements HttpMessageTemp {
         out.write(' ');
         out.write(httpVersion.headerBytes());
         out.write(CRLF);
-        headers.writeTo(out);
+        headers.writeAsHttp1(out);
         out.write(CRLF);
     }
 
@@ -151,7 +151,7 @@ class HttpResponseTemp implements HttpMessageTemp {
     private int statusCode;
     private String reason;
     private @Nullable BodySize bodySize;
-    private final Mu3Headers headers = new Mu3Headers();
+    private final FieldBlock headers = new FieldBlock();
 
     boolean isInformational() { return statusCode / 100 == 1; }
 
@@ -166,7 +166,7 @@ class HttpResponseTemp implements HttpMessageTemp {
     }
 
     @Override
-    public Mu3Headers headers() {
+    public FieldBlock headers() {
         return headers;
     }
 
@@ -214,7 +214,7 @@ class HttpResponseTemp implements HttpMessageTemp {
         out.write(' ');
         out.write(reason.getBytes(StandardCharsets.US_ASCII));
         out.write(CRLF);
-        headers.writeTo(out);
+        headers.writeAsHttp1(out);
         out.write(CRLF);
     }
 

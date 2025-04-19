@@ -16,7 +16,7 @@ import static java.util.Collections.emptyList;
 abstract class BaseResponse implements MuResponse {
 
     protected final Mu3Request request;
-    private final Headers headers;
+    final FieldBlock headers;
     @Nullable
     private volatile PrintWriter writer = null;
     @Nullable
@@ -27,7 +27,7 @@ abstract class BaseResponse implements MuResponse {
 
     private ResponseState state = ResponseState.NOTHING;
 
-    BaseResponse(Mu3Request request, Headers headers) {
+    BaseResponse(Mu3Request request, FieldBlock headers) {
         this.request = request;
         this.headers = headers;
     }

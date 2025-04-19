@@ -461,7 +461,7 @@ public class HeadersTest {
     @ParameterizedTest
     @ArgumentsSource(ServerTypeArgs.class)
     public void httpHeadersToStringDoesNotLogSensitiveHeaders(String protocol) {
-        Headers headers = new Mu3Headers();
+        Headers headers = Headers.create();
         headers.add("some-header", "value 1");
         headers.add("some-header", "value 2");
         headers.set(HeaderNames.AUTHORIZATION.toString().toUpperCase(), "shouldnotprint");

@@ -86,14 +86,14 @@ class MultipartFormParserTest {
                 "This is the epilogue.  It is also to be ignored.");
         var parser = new MultipartFormParser(tempDir(),"simple boundary", inputStream, 8192, StandardCharsets.UTF_8);
         parser.discardPreamble();
-        Mu3Headers part1Headers = parser.readPartHeaders();
+        Headers part1Headers = parser.readPartHeaders();
         assertThat(part1Headers, notNullValue());
         assertThat(part1Headers.size(), equalTo(0));
 
         var part1Body = parser.readString(StandardCharsets.US_ASCII);
         assertThat(part1Body, equalTo("This is implicitly typed plain US-ASCII text.\nIt does NOT end with a linebreak."));
 
-        Mu3Headers part2Headers = parser.readPartHeaders();
+        Headers part2Headers = parser.readPartHeaders();
         assertThat(part2Headers, notNullValue());
         assertThat(part2Headers.size(), equalTo(1));
         assertThat(part2Headers.contentType(), equalTo(MediaType.valueOf("text/plain; charset=us-ascii")));

@@ -6,7 +6,7 @@ import java.net.URI;
 
 public class HttpException extends RuntimeException {
     private final HttpStatus status;
-    private final Mu3Headers headers = Mu3Headers.newWithDate();
+    private final FieldBlock headers = FieldBlock.newWithDate();
 
     public HttpException(HttpStatus status) {
         super(status.code() == 404 ? "This page is not available. Sorry about that." : status.toString());

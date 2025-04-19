@@ -17,7 +17,7 @@ import static org.hamcrest.core.IsEqual.equalTo;
 
 public class Http1AndHttp2HeadersTest {
 
-    private final Headers[] impls = { new Mu3Headers() };
+    private final Headers[] impls = { new FieldBlock() };
 
     @Test
     public void caseIsInsensitive() {

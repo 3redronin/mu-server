@@ -3,6 +3,7 @@ package io.muserver;
 import org.jspecify.annotations.Nullable;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Date;
 import java.util.stream.IntStream;
 
 class HeaderString implements CharSequence {
@@ -31,7 +32,11 @@ class HeaderString implements CharSequence {
         if (value instanceof HeaderString) {
             return (HeaderString) value;
         }
-        CharSequence s = value instanceof CharSequence ? (CharSequence) value : value.toString();
+        CharSequence s = value instanceof CharSequence
+            ? (CharSequence) value
+            : value instanceof Date
+                ? Mutils.toHttpDate((Date)value)
+                : value.toString();
         if (s.length() == 0) {
             if (type == Type.HEADER) throw new IllegalArgumentException("Empty header names not allowed");
             return EMPTY_VALUE;

@@ -568,4 +568,11 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
      */
     String toString(@Nullable Collection<String> toSuppress);
 
+    /**
+     * Creates a new Headers object
+     * @return an empty Headers object
+     */
+    static Headers create() {
+        return new FieldBlock();
+    }
 }

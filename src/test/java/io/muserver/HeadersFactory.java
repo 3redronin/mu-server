@@ -4,13 +4,8 @@ import java.util.Map;
 
 public class HeadersFactory {
 
-    public static Headers create() {
-        return new Mu3Headers();
-    }
-
-
     public static Headers create(Map<String,Object> values) {
-        Mu3Headers headers = new Mu3Headers();
+        Headers headers = Headers.create();
         for (Map.Entry<String, Object> entry : values.entrySet()) {
             headers.add(entry.getKey(), entry.getValue());
         }

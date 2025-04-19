@@ -7,7 +7,7 @@ import java.util.*
 internal class Http1Response(
     muRequest: Mu3Request,
     private val socketOut: OutputStream,
-) : BaseResponse(muRequest, Mu3Headers()), MuResponse, ResponseInfo {
+) : BaseResponse(muRequest, FieldBlock()), MuResponse, ResponseInfo {
 
     var websocket: WebsocketConnection? = null
         private set
@@ -27,7 +27,7 @@ internal class Http1Response(
         if (!headers().contains(HeaderNames.DATE)) {
             headers().set("date", Mutils.toHttpDate(Date()))
         }
-        (headers() as Mu3Headers).writeTo(socketOut)
+        headers.writeAsHttp1(socketOut)
         socketOut.write(CRLF, 0, 2)
     }
 
@@ -36,7 +36,7 @@ internal class Http1Response(
         if (responseState() != ResponseState.NOTHING) throw IllegalStateException("Informational headers cannot be sent after the main response headers have been sent")
         socketOut.write(status.http11ResponseLine())
         if (headers != null) {
-            (headers as Mu3Headers).writeTo(socketOut)
+            (headers as FieldBlock).writeAsHttp1(socketOut)
         }
         socketOut.write(CRLF, 0, 2)
         socketOut.flush()
@@ -45,7 +45,7 @@ internal class Http1Response(
 
     override fun outputStream(bufferSize: Int): OutputStream {
         if (wrappedOut == null) {
-            var responseEncoder: ContentEncoder? = contentEncoder()
+            val responseEncoder: ContentEncoder? = contentEncoder()
 
             val fixedLen = headers().getLong(HeaderNames.CONTENT_LENGTH.toString(), -1)
             val rawOut = if (request.method.isHead) DiscardingOutputStream.INSTANCE else socketOut

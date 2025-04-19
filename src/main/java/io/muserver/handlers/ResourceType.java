@@ -76,7 +76,7 @@ public class ResourceType {
      * @return Creates and returns a Headers object with a single cache-control header set for 5 minutes.
      */
     public static Headers shortCache() {
-        return new Mu3Headers()
+        return Headers.create()
             .add(HeaderNames.CACHE_CONTROL, "max-age=300");
     }
 
@@ -84,7 +84,7 @@ public class ResourceType {
      * @return Creates and returns a Headers object with a single cache-control header set with no-cache.
      */
     public static Headers noCache() {
-        return new Mu3Headers()
+        return Headers.create()
             .add(HeaderNames.CACHE_CONTROL, HeaderValues.NO_CACHE);
     }
 
@@ -129,7 +129,7 @@ public class ResourceType {
      * <code>text/css</code>
      */
     public static final ResourceType TEXT_CSS = new ResourceType(ContentTypes.TEXT_CSS,
-        new Mu3Headers()
+        Headers.create()
             .add(HeaderNames.CACHE_CONTROL, "max-age=300")
             .add(HeaderNames.X_CONTENT_TYPE_OPTIONS, HeaderValues.NOSNIFF),
         true, singletonList("css"));
@@ -191,7 +191,7 @@ public class ResourceType {
      * <code>application/javascript</code>
      */
     public static final ResourceType APPLICATION_JAVASCRIPT = new ResourceType(ContentTypes.APPLICATION_JAVASCRIPT,
-        new Mu3Headers()
+        Headers.create()
             .add(HeaderNames.CACHE_CONTROL, "max-age=86400")
             .add(HeaderNames.X_CONTENT_TYPE_OPTIONS, HeaderValues.NOSNIFF),
         true, asList("js", "mjs"));
@@ -202,7 +202,7 @@ public class ResourceType {
     /**
      * <code>web/app-manifest</code>
      */
-    public static final ResourceType WEB_APP_MANIFEST = new ResourceType(ContentTypes.WEB_APP_MANIFEST, new Mu3Headers()
+    public static final ResourceType WEB_APP_MANIFEST = new ResourceType(ContentTypes.WEB_APP_MANIFEST, Headers.create()
         .add(HeaderNames.CACHE_CONTROL, "max-age=300"), true, singletonList("webmanifest"));
     /**
      * <code>audio/midi</code>
