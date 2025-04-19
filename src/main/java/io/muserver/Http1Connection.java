@@ -87,7 +87,7 @@ class Http1Connection extends BaseHttpConnection {
                 clientSocket.setSoTimeout(requestTimeout);
 
                 var muResponse = new Http1Response(muRequest, outputStream);
-                muRequest.response = muResponse;
+                muRequest.setResponse(muResponse);
                 closeConnection = muRequest.headers().closeConnectionRequested(httpVersion);
 
                 if (rejectException == null) {

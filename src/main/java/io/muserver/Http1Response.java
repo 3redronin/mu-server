@@ -59,7 +59,7 @@ class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
             ContentEncoder responseEncoder = contentEncoder();
 
             long fixedLen = headers().getLong(HeaderNames.CONTENT_LENGTH.toString(), -1);
-            OutputStream rawOut = request.getMethod().isHead() ? DiscardingOutputStream.INSTANCE : socketOut;
+            OutputStream rawOut = request.method().isHead() ? DiscardingOutputStream.INSTANCE : socketOut;
 
             if (fixedLen == -1L) {
                 headers().set(HeaderNames.TRANSFER_ENCODING, HeaderValues.CHUNKED);
@@ -86,7 +86,7 @@ class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
     void cleanup() throws IOException {
         if (responseState() == ResponseState.NOTHING) {
             // empty response body
-            if (!request.getMethod().isHead() && status().canHaveContent() && !headers().contains(HeaderNames.CONTENT_LENGTH)) {
+            if (!request.method().isHead() && status().canHaveContent() && !headers().contains(HeaderNames.CONTENT_LENGTH)) {
                 headers().set(HeaderNames.CONTENT_LENGTH, 0L);
             }
             writeStatusAndHeaders();

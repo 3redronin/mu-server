@@ -11,7 +11,7 @@ public class StatusLogger {
         int count = 0;
         for (MuRequest muRequest : muRequests) {
             Mu3Request req = (Mu3Request) muRequest;
-            log.info(count + ": response "+ req.response);
+            log.info(count + ": req " + req);
             count++;
         }
     }
