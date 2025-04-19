@@ -365,7 +365,7 @@ public class RequestBodyReaderStringTest {
 
         assertEventually(() -> infos, not(empty()));
         assertThat(infos.size(), equalTo(1));
-        Http1Response ri = (Http1Response) infos.get(0);
+        var ri = (Http1Response) infos.get(0);
         assertThat(ri.completedSuccessfully(), equalTo(true));
         assertThat(ri.response().responseState(), equalTo(ResponseState.FULL_SENT));
     }
@@ -414,7 +414,7 @@ public class RequestBodyReaderStringTest {
 
         assertEventually(() -> infos, not(empty()));
         assertThat(infos.size(), equalTo(1));
-        Http1Response ri = (Http1Response) infos.get(0);
+        var ri = (Http1Response) infos.get(0);
         assertThat(ri.completedSuccessfully(), equalTo(false));
         assertThat(ri.response().responseState(), equalTo(ResponseState.ERRORED));
     }
