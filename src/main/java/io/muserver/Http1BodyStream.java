@@ -177,6 +177,9 @@ class Http1BodyStream extends InputStream {
                 }
                 if (last == MessageBodyBit.EndOfBodyBit) {
                     drained = true;
+                } else if (last == MessageBodyBit.EOFMsg) {
+                    status.set(State.IO_EXCEPTION);
+                    break;
                 } else if (last instanceof MessageBodyBit) {
                     var mbb = (MessageBodyBit) last;
                     drained = mbb.isLast();
