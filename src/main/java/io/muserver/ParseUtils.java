@@ -38,14 +38,14 @@ class ParseUtils {
         return c >= 0x21 && c <= 0x7E;
     }
     static boolean isVChar(byte c) {
-        return c >= 0x21 && c <= 0x7E;
+        return c >= (byte)0x21 && c <= (byte)0x7E;
     }
 
     static boolean isOWS(char c) {
         return c == ' ' || c == '\t';
     }
     static boolean isOWS(byte c) {
-        return c == ' ' || c == '\t';
+        return c == (byte)' ' || c == (byte)'\t';
     }
 
     static String quoteIfNeeded(String value) {
