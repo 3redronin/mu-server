@@ -32,7 +32,7 @@ class Http2FlowController {
     }
 
     void applySettingsChange(Http2Settings oldSettings, Http2Settings newSettings) throws Http2Exception {
-        var diff = newSettings.initialWindowSize - oldSettings.maxFrameSize;
+        var diff = newSettings.initialWindowSize - oldSettings.initialWindowSize;
         if (diff == 0) {
             return;
         }
@@ -48,6 +48,7 @@ class Http2FlowController {
 
     boolean withdrawIfCan(int bytes) {
         if (bytes == 0) return true;
+        if (bytes < 0) throw new IllegalArgumentException("Negative withdrawal");
         lock.lock();
         try {
             if (bytes <= credit) {
