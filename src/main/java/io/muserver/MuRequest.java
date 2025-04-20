@@ -1,6 +1,5 @@
 package io.muserver;
 
-import kotlin.NotImplementedError;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
@@ -287,9 +286,7 @@ public interface MuRequest {
      * The HTTP version of the request
      * @return the version
      */
-    default HttpVersion httpVersion() {
-        throw new NotImplementedError();
-    }
+    HttpVersion httpVersion();
 
     /**
      * @return The HTTP connection that this request is sent over.

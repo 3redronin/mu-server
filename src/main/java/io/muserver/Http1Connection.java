@@ -1,6 +1,5 @@
 package io.muserver;
 
-import org.jetbrains.annotations.NotNull;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -92,7 +91,7 @@ class Http1Connection extends BaseHttpConnection {
 
                 if (rejectException == null) {
                     RateLimitRejectionAction first = null;
-                    for (@NotNull RateLimiterImpl rateLimiter : server.rateLimiters) {
+                    for (RateLimiterImpl rateLimiter : server.rateLimiters) {
                         var action = rateLimiter.record(muRequest);
                         if (action != null && first == null) {
                             first = action;

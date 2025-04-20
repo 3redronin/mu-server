@@ -129,6 +129,11 @@ public class NotImplementedMuRequest implements MuRequest {
     }
 
     @Override
+    public HttpVersion httpVersion() {
+        return throwIt();
+    }
+
+    @Override
     public HttpConnection connection() {
         return throwIt();
     }

@@ -1,7 +1,6 @@
 package io.muserver;
 
 import jakarta.ws.rs.core.MediaType;
-import org.jetbrains.annotations.NotNull;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
@@ -124,7 +123,6 @@ class Mu3Request implements MuRequest {
         }
     }
 
-    @NotNull
     private String streamBodyToString(Charset cs) throws IOException {
         try (var reader = new InputStreamReader(body(), cs)) {
             StringBuilder result = new StringBuilder();
