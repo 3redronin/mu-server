@@ -136,7 +136,7 @@ class Http2Stream implements ResponseInfo {
             bodySize = BodySize.UNSPECIFIED;
         }
 
-        var serverUri = connection.creator.getUri().resolve(path.toString());
+        var serverUri = connection.creator.uri().resolve(path.toString());
         var requestUri = Headtils.getUri(log, headers, path.toString(), serverUri);
 
         InputStream body = bodySize == BodySize.NONE ? EmptyInputStream.INSTANCE : null;

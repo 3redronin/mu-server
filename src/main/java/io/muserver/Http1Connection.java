@@ -74,7 +74,7 @@ class Http1Connection extends BaseHttpConnection {
                     relativeUrl = "/";
                 }
 
-                URI serverUri = creator.getUri().resolve(relativeUrl);
+                URI serverUri = creator.uri().resolve(relativeUrl);
                 URI requestUri = Headtils.getUri(log, request.headers(), relativeUrl, serverUri);
                 Method method = request.getMethod();
                 HttpVersion httpVersion = request.getHttpVersion();

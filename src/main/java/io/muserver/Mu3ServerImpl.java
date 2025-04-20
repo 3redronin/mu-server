@@ -1,6 +1,5 @@
 package io.muserver;
 
-import org.jetbrains.annotations.NotNull;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
@@ -87,7 +86,7 @@ class Mu3ServerImpl implements MuServer {
     private URI getUri(boolean wantsHttps) {
         for (var acceptor : acceptors) {
             if (acceptor.isHttps() == wantsHttps) {
-                return acceptor.getUri();
+                return acceptor.uri();
             }
         }
         return null;
@@ -112,7 +111,7 @@ class Mu3ServerImpl implements MuServer {
     @Override
     public InetSocketAddress address() {
         for (ConnectionAcceptor acceptor : acceptors) {
-            return acceptor.getAddress();
+            return acceptor.address();
         }
         throw new IllegalStateException("No address available"); // not possible
     }
@@ -120,7 +119,7 @@ class Mu3ServerImpl implements MuServer {
 
     private @Nullable GZIPEncoder zippy() {
         for (ConnectionAcceptor acceptor : acceptors) {
-            for (@NotNull ContentEncoder contentEncoder : acceptor.getContentEncoders()) {
+            for (ContentEncoder contentEncoder : acceptor.contentEncoders()) {
                 if (contentEncoder instanceof GZIPEncoder) {
                     return (GZIPEncoder) contentEncoder;
                 }
@@ -130,6 +129,7 @@ class Mu3ServerImpl implements MuServer {
     }
 
     @Override
+    @Deprecated
     public long minimumGzipSize() {
         var enc = zippy();
         return enc == null ? 0L : enc.minGzipSize();
@@ -161,6 +161,7 @@ class Mu3ServerImpl implements MuServer {
     }
 
     @Override
+    @Deprecated
     public boolean gzipEnabled() {
         return zippy() != null;
     }
@@ -171,6 +172,7 @@ class Mu3ServerImpl implements MuServer {
     }
 
     @Override
+    @Deprecated
     public Set<String> mimeTypesToGzip() {
         var enc = zippy();
         return enc == null ? Collections.emptySet() : enc.mimeTypesToGzip();
@@ -189,7 +191,7 @@ class Mu3ServerImpl implements MuServer {
     public @Nullable HttpsConfig httpsConfig() {
         for (ConnectionAcceptor acceptor : acceptors) {
             if (acceptor.isHttps()) {
-                return acceptor.getHttpsConfig();
+                return acceptor.httpsConfig();
             }
         }
         return null;
@@ -299,7 +301,7 @@ class Mu3ServerImpl implements MuServer {
 
             var acceptor = ConnectionAcceptor.create(impl, address, builder.httpsPort(), httpsConfig, http2Config, executor, contentEncoders);
             acceptors.add(acceptor);
-            httpsConfig.setHttpsUri(acceptor.getUri());
+            httpsConfig.setHttpsUri(acceptor.uri());
         }
         if (builder.httpPort() >= 0) {
             acceptors.add(ConnectionAcceptor.create(impl, address, builder.httpPort(), null, null, executor, contentEncoders));

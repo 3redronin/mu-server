@@ -166,7 +166,8 @@ public class ParametersTest {
                 response.write("|path=" + request.uri().getPath() + "|\n" +
                     "|rawPath=" + request.uri().getRawPath() + "|\n" +
                     "|serverPath=" + request.serverURI().getPath() + "|\n" +
-                    "|serverRawPath=" + request.serverURI().getRawPath() + "|\n");
+                    "|serverRawPath=" + request.serverURI().getRawPath() + "|\n" +
+                    "endMarker");
                 return true;
             }).start();
         String r;
@@ -176,9 +177,7 @@ public class ParametersTest {
             client.endHeaders();
             client.flushRequest();
 
-            while (client.bytesReceived() == 0) {
-                Thread.sleep(10);
-            }
+            assertEventually(client::responseString, endsWith("|\nendMarker"));
             r = client.responseString();
         }
         assertThat(r, containsString("|path=/a space/a+plus|"));
