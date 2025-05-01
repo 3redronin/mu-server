@@ -22,7 +22,8 @@ public class ServerUtils {
                     .withHttp2Config(Http2ConfigBuilder.http2Disabled());
                 break;
             case "h2":
-                builder.withHttpsPort(0);
+                builder.withHttpsPort(0)
+                    .withHttp2Config(Http2ConfigBuilder.http2Enabled());
                 break;
             default:
                 throw new IllegalArgumentException("Unsupported protocol: " + protocol);

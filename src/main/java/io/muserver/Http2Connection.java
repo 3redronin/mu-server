@@ -97,7 +97,19 @@ class Http2Connection extends BaseHttpConnection {
     public void start(InputStream clientIn, OutputStream clientOut) throws Http2Exception, IOException, ExecutionException, InterruptedException, TimeoutException {
         this.clientOut = clientOut;
         // do the handshake
-        clientSettings = Http2Handshaker.handshake(this, serverSettings, clientSettings, buffer, clientIn,  clientOut);
+        try {
+            clientSettings = Http2Handshaker.handshake(this, serverSettings, clientSettings, buffer, clientIn, clientOut);
+        } catch (Http2Exception h2e) {
+            log.debug("HTTP2 handshake failed", h2e);
+            try {
+                var goaway = new Http2GoAway(0, h2e.errorCode().code(), null);
+                goaway.writeTo(this, clientOut);
+            } catch (IOException ignored) {
+                // can't tell the client why there is a problem, but that's fine
+            }
+            // todo: raise event, or otherwise mark the connection is handshake failed for the onConnectionEnded listeners
+            return;
+        }
         fieldBlockEncoder.changeTableSize(clientSettings.headerTableSize);
         settingsAckQueue.add(System.currentTimeMillis());
 

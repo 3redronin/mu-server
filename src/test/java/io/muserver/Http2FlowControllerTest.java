@@ -32,7 +32,7 @@ class Http2FlowControllerTest {
         var exception = assertThrows(Http2Exception.class, () -> controller.applyWindowUpdate(update));
         assertThat(exception.errorType(), equalTo(Http2Level.STREAM));
         assertThat(exception.errorCode(), equalTo(Http2ErrorCode.FLOW_CONTROL_ERROR));
-        assertThat(exception.getMessage(), containsString("Flow control credit overflow"));
+        assertThat(exception.getMessage(), containsString("Credit overflow"));
     }
 
 
@@ -87,7 +87,7 @@ class Http2FlowControllerTest {
         var e = assertThrows(Http2Exception.class, () -> controller.applySettingsChange(oldSettings, newSettings));
         assertThat(e.errorType(), equalTo(Http2Level.STREAM));
         assertThat(e.errorCode(), equalTo(Http2ErrorCode.FLOW_CONTROL_ERROR));
-        assertThat(e.getMessage(), containsString("Flow control credit overflow due to settings change"));
+        assertThat(e.getMessage(), containsString("Credit overflow"));
     }
 
     @Test

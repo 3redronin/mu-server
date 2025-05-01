@@ -79,7 +79,6 @@ class Http2Settings implements LogicalHttp2Frame {
         while (toGo > 0) {
             int identifier = buffer.getShort() & 0xFFFF;
             long value = buffer.getInt() & 0xFFFFFFFFL;
-            System.out.println("setting " + identifier + " = " + value);
             if (identifier == 0x01) {
                 tableHeaderSize = value > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) value;
             } else if (identifier == 0x03) {
@@ -107,8 +106,9 @@ class Http2Settings implements LogicalHttp2Frame {
     private static int updatedValue(int oldValue, int newValue) {
         return newValue == -1 ? oldValue : newValue;
     }
-    public Http2Settings copyIfChanged(Http2Settings existingSettings) {
-        if (existingSettings.isAck) throw new IllegalArgumentException("No supported for ack");
+
+    Http2Settings copyIfChanged(Http2Settings existingSettings) {
+        assert !existingSettings.isAck;
         int newHeaderTableSize = updatedValue(existingSettings.headerTableSize, headerTableSize);
         int newInitialWindowSize = updatedValue(existingSettings.initialWindowSize, initialWindowSize);
         int newMaxFrameSize = updatedValue(existingSettings.maxFrameSize, maxFrameSize);

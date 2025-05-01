@@ -15,7 +15,7 @@ class Http2GoAway implements LogicalHttp2Frame {
     private final int errorCode;
     private final byte @Nullable [] debugData;
 
-    public Http2GoAway(int lastStreamId, int errorCode, byte @Nullable [] debugData) {
+    Http2GoAway(int lastStreamId, int errorCode, byte @Nullable [] debugData) {
         this.lastStreamId = lastStreamId;
         this.errorCode = errorCode;
         this.debugData = debugData;
@@ -77,7 +77,7 @@ class Http2GoAway implements LogicalHttp2Frame {
 
     @Override
     public void writeTo(Http2Connection connection, OutputStream out) throws IOException {
-        if (debugData != null) {
+        if (debugData != null && debugData.length > 0) {
             throw new IllegalStateException("Debug data not supported");
         }
         // without debug data, the payload is 2 ints - so 8 bytes

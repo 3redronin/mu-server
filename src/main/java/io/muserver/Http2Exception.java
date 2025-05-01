@@ -32,8 +32,6 @@ class Http2Exception extends Exception {
         this.streamId = streamId;
     }
 
-
-
     public Http2Level errorType() {
         return errorType;
     }
