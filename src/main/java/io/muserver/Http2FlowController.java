@@ -3,6 +3,8 @@ package io.muserver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -12,6 +14,7 @@ class Http2FlowController {
     private final int streamId;
     private int credit;
     private final Lock lock = new ReentrantLock();
+    private final Condition creditAvailable = lock.newCondition();
 
     Http2FlowController(int streamId, int initialCredit) {
         this.streamId = streamId;
@@ -20,27 +23,24 @@ class Http2FlowController {
     }
 
     void applyWindowUpdate(Http2WindowUpdate windowUpdate) throws Http2Exception {
-        lock.lock();
-        try {
-            credit = Math.addExact(credit, windowUpdate.windowSizeIncrement());
-            log.info("new credit for stream " + streamId + " is " + credit);
-        } catch (ArithmeticException e) {
-            throw new Http2Exception(Http2ErrorCode.FLOW_CONTROL_ERROR, "Flow control credit overflow", streamId);
-        } finally {
-            lock.unlock();
-        }
+        int diff = windowUpdate.windowSizeIncrement();
+        incrementCredit(diff);
     }
 
     void applySettingsChange(Http2Settings oldSettings, Http2Settings newSettings) throws Http2Exception {
         var diff = newSettings.initialWindowSize - oldSettings.initialWindowSize;
-        if (diff == 0) {
-            return;
-        }
+        incrementCredit(diff);
+    }
+
+    private void incrementCredit(int diff) throws Http2Exception {
+        if (diff == 0) return;
         lock.lock();
         try {
             credit = Math.addExact(credit, diff);
+            creditAvailable.signalAll();
+            log.info("new credit for stream " + streamId + " is " + credit);
         } catch (ArithmeticException e) {
-            throw new Http2Exception(Http2ErrorCode.FLOW_CONTROL_ERROR, "Flow control credit overflow due to settings change", streamId);
+            throw new Http2Exception(Http2ErrorCode.FLOW_CONTROL_ERROR, "Credit overflow", streamId);
         } finally {
             lock.unlock();
         }
@@ -59,6 +59,24 @@ class Http2FlowController {
         } finally {
             lock.unlock();
         }
+    }
+
+    boolean waitUntilWithdraw(int bytes, long timeout, TimeUnit unit) throws InterruptedException {
+        if (bytes == 0) return true;
+        if (bytes < 0) throw new IllegalArgumentException("Negative withdrawal");
+        lock.lock();
+        try {
+            while (bytes > credit) {
+                var timedOut = creditAvailable.await(timeout, unit);
+                if (timedOut) {
+                    return false;
+                }
+            }
+            credit -= bytes;
+        } finally {
+            lock.unlock();
+        }
+        return true;
     }
 
 }

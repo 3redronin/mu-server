@@ -19,6 +19,10 @@ class Http2DataFrame implements LogicalHttp2Frame {
         this.payloadLength = payloadLength;
     }
 
+    @Override
+    public int flowControlSize() {
+        return payloadLength;
+    }
 
     @Override
     public void writeTo(Http2Connection connection, OutputStream out) throws IOException {

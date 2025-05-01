@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.concurrent.TimeUnit;
 
 class Http2Stream implements ResponseInfo {
 
@@ -167,6 +168,8 @@ class Http2Stream implements ResponseInfo {
      * Writes a frame, blocking if needed until there is enough flow control credit.
      */
     void blockingWrite(LogicalHttp2Frame frame) throws InterruptedException, IOException {
+        // todo: use a proper timeout
+        outgoingFlowControl.waitUntilWithdraw(frame.flowControlSize(), 1, TimeUnit.HOURS);
         connection.write(frame);
     }
 
@@ -181,4 +184,7 @@ class Http2Stream implements ResponseInfo {
  */
 interface LogicalHttp2Frame {
     void writeTo(Http2Connection connection, OutputStream out) throws IOException;
+    default int flowControlSize() {
+        return 0;
+    }
 }

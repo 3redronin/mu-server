@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InterruptedIOException;
 import java.io.OutputStream;
 import java.net.Socket;
 import java.net.SocketException;
@@ -71,7 +72,9 @@ class Http2Connection extends BaseHttpConnection {
         return state;
     }
 
-    void write(LogicalHttp2Frame frame) throws IOException {
+    void write(LogicalHttp2Frame frame) throws IOException, InterruptedException {
+        // todo: wait for an appropriate timeout time
+        outgoingFlowControl.waitUntilWithdraw(frame.flowControlSize(), 2, TimeUnit.HOURS);
         writeLock.lock();
         try {
             log.info("Writing " + frame);
@@ -264,7 +267,11 @@ class Http2Connection extends BaseHttpConnection {
         if (state == State.OPEN) {
             state = State.HALF_CLOSED_LOCAL;
             var goaway = new Http2GoAway(lastStreamId, Http2ErrorCode.NO_ERROR.code(), null);
-            write(goaway);
+            try {
+                write(goaway);
+            } catch (InterruptedException e) {
+                throw new InterruptedIOException("Interrupted while waiting for the goaway frame to be written");
+            }
             flush();
             if (activeRequests().isEmpty()) {
                 forceShutdown();

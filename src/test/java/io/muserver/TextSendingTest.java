@@ -1,13 +1,17 @@
 package io.muserver;
 
 import okhttp3.Response;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ArgumentsSource;
 import scaffolding.MuAssert;
+import scaffolding.ServerTypeArgs;
 import scaffolding.ServerUtils;
 import scaffolding.StringUtils;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -20,13 +24,15 @@ import static scaffolding.ClientUtils.*;
 
 public class TextSendingTest {
 
+    @Nullable
     private MuServer server;
 
-    @Test
-    public void largeChunksOfTextCanBeWritten() throws Exception {
+    @ParameterizedTest
+    @ArgumentsSource(ServerTypeArgs.class)
+    public void largeChunksOfTextCanBeWritten(String protocol) throws Exception {
         String lotsoText = StringUtils.randomStringOfLength(70000);
-        server = ServerUtils.httpsServerForTest()
-            .withGzipEnabled(false)
+        server = ServerUtils.httpsServerForTest(protocol)
+            .withContentEncoders(Collections.emptyList())
             .addHandler(Method.GET, "/", (request, response, pp) -> {
                 response.contentType(ContentTypes.TEXT_PLAIN);
                 response.write(lotsoText);
@@ -39,9 +45,10 @@ public class TextSendingTest {
         }
     }
 
-    @Test
-    public void emptyStringsAreFine() throws Exception {
-        server = ServerUtils.httpsServerForTest()
+    @ParameterizedTest
+    @ArgumentsSource(ServerTypeArgs.class)
+    public void emptyStringsAreFine(String protocol) throws Exception {
+        server = ServerUtils.httpsServerForTest(protocol)
             .addHandler(Method.GET, "/", (request, response, pp) -> {
                 response.contentType(ContentTypes.TEXT_PLAIN);
                 response.write("");
@@ -53,11 +60,12 @@ public class TextSendingTest {
         }
     }
 
-    @Test
-    public void textCanBeSentInChunks() throws Exception {
+    @ParameterizedTest
+    @ArgumentsSource(ServerTypeArgs.class)
+    public void textCanBeSentInChunks(String protocol) throws Exception {
         List<String> chunks = asList("Hello", "World", StringUtils.randomStringOfLength(200000), "Yo");
 
-        server = ServerUtils.httpsServerForTest()
+        server = ServerUtils.httpsServerForTest(protocol)
             .addHandler(Method.GET, "/", (request, response, pp) -> {
                 response.contentType(ContentTypes.TEXT_PLAIN);
                 for (String chunk : chunks) {
@@ -78,9 +86,10 @@ public class TextSendingTest {
         }
     }
 
-    @Test
-    public void anEmptyHandlerIsA200WithNoContent() throws Exception {
-        server = ServerUtils.httpsServerForTest()
+    @ParameterizedTest
+    @ArgumentsSource(ServerTypeArgs.class)
+    public void anEmptyHandlerIsA200WithNoContent(String protocol) throws Exception {
+        server = ServerUtils.httpsServerForTest(protocol)
             .addHandler(Method.GET, "/", (request, response, pp) -> {
             }).start();
         try (Response resp = call(request(server.uri()))) {
@@ -88,10 +97,11 @@ public class TextSendingTest {
             assertThat(resp.body().bytes().length, is(0));
         }
     }
-    
-    @Test
-    public void defaultsToTextPlainIfNoContentTypeSet() throws IOException {
-        server = ServerUtils.httpsServerForTest()
+
+    @ParameterizedTest
+    @ArgumentsSource(ServerTypeArgs.class)
+    public void defaultsToTextPlainIfNoContentTypeSet(String protocol) throws IOException {
+        server = ServerUtils.httpsServerForTest(protocol)
             .addHandler(Method.GET, "/html", (request, response, pp) -> {
                 response.contentType("text/html");
                 response.write("This is HTML");
