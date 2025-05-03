@@ -12,18 +12,12 @@ import java.util.Objects;
 class Http2HeadersFrame implements LogicalHttp2Frame {
 
     private final int streamId;
-    private final boolean exclusive; // todo remove
     private final boolean endStream;
-    private final int streamDependencyId; // todo remove
-    private final int weight; // todo remove
     private final FieldBlock headers;
 
-    Http2HeadersFrame(int streamId, boolean exclusive, boolean endStream, int streamDependencyId, int weight, FieldBlock headers) {
+    Http2HeadersFrame(int streamId, boolean endStream, FieldBlock headers) {
         this.streamId = streamId;
-        this.exclusive = exclusive;
         this.endStream = endStream;
-        this.streamDependencyId = streamDependencyId;
-        this.weight = weight;
         this.headers = headers;
     }
 
@@ -53,19 +47,10 @@ class Http2HeadersFrame implements LogicalHttp2Frame {
             hpackLength -= padLength -  /* 1 byte for the pad size field  */1;
         }
 
-        boolean exclusive;
-        int streamDependency;
-        int weight;
         if (priority) {
             hpackLength -= 5;
-            byte next = buffer.get();
-            exclusive = (next & 0b10000000) > 0;
-            streamDependency = next & 0b01111111;
-            weight = buffer.get() & 0xff;
-        } else {
-            exclusive = false;
-            streamDependency = 0;
-            weight = 0;
+            // the exclusive, stream dependency and weight values are deprecated, so just reading past them
+            buffer.position(buffer.position() + 2);
         }
 
         // add name/value strings as:
@@ -131,23 +116,12 @@ class Http2HeadersFrame implements LogicalHttp2Frame {
             throw invalidRequestException;
         }
 
-        return new Http2HeadersFrame(frameHeader.streamId(), exclusive, endStream, streamDependency, weight, headers);
+        return new Http2HeadersFrame(frameHeader.streamId(), endStream, headers);
     }
 
-    public boolean exclusive() {
-        return exclusive;
-    }
-
+    @Override
     public boolean endStream() {
         return endStream;
-    }
-
-    public int streamDependencyId() {
-        return streamDependencyId;
-    }
-
-    public int weight() {
-        return weight;
     }
 
     public FieldBlock headers() {
@@ -155,7 +129,7 @@ class Http2HeadersFrame implements LogicalHttp2Frame {
     }
 
     @Override
-    public void writeTo(Http2Connection connection, OutputStream out) throws IOException {
+    public void writeTo(Http2Peer connection, OutputStream out) throws IOException {
 
         var baos = new NiceByteArrayOutputStream(32);
         baos.write(new byte[] { 0, 0, 0,
@@ -169,7 +143,7 @@ class Http2HeadersFrame implements LogicalHttp2Frame {
 
         int size = baos.size();
 
-        connection.fieldBlockEncoder.encodeTo(headers, baos);
+        connection.fieldBlockEncoder().encodeTo(headers, baos);
 
         size = baos.size() - size;
 
@@ -223,21 +197,18 @@ class Http2HeadersFrame implements LogicalHttp2Frame {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         Http2HeadersFrame that = (Http2HeadersFrame) o;
-        return exclusive == that.exclusive && endStream == that.endStream && streamDependencyId == that.streamDependencyId && weight == that.weight && Objects.equals(headers, that.headers);
+        return endStream == that.endStream && Objects.equals(headers, that.headers);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(exclusive, endStream, streamDependencyId, weight, headers);
+        return Objects.hash(endStream, headers);
     }
 
     @Override
     public String toString() {
         return "Http2HeaderFragment{" +
-            "priority=" + exclusive +
-            ", endStream=" + endStream +
-            ", streamDependencyId=" + streamDependencyId +
-            ", weight=" + weight +
+            "endStream=" + endStream +
             ", headers=" + headers +
             '}';
     }

@@ -76,7 +76,7 @@ class Http2GoAway implements LogicalHttp2Frame {
     }
 
     @Override
-    public void writeTo(Http2Connection connection, OutputStream out) throws IOException {
+    public void writeTo(Http2Peer connection, OutputStream out) throws IOException {
         if (debugData != null && debugData.length > 0) {
             throw new IllegalStateException("Debug data not supported");
         }

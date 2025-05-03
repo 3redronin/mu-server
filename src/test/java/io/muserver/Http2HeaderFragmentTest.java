@@ -18,9 +18,6 @@ public class Http2HeaderFragmentTest {
         var frameHeader = new Http2FrameHeader(0, Http2FrameType.HEADERS, 0b00000101, 1);
         var headers = Http2HeadersFrame.readLogicalFrame(frameHeader, getFieldBlockDecoder(), ByteBuffer.allocate(0), InputStream.nullInputStream());
         assertThat(headers.endStream(), equalTo(true));
-        assertThat(headers.exclusive(), equalTo(false));
-        assertThat(headers.streamDependencyId(), equalTo(0));
-        assertThat(headers.weight(), equalTo(0));
         assertThat(headers.headers().iterator().hasNext(), equalTo(false));
         // this is not actually valid as there are no pseudo headers but something else can deal with that
     }
@@ -73,9 +70,6 @@ public class Http2HeaderFragmentTest {
         var frameHeader = new Http2FrameHeader(byteBuffer.remaining(), Http2FrameType.HEADERS, 0b00000101, 1);
         var headers = Http2HeadersFrame.readLogicalFrame(frameHeader, getFieldBlockDecoder(), byteBuffer, InputStream.nullInputStream());
         assertThat(headers.endStream(), equalTo(true));
-        assertThat(headers.exclusive(), equalTo(false));
-        assertThat(headers.streamDependencyId(), equalTo(0));
-        assertThat(headers.weight(), equalTo(0));
         assertThat(headers.headers().entries(), hasSize(6));
         assertThat(headers.headers().get(":method"), equalTo("GET"));
         assertThat(headers.headers().get(":scheme"), equalTo("HTTPS"));

@@ -168,9 +168,28 @@ class Http2Stream implements ResponseInfo {
      * Writes a frame, blocking if needed until there is enough flow control credit.
      */
     void blockingWrite(LogicalHttp2Frame frame) throws InterruptedException, IOException {
+
+        // todo: synchronise access to the state
+        if (state == State.HALF_CLOSED_LOCAL) {
+            if (!(frame instanceof Http2WindowUpdate) && !(frame instanceof Http2ResetStreamFrame)) {
+                throw new IllegalStateException("Cannot send data after the stream has been half closed locally. Tried to send " + frame);
+            }
+        } else if (state == State.CLOSED) {
+            throw new IllegalStateException("Cannot send data after the stream has been closed. Tried to send " + frame);
+        }
+
         // todo: use a proper timeout
         outgoingFlowControl.waitUntilWithdraw(frame.flowControlSize(), 1, TimeUnit.HOURS);
         connection.write(frame);
+        if (frame.endStream()) {
+            if (state == State.OPEN) {
+                state = State.HALF_CLOSED_LOCAL;
+            } else if (state == State.HALF_CLOSED_REMOTE) {
+                state = State.CLOSED;
+            }
+        } else if (frame instanceof Http2ResetStreamFrame) {
+            state = State.CLOSED;
+        }
     }
 
     public void flush() throws IOException {
@@ -183,8 +202,9 @@ class Http2Stream implements ResponseInfo {
  * An HTTP2 frame, where continuations are treated together as a single frame
  */
 interface LogicalHttp2Frame {
-    void writeTo(Http2Connection connection, OutputStream out) throws IOException;
+    void writeTo(Http2Peer connection, OutputStream out) throws IOException;
     default int flowControlSize() {
         return 0;
     }
+    default boolean endStream() { return false;}
 }

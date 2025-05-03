@@ -25,7 +25,12 @@ class Http2DataFrame implements LogicalHttp2Frame {
     }
 
     @Override
-    public void writeTo(Http2Connection connection, OutputStream out) throws IOException {
+    public boolean endStream() {
+        return eos;
+    }
+
+    @Override
+    public void writeTo(Http2Peer connection, OutputStream out) throws IOException {
         out.write(new byte[] {
             // len
             (byte)(payloadLength >> 16),

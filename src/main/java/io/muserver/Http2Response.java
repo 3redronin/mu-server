@@ -46,7 +46,7 @@ class Http2Response extends BaseResponse {
         }
 
         var headerFragment = new Http2HeadersFrame(
-            stream.id, false, endOfStream, 0, 0, (FieldBlock) headers()
+            stream.id, endOfStream, (FieldBlock) headers()
         );
         stream.blockingWrite(headerFragment);
     }

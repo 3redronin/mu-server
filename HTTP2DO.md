@@ -10,8 +10,8 @@
  * 4.3.1. [ ] Compression State
 * 5. [ ] Streams and Multiplexing
  * 5.1. [ ] Stream States
- * 5.1.1. [ ] Stream Identifiers
- * 5.1.2. [ ] Stream Concurrency
+ * 5.1.1. [x] Stream Identifiers
+ * 5.1.2. [x] Stream Concurrency
  * 5.2. [ ] Flow Control
  * 5.2.1. [ ] Flow-Control Principles
  * 5.2.2. [ ] Appropriate Use of Flow Control

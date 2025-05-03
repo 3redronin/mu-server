@@ -39,7 +39,7 @@ class Http2ContinuationFrame implements LogicalHttp2Frame {
 
 
     @Override
-    public void writeTo(Http2Connection connection, OutputStream out) throws IOException {
+    public void writeTo(Http2Peer connection, OutputStream out) throws IOException {
         var size = fragment.length;
 
         out.write(new byte[] {

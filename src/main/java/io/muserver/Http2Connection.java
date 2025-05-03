@@ -21,7 +21,7 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
-class Http2Connection extends BaseHttpConnection {
+class Http2Connection extends BaseHttpConnection implements Http2Peer {
     private enum State {
         OPEN(true), HALF_CLOSED_LOCAL(true), HALF_CLOSED_REMOTE(false), CLOSED(false);
         final boolean canRead;
@@ -35,7 +35,7 @@ class Http2Connection extends BaseHttpConnection {
     private Http2Settings clientSettings = Http2Settings.DEFAULT_CLIENT_SETTINGS;
     private final ByteBuffer buffer;
     private volatile State state = State.OPEN;
-    private volatile int lastStreamId = Integer.MAX_VALUE;
+    private volatile int lastStreamId = -1;
     @Nullable
     private OutputStream clientOut;
     private final Http2FlowController incomingFlowControl = new Http2FlowController(0, 65535);
@@ -55,8 +55,14 @@ class Http2Connection extends BaseHttpConnection {
         this.fieldBlockEncoder = new FieldBlockEncoder(new HpackTable(clientSettings.headerTableSize));
     }
 
-    int maxFrameSize() {
+    @Override
+    public int maxFrameSize() {
         return clientSettings.maxFrameSize;
+    }
+
+    @Override
+    public FieldBlockEncoder fieldBlockEncoder() {
+        return fieldBlockEncoder;
     }
 
     private synchronized void onRemoteClose() {
@@ -99,121 +105,135 @@ class Http2Connection extends BaseHttpConnection {
         // do the handshake
         try {
             clientSettings = Http2Handshaker.handshake(this, serverSettings, clientSettings, buffer, clientIn, clientOut);
+
+            fieldBlockEncoder.changeTableSize(clientSettings.headerTableSize);
+            settingsAckQueue.add(System.currentTimeMillis());
+
+            var fieldBlockDecoder = new FieldBlockDecoder(new HpackTable(serverSettings.headerTableSize), server.maxUrlSize(), server.maxRequestHeadersSize());
+
+            // and now just read frames
+            while (state().canRead) {
+                try {
+                    Mutils.readAtLeast(buffer, clientIn, Http2FrameHeader.FRAME_HEADER_LENGTH);
+
+                    var fh = Http2FrameHeader.readFrom(buffer);
+                    var len = fh.length();
+                    Mutils.readAtLeast(buffer, clientIn, len);
+                    log.info("read fh = " + fh);
+
+                    if (state == State.HALF_CLOSED_LOCAL && fh.streamId() > lastStreamId) {
+                        discardPayload(buffer, clientIn, len);
+                    } else {
+
+                        switch (fh.frameType()) {
+                            case HEADERS: {
+                                if (fh.streamId() <= lastStreamId || (fh.streamId() % 2) == 0) {
+                                    throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "Invalid stream ID " + fh.streamId());
+                                }
+                                try {
+                                    var headerFragment = Http2HeadersFrame.readLogicalFrame(fh, fieldBlockDecoder, buffer, clientIn);
+                                    log.info("Got headers " + headerFragment);
+                                    if (activeRequests().size() >= serverSettings.maxConcurrentStreams) {
+                                        log.info("Max concurrent streams reached");
+                                        write(new Http2ResetStreamFrame(headerFragment.streamId(), Http2ErrorCode.REFUSED_STREAM.code()));
+                                    } else {
+                                        lastStreamId = fh.streamId();
+                                        startRequest(headerFragment);
+                                    }
+                                } catch (HttpException e) {
+                                    // return an http response
+                                    FieldBlock errorHeaders = new FieldBlock();
+                                    errorHeaders.add(HeaderNames.PSEUDO_STATUS, e.status());
+                                    errorHeaders.add(e.responseHeaders());
+                                    byte[] message = e.getMessage().getBytes(StandardCharsets.UTF_8);
+                                    if (outgoingFlowControl.withdrawIfCan(message.length)) {
+                                        errorHeaders.set(HeaderNames.CONTENT_TYPE, "text/plain;charset=utf-8");
+                                        errorHeaders.set(HeaderNames.CONTENT_LENGTH, message.length);
+                                        server.getStatsImpl().onInvalidRequest();
+                                        write(new Http2HeadersFrame(fh.streamId(), false, errorHeaders));
+                                        write(new Http2DataFrame(fh.streamId(), true, message, 0, message.length));
+                                    } else {
+                                        write(new Http2HeadersFrame(fh.streamId(), true, errorHeaders));
+                                    }
+                                }
+                                break;
+                            }
+                            case SETTINGS: {
+                                var settingsDiff = Http2Settings.readFrom(fh, buffer);
+                                if (settingsDiff.isAck) {
+                                    var ackedOne = settingsAckQueue.poll();
+                                    if (ackedOne == null) {
+                                        throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "Settings ack without pending settings");
+                                    } else {
+                                        log.info("Settings acked after " + (System.currentTimeMillis() - ackedOne) + "ms");
+                                    }
+                                } else {
+                                    var oldSettings = clientSettings;
+                                    var newSettings = settingsDiff.copyIfChanged(clientSettings);
+                                    if (newSettings != oldSettings) {
+                                        clientSettings = newSettings;
+                                        if (newSettings.initialWindowSize != oldSettings.initialWindowSize) {
+                                            // todo: apply diff settings on existing streams
+                                        }
+
+                                    }
+                                }
+                                break;
+                            }
+                            case WINDOW_UPDATE: {
+                                var windowUpdate = Http2WindowUpdate.readFrom(fh, buffer);
+                                incomingFlowControl.applyWindowUpdate(windowUpdate);
+                                if (windowUpdate.level() == Http2Level.STREAM) {
+                                    Http2Stream stream = streams.get(windowUpdate.streamId());
+                                    if (stream != null) {
+                                        stream.applyWindowUpdate(windowUpdate);
+                                    }
+                                }
+                                break;
+                            }
+                            case GOAWAY: {
+                                var goaway = Http2GoAway.readFrom(fh, buffer);
+                                onRemoteClose();
+                                System.out.println(goaway);
+                                break;
+                            }
+                            case CONTINUATION: {
+                                throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "Out of order continuation frame");
+                            }
+                            case PUSH_PROMISE: {
+                                throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "Client sent push promise");
+                            }
+                            default: {
+                                log.info("Discarding " + len + " bytes for unsupported type " + fh);
+                                discardPayload(buffer, clientIn, len);
+                            }
+                        }
+                    }
+                } catch (Http2Exception h2e) {
+                    if (h2e.errorType() == Http2Level.CONNECTION) {
+                        throw h2e;
+                    }
+                    write(new Http2ResetStreamFrame(h2e.streamId(), h2e.errorCode().code()));
+                    flush();
+                } catch (SocketException e) {
+                    if (state() == State.CLOSED) {
+                        log.info("Socket closed gracefully");
+                        break;
+                    } else throw e;
+                }
+                // TODO: end if pending settings ack not received
+            }
         } catch (Http2Exception h2e) {
-            log.debug("HTTP2 handshake failed", h2e);
+            log.debug("HTTP2 error", h2e);
             try {
                 var goaway = new Http2GoAway(0, h2e.errorCode().code(), null);
-                goaway.writeTo(this, clientOut);
+                write(goaway);
+                flush();
+                state = State.CLOSED;
             } catch (IOException ignored) {
                 // can't tell the client why there is a problem, but that's fine
             }
             // todo: raise event, or otherwise mark the connection is handshake failed for the onConnectionEnded listeners
-            return;
-        }
-        fieldBlockEncoder.changeTableSize(clientSettings.headerTableSize);
-        settingsAckQueue.add(System.currentTimeMillis());
-
-        var fieldBlockDecoder = new FieldBlockDecoder(new HpackTable(serverSettings.headerTableSize), server.maxUrlSize(), server.maxRequestHeadersSize());
-
-        // and now just read frames
-        while (state().canRead) {
-            try {
-                Mutils.readAtLeast(buffer, clientIn, Http2FrameHeader.FRAME_HEADER_LENGTH);
-            } catch (SocketException e) {
-                if (state() == State.CLOSED) {
-                    log.info("Socket closed gracefully");
-                    break;
-                } else throw e;
-            }
-            var fh = Http2FrameHeader.readFrom(buffer);
-            var len = fh.length();
-            Mutils.readAtLeast(buffer, clientIn, len);
-            log.info("read fh = " + fh);
-
-            if (state == State.HALF_CLOSED_LOCAL && fh.streamId() > lastStreamId) {
-                discardPayload(buffer, clientIn, len);
-            } else {
-
-                switch (fh.frameType()) {
-                    case HEADERS: {
-                        if (state == State.OPEN) {
-                            lastStreamId = fh.streamId();
-                        }
-                        try {
-                            var headerFragment = Http2HeadersFrame.readLogicalFrame(fh, fieldBlockDecoder, buffer, clientIn);
-                            log.info("Got headers " + headerFragment);
-                            startRequest(headerFragment);
-                        } catch (Http2Exception e) {
-                            if (e.errorType() == Http2Level.STREAM) {
-                                throw new UnsupportedOperationException("Stream reset");
-                            } else {
-                                throw e;
-                            }
-                        } catch (HttpException e) {
-                            // return an http response
-                            FieldBlock errorHeaders = new FieldBlock();
-                            errorHeaders.add(HeaderNames.PSEUDO_STATUS, e.status());
-                            errorHeaders.add(e.responseHeaders());
-                            byte[] message = e.getMessage().getBytes(StandardCharsets.UTF_8);
-                            if (outgoingFlowControl.withdrawIfCan(message.length)) {
-                                errorHeaders.set(HeaderNames.CONTENT_TYPE, "text/plain;charset=utf-8");
-                                errorHeaders.set(HeaderNames.CONTENT_LENGTH, message.length);
-                                server.getStatsImpl().onInvalidRequest();
-                                write(new Http2HeadersFrame(fh.streamId(), false, false, 0, 0, errorHeaders));
-                                write(new Http2DataFrame(fh.streamId(), true, message, 0, message.length));
-                            } else {
-                                write(new Http2HeadersFrame(fh.streamId(), false, true, 0, 0, errorHeaders));
-                            }
-                        }
-                        break;
-                    }
-                    case SETTINGS: {
-                        var settingsDiff = Http2Settings.readFrom(fh, buffer);
-                        if (settingsDiff.isAck) {
-                            var ackedOne = settingsAckQueue.poll();
-                            if (ackedOne == null) {
-                                throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "Settings ack without pending settings");
-                            } else {
-                                log.info("Settings acked after " + (System.currentTimeMillis() - ackedOne) + "ms");
-                            }
-                        } else {
-                            var oldSettings = clientSettings;
-                            var newSettings = settingsDiff.copyIfChanged(clientSettings);
-                            if (newSettings != oldSettings) {
-                                clientSettings = newSettings;
-                                if (newSettings.initialWindowSize != oldSettings.initialWindowSize) {
-                                    // todo: apply diff settings on existing streams
-                                }
-
-                            }
-                        }
-                        break;
-                    }
-                    case WINDOW_UPDATE: {
-                        var windowUpdate = Http2WindowUpdate.readFrom(fh, buffer);
-                        incomingFlowControl.applyWindowUpdate(windowUpdate);
-                        if (windowUpdate.level() == Http2Level.STREAM) {
-                            Http2Stream stream = streams.get(windowUpdate.streamId());
-                            if (stream != null) {
-                                stream.applyWindowUpdate(windowUpdate);
-                            }
-                        }
-                        break;
-                    }
-                    case GOAWAY: {
-                        var goaway = Http2GoAway.readFrom(fh, buffer);
-                        onRemoteClose();
-                        System.out.println(goaway);
-                        break;
-                    }
-                    default: {
-                        log.info("Discarding " + len + " bytes for unsupported type " + fh);
-                        discardPayload(buffer, clientIn, len);
-                    }
-                }
-            }
-
-            // TODO: end if pending settings ack not received
         }
 
     }
@@ -344,4 +364,11 @@ class Http2Connection extends BaseHttpConnection {
             forceShutdown();
         }
     }
+}
+
+interface Http2Peer {
+
+    int maxFrameSize();
+
+    FieldBlockEncoder fieldBlockEncoder();
 }

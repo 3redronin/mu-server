@@ -48,11 +48,14 @@ class H2Client implements Closeable  {
     }
 }
 
-class H2ClientConnection implements Closeable {
+class H2ClientConnection implements Http2Peer, Closeable {
     private final SSLSocket socket;
     private final InputStream inputStream;
     private final OutputStream outputStream;
     private final ByteBuffer readBuffer;
+    private int maxFrameSize = 16384;
+    private final FieldBlockEncoder fieldBlockEncoder = new FieldBlockEncoder(new HpackTable(Http2Settings.DEFAULT_CLIENT_SETTINGS.headerTableSize));
+    private final FieldBlockDecoder fieldBlockDecoder = new FieldBlockDecoder(new HpackTable(Http2Settings.DEFAULT_CLIENT_SETTINGS.headerTableSize), 32768, 32768);
 
     H2ClientConnection(SSLSocket socket) throws IOException {
         this.socket = socket;
@@ -65,11 +68,12 @@ class H2ClientConnection implements Closeable {
     public void writePreface() throws IOException {
         outputStream.write("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n".getBytes(StandardCharsets.US_ASCII));
     }
-    public void flushOutput() throws IOException {
+    public void flush() throws IOException {
         outputStream.flush();
     }
-    public void writeFrame(LogicalHttp2Frame frame) throws IOException {
-        frame.writeTo(null, outputStream);
+    public H2ClientConnection writeFrame(LogicalHttp2Frame frame) throws IOException {
+        frame.writeTo(this, outputStream);
+        return this;
     }
 
     Http2FrameHeader readFrameHeader() throws IOException, Http2Exception {
@@ -82,12 +86,29 @@ class H2ClientConnection implements Closeable {
         switch (header.frameType()) {
             case GOAWAY: return Http2GoAway.readFrom(header, readBuffer);
             case SETTINGS: return Http2Settings.readFrom(header, readBuffer);
+            case RST_STREAM: return Http2ResetStreamFrame.readFrom(header, readBuffer);
+            case HEADERS: return Http2HeadersFrame.readLogicalFrame(header, fieldBlockDecoder, readBuffer, inputStream);
         }
         throw new RuntimeException("Unexpected frameType: " + header.frameType());
     }
 
     LogicalHttp2Frame readLogicalFrame() throws IOException, Http2Exception {
-        return readLogicalFrame(readFrameHeader());
+        LogicalHttp2Frame frame = readLogicalFrame(readFrameHeader());
+        if (frame instanceof Http2Settings) {
+            var settings = (Http2Settings) frame;
+            if (!settings.isAck) {
+                this.maxFrameSize = settings.maxFrameSize;
+            }
+        }
+        return frame;
+    }
+
+    <T extends LogicalHttp2Frame> T readLogicalFrame(Class<T> clazz) throws Http2Exception, IOException {
+        var frame = readLogicalFrame();
+        if (clazz.isAssignableFrom(frame.getClass())) {
+            return (T)frame;
+        }
+        throw new IllegalStateException("Expected " + clazz.getName() + ", got " + frame);
     }
 
     @Override
@@ -97,5 +118,29 @@ class H2ClientConnection implements Closeable {
 
     public void writeRaw(byte[] bytes) throws IOException {
         outputStream.write(bytes);
+    }
+
+    public void handshake() throws IOException, Http2Exception {
+        writePreface();
+        writeFrame(Http2Settings.DEFAULT_CLIENT_SETTINGS);
+        flush();
+        var settings1 = readLogicalFrame(Http2Settings.class);
+        var settings2 = readLogicalFrame(Http2Settings.class);
+        if (settings1.isAck ^ settings2.isAck) {
+            writeFrame(Http2Settings.ACK);
+        } else {
+            throw new IllegalStateException("Expected single ACK, got " + settings1 + " and " + settings2);
+        }
+
+    }
+
+    @Override
+    public int maxFrameSize() {
+        return maxFrameSize;
+    }
+
+    @Override
+    public FieldBlockEncoder fieldBlockEncoder() {
+        return fieldBlockEncoder;
     }
 }
