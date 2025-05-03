@@ -25,6 +25,9 @@ class H2Client implements Closeable  {
         }
     }
 
+    public H2ClientConnection connect(MuServer server) throws IOException {
+        return connect(server.uri().getPort());
+    }
     public H2ClientConnection connect(int port) throws IOException {
         var socket = (SSLSocket) sslSocketFactory.createSocket("localhost", port);
         socket.setUseClientMode(true);

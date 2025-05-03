@@ -35,7 +35,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
     private Http2Settings clientSettings = Http2Settings.DEFAULT_CLIENT_SETTINGS;
     private final ByteBuffer buffer;
     private volatile State state = State.OPEN;
-    private volatile int lastStreamId = -1;
+    private volatile int lastStreamId = 0;
     @Nullable
     private OutputStream clientOut;
     private final Http2FlowController incomingFlowControl = new Http2FlowController(0, 65535);
@@ -226,7 +226,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         } catch (Http2Exception h2e) {
             log.debug("HTTP2 error", h2e);
             try {
-                var goaway = new Http2GoAway(0, h2e.errorCode().code(), null);
+                var goaway = new Http2GoAway(lastStreamId, h2e.errorCode().code(), null);
                 write(goaway);
                 flush();
                 state = State.CLOSED;

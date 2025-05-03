@@ -17,7 +17,7 @@
  * 5.2.2. [ ] Appropriate Use of Flow Control
  * 5.2.3. [ ] Flow-Control Performance
  * 5.3. [ ] Prioritization
- * 5.3.1. [ ] Background on Priority in RFC 7540
+ * 5.3.1. [x] Background on Priority in RFC 7540
  * 5.3.2. [ ] Priority Signaling in This Document
  * 5.4. [ ] Error Handling
  * 5.4.1. [ ] Connection Error Handling
