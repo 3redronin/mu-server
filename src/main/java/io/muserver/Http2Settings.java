@@ -1,6 +1,8 @@
 package io.muserver;
 
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -8,6 +10,7 @@ import java.nio.ByteBuffer;
 import java.util.Objects;
 
 class Http2Settings implements LogicalHttp2Frame {
+    private static final Logger log = LoggerFactory.getLogger(Http2Settings.class);
     static Http2Settings DEFAULT_CLIENT_SETTINGS = new Http2Settings(false,
         4096, 100, 65535, 16384, 32 * 1024
     );
@@ -95,6 +98,8 @@ class Http2Settings implements LogicalHttp2Frame {
                 maxFrameSize = (int) value;
             } else if (identifier == 0x06) {
                 maxHeaderListSize = value > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) value;
+            } else {
+                log.info("Ignoring unknown setting " + identifier + "=" + value);
             }
             toGo--;
         }

@@ -4,10 +4,7 @@ import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InterruptedIOException;
-import java.io.OutputStream;
+import java.io.*;
 import java.net.Socket;
 import java.net.SocketException;
 import java.nio.ByteBuffer;
@@ -15,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.cert.Certificate;
 import java.time.Instant;
 import java.util.Collections;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.*;
 import java.util.concurrent.locks.Lock;
@@ -177,6 +175,9 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                                         }
 
                                     }
+
+                                    // should we write this somewhere else?
+                                    write(Http2Settings.ACK);
                                 }
                                 break;
                             }
@@ -193,8 +194,8 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                             }
                             case GOAWAY: {
                                 var goaway = Http2GoAway.readFrom(fh, buffer);
+                                log.info("Got goaway from client " + Objects.requireNonNullElse(goaway.errorCodeEnum(), goaway.errorCode()) + " with last stream " + goaway.lastStreamId());
                                 onRemoteClose();
-                                System.out.println(goaway);
                                 break;
                             }
                             case CONTINUATION: {
@@ -215,9 +216,10 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                     }
                     write(new Http2ResetStreamFrame(h2e.streamId(), h2e.errorCode().code()));
                     flush();
-                } catch (SocketException e) {
+                } catch (SocketException | EOFException e) {
                     if (state() == State.CLOSED) {
                         log.info("Socket closed gracefully");
+                        onRemoteClose();
                         break;
                     } else throw e;
                 }

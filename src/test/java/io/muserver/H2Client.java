@@ -116,11 +116,13 @@ class H2ClientConnection implements Http2Peer, Closeable {
 
     @Override
     public void close() throws IOException {
+        flush();
         socket.close();
     }
 
-    public void writeRaw(byte[] bytes) throws IOException {
+    public H2ClientConnection writeRaw(byte[] bytes) throws IOException {
         outputStream.write(bytes);
+        return this;
     }
 
     public void handshake() throws IOException, Http2Exception {
