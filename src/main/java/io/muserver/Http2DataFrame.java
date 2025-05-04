@@ -2,9 +2,14 @@ package io.muserver;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.ByteBuffer;
+import java.util.Arrays;
 
 class Http2DataFrame implements LogicalHttp2Frame {
 
+    private static final byte eosFlag = (byte) 0b00000001;
+    private static final byte paddedFlag = (byte) 0b00001000;
+    private static final byte notEosFlag = (byte) 0b00000000;
     private final int streamId;
     private final boolean eos;
     private final byte[] payload;
@@ -17,6 +22,32 @@ class Http2DataFrame implements LogicalHttp2Frame {
         this.payload = payload;
         this.payloadOffset = payloadOffset;
         this.payloadLength = payloadLength;
+    }
+
+    public static Http2DataFrame readFrom(Http2FrameHeader header, ByteBuffer buffer) {
+
+        boolean eos = (header.flags() & eosFlag) == eosFlag;
+        boolean padded = (header.flags() & paddedFlag) == paddedFlag;
+
+        int padLength;
+        int dataLength;
+        if (padded) {
+            padLength = buffer.get() & 0xFF;
+            dataLength = header.length() - 1 - padLength;
+        } else {
+            padLength = 0;
+            dataLength = header.length();
+        }
+
+        byte[] data = new byte[dataLength];
+
+        buffer.get(data);
+
+        if (padded) {
+            buffer.position(buffer.position() + padLength);
+        }
+
+        return new Http2DataFrame(header.streamId(), eos, data, 0, dataLength);
     }
 
     @Override
@@ -39,7 +70,7 @@ class Http2DataFrame implements LogicalHttp2Frame {
             // type
             (byte)0,
             // flags
-            eos ? (byte)0b00000001 : (byte)0b00000000,
+            eos ? eosFlag : notEosFlag,
             // stream id
             (byte)(streamId >> 24),
             (byte)(streamId >> 16),
@@ -56,5 +87,23 @@ class Http2DataFrame implements LogicalHttp2Frame {
             ", eos=" + eos +
             ", payloadLength=" + payloadLength +
             '}';
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (o == null || getClass() != o.getClass()) return false;
+
+        Http2DataFrame that = (Http2DataFrame) o;
+        return streamId == that.streamId && eos == that.eos && payloadOffset == that.payloadOffset && payloadLength == that.payloadLength && Arrays.equals(payload, payloadOffset, payloadLength, that.payload, that.payloadOffset, that.payloadLength);
+    }
+
+    @Override
+    public int hashCode() {
+        int result = streamId;
+        result = 31 * result + Boolean.hashCode(eos);
+        result = 31 * result + Arrays.hashCode(payload);
+        result = 31 * result + payloadOffset;
+        result = 31 * result + payloadLength;
+        return result;
     }
 }
