@@ -27,7 +27,7 @@
 * 6. [ ] Frame Definitions
  * 6.1. [x] DATA
  * 6.2. [ ] HEADERS
- * 6.3. [ ] PRIORITY
+ * 6.3. [x] PRIORITY
  * 6.4. [ ] RST_STREAM
  * 6.5. [ ] SETTINGS
  * 6.5.1. [ ] SETTINGS Format
