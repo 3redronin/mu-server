@@ -10,10 +10,23 @@ class RFCTestUtils {
 
 
     static @NonNull FieldBlock getHelloHeaders(int port) {
-        FieldBlock headers = FieldBlock.newWithDate();
+        FieldBlock headers = baseHeaders(port);
         headers.add(":method", "GET");
-        headers.add(":scheme", "https");
         headers.add(":path", "/hello");
+        return headers;
+    }
+
+    static @NonNull FieldBlock postHelloHeaders(int port) {
+        FieldBlock headers = baseHeaders(port);
+        headers.add(":method", "POST");
+        headers.add(":path", "/hello");
+        headers.add("content-type", "text/plain; charset=utf-8");
+        return headers;
+    }
+
+    private static @NonNull FieldBlock baseHeaders(int port) {
+        FieldBlock headers = FieldBlock.newWithDate();
+        headers.add(":scheme", "https");
         headers.add(":authority", "localhost:" + port);
         return headers;
     }

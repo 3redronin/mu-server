@@ -24,7 +24,7 @@ class Http2DataFrame implements LogicalHttp2Frame {
         this.payloadLength = payloadLength;
     }
 
-    public static Http2DataFrame readFrom(Http2FrameHeader header, ByteBuffer buffer) {
+    public static Http2DataFrame readFrom(Http2FrameHeader header, ByteBuffer buffer) throws Http2Exception {
 
         boolean eos = (header.flags() & eosFlag) == eosFlag;
         boolean padded = (header.flags() & paddedFlag) == paddedFlag;
@@ -33,6 +33,9 @@ class Http2DataFrame implements LogicalHttp2Frame {
         int dataLength;
         if (padded) {
             padLength = buffer.get() & 0xFF;
+            if (padLength >= header.length()) {
+                throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "Padding length too large");
+            }
             dataLength = header.length() - 1 - padLength;
         } else {
             padLength = 0;
@@ -58,6 +61,22 @@ class Http2DataFrame implements LogicalHttp2Frame {
     @Override
     public boolean endStream() {
         return eos;
+    }
+
+    public int streamId() {
+        return streamId;
+    }
+
+    public byte[] payload() {
+        return payload;
+    }
+
+    public int payloadOffset() {
+        return payloadOffset;
+    }
+
+    public int payloadLength() {
+        return payloadLength;
     }
 
     @Override

@@ -25,7 +25,7 @@
  * 5.4.3. [ ] Connection Termination
  * 5.5. [x] Extending HTTP/2
 * 6. [ ] Frame Definitions
- * 6.1. [ ] DATA
+ * 6.1. [x] DATA
  * 6.2. [ ] HEADERS
  * 6.3. [ ] PRIORITY
  * 6.4. [ ] RST_STREAM

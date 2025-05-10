@@ -14,25 +14,28 @@ class Http2Stream implements ResponseInfo {
     private static final Logger log = LoggerFactory.getLogger(Http2Stream.class);
 
     private enum State {
-        /* IDLE, RESERVED_LOCAL, RESERVED_REMOTE, */ OPEN, HALF_CLOSED_LOCAL, HALF_CLOSED_REMOTE, CLOSED
+        /* IDLE, RESERVED_LOCAL, RESERVED_REMOTE, */ OPEN, HALF_CLOSED_LOCAL, HALF_CLOSED_REMOTE, CLOSED;
 
     }
     final int id;
     private final Http2Connection connection;
-
     final Mu3Request request;
+
     private final Http2FlowController incomingFlowControl;
     private final Http2FlowController outgoingFlowControl;
     @Nullable
     private Http2Response response;
     private State state = State.OPEN;
     private long endTime = 0;
-    Http2Stream(int id, Http2Connection connection, Mu3Request request, Http2FlowController incomingFlowControl, Http2FlowController outgoingFlowControl) {
+    private final InputStream bodyInputStream;
+
+    Http2Stream(int id, Http2Connection connection, Mu3Request request, Http2FlowController incomingFlowControl, Http2FlowController outgoingFlowControl, InputStream bodyInputStream) {
         this.id = id;
         this.connection = connection;
         this.request = request;
         this.incomingFlowControl = incomingFlowControl;
         this.outgoingFlowControl = outgoingFlowControl;
+        this.bodyInputStream = bodyInputStream;
     }
 
     int maxFrameSize() {
@@ -53,6 +56,33 @@ class Http2Stream implements ResponseInfo {
     public boolean completedSuccessfully() {
         return request.completedSuccessfully() && response.responseState().completedSuccessfully();
     }
+
+    public void onData(Http2DataFrame dataFrame) throws Http2Exception {
+        // todo: thread safety
+        if (state != State.OPEN && state != State.HALF_CLOSED_LOCAL) {
+            state = State.CLOSED;
+            throw new Http2Exception(Http2ErrorCode.STREAM_CLOSED, "Invalid state for data", id);
+        }
+
+        if (bodyInputStream instanceof Http2BodyInputStream) {
+            ((Http2BodyInputStream)bodyInputStream).onData(dataFrame);
+            if (dataFrame.endStream()) {
+                switch (state) {
+                    case OPEN:
+                        state = State.HALF_CLOSED_REMOTE;
+                        break;
+                    case HALF_CLOSED_LOCAL:
+                        state = State.CLOSED;
+                        break;
+                    default:
+                        throw new IllegalStateException("Invalid state for data: " + state);
+                }
+            }
+        } else {
+            // TODO: reset the stream
+        }
+    }
+
 
     @Override
     public MuRequest request() {
@@ -140,16 +170,13 @@ class Http2Stream implements ResponseInfo {
         var serverUri = connection.creator.uri().resolve(path.toString());
         var requestUri = Headtils.getUri(log, headers, path.toString(), serverUri);
 
-        InputStream body = bodySize == BodySize.NONE ? EmptyInputStream.INSTANCE : null;
-        if (body == null) {
-            throw new UnsupportedOperationException("Request bodies");
-        }
+        InputStream body = bodySize == BodySize.NONE ? EmptyInputStream.INSTANCE : new Http2BodyInputStream(connection.server.requestIdleTimeoutMillis());
         var request = new Mu3Request(connection, method, requestUri, serverUri, HttpVersion.HTTP_2, headers, bodySize, body);
 
         var outgoingFlowControl = new Http2FlowController(id, clientSettings.initialWindowSize);
         var incomingFlowControl = new Http2FlowController(id, serverSettings.initialWindowSize);
 
-        Http2Stream stream = new Http2Stream(id, connection, request, incomingFlowControl, outgoingFlowControl);
+        Http2Stream stream = new Http2Stream(id, connection, request, incomingFlowControl, outgoingFlowControl, body);
         stream.response = new Http2Response(stream, new FieldBlock(), request);
         return stream;
     }
@@ -168,6 +195,8 @@ class Http2Stream implements ResponseInfo {
      * Writes a frame, blocking if needed until there is enough flow control credit.
      */
     void blockingWrite(LogicalHttp2Frame frame) throws InterruptedException, IOException {
+
+        // DATA frames are subject to flow control and can only be sent when a stream is in the "open" or "half-closed (remote)" state
 
         // todo: synchronise access to the state
         if (state == State.HALF_CLOSED_LOCAL) {
@@ -195,6 +224,13 @@ class Http2Stream implements ResponseInfo {
     public void flush() throws IOException {
         connection.flush();
     }
+
+    @Override
+    public String toString() {
+        Http2Response resp = response;
+        return resp == null ? "Uninitialized respons" : resp.status() + " (" + resp.responseState() + ")";
+    }
+
 
 }
 

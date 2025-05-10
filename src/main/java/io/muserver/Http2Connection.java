@@ -83,6 +83,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         try {
             log.info("Writing " + frame);
             frame.writeTo(this, clientOut);
+            log.info("Wrote it");
         } finally {
             writeLock.unlock();
         }
@@ -120,6 +121,8 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                     log.info("read fh = " + fh);
 
                     if (state == State.HALF_CLOSED_LOCAL && fh.streamId() > lastStreamId) {
+                        // we've told the client we have stopped, but this is a new stream ID (should we refuse it?)
+                        log.info("Discarding it");
                         discardPayload(buffer, clientIn, len);
                     } else {
 
@@ -134,6 +137,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                                     if (activeRequests().size() >= serverSettings.maxConcurrentStreams) {
                                         log.info("Max concurrent streams reached");
                                         write(new Http2ResetStreamFrame(headerFragment.streamId(), Http2ErrorCode.REFUSED_STREAM.code()));
+                                        flush();
                                     } else {
                                         lastStreamId = fh.streamId();
                                         startRequest(headerFragment);
@@ -153,6 +157,25 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                                     } else {
                                         write(new Http2HeadersFrame(fh.streamId(), true, errorHeaders));
                                     }
+                                    flush();
+                                }
+                                break;
+                            }
+                            case DATA: {
+                                var dataFrame = Http2DataFrame.readFrom(fh, buffer);
+                                var stream = streams.get(dataFrame.streamId());
+                                if (stream == null) {
+                                    // From RFC9113 6.1: If a DATA frame is received whose Stream Identifier field is 0x00, the recipient MUST respond with a connection error
+                                    // From RFC9113 5.1: Receiving any frame other than HEADERS or PRIORITY on a stream in this [idle] state MUST be treated as a connection error
+                                    if (fh.streamId() == 0 || fh.streamId() > lastStreamId || (fh.streamId() % 2) == 0) {
+                                        throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "Invalid stream ID on data frame");
+                                    } else {
+                                        // From RFC9113 6.1: If a DATA frame is received whose stream is not in the "open" or "half-closed (local)" state, the recipient MUST respond with a stream error (Section 5.4.2) of type STREAM_CLOSED.
+                                        // As the stream is null, then most likely it is already closed. (Half-closed streams would not be here)
+                                        throw new Http2Exception(Http2ErrorCode.STREAM_CLOSED, "Received data on closed stream", fh.streamId());
+                                    }
+                                } else {
+                                    stream.onData(dataFrame);
                                 }
                                 break;
                             }
@@ -171,7 +194,9 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                                     if (newSettings != oldSettings) {
                                         clientSettings = newSettings;
                                         if (newSettings.initialWindowSize != oldSettings.initialWindowSize) {
-                                            // todo: apply diff settings on existing streams
+                                            for (var stream : streams.values()) {
+                                                // TODO: pass it
+                                            }
                                         }
 
                                     }

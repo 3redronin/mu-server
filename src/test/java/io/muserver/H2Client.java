@@ -2,6 +2,7 @@ package io.muserver;
 
 import javax.net.ssl.*;
 import java.io.*;
+import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyManagementException;
@@ -68,6 +69,10 @@ class H2ClientConnection implements Http2Peer, Closeable {
         readBuffer = ByteBuffer.allocate(16384).flip();
     }
 
+    public Socket socket() {
+        return socket;
+    }
+
     public void writePreface() throws IOException {
         outputStream.write("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n".getBytes(StandardCharsets.US_ASCII));
     }
@@ -77,6 +82,10 @@ class H2ClientConnection implements Http2Peer, Closeable {
     public H2ClientConnection writeFrame(LogicalHttp2Frame frame) throws IOException {
         frame.writeTo(this, outputStream);
         return this;
+    }
+
+    public int available() throws IOException {
+        return inputStream.available();
     }
 
     Http2FrameHeader readFrameHeader() throws IOException, Http2Exception {
@@ -91,6 +100,7 @@ class H2ClientConnection implements Http2Peer, Closeable {
             case SETTINGS: return Http2Settings.readFrom(header, readBuffer);
             case RST_STREAM: return Http2ResetStreamFrame.readFrom(header, readBuffer);
             case HEADERS: return Http2HeadersFrame.readLogicalFrame(header, fieldBlockDecoder, readBuffer, inputStream);
+            case DATA: return Http2DataFrame.readFrom(header, readBuffer);
         }
         throw new RuntimeException("Unexpected frameType: " + header.frameType());
     }
@@ -125,7 +135,7 @@ class H2ClientConnection implements Http2Peer, Closeable {
         return this;
     }
 
-    public void handshake() throws IOException, Http2Exception {
+    public H2ClientConnection handshake() throws IOException, Http2Exception {
         writePreface();
         writeFrame(Http2Settings.DEFAULT_CLIENT_SETTINGS);
         flush();
@@ -136,7 +146,7 @@ class H2ClientConnection implements Http2Peer, Closeable {
         } else {
             throw new IllegalStateException("Expected single ACK, got " + settings1 + " and " + settings2);
         }
-
+        return this;
     }
 
     @Override
