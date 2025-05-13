@@ -25,11 +25,13 @@ import org.slf4j.LoggerFactory;
 import javax.net.ssl.SSLParameters;
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.*;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /**
@@ -625,8 +627,11 @@ public class MuServerBuilder {
         NioEventLoopGroup workerGroup = new NioEventLoopGroup(this.nioThreads);
         List<Channel> channels = new ArrayList<>();
 
+        GlobalTrafficShapingHandler trafficShapingHandler = new GlobalTrafficShapingHandler(workerGroup, 0, 0, 1000);
+        MuStatsImpl stats = new MuStatsImpl(trafficShapingHandler.trafficCounter());
+
         ExecutorService finalHandlerExecutor = handlerExecutor;
-        Runnable shutdown = () -> {
+        Consumer<Duration> shutdown = (gracefulDuration) -> {
             try {
                 if (wheelTimer != null) {
                     wheelTimer.stop();
@@ -634,9 +639,11 @@ public class MuServerBuilder {
                 for (Channel channel : channels) {
                     channel.close().sync();
                 }
-                finalHandlerExecutor.shutdown();
+
                 bossGroup.shutdownGracefully(0, 0, TimeUnit.MILLISECONDS).sync();
+                gracefulWait(gracefulDuration, stats);
                 workerGroup.shutdownGracefully(0, 0, TimeUnit.MILLISECONDS).sync();
+                finalHandlerExecutor.shutdown();
 
             } catch (Exception e) {
                 log.info("Error while shutting down. Will ignore. Error was: " + e.getMessage());
@@ -644,8 +651,7 @@ public class MuServerBuilder {
         };
 
         try {
-            GlobalTrafficShapingHandler trafficShapingHandler = new GlobalTrafficShapingHandler(workerGroup, 0, 0, 1000);
-            MuStatsImpl stats = new MuStatsImpl(trafficShapingHandler.trafficCounter());
+
             SslContextProvider sslContextProvider = null;
 
             boolean http2Enabled = http2Config != null && http2Config.enabled;
@@ -682,10 +688,21 @@ public class MuServerBuilder {
             return server;
 
         } catch (Exception ex) {
-            shutdown.run();
+            shutdown.accept(Duration.ofMillis(0));
             throw new MuException("Error while starting server", ex);
         }
 
+    }
+
+    private static void gracefulWait(Duration gracefulDuration, MuStatsImpl stats) throws InterruptedException {
+        long start = System.currentTimeMillis();
+        while(!stats.activeRequests().isEmpty()
+            && (System.currentTimeMillis() - start) < gracefulDuration.toMillis()) {
+            Thread.sleep(100);
+        }
+        if (!stats.activeRequests().isEmpty()) {
+            log.info("Shutting down worker threads. Active requests: {}", stats.activeRequests());
+        }
     }
 
     private static URI getUriFromChannel(Channel httpChannel, String protocol, String host) {

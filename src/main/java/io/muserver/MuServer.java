@@ -18,7 +18,21 @@ public interface MuServer {
     /**
      * Shuts down the server
      */
-    void stop();
+    default void stop() {
+        stop(0, TimeUnit.MILLISECONDS);
+    }
+
+
+    /**
+     * Graceful shut down the server with timeout. During the graceful period, the server will not accept
+     * new connections and wait for in flight requests to finish.
+     * <p>
+     * It's a blocking call, so it will not return until the server is stopped or the timeout is reached.
+     *
+     * @param duration the graceful timeout period, or 0 to shut down immediately.
+     * @param unit The unit of the period.
+     */
+    void stop(long duration, TimeUnit unit);
 
     /**
      * @return The HTTPS (or if unavailable the HTTP) URI of the web server.

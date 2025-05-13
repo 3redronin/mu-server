@@ -4,17 +4,20 @@ import io.netty.handler.ssl.SslContext;
 
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 class MuServerImpl implements MuServer {
 
     private URI httpUri;
     private URI httpsUri;
-    private Runnable shutdown;
+    private Consumer<Duration> shutdown;
     final MuStatsImpl stats;
     private InetSocketAddress address;
     private SslContextProvider sslContextProvider;
@@ -23,7 +26,7 @@ class MuServerImpl implements MuServer {
     private final Set<HttpConnection> connections = ConcurrentHashMap.newKeySet();
     final UnhandledExceptionHandler unhandledExceptionHandler;
 
-    void onStarted(URI httpUri, URI httpsUri, Runnable shutdown, InetSocketAddress address, SslContextProvider sslContextProvider) {
+    void onStarted(URI httpUri, URI httpsUri, Consumer<Duration> shutdown, InetSocketAddress address, SslContextProvider sslContextProvider) {
         this.address = address;
         this.sslContextProvider = sslContextProvider;
         if (httpUri == null && httpsUri == null) {
@@ -41,9 +44,10 @@ class MuServerImpl implements MuServer {
         this.unhandledExceptionHandler = unhandledExceptionHandler;
     }
 
+
     @Override
-    public void stop() {
-        shutdown.run();
+    public void stop(long duration, TimeUnit unit) {
+        shutdown.accept(Duration.ofMillis(unit.toMillis(duration)));
     }
 
     @Override
