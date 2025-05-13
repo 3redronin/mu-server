@@ -694,16 +694,15 @@ public class MuServerBuilder {
 
     }
 
-    private static void gracefulWait(Duration gracefulDuration, MuStatsImpl stats) throws InterruptedException {
-        long start = System.currentTimeMillis();
-        while(!stats.activeRequests().isEmpty()
-            && (System.currentTimeMillis() - start) < gracefulDuration.toMillis()) {
-            Thread.sleep(100);
-        }
-        if (!stats.activeRequests().isEmpty()) {
-            log.info("Shutting down worker threads. Active requests: {}", stats.activeRequests());
-        }
+private static void gracefulWait(Duration gracefulDuration, MuStatsImpl stats) throws InterruptedException {
+    long endTime = System.currentTimeMillis() + gracefulDuration.toMillis();
+    while (!stats.activeRequests().isEmpty() && System.currentTimeMillis() < endTime) {
+        Thread.sleep(100);
     }
+    if (!stats.activeRequests().isEmpty()) {
+        log.info("Shutting down worker threads. Active requests: {}", stats.activeRequests());
+    }
+}
 
     private static URI getUriFromChannel(Channel httpChannel, String protocol, String host) {
         host = host == null ? "localhost" : host;

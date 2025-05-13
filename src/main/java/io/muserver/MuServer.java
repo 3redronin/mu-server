@@ -23,15 +23,16 @@ public interface MuServer {
     }
 
 
-    /**
-     * Graceful shut down the server with timeout. During the graceful period, the server will not accept
-     * new connections and wait for in flight requests to finish.
-     * <p>
-     * It's a blocking call, so it will not return until the server is stopped or the timeout is reached.
-     *
-     * @param duration the graceful timeout period, or 0 to shut down immediately.
-     * @param unit The unit of the period.
-     */
+   /**
+      * Gracefully shuts down the server with a timeout. During the graceful shutdown period, the server will stop
+      * accepting new connections and wait for in-flight requests to complete.
+      * <p>
+      * This is a blocking call and will not return until the server is fully stopped or the timeout is reached.
+      * </p>
+      *
+      * @param duration The duration of the graceful timeout period, or 0 to shut down immediately.
+      * @param unit     The time unit of the duration.
+      */
     void stop(long duration, TimeUnit unit);
 
     /**
