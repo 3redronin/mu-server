@@ -10,6 +10,7 @@ import java.io.UncheckedIOException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
@@ -73,7 +74,7 @@ public class StopTest {
         // new request should fail
         Thread.sleep(200L);
         UncheckedIOException exception = assertThrows(UncheckedIOException.class, () -> {
-            try (Response resp = call(request().url(server.uri().toString())) ) {}
+            try (Response ignored = call(request().url(server.uri().toString())) ) {}
         });
         Throwable rootCause = exception.getCause().getCause();
         assertThat(rootCause, is(instanceOf(java.net.ConnectException.class)));
@@ -89,18 +90,15 @@ public class StopTest {
 
         CountDownLatch serverReceivedLatch = new CountDownLatch(1);
         CountDownLatch clientReceivedLatch = new CountDownLatch(1);
-        AtomicInteger clientReceivedStatus = new AtomicInteger();
+        AtomicReference<Exception> clientException = new AtomicReference<>();
 
         server = startLongDelayServer(serverReceivedLatch, 2000L);
 
         new Thread(() -> {
             UncheckedIOException exception = assertThrows(UncheckedIOException.class, () ->{
-                try (Response resp = call(request().url(server.uri().toString())) ) {
-                    clientReceivedStatus.set(resp.code());
-                }
+                try (Response ignore = call(request().url(server.uri().toString())) ) {}
             });
-            Throwable rootCause = exception.getCause().getCause();
-            assertThat(rootCause, is(instanceOf(java.io.EOFException.class)));
+            clientException.set(exception);
             clientReceivedLatch.countDown();
         }).start();
 
@@ -110,7 +108,7 @@ public class StopTest {
 
         // the previous in flight request should be aborted
         assertThat(clientReceivedLatch.await(2, TimeUnit.SECONDS), is(true));
-        assertThat(clientReceivedStatus.get(), is(0));
+        assertThat(clientException.get().getCause().getCause(), is(instanceOf(java.io.EOFException.class)));
     }
 
 }
