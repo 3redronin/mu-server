@@ -31,7 +31,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.*;
-import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -631,7 +631,7 @@ public class MuServerBuilder {
         MuStatsImpl stats = new MuStatsImpl(trafficShapingHandler.trafficCounter());
 
         ExecutorService finalHandlerExecutor = handlerExecutor;
-        Consumer<Duration> shutdown = (gracefulDuration) -> {
+        Function<Duration, Boolean> shutdown = (gracefulDuration) -> {
             try {
                 if (wheelTimer != null) {
                     wheelTimer.stop();
@@ -641,12 +641,20 @@ public class MuServerBuilder {
                 }
 
                 bossGroup.shutdownGracefully(0, 0, TimeUnit.MILLISECONDS).sync();
-                gracefulWait(gracefulDuration, stats);
+
+                boolean hasInFlightRequests = gracefulWait(gracefulDuration, stats);
+                if (hasInFlightRequests) {
+                    log.info("Shutting down worker threads. Active requests: {}", stats.activeRequests());
+                }
+
                 workerGroup.shutdownGracefully(0, 0, TimeUnit.MILLISECONDS).sync();
                 finalHandlerExecutor.shutdown();
 
+                return hasInFlightRequests;
+
             } catch (Exception e) {
-                log.info("Error while shutting down. Will ignore. Error was: " + e.getMessage());
+                log.info("Error while shutting down. Will ignore. Error was: {}", e.getMessage());
+                return false;
             }
         };
 
@@ -688,20 +696,18 @@ public class MuServerBuilder {
             return server;
 
         } catch (Exception ex) {
-            shutdown.accept(Duration.ofMillis(0));
+            shutdown.apply(Duration.ofMillis(0));
             throw new MuException("Error while starting server", ex);
         }
 
     }
 
-private static void gracefulWait(Duration gracefulDuration, MuStatsImpl stats) throws InterruptedException {
+private  boolean gracefulWait(Duration gracefulDuration, MuStatsImpl stats) throws InterruptedException {
     long endTime = System.currentTimeMillis() + gracefulDuration.toMillis();
     while (!stats.activeRequests().isEmpty() && System.currentTimeMillis() < endTime) {
         Thread.sleep(100);
     }
-    if (!stats.activeRequests().isEmpty()) {
-        log.info("Shutting down worker threads. Active requests: {}", stats.activeRequests());
-    }
+    return !stats.activeRequests().isEmpty();
 }
 
     private static URI getUriFromChannel(Channel httpChannel, String protocol, String host) {

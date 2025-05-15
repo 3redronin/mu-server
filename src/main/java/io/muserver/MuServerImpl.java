@@ -10,14 +10,14 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 class MuServerImpl implements MuServer {
 
     private URI httpUri;
     private URI httpsUri;
-    private Consumer<Duration> shutdown;
+    private Function<Duration, Boolean> shutdown;
     final MuStatsImpl stats;
     private InetSocketAddress address;
     private SslContextProvider sslContextProvider;
@@ -26,7 +26,7 @@ class MuServerImpl implements MuServer {
     private final Set<HttpConnection> connections = ConcurrentHashMap.newKeySet();
     final UnhandledExceptionHandler unhandledExceptionHandler;
 
-    void onStarted(URI httpUri, URI httpsUri, Consumer<Duration> shutdown, InetSocketAddress address, SslContextProvider sslContextProvider) {
+    void onStarted(URI httpUri, URI httpsUri, Function<Duration, Boolean> shutdown, InetSocketAddress address, SslContextProvider sslContextProvider) {
         this.address = address;
         this.sslContextProvider = sslContextProvider;
         if (httpUri == null && httpsUri == null) {
@@ -46,8 +46,8 @@ class MuServerImpl implements MuServer {
 
 
     @Override
-    public void stop(long duration, TimeUnit unit) {
-        shutdown.accept(Duration.ofMillis(unit.toMillis(duration)));
+    public boolean stop(long duration, TimeUnit unit) {
+        return shutdown.apply(Duration.ofMillis(unit.toMillis(duration)));
     }
 
     @Override

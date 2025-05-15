@@ -1,15 +1,18 @@
 package io.muserver;
 
 import okhttp3.Response;
+import org.junit.After;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.UncheckedIOException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.assertThrows;
 import static scaffolding.ClientUtils.call;
@@ -19,14 +22,17 @@ public class StopTest {
 
     private static final Logger log = LoggerFactory.getLogger(StopTest.class);
 
-    @Test
-    public void gracefulShutdown() throws InterruptedException {
+    private MuServer server;
 
-        CountDownLatch serverReceivedLatch = new CountDownLatch(1);
-        CountDownLatch clientReceivedLatch = new CountDownLatch(1);
-        AtomicInteger clientReceivedStatus = new AtomicInteger();
+    @After
+    public void tearDown() throws Exception {
+        if (server != null) {
+            server.stop();
+        }
+    }
 
-        MuServer server = MuServerBuilder
+    private static MuServer startLongDelayServer(CountDownLatch serverReceivedLatch, long delayTime) {
+        return MuServerBuilder
             .httpServer()
             .addHandler((request, response) -> {
                 log.info("received request {}", request);
@@ -35,7 +41,7 @@ public class StopTest {
                 AsyncHandle asyncHandle = request.handleAsync();
                 asyncHandle.addResponseCompleteHandler(info -> log.info("request completed {}", info));
 
-                Thread.sleep(2000L);
+                Thread.sleep(delayTime);
                 response.status(200);
                 asyncHandle.write(Mutils.toByteBuffer("Hello"));
                 asyncHandle.complete();
@@ -43,8 +49,16 @@ public class StopTest {
                 return true;
             })
             .start();
+    }
 
+    @Test
+    public void gracefulShutdown_withinGracefulPeriod() throws InterruptedException {
 
+        CountDownLatch serverReceivedLatch = new CountDownLatch(1);
+        CountDownLatch clientReceivedLatch = new CountDownLatch(1);
+        AtomicInteger clientReceivedStatus = new AtomicInteger();
+
+        server = startLongDelayServer(serverReceivedLatch, 2000L);
 
         new Thread(() -> {
             try (Response resp = call(request().url(server.uri().toString()))) {
@@ -59,14 +73,45 @@ public class StopTest {
 
         // new request should fail
         Thread.sleep(200L);
-        assertThrows(Exception.class, () -> {
-            try (Response resp = call(request().url(server.uri().toString()))) {
-                assertThat(resp.code(), is(200));
-            }
+        UncheckedIOException exception = assertThrows(UncheckedIOException.class, () -> {
+            try (Response resp = call(request().url(server.uri().toString())) ) {}
         });
+        Throwable rootCause = exception.getCause().getCause();
+        assertThat(rootCause, is(instanceOf(java.net.ConnectException.class)));
+        assertThat(rootCause.getMessage(), is("Connection refused"));
 
-        // the previous in flight request should completed
+        // the previous in flight request should complete
         assertThat(clientReceivedLatch.await(2, TimeUnit.SECONDS), is(true));
         assertThat(clientReceivedStatus.get(), is(200));
     }
+
+    @Test
+    public void gracefulShutdown_inFlightRequestAbortedWhenGracefulPeriodExceed() throws InterruptedException {
+
+        CountDownLatch serverReceivedLatch = new CountDownLatch(1);
+        CountDownLatch clientReceivedLatch = new CountDownLatch(1);
+        AtomicInteger clientReceivedStatus = new AtomicInteger();
+
+        server = startLongDelayServer(serverReceivedLatch, 2000L);
+
+        new Thread(() -> {
+            UncheckedIOException exception = assertThrows(UncheckedIOException.class, () ->{
+                try (Response resp = call(request().url(server.uri().toString())) ) {
+                    clientReceivedStatus.set(resp.code());
+                }
+            });
+            Throwable rootCause = exception.getCause().getCause();
+            assertThat(rootCause, is(instanceOf(java.io.EOFException.class)));
+            clientReceivedLatch.countDown();
+        }).start();
+
+        assertThat(serverReceivedLatch.await(2, TimeUnit.SECONDS), is(true));
+
+        new Thread(() -> server.stop(500, TimeUnit.MILLISECONDS)).start();
+
+        // the previous in flight request should be aborted
+        assertThat(clientReceivedLatch.await(2, TimeUnit.SECONDS), is(true));
+        assertThat(clientReceivedStatus.get(), is(0));
+    }
+
 }
