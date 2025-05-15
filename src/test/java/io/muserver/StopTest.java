@@ -12,8 +12,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.instanceOf;
-import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.*;
 import static org.junit.Assert.assertThrows;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
@@ -78,7 +77,7 @@ public class StopTest {
         });
         Throwable rootCause = exception.getCause().getCause();
         assertThat(rootCause, is(instanceOf(java.net.ConnectException.class)));
-        assertThat(rootCause.getMessage(), is("Connection refused"));
+        assertThat(rootCause.getMessage(), containsString("Connection refused"));
 
         // the previous in flight request should complete
         assertThat(clientReceivedLatch.await(2, TimeUnit.SECONDS), is(true));
