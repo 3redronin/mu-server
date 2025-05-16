@@ -25,11 +25,13 @@ import org.slf4j.LoggerFactory;
 import javax.net.ssl.SSLParameters;
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -625,8 +627,11 @@ public class MuServerBuilder {
         NioEventLoopGroup workerGroup = new NioEventLoopGroup(this.nioThreads);
         List<Channel> channels = new ArrayList<>();
 
+        GlobalTrafficShapingHandler trafficShapingHandler = new GlobalTrafficShapingHandler(workerGroup, 0, 0, 1000);
+        MuStatsImpl stats = new MuStatsImpl(trafficShapingHandler.trafficCounter());
+
         ExecutorService finalHandlerExecutor = handlerExecutor;
-        Runnable shutdown = () -> {
+        Function<Duration, Boolean> shutdown = (gracefulDuration) -> {
             try {
                 if (wheelTimer != null) {
                     wheelTimer.stop();
@@ -634,18 +639,27 @@ public class MuServerBuilder {
                 for (Channel channel : channels) {
                     channel.close().sync();
                 }
-                finalHandlerExecutor.shutdown();
+
                 bossGroup.shutdownGracefully(0, 0, TimeUnit.MILLISECONDS).sync();
+
+                boolean hasInFlightRequests = gracefulWait(gracefulDuration, stats);
+                if (hasInFlightRequests) {
+                    log.info("Shutting down worker threads. Active requests: {}", stats.activeRequests());
+                }
+
                 workerGroup.shutdownGracefully(0, 0, TimeUnit.MILLISECONDS).sync();
+                finalHandlerExecutor.shutdown();
+
+                return hasInFlightRequests;
 
             } catch (Exception e) {
-                log.info("Error while shutting down. Will ignore. Error was: " + e.getMessage());
+                log.info("Error while shutting down. Will ignore. Error was: {}", e.getMessage());
+                return false;
             }
         };
 
         try {
-            GlobalTrafficShapingHandler trafficShapingHandler = new GlobalTrafficShapingHandler(workerGroup, 0, 0, 1000);
-            MuStatsImpl stats = new MuStatsImpl(trafficShapingHandler.trafficCounter());
+
             SslContextProvider sslContextProvider = null;
 
             boolean http2Enabled = http2Config != null && http2Config.enabled;
@@ -682,11 +696,19 @@ public class MuServerBuilder {
             return server;
 
         } catch (Exception ex) {
-            shutdown.run();
+            shutdown.apply(Duration.ofMillis(0));
             throw new MuException("Error while starting server", ex);
         }
 
     }
+
+private  boolean gracefulWait(Duration gracefulDuration, MuStatsImpl stats) throws InterruptedException {
+    long endTime = System.currentTimeMillis() + gracefulDuration.toMillis();
+    while (!stats.activeRequests().isEmpty() && System.currentTimeMillis() < endTime) {
+        Thread.sleep(100);
+    }
+    return !stats.activeRequests().isEmpty();
+}
 
     private static URI getUriFromChannel(Channel httpChannel, String protocol, String host) {
         host = host == null ? "localhost" : host;

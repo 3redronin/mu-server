@@ -18,7 +18,24 @@ public interface MuServer {
     /**
      * Shuts down the server
      */
-    void stop();
+    default void stop() {
+        stop(0, TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * Gracefully shuts down the server with a timeout. During the graceful shutdown period, the server will stop
+     * accepting new connections and wait for in-flight requests to complete. When timeout is reached and there
+     * are still in-flight requests, all the http connections will be aborted, no exception will be thrown.
+     *
+     * <p>
+     * This is a blocking call and will not return until the server is fully stopped or the timeout is reached.
+     * </p>
+     *
+     * @param duration The duration of the graceful timeout period, or 0 to shut down immediately.
+     * @param unit     The time unit of the duration.
+     * @return false if there were in-flight requests not completed.
+     */
+    boolean stop(long duration, TimeUnit unit);
 
     /**
      * @return The HTTPS (or if unavailable the HTTP) URI of the web server.
@@ -76,6 +93,7 @@ public interface MuServer {
     /**
      * The size a response body must be before GZIP is enabled, if {@link #gzipEnabled()} is true and the mime type is in {@link #mimeTypesToGzip()}
      * <p>This can only be set at point of server creation with {@link MuServerBuilder#withGzip(long, Set)}</p>
+     *
      * @return Size in bytes.
      */
     long minimumGzipSize();
@@ -83,6 +101,7 @@ public interface MuServer {
     /**
      * The maximum allowed size of request headers.
      * <p>This can only be set at point of server creation with {@link MuServerBuilder#withMaxHeadersSize(int)}</p>
+     *
      * @return Size in bytes.
      */
     int maxRequestHeadersSize();
@@ -90,6 +109,7 @@ public interface MuServer {
     /**
      * The maximum idle timeout for reading request bodies.
      * <p>This can only be set at point of server creation with {@link MuServerBuilder#withIdleTimeout(long, TimeUnit)}</p>
+     *
      * @return Timeout in milliseconds.
      */
     long requestIdleTimeoutMillis();
@@ -97,6 +117,7 @@ public interface MuServer {
     /**
      * The maximum allowed size of a request body.
      * <p>This can only be set at point of server creation with {@link MuServerBuilder#withMaxRequestSize(long)}</p>
+     *
      * @return Size in bytes.
      */
     long maxRequestSize();
@@ -104,6 +125,7 @@ public interface MuServer {
     /**
      * The maximum allowed size of the URI sent in a request line.
      * <p>This can only be set at point of server creation with {@link MuServerBuilder#withMaxUrlSize(int)}</p>
+     *
      * @return Length of allowed URI string.
      */
     int maxUrlSize();
@@ -112,6 +134,7 @@ public interface MuServer {
      * Specifies whether GZIP is on or not.
      * <p>This can only be set at point of server creation with {@link MuServerBuilder#withGzipEnabled(boolean)} or
      * {@link MuServerBuilder#withGzip(long, Set)}</p>
+     *
      * @return True if gzip is enabled for responses that match gzip criteria; otherwise false.
      */
     boolean gzipEnabled();
@@ -119,18 +142,21 @@ public interface MuServer {
     /**
      * Specifies the mime-types that GZIP should be applied to.
      * <p>This can only be set at point of server creation with {@link MuServerBuilder#withGzip(long, Set)}</p>
+     *
      * @return A set of mime-types.
      */
     Set<String> mimeTypesToGzip();
 
     /**
      * Changes the HTTPS certificate. This can be changed without restarting the server.
+     *
      * @param newHttpsConfig The new SSL Context to use.
      */
     void changeHttpsConfig(HttpsConfigBuilder newHttpsConfig);
 
     /**
      * Gets the SSL info of the server, or null if SSL is not enabled.
+     *
      * @return A description of the actual SSL settings used, or null.
      */
     SSLInfo sslInfo();
