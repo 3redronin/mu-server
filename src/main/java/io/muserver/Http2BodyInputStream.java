@@ -1,9 +1,11 @@
 package io.muserver;
 
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InterruptedIOException;
 import java.util.LinkedList;
+import java.util.Objects;
 import java.util.Queue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
@@ -14,7 +16,7 @@ class Http2BodyInputStream extends InputStream {
 
     private final long readTimeoutMillis;
     private final Lock lock = new ReentrantLock();
-    private final Queue<Http2DataFrame> frames = new LinkedList<>();
+    private final Queue<LogicalHttp2Frame> frames = new LinkedList<>();
     private final Condition hasData = lock.newCondition();
     private int currentOffset = 0;
 
@@ -34,7 +36,7 @@ class Http2BodyInputStream extends InputStream {
     public int read(byte[] b, int off, int len) throws IOException {
         lock.lock();
         try {
-            Http2DataFrame frame;
+            LogicalHttp2Frame frame;
             while ((frame = frames.peek()) == null) {
                 try {
                     if (!hasData.await(readTimeoutMillis, TimeUnit.MILLISECONDS)) {
@@ -45,29 +47,43 @@ class Http2BodyInputStream extends InputStream {
                 }
             }
 
-            int offset = frame.payloadOffset() + currentOffset;
-            int remaining = frame.payloadLength() - currentOffset;
-            if (remaining == 0 && frame.endStream()) {
-                return -1;
-            }
-            if (remaining < len) {
-                // the user wants more than what is available in the first frame, so give all the rest of it
-                System.arraycopy(frame.payload(), offset, b, off, remaining);
+            if (frame instanceof Http2DataFrame) {
+                var data = (Http2DataFrame) frame;
+
+                int offset = data.payloadOffset() + currentOffset;
+                int remaining = data.payloadLength() - currentOffset;
+                if (remaining == 0 && data.endStream()) {
+                    return -1;
+                }
+                if (remaining < len) {
+                    // the user wants more than what is available in the first frame, so give all the rest of it
+                    System.arraycopy(data.payload(), offset, b, off, remaining);
 //                if (remaining == len) {
                     // TODO: how about waiting for more data?
 //                }
-                if (!frame.endStream()) {
-                    currentOffset = 0;
-                    frames.remove();
+                    if (!frame.endStream()) {
+                        currentOffset = 0;
+                        frames.remove();
+                    } else {
+                        currentOffset += remaining;
+                    }
+                    return remaining;
                 } else {
-                    currentOffset += remaining;
+                    // the user wants less than what is available
+                    System.arraycopy(data.payload(), offset, b, off, len);
+                    currentOffset += len;
+                    return len;
                 }
-                return remaining;
+            } else if (frame instanceof Http2ResetStreamFrame) {
+                var reset = (Http2ResetStreamFrame) frame;
+                Http2ErrorCode err = Objects.requireNonNullElse(reset.errorCodeEnum(), Http2ErrorCode.INTERNAL_ERROR);
+                if (err == Http2ErrorCode.CANCEL) {
+                    throw new EOFException("Client cancelled the request");
+                }
+                throw new IOException("Error reading request body: " + err.name() + " (" + err.code() + ")");
             } else {
-                // the user wants less than what is available
-                System.arraycopy(frame.payload(), offset, b, off, len);
-                currentOffset += len;
-                return len;
+                // not possible, I swear
+                throw new IllegalStateException("Unexpected frame type: " + frame.getClass().getName());
             }
 
         } finally {
@@ -84,6 +100,17 @@ class Http2BodyInputStream extends InputStream {
             } finally {
                 lock.unlock();
             }
+        }
+    }
+
+    public void onStreamReset(Http2ResetStreamFrame resetFrame) {
+        lock.lock();
+        try {
+            frames.clear();
+            frames.add(resetFrame);
+            hasData.signal();
+        } finally {
+            lock.unlock();
         }
     }
 }

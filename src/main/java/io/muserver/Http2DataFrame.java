@@ -3,6 +3,7 @@ package io.muserver;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 class Http2DataFrame implements LogicalHttp2Frame {
@@ -97,6 +98,10 @@ class Http2DataFrame implements LogicalHttp2Frame {
             (byte)(streamId)
         });
         out.write(payload, payloadOffset, payloadLength);
+    }
+
+    public String toUTF8() {
+        return new String(payload, payloadOffset, payloadLength, StandardCharsets.UTF_8);
     }
 
     @Override

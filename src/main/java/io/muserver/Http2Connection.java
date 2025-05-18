@@ -72,6 +72,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         log.info("State is now " + state);
     }
 
+    // todo read/write locks
     private synchronized State state() {
         return state;
     }
@@ -122,7 +123,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
 
                     if (state == State.HALF_CLOSED_LOCAL && fh.streamId() > lastStreamId) {
                         // we've told the client we have stopped, but this is a new stream ID (should we refuse it?)
-                        log.info("Discarding it");
+                        log.info("Discarding " + fh.streamId() + " because we told the client the last stream ID is " + lastStreamId);
                         discardPayload(buffer, clientIn, len);
                     } else {
 
@@ -155,6 +156,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                                         write(new Http2HeadersFrame(fh.streamId(), false, errorHeaders));
                                         write(new Http2DataFrame(fh.streamId(), true, message, 0, message.length));
                                     } else {
+                                        errorHeaders.set(HeaderNames.CONTENT_LENGTH, 0);
                                         write(new Http2HeadersFrame(fh.streamId(), true, errorHeaders));
                                     }
                                     flush();
@@ -212,7 +214,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                                 if (windowUpdate.level() == Http2Level.STREAM) {
                                     Http2Stream stream = streams.get(windowUpdate.streamId());
                                     if (stream != null) {
-                                        stream.applyWindowUpdate(windowUpdate);
+                                        stream.onWindowUpdate(windowUpdate);
                                     }
                                 }
                                 break;
@@ -221,6 +223,20 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                                 var goaway = Http2GoAway.readFrom(fh, buffer);
                                 log.info("Got goaway from client " + Objects.requireNonNullElse(goaway.errorCodeEnum(), goaway.errorCode()) + " with last stream " + goaway.lastStreamId());
                                 onRemoteClose();
+                                break;
+                            }
+                            case RST_STREAM: {
+                                var rstStream = Http2ResetStreamFrame.readFrom(fh, buffer);
+                                int streamId = rstStream.streamId();
+                                var stream = streams.get(streamId);
+                                log.info("Reset stream " + rstStream + " for " + stream);
+                                if (stream != null) {
+                                    stream.onReset(rstStream);
+                                } else {
+                                    if (streamId > lastStreamId || streamId % 2 == 0) {
+                                        throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "Invalid stream ID on rst_stream");
+                                    }
+                                }
                                 break;
                             }
                             case CONTINUATION: {
@@ -241,7 +257,9 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                     }
                     write(new Http2ResetStreamFrame(h2e.streamId(), h2e.errorCode().code()));
                     flush();
-                } catch (SocketException | EOFException e) {
+                } catch (EOFException e) {
+                    onRemoteClose();
+                } catch (SocketException e) {
                     if (state() == State.CLOSED) {
                         log.info("Socket closed gracefully");
                         onRemoteClose();

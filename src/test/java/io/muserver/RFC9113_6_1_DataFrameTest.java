@@ -9,8 +9,6 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.net.Socket;
-import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CountDownLatch;
@@ -248,15 +246,10 @@ class RFC9113_6_1_DataFrameTest {
 
             // wanna assert that nothing is coming
             assertThat(con.available(), equalTo(0));
-            assertNothingToRead(con.socket());
+            RFCTestUtils.assertNothingToRead(con.socket());
 
         }
 
-    }
-
-    private static void assertNothingToRead(Socket socket) throws IOException {
-        socket.setSoTimeout(20);
-        assertThrows(SocketTimeoutException.class, () -> socket.getInputStream().read());
     }
 
     private int getPort() {

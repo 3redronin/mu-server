@@ -16,19 +16,19 @@ class Http2Stream implements ResponseInfo {
     private enum State {
         /* IDLE, RESERVED_LOCAL, RESERVED_REMOTE, */ OPEN, HALF_CLOSED_LOCAL, HALF_CLOSED_REMOTE, CLOSED;
 
+
     }
     final int id;
     private final Http2Connection connection;
     final Mu3Request request;
-
     private final Http2FlowController incomingFlowControl;
+
     private final Http2FlowController outgoingFlowControl;
     @Nullable
     private Http2Response response;
     private State state = State.OPEN;
     private long endTime = 0;
     private final InputStream bodyInputStream;
-
     Http2Stream(int id, Http2Connection connection, Mu3Request request, Http2FlowController incomingFlowControl, Http2FlowController outgoingFlowControl, InputStream bodyInputStream) {
         this.id = id;
         this.connection = connection;
@@ -48,13 +48,21 @@ class Http2Stream implements ResponseInfo {
         return (end == 0L ? System.currentTimeMillis() : end) - request.startTime();
     }
 
-    public void applyWindowUpdate(Http2WindowUpdate windowUpdate) throws Http2Exception {
-        outgoingFlowControl.applyWindowUpdate(windowUpdate);
-    }
 
     @Override
     public boolean completedSuccessfully() {
         return request.completedSuccessfully() && response.responseState().completedSuccessfully();
+    }
+
+    public void onWindowUpdate(Http2WindowUpdate windowUpdate) throws Http2Exception {
+        outgoingFlowControl.applyWindowUpdate(windowUpdate);
+    }
+
+    public void onReset(Http2ResetStreamFrame rstStream) {
+        state = State.CLOSED;
+        if (bodyInputStream instanceof Http2BodyInputStream) {
+            ((Http2BodyInputStream) bodyInputStream).onStreamReset(rstStream);
+        }
     }
 
     public void onData(Http2DataFrame dataFrame) throws Http2Exception {

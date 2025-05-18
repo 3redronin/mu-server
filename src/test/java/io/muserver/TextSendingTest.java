@@ -3,7 +3,6 @@ package io.muserver;
 import okhttp3.Response;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ArgumentsSource;
 import scaffolding.MuAssert;
@@ -30,7 +29,6 @@ public class TextSendingTest {
 
     @ParameterizedTest
     @ArgumentsSource(ServerTypeArgs.class)
-    @Disabled("Not working with h2 yet")
     public void largeChunksOfTextCanBeWritten(String protocol) throws Exception {
         String lotsoText = StringUtils.randomStringOfLength(70000);
         server = ServerUtils.httpsServerForTest(protocol)
@@ -64,7 +62,6 @@ public class TextSendingTest {
 
     @ParameterizedTest
     @ArgumentsSource(ServerTypeArgs.class)
-    @Disabled("Not working with h2 yet")
     public void textCanBeSentInChunks(String protocol) throws Exception {
         List<String> chunks = asList("Hello", "World", StringUtils.randomStringOfLength(200000), "Yo");
 

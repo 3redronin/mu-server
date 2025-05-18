@@ -2,6 +2,12 @@ package io.muserver;
 
 import org.jspecify.annotations.NonNull;
 
+import java.io.IOException;
+import java.net.Socket;
+import java.net.SocketTimeoutException;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
 class RFCTestUtils {
 
     static Http2GoAway goAway(int lastStreamId, Http2ErrorCode code) {
@@ -29,5 +35,10 @@ class RFCTestUtils {
         headers.add(":scheme", "https");
         headers.add(":authority", "localhost:" + port);
         return headers;
+    }
+
+    static void assertNothingToRead(Socket socket) throws IOException {
+        socket.setSoTimeout(20);
+        assertThrows(SocketTimeoutException.class, () -> socket.getInputStream().read());
     }
 }
