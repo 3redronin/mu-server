@@ -1,6 +1,7 @@
 package io.muserver;
 
 import org.jspecify.annotations.NonNull;
+import org.junit.jupiter.params.ParameterizedTest;
 
 import java.io.IOException;
 import java.net.Socket;
@@ -38,7 +39,12 @@ class RFCTestUtils {
     }
 
     static void assertNothingToRead(Socket socket) throws IOException {
-        socket.setSoTimeout(20);
-        assertThrows(SocketTimeoutException.class, () -> socket.getInputStream().read());
+        var beforeTimeout = socket.getSoTimeout();
+        try {
+            socket.setSoTimeout(20);
+            assertThrows(SocketTimeoutException.class, () -> socket.getInputStream().read());
+        } finally {
+            socket.setSoTimeout(beforeTimeout);
+        }
     }
 }
