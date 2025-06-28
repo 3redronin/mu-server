@@ -41,6 +41,7 @@ public class HeadersTest {
             .addHandler((request, response) -> {
                 String something = request.headers().get("X-Something");
                 response.headers().add("X-Response", something);
+                response.headers().add("null-value", null);
                 response.write("val: " + request.headers().get("not-on-request"));
                 return true;
             }).start();
@@ -156,12 +157,14 @@ public class HeadersTest {
         server = httpServer()
             .withMaxHeadersSize(value.length() + 1000)
             .addHandler(Method.GET, "/", (req, resp, pp) -> {
+                resp.headers().set("X-Large-Response", req.headers().get("x-large"));
                 resp.write(req.headers().get("X-Large"));
             })
             .start();
 
 
         try (Response resp = call(request(server.uri()).header("x-Large", value))) {
+            assertThat(resp.header("x-large-response"), equalTo(value));
             assertThat(resp.body().string(), equalTo(value));
         }
 
