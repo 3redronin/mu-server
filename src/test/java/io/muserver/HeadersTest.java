@@ -41,7 +41,6 @@ public class HeadersTest {
             .addHandler((request, response) -> {
                 String something = request.headers().get("X-Something");
                 response.headers().add("X-Response", something);
-                response.headers().add("null-value", null);
                 response.write("val: " + request.headers().get("not-on-request"));
                 return true;
             }).start();
