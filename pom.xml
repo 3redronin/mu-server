@@ -215,7 +215,7 @@
             <plugin>
                 <groupId>com.github.danielflower.mavenplugins</groupId>
                 <artifactId>multi-module-maven-release-plugin</artifactId>
-                <version>3.6.4</version>
+                <version>3.8.0</version>
                 <configuration>
                     <releaseProfiles>
                         <releaseProfile>release</releaseProfile>
@@ -345,12 +345,6 @@
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-gpg-plugin</artifactId>
                         <version>3.2.4</version>
-                        <configuration>
-                            <gpgArguments>
-                                <arg>--pinentry-mode</arg>
-                                <arg>loopback</arg>
-                            </gpgArguments>
-                        </configuration>
                         <executions>
                             <execution>
                                 <id>sign-artifacts</id>
@@ -358,6 +352,9 @@
                                 <goals>
                                     <goal>sign</goal>
                                 </goals>
+                                <configuration>
+                                    <signer>bc</signer>
+                                </configuration>
                             </execution>
                         </executions>
                     </plugin>
