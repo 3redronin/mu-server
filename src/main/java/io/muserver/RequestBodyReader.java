@@ -237,7 +237,7 @@ abstract class RequestBodyReader {
         public MultipartFormReader(long maxSize, HttpRequest nettyRequest, Charset charset) {
             super(maxSize);
             HttpDataFactory factory = new DefaultHttpDataFactory(charset);
-            multipartRequestDecoder = new HttpPostMultipartRequestDecoder(factory, nettyRequest, charset);
+            multipartRequestDecoder = new HttpPostMultipartRequestDecoder(factory, nettyRequest, charset, 4096, 2048);
         }
 
         @Override
