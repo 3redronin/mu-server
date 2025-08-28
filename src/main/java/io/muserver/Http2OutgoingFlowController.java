@@ -8,18 +8,18 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
-class Http2FlowController {
-    private static final Logger log = LoggerFactory.getLogger(Http2FlowController.class);
+class Http2OutgoingFlowController {
+    private static final Logger log = LoggerFactory.getLogger(Http2OutgoingFlowController.class);
 
     private final int streamId;
     private int credit;
     private final Lock lock = new ReentrantLock();
     private final Condition creditAvailable = lock.newCondition();
 
-    Http2FlowController(int streamId, int initialCredit) {
+    Http2OutgoingFlowController(int streamId, int initialCredit) {
         this.streamId = streamId;
         this.credit = initialCredit;
-        log.info("starting credit for stream " + streamId + " is " + credit);
+        log.debug("starting credit for incoming stream {} is {}", streamId, credit);
     }
 
     void applyWindowUpdate(Http2WindowUpdate windowUpdate) throws Http2Exception {
@@ -27,12 +27,7 @@ class Http2FlowController {
         incrementCredit(diff);
     }
 
-    void applySettingsChange(Http2Settings oldSettings, Http2Settings newSettings) throws Http2Exception {
-        var diff = newSettings.initialWindowSize - oldSettings.initialWindowSize;
-        incrementCredit(diff);
-    }
-
-    private void incrementCredit(int diff) throws Http2Exception {
+    void incrementCredit(int diff) throws Http2Exception {
         if (diff == 0) return;
         lock.lock();
         try {
@@ -46,23 +41,16 @@ class Http2FlowController {
         }
     }
 
-    boolean withdrawIfCan(int bytes) {
-        if (bytes == 0) return true;
-        if (bytes < 0) throw new IllegalArgumentException("Negative withdrawal");
+    int credit() {
         lock.lock();
         try {
-            if (bytes <= credit) {
-                credit -= bytes;
-                return true;
-            }
-            return false;
+            return credit;
         } finally {
             lock.unlock();
         }
     }
 
     boolean waitUntilWithdraw(int bytes, long timeout, TimeUnit unit) throws InterruptedException {
-        if (bytes == 0) return true;
         if (bytes < 0) throw new IllegalArgumentException("Negative withdrawal");
         lock.lock();
         try {
@@ -77,6 +65,25 @@ class Http2FlowController {
             lock.unlock();
         }
         return true;
+    }
+
+    boolean withdrawIfCan(int bytes) {
+        if (bytes == 0) return true;
+        if (bytes < 0) throw new IllegalArgumentException("Negative withdrawal");
+        lock.lock();
+        try {
+            if (bytes <= credit) {
+                log.info("withdrawing " + bytes + " bytes from " + streamId);
+                if (bytes == 65535) {
+                    log.info("hmmm");
+                }
+                credit -= bytes;
+                return true;
+            }
+            return false;
+        } finally {
+            lock.unlock();
+        }
     }
 
 }

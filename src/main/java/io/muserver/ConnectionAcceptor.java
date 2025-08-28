@@ -197,10 +197,10 @@ class ConnectionAcceptor {
                 secureSocket.setWantClientAuth(clientAuthTrustManager != null);
 
                 secureSocket.addHandshakeCompletedListener(event ->
-                    log.info("Handshake complete " + event));
+                    log.debug("Handshake complete {}", event));
 
                 secureSocket.startHandshake();
-                log.info("Selected protocol is " + secureSocket.getApplicationProtocol());
+                log.debug("Selected protocol is {}", secureSocket.getApplicationProtocol());
 
                 if ("h2".equals(secureSocket.getApplicationProtocol())) {
                     httpVersion = HttpVersion.HTTP_2;
@@ -366,7 +366,7 @@ class ConnectionAcceptor {
         }
 
         for (Map.Entry<SocketOption<?>, Object> entry : appliedOptions.entrySet()) {
-            log.info("Applied socket option " + entry.getKey() + "=" + entry.getValue());
+            log.debug("Applied socket option {}={}", entry.getKey(), entry.getValue());
         }
     }
 

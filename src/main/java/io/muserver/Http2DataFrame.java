@@ -7,7 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 class Http2DataFrame implements LogicalHttp2Frame {
-
+    private static final byte[] EMPTY_BYTES = new byte[0];
     private static final byte eosFlag = (byte) 0b00000001;
     private static final byte paddedFlag = (byte) 0b00001000;
     private static final byte notEosFlag = (byte) 0b00000000;
@@ -25,7 +25,11 @@ class Http2DataFrame implements LogicalHttp2Frame {
         this.payloadLength = payloadLength;
     }
 
-    public static Http2DataFrame readFrom(Http2FrameHeader header, ByteBuffer buffer) throws Http2Exception {
+    static Http2DataFrame eos(int streamId) {
+        return new Http2DataFrame(streamId, true, EMPTY_BYTES, 0, 0);
+    }
+
+    static Http2DataFrame readFrom(Http2FrameHeader header, ByteBuffer buffer) throws Http2Exception {
 
         boolean eos = (header.flags() & eosFlag) == eosFlag;
         boolean padded = (header.flags() & paddedFlag) == paddedFlag;

@@ -7,6 +7,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
@@ -18,8 +19,9 @@ class Http2BodyInputStreamTest {
     void readsWhenDataIsAvailable(int copyBufferSize) throws Exception {
 
         var received = new ByteArrayOutputStream();
+        var callbackValue = new AtomicLong();
 
-        try (var stream = new Http2BodyInputStream(10000)) {
+        try (var stream = new Http2BodyInputStream(10000, callbackValue::addAndGet)) {
             var t = new Thread(() -> {
                 try {
                     Mutils.copy(stream, received, copyBufferSize);
@@ -37,7 +39,7 @@ class Http2BodyInputStreamTest {
         }
 
         assertThat(received.toString(StandardCharsets.UTF_8), equalTo("Hello world"));
-
+        assertThat(callbackValue.get(), equalTo(11L));
     }
 
     private Http2DataFrame data(String data, boolean eos) {

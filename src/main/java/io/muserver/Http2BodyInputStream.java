@@ -15,13 +15,15 @@ import java.util.concurrent.locks.ReentrantLock;
 class Http2BodyInputStream extends InputStream {
 
     private final long readTimeoutMillis;
+    private final CreditAvailableListener onDataReadCallback;
     private final Lock lock = new ReentrantLock();
-    private final Queue<LogicalHttp2Frame> frames = new LinkedList<>();
+    private final Queue<Object> frames = new LinkedList<>();
     private final Condition hasData = lock.newCondition();
     private int currentOffset = 0;
 
-    Http2BodyInputStream(long readTimeoutMillis) {
+    Http2BodyInputStream(long readTimeoutMillis, CreditAvailableListener onDataReadCallback) {
         this.readTimeoutMillis = readTimeoutMillis;
+        this.onDataReadCallback = onDataReadCallback;
     }
 
     @Override
@@ -36,7 +38,7 @@ class Http2BodyInputStream extends InputStream {
     public int read(byte[] b, int off, int len) throws IOException {
         lock.lock();
         try {
-            LogicalHttp2Frame frame;
+            Object frame;
             while ((frame = frames.peek()) == null) {
                 try {
                     if (!hasData.await(readTimeoutMillis, TimeUnit.MILLISECONDS)) {
@@ -55,32 +57,34 @@ class Http2BodyInputStream extends InputStream {
                 if (remaining == 0 && data.endStream()) {
                     return -1;
                 }
+                int readAmount;
                 if (remaining < len) {
                     // the user wants more than what is available in the first frame, so give all the rest of it
                     System.arraycopy(data.payload(), offset, b, off, remaining);
 //                if (remaining == len) {
                     // TODO: how about waiting for more data?
 //                }
-                    if (!frame.endStream()) {
+                    if (!data.endStream()) {
                         currentOffset = 0;
                         frames.remove();
                     } else {
                         currentOffset += remaining;
                     }
-                    return remaining;
+                    readAmount = remaining;
                 } else {
                     // the user wants less than what is available
                     System.arraycopy(data.payload(), offset, b, off, len);
                     currentOffset += len;
-                    return len;
+                    readAmount = len;
                 }
-            } else if (frame instanceof Http2ResetStreamFrame) {
-                var reset = (Http2ResetStreamFrame) frame;
-                Http2ErrorCode err = Objects.requireNonNullElse(reset.errorCodeEnum(), Http2ErrorCode.INTERNAL_ERROR);
-                if (err == Http2ErrorCode.CANCEL) {
-                    throw new EOFException("Client cancelled the request");
+                try {
+                    onDataReadCallback.creditAvailable(readAmount);
+                } catch (Http2Exception e) {
+                    throw new IOException("Http2 error updating flow control", e);
                 }
-                throw new IOException("Error reading request body: " + err.name() + " (" + err.code() + ")");
+                return readAmount;
+            } else if (frame instanceof IOException) {
+                throw (IOException) frame;
             } else {
                 // not possible, I swear
                 throw new IllegalStateException("Unexpected frame type: " + frame.getClass().getName());
@@ -103,14 +107,34 @@ class Http2BodyInputStream extends InputStream {
         }
     }
 
-    public void onStreamReset(Http2ResetStreamFrame resetFrame) {
+    void onStreamReset(Http2ResetStreamFrame reset) {
+        Http2ErrorCode err = Objects.requireNonNullElse(reset.errorCodeEnum(), Http2ErrorCode.INTERNAL_ERROR);
+        var ex = (err == Http2ErrorCode.CANCEL)
+            ? new EOFException("Client cancelled the request")
+            : new IOException("Error reading request body: " + err.name() + " (" + err.code() + ")");
+        setErrored(ex);
+    }
+
+    private void setErrored(IOException ex) {
         lock.lock();
         try {
-            frames.clear();
-            frames.add(resetFrame);
-            hasData.signal();
+            if (!isErrored()) {
+                frames.clear();
+                frames.add(ex);
+                hasData.signal();
+            }
         } finally {
             lock.unlock();
         }
     }
+
+    private boolean isErrored() {
+        return frames.size() == 1 && frames.peek() instanceof Exception;
+    }
+
+    void cancel(IOException reason) {
+        setErrored(reason);
+    }
+
+
 }

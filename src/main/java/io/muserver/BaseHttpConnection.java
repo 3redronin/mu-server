@@ -196,7 +196,6 @@ abstract class BaseHttpConnection implements HttpConnection {
     public abstract void abortWithTimeout() throws IOException;
     
     abstract void initiateGracefulShutdown() throws IOException;
-    abstract boolean isShutdown();
     abstract void forceShutdown();
 
 }

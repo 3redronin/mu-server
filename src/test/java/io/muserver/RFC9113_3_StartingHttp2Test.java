@@ -118,10 +118,7 @@ class RFC9113_3_StartingHttp2Test {
             con.writeFrame(goAway(0, Http2ErrorCode.NO_ERROR));
             con.flush();
 
-            // TODO: or should we get a goaway back?
-            assertThrows(IOException.class, con::readFrameHeader);
-//            assertThat(con.readLogicalFrame(), equalTo(goAway(0, Http2ErrorCode.NO_ERROR)));
-
+            assertThat(con.readLogicalFrame(), equalTo(goAway(0, Http2ErrorCode.NO_ERROR)));
         }
 
     }

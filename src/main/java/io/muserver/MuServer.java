@@ -29,6 +29,23 @@ public interface MuServer extends Closeable {
     void stop();
 
     /**
+     * Gracefully shuts down the server with a timeout. During the graceful shutdown period, the server will stop
+     * accepting new connections and wait for in-flight requests to complete. When timeout is reached and there
+     * are still in-flight requests, all the http connections will be aborted, no exception will be thrown.
+     *
+     * <p>
+     * This is a blocking call and will not return until the server is fully stopped or the timeout is reached.
+     * </p>
+     *
+     * @param duration The duration of the graceful timeout period, or 0 to shut down immediately.
+     * @param unit     The time unit of the duration.
+     * @return false if there were in-flight requests not completed.
+     */
+    default boolean stop(long duration, TimeUnit unit) {
+        throw new RuntimeException("not implemented");
+    };
+
+    /**
      * @return The HTTPS (or if unavailable the HTTP) URI of the web server.
      */
     URI uri();

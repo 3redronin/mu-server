@@ -43,6 +43,14 @@ class Http2Exception extends Exception {
     public int streamId() {
         return streamId;
     }
+
+    public LogicalHttp2Frame toFrame() {
+        if (errorType == Http2Level.CONNECTION) {
+            return new Http2GoAway(streamId, errorCode.code(), null);
+        } else {
+            return new Http2ResetStreamFrame(streamId, errorCode().code());
+        }
+    }
 }
 
 enum Http2Level {

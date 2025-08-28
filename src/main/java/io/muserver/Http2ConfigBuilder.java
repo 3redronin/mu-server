@@ -129,7 +129,7 @@ public class Http2ConfigBuilder {
     }
 
     /**
-     * Sets the initial window size.
+     * Sets the initial flow control window size for streams.
      *
      * <p>The default is 65535 bytes.</p>
      *
@@ -139,7 +139,7 @@ public class Http2ConfigBuilder {
      *
      * <p>Limits:</p>
      * <ul>
-     * <li>Minimum: 1024</li>
+     * <li>Minimum: 0 (which would prevent clients from sending data)</li>
      * <li>Maximum: No specific maximum</li>
      * </ul>
      *
@@ -148,8 +148,8 @@ public class Http2ConfigBuilder {
      * @throws IllegalArgumentException if the size is less than 0 or greater than 2147483647.
      */
     public Http2ConfigBuilder withInitialWindowSize(int initialWindowSize) {
-        if (initialWindowSize < 1024) {
-            throw new IllegalArgumentException("Window size is too small");
+        if (initialWindowSize < 0) {
+            throw new IllegalArgumentException("Window size is negative");
         }
         this.initialWindowSize = initialWindowSize;
         return this;

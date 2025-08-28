@@ -63,6 +63,7 @@ class H2ClientConnection implements Http2Peer, Closeable {
 
     H2ClientConnection(SSLSocket socket) throws IOException {
         this.socket = socket;
+        socket.setSoTimeout(10000);
         // TODO consider if each should be buffered
         inputStream = new BufferedInputStream(socket.getInputStream());
         outputStream = new BufferedOutputStream(socket.getOutputStream());
@@ -101,8 +102,9 @@ class H2ClientConnection implements Http2Peer, Closeable {
             case RST_STREAM: return Http2ResetStreamFrame.readFrom(header, readBuffer);
             case HEADERS: return Http2HeadersFrame.readLogicalFrame(header, fieldBlockDecoder, readBuffer, inputStream);
             case DATA: return Http2DataFrame.readFrom(header, readBuffer);
+            case WINDOW_UPDATE: return Http2WindowUpdate.readFrom(header, readBuffer);
         }
-        throw new RuntimeException("Unexpected frameType: " + header.frameType());
+        throw new RuntimeException("Unexpected frameType: " + header.frameType() + " on stream " + header.streamId());
     }
 
     LogicalHttp2Frame readLogicalFrame() throws IOException, Http2Exception {

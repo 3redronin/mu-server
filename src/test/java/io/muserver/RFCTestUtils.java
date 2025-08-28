@@ -6,6 +6,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import java.io.IOException;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
+import java.nio.charset.StandardCharsets;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -15,6 +16,13 @@ class RFCTestUtils {
         return new Http2GoAway(lastStreamId, code.code(), new byte[0]);
     }
 
+    static @NonNull Http2DataFrame utf8DataFrame(int streamId, boolean endStream, String text) {
+        var bytes = text.getBytes(StandardCharsets.UTF_8);
+        return new Http2DataFrame(streamId, endStream, bytes, 0, bytes.length);
+    }
+    static @NonNull Http2DataFrame emptyEosDataFrame(int streamId) {
+        return new Http2DataFrame(streamId, true, new byte[0], 0, 0);
+    }
 
     static @NonNull FieldBlock getHelloHeaders(int port) {
         FieldBlock headers = baseHeaders(port);

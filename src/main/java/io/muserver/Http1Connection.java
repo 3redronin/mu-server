@@ -251,11 +251,6 @@ class Http1Connection extends BaseHttpConnection {
     }
 
     @Override
-    boolean isShutdown() {
-        return state == HttpConnectionState.CLOSED;
-    }
-
-    @Override
     void forceShutdown() {
         // todo thread safety
         if (state == HttpConnectionState.CLOSED) {

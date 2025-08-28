@@ -20,6 +20,10 @@ class Http2DataFrameOutputStream extends OutputStream {
         write(new byte[] { (byte)b }, 0, 1);
     }
 
+    /**
+     * Blockingly writes a data frame to the http2 connection - flushing does nothing. So this
+     * is designed to be wrapped by a buffered output stream
+     */
     @Override
     public void write(byte[] b, int off, int len) throws IOException {
         if (!closed.get()) {
@@ -34,23 +38,19 @@ class Http2DataFrameOutputStream extends OutputStream {
                     remaining -= frameLen;
                 }
             } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
                 throw new InterruptedIOException("Interrupted while writing data frame");
             }
         }
     }
 
     @Override
-    public void flush() throws IOException {
-        stream.flush();
-    }
-
-    @Override
     public void close() throws IOException {
         if (closed.compareAndSet(false, true)) {
             try {
-                stream.blockingWrite(new Http2DataFrame(stream.id, true, new byte[0], 0, 0));
-                stream.flush();
+                stream.blockingWrite(Http2DataFrame.eos(stream.id));
             } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
                 throw new InterruptedIOException("Interrupted while writing data frame");
             }
         }

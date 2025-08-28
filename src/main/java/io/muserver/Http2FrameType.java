@@ -3,13 +3,13 @@ package io.muserver;
 import org.jspecify.annotations.Nullable;
 
 enum Http2FrameType {
-    DATA((byte) 0x00, false, null, -1),
+    DATA((byte) 0x00, false, true, -1),
     HEADERS((byte) 0x01, true, true, -1),
     PRIORITY((byte) 0x02, false, null, 0x05),
-    RST_STREAM((byte) 0x03, false, null, 0x04),
+    RST_STREAM((byte) 0x03, false, true, 0x04),
     SETTINGS((byte) 0x04, false, false, -1),
     PUSH_PROMISE((byte) 0x05, true, null, -1),
-    PING((byte) 0x06, false, null, 0x08),
+    PING((byte) 0x06, false, false, 0x08),
     GOAWAY((byte) 0x07, false, false, -1),
     WINDOW_UPDATE((byte) 0x08, false, null, 0x04),
     CONTINUATION((byte) 0x09, true, null, -1),

@@ -13,25 +13,27 @@ class Http2Stream implements ResponseInfo {
 
     private static final Logger log = LoggerFactory.getLogger(Http2Stream.class);
 
+
     private enum State {
-        /* IDLE, RESERVED_LOCAL, RESERVED_REMOTE, */ OPEN, HALF_CLOSED_LOCAL, HALF_CLOSED_REMOTE, CLOSED;
+        /* IDLE, RESERVED_LOCAL, RESERVED_REMOTE, */ OPEN, HALF_CLOSED_LOCAL, HALF_CLOSED_REMOTE, CLOSED
 
 
     }
     final int id;
     private final Http2Connection connection;
     final Mu3Request request;
-    private final Http2FlowController incomingFlowControl;
+    private final Http2IncomingFlowController incomingFlowControl;
 
-    private final Http2FlowController outgoingFlowControl;
+    private final Http2OutgoingFlowController outgoingFlowControl;
     @Nullable
     private Http2Response response;
-    private State state = State.OPEN;
+    private State state;
     private long endTime = 0;
     private final InputStream bodyInputStream;
-    Http2Stream(int id, Http2Connection connection, Mu3Request request, Http2FlowController incomingFlowControl, Http2FlowController outgoingFlowControl, InputStream bodyInputStream) {
+    Http2Stream(int id, Http2Connection connection, State state, Mu3Request request, Http2IncomingFlowController incomingFlowControl, Http2OutgoingFlowController outgoingFlowControl, InputStream bodyInputStream) {
         this.id = id;
         this.connection = connection;
+        this.state = state;
         this.request = request;
         this.incomingFlowControl = incomingFlowControl;
         this.outgoingFlowControl = outgoingFlowControl;
@@ -54,22 +56,33 @@ class Http2Stream implements ResponseInfo {
         return request.completedSuccessfully() && response.responseState().completedSuccessfully();
     }
 
-    public void onWindowUpdate(Http2WindowUpdate windowUpdate) throws Http2Exception {
+    void onWindowUpdate(Http2WindowUpdate windowUpdate) throws Http2Exception {
         outgoingFlowControl.applyWindowUpdate(windowUpdate);
     }
 
-    public void onReset(Http2ResetStreamFrame rstStream) {
+    void onReset(Http2ResetStreamFrame rstStream) {
         state = State.CLOSED;
         if (bodyInputStream instanceof Http2BodyInputStream) {
             ((Http2BodyInputStream) bodyInputStream).onStreamReset(rstStream);
         }
     }
 
-    public void onData(Http2DataFrame dataFrame) throws Http2Exception {
+    void cancel(IOException reason) {
+        state = State.CLOSED;
+        if (bodyInputStream instanceof Http2BodyInputStream) {
+            ((Http2BodyInputStream) bodyInputStream).cancel(reason);
+        }
+    }
+
+    void onData(int flowControlSize, Http2DataFrame dataFrame) throws Http2Exception {
         // todo: thread safety
         if (state != State.OPEN && state != State.HALF_CLOSED_LOCAL) {
             state = State.CLOSED;
             throw new Http2Exception(Http2ErrorCode.STREAM_CLOSED, "Invalid state for data", id);
+        }
+
+        if (!incomingFlowControl.withdrawIfCan(flowControlSize)) {
+            throw new Http2Exception(Http2ErrorCode.FLOW_CONTROL_ERROR, "Not enough flow control credit for stream", id);
         }
 
         if (bodyInputStream instanceof Http2BodyInputStream) {
@@ -87,10 +100,9 @@ class Http2Stream implements ResponseInfo {
                 }
             }
         } else {
-            // TODO: reset the stream
+            throw new Http2Exception(Http2ErrorCode.INTERNAL_ERROR, "Received data on a stream with no body", id);
         }
     }
-
 
     @Override
     public MuRequest request() {
@@ -178,13 +190,21 @@ class Http2Stream implements ResponseInfo {
         var serverUri = connection.creator.uri().resolve(path.toString());
         var requestUri = Headtils.getUri(log, headers, path.toString(), serverUri);
 
-        InputStream body = bodySize == BodySize.NONE ? EmptyInputStream.INSTANCE : new Http2BodyInputStream(connection.server.requestIdleTimeoutMillis());
+        var outgoingFlowControl = new Http2OutgoingFlowController(id, clientSettings.initialWindowSize);
+        var incomingFlowControl = new Http2IncomingFlowController(id, serverSettings.initialWindowSize);
+
+        InputStream body = bodySize == BodySize.NONE ? EmptyInputStream.INSTANCE : new Http2BodyInputStream(connection.server.requestIdleTimeoutMillis(), read -> {
+            var update = incomingFlowControl.incrementCredit(read);
+            if (update > 0) {
+                connection.write(new Http2WindowUpdate(id, read));
+            }
+            connection.creditAvailable(read);
+        });
         var request = new Mu3Request(connection, method, requestUri, serverUri, HttpVersion.HTTP_2, headers, bodySize, body);
 
-        var outgoingFlowControl = new Http2FlowController(id, clientSettings.initialWindowSize);
-        var incomingFlowControl = new Http2FlowController(id, serverSettings.initialWindowSize);
 
-        Http2Stream stream = new Http2Stream(id, connection, request, incomingFlowControl, outgoingFlowControl, body);
+        var state = headerFrame.endStream() ? State.HALF_CLOSED_REMOTE : State.OPEN;
+        Http2Stream stream = new Http2Stream(id, connection, state, request, incomingFlowControl, outgoingFlowControl, body);
         stream.response = new Http2Response(stream, new FieldBlock(), request);
         return stream;
     }
@@ -202,7 +222,7 @@ class Http2Stream implements ResponseInfo {
     /**
      * Writes a frame, blocking if needed until there is enough flow control credit.
      */
-    void blockingWrite(LogicalHttp2Frame frame) throws InterruptedException, IOException {
+    void blockingWrite(LogicalHttp2Frame frame) throws IOException, InterruptedException {
 
         // DATA frames are subject to flow control and can only be sent when a stream is in the "open" or "half-closed (remote)" state
 
@@ -216,8 +236,14 @@ class Http2Stream implements ResponseInfo {
         }
 
         // todo: use a proper timeout
-        outgoingFlowControl.waitUntilWithdraw(frame.flowControlSize(), 1, TimeUnit.HOURS);
-        connection.write(frame);
+        int neededCredit = frame.flowControlSize();
+        if (neededCredit != 0) {
+            if (!outgoingFlowControl.waitUntilWithdraw(neededCredit, 1, TimeUnit.HOURS)) {
+                throw new IOException("Timed out waiting for flow control credit");
+            }
+        }
+        WriteTask writeTask = new WriteTask(frame, true);
+        connection.write(writeTask);
         if (frame.endStream()) {
             if (state == State.OPEN) {
                 state = State.HALF_CLOSED_LOCAL;
@@ -227,10 +253,7 @@ class Http2Stream implements ResponseInfo {
         } else if (frame instanceof Http2ResetStreamFrame) {
             state = State.CLOSED;
         }
-    }
-
-    public void flush() throws IOException {
-        connection.flush();
+        writeTask.await(2, TimeUnit.HOURS);
     }
 
     @Override
@@ -238,7 +261,6 @@ class Http2Stream implements ResponseInfo {
         Http2Response resp = response;
         return resp == null ? "Uninitialized respons" : resp.status() + " (" + resp.responseState() + ")";
     }
-
 
 }
 

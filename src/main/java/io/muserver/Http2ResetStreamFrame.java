@@ -62,4 +62,26 @@ class Http2ResetStreamFrame implements LogicalHttp2Frame {
         return new Http2ResetStreamFrame(header.streamId(), errorCode);
     }
 
+    @Override
+    public boolean equals(Object o) {
+        if (o == null || getClass() != o.getClass()) return false;
+
+        Http2ResetStreamFrame that = (Http2ResetStreamFrame) o;
+        return streamId == that.streamId && errorCode == that.errorCode;
+    }
+
+    @Override
+    public int hashCode() {
+        int result = streamId;
+        result = 31 * result + errorCode;
+        return result;
+    }
+
+    @Override
+    public String toString() {
+        return "Http2ResetStreamFrame{" +
+            "streamId=" + streamId +
+            ", errorCode=" + errorCode +
+            '}';
+    }
 }
