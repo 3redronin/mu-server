@@ -168,7 +168,13 @@ class OpenApiDocumentor implements MuHandler {
             } else {
                 OperationObject curOO = method.createOperationBuilder(customSchemas).build();
                 List<ParameterObject> combinedParams = new ArrayList<>(existing.parameters());
-                combinedParams.addAll(parameters);
+                for (ParameterObject po : parameters) {
+                    // add to combinedParams if none with same name and in
+                    if (combinedParams.stream().noneMatch(p -> p.name().equals(po.name()) &&
+                        p.in().equals(po.in()))) {
+                        combinedParams.add(po);
+                    }
+                }
 
                 Map<String, MediaTypeObject> mergedContent = new HashMap<>();
                 if (existing.requestBody() != null && existing.requestBody().content() != null) {
