@@ -9,8 +9,8 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import okhttp3.Response;
 import org.json.JSONObject;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.ClientUtils;
 import scaffolding.MuAssert;
 
@@ -95,7 +95,7 @@ public class JaxRSOpenApiTest {
         assertThat(getOperation.toString(4), equalTo(expected.toString(4)));
     }
 
-    @After
+    @AfterEach
     public void tearDown() {
         MuAssert.stopAndCheck(server);
     }
