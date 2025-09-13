@@ -48,16 +48,15 @@ public class CSRFProtectionHandlerBuilder implements MuHandlerBuilder<CSRFProtec
      *
      * <p>If no custom handler is set, a default handler will throw a {@link BadRequestException}.</p>
      *
-     * <p>Example usage:
+     * <p>Example usage:</p>
      * <pre><code>
-     * builder.withRejectionHandler((request, response) -> {
+     * builder.withRejectionHandler((request, response) -&gt; {
      *     System.out.println("CSRF protection triggered for request to " + request.uri() + " with headers: " + request.headers());
      *     response.status(400);
      *     response.write("Forbidden");
      *     return true;
      * });
      * </code></pre>
-     * </p>
      * @param handler The {@link MuHandler} to execute when a request is rejected by CSRF protection, or <code>null</code>
      *                for a default handler.
      * @return This builder instance for method chaining.
