@@ -3,8 +3,8 @@ package io.muserver.handlers;
 import io.muserver.Method;
 import io.muserver.MuServer;
 import okhttp3.Response;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -20,7 +20,7 @@ public class CSRFProtectionHandlerTest {
 
     private MuServer server;
 
-    @After
+    @AfterEach
     public void stop() {
         scaffolding.MuAssert.stopAndCheck(server);
     }
