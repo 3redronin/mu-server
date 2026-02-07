@@ -743,14 +743,7 @@ private  boolean gracefulWait(Duration gracefulDuration, MuStatsImpl stats) thro
                         p.addLast("HAProxyMessageDecoder", haProxyMessageDecoder);
                     }
                     if (usesSsl) {
-                        p.addLast("ssl", new SniHandler(new DomainWildcardMappingBuilder<>(sslContextProvider.get()).build()) {
-
-
-                            @Override
-                            protected void handlerRemoved0(ChannelHandlerContext ctx) throws Exception {
-                                System.out.println("Removing SNI handler:" + ctx.name());
-                                super.handlerRemoved0(ctx);
-                            }
+                        p.addLast("sni", new SniHandler(new DomainWildcardMappingBuilder<>(sslContextProvider.get()).build()) {
 
                             @Override
                             protected void onLookupComplete(ChannelHandlerContext ctx, Future<SslContext> future) throws Exception {

@@ -48,7 +48,7 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
     }
 
     static SSLSession getSslSession(ChannelHandlerContext ctx) {
-        SslHandler ssl = (SslHandler) ctx.channel().pipeline().get("ssl");
+        SslHandler ssl = (SslHandler) ctx.channel().pipeline().get(SslHandler.class.getName());
         return ssl.engine().getSession();
     }
 
@@ -297,7 +297,7 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
 
     static Optional<Certificate> fromContext(ChannelHandlerContext channelHandlerContext) {
         try {
-            SslHandler sslhandler = (SslHandler) channelHandlerContext.channel().pipeline().get("ssl");
+            SslHandler sslhandler = (SslHandler) channelHandlerContext.channel().pipeline().get(SslHandler.class.getName());
             if (sslhandler == null) {
                 return Optional.empty();
             }
