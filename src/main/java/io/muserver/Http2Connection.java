@@ -569,5 +569,10 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
         return Optional.ofNullable(proxyInfo);
     }
 
+    @Override
+    public Optional<String> sniHostName() {
+        return Optional.ofNullable(this.nettyContext.channel().attr(Mutils.SNI_HOSTNAME).get());
+    }
+
 }
 

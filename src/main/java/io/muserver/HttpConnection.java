@@ -100,4 +100,10 @@ public interface HttpConnection {
      */
     Optional<ProxiedConnectionInfo> proxyInfo();
 
+    /**
+     * Gets the SNI host name that the client sent during the TLS handshake, if any.
+     * @return SNI host name sent by the client, or {@link Optional#empty()} if none specified or if the connection is not over HTTPS.
+     */
+    Optional<String> sniHostName();
+
 }

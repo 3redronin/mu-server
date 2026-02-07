@@ -11,7 +11,9 @@ import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SNIHostName;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLParameters;
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.net.URI;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
@@ -90,19 +92,25 @@ public class HttpsTest {
                 .withKeyPassword("MY_PASSWORD")
                 .withKeystoreFromClasspath("/jks-keystore-combine.jks"))
             .addHandler((request, response) -> {
-                response.write("This is encrypted");
+                response.write("This is encrypted, sni is " + request.connection().sniHostName().orElse("Optional.empty()"));
                 return true;
             })
             .start();
 
         try (Response resp = call(request(server.httpsUri()))) {
-            assertThat(resp.body().string(), equalTo("This is encrypted"));
+            assertThat(resp.body().string(), equalTo("This is encrypted, sni is Optional.empty()"));
         }
 
         assertThat(certInformationBySni(server.uri(), "localhost"), containsString("TEST-1"));
         assertThat(certInformationBySni(server.uri(), "test-1.com"), containsString("TEST-1"));
         assertThat(certInformationBySni(server.uri(), "test-2.com"), containsString("TEST-2"));
         assertThat(certInformationBySni(server.uri(), "not-matching"), containsString("TEST-2")); // TEST-2 is defaultAlias
+
+
+        assertThat(responseBySni(server.uri(), "localhost"), equalTo("200 This is encrypted, sni is localhost"));
+        assertThat(responseBySni(server.uri(), "test-1.com"), equalTo("200 This is encrypted, sni is test-1.com"));
+        assertThat(responseBySni(server.uri(), "test-2.com"), equalTo("200 This is encrypted, sni is test-2.com"));
+        assertThat(responseBySni(server.uri(), "not-matching"), equalTo("200 This is encrypted, sni is not-matching"));
     }
 
     private String certInformationBySni(URI uri, String sni) throws IOException {
@@ -123,6 +131,25 @@ public class HttpsTest {
             }
         }
         return sb.toString();
+    }
+
+    private String responseBySni(URI uri, String sni) throws IOException {
+        SSLContext sslContext = sslContextForTesting(veryTrustingTrustManager());
+        SSLParameters sslParameters = new SSLParameters();
+        sslParameters.setServerNames(Collections.singletonList(new SNIHostName(sni)));
+        HttpsURLConnection.setDefaultSSLSocketFactory(new SSLSocketFactoryWrapper(sslContext.getSocketFactory(), sslParameters));
+        HttpsURLConnection conn = (HttpsURLConnection) uri.toURL().openConnection();
+        conn.setHostnameVerifier((hostname, session) -> true); // disable the client side handshake verification
+        conn.connect();
+        int responseCode = conn.getResponseCode();
+        try (BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream())) ) {
+            String inputLine;
+            StringBuilder body = new StringBuilder();
+            while ((inputLine = in.readLine()) != null) {
+                body.append(inputLine);
+            }
+            return responseCode + " " + body;
+        }
     }
 
     @Test

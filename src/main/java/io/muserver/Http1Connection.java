@@ -290,6 +290,11 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
         return Optional.ofNullable(proxyInfo);
     }
 
+    @Override
+    public Optional<String> sniHostName() {
+        return Optional.ofNullable(nettyCtx.channel().attr(Mutils.SNI_HOSTNAME).get());
+    }
+
     static Optional<Certificate> fromContext(ChannelHandlerContext channelHandlerContext) {
         try {
             SslHandler sslhandler = (SslHandler) channelHandlerContext.channel().pipeline().get("ssl");

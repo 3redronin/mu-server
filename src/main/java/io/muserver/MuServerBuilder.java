@@ -3,6 +3,7 @@ package io.muserver;
 import io.muserver.handlers.ResourceType;
 import io.muserver.rest.MuRuntimeDelegate;
 import io.netty.bootstrap.ServerBootstrap;
+import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
@@ -13,12 +14,15 @@ import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseEncoder;
 import io.netty.handler.codec.http.HttpServerKeepAliveHandler;
 import io.netty.handler.flow.FlowControlHandler;
+import io.netty.handler.ssl.SniHandler;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.handler.traffic.GlobalTrafficShapingHandler;
+import io.netty.util.DomainWildcardMappingBuilder;
 import io.netty.util.HashedWheelTimer;
 import io.netty.util.concurrent.DefaultThreadFactory;
+import io.netty.util.concurrent.Future;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,6 +43,7 @@ import java.util.stream.Collectors;
  * <p>Use the <code>withXXX()</code> methods to set the ports, config, and request handlers needed.</p>
  */
 public class MuServerBuilder {
+
     static {
         MuRuntimeDelegate.ensureSet();
     }
@@ -409,6 +414,7 @@ public class MuServerBuilder {
      *     return true;
      * })
      * </code></pre>
+     *
      * @param exceptionHandler The handler to be called when an unhandled exception is encountered
      * @return This builder
      */
@@ -542,7 +548,9 @@ public class MuServerBuilder {
     /**
      * @return The current value of this property
      */
-    public boolean haProxyProtocolEnabled() { return this.haProxyProtocolEnabled; }
+    public boolean haProxyProtocolEnabled() {
+        return this.haProxyProtocolEnabled;
+    }
 
     /**
      * @return The current value of this property
@@ -596,6 +604,7 @@ public class MuServerBuilder {
     /**
      * If enabled, then <a href="https://www.haproxy.org/download/1.8/doc/proxy-protocol.txt">HA Proxy Protocol</a>
      * parsing on new connections will be enabled.
+     *
      * @param enabled <code>true</code> to enable. The default is <code>false</code>
      * @return This builder
      */
@@ -734,11 +743,30 @@ private  boolean gracefulWait(Duration gracefulDuration, MuStatsImpl stats) thro
                         p.addLast("HAProxyMessageDecoder", haProxyMessageDecoder);
                     }
                     if (usesSsl) {
-                        SslHandler sslHandler = sslContextProvider.get().newHandler(socketChannel.alloc());
-                        SSLParameters params = sslHandler.engine().getSSLParameters();
-                        params.setUseCipherSuitesOrder(true);
-                        sslHandler.engine().setSSLParameters(params);
-                        p.addLast("ssl", sslHandler);
+                        p.addLast("ssl", new SniHandler(new DomainWildcardMappingBuilder<>(sslContextProvider.get()).build()) {
+
+
+                            @Override
+                            protected void handlerRemoved0(ChannelHandlerContext ctx) throws Exception {
+                                System.out.println("Removing SNI handler:" + ctx.name());
+                                super.handlerRemoved0(ctx);
+                            }
+
+                            @Override
+                            protected void onLookupComplete(ChannelHandlerContext ctx, Future<SslContext> future) throws Exception {
+                                super.onLookupComplete(ctx, future);
+                                ctx.channel().attr(Mutils.SNI_HOSTNAME).set(hostname());
+                            }
+
+                            @Override
+                            protected SslHandler newSslHandler(SslContext context, ByteBufAllocator allocator) {
+                                SslHandler sslHandler = sslContextProvider.get().newHandler(socketChannel.alloc());
+                                SSLParameters params = sslHandler.engine().getSSLParameters();
+                                params.setUseCipherSuitesOrder(true);
+                                sslHandler.engine().setSSLParameters(params);
+                                return sslHandler;
+                            }
+                        });
                     }
                     boolean addAlpn = http2 && usesSsl;
                     if (addAlpn) {
