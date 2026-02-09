@@ -8,6 +8,7 @@ import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.handler.codec.haproxy.HAProxyMessage;
 import io.netty.handler.codec.haproxy.HAProxyMessageDecoder;
 import io.netty.handler.codec.http.HttpRequestDecoder;
 import io.netty.handler.codec.http.HttpResponse;
@@ -745,6 +746,37 @@ private  boolean gracefulWait(Duration gracefulDuration, MuStatsImpl stats) thro
                     if (usesSsl) {
                         p.addLast("sni", new SniHandler(new DomainWildcardMappingBuilder<>(sslContextProvider.get()).build()) {
 
+                            private HAProxyMessage haProxyMessage = null;
+                            private ChannelHandlerContext ctx;
+
+                            @Override
+                            public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+                                fireHAProxyMessage();
+                                super.channelInactive(ctx);
+                            }
+
+                            @Override
+                            public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
+                                this.ctx = ctx;
+                                super.handlerAdded(ctx);
+                            }
+
+                            private void fireHAProxyMessage() {
+                                if (haProxyMessage != null) {
+                                    ctx.fireChannelRead(haProxyMessage);
+                                    haProxyMessage = null;
+                                }
+                            }
+
+                            @Override
+                            public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+                                if (msg instanceof HAProxyMessage) {
+                                    haProxyMessage = (HAProxyMessage) msg;
+                                } else {
+                                    super.channelRead(ctx, msg);
+                                }
+                            }
+
                             @Override
                             protected void onLookupComplete(ChannelHandlerContext ctx, Future<SslContext> future) throws Exception {
                                 super.onLookupComplete(ctx, future);
@@ -759,6 +791,12 @@ private  boolean gracefulWait(Duration gracefulDuration, MuStatsImpl stats) thro
                                 sslHandler.engine().setSSLParameters(params);
                                 return sslHandler;
                             }
+
+                            protected void replaceHandler(ChannelHandlerContext ctx, String hostname, SslContext sslContext) throws Exception {
+                                super.replaceHandler(ctx, hostname, sslContext);
+                                fireHAProxyMessage();
+                            }
+
                         });
                     }
                     boolean addAlpn = http2 && usesSsl;
