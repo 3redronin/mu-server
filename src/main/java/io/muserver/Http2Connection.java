@@ -3,7 +3,6 @@ package io.muserver;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.handler.codec.haproxy.HAProxyMessage;
 import io.netty.handler.codec.http.*;
 import io.netty.handler.codec.http2.*;
 import io.netty.handler.timeout.IdleState;
@@ -142,15 +141,6 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
         super(decoder, encoder, initialSettings);
         this.server = server;
         this.nettyHandlerAdapter = nettyHandlerAdapter;
-    }
-
-    @Override
-    public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-        if (msg instanceof HAProxyMessage) {
-            HAProxyMessage hap = (HAProxyMessage) msg;
-            this.proxyInfo = ProxiedConnectionInfoImpl.fromNetty(hap);
-        }
-        super.channelRead(ctx, msg);
     }
 
     @Override
@@ -566,12 +556,12 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
 
     @Override
     public Optional<ProxiedConnectionInfo> proxyInfo() {
-        return Optional.ofNullable(proxyInfo);
+        return Optional.ofNullable(this.nettyContext.channel().attr(HAProxyMessageHandler.HA_PROXY_INFO).get());
     }
 
     @Override
     public Optional<String> sniHostName() {
-        return Optional.ofNullable(this.nettyContext.channel().attr(Mutils.SNI_HOSTNAME).get());
+        return Optional.ofNullable(this.nettyContext.channel().attr(MuSniHandler.SNI_HOSTNAME).get());
     }
 
 }

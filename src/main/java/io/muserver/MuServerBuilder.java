@@ -3,31 +3,25 @@ package io.muserver;
 import io.muserver.handlers.ResourceType;
 import io.muserver.rest.MuRuntimeDelegate;
 import io.netty.bootstrap.ServerBootstrap;
-import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
-import io.netty.handler.codec.haproxy.HAProxyMessage;
 import io.netty.handler.codec.haproxy.HAProxyMessageDecoder;
 import io.netty.handler.codec.http.HttpRequestDecoder;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseEncoder;
 import io.netty.handler.codec.http.HttpServerKeepAliveHandler;
 import io.netty.handler.flow.FlowControlHandler;
-import io.netty.handler.ssl.SniHandler;
 import io.netty.handler.ssl.SslContext;
-import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.handler.traffic.GlobalTrafficShapingHandler;
 import io.netty.util.DomainWildcardMappingBuilder;
 import io.netty.util.HashedWheelTimer;
 import io.netty.util.concurrent.DefaultThreadFactory;
-import io.netty.util.concurrent.Future;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.net.ssl.SSLParameters;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.time.Duration;
@@ -740,64 +734,11 @@ private  boolean gracefulWait(Duration gracefulDuration, MuStatsImpl stats) thro
                     p.addLast("idle", new IdleStateHandler(0, 0, idleTimeoutMills, TimeUnit.MILLISECONDS));
                     p.addLast(trafficShapingHandler);
                     if (haProxyProtocolEnabled) {
-                        HAProxyMessageDecoder haProxyMessageDecoder = new HAProxyMessageDecoder();
-                        p.addLast("HAProxyMessageDecoder", haProxyMessageDecoder);
+                        p.addLast("HAProxyMessageDecoder", new HAProxyMessageDecoder());
+                        p.addLast("HAProxyMessageHandler", new HAProxyMessageHandler());
                     }
                     if (usesSsl) {
-                        p.addLast("sni", new SniHandler(new DomainWildcardMappingBuilder<>(sslContextProvider.get()).build()) {
-
-                            private HAProxyMessage haProxyMessage = null;
-                            private ChannelHandlerContext ctx;
-
-                            @Override
-                            public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-                                fireHAProxyMessage();
-                                super.channelInactive(ctx);
-                            }
-
-                            @Override
-                            public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
-                                this.ctx = ctx;
-                                super.handlerAdded(ctx);
-                            }
-
-                            private void fireHAProxyMessage() {
-                                if (haProxyMessage != null) {
-                                    ctx.fireChannelRead(haProxyMessage);
-                                    haProxyMessage = null;
-                                }
-                            }
-
-                            @Override
-                            public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-                                if (msg instanceof HAProxyMessage) {
-                                    haProxyMessage = (HAProxyMessage) msg;
-                                } else {
-                                    super.channelRead(ctx, msg);
-                                }
-                            }
-
-                            @Override
-                            protected void onLookupComplete(ChannelHandlerContext ctx, Future<SslContext> future) throws Exception {
-                                super.onLookupComplete(ctx, future);
-                                ctx.channel().attr(Mutils.SNI_HOSTNAME).set(hostname());
-                            }
-
-                            @Override
-                            protected SslHandler newSslHandler(SslContext context, ByteBufAllocator allocator) {
-                                SslHandler sslHandler = sslContextProvider.get().newHandler(socketChannel.alloc());
-                                SSLParameters params = sslHandler.engine().getSSLParameters();
-                                params.setUseCipherSuitesOrder(true);
-                                sslHandler.engine().setSSLParameters(params);
-                                return sslHandler;
-                            }
-
-                            protected void replaceHandler(ChannelHandlerContext ctx, String hostname, SslContext sslContext) throws Exception {
-                                super.replaceHandler(ctx, hostname, sslContext);
-                                fireHAProxyMessage();
-                            }
-
-                        });
+                        p.addLast("sni", new MuSniHandler(() -> new DomainWildcardMappingBuilder<>(sslContextProvider.get()).build()));
                     }
                     boolean addAlpn = http2 && usesSsl;
                     if (addAlpn) {

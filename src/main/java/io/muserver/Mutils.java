@@ -1,7 +1,5 @@
 package io.muserver;
 
-import io.netty.util.AttributeKey;
-
 import java.io.*;
 import java.net.URI;
 import java.net.URLDecoder;
@@ -26,7 +24,6 @@ public class Mutils {
      * The new-line character for the current platform, e.g. <code>\n</code> in Linux or <code>\r\n</code> on Windows.
      */
     public static final String NEWLINE = String.format("%n");
-    public static final AttributeKey<String> SNI_HOSTNAME = AttributeKey.valueOf("sniHostName");
 
     /**
      * @param value the value to encode
