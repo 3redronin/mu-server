@@ -92,65 +92,25 @@ public class HttpsTest {
                 .withKeyPassword("MY_PASSWORD")
                 .withKeystoreFromClasspath("/jks-keystore-combine.jks"))
             .addHandler((request, response) -> {
-                response.write("This is encrypted");
+                response.write("This is encrypted, sni is " + request.connection().sniHostName().orElse("Optional.empty()"));
                 return true;
             })
             .start();
 
         try (Response resp = call(request(server.httpsUri()))) {
-            assertThat(resp.body().string(), equalTo("This is encrypted"));
+            assertThat(resp.body().string(), equalTo("This is encrypted, sni is Optional.empty()"));
         }
 
         assertThat(certInformationBySni(server.uri(), "localhost"), containsString("TEST-1"));
         assertThat(certInformationBySni(server.uri(), "test-1.com"), containsString("TEST-1"));
         assertThat(certInformationBySni(server.uri(), "test-2.com"), containsString("TEST-2"));
         assertThat(certInformationBySni(server.uri(), "not-matching"), containsString("TEST-2")); // TEST-2 is defaultAlias
-    }
 
-    @Test
-    public void canGetClientSniOnHttpsServer() throws Exception {
-
-        /* jks-keystore-combine.jks generated with:
-        keytool -genkeypair -keystore jks-keystore-combine.jks -storetype JKS -alias mykey-1 -storepass MY_PASSWORD -keypass MY_PASSWORD -keyalg RSA -keysize 2048 -validity 999999 -dname "CN=TEST-1, OU=Ronin, O=MuServer, L=NA, ST=NA, C=NA" -ext san=dns:test-1.com,dns:localhost,ip:127.0.0.1
-        keytool -genkeypair -keystore jks-keystore-temp-2.jks -storetype JKS -alias mykey-2 -storepass MY_PASSWORD -keypass MY_PASSWORD -keyalg RSA -keysize 2048 -validity 999999 -dname "CN=TEST-2, OU=Ronin, O=MuServer, L=NA, ST=NA, C=NA" -ext san=dns:test-2.com,ip:127.0.0.1
-        keytool -importkeystore -srckeystore jks-keystore-temp-2.jks -destkeystore jks-keystore-combine.jks -srcalias mykey-2 -destalias mykey-2 -srcstorepass MY_PASSWORD -deststorepass MY_PASSWORD
-        */
-        server = ServerUtils.httpsServerForTest()
-            .withHttpsConfig(HttpsConfigBuilder.httpsConfig()
-                .withKeystoreType("JKS")
-                .withKeystorePassword("MY_PASSWORD")
-                .withKeyPassword("MY_PASSWORD")
-                .withKeystoreFromClasspath("/jks-keystore-combine.jks"))
-            .addHandler((request, response) -> {
-                response.write("This is encrypted, sni is " + request.connection().sniHostName().orElse("Optional.empty()"));
-                return true;
-            })
-            .start();
-
-        // when client not specify the sni, it's empty
-        try (Response resp = call(request(server.httpsUri()))) {
-            assertThat(resp.body().string(), equalTo("This is encrypted, sni is Optional.empty()"));
-        }
 
         assertThat(responseBySni(server.uri(), "localhost"), equalTo("200 This is encrypted, sni is localhost"));
         assertThat(responseBySni(server.uri(), "test-1.com"), equalTo("200 This is encrypted, sni is test-1.com"));
         assertThat(responseBySni(server.uri(), "test-2.com"), equalTo("200 This is encrypted, sni is test-2.com"));
         assertThat(responseBySni(server.uri(), "not-matching"), equalTo("200 This is encrypted, sni is not-matching"));
-    }
-
-    @Test
-    public void canGetEmptyClientSniOnHttpServer() throws Exception {
-
-        server = MuServerBuilder.httpServer()
-            .addHandler((request, response) -> {
-                response.write("This is encrypted, sni is " + request.connection().sniHostName().orElse("Optional.empty()"));
-                return true;
-            })
-            .start();
-
-        try (Response resp = call(request(server.httpUri()))) {
-            assertThat(resp.body().string(), equalTo("This is encrypted, sni is Optional.empty()"));
-        }
     }
 
     private String certInformationBySni(URI uri, String sni) throws IOException {
