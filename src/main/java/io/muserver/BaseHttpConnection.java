@@ -198,4 +198,8 @@ abstract class BaseHttpConnection implements HttpConnection {
     abstract void initiateGracefulShutdown() throws IOException;
     abstract void forceShutdown();
 
+    @Override
+    public Optional<String> sniHostName() {
+        throw new UnsupportedOperationException("Not implemented yet.");
+    }
 }
