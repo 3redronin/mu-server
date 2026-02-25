@@ -12,7 +12,7 @@ import javax.net.ssl.SSLParameters;
 import java.util.function.Supplier;
 
 
-public class MuSniHandler extends SniHandler {
+class MuSniHandler extends SniHandler {
 
     static final AttributeKey<String> SNI_HOSTNAME = AttributeKey.valueOf("SNI_HOSTNAME");
 
