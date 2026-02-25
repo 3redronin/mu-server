@@ -13,5 +13,8 @@ class HAProxyMessageHandler extends SimpleChannelInboundHandler<HAProxyMessage> 
     protected void channelRead0(ChannelHandlerContext ctx, HAProxyMessage msg) {
         ProxiedConnectionInfoImpl proxyConnectionInfo = ProxiedConnectionInfoImpl.fromNetty(msg);
         ctx.channel().attr(HA_PROXY_INFO).set(proxyConnectionInfo);
+        if (!ctx.channel().config().isAutoRead()) {
+            ctx.read();
+        }
     }
 }
