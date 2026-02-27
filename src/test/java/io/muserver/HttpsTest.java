@@ -11,7 +11,9 @@ import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SNIHostName;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLParameters;
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.net.URI;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
@@ -122,7 +124,74 @@ public class HttpsTest {
                 sb.append(x.getIssuerDN());
             }
         }
+        conn.disconnect();
         return sb.toString();
+    }
+
+    @Test
+    public void canGetClientSniOnHttpsServer() throws Exception {
+
+        /* jks-keystore-combine.jks generated with:
+        keytool -genkeypair -keystore jks-keystore-combine.jks -storetype JKS -alias mykey-1 -storepass MY_PASSWORD -keypass MY_PASSWORD -keyalg RSA -keysize 2048 -validity 999999 -dname "CN=TEST-1, OU=Ronin, O=MuServer, L=NA, ST=NA, C=NA" -ext san=dns:test-1.com,dns:localhost,ip:127.0.0.1
+        keytool -genkeypair -keystore jks-keystore-temp-2.jks -storetype JKS -alias mykey-2 -storepass MY_PASSWORD -keypass MY_PASSWORD -keyalg RSA -keysize 2048 -validity 999999 -dname "CN=TEST-2, OU=Ronin, O=MuServer, L=NA, ST=NA, C=NA" -ext san=dns:test-2.com,ip:127.0.0.1
+        keytool -importkeystore -srckeystore jks-keystore-temp-2.jks -destkeystore jks-keystore-combine.jks -srcalias mykey-2 -destalias mykey-2 -srcstorepass MY_PASSWORD -deststorepass MY_PASSWORD
+        */
+        server = ServerUtils.httpsServerForTest()
+            .withHttpsConfig(HttpsConfigBuilder.httpsConfig()
+                .withKeystoreType("JKS")
+                .withKeystorePassword("MY_PASSWORD")
+                .withKeyPassword("MY_PASSWORD")
+                .withKeystoreFromClasspath("/jks-keystore-combine.jks"))
+            .addHandler((request, response) -> {
+                response.write("This is encrypted, sni is " + request.connection().sniHostName().orElse("Optional.empty()"));
+                return true;
+            })
+            .start();
+
+        // when client not specify the sni, it's empty
+        try (Response resp = call(request(server.httpsUri()))) {
+            assertThat(resp.body().string(), equalTo("This is encrypted, sni is Optional.empty()"));
+        }
+
+        assertThat(responseBySni(server.uri(), "localhost"), equalTo("200 This is encrypted, sni is localhost"));
+        assertThat(responseBySni(server.uri(), "test-1.com"), equalTo("200 This is encrypted, sni is test-1.com"));
+        assertThat(responseBySni(server.uri(), "test-2.com"), equalTo("200 This is encrypted, sni is test-2.com"));
+        assertThat(responseBySni(server.uri(), "not-matching"), equalTo("200 This is encrypted, sni is not-matching"));
+    }
+
+    @Test
+    public void canGetEmptyClientSniOnHttpServer() throws Exception {
+
+        server = MuServerBuilder.httpServer()
+            .addHandler((request, response) -> {
+                response.write("This is encrypted, sni is " + request.connection().sniHostName().orElse("Optional.empty()"));
+                return true;
+            })
+            .start();
+
+        try (Response resp = call(request(server.httpUri()))) {
+            assertThat(resp.body().string(), equalTo("This is encrypted, sni is Optional.empty()"));
+        }
+    }
+
+    private String responseBySni(URI uri, String sni) throws IOException {
+        SSLContext sslContext = sslContextForTesting(veryTrustingTrustManager());
+        SSLParameters sslParameters = new SSLParameters();
+        sslParameters.setServerNames(Collections.singletonList(new SNIHostName(sni)));
+        HttpsURLConnection.setDefaultSSLSocketFactory(new SSLSocketFactoryWrapper(sslContext.getSocketFactory(), sslParameters));
+        HttpsURLConnection conn = (HttpsURLConnection) uri.toURL().openConnection();
+        conn.setHostnameVerifier((hostname, session) -> true); // disable the client side handshake verification
+        conn.connect();
+        int responseCode = conn.getResponseCode();
+        try (BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream())) ) {
+            String inputLine;
+            StringBuilder body = new StringBuilder();
+            while ((inputLine = in.readLine()) != null) {
+                body.append(inputLine);
+            }
+            conn.disconnect();
+            return responseCode + " " + body;
+        }
     }
 
     @Test

@@ -14,15 +14,14 @@ import io.netty.handler.codec.http.HttpResponseEncoder;
 import io.netty.handler.codec.http.HttpServerKeepAliveHandler;
 import io.netty.handler.flow.FlowControlHandler;
 import io.netty.handler.ssl.SslContext;
-import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.handler.traffic.GlobalTrafficShapingHandler;
+import io.netty.util.DomainWildcardMappingBuilder;
 import io.netty.util.HashedWheelTimer;
 import io.netty.util.concurrent.DefaultThreadFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.net.ssl.SSLParameters;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.time.Duration;
@@ -39,6 +38,7 @@ import java.util.stream.Collectors;
  * <p>Use the <code>withXXX()</code> methods to set the ports, config, and request handlers needed.</p>
  */
 public class MuServerBuilder {
+
     static {
         MuRuntimeDelegate.ensureSet();
     }
@@ -409,6 +409,7 @@ public class MuServerBuilder {
      *     return true;
      * })
      * </code></pre>
+     *
      * @param exceptionHandler The handler to be called when an unhandled exception is encountered
      * @return This builder
      */
@@ -542,7 +543,9 @@ public class MuServerBuilder {
     /**
      * @return The current value of this property
      */
-    public boolean haProxyProtocolEnabled() { return this.haProxyProtocolEnabled; }
+    public boolean haProxyProtocolEnabled() {
+        return this.haProxyProtocolEnabled;
+    }
 
     /**
      * @return The current value of this property
@@ -596,6 +599,7 @@ public class MuServerBuilder {
     /**
      * If enabled, then <a href="https://www.haproxy.org/download/1.8/doc/proxy-protocol.txt">HA Proxy Protocol</a>
      * parsing on new connections will be enabled.
+     *
      * @param enabled <code>true</code> to enable. The default is <code>false</code>
      * @return This builder
      */
@@ -730,15 +734,11 @@ private  boolean gracefulWait(Duration gracefulDuration, MuStatsImpl stats) thro
                     p.addLast("idle", new IdleStateHandler(0, 0, idleTimeoutMills, TimeUnit.MILLISECONDS));
                     p.addLast(trafficShapingHandler);
                     if (haProxyProtocolEnabled) {
-                        HAProxyMessageDecoder haProxyMessageDecoder = new HAProxyMessageDecoder();
-                        p.addLast("HAProxyMessageDecoder", haProxyMessageDecoder);
+                        p.addLast("HAProxyMessageDecoder", new HAProxyMessageDecoder());
+                        p.addLast("HAProxyMessageHandler", new HAProxyMessageHandler());
                     }
                     if (usesSsl) {
-                        SslHandler sslHandler = sslContextProvider.get().newHandler(socketChannel.alloc());
-                        SSLParameters params = sslHandler.engine().getSSLParameters();
-                        params.setUseCipherSuitesOrder(true);
-                        sslHandler.engine().setSSLParameters(params);
-                        p.addLast("ssl", sslHandler);
+                        p.addLast("sni", new MuSniHandler(() -> new DomainWildcardMappingBuilder<>(sslContextProvider.get()).build()));
                     }
                     boolean addAlpn = http2 && usesSsl;
                     if (addAlpn) {
