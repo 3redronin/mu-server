@@ -10,10 +10,7 @@ import org.eclipse.jetty.client.util.InputStreamContentProvider;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
-import scaffolding.MuAssert;
-import scaffolding.ServerUtils;
-import scaffolding.SlowBodySender;
-import scaffolding.StringUtils;
+import scaffolding.*;
 
 import java.io.*;
 import java.nio.ByteBuffer;
@@ -24,6 +21,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static io.muserver.MuServerBuilder.httpServer;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.*;
@@ -163,6 +161,44 @@ public class RequestBodyReaderInputStreamAdapterTest {
             assertThat(resp.body().string(), equalTo("Loop 0\nLoop 1\nLoop 2\nLoop 3\nLoop 4\nLoop 5\nLoop 6\nLoop 7\nLoop 8\nLoop 9\n"));
         }
     }
+
+    @Test
+    public void chunkedRequestBodiesCanBeRead() throws Exception {
+        server = httpServer()
+            .addHandler((request, response) -> {
+                try (var isr = new InputStreamReader(request.inputStream().get())) {
+                    var buffer = new char[100];
+                    int read;
+                    var sb = new StringBuilder();
+                    while ((read = isr.read(buffer)) != -1) {
+                        sb.append(buffer, 0, read);
+                    }
+                    response.write(sb.toString());
+                }
+                return true;
+            })
+            .start();
+
+        try (var client = Http1Client.connect(server.uri())) {
+            client.writeRequestLine(Method.POST, "/")
+                .writeHeader("host", server.uri().getAuthority())
+                .writeHeader("content-type", "text/plain")
+                .writeHeader("transfer-encoding", "chunked")
+                .endHeaders()
+                .writeAscii("5\r\nHello\r\n")
+                .writeAscii("1\r\n \r\n")
+                .writeAscii("5\r\nWorld\r\n")
+                .writeAscii("0\r\n\r\n")
+                .flush();
+            client.readLine();
+            var headers = client.readHeaders();
+            var body = client.readBody(headers);
+            assertThat(body, equalTo("Hello World"));
+        }
+
+
+    }
+
 
 
     @Test
