@@ -58,13 +58,15 @@ class RequestBodyReaderInputStreamAdapter extends RequestBodyReader {
                 if (finished) {
                     return -1;
                 }
-                while (currentBuf == null) {
+                while (currentBuf == null || (currentBuf.readableBytes() == 0 && !receivedLast)) {
                     waitForData();
                 }
-                int actual = Math.min(len, currentBuf.readableBytes());
-                if (actual > 0) {
-                    currentBuf.readBytes(b, off, actual);
+                if (currentBuf.readableBytes() == 0) {
+                    afterConsumed();
+                    return -1;
                 }
+                int actual = Math.min(len, currentBuf.readableBytes());
+                currentBuf.readBytes(b, off, actual);
                 afterConsumed();
                 return actual;
             }
