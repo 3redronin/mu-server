@@ -183,6 +183,12 @@ class MuWebSocketSessionImpl implements MuWebSocketSession, Exchange {
             // closed, a peer does not send any further data; after receiving a
             // control frame indicating the connection should be closed, a peer
             // discards any further data received.
+            try {
+                // this will pull more bytes ( discarding ) and finally close connection
+                doneCallback.onComplete(new IllegalStateException("Received a message when websocket state is closing or closed"));
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
             return;
         }
         MuWebSocket muWebSocket = this.muWebSocket;
