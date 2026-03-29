@@ -42,12 +42,31 @@ public class WebSocketHandler implements MuHandler {
             return false;
         }
         NettyRequestAdapter reqImpl = (NettyRequestAdapter) request;
+
+        AsyncHandle asyncHandle = request.handleAsync();
+
+        asyncHandle.addResponseCompleteHandler(info -> {
+
+            if (reqImpl.exchange().state() == HttpExchangeState.UPGRADED) {
+                return;
+            }
+
+            if (reqImpl.ctx.channel().isOpen()) {
+                reqImpl.ctx.channel().eventLoop().execute(() -> {
+                    if (reqImpl.ctx.channel().isOpen()) {
+                        reqImpl.ctx.channel().close();
+                    }
+                });
+            }
+        });
+
         boolean upgraded;
         try {
             upgraded = reqImpl.websocketUpgrade(muWebSocket, nettyHeaders, idleReadTimeoutMills, pingAfterWriteMillis, maxFramePayloadLength);
         } catch (UnsupportedOperationException e) {
             response.status(426);
             response.headers().set(HeaderNames.SEC_WEBSOCKET_VERSION, "13");
+            asyncHandle.complete();
             return true;
         }
         return upgraded;
