@@ -14,9 +14,9 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <netty.version>4.1.131.Final</netty.version>
+        <netty.version>4.1.132.Final</netty.version>
         <slf4j.version>1.7.36</slf4j.version>
-        <jetty.version>9.4.57.v20241219</jetty.version>
+        <jetty.version>9.4.58.v20250814</jetty.version>
     </properties>
 
     <scm>
@@ -154,19 +154,19 @@
         <dependency>
             <groupId>com.squareup.okio</groupId>
             <artifactId>okio</artifactId>
-            <version>3.9.0</version>
+            <version>3.17.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>com.squareup.okio</groupId>
             <artifactId>okio-jvm</artifactId>
-            <version>3.9.0</version>
+            <version>3.17.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.json</groupId>
             <artifactId>json</artifactId>
-            <version>20250517</version>
+            <version>20251224</version>
             <scope>test</scope>
         </dependency>
         <dependency>
