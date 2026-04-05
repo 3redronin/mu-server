@@ -110,8 +110,8 @@ class RFC9113_6_4_RstStreamTest {
                 .flush();
 
             // Expect the response and first bit of data back
-            con.readLogicalFrame(Http2HeadersFrame.class);
-            var data = con.readLogicalFrame(Http2DataFrame.class);
+            readIgnoringWindowUpdates(con, Http2HeadersFrame.class);
+            var data = readIgnoringWindowUpdates(con, Http2DataFrame.class);
             assertThat(data.toUTF8(), equalTo("Hello"));
 
             // The request body is not finished, but reset the frame
@@ -133,8 +133,8 @@ class RFC9113_6_4_RstStreamTest {
             // new requests still work on the same connection though
             con.writeFrame(new Http2HeadersFrame(3, true, getHelloHeaders(getPort())))
                 .flush();
-            con.readLogicalFrame(Http2HeadersFrame.class);
-            Http2DataFrame getGot = con.readLogicalFrame(Http2DataFrame.class);
+            readIgnoringWindowUpdates(con, Http2HeadersFrame.class);
+            Http2DataFrame getGot = readIgnoringWindowUpdates(con, Http2DataFrame.class);
             assertThat(getGot.toUTF8(), equalTo("Get got"));
 
             info = completedStreams.poll(10, TimeUnit.SECONDS);
@@ -255,15 +255,15 @@ class RFC9113_6_4_RstStreamTest {
             con.writeFrame(new Http2DataFrame(1, true, "Hello".getBytes(StandardCharsets.UTF_8), 0, 5));
             con.flush();
 
-            var resp = con.readLogicalFrame(Http2HeadersFrame.class);
+            var resp = readIgnoringWindowUpdates(con, Http2HeadersFrame.class);
             assertThat(resp.streamId(), equalTo(1));
             assertThat(resp.headers().get(":status"), equalTo("200"));
 
-            var data = con.readLogicalFrame(Http2DataFrame.class);
+            var data = readIgnoringWindowUpdates(con, Http2DataFrame.class);
             assertThat(data.streamId(), equalTo(1));
             assertThat(new String(data.payload(), data.payloadOffset(), data.payloadLength(), StandardCharsets.UTF_8), equalTo("Hello"));
 
-            var eos = con.readLogicalFrame(Http2DataFrame.class);
+            var eos = readIgnoringWindowUpdates(con, Http2DataFrame.class);
             assertThat(eos.endStream(), equalTo(true));
         }
 

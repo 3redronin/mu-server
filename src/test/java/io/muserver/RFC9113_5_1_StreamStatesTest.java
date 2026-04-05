@@ -86,6 +86,7 @@ class RFC9113_5_1_StreamStatesTest {
 
             con.writeFrame(goAway(3, Http2ErrorCode.NO_ERROR)).flush();
 
+            assertThat(con.readLogicalFrame(Http2GoAway.class), equalTo(goAway(5, Http2ErrorCode.NO_ERROR)));
             assertThrows(IOException.class, con::readFrameHeader);
         }
 

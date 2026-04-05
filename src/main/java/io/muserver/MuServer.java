@@ -41,9 +41,7 @@ public interface MuServer extends Closeable {
      * @param unit     The time unit of the duration.
      * @return false if there were in-flight requests not completed.
      */
-    default boolean stop(long duration, TimeUnit unit) {
-        throw new RuntimeException("not implemented");
-    };
+    boolean stop(long duration, TimeUnit unit);
 
     /**
      * @return The HTTPS (or if unavailable the HTTP) URI of the web server.

@@ -128,8 +128,13 @@ class H2ClientConnection implements Http2Peer, Closeable {
 
     @Override
     public void close() throws IOException {
-        flush();
-        socket.close();
+        try {
+            flush();
+        } catch (IOException ignored) {
+            // The server might have already closed the TLS connection as part of GOAWAY shutdown.
+        } finally {
+            socket.close();
+        }
     }
 
     public H2ClientConnection writeRaw(byte[] bytes) throws IOException {

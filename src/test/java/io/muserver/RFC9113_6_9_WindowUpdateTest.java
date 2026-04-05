@@ -152,8 +152,8 @@ class RFC9113_6_9_WindowUpdateTest {
                 // write up to the limit
                 .writeFrame(utf8DataFrame(1, false, "Hell"))
                 .flush();
-            con.readLogicalFrame(Http2HeadersFrame.class);
-            assertThat(con.readLogicalFrame(Http2DataFrame.class).toUTF8(), equalTo("Hell")); // the text
+            readIgnoringWindowUpdates(con, Http2HeadersFrame.class);
+            assertThat(readIgnoringWindowUpdates(con, Http2DataFrame.class).toUTF8(), equalTo("Hell")); // the text
 
             // and now definitely exceed the limit
 

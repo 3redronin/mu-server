@@ -62,6 +62,8 @@ class ConnectionAcceptor {
     }
 
     private volatile State state = State.NOT_STARTED;
+    private volatile long gracefulShutdownTimeoutMillis = 20_000;
+    private volatile boolean lastStopWasGraceful = true;
 
     private final boolean isHttps;
 
@@ -119,12 +121,13 @@ class ConnectionAcceptor {
                 }
             }
         }
-        shutdownConnections();
+        lastStopWasGraceful = shutdownConnections();
+        state = State.STOPPED;
     }
 
-    private void shutdownConnections() {
+    private boolean shutdownConnections() {
         log.info("Closing server with " + connections.size() + " connected connections");
-        Instant waitUntil = Instant.now().plusSeconds(20);
+        Instant waitUntil = Instant.now().plusMillis(gracefulShutdownTimeoutMillis);
         for (BaseHttpConnection connection : connections) {
             try {
                 connection.initiateGracefulShutdown();
@@ -139,6 +142,7 @@ class ConnectionAcceptor {
                 break;
             }
         }
+        boolean drainedCleanly = connections.isEmpty();
         for (BaseHttpConnection connection : connections) {
             log.info("Force closure of active connection {} with requests {}", connection, connection.activeRequests());
             try {
@@ -153,6 +157,7 @@ class ConnectionAcceptor {
             log.warn("Error closing socket server", e);
         }
         log.info("Closed");
+        return drainedCleanly;
     }
 
     private void timeoutLoop() {
@@ -288,16 +293,23 @@ class ConnectionAcceptor {
         }
     }
 
-    public void stop(long timeoutMillis) {
+    public boolean stop(long timeoutMillis) {
+        if (state == State.STOPPED) {
+            return lastStopWasGraceful;
+        }
         log.info("Stopping server 1");
         state = State.STOPPING;
-        long start = System.currentTimeMillis();
+        gracefulShutdownTimeoutMillis = Math.max(0L, timeoutMillis);
+        long deadline = System.currentTimeMillis() + gracefulShutdownTimeoutMillis;
         if (timeoutThread != null) {
             timeoutThread.interrupt();
-            try {
-                timeoutThread.join(timeoutMillis);
-            } catch (InterruptedException ignored) {
-
+            long remaining = Math.max(0L, deadline - System.currentTimeMillis());
+            if (remaining > 0) {
+                try {
+                    timeoutThread.join(remaining);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
             }
         }
         try {
@@ -305,16 +317,20 @@ class ConnectionAcceptor {
         } catch (IOException e) {
             log.warn("Error closing server socket", e);
         }
-        long durationSoFar = System.currentTimeMillis() - start;
-        try {
-            acceptorThread.join(Math.max(1, timeoutMillis - durationSoFar));
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+        long remaining = Math.max(0L, deadline - System.currentTimeMillis());
+        if (remaining > 0) {
+            try {
+                acceptorThread.join(remaining);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
         if (acceptorThread.isAlive()) {
             log.warn("Could not kill " + this + " after " + timeoutMillis + " ms");
+            lastStopWasGraceful = false;
+            return false;
         }
-        state = State.STOPPED;
+        return lastStopWasGraceful;
     }
 
     @Override

@@ -5,15 +5,10 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import scaffolding.MuAssert;
-
-import java.io.EOFException;
-import java.net.SocketException;
-import java.nio.charset.StandardCharsets;
+import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -38,11 +33,18 @@ class RFC9113_6_8_GoAwayTest {
              var con = client.connect(server)) {
             con.handshake();
             assertNothingToRead(con.socket());
-            server.stop();
-            assertThat("Expected warning goaway", con.readLogicalFrame(),
-                equalTo(goAway(0x7FFFFFFF, Http2ErrorCode.NO_ERROR)));
-            assertThat("Expected final goaway", con.readLogicalFrame(),
-                equalTo(goAway(0, Http2ErrorCode.NO_ERROR)));
+            var stopper = Executors.newSingleThreadExecutor();
+            try {
+                var stopped = stopper.submit(() -> server.stop());
+                assertThat("Expected warning goaway", con.readLogicalFrame(),
+                    equalTo(goAway(0x7FFFFFFF, Http2ErrorCode.NO_ERROR)));
+                assertThat("Expected final goaway", con.readLogicalFrame(),
+                    equalTo(goAway(0, Http2ErrorCode.NO_ERROR)));
+                stopped.get(5, TimeUnit.SECONDS);
+                assertThrows(IOException.class, con::readFrameHeader);
+            } finally {
+                stopper.shutdownNow();
+            }
         }
     }
 
@@ -76,7 +78,7 @@ class RFC9113_6_8_GoAwayTest {
             assertNotTimedOut("Waiting for 2 requests to start", twoRequestsStartedLatch);
 
             var stopper = Executors.newSingleThreadExecutor();
-            stopper.submit(() -> server.stop());
+            var stopped = stopper.submit(() -> server.stop());
 
             System.out.println("server stopped");
             assertThat("Expected warning goaway", con.readLogicalFrame(),
@@ -107,6 +109,8 @@ class RFC9113_6_8_GoAwayTest {
                     emptyEosDataFrame(3)
                 ));
 
+            stopped.get(5, TimeUnit.SECONDS);
+            assertThrows(IOException.class, con::readFrameHeader);
 
             stopper.shutdownNow();
         }

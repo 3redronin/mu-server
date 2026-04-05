@@ -17,6 +17,7 @@ import java.util.concurrent.TimeUnit;
 
 import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.RFCTestUtils.postHelloHeaders;
+import static io.muserver.RFCTestUtils.readIgnoringWindowUpdates;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.notNullValue;
@@ -143,20 +144,20 @@ class RFC9113_6_1_DataFrameTest {
             con.writeFrame(new Http2DataFrame(1, true, "Hello".getBytes(StandardCharsets.UTF_8), 0, 5));
             con.flush();
 
-            var resp = con.readLogicalFrame(Http2HeadersFrame.class);
+            var resp = readIgnoringWindowUpdates(con, Http2HeadersFrame.class);
             assertThat(resp.streamId(), equalTo(1));
             assertThat(resp.headers().get(":status"), equalTo("200"));
             assertThat(resp.headers().get("content-type"), equalTo("text/plain; charset=utf-8"));
             assertThat(resp.endStream(), equalTo(false));
 
-            var data = con.readLogicalFrame(Http2DataFrame.class);
+            var data = readIgnoringWindowUpdates(con, Http2DataFrame.class);
             assertThat(data.streamId(), equalTo(1));
             assertThat(data.flowControlSize(), equalTo(5));
             assertThat(new String(data.payload(), data.payloadOffset(), data.payloadLength(), StandardCharsets.UTF_8), equalTo("Hello"));
 
             // note: the end stream is always separate currently, as doing things like gzipping is much easier when this is the case
             assertThat(data.endStream(), equalTo(false));
-            var eos = con.readLogicalFrame(Http2DataFrame.class);
+            var eos = readIgnoringWindowUpdates(con, Http2DataFrame.class);
             assertThat(eos.endStream(), equalTo(true));
             assertThat(eos.streamId(), equalTo(1));
             assertThat(eos.flowControlSize(), equalTo(0));
@@ -188,9 +189,9 @@ class RFC9113_6_1_DataFrameTest {
                 .writeFrame(new Http2HeadersFrame(1, false, postHelloHeaders(getPort())))
                 .writeFrame(new Http2DataFrame(1, true, "Hello".getBytes(StandardCharsets.UTF_8), 0, 5))
                 .flush();
-            con.readLogicalFrame(Http2HeadersFrame.class);
-            con.readLogicalFrame(Http2DataFrame.class);
-            con.readLogicalFrame(Http2DataFrame.class);
+            readIgnoringWindowUpdates(con, Http2HeadersFrame.class);
+            readIgnoringWindowUpdates(con, Http2DataFrame.class);
+            readIgnoringWindowUpdates(con, Http2DataFrame.class);
 
             assertNotTimedOut("Waiting for stream to complete", completedLatch);
 

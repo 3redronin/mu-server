@@ -20,6 +20,7 @@ import java.util.concurrent.TimeUnit;
 
 import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.RFCTestUtils.postHelloHeaders;
+import static io.muserver.RFCTestUtils.readIgnoringWindowUpdates;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.notNullValue;
@@ -55,15 +56,15 @@ class RFC9113_6_3_PriorityFrameTest {
             con.writeFrame(new Http2PriorityFrame(1, true, 2, 10));
             con.flush();
 
-            var resp = con.readLogicalFrame(Http2HeadersFrame.class);
+            var resp = readIgnoringWindowUpdates(con, Http2HeadersFrame.class);
             assertThat(resp.streamId(), equalTo(1));
             assertThat(resp.headers().get(":status"), equalTo("200"));
 
-            var data = con.readLogicalFrame(Http2DataFrame.class);
+            var data = readIgnoringWindowUpdates(con, Http2DataFrame.class);
             assertThat(data.streamId(), equalTo(1));
             assertThat(new String(data.payload(), data.payloadOffset(), data.payloadLength(), StandardCharsets.UTF_8), equalTo("Hello"));
 
-            var eos = con.readLogicalFrame(Http2DataFrame.class);
+            var eos = readIgnoringWindowUpdates(con, Http2DataFrame.class);
             assertThat(eos.endStream(), equalTo(true));
         }
 

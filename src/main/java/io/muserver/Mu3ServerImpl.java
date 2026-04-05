@@ -60,9 +60,21 @@ class Mu3ServerImpl implements MuServer {
 
     @Override
     public void stop() {
+        stop(10, java.util.concurrent.TimeUnit.SECONDS);
+    }
+
+    @Override
+    public boolean stop(long duration, java.util.concurrent.TimeUnit unit) {
+        long timeoutMillis = Math.max(0L, unit.toMillis(duration));
+        long deadline = System.currentTimeMillis() + timeoutMillis;
+        boolean stoppedCleanly = true;
         for (var acceptor : acceptors) {
-            acceptor.stop(10000);
+            long remaining = Math.max(0L, deadline - System.currentTimeMillis());
+            if (!acceptor.stop(remaining)) {
+                stoppedCleanly = false;
+            }
         }
+        return stoppedCleanly;
     }
 
     @Override

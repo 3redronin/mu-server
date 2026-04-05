@@ -1,8 +1,6 @@
 package io.muserver;
 
 import org.jspecify.annotations.NonNull;
-import org.junit.jupiter.params.ParameterizedTest;
-
 import java.io.IOException;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
@@ -53,6 +51,18 @@ class RFCTestUtils {
             assertThrows(SocketTimeoutException.class, () -> socket.getInputStream().read());
         } finally {
             socket.setSoTimeout(beforeTimeout);
+        }
+    }
+
+    static <T extends LogicalHttp2Frame> T readIgnoringWindowUpdates(H2ClientConnection con, Class<T> clazz) throws IOException, Http2Exception {
+        while (true) {
+            var frame = con.readLogicalFrame();
+            if (clazz.isAssignableFrom(frame.getClass())) {
+                return clazz.cast(frame);
+            }
+            if (!(frame instanceof Http2WindowUpdate)) {
+                throw new IllegalStateException("Expected " + clazz.getName() + ", got " + frame);
+            }
         }
     }
 }

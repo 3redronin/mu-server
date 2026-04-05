@@ -33,7 +33,15 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
             this.canSendFrames = canSendFrames;
         }
     }
+    /**
+     * The inbound side of the connection. This is tracked separately from writes because the peer can stop sending
+     * new work while we still have responses to finish.
+     */
     private volatile HState readState =  HState.ACTIVE;
+    /**
+     * The outbound side of the connection. This is tracked separately from reads because we can start shutting down
+     * locally while still reading frames for streams that are already in flight.
+     */
     private volatile HState writeState =  HState.ACTIVE;
 
     private static final Logger log = LoggerFactory.getLogger(Http2Connection.class);
@@ -52,6 +60,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
     private final Lock writeQueueLock = new ReentrantLock();
     private final Condition writeQueueCondition = writeQueueLock.newCondition();
     private final Queue<WriteTask> writeQueue = new ArrayDeque<>();
+    private volatile boolean finalGoAwayQueued;
 
     final FieldBlockEncoder fieldBlockEncoder;
 
@@ -91,6 +100,130 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
             writeQueueCondition.signalAll();
         } finally {
             writeQueueLock.unlock();
+        }
+    }
+
+    private void signalWriteLoop() {
+        writeQueueLock.lock();
+        try {
+            writeQueueCondition.signalAll();
+        } finally {
+            writeQueueLock.unlock();
+        }
+    }
+
+    private void closeSocketQuietly() {
+        if (closed.compareAndSet(false, true)) {
+            try {
+                clientSocket.close();
+            } catch (IOException e) {
+                log.debug("Error closing HTTP/2 socket", e);
+            }
+        }
+    }
+
+    private void setReadStateAndSignal(HState newState) {
+        writeQueueLock.lock();
+        try {
+            readState = newState;
+            writeQueueCondition.signalAll();
+        } finally {
+            writeQueueLock.unlock();
+        }
+    }
+
+    private void markPeerShutdownInitiatedLocked() {
+        readState = HState.SHUTDOWN_INITIATED;
+        writeQueueCondition.signalAll();
+    }
+
+    private void markLocalShutdownInitiatedLocked() {
+        if (writeState == HState.ACTIVE) {
+            log.info("Graceful shutdown initiated with write state {}", writeState);
+            writeState = HState.SHUTDOWN_INITIATED;
+            // As per: https://datatracker.ietf.org/doc/html/rfc9113#section-6.8-18
+            // A server that is attempting to gracefully shut down a connection SHOULD send an initial GOAWAY frame
+            // with the last stream identifier set to 2^31-1 and a NO_ERROR code. This signals to the client that a
+            // shutdown is imminent and that initiating further requests is prohibited. After allowing time for any
+            // in-flight stream creation (at least one round-trip time), the server MAY send another GOAWAY frame
+            // with an updated last stream identifier. This ensures that a connection can be cleanly shut down
+            // without losing requests.
+            write(GO_AWAY_WARNING);
+        }
+    }
+
+    private void markConnectionErroredLocked() {
+        readState = HState.ERRORED;
+        writeState = HState.ERRORED;
+        writeQueueCondition.signalAll();
+    }
+
+    private boolean isLocalShutdownInitiatedLocked() {
+        return writeState == HState.SHUTDOWN_INITIATED;
+    }
+
+    private boolean isPeerShutdownInitiatedLocked() {
+        return readState == HState.SHUTDOWN_INITIATED;
+    }
+
+    private boolean isReadTerminalLocked() {
+        return !readState.canSendFrames;
+    }
+
+    private boolean shouldQueueFinalGoAwayLocked() {
+        return (isLocalShutdownInitiatedLocked() || isPeerShutdownInitiatedLocked()) && !finalGoAwayQueued;
+    }
+
+    private void queueFinalGoAwayLocked() {
+        finalGoAwayQueued = true;
+        maxAllowedStreamId = lastStreamId;
+        log.info("Queuing final go away with last stream id {}", maxAllowedStreamId);
+        write(new Http2GoAway(maxAllowedStreamId, 0, null));
+    }
+
+    private boolean isTerminalAndDrainedLocked() {
+        return (isLocalShutdownInitiatedLocked() || isPeerShutdownInitiatedLocked() || isReadTerminalLocked())
+            && streams.isEmpty()
+            && writeQueue.isEmpty();
+    }
+
+    private void completeShutdownLocked() {
+        log.info("HTTP/2 connection finished with read state {} and write state {}", readState, writeState);
+        writeState = readState == HState.ERRORED ? HState.ERRORED : HState.COMPLETED;
+        readState = writeState;
+    }
+
+    private void drainWritableFramesLocked(OutputStream clientOut, List<WriteTask> writtenTasks) throws IOException {
+        while (!writeQueue.isEmpty()) {
+            WriteTask candidate = null;
+            for (var task : writeQueue) {
+                if (candidate == null) {
+                    var frame = task.frame();
+                    int requiredCredit = frame.flowControlSize();
+                    log.info("frame=" + frame.getClass().getSimpleName() + " required=" + requiredCredit + " available=" + outgoingFlowControl.credit());
+                    if (requiredCredit == 0 || requiredCredit <= outgoingFlowControl.credit()) {
+                        candidate = task;
+                    }
+                }
+            }
+            if (candidate == null) {
+                return; // stop draining writeQueue until more items or more credit available
+            }
+
+            if (outgoingFlowControl.withdrawIfCan(candidate.frame().flowControlSize())) {
+                writeQueue.remove(candidate);
+                log.info("Writing " + candidate.frame());
+                candidate.frame().writeTo(this, clientOut);
+                writtenTasks.add(candidate);
+            }
+
+            if (!writtenTasks.isEmpty()) {
+                clientOut.flush();
+                for (WriteTask task : writtenTasks) {
+                    task.complete();
+                }
+                writtenTasks.clear();
+            }
         }
     }
 
@@ -175,9 +308,9 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
                     log.warn(e.getClass() + " reading frame at read state " + readState + " writeState=" + writeState, e);
                     // todo: read streams in a lock
                     if (streams.isEmpty()) {
-                        readState = HState.COMPLETED; // todo: is this okay or an error?
+                        setReadStateAndSignal(HState.COMPLETED); // todo: is this okay or an error?
                     } else {
-                        readState = HState.ERRORED;
+                        setReadStateAndSignal(HState.ERRORED);
                     }
                 }
                 // TODO: end if pending settings ack not received
@@ -195,13 +328,14 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
                     WriteTask writeTask = new WriteTask(goAway, true);
                     write(writeTask);
                     writeTask.await(30, TimeUnit.SECONDS);
+                    setReadStateAndSignal(HState.ERRORED);
                     writeEndedFuture.get(1, TimeUnit.MINUTES);
                 } else {
                     goAway.writeTo(this, clientOut);
                     clientOut.flush();
                 }
             } finally {
-                readState = HState.ERRORED;
+                setReadStateAndSignal(HState.ERRORED);
 
                 // TODO: check threadsafety of streams
                 if (!streams.isEmpty()) {
@@ -236,8 +370,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         log.info("Got goaway from client " + Objects.requireNonNullElse(goaway.errorCodeEnum(), goaway.errorCode()) + " with last stream " + goaway.lastStreamId());
         writeQueueLock.lock();
         try {
-            readState = HState.SHUTDOWN_INITIATED;
-            writeQueueCondition.signalAll();
+            markPeerShutdownInitiatedLocked();
         } finally {
             writeQueueLock.unlock();
         }
@@ -339,59 +472,25 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         }
     }
 
-    private @NonNull Future<?> startWriteLoop(OutputStream clientOut) {
+    private Future<?> startWriteLoop(OutputStream clientOut) {
         var writtenTasks = new ArrayList<WriteTask>(8);
         return executorService.submit(() -> {
 
             while (writeState.canSendFrames) {
                 writeQueueLock.lock();
                 try {
-                    while (!writeQueue.isEmpty()) {
-                        WriteTask candidate = null;
-                        for (var task : writeQueue) {
-                            if (candidate == null) {
-                                var frame = task.frame();
-                                int requiredCredit = frame.flowControlSize();
-                                log.info("frame=" + frame.getClass().getSimpleName() + " required=" + requiredCredit + " available=" + outgoingFlowControl.credit());
-                                if (requiredCredit == 0 || requiredCredit <= outgoingFlowControl.credit()) {
-                                    candidate = task;
-                                }
-                            }
-                        }
-                        if (candidate != null) {
-                            if (outgoingFlowControl.withdrawIfCan(candidate.frame().flowControlSize())) {
-                                writeQueue.remove(candidate);
-                                log.info("Writing " + candidate.frame());
-                                candidate.frame().writeTo(this, clientOut);
-                                writtenTasks.add(candidate);
-                            }
-                        } else {
-                            break; // stop draining writeQueue until more items or more credit available
-                        }
+                    drainWritableFramesLocked(clientOut, writtenTasks);
 
-                        if (!writtenTasks.isEmpty()) {
-                            clientOut.flush();
-                            for (WriteTask task : writtenTasks) {
-                                task.complete();
-                            }
-                            writtenTasks.clear();
-                        }
-
-                    }
-                    boolean shutDownInitiatedByEitherSide = readState == HState.SHUTDOWN_INITIATED || writeState == HState.SHUTDOWN_INITIATED;
-                    if (shutDownInitiatedByEitherSide && maxAllowedStreamId == MAX_POSSIBLE_STREAM_ID) {
-                        maxAllowedStreamId = lastStreamId;
-                        log.info("Queuing final go away with last stream id " + maxAllowedStreamId);
-                        write(new Http2GoAway(maxAllowedStreamId, 0, null));
-                    } else if (shutDownInitiatedByEitherSide && streams.isEmpty()) {
-                        writeState = HState.COMPLETED;
-                        readState = HState.COMPLETED;
+                    if (shouldQueueFinalGoAwayLocked()) {
+                        queueFinalGoAwayLocked();
+                    } else if (isTerminalAndDrainedLocked()) {
+                        completeShutdownLocked();
                     } else {
                         writeQueueCondition.await();
                     }
                 } catch (Exception e) {
                     log.info("Write loop IO Exception with state=" + writeState);
-                    writeState = HState.ERRORED;
+                    markConnectionErroredLocked();
                     WriteTask task;
                     while ((task = writeQueue.poll()) != null) {
                         task.fail(e);
@@ -400,6 +499,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
                     writeQueueLock.unlock();
                 }
             }
+            closeSocketQuietly();
             // note: don't close the output stream here as that closes the TLS connection in java
             log.info("Connection write loop closing with state=" + writeState);
         });
@@ -464,18 +564,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
     void initiateGracefulShutdown() {
         writeQueueLock.lock();
         try {
-            if (writeState == HState.ACTIVE) {
-                log.info("Graceful shutdown initiated with write state " + writeState);
-                writeState = HState.SHUTDOWN_INITIATED;
-                // As per: https://datatracker.ietf.org/doc/html/rfc9113#section-6.8-18
-                // A server that is attempting to gracefully shut down a connection SHOULD send an initial GOAWAY frame
-                // with the last stream identifier set to 2^31-1 and a NO_ERROR code. This signals to the client that a
-                // shutdown is imminent and that initiating further requests is prohibited. After allowing time for any
-                // in-flight stream creation (at least one round-trip time), the server MAY send another GOAWAY frame
-                // with an updated last stream identifier. This ensures that a connection can be cleanly shut down
-                // without losing requests.
-                write(GO_AWAY_WARNING);
-            }
+            markLocalShutdownInitiatedLocked();
         } finally {
             writeQueueLock.unlock();
         }
@@ -486,12 +575,12 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         writeQueueLock.lock();
         try {
             if (writeState.canSendFrames) {
-                writeState = HState.ERRORED;
-                writeQueueCondition.signalAll();
+                markConnectionErroredLocked();
             }
         } finally {
             writeQueueLock.unlock();
         }
+        closeSocketQuietly();
     }
 
     @Override
@@ -518,6 +607,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
     protected void onExchangeEnded(ResponseInfo exchange) {
         var stream = (Http2Stream) exchange;
         streams.remove(stream.id);
+        signalWriteLoop();
         super.onExchangeEnded(exchange);
     }
 }
