@@ -136,9 +136,18 @@ class Http2Stream implements ResponseInfo {
         Method method = null;
         HeaderString path = null;
         HeaderString scheme = null;
+        boolean regularHeadersStarted = false;
         while (iter.hasNext()) {
             FieldLine line = iter.next();
             HeaderString n = line.name();
+            boolean pseudoHeader = n.charAt(0) == ':';
+            if (pseudoHeader) {
+                if (regularHeadersStarted) {
+                    throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "pseudo header after regular header", id);
+                }
+            } else {
+                regularHeadersStarted = true;
+            }
             if (n == HeaderNames.PSEUDO_AUTHORITY) {
                 if (authority != null) throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "double :authority", id);
                 authority = line.value();
@@ -178,6 +187,8 @@ class Http2Stream implements ResponseInfo {
                 throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "connection", id);
             } else if (n == HeaderNames.TRANSFER_ENCODING) {
                 throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "transfer-encoding", id);
+            } else if (pseudoHeader) {
+                throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "unexpected pseudo header", id);
             }
         }
         if (method == null || path == null || scheme == null) {

@@ -128,7 +128,7 @@ class RFCTestUtils {
     }
 
     private static @NonNull FieldBlock baseHeaders(int port) {
-        FieldBlock headers = FieldBlock.newWithDate();
+        FieldBlock headers = new FieldBlock();
         headers.add(":scheme", "https");
         headers.add(":authority", "localhost:" + port);
         return headers;

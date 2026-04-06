@@ -55,6 +55,70 @@ class RFC9113_6_2_HeadersTest {
         }
     }
 
+    @Test
+    void unknownRequestPseudoHeadersAreStreamErrors() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> response.status(202))
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            FieldBlock invalid = FieldBlock.newWithDate();
+            invalid.add(":scheme", "https");
+            invalid.add(":authority", "localhost:" + getPort());
+            invalid.add(":method", "GET");
+            invalid.add(":path", "/hello");
+            invalid.add(":status", "200");
+
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, true, invalid))
+                .flush();
+
+            var reset = con.readLogicalFrame(Http2ResetStreamFrame.class);
+            assertThat(reset.streamId(), equalTo(1));
+            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+
+            con.writeFrame(new Http2HeadersFrame(3, true, getHelloHeaders(getPort()))).flush();
+            var response = con.readLogicalFrame(Http2HeadersFrame.class);
+            assertThat(response.streamId(), equalTo(3));
+            assertThat(response.headers().get(":status"), equalTo("202"));
+        }
+    }
+
+    @Test
+    void requestPseudoHeadersMustComeBeforeRegularHeaders() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> response.status(202))
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            FieldBlock invalid = new FieldBlock();
+            invalid.add(":scheme", "https");
+            invalid.add(":authority", "localhost:" + getPort());
+            invalid.add(":method", "GET");
+            invalid.add("accept", "*/*");
+            invalid.add(":path", "/hello");
+
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, true, invalid))
+                .flush();
+
+            var reset = con.readLogicalFrame(Http2ResetStreamFrame.class);
+            assertThat(reset.streamId(), equalTo(1));
+            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+
+            con.writeFrame(new Http2HeadersFrame(3, true, getHelloHeaders(getPort()))).flush();
+            var response = con.readLogicalFrame(Http2HeadersFrame.class);
+            assertThat(response.streamId(), equalTo(3));
+            assertThat(response.headers().get(":status"), equalTo("202"));
+        }
+    }
+
     private int getPort() {
         return server.uri().getPort();
     }
@@ -64,5 +128,7 @@ class RFC9113_6_2_HeadersTest {
         if (server != null) server.stop();
     }
 }
+
+
 
 
