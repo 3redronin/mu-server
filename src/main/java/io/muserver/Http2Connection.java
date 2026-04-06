@@ -309,6 +309,10 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
                                 readSettingsFrame(fh);
                                 break;
                             }
+                             case PING: {
+                                 readPingFrame(fh);
+                                 break;
+                             }
                             case WINDOW_UPDATE: {
                                 readWindowUpdate(fh);
                                 break;
@@ -466,6 +470,13 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
             write(Http2Settings.ACK);
         }
     }
+
+     private void readPingFrame(Http2FrameHeader fh) throws Http2Exception {
+         var ping = Http2Ping.readFrom(fh, buffer);
+         if (!ping.isAck()) {
+             write(new Http2Ping(true, ping.opaqueData()));
+         }
+     }
 
     private void readDataFrame(Http2FrameHeader fh) throws Http2Exception {
         var dataFrame = Http2DataFrame.readFrom(fh, buffer);

@@ -100,6 +100,7 @@ class H2ClientConnection implements Http2Peer, Closeable {
         switch (header.frameType()) {
             case GOAWAY: return Http2GoAway.readFrom(header, readBuffer);
             case SETTINGS: return Http2Settings.readFrom(header, readBuffer);
+            case PING: return Http2Ping.readFrom(header, readBuffer);
             case RST_STREAM: return Http2ResetStreamFrame.readFrom(header, readBuffer);
             case HEADERS: return Http2HeadersFrame.readLogicalFrame(header, fieldBlockDecoder, readBuffer, inputStream);
             case DATA: return Http2DataFrame.readFrom(header, readBuffer);

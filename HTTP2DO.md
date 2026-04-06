@@ -32,9 +32,9 @@
  * 6.5. [ ] SETTINGS
  * 6.5.1. [ ] SETTINGS Format
  * 6.5.2. [ ] Defined Settings
- * 6.5.3. [ ] Settings Synchronization
+ * 6.5.3. [x] Settings Synchronization
  * 6.6. [ ] PUSH_PROMISE
- * 6.7. [ ] PING
+ * 6.7. [x] PING
  * 6.8. [ ] GOAWAY
  * 6.9. [ ] WINDOW_UPDATE
  * 6.9.1. [ ] The Flow-Control Window
