@@ -60,6 +60,10 @@ class Http2Stream implements ResponseInfo {
         outgoingFlowControl.applyWindowUpdate(windowUpdate);
     }
 
+    void applyClientSettingsChange(Http2Settings oldSettings, Http2Settings newSettings) throws Http2Exception {
+        outgoingFlowControl.applySettingsChange(oldSettings, newSettings);
+    }
+
     void onReset(Http2ResetStreamFrame rstStream) {
         state = State.CLOSED;
         if (bodyInputStream instanceof Http2BodyInputStream) {
@@ -196,7 +200,7 @@ class Http2Stream implements ResponseInfo {
         InputStream body = bodySize == BodySize.NONE ? EmptyInputStream.INSTANCE : new Http2BodyInputStream(connection.server.requestIdleTimeoutMillis(), read -> {
             var update = incomingFlowControl.incrementCredit(read);
             if (update > 0) {
-                connection.write(new Http2WindowUpdate(id, read));
+                connection.write(new Http2WindowUpdate(id, update));
             }
             connection.creditAvailable(read);
         });

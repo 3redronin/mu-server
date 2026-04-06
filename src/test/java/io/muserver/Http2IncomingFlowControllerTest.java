@@ -28,6 +28,18 @@ class Http2IncomingFlowControllerTest {
     }
 
     @Test
+    void windowUpdatesAreBatchedUntilHalfTheWindowHasBeenConsumed() throws Http2Exception {
+        var controller = new Http2IncomingFlowController(1, 1000);
+
+        assertThat(controller.withdrawIfCan(1000), is(true));
+
+        assertThat(controller.incrementCredit(499), is(0));
+        assertThat(controller.incrementCredit(1), is(500));
+        assertThat(controller.incrementCredit(400), is(0));
+        assertThat(controller.incrementCredit(100), is(500));
+    }
+
+    @Test
     void ifCreditBecomesNegativeDueToASettingsChangeThenNoWithdrawlsAllowedUntilEnoughPaidBack() throws Http2Exception {
         var controller = new Http2IncomingFlowController(1, 1000);
         // ...now balance is 1000
@@ -43,12 +55,12 @@ class Http2IncomingFlowControllerTest {
         // can't withdraw from negabite balance
         assertThat(controller.withdrawIfCan(1), is(false));
 
-        controller.incrementCredit(200);
+        assertThat(controller.incrementCredit(200), is(200));
         // ...now balance is -100
 
         assertThat(controller.withdrawIfCan(1), is(false));
 
-        controller.incrementCredit(200);
+        assertThat(controller.incrementCredit(200), is(200));
         // ...now balance is 100
 
         assertThat(controller.withdrawIfCan(100), is(true));

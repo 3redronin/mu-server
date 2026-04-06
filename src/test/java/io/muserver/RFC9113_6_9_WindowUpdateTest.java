@@ -203,9 +203,6 @@ class RFC9113_6_9_WindowUpdateTest {
             // We should get a window update because the read consumed the bytes
             assertThat(con.readLogicalFrame(), equalTo(windowUpdate(1, 4)));
 
-            // Currently we get a connection update - we shouldn't as there is no need to soon but that's for a future optimisation
-            assertThat(con.readLogicalFrame(), equalTo(windowUpdate(0, 4)));
-
             // now we can read data that was written
             assertThat(con.readLogicalFrame(Http2DataFrame.class).toUTF8(), equalTo("Hell")); // the text
 
@@ -214,7 +211,6 @@ class RFC9113_6_9_WindowUpdateTest {
 
             // and get more updates
             assertThat(con.readLogicalFrame(), equalTo(windowUpdate(1, 4)));
-            assertThat(con.readLogicalFrame(), equalTo(windowUpdate(0, 4)));
 
             // along with the data
             assertThat(con.readLogicalFrame(Http2DataFrame.class).toUTF8(), equalTo("o wo")); // the text

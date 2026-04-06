@@ -3,7 +3,6 @@ package io.muserver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -34,14 +33,15 @@ class Http2IncomingFlowController {
 
     void applySettingsChange(Http2Settings oldSettings, Http2Settings newSettings) throws Http2Exception {
         var diff = newSettings.initialWindowSize - oldSettings.initialWindowSize;
-        if (diff > 0) {
-            lock.lock();
-            try {
-                credit += diff; // can't overflow
-                maxCredit = newSettings.initialWindowSize;
-            } finally {
-                lock.unlock();
-            }
+        if (diff == 0) return;
+        lock.lock();
+        try {
+            credit = Math.addExact(credit, diff);
+            maxCredit = newSettings.initialWindowSize;
+        } catch (ArithmeticException e) {
+            throw new Http2Exception(Http2ErrorCode.FLOW_CONTROL_ERROR, "Credit overflow", streamId);
+        } finally {
+            lock.unlock();
         }
     }
 
@@ -57,7 +57,7 @@ class Http2IncomingFlowController {
         lock.lock();
         try {
             credit = Math.addExact(credit, diff);
-            pending += credit;
+            pending = Math.addExact(pending, diff);
             log.info("new credit for stream " + streamId + " is " + credit);
             if (pending >= (maxCredit >>> 1)) {
                 // we have used more than half of the available credit - send an update

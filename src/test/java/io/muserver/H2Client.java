@@ -53,6 +53,7 @@ class H2Client implements Closeable  {
 }
 
 class H2ClientConnection implements Http2Peer, Closeable {
+    private static final int MAX_LEGAL_FRAME_SIZE = 16_777_215;
     private final SSLSocket socket;
     private final InputStream inputStream;
     private final OutputStream outputStream;
@@ -67,7 +68,7 @@ class H2ClientConnection implements Http2Peer, Closeable {
         // TODO consider if each should be buffered
         inputStream = new BufferedInputStream(socket.getInputStream());
         outputStream = new BufferedOutputStream(socket.getOutputStream());
-        readBuffer = ByteBuffer.allocate(16384).flip();
+        readBuffer = ByteBuffer.allocate(MAX_LEGAL_FRAME_SIZE).flip();
     }
 
     public Socket socket() {

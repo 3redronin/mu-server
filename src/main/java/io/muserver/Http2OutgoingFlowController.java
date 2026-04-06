@@ -27,6 +27,12 @@ class Http2OutgoingFlowController {
         incrementCredit(diff);
     }
 
+    void applySettingsChange(Http2Settings oldSettings, Http2Settings newSettings) throws Http2Exception {
+        int diff = newSettings.initialWindowSize - oldSettings.initialWindowSize;
+        if (diff == 0) return;
+        incrementCredit(diff);
+    }
+
     void incrementCredit(int diff) throws Http2Exception {
         if (diff == 0) return;
         lock.lock();
@@ -55,8 +61,8 @@ class Http2OutgoingFlowController {
         lock.lock();
         try {
             while (bytes > credit) {
-                var timedOut = creditAvailable.await(timeout, unit);
-                if (timedOut) {
+                var signalled = creditAvailable.await(timeout, unit);
+                if (!signalled) {
                     return false;
                 }
             }

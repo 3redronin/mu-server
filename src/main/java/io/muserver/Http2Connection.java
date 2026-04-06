@@ -86,7 +86,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
     public void creditAvailable(int credit) throws Http2Exception {
         var update = incomingFlowControl.incrementCredit(credit);
         if (update > 0) {
-            write(new Http2WindowUpdate(0, credit));
+            write(new Http2WindowUpdate(0, update));
         }
     }
 
@@ -403,7 +403,11 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
                 clientSettings = newSettings;
                 if (newSettings.initialWindowSize != oldSettings.initialWindowSize) {
                     for (var stream : streams.values()) {
-                        // TODO: pass it
+                        try {
+                            stream.applyClientSettingsChange(oldSettings, newSettings);
+                        } catch (Http2Exception e) {
+                            throw new Http2Exception(e.errorCode(), e.getMessage());
+                        }
                     }
                 }
 
