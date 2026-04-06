@@ -22,7 +22,7 @@
  * 5.4. [ ] Error Handling
  * 5.4.1. [ ] Connection Error Handling
  * 5.4.2. [ ] Stream Error Handling
- * 5.4.3. [ ] Connection Termination
+ * 5.4.3. [x] Connection Termination
  * 5.5. [x] Extending HTTP/2
 * 6. [ ] Frame Definitions
  * 6.1. [x] DATA

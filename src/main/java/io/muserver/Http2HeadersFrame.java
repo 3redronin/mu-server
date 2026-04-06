@@ -39,18 +39,28 @@ class Http2HeadersFrame implements LogicalHttp2Frame {
         var padded = (frameHeader.flags() & 0b00001000) > 0;
         var endHeaders = (frameHeader.flags() & 0b00000100) > 0;
         var endStream = (frameHeader.flags() & 0b0000001) > 0;
-
-        var padLength = padded ? buffer.get() & 0xff : 0;
-
         int hpackLength = frameHeader.length();
+
+        int padLength = 0;
         if (padded) {
-            hpackLength -= padLength -  /* 1 byte for the pad size field  */1;
+            if (hpackLength < 1) {
+                throw Http2Exception.connection(Http2ErrorCode.FRAME_SIZE_ERROR, "HEADERS frame missing pad length");
+            }
+            padLength = buffer.get() & 0xff;
+            hpackLength -= 1;
+            if (padLength > hpackLength) {
+                throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "padding is longer than remaining payload");
+            }
+            hpackLength -= padLength;
         }
 
         if (priority) {
+            if (hpackLength < 5) {
+                throw Http2Exception.connection(Http2ErrorCode.FRAME_SIZE_ERROR, "HEADERS priority fields require 5 bytes");
+            }
             hpackLength -= 5;
             // the exclusive, stream dependency and weight values are deprecated, so just reading past them
-            buffer.position(buffer.position() + 2);
+            buffer.position(buffer.position() + 5);
         }
 
         // add name/value strings as:
@@ -59,8 +69,8 @@ class Http2HeadersFrame implements LogicalHttp2Frame {
         NiceByteArrayOutputStream baos = null;
         HttpException invalidRequestException = null;
 
-        if (hpackLength > 0) {
-            if (endHeaders) {
+        if (endHeaders) {
+            if (hpackLength > 0) {
                 var slice = buffer.slice().limit(hpackLength);
                 try {
                     headers = fieldBlockDecoder.decodeFrom(slice);
@@ -70,19 +80,21 @@ class Http2HeadersFrame implements LogicalHttp2Frame {
                     headers = new FieldBlock();
                 }
             } else {
-                baos = new NiceByteArrayOutputStream(hpackLength * 2);
+                headers = new FieldBlock();
+            }
+        } else {
+            baos = new NiceByteArrayOutputStream(Math.max(32, hpackLength * 2));
+            if (hpackLength > 0) {
                 if (buffer.hasArray()) {
                     baos.write(buffer.array(), buffer.arrayOffset() + buffer.position(), hpackLength);
                 } else {
                     // TODO: support non-array buffer
                     throw new IllegalStateException("Not supported");
                 }
-                headers = null;
             }
-            buffer.position(buffer.position() + hpackLength);
-        } else {
-            headers = new FieldBlock();
+            headers = null;
         }
+        buffer.position(buffer.position() + hpackLength);
 
         if (padLength > 0) {
             buffer.position(buffer.position() + padLength);
@@ -149,7 +161,7 @@ class Http2HeadersFrame implements LogicalHttp2Frame {
 
         int remaining = size;
         int maxFrameSize = connection.maxFrameSize();
-        int messages = (size / maxFrameSize) + 1;
+        int messages = Math.max(1, (size + maxFrameSize - 1) / maxFrameSize);
 
         for (int i = 0; i < messages; i++) {
             int payloadBytes = Math.min(remaining, maxFrameSize);

@@ -51,6 +51,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
     private final ByteBuffer buffer;
     private volatile int maxAllowedStreamId = MAX_POSSIBLE_STREAM_ID;
     private volatile int lastStreamId = 0;
+    private volatile int peerGoAwayLastStreamId = MAX_POSSIBLE_STREAM_ID;
     private final Http2IncomingFlowController incomingFlowControl = new Http2IncomingFlowController(0, 65535);
     private final Http2OutgoingFlowController outgoingFlowControl = new Http2OutgoingFlowController(0, 65535);
     private final ConcurrentLinkedQueue<Long> settingsAckQueue = new ConcurrentLinkedQueue<>();
@@ -170,6 +171,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         if (writeState == HState.ACTIVE) {
             log.info("Graceful shutdown initiated with write state {}", writeState);
             writeState = HState.SHUTDOWN_INITIATED;
+            maxAllowedStreamId = lastStreamId;
             // As per: https://datatracker.ietf.org/doc/html/rfc9113#section-6.8-18
             // A server that is attempting to gracefully shut down a connection SHOULD send an initial GOAWAY frame
             // with the last stream identifier set to 2^31-1 and a NO_ERROR code. This signals to the client that a
@@ -204,7 +206,9 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
     }
 
     private boolean shouldQueueFinalGoAwayLocked() {
-        return isShutdownInitiatedLocked() && !finalGoAwayQueued;
+        return isShutdownInitiatedLocked()
+            && streams.isEmpty()
+            && !finalGoAwayQueued;
     }
 
     private void queueFinalGoAwayLocked() {
@@ -409,6 +413,10 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         log.info("Got goaway from client " + Objects.requireNonNullElse(goaway.errorCodeEnum(), goaway.errorCode()) + " with last stream " + goaway.lastStreamId());
         writeQueueLock.lock();
         try {
+            if (goaway.lastStreamId() > peerGoAwayLastStreamId) {
+                throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "GOAWAY last stream ID cannot increase");
+            }
+            peerGoAwayLastStreamId = goaway.lastStreamId();
             markPeerShutdownInitiatedLocked();
         } finally {
             writeQueueLock.unlock();
@@ -498,12 +506,26 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         try {
             var headerFragment = Http2HeadersFrame.readLogicalFrame(fh, fieldBlockDecoder, buffer, clientIn);
             log.info("Got headers " + headerFragment);
-            if (activeRequests().size() >= serverSettings.maxConcurrentStreams) {
-                log.info("Max concurrent streams reached");
-                write(new Http2ResetStreamFrame(headerFragment.streamId(), Http2ErrorCode.REFUSED_STREAM.code()));
-            } else {
-                log.info("Setting last stream id to " + fh.streamId());
-                lastStreamId = fh.streamId();
+            boolean startRequest;
+            writeQueueLock.lock();
+            try {
+                if (isShutdownInitiatedLocked()) {
+                    log.info("Refusing stream {} because graceful shutdown has started", headerFragment.streamId());
+                    write(new Http2ResetStreamFrame(headerFragment.streamId(), Http2ErrorCode.REFUSED_STREAM.code()));
+                    startRequest = false;
+                } else if (activeRequests().size() >= serverSettings.maxConcurrentStreams) {
+                    log.info("Max concurrent streams reached");
+                    write(new Http2ResetStreamFrame(headerFragment.streamId(), Http2ErrorCode.REFUSED_STREAM.code()));
+                    startRequest = false;
+                } else {
+                    log.info("Setting last stream id to " + fh.streamId());
+                    lastStreamId = fh.streamId();
+                    startRequest = true;
+                }
+            } finally {
+                writeQueueLock.unlock();
+            }
+            if (startRequest) {
                 startRequest(headerFragment);
             }
         } catch (HttpException e) {

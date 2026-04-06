@@ -1,6 +1,7 @@
 package io.muserver;
 
 import org.jspecify.annotations.NonNull;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
@@ -33,6 +34,78 @@ class RFCTestUtils {
         frame[8] = (byte) streamId;
         frame[9] = (byte) padLength;
         System.arraycopy(data, 0, frame, 10, data.length);
+        return frame;
+    }
+
+    static byte[] encodeFieldBlock(FieldBlock headers) throws IOException {
+        var out = new ByteArrayOutputStream();
+        new FieldBlockEncoder(new HpackTable(Http2Settings.DEFAULT_CLIENT_SETTINGS.headerTableSize)).encodeTo(headers, out);
+        return out.toByteArray();
+    }
+
+    static byte[] headersFrame(int streamId, boolean endStream, boolean endHeaders, byte[] fragment) {
+        return headersFrame(streamId, endStream, endHeaders, fragment, 0, false, 0, 0, false);
+    }
+
+    static byte[] paddedHeadersFrame(int streamId, boolean endStream, boolean endHeaders, byte[] fragment, int padLength) {
+        return headersFrame(streamId, endStream, endHeaders, fragment, padLength, false, 0, 0, false);
+    }
+
+    static byte[] priorityHeadersFrame(int streamId, boolean endStream, boolean endHeaders, byte[] fragment, boolean exclusive, int dependencyStreamId, int weight) {
+        return headersFrame(streamId, endStream, endHeaders, fragment, 0, true, dependencyStreamId, weight, exclusive);
+    }
+
+    static byte[] continuationFrame(int streamId, boolean endHeaders, byte[] fragment) {
+        int payloadLength = fragment.length;
+        byte[] frame = new byte[9 + payloadLength];
+        frame[0] = (byte) (payloadLength >> 16);
+        frame[1] = (byte) (payloadLength >> 8);
+        frame[2] = (byte) payloadLength;
+        frame[3] = 0x09;
+        frame[4] = (byte) (endHeaders ? 0b00000100 : 0);
+        frame[5] = (byte) (streamId >> 24);
+        frame[6] = (byte) (streamId >> 16);
+        frame[7] = (byte) (streamId >> 8);
+        frame[8] = (byte) streamId;
+        System.arraycopy(fragment, 0, frame, 9, fragment.length);
+        return frame;
+    }
+
+    private static byte[] headersFrame(int streamId, boolean endStream, boolean endHeaders, byte[] fragment, int padLength, boolean priority, int dependencyStreamId, int weight, boolean exclusive) {
+        int priorityLength = priority ? 5 : 0;
+        int paddingFieldLength = padLength > 0 ? 1 : 0;
+        int payloadLength = paddingFieldLength + priorityLength + fragment.length + padLength;
+        byte[] frame = new byte[9 + payloadLength];
+        frame[0] = (byte) (payloadLength >> 16);
+        frame[1] = (byte) (payloadLength >> 8);
+        frame[2] = (byte) payloadLength;
+        frame[3] = 0x01;
+
+        int flags = 0;
+        if (endStream) flags |= 0b00000001;
+        if (endHeaders) flags |= 0b00000100;
+        if (padLength > 0) flags |= 0b00001000;
+        if (priority) flags |= 0b00100000;
+        frame[4] = (byte) flags;
+
+        frame[5] = (byte) (streamId >> 24);
+        frame[6] = (byte) (streamId >> 16);
+        frame[7] = (byte) (streamId >> 8);
+        frame[8] = (byte) streamId;
+
+        int offset = 9;
+        if (padLength > 0) {
+            frame[offset++] = (byte) padLength;
+        }
+        if (priority) {
+            int dependency = exclusive ? (dependencyStreamId | 0x80000000) : dependencyStreamId;
+            frame[offset++] = (byte) (dependency >> 24);
+            frame[offset++] = (byte) (dependency >> 16);
+            frame[offset++] = (byte) (dependency >> 8);
+            frame[offset++] = (byte) dependency;
+            frame[offset++] = (byte) weight;
+        }
+        System.arraycopy(fragment, 0, frame, offset, fragment.length);
         return frame;
     }
     static @NonNull Http2DataFrame emptyEosDataFrame(int streamId) {

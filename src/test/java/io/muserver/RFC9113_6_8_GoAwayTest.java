@@ -84,9 +84,6 @@ class RFC9113_6_8_GoAwayTest {
             assertThat("Expected warning goaway", con.readLogicalFrame(),
                 equalTo(goAway(0x7FFFFFFF, Http2ErrorCode.NO_ERROR)));
             System.out.println("Warning gotten");
-            assertThat("Expected final goaway", con.readLogicalFrame(),
-                equalTo(goAway(3, Http2ErrorCode.NO_ERROR)));
-            System.out.println("Final gotten");
             con.writeFrame(getHelloFrame(5)).flush();
             System.out.println("Client sent stream 5");
             assertThat(con.readLogicalFrame(), equalTo(new Http2ResetStreamFrame(5, Http2ErrorCode.REFUSED_STREAM.code())));
@@ -108,6 +105,10 @@ class RFC9113_6_8_GoAwayTest {
                     utf8DataFrame(3, false, "done"),
                     emptyEosDataFrame(3)
                 ));
+
+            assertThat("Expected final goaway", con.readLogicalFrame(),
+                equalTo(goAway(3, Http2ErrorCode.NO_ERROR)));
+            System.out.println("Final gotten");
 
             stopped.get(5, TimeUnit.SECONDS);
             assertThrows(IOException.class, con::readFrameHeader);

@@ -9,10 +9,13 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import static io.muserver.MuServerBuilder.httpsServer;
+import static io.muserver.RFCTestUtils.emptyEosDataFrame;
 import static io.muserver.RFCTestUtils.goAway;
+import static io.muserver.RFCTestUtils.utf8DataFrame;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.equalTo;
@@ -106,6 +109,57 @@ class RFC9113_5_4_ErrorHandlingTest {
             assertThat(goAway.lastStreamId(), equalTo(1));
             assertThat(goAway.errorCodeEnum(), equalTo(Http2ErrorCode.FLOW_CONTROL_ERROR));
             assertThrows(IOException.class, con::readFrameHeader);
+        }
+
+    }
+
+    @Test
+    public void gracefulShutdownKeepsTheFinalGoAwayLastStreamIDStable() throws Exception {
+
+        var goTime = new CountDownLatch(1);
+        var started = new CountDownLatch(1);
+
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
+                started.countDown();
+                if (!goTime.await(5, TimeUnit.SECONDS)) {
+                    throw new IllegalStateException("Timed out waiting to finish request");
+                }
+                response.write("done");
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, true, getHelloHeaders()))
+                .flush();
+
+            assertThat(started.await(5, TimeUnit.SECONDS), equalTo(true));
+
+            var stopper = Executors.newSingleThreadExecutor();
+            try {
+                var stopped = stopper.submit(() -> server.stop());
+
+                assertThat(con.readLogicalFrame(Http2GoAway.class), equalTo(goAway(0x7FFFFFFF, Http2ErrorCode.NO_ERROR)));
+
+                con.writeFrame(new Http2HeadersFrame(3, true, getHelloHeaders())).flush();
+                assertThat(con.readLogicalFrame(Http2ResetStreamFrame.class), equalTo(new Http2ResetStreamFrame(3, Http2ErrorCode.REFUSED_STREAM.code())));
+
+                goTime.countDown();
+
+                assertThat(con.readLogicalFrame(Http2HeadersFrame.class).streamId(), equalTo(1));
+                assertThat(con.readLogicalFrame(Http2DataFrame.class), equalTo(utf8DataFrame(1, false, "done")));
+                assertThat(con.readLogicalFrame(Http2DataFrame.class), equalTo(emptyEosDataFrame(1)));
+                assertThat(con.readLogicalFrame(Http2GoAway.class), equalTo(goAway(1, Http2ErrorCode.NO_ERROR)));
+
+                stopped.get(5, TimeUnit.SECONDS);
+                assertThrows(IOException.class, con::readFrameHeader);
+            } finally {
+                stopper.shutdownNow();
+            }
         }
 
     }

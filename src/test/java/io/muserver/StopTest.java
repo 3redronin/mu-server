@@ -185,13 +185,13 @@ public class StopTest {
             }).start();
 
             assertThat(con.readLogicalFrame(), equalTo(new Http2GoAway(0x7FFFFFFF, Http2ErrorCode.NO_ERROR.code(), new byte[0])));
-            assertThat(con.readLogicalFrame(), equalTo(new Http2GoAway(1, Http2ErrorCode.NO_ERROR.code(), new byte[0])));
 
             goTime.countDown();
 
             assertThat(con.readLogicalFrame(Http2HeadersFrame.class).headers().get(":status"), equalTo("200"));
             assertThat(con.readLogicalFrame(Http2DataFrame.class).toUTF8(), equalTo("done"));
             assertThat(con.readLogicalFrame(Http2DataFrame.class).endStream(), is(true));
+            assertThat(con.readLogicalFrame(), equalTo(new Http2GoAway(1, Http2ErrorCode.NO_ERROR.code(), new byte[0])));
             assertThat(stopReturnedLatch.await(2, TimeUnit.SECONDS), is(true));
             assertThat(stopResult.get(), is(true));
             assertThrows(java.io.IOException.class, con::readFrameHeader);
