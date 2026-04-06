@@ -78,9 +78,13 @@ class Http2Stream implements ResponseInfo {
         }
     }
 
+    boolean canReceiveData() {
+        return state == State.OPEN || state == State.HALF_CLOSED_LOCAL;
+    }
+
     void onData(int flowControlSize, Http2DataFrame dataFrame) throws Http2Exception {
         // todo: thread safety
-        if (state != State.OPEN && state != State.HALF_CLOSED_LOCAL) {
+        if (!canReceiveData()) {
             state = State.CLOSED;
             throw new Http2Exception(Http2ErrorCode.STREAM_CLOSED, "Invalid state for data", id);
         }

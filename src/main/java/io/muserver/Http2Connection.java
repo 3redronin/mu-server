@@ -84,6 +84,10 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
 
     @Override
     public void creditAvailable(int credit) throws Http2Exception {
+        refundDiscardedConnectionCredit(credit);
+    }
+
+    private void refundDiscardedConnectionCredit(int credit) throws Http2Exception {
         var update = incomingFlowControl.incrementCredit(credit);
         if (update > 0) {
             write(new Http2WindowUpdate(0, update));
@@ -435,10 +439,20 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
             } else {
                 // From RFC9113 6.1: If a DATA frame is received whose stream is not in the "open" or "half-closed (local)" state, the recipient MUST respond with a stream error (Section 5.4.2) of type STREAM_CLOSED.
                 // As the stream is null, then most likely it is already closed. (Half-closed streams would not be here)
+                refundDiscardedConnectionCredit(fh.length());
                 throw new Http2Exception(Http2ErrorCode.STREAM_CLOSED, "Received data on closed stream", fh.streamId());
             }
         } else {
-            stream.onData(fh.length(), dataFrame);
+            if (!stream.canReceiveData()) {
+                refundDiscardedConnectionCredit(fh.length());
+                throw new Http2Exception(Http2ErrorCode.STREAM_CLOSED, "Received data on closed stream", fh.streamId());
+            }
+            try {
+                stream.onData(fh.length(), dataFrame);
+            } catch (Http2Exception e) {
+                refundDiscardedConnectionCredit(fh.length());
+                throw e;
+            }
         }
     }
 

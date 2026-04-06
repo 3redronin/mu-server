@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import java.io.EOFException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -191,6 +192,106 @@ class RFC9113_6_4_RstStreamTest {
             assertThat(headers.headers().get(":status"), equalTo("200"));
             assertThat(readIgnoringWindowUpdates(con, Http2DataFrame.class).toUTF8(), equalTo("Goodbye!"));
             assertThat(readIgnoringWindowUpdates(con, Http2DataFrame.class).endStream(), equalTo(true));
+
+            letFirstRequestFinish.countDown();
+
+            var results = new ArrayList<Boolean>(2);
+            results.add(completedStreams.poll(10, TimeUnit.SECONDS).completedSuccessfully());
+            results.add(completedStreams.poll(10, TimeUnit.SECONDS).completedSuccessfully());
+            assertThat(results, containsInAnyOrder(false, true));
+        }
+    }
+
+    @Test
+    void lateDataAfterAResetDoesNotStrandConnectionCredit() throws Exception {
+        var firstRequestStarted = new CountDownLatch(1);
+        var resetSeenByHandler = new CountDownLatch(1);
+        var letFirstRequestFinish = new CountDownLatch(1);
+        var completedStreams = new LinkedBlockingQueue<ResponseInfo>(2);
+        var requestCount = new AtomicInteger();
+        byte[] largeBody = new byte[16384];
+        Arrays.fill(largeBody, (byte) 'x');
+
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.POST, "/hello", (request, response, pathParams) -> {
+                if (requestCount.incrementAndGet() == 1) {
+                    firstRequestStarted.countDown();
+                    try (var body = request.body()) {
+                        try {
+                            body.read();
+                            throw new AssertionError("Expected reset to make the request body unreadable");
+                        } catch (EOFException expected) {
+                            resetSeenByHandler.countDown();
+                            assertThat(letFirstRequestFinish.await(10, TimeUnit.SECONDS), equalTo(true));
+                        }
+                    }
+                } else {
+                    response.write(Integer.toString(request.readBodyAsString().length()));
+                }
+            })
+            .addResponseCompleteListener(completedStreams::add)
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, false, postHelloHeaders(getPort())))
+                .flush();
+
+            assertThat(firstRequestStarted.await(10, TimeUnit.SECONDS), equalTo(true));
+
+            con.writeFrame(new Http2ResetStreamFrame(1, Http2ErrorCode.CANCEL.code()))
+                .flush();
+
+            assertThat(resetSeenByHandler.await(10, TimeUnit.SECONDS), equalTo(true));
+
+            con.writeFrame(new Http2DataFrame(1, false, largeBody, 0, largeBody.length))
+                .writeFrame(new Http2DataFrame(1, false, largeBody, 0, largeBody.length))
+                .writeFrame(new Http2DataFrame(1, false, largeBody, 0, largeBody.length))
+                .writeFrame(new Http2DataFrame(1, false, largeBody, 0, largeBody.length))
+                .writeFrame(new Http2HeadersFrame(3, false, postHelloHeaders(getPort())))
+                .writeFrame(new Http2DataFrame(3, true, largeBody, 0, largeBody.length))
+                .flush();
+
+            int resetsSeen = 0;
+            Http2HeadersFrame headers = null;
+            Http2DataFrame data = null;
+            Http2DataFrame eos = null;
+            while (resetsSeen < 4 || headers == null || data == null || eos == null) {
+                var frame = con.readLogicalFrame();
+                if (frame instanceof Http2WindowUpdate) {
+                    continue;
+                }
+                if (frame instanceof Http2ResetStreamFrame) {
+                    var reset = (Http2ResetStreamFrame) frame;
+                    assertThat(reset.streamId(), equalTo(1));
+                    assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.STREAM_CLOSED));
+                    resetsSeen++;
+                    continue;
+                }
+                if (frame instanceof Http2HeadersFrame) {
+                    headers = (Http2HeadersFrame) frame;
+                    continue;
+                }
+                if (frame instanceof Http2DataFrame) {
+                    var dataFrame = (Http2DataFrame) frame;
+                    if (dataFrame.endStream()) {
+                        eos = dataFrame;
+                    } else {
+                        data = dataFrame;
+                    }
+                    continue;
+                }
+                throw new AssertionError("Unexpected frame: " + frame);
+            }
+
+            assertThat(headers.streamId(), equalTo(3));
+            assertThat(headers.headers().get(":status"), equalTo("200"));
+            assertThat(data.toUTF8(), equalTo(Integer.toString(largeBody.length)));
+            assertThat(eos.streamId(), equalTo(3));
+            assertThat(eos.endStream(), equalTo(true));
 
             letFirstRequestFinish.countDown();
 
