@@ -101,12 +101,6 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         write(new WriteTask(frame, false));
     }
     void write(WriteTask writeTask) {
-        if (writeTask.frame() instanceof Http2Settings) {
-            var settings = (Http2Settings) writeTask.frame();
-            if (!settings.isAck) {
-                queuePendingSettingsAck();
-            }
-        }
         writeQueueLock.lock();
         try {
             writeQueue.add(writeTask);
@@ -251,6 +245,12 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
                 writeQueue.remove(candidate);
                 log.info("Writing " + candidate.frame());
                 candidate.frame().writeTo(this, clientOut);
+                if (candidate.frame() instanceof Http2Settings) {
+                    var settings = (Http2Settings) candidate.frame();
+                    if (!settings.isAck) {
+                        queuePendingSettingsAck();
+                    }
+                }
                 writtenTasks.add(candidate);
             }
 

@@ -6,9 +6,13 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.time.Instant;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Queue;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
 
 import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.RFCTestUtils.assertNothingToRead;
@@ -276,6 +280,43 @@ class RFC9113_6_5_SettingsTest {
         }
     }
 
+    @Test
+    void serverSettingsAreOnlyAckPendingAfterTheyAreSent() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled().withSettingsAckTimeoutMillis(5000))
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake();
+
+            var liveConnection = (Http2Connection) server.activeConnections().iterator().next();
+            var executor = Executors.newSingleThreadExecutor();
+            try {
+                var queuedOnlyConnection = new Http2Connection(
+                    liveConnection.server,
+                    liveConnection.creator,
+                    liveConnection.clientSocket,
+                    liveConnection.clientCertificate,
+                    Instant.now(),
+                    Http2Settings.DEFAULT_CLIENT_SETTINGS,
+                    5000,
+                    executor
+                );
+
+                Queue<Long> settingsAckQueue = getField(queuedOnlyConnection, "settingsAckQueue", Queue.class);
+                assertThat(settingsAckQueue.size(), equalTo(0));
+
+                queuedOnlyConnection.write(new Http2Settings(false, 8192, 123, 65535, 16384, 32768));
+
+                assertThat(settingsAckQueue.size(), equalTo(0));
+            } finally {
+                executor.shutdownNow();
+            }
+        }
+    }
+
     private static byte[] settingsFrame(int identifier, long value) {
         return new byte[] {
             0, 0, 6,
@@ -293,6 +334,13 @@ class RFC9113_6_5_SettingsTest {
 
     private int getPort() {
         return server.uri().getPort();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> T getField(Object target, String name, Class<T> type) throws Exception {
+        Field field = target.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        return (T) type.cast(field.get(target));
     }
 
     @AfterEach
