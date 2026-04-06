@@ -219,7 +219,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
     }
 
     private boolean isTerminalAndDrainedLocked() {
-        return (isShutdownInitiatedLocked() || isReadTerminalLocked())
+        return (isReadTerminalLocked() || (isShutdownInitiatedLocked() && finalGoAwayQueued))
             && streams.isEmpty()
             && writeQueue.isEmpty();
     }
@@ -430,6 +430,8 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
             Http2Stream stream = streams.get(windowUpdate.streamId());
             if (stream != null) {
                 stream.onWindowUpdate(windowUpdate);
+            } else if (windowUpdate.streamId() > lastStreamId || (windowUpdate.streamId() % 2) == 0) {
+                throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Invalid stream ID on window update");
             }
         }
     }

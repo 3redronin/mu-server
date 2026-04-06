@@ -20,7 +20,7 @@
  * 5.3.1. [x] Background on Priority in RFC 7540
  * 5.3.2. [ ] Priority Signaling in This Document
  * 5.4. [ ] Error Handling
- * 5.4.1. [ ] Connection Error Handling
+ * 5.4.1. [x] Connection Error Handling
  * 5.4.2. [ ] Stream Error Handling
  * 5.4.3. [x] Connection Termination
  * 5.5. [x] Extending HTTP/2

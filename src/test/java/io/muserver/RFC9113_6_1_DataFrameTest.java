@@ -239,6 +239,31 @@ class RFC9113_6_1_DataFrameTest {
     }
 
     @Test
+    void paddedDataFramesMustIncludeAPadLengthField() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake()
+                .writeRaw(new byte[] {
+                    0, 0, 0,
+                    0x00,
+                    0b00001000,
+                    0, 0, 0, 1
+                })
+                .flush();
+
+            var goAway = con.readLogicalFrame(Http2GoAway.class);
+            assertThat(goAway.lastStreamId(), equalTo(0));
+            assertThat(goAway.errorCodeEnum(), equalTo(Http2ErrorCode.FRAME_SIZE_ERROR));
+            assertThrows(IOException.class, con::readFrameHeader);
+        }
+    }
+
+    @Test
     void aDataFrameReceivedOnAClosedStreamIsStreamError() throws Exception {
         var completedLatch = new CountDownLatch(1);
         server = httpsServer()

@@ -70,6 +70,26 @@ class RFC9113_6_3_PriorityFrameTest {
 
     }
 
+    @Test
+    void priorityFramesMustBeAssociatedWithAStream() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake();
+
+            con.writeFrame(new Http2PriorityFrame(0, true, 2, 10));
+            con.flush();
+
+            assertThat(con.readLogicalFrame(), equalTo(RFCTestUtils.goAway(0, Http2ErrorCode.PROTOCOL_ERROR)));
+            assertThrows(IOException.class, con::readFrameHeader);
+        }
+
+    }
+
     private int getPort() {
         return server.uri().getPort();
     }

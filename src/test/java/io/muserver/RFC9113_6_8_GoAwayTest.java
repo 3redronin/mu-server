@@ -6,6 +6,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -117,6 +118,40 @@ class RFC9113_6_8_GoAwayTest {
         }
     }
 
+    @Test
+    void goAwayFramesMustHaveAtLeastEightBytesOfPayload() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            con.handshake();
+
+            con.writeRaw(rawGoAwayFrame(0, new byte[7])).flush();
+
+            assertThat(con.readLogicalFrame(), equalTo(goAway(0, Http2ErrorCode.FRAME_SIZE_ERROR)));
+            assertThrows(IOException.class, con::readFrameHeader);
+        }
+    }
+
+    @Test
+    void goAwayFramesMustBeOnStreamZero() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            con.handshake();
+
+            con.writeRaw(rawGoAwayFrame(1, ByteBuffer.allocate(8).putInt(0).putInt(0).array())).flush();
+
+            assertThat(con.readLogicalFrame(), equalTo(goAway(0, Http2ErrorCode.PROTOCOL_ERROR)));
+            assertThrows(IOException.class, con::readFrameHeader);
+        }
+    }
+
     private @NonNull Http2HeadersFrame getHelloFrame(int streamId) {
         return new Http2HeadersFrame(streamId, true, getHelloHeaders(getPort()));
     }
@@ -124,6 +159,21 @@ class RFC9113_6_8_GoAwayTest {
 
     private int getPort() {
         return server.uri().getPort();
+    }
+
+    private byte[] rawGoAwayFrame(int streamId, byte[] payload) {
+        byte[] frame = new byte[9 + payload.length];
+        frame[0] = (byte) (payload.length >> 16);
+        frame[1] = (byte) (payload.length >> 8);
+        frame[2] = (byte) payload.length;
+        frame[3] = 0x07;
+        frame[4] = 0;
+        frame[5] = (byte) (streamId >> 24);
+        frame[6] = (byte) (streamId >> 16);
+        frame[7] = (byte) (streamId >> 8);
+        frame[8] = (byte) streamId;
+        System.arraycopy(payload, 0, frame, 9, payload.length);
+        return frame;
     }
 
     @AfterEach

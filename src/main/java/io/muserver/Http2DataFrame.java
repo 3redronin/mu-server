@@ -37,6 +37,9 @@ class Http2DataFrame implements LogicalHttp2Frame {
         int padLength;
         int dataLength;
         if (padded) {
+            if (header.length() < 1) {
+                throw Http2Exception.connection(Http2ErrorCode.FRAME_SIZE_ERROR, "DATA frame missing pad length");
+            }
             padLength = buffer.get() & 0xFF;
             if (padLength >= header.length()) {
                 throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "Padding length too large");

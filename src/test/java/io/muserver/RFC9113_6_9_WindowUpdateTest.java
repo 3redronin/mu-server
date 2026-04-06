@@ -76,6 +76,38 @@ class RFC9113_6_9_WindowUpdateTest {
     }
 
     @Test
+    void streamWindowUpdatesOnIdleStreamsAreConnectionErrors() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .start();
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            con.handshake()
+                .writeFrame(windowUpdate(3, 1))
+                .flush();
+            var goaway = con.readLogicalFrame(Http2GoAway.class);
+            assertThat(goaway.lastStreamId(), equalTo(0));
+            assertThat(goaway.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+        }
+    }
+
+    @Test
+    void streamWindowUpdatesOnEvenClientStreamIDsAreConnectionErrors() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .start();
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            con.handshake()
+                .writeFrame(windowUpdate(2, 1))
+                .flush();
+            var goaway = con.readLogicalFrame(Http2GoAway.class);
+            assertThat(goaway.lastStreamId(), equalTo(0));
+            assertThat(goaway.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+        }
+    }
+
+    @Test
     void streamUpdatesCanComeInOnClosedStreams() throws Exception {
         server = httpsServer()
             .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {

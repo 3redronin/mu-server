@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class Http2GoAwayTest {
 
@@ -70,5 +71,30 @@ class Http2GoAwayTest {
         Http2GoAway goAway = new Http2GoAway(3, 1, debugData);
 
         assertThat(goAway.debugDataAsUTF8String(), is("Multilingual 文字"));
+    }
+
+    @Test
+    void frameSizeErrorThrownIfGoAwayPayloadIsTooShort() {
+        ByteBuffer buffer = ByteBuffer.wrap(new byte[7]);
+        var header = new Http2FrameHeader(7, Http2FrameType.GOAWAY, 0, 0);
+
+        var ex = assertThrows(Http2Exception.class, () -> Http2GoAway.readFrom(header, buffer));
+
+        assertThat(ex.errorType(), is(Http2Level.CONNECTION));
+        assertThat(ex.errorCode(), is(Http2ErrorCode.FRAME_SIZE_ERROR));
+    }
+
+    @Test
+    void protocolErrorThrownIfGoAwayIsNotOnStreamZero() {
+        ByteBuffer buffer = ByteBuffer.allocate(8);
+        buffer.putInt(0);
+        buffer.putInt(0);
+        buffer.flip();
+        var header = new Http2FrameHeader(8, Http2FrameType.GOAWAY, 0, 1);
+
+        var ex = assertThrows(Http2Exception.class, () -> Http2GoAway.readFrom(header, buffer));
+
+        assertThat(ex.errorType(), is(Http2Level.CONNECTION));
+        assertThat(ex.errorCode(), is(Http2ErrorCode.PROTOCOL_ERROR));
     }
 }

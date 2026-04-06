@@ -45,6 +45,12 @@ class Http2GoAway implements LogicalHttp2Frame {
     }
 
     static Http2GoAway readFrom(Http2FrameHeader header, ByteBuffer buffer) throws Http2Exception {
+        if (header.length() < 8) {
+            throw Http2Exception.connection(Http2ErrorCode.FRAME_SIZE_ERROR, "GOAWAY payload too short");
+        }
+        if (header.streamId() != 0) {
+            throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "GOAWAY must be on stream 0");
+        }
         int lastStreamId = buffer.getInt() & 0x7FFFFFFF;
         int errorCode = buffer.getInt() & 0x7FFFFFFF;
         byte[] debugData = new byte[header.length() - 8];
