@@ -21,7 +21,7 @@ class Http2BodyInputStreamTest {
         var received = new ByteArrayOutputStream();
         var callbackValue = new AtomicLong();
 
-        try (var stream = new Http2BodyInputStream(10000, callbackValue::addAndGet)) {
+        try (var stream = new Http2BodyInputStream(10000, callbackValue::addAndGet, credit -> {})) {
             var t = new Thread(() -> {
                 try {
                     Mutils.copy(stream, received, copyBufferSize);
@@ -40,6 +40,44 @@ class Http2BodyInputStreamTest {
 
         assertThat(received.toString(StandardCharsets.UTF_8), equalTo("Hello world"));
         assertThat(callbackValue.get(), equalTo(11L));
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {1, 2, 5})
+    void flowControlCreditIncludesPaddingWhenAFrameIsFullyConsumed(int firstReadSize) throws Exception {
+        var callbackValue = new AtomicLong();
+
+        try (var stream = new Http2BodyInputStream(10000, callbackValue::addAndGet, credit -> {})) {
+            stream.onData(data("Hello", false), 8);
+
+            var buffer = new byte[Math.max(firstReadSize, 8)];
+            assertThat(stream.read(buffer, 0, firstReadSize), equalTo(firstReadSize));
+            assertThat(callbackValue.get(), equalTo(firstReadSize == 5 ? 8L : (long) firstReadSize));
+
+            if (firstReadSize < 5) {
+                assertThat(stream.read(buffer, firstReadSize, 5 - firstReadSize), equalTo(5 - firstReadSize));
+                assertThat(callbackValue.get(), equalTo(8L));
+            }
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {1, 2, 4})
+    void unreadQueuedDataIsRefundedOnCancel(int firstReadSize) throws Exception {
+        var readCallbackValue = new AtomicLong();
+        var discardCallbackValue = new AtomicLong();
+
+        try (var stream = new Http2BodyInputStream(10000, readCallbackValue::addAndGet, discardCallbackValue::addAndGet)) {
+            stream.onData(data("Hello", false), 8);
+
+            var buffer = new byte[8];
+            assertThat(stream.read(buffer, 0, firstReadSize), equalTo(firstReadSize));
+
+            stream.cancel(new IOException("cancelled"));
+        }
+
+        assertThat(readCallbackValue.get(), equalTo((long) firstReadSize));
+        assertThat(discardCallbackValue.get(), equalTo(8L - firstReadSize));
     }
 
     private Http2DataFrame data(String data, boolean eos) {

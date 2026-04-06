@@ -90,7 +90,7 @@ class Http2Stream implements ResponseInfo {
         }
 
         if (bodyInputStream instanceof Http2BodyInputStream) {
-            ((Http2BodyInputStream)bodyInputStream).onData(dataFrame);
+            ((Http2BodyInputStream)bodyInputStream).onData(dataFrame, flowControlSize);
             if (dataFrame.endStream()) {
                 switch (state) {
                     case OPEN:
@@ -197,13 +197,17 @@ class Http2Stream implements ResponseInfo {
         var outgoingFlowControl = new Http2OutgoingFlowController(id, clientSettings.initialWindowSize);
         var incomingFlowControl = new Http2IncomingFlowController(id, serverSettings.initialWindowSize);
 
-        InputStream body = bodySize == BodySize.NONE ? EmptyInputStream.INSTANCE : new Http2BodyInputStream(connection.server.requestIdleTimeoutMillis(), read -> {
-            var update = incomingFlowControl.incrementCredit(read);
-            if (update > 0) {
-                connection.write(new Http2WindowUpdate(id, update));
-            }
-            connection.creditAvailable(read);
-        });
+        InputStream body = bodySize == BodySize.NONE ? EmptyInputStream.INSTANCE : new Http2BodyInputStream(
+            connection.server.requestIdleTimeoutMillis(),
+            read -> {
+                var update = incomingFlowControl.incrementCredit(read);
+                if (update > 0) {
+                    connection.write(new Http2WindowUpdate(id, update));
+                }
+                connection.creditAvailable(read);
+            },
+            connection
+        );
         var request = new Mu3Request(connection, method, requestUri, serverUri, HttpVersion.HTTP_2, headers, bodySize, body);
 
 

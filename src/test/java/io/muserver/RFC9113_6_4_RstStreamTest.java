@@ -7,9 +7,11 @@ import org.junit.jupiter.api.Test;
 
 import java.io.EOFException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.RFCTestUtils.*;
@@ -143,6 +145,60 @@ class RFC9113_6_4_RstStreamTest {
 
         }
 
+    }
+
+    @Test
+    void resettingAStreamRefundsUnreadConnectionCredit() throws Exception {
+        var firstRequestStarted = new CountDownLatch(1);
+        var letFirstRequestFinish = new CountDownLatch(1);
+        var completedStreams = new LinkedBlockingQueue<ResponseInfo>(2);
+        var requestCount = new AtomicInteger();
+
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled().withInitialWindowSize(8))
+            .addHandler(Method.POST, "/hello", (request, response, pathParams) -> {
+                if (requestCount.incrementAndGet() == 1) {
+                    firstRequestStarted.countDown();
+                    assertThat(letFirstRequestFinish.await(10, TimeUnit.SECONDS), equalTo(true));
+                    try (var body = request.body()) {
+                        body.readAllBytes();
+                    }
+                } else {
+                    response.write(request.readBodyAsString());
+                }
+            })
+            .addResponseCompleteListener(completedStreams::add)
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, false, postHelloHeaders(getPort())))
+                .writeFrame(utf8DataFrame(1, false, "Hell"))
+                .writeFrame(utf8DataFrame(1, false, "o wo"))
+                .flush();
+
+            assertThat(firstRequestStarted.await(10, TimeUnit.SECONDS), equalTo(true));
+
+            con.writeFrame(new Http2ResetStreamFrame(1, Http2ErrorCode.CANCEL.code()))
+                .writeFrame(new Http2HeadersFrame(3, false, postHelloHeaders(getPort())))
+                .writeFrame(utf8DataFrame(3, true, "Goodbye!"))
+                .flush();
+
+            var headers = readIgnoringWindowUpdates(con, Http2HeadersFrame.class);
+            assertThat(headers.streamId(), equalTo(3));
+            assertThat(headers.headers().get(":status"), equalTo("200"));
+            assertThat(readIgnoringWindowUpdates(con, Http2DataFrame.class).toUTF8(), equalTo("Goodbye!"));
+            assertThat(readIgnoringWindowUpdates(con, Http2DataFrame.class).endStream(), equalTo(true));
+
+            letFirstRequestFinish.countDown();
+
+            var results = new ArrayList<Boolean>(2);
+            results.add(completedStreams.poll(10, TimeUnit.SECONDS).completedSuccessfully());
+            results.add(completedStreams.poll(10, TimeUnit.SECONDS).completedSuccessfully());
+            assertThat(results, containsInAnyOrder(false, true));
+        }
     }
 
     @Test

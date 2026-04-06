@@ -14,16 +14,33 @@ import java.util.concurrent.locks.ReentrantLock;
 
 class Http2BodyInputStream extends InputStream {
 
+    private static class PendingDataFrame {
+        final Http2DataFrame dataFrame;
+        final int flowControlSize;
+        int currentOffset;
+        int creditReturned;
+
+        PendingDataFrame(Http2DataFrame dataFrame, int flowControlSize) {
+            this.dataFrame = dataFrame;
+            this.flowControlSize = flowControlSize;
+        }
+
+        int unreadCredit() {
+            return flowControlSize - creditReturned;
+        }
+    }
+
     private final long readTimeoutMillis;
     private final CreditAvailableListener onDataReadCallback;
+    private final CreditAvailableListener onDataDiscardedCallback;
     private final Lock lock = new ReentrantLock();
     private final Queue<Object> frames = new LinkedList<>();
     private final Condition hasData = lock.newCondition();
-    private int currentOffset = 0;
 
-    Http2BodyInputStream(long readTimeoutMillis, CreditAvailableListener onDataReadCallback) {
+    Http2BodyInputStream(long readTimeoutMillis, CreditAvailableListener onDataReadCallback, CreditAvailableListener onDataDiscardedCallback) {
         this.readTimeoutMillis = readTimeoutMillis;
         this.onDataReadCallback = onDataReadCallback;
+        this.onDataDiscardedCallback = onDataDiscardedCallback;
     }
 
     @Override
@@ -49,36 +66,41 @@ class Http2BodyInputStream extends InputStream {
                 }
             }
 
-            if (frame instanceof Http2DataFrame) {
-                var data = (Http2DataFrame) frame;
+            if (frame instanceof PendingDataFrame) {
+                var pending = (PendingDataFrame) frame;
+                var data = pending.dataFrame;
 
-                int offset = data.payloadOffset() + currentOffset;
-                int remaining = data.payloadLength() - currentOffset;
+                int offset = data.payloadOffset() + pending.currentOffset;
+                int remaining = data.payloadLength() - pending.currentOffset;
                 if (remaining == 0 && data.endStream()) {
                     return -1;
                 }
                 int readAmount;
+                int creditToReturn;
                 if (remaining < len) {
                     // the user wants more than what is available in the first frame, so give all the rest of it
                     System.arraycopy(data.payload(), offset, b, off, remaining);
-//                if (remaining == len) {
                     // TODO: how about waiting for more data?
-//                }
+                    pending.currentOffset += remaining;
                     if (!data.endStream()) {
-                        currentOffset = 0;
                         frames.remove();
-                    } else {
-                        currentOffset += remaining;
                     }
                     readAmount = remaining;
                 } else {
                     // the user wants less than what is available
                     System.arraycopy(data.payload(), offset, b, off, len);
-                    currentOffset += len;
+                    pending.currentOffset += len;
                     readAmount = len;
                 }
+
+                creditToReturn = readAmount;
+                if (pending.currentOffset == data.payloadLength()) {
+                    creditToReturn += pending.flowControlSize - data.payloadLength();
+                }
+                pending.creditReturned += creditToReturn;
+
                 try {
-                    onDataReadCallback.creditAvailable(readAmount);
+                    onDataReadCallback.creditAvailable(creditToReturn);
                 } catch (Http2Exception e) {
                     throw new IOException("Http2 error updating flow control", e);
                 }
@@ -96,10 +118,14 @@ class Http2BodyInputStream extends InputStream {
     }
 
     public void onData(Http2DataFrame dataFrame) {
+        onData(dataFrame, dataFrame.flowControlSize());
+    }
+
+    public void onData(Http2DataFrame dataFrame, int flowControlSize) {
         if (dataFrame.payloadLength() > 0 || dataFrame.endStream()) {
             lock.lock();
             try {
-                frames.add(dataFrame);
+                frames.add(new PendingDataFrame(dataFrame, flowControlSize));
                 hasData.signal();
             } finally {
                 lock.unlock();
@@ -116,15 +142,28 @@ class Http2BodyInputStream extends InputStream {
     }
 
     private void setErrored(IOException ex) {
+        int discardedCredit = 0;
         lock.lock();
         try {
             if (!isErrored()) {
+                for (Object frame : frames) {
+                    if (frame instanceof PendingDataFrame) {
+                        discardedCredit += ((PendingDataFrame) frame).unreadCredit();
+                    }
+                }
                 frames.clear();
                 frames.add(ex);
                 hasData.signal();
             }
         } finally {
             lock.unlock();
+        }
+        if (discardedCredit > 0) {
+            try {
+                onDataDiscardedCallback.creditAvailable(discardedCredit);
+            } catch (Http2Exception e) {
+                throw new IllegalStateException("Could not refund unread HTTP/2 data credit", e);
+            }
         }
     }
 
