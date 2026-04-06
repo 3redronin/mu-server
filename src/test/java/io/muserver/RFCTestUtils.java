@@ -18,6 +18,23 @@ class RFCTestUtils {
         var bytes = text.getBytes(StandardCharsets.UTF_8);
         return new Http2DataFrame(streamId, endStream, bytes, 0, bytes.length);
     }
+
+    static byte[] paddedDataFrame(int streamId, boolean endStream, byte[] data, int padLength) {
+        int payloadLength = 1 + data.length + padLength;
+        byte[] frame = new byte[9 + payloadLength];
+        frame[0] = (byte) (payloadLength >> 16);
+        frame[1] = (byte) (payloadLength >> 8);
+        frame[2] = (byte) payloadLength;
+        frame[3] = 0x00;
+        frame[4] = (byte) ((endStream ? 0b00000001 : 0) | 0b00001000);
+        frame[5] = (byte) (streamId >> 24);
+        frame[6] = (byte) (streamId >> 16);
+        frame[7] = (byte) (streamId >> 8);
+        frame[8] = (byte) streamId;
+        frame[9] = (byte) padLength;
+        System.arraycopy(data, 0, frame, 10, data.length);
+        return frame;
+    }
     static @NonNull Http2DataFrame emptyEosDataFrame(int streamId) {
         return new Http2DataFrame(streamId, true, new byte[0], 0, 0);
     }

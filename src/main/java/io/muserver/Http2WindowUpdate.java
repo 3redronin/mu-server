@@ -32,7 +32,9 @@ class Http2WindowUpdate implements LogicalHttp2Frame {
     static Http2WindowUpdate readFrom(Http2FrameHeader header, ByteBuffer buffer) throws Http2Exception {
         int size = buffer.getInt() & 0x7FFFFFFF;
         if (size == 0) {
-            throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "window size increment 0", header.streamId());
+            throw header.streamId() == 0
+                ? Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "window size increment 0")
+                : Http2Exception.stream(Http2ErrorCode.PROTOCOL_ERROR, "window size increment 0", header.streamId());
         }
         return new Http2WindowUpdate(header.streamId(), size);
     }

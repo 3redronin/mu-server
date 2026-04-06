@@ -127,4 +127,75 @@ public class StopTest {
         assertThat(stopResult.get(), is(false));
     }
 
+    @Test
+    public void gracefulShutdown_http2IdleConnectionFinishesQuickly() throws Exception {
+        server = MuServerBuilder.httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .start();
+
+        var stopResult = new AtomicBoolean();
+        var stopReturnedLatch = new CountDownLatch(1);
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake();
+
+            new Thread(() -> {
+                stopResult.set(server.stop(2, TimeUnit.SECONDS));
+                stopReturnedLatch.countDown();
+            }).start();
+
+            assertThat(con.readLogicalFrame(), equalTo(new Http2GoAway(0x7FFFFFFF, Http2ErrorCode.NO_ERROR.code(), new byte[0])));
+            assertThat(con.readLogicalFrame(), equalTo(new Http2GoAway(0, Http2ErrorCode.NO_ERROR.code(), new byte[0])));
+            assertThat(stopReturnedLatch.await(2, TimeUnit.SECONDS), is(true));
+            assertThat(stopResult.get(), is(true));
+            assertThrows(java.io.IOException.class, con::readFrameHeader);
+        }
+    }
+
+    @Test
+    public void gracefulShutdown_http2InFlightRequestsCompleteQuickly() throws Exception {
+        var goTime = new CountDownLatch(1);
+        var requestStarted = new CountDownLatch(1);
+        server = MuServerBuilder.httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
+                requestStarted.countDown();
+                assertThat(goTime.await(2, TimeUnit.SECONDS), is(true));
+                response.write("done");
+            })
+            .start();
+
+        var stopResult = new AtomicBoolean();
+        var stopReturnedLatch = new CountDownLatch(1);
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, true, RFCTestUtils.getHelloHeaders(server.uri().getPort())))
+                .flush();
+
+            assertThat(requestStarted.await(2, TimeUnit.SECONDS), is(true));
+
+            new Thread(() -> {
+                stopResult.set(server.stop(2, TimeUnit.SECONDS));
+                stopReturnedLatch.countDown();
+            }).start();
+
+            assertThat(con.readLogicalFrame(), equalTo(new Http2GoAway(0x7FFFFFFF, Http2ErrorCode.NO_ERROR.code(), new byte[0])));
+            assertThat(con.readLogicalFrame(), equalTo(new Http2GoAway(1, Http2ErrorCode.NO_ERROR.code(), new byte[0])));
+
+            goTime.countDown();
+
+            assertThat(con.readLogicalFrame(Http2HeadersFrame.class).headers().get(":status"), equalTo("200"));
+            assertThat(con.readLogicalFrame(Http2DataFrame.class).toUTF8(), equalTo("done"));
+            assertThat(con.readLogicalFrame(Http2DataFrame.class).endStream(), is(true));
+            assertThat(stopReturnedLatch.await(2, TimeUnit.SECONDS), is(true));
+            assertThat(stopResult.get(), is(true));
+            assertThrows(java.io.IOException.class, con::readFrameHeader);
+        }
+    }
+
 }

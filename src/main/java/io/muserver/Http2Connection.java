@@ -21,7 +21,7 @@ import java.util.stream.Collectors;
 
 class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAvailableListener {
     private static final int MAX_POSSIBLE_STREAM_ID = 0x7fffffff;
-    private static final WriteTask GO_AWAY_WARNING = new WriteTask(new Http2GoAway(MAX_POSSIBLE_STREAM_ID, Http2ErrorCode.NO_ERROR.code(), null), false);
+    private static final Http2GoAway GO_AWAY_WARNING = new Http2GoAway(MAX_POSSIBLE_STREAM_ID, Http2ErrorCode.NO_ERROR.code(), null);
 
     private enum HState {
         ACTIVE(true), SHUTDOWN_INITIATED(true), COMPLETED(false), ERRORED(false);
@@ -174,8 +174,12 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         return !readState.canSendFrames;
     }
 
+    private boolean isShutdownInitiatedLocked() {
+        return isLocalShutdownInitiatedLocked() || isPeerShutdownInitiatedLocked();
+    }
+
     private boolean shouldQueueFinalGoAwayLocked() {
-        return (isLocalShutdownInitiatedLocked() || isPeerShutdownInitiatedLocked()) && !finalGoAwayQueued;
+        return isShutdownInitiatedLocked() && !finalGoAwayQueued;
     }
 
     private void queueFinalGoAwayLocked() {
@@ -186,7 +190,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
     }
 
     private boolean isTerminalAndDrainedLocked() {
-        return (isLocalShutdownInitiatedLocked() || isPeerShutdownInitiatedLocked() || isReadTerminalLocked())
+        return (isShutdownInitiatedLocked() || isReadTerminalLocked())
             && streams.isEmpty()
             && writeQueue.isEmpty();
     }
@@ -288,10 +292,10 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
                                 break;
                             }
                             case CONTINUATION: {
-                                throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "Out of order continuation frame");
+                                throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Out of order continuation frame");
                             }
                             case PUSH_PROMISE: {
-                                throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "Client sent push promise");
+                                throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Client sent push promise");
                             }
                             default: {
                                 log.info("Discarding " + len + " bytes for unsupported type " + fh);
@@ -326,6 +330,14 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         } catch (Http2Exception h2e) {
             log.debug("HTTP2 error", h2e);
 
+            var connectionError = new IOException("Connection error", h2e);
+
+            if (!streams.isEmpty()) {
+                for (var stream : streams.values()) {
+                    stream.cancel(connectionError, false);
+                }
+            }
+
             try {
                 Http2GoAway goAway = new Http2GoAway(lastStreamId, h2e.errorCode().code(), null);
                 if (writeEndedFuture != null) {
@@ -340,14 +352,6 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
                 }
             } finally {
                 setReadStateAndSignal(HState.ERRORED);
-
-                // TODO: check threadsafety of streams
-                if (!streams.isEmpty()) {
-                    var connectionError = new IOException("Connection error", h2e);
-                    for (var stream : streams.values()) {
-                        stream.cancel(connectionError);
-                    }
-                }
             }
 
             // todo: raise event, or otherwise mark the connection is handshake failed for the onConnectionEnded listeners
@@ -364,7 +368,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
             stream.onReset(rstStream);
         } else {
             if (streamId > lastStreamId || streamId % 2 == 0) {
-                throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "Invalid stream ID on rst_stream");
+                throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Invalid stream ID on rst_stream");
             }
         }
     }
@@ -396,7 +400,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         if (settingsDiff.isAck) {
             var ackedOne = settingsAckQueue.poll();
             if (ackedOne == null) {
-                throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "Settings ack without pending settings");
+                throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Settings ack without pending settings");
             } else {
                 log.info("Settings acked after " + (System.currentTimeMillis() - ackedOne) + "ms");
             }
@@ -410,7 +414,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
                         try {
                             stream.applyClientSettingsChange(oldSettings, newSettings);
                         } catch (Http2Exception e) {
-                            throw new Http2Exception(e.errorCode(), e.getMessage());
+                            throw Http2Exception.connection(e.errorCode(), e.getMessage());
                         }
                     }
                 }
@@ -427,7 +431,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
 
         // note: checking the length on the header, not the payload length, as padding is discarded when reading data frames
         if (!incomingFlowControl.withdrawIfCan(fh.length())) {
-            throw new Http2Exception(Http2ErrorCode.FLOW_CONTROL_ERROR, "Connection flow control credit breach", fh.streamId());
+            throw Http2Exception.connection(Http2ErrorCode.FLOW_CONTROL_ERROR, "Connection flow control credit breach");
         }
 
         var stream = streams.get(dataFrame.streamId());
@@ -435,7 +439,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
             // From RFC9113 6.1: If a DATA frame is received whose Stream Identifier field is 0x00, the recipient MUST respond with a connection error
             // From RFC9113 5.1: Receiving any frame other than HEADERS or PRIORITY on a stream in this [idle] state MUST be treated as a connection error
             if (fh.streamId() == 0 || fh.streamId() > lastStreamId || (fh.streamId() % 2) == 0) {
-                throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "Invalid stream ID on data frame");
+                throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Invalid stream ID on data frame");
             } else {
                 // From RFC9113 6.1: If a DATA frame is received whose stream is not in the "open" or "half-closed (local)" state, the recipient MUST respond with a stream error (Section 5.4.2) of type STREAM_CLOSED.
                 // As the stream is null, then most likely it is already closed. (Half-closed streams would not be here)
@@ -458,7 +462,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
 
     private void readHeaders(InputStream clientIn, Http2FrameHeader fh, FieldBlockDecoder fieldBlockDecoder) throws Http2Exception, IOException {
         if (fh.streamId() <= lastStreamId || (fh.streamId() % 2) == 0) {
-            throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "Invalid stream ID " + fh.streamId());
+            throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Invalid stream ID " + fh.streamId());
         }
         try {
             var headerFragment = Http2HeadersFrame.readLogicalFrame(fh, fieldBlockDecoder, buffer, clientIn);

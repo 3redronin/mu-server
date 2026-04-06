@@ -167,6 +167,78 @@ class RFC9113_6_1_DataFrameTest {
     }
 
     @Test
+    void paddedDataFramesCanBeSentToTheServer() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.POST, "/hello", (request, response, pathParams) -> {
+                response.write(request.readBodyAsString());
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, false, postHelloHeaders(getPort())))
+                .writeRaw(RFCTestUtils.paddedDataFrame(1, true, "Hello".getBytes(StandardCharsets.UTF_8), 2))
+                .flush();
+
+            var headers = readIgnoringWindowUpdates(con, Http2HeadersFrame.class);
+            assertThat(headers.streamId(), equalTo(1));
+            assertThat(headers.headers().get(":status"), equalTo("200"));
+            assertThat(readIgnoringWindowUpdates(con, Http2DataFrame.class).toUTF8(), equalTo("Hello"));
+            assertThat(readIgnoringWindowUpdates(con, Http2DataFrame.class).endStream(), equalTo(true));
+        }
+    }
+
+    @Test
+    void paddedDataFramesUseTheFullFrameSizeForStreamWindowUpdates() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled().withInitialWindowSize(8))
+            .addHandler(Method.POST, "/hello", (request, response, pathParams) -> {
+                response.write(request.readBodyAsString());
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, false, postHelloHeaders(getPort())))
+                .writeRaw(RFCTestUtils.paddedDataFrame(1, true, "Hello".getBytes(StandardCharsets.UTF_8), 2))
+                .flush();
+
+            assertThat(con.readLogicalFrame(), equalTo(new Http2WindowUpdate(1, 8)));
+
+            var headers = readIgnoringWindowUpdates(con, Http2HeadersFrame.class);
+            assertThat(headers.streamId(), equalTo(1));
+            assertThat(headers.headers().get(":status"), equalTo("200"));
+            assertThat(readIgnoringWindowUpdates(con, Http2DataFrame.class).toUTF8(), equalTo("Hello"));
+            assertThat(readIgnoringWindowUpdates(con, Http2DataFrame.class).endStream(), equalTo(true));
+        }
+    }
+
+    @Test
+    void invalidPaddingOnALiveConnectionIsAConnectionError() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake()
+                .writeRaw(invalidPaddedDataFrame(1, false, "Hello".getBytes(StandardCharsets.UTF_8), 6))
+                .flush();
+
+            var goAway = con.readLogicalFrame(Http2GoAway.class);
+            assertThat(goAway.lastStreamId(), equalTo(0));
+            assertThat(goAway.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+            assertThrows(IOException.class, con::readFrameHeader);
+        }
+    }
+
+    @Test
     void aDataFrameReceivedOnAClosedStreamIsStreamError() throws Exception {
         var completedLatch = new CountDownLatch(1);
         server = httpsServer()
@@ -255,6 +327,23 @@ class RFC9113_6_1_DataFrameTest {
 
     private int getPort() {
         return server.uri().getPort();
+    }
+
+    private static byte[] invalidPaddedDataFrame(int streamId, boolean endStream, byte[] data, int declaredPadLength) {
+        int payloadLength = 1 + data.length;
+        return new byte[] {
+            (byte) (payloadLength >> 16),
+            (byte) (payloadLength >> 8),
+            (byte) payloadLength,
+            0x00,
+            (byte) ((endStream ? 0b00000001 : 0) | 0b00001000),
+            (byte) (streamId >> 24),
+            (byte) (streamId >> 16),
+            (byte) (streamId >> 8),
+            (byte) streamId,
+            (byte) declaredPadLength,
+            data[0], data[1], data[2], data[3], data[4]
+        };
     }
 
 

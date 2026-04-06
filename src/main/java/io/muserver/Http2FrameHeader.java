@@ -43,19 +43,19 @@ class Http2FrameHeader {
         if (length > buffer.capacity()) {
             var errorType = !hasStream || frameType.hasFieldBlock() || frameType == Http2FrameType.UNKNOWN ? Http2Level.CONNECTION : Http2Level.STREAM;
             if (errorType == Http2Level.CONNECTION) {
-                throw new Http2Exception(Http2ErrorCode.FRAME_SIZE_ERROR, "frame content too large");
+                throw Http2Exception.connection(Http2ErrorCode.FRAME_SIZE_ERROR, "frame content too large");
             } else {
-                throw new Http2Exception(Http2ErrorCode.FRAME_SIZE_ERROR, "frame content too large", streamId);
+                throw Http2Exception.stream(Http2ErrorCode.FRAME_SIZE_ERROR, "frame content too large", streamId);
             }
         }
         var fixedSize = frameType.fixedSize();
         if (fixedSize >= 0 && fixedSize != length) {
-            throw new Http2Exception(Http2ErrorCode.FRAME_SIZE_ERROR, "frame content incorrect for fixed size frame");
+            throw Http2Exception.connection(Http2ErrorCode.FRAME_SIZE_ERROR, "frame content incorrect for fixed size frame");
         }
         var streamRequired = frameType.hasStream();
         if (streamRequired != null) {
             if ((streamRequired && !hasStream) || (!streamRequired && hasStream)) {
-                throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "Stream ID " + (hasStream ? "" : "not ") + "present for " + frameType);
+                throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Stream ID " + (hasStream ? "" : "not ") + "present for " + frameType);
             }
         }
         return new Http2FrameHeader(length, frameType, flags, streamId);

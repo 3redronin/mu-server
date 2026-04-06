@@ -41,7 +41,9 @@ class Http2OutgoingFlowController {
             creditAvailable.signalAll();
             log.info("new credit for stream " + streamId + " is " + credit);
         } catch (ArithmeticException e) {
-            throw new Http2Exception(Http2ErrorCode.FLOW_CONTROL_ERROR, "Credit overflow", streamId);
+            throw streamId == 0
+                ? Http2Exception.connection(Http2ErrorCode.FLOW_CONTROL_ERROR, "Credit overflow")
+                : Http2Exception.stream(Http2ErrorCode.FLOW_CONTROL_ERROR, "Credit overflow", streamId);
         } finally {
             lock.unlock();
         }

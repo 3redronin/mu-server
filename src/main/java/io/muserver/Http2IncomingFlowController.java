@@ -39,7 +39,9 @@ class Http2IncomingFlowController {
             credit = Math.addExact(credit, diff);
             maxCredit = newSettings.initialWindowSize;
         } catch (ArithmeticException e) {
-            throw new Http2Exception(Http2ErrorCode.FLOW_CONTROL_ERROR, "Credit overflow", streamId);
+            throw streamId == 0
+                ? Http2Exception.connection(Http2ErrorCode.FLOW_CONTROL_ERROR, "Credit overflow")
+                : Http2Exception.stream(Http2ErrorCode.FLOW_CONTROL_ERROR, "Credit overflow", streamId);
         } finally {
             lock.unlock();
         }
@@ -69,7 +71,9 @@ class Http2IncomingFlowController {
                 return 0;
             }
         } catch (ArithmeticException e) {
-            throw new Http2Exception(Http2ErrorCode.FLOW_CONTROL_ERROR, "Credit overflow", streamId);
+            throw streamId == 0
+                ? Http2Exception.connection(Http2ErrorCode.FLOW_CONTROL_ERROR, "Credit overflow")
+                : Http2Exception.stream(Http2ErrorCode.FLOW_CONTROL_ERROR, "Credit overflow", streamId);
         } finally {
             lock.unlock();
         }

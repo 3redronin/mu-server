@@ -16,6 +16,17 @@ class Http2Exception extends Exception {
         this(Http2Level.CONNECTION, errorCode, message, 0);
     }
 
+    static Http2Exception connection(Http2ErrorCode errorCode, @Nullable String message) {
+        return new Http2Exception(Http2Level.CONNECTION, errorCode, message, 0);
+    }
+
+    static Http2Exception stream(Http2ErrorCode errorCode, @Nullable String message, int streamId) {
+        if (streamId == 0) {
+            throw new IllegalArgumentException("Stream errors must have a non-zero stream ID");
+        }
+        return new Http2Exception(Http2Level.STREAM, errorCode, message, streamId);
+    }
+
     /**
      * Creates a connection error if stream ID is 0; otherwise creates a stream error
      * @param errorCode the code

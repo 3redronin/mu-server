@@ -79,6 +79,37 @@ class RFC9113_5_4_ErrorHandlingTest {
 
     }
 
+    @Test
+    public void connectionScopedFlowControlErrorsStayConnectionErrorsEvenOnNonZeroStreamIds() throws Exception {
+
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.POST, "/hello", (request, response, pathParams) -> {
+                Thread.sleep(5000);
+                response.status(202);
+            })
+            .start();
+
+        byte[] sixteenK = new byte[16384];
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, false, RFCTestUtils.postHelloHeaders(server.uri().getPort())))
+                .writeFrame(new Http2DataFrame(1, false, sixteenK, 0, sixteenK.length))
+                .writeFrame(new Http2DataFrame(1, false, sixteenK, 0, sixteenK.length))
+                .writeFrame(new Http2DataFrame(1, false, sixteenK, 0, sixteenK.length))
+                .writeFrame(new Http2DataFrame(1, false, sixteenK, 0, sixteenK.length))
+                .flush();
+
+            var goAway = con.readLogicalFrame(Http2GoAway.class);
+            assertThat(goAway.lastStreamId(), equalTo(1));
+            assertThat(goAway.errorCodeEnum(), equalTo(Http2ErrorCode.FLOW_CONTROL_ERROR));
+            assertThrows(IOException.class, con::readFrameHeader);
+        }
+
+    }
+
 
     private @NonNull FieldBlock getHelloHeaders() {
         return RFCTestUtils.getHelloHeaders(server.uri().getPort());

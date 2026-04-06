@@ -72,9 +72,13 @@ class Http2Stream implements ResponseInfo {
     }
 
     void cancel(IOException reason) {
+        cancel(reason, true);
+    }
+
+    void cancel(IOException reason, boolean refundUnreadData) {
         state = State.CLOSED;
         if (bodyInputStream instanceof Http2BodyInputStream) {
-            ((Http2BodyInputStream) bodyInputStream).cancel(reason);
+            ((Http2BodyInputStream) bodyInputStream).cancel(reason, refundUnreadData);
         }
     }
 

@@ -138,17 +138,19 @@ class Http2BodyInputStream extends InputStream {
         var ex = (err == Http2ErrorCode.CANCEL)
             ? new EOFException("Client cancelled the request")
             : new IOException("Error reading request body: " + err.name() + " (" + err.code() + ")");
-        setErrored(ex);
+        setErrored(ex, true);
     }
 
-    private void setErrored(IOException ex) {
+    private void setErrored(IOException ex, boolean refundUnreadData) {
         int discardedCredit = 0;
         lock.lock();
         try {
             if (!isErrored()) {
-                for (Object frame : frames) {
-                    if (frame instanceof PendingDataFrame) {
-                        discardedCredit += ((PendingDataFrame) frame).unreadCredit();
+                if (refundUnreadData) {
+                    for (Object frame : frames) {
+                        if (frame instanceof PendingDataFrame) {
+                            discardedCredit += ((PendingDataFrame) frame).unreadCredit();
+                        }
                     }
                 }
                 frames.clear();
@@ -172,7 +174,11 @@ class Http2BodyInputStream extends InputStream {
     }
 
     void cancel(IOException reason) {
-        setErrored(reason);
+        cancel(reason, true);
+    }
+
+    void cancel(IOException reason, boolean refundUnreadData) {
+        setErrored(reason, refundUnreadData);
     }
 
 
