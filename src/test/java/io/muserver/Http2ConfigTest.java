@@ -15,7 +15,8 @@ public class Http2ConfigTest {
             .withMaxConcurrentStreams(2)
             .withMaxFrameSize(20000)
             .withMaxHeaderListSize(4)
-            .withInitialWindowSize(50000);
+            .withInitialWindowSize(50000)
+            .withSettingsAckTimeoutMillis(3210);
         var originalConfig = originalBuilder.build();
 
         assertThat(originalConfig.enabled(), equalTo(false));
@@ -24,6 +25,7 @@ public class Http2ConfigTest {
         assertThat(originalConfig.maxFrameSize(), equalTo(20000));
         assertThat(originalConfig.maxHeaderListSize(), equalTo(4));
         assertThat(originalConfig.initialWindowSize(), equalTo(50000));
+        assertThat(originalConfig.settingsAckTimeoutMillis(), equalTo(3210L));
 
         var remadeBuilder = originalConfig.toBuilder();
         assertThat(remadeBuilder, equalTo(originalBuilder));

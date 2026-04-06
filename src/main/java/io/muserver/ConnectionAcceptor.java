@@ -263,7 +263,7 @@ class ConnectionAcceptor {
 
     private void handleRequest(Socket socket, @Nullable Certificate clientCert, Instant startTime, HttpVersion httpVersion) {
         BaseHttpConnection con = httpVersion == HttpVersion.HTTP_2
-            ? new Http2Connection(server, this, socket, clientCert, startTime, http2Config.initialSettings(), executorService)
+            ? new Http2Connection(server, this, socket, clientCert, startTime, http2Config.initialSettings(), http2Config.settingsAckTimeoutMillis(), executorService)
             : new Http1Connection(server, this, socket, clientCert, startTime);
 
         connections.add(con);

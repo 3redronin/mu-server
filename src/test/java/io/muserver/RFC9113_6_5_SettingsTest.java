@@ -115,6 +115,27 @@ class RFC9113_6_5_SettingsTest {
     }
 
     @Test
+    void missingAckForTheServersSettingsLeadsToASettingsTimeout() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled().withSettingsAckTimeoutMillis(200))
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.writePreface();
+            con.writeFrame(Http2Settings.DEFAULT_CLIENT_SETTINGS);
+            con.flush();
+
+            assertThat(con.readLogicalFrame(Http2Settings.class), equalTo(new Http2Settings(false, 4096, 200, 65535, 16384, 8192)));
+            assertThat(con.readLogicalFrame(), equalTo(Http2Settings.ACK));
+
+            assertThat(con.readLogicalFrame(), equalTo(goAway(0, Http2ErrorCode.SETTINGS_TIMEOUT)));
+            assertThrows(IOException.class, con::readFrameHeader);
+        }
+    }
+
+    @Test
     void invalidInitialWindowSizeIsAFlowControlError() throws Exception {
         server = httpsServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())

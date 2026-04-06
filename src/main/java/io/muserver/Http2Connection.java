@@ -1,6 +1,5 @@
 package io.muserver;
 
-import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -8,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import java.io.*;
 import java.net.Socket;
 import java.net.SocketException;
+import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.cert.Certificate;
@@ -56,6 +56,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
     private final ConcurrentLinkedQueue<Long> settingsAckQueue = new ConcurrentLinkedQueue<>();
     private final ConcurrentHashMap<Integer, Http2Stream> streams = new ConcurrentHashMap<>();
     private final ExecutorService executorService;
+    private final long settingsAckTimeoutMillis;
 
     private final Lock writeQueueLock = new ReentrantLock();
     private final Condition writeQueueCondition = writeQueueLock.newCondition();
@@ -64,9 +65,10 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
 
     final FieldBlockEncoder fieldBlockEncoder;
 
-    Http2Connection(Mu3ServerImpl server, ConnectionAcceptor creator, Socket clientSocket, @Nullable Certificate clientCertificate, Instant handshakeStartTime, Http2Settings initialServerSettings, ExecutorService executorService) {
+    Http2Connection(Mu3ServerImpl server, ConnectionAcceptor creator, Socket clientSocket, @Nullable Certificate clientCertificate, Instant handshakeStartTime, Http2Settings initialServerSettings, long settingsAckTimeoutMillis, ExecutorService executorService) {
         super(server, creator, clientSocket, clientCertificate, handshakeStartTime);
         this.serverSettings = initialServerSettings;
+        this.settingsAckTimeoutMillis = settingsAckTimeoutMillis;
         this.executorService = executorService;
         this.buffer = ByteBuffer.allocate(serverSettings.maxFrameSize).flip();
         this.fieldBlockEncoder = new FieldBlockEncoder(new HpackTable(clientSettings.headerTableSize));
@@ -98,6 +100,12 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         write(new WriteTask(frame, false));
     }
     void write(WriteTask writeTask) {
+        if (writeTask.frame() instanceof Http2Settings) {
+            var settings = (Http2Settings) writeTask.frame();
+            if (!settings.isAck) {
+                queuePendingSettingsAck();
+            }
+        }
         writeQueueLock.lock();
         try {
             writeQueue.add(writeTask);
@@ -124,6 +132,23 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
                 log.debug("Error closing HTTP/2 socket", e);
             }
         }
+    }
+
+    private void queuePendingSettingsAck() {
+        settingsAckQueue.add(System.currentTimeMillis() + settingsAckTimeoutMillis);
+    }
+
+    private void prepareForFrameRead() throws SocketException, Http2Exception {
+        Long deadline = settingsAckQueue.peek();
+        if (deadline == null) {
+            clientSocket.setSoTimeout(0);
+            return;
+        }
+        long remaining = deadline - System.currentTimeMillis();
+        if (remaining <= 0) {
+            throw Http2Exception.connection(Http2ErrorCode.SETTINGS_TIMEOUT, "Timed out waiting for SETTINGS ack");
+        }
+        clientSocket.setSoTimeout((int) Math.min(Integer.MAX_VALUE, remaining));
     }
 
     private void setReadStateAndSignal(HState newState) {
@@ -243,7 +268,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
             clientSettings = Http2Handshaker.handshake(this, serverSettings, clientSettings, buffer, clientIn, clientOut);
 
             fieldBlockEncoder.changeTableSize(clientSettings.headerTableSize);
-            settingsAckQueue.add(System.currentTimeMillis());
+            queuePendingSettingsAck();
 
             var fieldBlockDecoder = new FieldBlockDecoder(new HpackTable(serverSettings.headerTableSize), server.maxUrlSize(), server.maxRequestHeadersSize());
             writeEndedFuture = startWriteLoop(clientOut);
@@ -251,6 +276,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
             // and now just read frames
             while (readState.canSendFrames) {
                 try {
+                    prepareForFrameRead();
                     Mutils.readAtLeast(buffer, clientIn, Http2FrameHeader.FRAME_HEADER_LENGTH);
 
                     var fh = Http2FrameHeader.readFrom(buffer);
@@ -312,6 +338,11 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
                     if (stream != null) {
                         stream.cancel(new IOException("Stream error", h2e));
                     }
+                } catch (SocketTimeoutException e) {
+                    if (!settingsAckQueue.isEmpty()) {
+                        throw Http2Exception.connection(Http2ErrorCode.SETTINGS_TIMEOUT, "Timed out waiting for SETTINGS ack");
+                    }
+                    throw e;
                 } catch (EOFException | SocketException e) {
                     log.warn(e.getClass() + " reading frame at read state " + readState + " writeState=" + writeState, e);
                     // todo: read streams in a lock
@@ -402,7 +433,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
             if (ackedOne == null) {
                 throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Settings ack without pending settings");
             } else {
-                log.info("Settings acked after " + (System.currentTimeMillis() - ackedOne) + "ms");
+                log.info("Settings acked");
             }
         } else {
             var oldSettings = clientSettings;

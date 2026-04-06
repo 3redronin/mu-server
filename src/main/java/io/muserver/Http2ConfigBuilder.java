@@ -1,5 +1,6 @@
 package io.muserver;
 
+import java.util.concurrent.TimeUnit;
 import java.util.Objects;
 
 /**
@@ -19,6 +20,7 @@ public class Http2ConfigBuilder {
     private int initialWindowSize = 65535;
     private int maxFrameSize = 16384;
     private int maxHeaderListSize = -1;
+    private long settingsAckTimeoutMillis = 10_000;
 
     /**
      * Specifies whether to enable HTTP2 or not.
@@ -202,6 +204,42 @@ public class Http2ConfigBuilder {
     }
 
     /**
+     * Gets the timeout for receiving acknowledgements to locally-sent SETTINGS frames.
+     *
+     * @return the SETTINGS acknowledgement timeout in milliseconds
+     */
+    public long settingsAckTimeoutMillis() {
+        return settingsAckTimeoutMillis;
+    }
+
+    /**
+     * Sets the timeout for receiving acknowledgements to locally-sent SETTINGS frames.
+     *
+     * <p>The default is 10 seconds.</p>
+     *
+     * @param settingsAckTimeoutMillis the timeout in milliseconds
+     * @return this builder
+     */
+    public Http2ConfigBuilder withSettingsAckTimeoutMillis(long settingsAckTimeoutMillis) {
+        if (settingsAckTimeoutMillis < 0) {
+            throw new IllegalArgumentException("SETTINGS ack timeout must be non-negative.");
+        }
+        this.settingsAckTimeoutMillis = settingsAckTimeoutMillis;
+        return this;
+    }
+
+    /**
+     * Sets the timeout for receiving acknowledgements to locally-sent SETTINGS frames.
+     *
+     * @param duration the timeout duration
+     * @param unit the timeout unit
+     * @return this builder
+     */
+    public Http2ConfigBuilder withSettingsAckTimeout(long duration, TimeUnit unit) {
+        return withSettingsAckTimeoutMillis(unit.toMillis(duration));
+    }
+
+    /**
      * <p>Specifies the maximum size in bytes of the HTTP request headers.</p>
      *
      * <p>This defaults to the value specified server-wide with {@link MuServerBuilder#withMaxHeadersSize(int)}.
@@ -235,7 +273,7 @@ public class Http2ConfigBuilder {
         Http2Settings initialSettings = new Http2Settings(
             false, maxHeaderTableSize, maxConcurrentStreams, initialWindowSize, maxFrameSize, maxHeaderListSize
         );
-        return new Http2Config(enabled, initialSettings);
+        return new Http2Config(enabled, initialSettings, settingsAckTimeoutMillis);
     }
 
     /**
@@ -280,12 +318,18 @@ public class Http2ConfigBuilder {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         Http2ConfigBuilder that = (Http2ConfigBuilder) o;
-        return enabled == that.enabled && maxHeaderTableSize == that.maxHeaderTableSize && maxConcurrentStreams == that.maxConcurrentStreams && initialWindowSize == that.initialWindowSize && maxFrameSize == that.maxFrameSize && maxHeaderListSize == that.maxHeaderListSize;
+        return enabled == that.enabled
+            && maxHeaderTableSize == that.maxHeaderTableSize
+            && maxConcurrentStreams == that.maxConcurrentStreams
+            && initialWindowSize == that.initialWindowSize
+            && maxFrameSize == that.maxFrameSize
+            && maxHeaderListSize == that.maxHeaderListSize
+            && settingsAckTimeoutMillis == that.settingsAckTimeoutMillis;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(enabled, maxHeaderTableSize, maxConcurrentStreams, initialWindowSize, maxFrameSize, maxHeaderListSize);
+        return Objects.hash(enabled, maxHeaderTableSize, maxConcurrentStreams, initialWindowSize, maxFrameSize, maxHeaderListSize, settingsAckTimeoutMillis);
     }
 
     @Override
@@ -297,6 +341,7 @@ public class Http2ConfigBuilder {
             ", initialWindowSize=" + initialWindowSize +
             ", maxFrameSize=" + maxFrameSize +
             ", maxHeaderListSize=" + maxHeaderListSize +
+            ", settingsAckTimeoutMillis=" + settingsAckTimeoutMillis +
             '}';
     }
 }

@@ -9,9 +9,11 @@ import java.util.Objects;
 public class Http2Config {
     private final boolean enabled;
     private final Http2Settings initialSettings;
-    Http2Config(boolean enabled, Http2Settings initialSettings) {
+    private final long settingsAckTimeoutMillis;
+    Http2Config(boolean enabled, Http2Settings initialSettings, long settingsAckTimeoutMillis) {
         this.enabled = enabled;
         this.initialSettings = initialSettings;
+        this.settingsAckTimeoutMillis = settingsAckTimeoutMillis;
     }
 
     /**
@@ -24,6 +26,7 @@ public class Http2Config {
             .withMaxFrameSize(initialSettings.maxFrameSize)
             .withMaxHeaderListSize(initialSettings.maxHeaderListSize)
             .withInitialWindowSize(initialSettings.initialWindowSize)
+            .withSettingsAckTimeoutMillis(settingsAckTimeoutMillis)
             .enabled(enabled);
     }
 
@@ -79,6 +82,15 @@ public class Http2Config {
         return initialSettings.maxHeaderListSize;
     }
 
+    /**
+     * Gets the timeout for receiving acknowledgements to locally-sent SETTINGS frames.
+     *
+     * @return the SETTINGS acknowledgement timeout in milliseconds
+     */
+    public long settingsAckTimeoutMillis() {
+        return settingsAckTimeoutMillis;
+    }
+
     Http2Settings initialSettings() {
         return initialSettings;
     }
@@ -88,12 +100,14 @@ public class Http2Config {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         Http2Config that = (Http2Config) o;
-        return enabled == that.enabled && Objects.equals(initialSettings, that.initialSettings);
+        return enabled == that.enabled
+            && settingsAckTimeoutMillis == that.settingsAckTimeoutMillis
+            && Objects.equals(initialSettings, that.initialSettings);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(enabled, initialSettings);
+        return Objects.hash(enabled, initialSettings, settingsAckTimeoutMillis);
     }
 
     @Override
@@ -101,6 +115,7 @@ public class Http2Config {
         return "Http2Config{" +
             "enabled=" + enabled +
             ", initialSettings=" + initialSettings +
+            ", settingsAckTimeoutMillis=" + settingsAckTimeoutMillis +
             '}';
     }
 }
