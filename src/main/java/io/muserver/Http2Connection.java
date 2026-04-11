@@ -21,6 +21,7 @@ import java.util.stream.Collectors;
 
 class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAvailableListener {
     private static final int MAX_POSSIBLE_STREAM_ID = 0x7fffffff;
+    static final long GO_AWAY_GRACE_PERIOD_MILLIS = 200;
     private static final Http2GoAway GO_AWAY_WARNING = new Http2GoAway(MAX_POSSIBLE_STREAM_ID, Http2ErrorCode.NO_ERROR.code(), null);
 
     private enum HState {
@@ -63,6 +64,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
     private final Condition writeQueueCondition = writeQueueLock.newCondition();
     private final Queue<WriteTask> writeQueue = new ArrayDeque<>();
     private volatile boolean finalGoAwayQueued;
+    private volatile long finalGoAwayEarliestTime = Long.MAX_VALUE;
 
     final FieldBlockEncoder fieldBlockEncoder;
 
@@ -150,22 +152,26 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         writeQueueLock.lock();
         try {
             readState = newState;
-            writeQueueCondition.signalAll();
+            signalWriteLoopLocked();
         } finally {
             writeQueueLock.unlock();
         }
     }
 
+    private void signalWriteLoopLocked() {
+        writeQueueCondition.signalAll();
+    }
+
     private void markPeerShutdownInitiatedLocked() {
         readState = HState.SHUTDOWN_INITIATED;
-        writeQueueCondition.signalAll();
+        signalWriteLoopLocked();
     }
 
     private void markLocalShutdownInitiatedLocked() {
         if (writeState == HState.ACTIVE) {
             log.info("Graceful shutdown initiated with write state {}", writeState);
             writeState = HState.SHUTDOWN_INITIATED;
-            maxAllowedStreamId = lastStreamId;
+            finalGoAwayEarliestTime = System.currentTimeMillis() + GO_AWAY_GRACE_PERIOD_MILLIS;
             // As per: https://datatracker.ietf.org/doc/html/rfc9113#section-6.8-18
             // A server that is attempting to gracefully shut down a connection SHOULD send an initial GOAWAY frame
             // with the last stream identifier set to 2^31-1 and a NO_ERROR code. This signals to the client that a
@@ -180,7 +186,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
     private void markConnectionErroredLocked() {
         readState = HState.ERRORED;
         writeState = HState.ERRORED;
-        writeQueueCondition.signalAll();
+        signalWriteLoopLocked();
     }
 
     private boolean isLocalShutdownInitiatedLocked() {
@@ -199,10 +205,28 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         return isLocalShutdownInitiatedLocked() || isPeerShutdownInitiatedLocked();
     }
 
-    private boolean shouldQueueFinalGoAwayLocked() {
-        return isShutdownInitiatedLocked()
-            && streams.isEmpty()
-            && !finalGoAwayQueued;
+    private long localGoAwayGracePeriodMillisRemainingLocked(long now) {
+        return Math.max(0L, finalGoAwayEarliestTime - now);
+    }
+
+    private boolean isStillAllowingInFlightStreamCreationLocked(long now) {
+        return isLocalShutdownInitiatedLocked()
+            && localGoAwayGracePeriodMillisRemainingLocked(now) > 0L;
+    }
+
+    private boolean canStartNewStreamsLocked(long now) {
+        return !isPeerShutdownInitiatedLocked()
+            && (!isLocalShutdownInitiatedLocked() || isStillAllowingInFlightStreamCreationLocked(now));
+    }
+
+    private boolean shouldQueueFinalGoAwayLocked(long now) {
+        if (finalGoAwayQueued) {
+            return false;
+        }
+        if (isLocalShutdownInitiatedLocked()) {
+            return localGoAwayGracePeriodMillisRemainingLocked(now) == 0L;
+        }
+        return isPeerShutdownInitiatedLocked() && streams.isEmpty();
     }
 
     private void queueFinalGoAwayLocked() {
@@ -216,6 +240,23 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         return (isReadTerminalLocked() || (isShutdownInitiatedLocked() && finalGoAwayQueued))
             && streams.isEmpty()
             && writeQueue.isEmpty();
+    }
+
+    private long millisUntilNextWriteActionLocked(long now) {
+        if (isLocalShutdownInitiatedLocked() && !finalGoAwayQueued) {
+            return localGoAwayGracePeriodMillisRemainingLocked(now);
+        }
+        return -1L;
+    }
+
+    private void awaitWriteLoopSignalLocked(long now) throws InterruptedException {
+        long waitTime = millisUntilNextWriteActionLocked(now);
+        if (waitTime > 0L) {
+            boolean wokeBySignal = writeQueueCondition.await(waitTime, TimeUnit.MILLISECONDS);
+            log.trace("Write loop woke {} while waiting for final GOAWAY deadline", wokeBySignal ? "by signal" : "by timeout");
+        } else {
+            writeQueueCondition.await();
+        }
     }
 
     private void completeShutdownLocked() {
@@ -522,8 +563,9 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
             boolean startRequest;
             writeQueueLock.lock();
             try {
-                if (isShutdownInitiatedLocked()) {
-                    log.info("Refusing stream {} because graceful shutdown has started", headerFragment.streamId());
+                long now = System.currentTimeMillis();
+                if (!canStartNewStreamsLocked(now)) {
+                    log.info("Refusing stream {} because graceful shutdown no longer allows new streams", headerFragment.streamId());
                     write(new Http2ResetStreamFrame(headerFragment.streamId(), Http2ErrorCode.REFUSED_STREAM.code()));
                     startRequest = false;
                 } else if (activeRequests().size() >= serverSettings.maxConcurrentStreams) {
@@ -567,14 +609,15 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
             while (writeState.canSendFrames) {
                 writeQueueLock.lock();
                 try {
+                    long now = System.currentTimeMillis();
                     drainWritableFramesLocked(clientOut, writtenTasks);
 
-                    if (shouldQueueFinalGoAwayLocked()) {
+                    if (shouldQueueFinalGoAwayLocked(now)) {
                         queueFinalGoAwayLocked();
                     } else if (isTerminalAndDrainedLocked()) {
                         completeShutdownLocked();
                     } else {
-                        writeQueueCondition.await();
+                        awaitWriteLoopSignalLocked(now);
                     }
                 } catch (Exception e) {
                     log.info("Write loop IO Exception with state=" + writeState);
@@ -597,18 +640,14 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         var stream = Http2Stream.start(this, frame, serverSettings, clientSettings);
         streams.put(frame.streamId(), stream);
         onRequestStarted(stream.request);
-        executorService.submit(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    handleExchange(stream.request, stream.response());
-                    stream.cleanup();
-                } catch (Throwable e) {
-                    log.info("Unhandled stream exception", e);
-                } finally {
-                    onExchangeEnded(stream);
-                }
-
+        executorService.submit(() -> {
+            try {
+                handleExchange(stream.request, stream.response());
+                stream.cleanup();
+            } catch (Throwable e) {
+                log.info("Unhandled stream exception", e);
+            } finally {
+                onExchangeEnded(stream);
             }
         });
     }

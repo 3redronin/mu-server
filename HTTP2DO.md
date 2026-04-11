@@ -19,10 +19,10 @@
  * 5.3. [ ] Prioritization
  * 5.3.1. [x] Background on Priority in RFC 7540
  * 5.3.2. [ ] Priority Signaling in This Document
- * 5.4. [x] Error Handling
- * 5.4.1. [x] Connection Error Handling
- * 5.4.2. [x] Stream Error Handling
- * 5.4.3. [x] Connection Termination
+ * 5.4. [ ] Error Handling
+ * 5.4.1. [ ] Connection Error Handling
+ * 5.4.2. [ ] Stream Error Handling
+ * 5.4.3. [ ] Connection Termination
  * 5.5. [x] Extending HTTP/2
 * 6. [ ] Frame Definitions
  * 6.1. [x] DATA
@@ -32,9 +32,9 @@
  * 6.5. [ ] SETTINGS
  * 6.5.1. [ ] SETTINGS Format
  * 6.5.2. [ ] Defined Settings
- * 6.5.3. [x] Settings Synchronization
+ * 6.5.3. [ ] Settings Synchronization
  * 6.6. [ ] PUSH_PROMISE
- * 6.7. [x] PING
+ * 6.7. [ ] PING
  * 6.8. [ ] GOAWAY
  * 6.9. [ ] WINDOW_UPDATE
  * 6.9.1. [ ] The Flow-Control Window

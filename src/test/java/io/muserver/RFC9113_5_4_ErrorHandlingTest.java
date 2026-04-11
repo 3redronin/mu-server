@@ -11,6 +11,8 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.RFCTestUtils.emptyEosDataFrame;
@@ -118,11 +120,17 @@ class RFC9113_5_4_ErrorHandlingTest {
 
         var goTime = new CountDownLatch(1);
         var started = new CountDownLatch(1);
+        var secondStarted = new CountDownLatch(1);
+        var requestCount = new AtomicInteger();
 
         server = httpsServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())
             .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
-                started.countDown();
+                if (requestCount.incrementAndGet() == 1) {
+                    started.countDown();
+                } else {
+                    secondStarted.countDown();
+                }
                 if (!goTime.await(5, TimeUnit.SECONDS)) {
                     throw new IllegalStateException("Timed out waiting to finish request");
                 }
@@ -146,14 +154,31 @@ class RFC9113_5_4_ErrorHandlingTest {
                 assertThat(con.readLogicalFrame(Http2GoAway.class), equalTo(goAway(0x7FFFFFFF, Http2ErrorCode.NO_ERROR)));
 
                 con.writeFrame(new Http2HeadersFrame(3, true, getHelloHeaders())).flush();
-                assertThat(con.readLogicalFrame(Http2ResetStreamFrame.class), equalTo(new Http2ResetStreamFrame(3, Http2ErrorCode.REFUSED_STREAM.code())));
+                assertThat(secondStarted.await(5, TimeUnit.SECONDS), equalTo(true));
+                assertThat(con.readLogicalFrame(Http2GoAway.class), equalTo(goAway(3, Http2ErrorCode.NO_ERROR)));
+
+                con.writeFrame(new Http2HeadersFrame(5, true, getHelloHeaders())).flush();
+                assertThat(con.readLogicalFrame(Http2ResetStreamFrame.class), equalTo(new Http2ResetStreamFrame(5, Http2ErrorCode.REFUSED_STREAM.code())));
 
                 goTime.countDown();
 
-                assertThat(con.readLogicalFrame(Http2HeadersFrame.class).streamId(), equalTo(1));
-                assertThat(con.readLogicalFrame(Http2DataFrame.class), equalTo(utf8DataFrame(1, false, "done")));
-                assertThat(con.readLogicalFrame(Http2DataFrame.class), equalTo(emptyEosDataFrame(1)));
-                assertThat(con.readLogicalFrame(Http2GoAway.class), equalTo(goAway(1, Http2ErrorCode.NO_ERROR)));
+                var nextFrames = List.of(
+                    con.readLogicalFrame(), con.readLogicalFrame(), con.readLogicalFrame(),
+                    con.readLogicalFrame(), con.readLogicalFrame(), con.readLogicalFrame()
+                );
+                assertThat(nextFrames.stream()
+                        .filter(Http2HeadersFrame.class::isInstance)
+                        .map(Http2HeadersFrame.class::cast)
+                        .map(Http2HeadersFrame::streamId)
+                        .collect(Collectors.toList()),
+                    containsInAnyOrder(1, 3));
+                assertThat(nextFrames.stream().filter(Http2DataFrame.class::isInstance).collect(Collectors.toList()),
+                    containsInAnyOrder(
+                        utf8DataFrame(1, false, "done"),
+                        emptyEosDataFrame(1),
+                        utf8DataFrame(3, false, "done"),
+                        emptyEosDataFrame(3)
+                    ));
 
                 stopped.get(5, TimeUnit.SECONDS);
                 assertThrows(IOException.class, con::readFrameHeader);

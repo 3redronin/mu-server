@@ -50,22 +50,20 @@ class RFC9113_6_8_GoAwayTest {
     }
 
     @Test
-    void aGracefulShutdownLetsRemainingRequestsComplete() throws Exception {
+    void aGracefulShutdownAllowsInFlightStreamCreationBeforeSendingTheFinalGoAway() throws Exception {
         var goTime = new CountDownLatch(1);
         var twoRequestsStartedLatch = new CountDownLatch(2);
+        var threeRequestsStartedLatch = new CountDownLatch(3);
         server = httpsServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())
             .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
                 twoRequestsStartedLatch.countDown();
-                System.out.println("Request started");
+                threeRequestsStartedLatch.countDown();
                 if (goTime.await(5, TimeUnit.SECONDS)) {
-                    System.out.println("Wrotten");
                     response.write("done");
                 } else {
-                    System.out.println("Timed out");
                     response.write("timed out");
                 }
-                System.out.println("Response complete");
             })
             .start();
         try (var client = new H2Client();
@@ -81,20 +79,27 @@ class RFC9113_6_8_GoAwayTest {
             var stopper = Executors.newSingleThreadExecutor();
             var stopped = stopper.submit(() -> server.stop());
 
-            System.out.println("server stopped");
             assertThat("Expected warning goaway", con.readLogicalFrame(),
                 equalTo(goAway(0x7FFFFFFF, Http2ErrorCode.NO_ERROR)));
-            System.out.println("Warning gotten");
+
             con.writeFrame(getHelloFrame(5)).flush();
-            System.out.println("Client sent stream 5");
-            assertThat(con.readLogicalFrame(), equalTo(new Http2ResetStreamFrame(5, Http2ErrorCode.REFUSED_STREAM.code())));
+            assertNotTimedOut("Waiting for grace-period stream to start", threeRequestsStartedLatch);
+
+            assertThat("Expected final goaway", con.readLogicalFrame(),
+                equalTo(goAway(5, Http2ErrorCode.NO_ERROR)));
+
+            con.writeFrame(getHelloFrame(7)).flush();
+            assertThat(con.readLogicalFrame(), equalTo(new Http2ResetStreamFrame(7, Http2ErrorCode.REFUSED_STREAM.code())));
 
             goTime.countDown();
 
             var nextFrames = List.of(
-                con.readLogicalFrame(), con.readLogicalFrame(), con.readLogicalFrame(), con.readLogicalFrame(), con.readLogicalFrame(), con.readLogicalFrame()
+                con.readLogicalFrame(), con.readLogicalFrame(), con.readLogicalFrame(),
+                con.readLogicalFrame(), con.readLogicalFrame(), con.readLogicalFrame(),
+                con.readLogicalFrame(), con.readLogicalFrame(), con.readLogicalFrame()
             );
             assertThat(nextFrames, containsInAnyOrder(
+                instanceOf(Http2HeadersFrame.class), instanceOf(Http2DataFrame.class), instanceOf(Http2DataFrame.class),
                 instanceOf(Http2HeadersFrame.class), instanceOf(Http2DataFrame.class), instanceOf(Http2DataFrame.class),
                 instanceOf(Http2HeadersFrame.class), instanceOf(Http2DataFrame.class), instanceOf(Http2DataFrame.class)
                 ));
@@ -104,12 +109,10 @@ class RFC9113_6_8_GoAwayTest {
                     utf8DataFrame(1, false, "done"),
                     emptyEosDataFrame(1),
                     utf8DataFrame(3, false, "done"),
-                    emptyEosDataFrame(3)
+                    emptyEosDataFrame(3),
+                    utf8DataFrame(5, false, "done"),
+                    emptyEosDataFrame(5)
                 ));
-
-            assertThat("Expected final goaway", con.readLogicalFrame(),
-                equalTo(goAway(3, Http2ErrorCode.NO_ERROR)));
-            System.out.println("Final gotten");
 
             stopped.get(5, TimeUnit.SECONDS);
             assertThrows(IOException.class, con::readFrameHeader);

@@ -63,6 +63,7 @@ class ConnectionAcceptor {
 
     private volatile State state = State.NOT_STARTED;
     private volatile long gracefulShutdownTimeoutMillis = 20_000;
+    private volatile long gracefulShutdownDeadlineMillis = Long.MAX_VALUE;
     private volatile boolean lastStopWasGraceful = true;
 
     private final boolean isHttps;
@@ -127,14 +128,17 @@ class ConnectionAcceptor {
 
     private boolean shutdownConnections() {
         log.info("Closing server with " + connections.size() + " connected connections");
-        Instant waitUntil = Instant.now().plusMillis(gracefulShutdownTimeoutMillis);
+        long waitUntil = gracefulShutdownDeadlineMillis;
+        if (waitUntil == Long.MAX_VALUE) {
+            waitUntil = System.currentTimeMillis() + gracefulShutdownTimeoutMillis;
+        }
         for (BaseHttpConnection connection : connections) {
             try {
                 connection.initiateGracefulShutdown();
             } catch (IOException ignored) {
             }
         }
-        while (!connections.isEmpty() && waitUntil.isAfter(Instant.now())) {
+        while (!connections.isEmpty() && System.currentTimeMillis() < waitUntil) {
             try {
                 Thread.sleep(10);
             } catch (InterruptedException e) {
@@ -301,6 +305,7 @@ class ConnectionAcceptor {
         state = State.STOPPING;
         gracefulShutdownTimeoutMillis = Math.max(0L, timeoutMillis);
         long deadline = System.currentTimeMillis() + gracefulShutdownTimeoutMillis;
+        gracefulShutdownDeadlineMillis = deadline;
         if (timeoutThread != null) {
             timeoutThread.interrupt();
             long remaining = Math.max(0L, deadline - System.currentTimeMillis());
