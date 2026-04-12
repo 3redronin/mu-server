@@ -65,6 +65,41 @@ class RFC9113_6_10_ContinuationTest {
             assertThrows(IOException.class, con::readFrameHeader);
         }
     }
+
+    @Test
+    void priorityFramesCannotBeInterleavedInsideAHeaderBlock() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .start();
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            byte[] encoded = encodeFieldBlock(getHelloHeaders(getPort()));
+            byte[] first = Arrays.copyOfRange(encoded, 0, 5);
+            byte[] second = Arrays.copyOfRange(encoded, 5, encoded.length);
+            con.handshake()
+                .writeRaw(headersFrame(1, true, false, first))
+                .writeRaw(priorityFrame(1))
+                .writeRaw(continuationFrame(1, true, second))
+                .flush();
+            assertThat(con.readLogicalFrame(), equalTo(goAway(0, Http2ErrorCode.PROTOCOL_ERROR)));
+            assertThrows(IOException.class, con::readFrameHeader);
+        }
+    }
+
+    private byte[] priorityFrame(int streamId) {
+        return new byte[] {
+            0, 0, 5,
+            0x02,
+            0,
+            (byte) (streamId >> 24),
+            (byte) (streamId >> 16),
+            (byte) (streamId >> 8),
+            (byte) streamId,
+            0, 0, 0, 0,
+            10
+        };
+    }
+
     private int getPort() {
         return server.uri().getPort();
     }

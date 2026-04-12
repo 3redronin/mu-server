@@ -4,28 +4,19 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.net.Socket;
-import java.net.SocketTimeoutException;
-import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
 
 import static io.muserver.MuServerBuilder.httpsServer;
+import static io.muserver.RFCTestUtils.assertNothingToRead;
+import static io.muserver.RFCTestUtils.getHelloHeaders;
 import static io.muserver.RFCTestUtils.postHelloHeaders;
 import static io.muserver.RFCTestUtils.readIgnoringWindowUpdates;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.notNullValue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static scaffolding.MuAssert.assertNotTimedOut;
 
 @DisplayName("RFC 9113 6.3 Frame Definitions: PRIORITY")
 class RFC9113_6_3_PriorityFrameTest {
@@ -90,6 +81,104 @@ class RFC9113_6_3_PriorityFrameTest {
 
     }
 
+    @Test
+    void priorityFramesOnIdleStreamsAreIgnoredWithoutCreatingStreams() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> response.status(202))
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake()
+                .writeFrame(new Http2PriorityFrame(3, false, 0, 10))
+                .flush();
+
+            assertNothingToRead(con.socket());
+
+            con.writeFrame(new Http2HeadersFrame(3, true, getHelloHeaders(getPort())))
+                .flush();
+
+            var response = con.readLogicalFrame(Http2HeadersFrame.class);
+            assertThat(response.streamId(), equalTo(3));
+            assertThat(response.headers().get(":status"), equalTo("202"));
+        }
+    }
+
+    @Test
+    void priorityFramesOnClosedStreamsAreIgnored() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> response.status(202))
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, true, getHelloHeaders(getPort())))
+                .flush();
+
+            var response = con.readLogicalFrame(Http2HeadersFrame.class);
+            assertThat(response.streamId(), equalTo(1));
+            assertThat(response.headers().get(":status"), equalTo("202"));
+
+            con.writeFrame(new Http2PriorityFrame(1, false, 0, 10))
+                .flush();
+
+            assertNothingToRead(con.socket());
+
+            con.writeFrame(new Http2HeadersFrame(3, true, getHelloHeaders(getPort())))
+                .flush();
+
+            var nextResponse = con.readLogicalFrame(Http2HeadersFrame.class);
+            assertThat(nextResponse.streamId(), equalTo(3));
+            assertThat(nextResponse.headers().get(":status"), equalTo("202"));
+        }
+    }
+
+    @Test
+    void priorityFramesWithInvalidLengthAreStreamErrors() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> response.status(202))
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake()
+                .writeRaw(priorityFrameWithPayloadLength(1, 4))
+                .flush();
+
+            var reset = con.readLogicalFrame(Http2ResetStreamFrame.class);
+            assertThat(reset.streamId(), equalTo(1));
+            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.FRAME_SIZE_ERROR));
+
+            con.writeFrame(new Http2HeadersFrame(3, true, getHelloHeaders(getPort())))
+                .flush();
+
+            var response = con.readLogicalFrame(Http2HeadersFrame.class);
+            assertThat(response.streamId(), equalTo(3));
+            assertThat(response.headers().get(":status"), equalTo("202"));
+        }
+    }
+
+    private static byte[] priorityFrameWithPayloadLength(int streamId, int payloadLength) {
+        byte[] frame = new byte[9 + payloadLength];
+        frame[0] = (byte) (payloadLength >> 16);
+        frame[1] = (byte) (payloadLength >> 8);
+        frame[2] = (byte) payloadLength;
+        frame[3] = 0x02;
+        frame[4] = 0;
+        frame[5] = (byte) (streamId >> 24);
+        frame[6] = (byte) (streamId >> 16);
+        frame[7] = (byte) (streamId >> 8);
+        frame[8] = (byte) streamId;
+        return frame;
+    }
+
     private int getPort() {
         return server.uri().getPort();
     }
@@ -116,21 +205,9 @@ class RFC9113_6_3_PriorityFrameTest {
             return streamId;
         }
 
-        public boolean exclusive() {
-            return exclusive;
-        }
-
-        public int streamDependencyId() {
-            return streamDependencyId;
-        }
-
-        public int weight() {
-            return weight;
-        }
-
         @Override
         public void writeTo(Http2Peer connection, OutputStream out) throws IOException {
-            int exclusiveMask = exclusive ? 0xFFFFFFFF : 0x7FFFFFFF;
+            int dependency = exclusive ? (streamDependencyId | 0x80000000) : streamDependencyId;
             out.write(new byte[] {
                 // payload length - always 5
                 0b00000000,
@@ -150,10 +227,10 @@ class RFC9113_6_3_PriorityFrameTest {
                 (byte) streamId,
 
                 // exclusive bit + stream dependency id
-                (byte) ((streamDependencyId >> 24) & exclusiveMask),
-                (byte) (streamDependencyId >> 16),
-                (byte) (streamDependencyId >> 8),
-                (byte) streamDependencyId,
+                (byte) (dependency >> 24),
+                (byte) (dependency >> 16),
+                (byte) (dependency >> 8),
+                (byte) dependency,
 
                 // weight
                 (byte)weight

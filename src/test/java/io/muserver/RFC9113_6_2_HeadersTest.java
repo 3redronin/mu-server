@@ -74,6 +74,7 @@ class RFC9113_6_2_HeadersTest {
         }
     }
 
+
     @Test
     void paddedHeadersFramesMustIncludeAPadLengthByte() throws Exception {
         server = httpsServer()

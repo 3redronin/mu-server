@@ -49,7 +49,7 @@ class Http2FrameHeader {
             }
         }
         var fixedSize = frameType.fixedSize();
-        if (fixedSize >= 0 && fixedSize != length) {
+        if (frameType != Http2FrameType.PRIORITY && fixedSize >= 0 && fixedSize != length) {
             throw Http2Exception.connection(Http2ErrorCode.FRAME_SIZE_ERROR, "frame content incorrect for fixed size frame");
         }
         var streamRequired = frameType.hasStream();

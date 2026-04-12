@@ -366,6 +366,10 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
                                 readResetStreamFrame(fh);
                                 break;
                             }
+                            case PRIORITY: {
+                                readPriorityFrame(fh);
+                                break;
+                            }
                             case CONTINUATION: {
                                 throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Out of order continuation frame");
                             }
@@ -450,6 +454,15 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
             if (streamId > lastStreamId || streamId % 2 == 0) {
                 throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Invalid stream ID on rst_stream");
             }
+        }
+    }
+
+
+    private void readPriorityFrame(Http2FrameHeader fh) throws Http2Exception {
+        int payloadLength = fh.length();
+        buffer.position(buffer.position() + payloadLength);
+        if (payloadLength != 5) {
+            throw Http2Exception.stream(Http2ErrorCode.FRAME_SIZE_ERROR, "PRIORITY frame payload must be 5 bytes", fh.streamId());
         }
     }
 
