@@ -6,6 +6,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -15,6 +16,7 @@ import static io.muserver.RFCTestUtils.*;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.notNullValue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @DisplayName("RFC 9113 6.9 Frame Definitions: WINDOW_UPDATE")
 class RFC9113_6_9_WindowUpdateTest {
@@ -158,6 +160,86 @@ class RFC9113_6_9_WindowUpdateTest {
             writeLatch.countDown();
             assertThat(con.readLogicalFrame(Http2DataFrame.class).toUTF8(), equalTo(" and done.")); // Get got
             assertThat(con.readLogicalFrame(Http2DataFrame.class).endStream(), equalTo(true)); // Get got
+        }
+    }
+
+    @Test
+    void connectionWindowUpdatesThatOverflowAreConnectionErrors() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .start();
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            con.handshake()
+                .writeFrame(windowUpdate(0, Integer.MAX_VALUE))
+                .flush();
+
+            var goaway = con.readLogicalFrame(Http2GoAway.class);
+            assertThat(goaway.lastStreamId(), equalTo(0));
+            assertThat(goaway.errorCodeEnum(), equalTo(Http2ErrorCode.FLOW_CONTROL_ERROR));
+            assertThrows(IOException.class, con::readFrameHeader);
+        }
+    }
+
+    @Test
+    void streamWindowUpdatesMustNotIncreaseConnectionCredit() throws Exception {
+        byte[] body = new byte[65535];
+        java.util.Arrays.fill(body, (byte) 'x');
+
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
+                response.outputStream().write(body);
+            })
+            .addHandler(Method.GET, "/small", (request, response, pathParams) -> {
+                response.write("y");
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, true, getHelloHeaders(getPort())))
+                .flush();
+
+            var headers = readIgnoringWindowUpdates(con, Http2HeadersFrame.class);
+            assertThat(headers.streamId(), equalTo(1));
+            assertThat(headers.headers().get(":status"), equalTo("200"));
+
+            int received = 0;
+            while (received < 65535) {
+                var frame = readIgnoringWindowUpdates(con, Http2DataFrame.class);
+                received += frame.payloadLength();
+                assertThat(frame.endStream(), equalTo(false));
+            }
+            assertThat(received, equalTo(65535));
+
+            assertThat(readIgnoringWindowUpdates(con, Http2DataFrame.class), equalTo(Http2DataFrame.eos(1)));
+
+            var smallHeaders = getHelloHeaders(getPort());
+            smallHeaders.set(":path", "/small");
+
+            con.writeFrame(new Http2HeadersFrame(3, true, smallHeaders)).flush();
+
+            headers = readIgnoringWindowUpdates(con, Http2HeadersFrame.class);
+            assertThat(headers.streamId(), equalTo(3));
+            assertThat(headers.headers().get(":status"), equalTo("200"));
+
+            assertNothingToRead(con.socket());
+
+            con.writeFrame(windowUpdate(1, 1)).flush();
+
+            assertNothingToRead(con.socket());
+
+            con.writeFrame(windowUpdate(0, 1)).flush();
+
+            var lastByte = readIgnoringWindowUpdates(con, Http2DataFrame.class);
+            assertThat(lastByte.streamId(), equalTo(3));
+            assertThat(lastByte.payloadLength(), equalTo(1));
+            assertThat(lastByte.toUTF8(), equalTo("y"));
+            assertThat(lastByte.endStream(), equalTo(false));
+
+            assertThat(readIgnoringWindowUpdates(con, Http2DataFrame.class), equalTo(Http2DataFrame.eos(3)));
         }
     }
 

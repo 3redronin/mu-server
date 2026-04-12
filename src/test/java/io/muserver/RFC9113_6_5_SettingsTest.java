@@ -18,6 +18,7 @@ import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.RFCTestUtils.assertNothingToRead;
 import static io.muserver.RFCTestUtils.goAway;
 import static io.muserver.RFCTestUtils.getHelloHeaders;
+import static io.muserver.RFCTestUtils.readIgnoringWindowUpdates;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.equalTo;
@@ -281,6 +282,130 @@ class RFC9113_6_5_SettingsTest {
     }
 
     @Test
+    void increasingInitialWindowSizeCanUnblockAnExistingStreamWithoutAStreamWindowUpdate() throws Exception {
+        var goTime = new CountDownLatch(1);
+        var requestStarted = new CountDownLatch(1);
+
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
+                requestStarted.countDown();
+                assertNotTimedOut("waiting to write response", goTime);
+                response.write("hello");
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake()
+                .writeRaw(settingsFrame(4, 0))
+                .flush();
+
+            assertThat(con.readLogicalFrame(), equalTo(Http2Settings.ACK));
+
+            con.writeFrame(new Http2HeadersFrame(1, true, getHelloHeaders(getPort())))
+                .flush();
+
+            assertNotTimedOut("waiting for request to start", requestStarted);
+
+            goTime.countDown();
+
+            var headers = con.readLogicalFrame(Http2HeadersFrame.class);
+            assertThat(headers.headers().get(":status"), equalTo("200"));
+
+            assertNothingToRead(con.socket());
+
+            con.writeRaw(settingsFrame(4, 5))
+                .flush();
+
+            assertThat(con.readLogicalFrame(), equalTo(Http2Settings.ACK));
+            assertThat(con.readLogicalFrame(Http2DataFrame.class).toUTF8(), equalTo("hello"));
+            assertThat(con.readLogicalFrame(), equalTo(Http2DataFrame.eos(1)));
+        }
+    }
+
+    @Test
+    void shrinkingInitialWindowSizeCanMakeOneExistingStreamNegativeWithoutBlockingAnother() throws Exception {
+        var stream1MaySendSecondChunk = new CountDownLatch(1);
+        var stream3MayWrite = new CountDownLatch(1);
+        var stream1Started = new CountDownLatch(1);
+        var stream3Started = new CountDownLatch(1);
+
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.GET, "/s1", (request, response, pathParams) -> {
+                stream1Started.countDown();
+                response.sendChunk("0123456789");
+                assertNotTimedOut("waiting for second s1 chunk", stream1MaySendSecondChunk);
+                response.sendChunk("A");
+            })
+            .addHandler(Method.GET, "/s3", (request, response, pathParams) -> {
+                stream3Started.countDown();
+                assertNotTimedOut("waiting for s3 to write", stream3MayWrite);
+                response.write("B");
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            var s1Headers = getHelloHeaders(getPort());
+            s1Headers.set(":path", "/s1");
+            var s3Headers = getHelloHeaders(getPort());
+            s3Headers.set(":path", "/s3");
+
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, true, s1Headers))
+                .writeFrame(new Http2HeadersFrame(3, true, s3Headers))
+                .flush();
+
+            assertNotTimedOut("waiting for s1 to start", stream1Started);
+            assertNotTimedOut("waiting for s3 to start", stream3Started);
+
+            var headers1 = readIgnoringWindowUpdates(con, Http2HeadersFrame.class);
+            assertThat(headers1.streamId(), equalTo(1));
+            assertThat(headers1.headers().get(":status"), equalTo("200"));
+
+            var firstChunk = readIgnoringWindowUpdates(con, Http2DataFrame.class);
+            assertThat(firstChunk.streamId(), equalTo(1));
+            assertThat(firstChunk.toUTF8(), equalTo("0123456789"));
+            assertThat(firstChunk.endStream(), equalTo(false));
+
+            con.writeRaw(settingsFrame(4, 5))
+                .flush();
+
+            assertThat(con.readLogicalFrame(), equalTo(Http2Settings.ACK));
+
+            stream1MaySendSecondChunk.countDown();
+            stream3MayWrite.countDown();
+
+            var headers3 = readIgnoringWindowUpdatesForStream(con, Http2HeadersFrame.class, 3);
+            assertThat(headers3.headers().get(":status"), equalTo("200"));
+
+            var stream3Data = readIgnoringWindowUpdatesForStream(con, Http2DataFrame.class, 3);
+            assertThat(stream3Data.toUTF8(), equalTo("B"));
+            assertThat(stream3Data.endStream(), equalTo(false));
+            assertThat(readIgnoringWindowUpdatesForStream(con, Http2DataFrame.class, 3), equalTo(Http2DataFrame.eos(3)));
+
+            assertNothingToRead(con.socket());
+
+            con.writeFrame(new Http2WindowUpdate(1, 5))
+                .flush();
+
+            assertNothingToRead(con.socket());
+
+            con.writeFrame(new Http2WindowUpdate(1, 1))
+                .flush();
+
+            var secondChunk = readIgnoringWindowUpdatesForStream(con, Http2DataFrame.class, 1);
+            assertThat(secondChunk.toUTF8(), equalTo("A"));
+            assertThat(secondChunk.endStream(), equalTo(false));
+            assertThat(readIgnoringWindowUpdatesForStream(con, Http2DataFrame.class, 1), equalTo(Http2DataFrame.eos(1)));
+        }
+    }
+
+    @Test
     void serverSettingsAreOnlyAckPendingAfterTheyAreSent() throws Exception {
         server = httpsServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled().withSettingsAckTimeoutMillis(5000))
@@ -334,6 +459,31 @@ class RFC9113_6_5_SettingsTest {
 
     private int getPort() {
         return server.uri().getPort();
+    }
+
+    private static <T extends LogicalHttp2Frame> T readIgnoringWindowUpdatesForStream(H2ClientConnection con, Class<T> clazz, int streamId) throws IOException, Http2Exception {
+        while (true) {
+            var frame = con.readLogicalFrame();
+            if (frame instanceof Http2WindowUpdate) {
+                continue;
+            }
+            if (clazz.isAssignableFrom(frame.getClass())) {
+                if (frame instanceof Http2HeadersFrame) {
+                    var headers = (Http2HeadersFrame) frame;
+                    if (headers.streamId() == streamId) {
+                        return clazz.cast(headers);
+                    }
+                } else if (frame instanceof Http2DataFrame) {
+                    var data = (Http2DataFrame) frame;
+                    if (data.streamId() == streamId) {
+                        return clazz.cast(data);
+                    }
+                } else {
+                    return clazz.cast(frame);
+                }
+            }
+            throw new IllegalStateException("Expected " + clazz.getName() + " for stream " + streamId + ", got " + frame);
+        }
     }
 
     @SuppressWarnings("unchecked")

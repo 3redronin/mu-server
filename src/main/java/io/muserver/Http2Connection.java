@@ -470,8 +470,10 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
 
     private void readWindowUpdate(Http2FrameHeader fh) throws Http2Exception {
         var windowUpdate = Http2WindowUpdate.readFrom(fh, buffer);
-        outgoingFlowControl.applyWindowUpdate(windowUpdate);
-        if (windowUpdate.level() == Http2Level.STREAM) {
+        if (windowUpdate.level() == Http2Level.CONNECTION) {
+            outgoingFlowControl.applyWindowUpdate(windowUpdate);
+            signalWriteLoop();
+        } else {
             Http2Stream stream = streams.get(windowUpdate.streamId());
             if (stream != null) {
                 stream.onWindowUpdate(windowUpdate);

@@ -306,9 +306,7 @@ public class MuServerTest {
             .sendHeader("Host", server.uri().getAuthority())
             .endHeaders()
             .flushRequest()) {
-            while (client.responseString().isEmpty()) {
-                Thread.sleep(100);
-            }
+            assertEventually(client::responseString, endsWith("Invalid request URL"));
             String body = client.responseString();
             assertThat(body, startsWith("HTTP/1.1 400 Bad Request"));
             assertThat(body, endsWith("Invalid request URL"));

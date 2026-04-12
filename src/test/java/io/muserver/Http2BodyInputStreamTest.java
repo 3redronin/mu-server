@@ -80,6 +80,26 @@ class Http2BodyInputStreamTest {
         assertThat(discardCallbackValue.get(), equalTo(8L - firstReadSize));
     }
 
+    @ParameterizedTest
+    @ValueSource(ints = {1, 2, 4})
+    void unreadQueuedCreditAcrossMultipleFramesIsRefundedOnCancel(int firstReadSize) throws Exception {
+        var readCallbackValue = new AtomicLong();
+        var discardCallbackValue = new AtomicLong();
+
+        try (var stream = new Http2BodyInputStream(10000, readCallbackValue::addAndGet, discardCallbackValue::addAndGet)) {
+            stream.onData(data("Hello", false), 8);
+            stream.onData(data("world", false), 9);
+
+            var buffer = new byte[8];
+            assertThat(stream.read(buffer, 0, firstReadSize), equalTo(firstReadSize));
+
+            stream.cancel(new IOException("cancelled"));
+        }
+
+        assertThat(readCallbackValue.get(), equalTo((long) firstReadSize));
+        assertThat(discardCallbackValue.get(), equalTo((8L - firstReadSize) + 9L));
+    }
+
     private Http2DataFrame data(String data, boolean eos) {
         byte[] bytes = data.getBytes(StandardCharsets.UTF_8);
         return new Http2DataFrame(1, eos, bytes, 0, bytes.length);
