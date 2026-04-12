@@ -6,21 +6,39 @@ import java.nio.ByteBuffer;
 
 class HuffmanDecoder {
 
-    static HeaderString decodeFrom(ByteBuffer bb, int len, HeaderString.Type type) {
+    static HeaderString decodeFrom(ByteBuffer bb, int len, HeaderString.Type type) throws Http2Exception {
         var sb = new StringBuilder();
         var node = root;
+        int bitsSinceLastSymbol = 0;
+        boolean tailBitsAreAllOnes = true;
         while (len > 0) {
             len--;
 
             int b = bb.get() & 0xff;
             for (int j = 7; j >= 0; j--) {
                 var isLeft = (b & (1 << j)) == 0;
+                bitsSinceLastSymbol++;
+                tailBitsAreAllOnes &= !isLeft;
                 node = isLeft ? node.left : node.right;
+                if (node == null) {
+                    throw new Http2Exception(Http2ErrorCode.COMPRESSION_ERROR, "invalid huffman encoding");
+                }
                 if (node.leaf) {
+                    if (node.c > 255) {
+                        throw new Http2Exception(Http2ErrorCode.COMPRESSION_ERROR, "EOS must not appear in a huffman encoded string");
+                    }
                     char c = node.c;
                     sb.append(c);
                     node = root;
+                    bitsSinceLastSymbol = 0;
+                    tailBitsAreAllOnes = true;
                 }
+            }
+        }
+
+        if (node != root) {
+            if (bitsSinceLastSymbol > 7 || !tailBitsAreAllOnes) {
+                throw new Http2Exception(Http2ErrorCode.COMPRESSION_ERROR, "invalid huffman padding");
             }
         }
 

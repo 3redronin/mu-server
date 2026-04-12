@@ -7,26 +7,32 @@ class FieldBlockDecoder {
     private final int maxUriLength;
     private final int maxHeadersSize;
     private final HpackTable table;
+    private int allowedMaxTableSize;
 
     FieldBlockDecoder(HpackTable table, int maxUriLength, int maxHeadersSize) {
         this.table = table;
         this.maxUriLength = maxUriLength;
         this.maxHeadersSize = maxHeadersSize;
+        this.allowedMaxTableSize = table.maxSize();
     }
 
     FieldBlock decodeFrom(ByteBuffer buffer) throws HttpException, Http2Exception {
         var fb = new FieldBlock();
         int totalLen = 0;
         int uriLen = 0;
+        boolean canChangeTableSize = true;
 
         while (buffer.hasRemaining()) {
             byte b = buffer.get();
 
             if ((b & 0b10000000) > 0) {
                 // RFC7541 6.1. Indexed Header Field Representation
+                canChangeTableSize = false;
                 int index = readHpackInt(7, b, buffer);
                 fb.add(table.getValue(index));
             } else {
+                // RFC7541 6.3. Dynamic Table Size Update
+                boolean tableSizeUpdate = (b & 0b11100000) == 0b00100000;
                 // RFC7541 6.2.1. Literal Header Field with Incremental Indexing
                 boolean litWith = (b & 0b01000000) > 0;
                 // RFC7541 6.2.2. Literal Header Field without Indexing
@@ -34,7 +40,17 @@ class FieldBlockDecoder {
                 // RFC7541 6.2.3. Literal Header Field Never Indexed
                 boolean litNever = (b & 0b11110000) == 0b00010000;
 
-                if (litWith || litWithout || litNever) {
+                if (tableSizeUpdate) {
+                    if (!canChangeTableSize) {
+                        throw new Http2Exception(Http2ErrorCode.COMPRESSION_ERROR, "dynamic table size update must be at the start of the field block");
+                    }
+                    int newSize = readHpackInt(5, b, buffer);
+                    if (newSize > allowedMaxTableSize) {
+                        throw new Http2Exception(Http2ErrorCode.COMPRESSION_ERROR, "dynamic table size update exceeds the configured maximum");
+                    }
+                    table.changeMaxSize(newSize);
+                } else if (litWith || litWithout || litNever) {
+                    canChangeTableSize = false;
                     int prefixLen = litWith ? 6 : 4;
                     var nameIndex = readHpackInt(prefixLen, b, buffer);
                     HeaderString name;
@@ -125,6 +141,7 @@ class FieldBlockDecoder {
     }
 
     public void changeTableSize(int headerTableSize) {
+        this.allowedMaxTableSize = headerTableSize;
         table.changeMaxSize(headerTableSize);
     }
 }

@@ -89,6 +89,10 @@ class HpackTable {
         this.maxSize = maxSize;
     }
 
+    int maxSize() {
+        return maxSize;
+    }
+
     void changeMaxSize(int newSize) {
         if (newSize != maxSize) {
             maxSize = newSize;
