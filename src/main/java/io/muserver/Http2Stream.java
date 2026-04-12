@@ -176,6 +176,13 @@ class Http2Stream implements ResponseInfo {
                 }
             } else {
                 regularHeadersStarted = true;
+                // RFC 9113 §8.2.1: field names MUST be lowercase in HTTP/2
+                for (int i = 0; i < n.length(); i++) {
+                    char c = n.charAt(i);
+                    if (c >= 'A' && c <= 'Z') {
+                        throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "uppercase field name in HTTP/2 request", id);
+                    }
+                }
             }
             if (n == HeaderNames.PSEUDO_AUTHORITY) {
                 if (authority != null) throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "double :authority", id);
@@ -216,12 +223,30 @@ class Http2Stream implements ResponseInfo {
                 throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "connection", id);
             } else if (n == HeaderNames.TRANSFER_ENCODING) {
                 throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "transfer-encoding", id);
+            } else if (n == HeaderNames.KEEP_ALIVE) {
+                // RFC 9113 §8.2.2: connection-specific header fields MUST NOT be used in HTTP/2
+                throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "keep-alive", id);
+            } else if (n == HeaderNames.PROXY_CONNECTION) {
+                // RFC 9113 §8.2.2: connection-specific header fields MUST NOT be used in HTTP/2
+                throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "proxy-connection", id);
+            } else if (n == HeaderNames.UPGRADE) {
+                // RFC 9113 §8.2.2: connection-specific header fields MUST NOT be used in HTTP/2
+                throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "upgrade", id);
+            } else if (n == HeaderNames.TE) {
+                // RFC 9113 §8.2.2: TE header MAY appear but MUST NOT contain any value other than "trailers"
+                if (!"trailers".equalsIgnoreCase(line.value().toString())) {
+                    throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "te header with value other than trailers", id);
+                }
             } else if (pseudoHeader) {
                 throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "unexpected pseudo header", id);
             }
         }
         if (method == null || path == null || scheme == null) {
             throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "missing required pseudo header", id);
+        }
+        // RFC 9113 §8.3.1: the :path pseudo-header field MUST NOT be empty
+        if (path.length() == 0) {
+            throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "empty :path pseudo-header", id);
         }
         if (authority == null) {
             // TODO: use this somehow
