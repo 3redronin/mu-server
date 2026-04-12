@@ -1,13 +1,18 @@
 name: Build and test
 
-on: [push, pull_request]
+on:
+  push:
+    branches:
+      - master
+      - mu3
+  pull_request:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        java: [ 11, 17, 21 ]
+        java: [ 11, 17, 21, 25 ]
     name: Java ${{ matrix.java }} build
     steps:
       - uses: actions/checkout@v4
