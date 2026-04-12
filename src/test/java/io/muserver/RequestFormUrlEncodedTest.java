@@ -4,6 +4,7 @@ import okhttp3.FormBody;
 import okhttp3.Response;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import scaffolding.Http1Client;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 
@@ -119,6 +120,30 @@ public class RequestFormUrlEncodedTest {
         }
         assertThat(actual[0], instanceOf(IllegalStateException.class));
         assertThat(actual[0].getMessage(), equalTo("The body of the request message cannot be read twice. This can happen when calling any 2 of inputStream(), readBodyAsString(), or form() methods."));
+    }
+
+    @Test
+    public void trailersCanBeReadAfterFormParsing() throws Exception {
+        server = ServerUtils.httpsServerForTest("http")
+            .addHandler((request, response) -> {
+                response.write(request.form().get("hello") + "|" + request.trailers().get("checksum"));
+                return true;
+            })
+            .start();
+
+        try (var client = Http1Client.connect(server.uri())) {
+            client.writeRequestLine(Method.POST, "/")
+                .writeHeader("content-type", "application/x-www-form-urlencoded")
+                .writeHeader("transfer-encoding", "chunked")
+                .endHeaders()
+                .writeAscii("b\r\nhello=world\r\n")
+                .writeAscii("0\r\nchecksum: abc123\r\n\r\n")
+                .flush();
+
+            client.readLine();
+            var headers = client.readHeaders();
+            assertThat(client.readBody(headers), equalTo("world|abc123"));
+        }
     }
 
     @AfterEach

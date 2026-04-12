@@ -12,7 +12,7 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
-class Http2BodyInputStream extends InputStream {
+class Http2BodyInputStream extends InputStream implements RequestTrailersAccessor {
 
     private static class PendingDataFrame {
         final Http2DataFrame dataFrame;
@@ -36,6 +36,15 @@ class Http2BodyInputStream extends InputStream {
     private final Lock lock = new ReentrantLock();
     private final Queue<Object> frames = new LinkedList<>();
     private final Condition hasData = lock.newCondition();
+    private boolean requestBodyComplete;
+    private @org.jspecify.annotations.Nullable FieldBlock trailers;
+
+    private static final class EndOfStreamMarker {
+        private EndOfStreamMarker() {
+        }
+    }
+
+    private static final EndOfStreamMarker END_OF_STREAM = new EndOfStreamMarker();
 
     Http2BodyInputStream(long readTimeoutMillis, CreditAvailableListener onDataReadCallback, CreditAvailableListener onDataDiscardedCallback) {
         this.readTimeoutMillis = readTimeoutMillis;
@@ -105,6 +114,8 @@ class Http2BodyInputStream extends InputStream {
                     throw new IOException("Http2 error updating flow control", e);
                 }
                 return readAmount;
+            } else if (frame == END_OF_STREAM) {
+                return -1;
             } else if (frame instanceof IOException) {
                 throw (IOException) frame;
             } else {
@@ -126,10 +137,25 @@ class Http2BodyInputStream extends InputStream {
             lock.lock();
             try {
                 frames.add(new PendingDataFrame(dataFrame, flowControlSize));
+                if (dataFrame.endStream()) {
+                    requestBodyComplete = true;
+                }
                 hasData.signal();
             } finally {
                 lock.unlock();
             }
+        }
+    }
+
+    void onTrailers(FieldBlock trailers) {
+        lock.lock();
+        try {
+            this.trailers = trailers;
+            this.requestBodyComplete = true;
+            frames.add(END_OF_STREAM);
+            hasData.signal();
+        } finally {
+            lock.unlock();
         }
     }
 
@@ -179,6 +205,30 @@ class Http2BodyInputStream extends InputStream {
 
     void cancel(IOException reason, boolean refundUnreadData) {
         setErrored(reason, refundUnreadData);
+    }
+
+
+    @Override
+    public boolean isRequestBodyComplete() {
+        lock.lock();
+        try {
+            if (requestBodyComplete) {
+                return true;
+            }
+            Object frame = frames.peek();
+            if (frame instanceof PendingDataFrame) {
+                var pending = (PendingDataFrame) frame;
+                return pending.dataFrame.endStream() && pending.currentOffset == pending.dataFrame.payloadLength();
+            }
+            return frame == END_OF_STREAM;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    @Override
+    public @org.jspecify.annotations.Nullable Headers trailers() {
+        return trailers;
     }
 
 

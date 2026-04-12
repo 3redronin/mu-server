@@ -86,6 +86,35 @@ class Http2Stream implements ResponseInfo {
         return state == State.OPEN || state == State.HALF_CLOSED_LOCAL;
     }
 
+    void onTrailers(Http2HeadersFrame headersFrame) throws Http2Exception {
+        if (!canReceiveData()) {
+            state = State.CLOSED;
+            throw new Http2Exception(Http2ErrorCode.STREAM_CLOSED, "Invalid state for trailers", id);
+        }
+        if (!headersFrame.endStream()) {
+            throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "Trailing headers must end the stream", id);
+        }
+        for (FieldLine line : headersFrame.headers().lineIterator()) {
+            HeaderString name = line.name();
+            if (name.charAt(0) == ':' || RequestTrailers.isForbiddenTrailerField(name)) {
+                throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "invalid trailer field", id);
+            }
+        }
+        if (bodyInputStream instanceof Http2BodyInputStream) {
+            ((Http2BodyInputStream) bodyInputStream).onTrailers(headersFrame.headers());
+        }
+        switch (state) {
+            case OPEN:
+                state = State.HALF_CLOSED_REMOTE;
+                break;
+            case HALF_CLOSED_LOCAL:
+                state = State.CLOSED;
+                break;
+            default:
+                throw new IllegalStateException("Invalid state for trailers: " + state);
+        }
+    }
+
     void onData(int flowControlSize, Http2DataFrame dataFrame) throws Http2Exception {
         // todo: thread safety
         if (!canReceiveData()) {

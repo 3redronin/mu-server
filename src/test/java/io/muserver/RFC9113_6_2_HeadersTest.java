@@ -119,6 +119,66 @@ class RFC9113_6_2_HeadersTest {
         }
     }
 
+    @Test
+    void trailingHeadersCanBeReadAfterTheRequestBody() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.POST, "/hello", (request, response, pathParams) -> {
+                response.write(request.readBodyAsString() + "|" + request.trailers().get("checksum"));
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            FieldBlock trailers = new FieldBlock();
+            trailers.add("checksum", "abc123");
+
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, false, postHelloHeaders(getPort())))
+                .writeFrame(utf8DataFrame(1, false, "Hello"))
+                .writeFrame(new Http2HeadersFrame(1, true, trailers))
+                .flush();
+
+            var headers = readIgnoringWindowUpdates(con, Http2HeadersFrame.class);
+            assertThat(headers.streamId(), equalTo(1));
+            assertThat(headers.headers().get(":status"), equalTo("200"));
+
+            assertThat(readIgnoringWindowUpdates(con, Http2DataFrame.class).toUTF8(), equalTo("Hello|abc123"));
+            assertThat(readIgnoringWindowUpdates(con, Http2DataFrame.class).endStream(), equalTo(true));
+        }
+    }
+
+    @Test
+    void invalidTrailerFieldsAreStreamErrors() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.POST, "/hello", (request, response, pathParams) -> response.write(request.readBodyAsString()))
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            FieldBlock trailers = new FieldBlock();
+            trailers.add("content-length", "123");
+
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, false, postHelloHeaders(getPort())))
+                .writeFrame(utf8DataFrame(1, false, "Hello"))
+                .writeFrame(new Http2HeadersFrame(1, true, trailers))
+                .flush();
+
+            var reset = con.readLogicalFrame(Http2ResetStreamFrame.class);
+            assertThat(reset.streamId(), equalTo(1));
+            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+
+            con.writeFrame(new Http2HeadersFrame(3, true, postHelloHeaders(getPort()))).flush();
+            var response = con.readLogicalFrame(Http2HeadersFrame.class);
+            assertThat(response.streamId(), equalTo(3));
+            assertThat(response.headers().get(":status"), equalTo("200"));
+        }
+    }
+
     private int getPort() {
         return server.uri().getPort();
     }

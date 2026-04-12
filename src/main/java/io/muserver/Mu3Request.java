@@ -98,6 +98,22 @@ class Mu3Request implements MuRequest {
     }
 
     @Override
+    public Headers trailers() {
+        if (bodySize == BodySize.NONE) {
+            return Headers.create();
+        }
+        if (!(body instanceof RequestTrailersAccessor)) {
+            return Headers.create();
+        }
+        var accessor = (RequestTrailersAccessor) body;
+        if (!accessor.isRequestBodyComplete()) {
+            throw new IllegalStateException("The request trailers are not available until the full request body has been read.");
+        }
+        var trailers = accessor.trailers();
+        return trailers == null ? Headers.create() : trailers;
+    }
+
+    @Override
     public InputStream body() {
         return body;
     }

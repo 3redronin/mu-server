@@ -9,7 +9,7 @@ import java.nio.ByteBuffer;
 import java.text.ParseException;
 import java.util.concurrent.atomic.AtomicReference;
 
-class Http1BodyStream extends InputStream {
+class Http1BodyStream extends InputStream implements RequestTrailersAccessor {
 
     enum State {
         READING, EOF, IO_EXCEPTION, TIMED_OUT
@@ -20,6 +20,8 @@ class Http1BodyStream extends InputStream {
 
     @Nullable
     private ByteBuffer bb = null;
+    @Nullable
+    private FieldBlock trailers = null;
     private boolean lastBitReceived = false;
     private long bytesReceived = 0L;
 
@@ -106,6 +108,7 @@ class Http1BodyStream extends InputStream {
                             throw (pe instanceof IOException) ? (IOException) pe : new IOException("Parse error in request body", pe);
                         }
                         if (next == MessageBodyBit.EndOfBodyBit) {
+                            trailers = parser instanceof Http1MessageParser ? ((Http1MessageParser) parser).takeTrailers() : null;
                             bb = null;
                             status.set(State.EOF);
                             ready = true;
@@ -176,6 +179,7 @@ class Http1BodyStream extends InputStream {
                     break;
                 }
                 if (last == MessageBodyBit.EndOfBodyBit) {
+                    trailers = parser instanceof Http1MessageParser ? ((Http1MessageParser) parser).takeTrailers() : null;
                     drained = true;
                 } else if (last == MessageBodyBit.EOFMsg) {
                     status.set(State.IO_EXCEPTION);
@@ -194,5 +198,15 @@ class Http1BodyStream extends InputStream {
             }
         }
         return status.get();
+    }
+
+    @Override
+    public boolean isRequestBodyComplete() {
+        return status.get() == State.EOF;
+    }
+
+    @Override
+    public @Nullable Headers trailers() {
+        return trailers;
     }
 }

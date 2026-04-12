@@ -77,6 +77,16 @@ public interface MuRequest {
     Optional<InputStream> inputStream();
 
     /**
+     * Gets the request trailers.
+     * <p>If the request has a body, then trailers are only available once the full body has been read.</p>
+     * <p>If there are no trailers, then an empty headers object is returned.</p>
+     *
+     * @return The request trailers, or empty headers if none were sent.
+     * @throws IllegalStateException Thrown if the request body has not been fully read yet.
+     */
+    Headers trailers();
+
+    /**
      * <p>The input stream of the request body.</p>
      * <p>If there is no body then an empty input stream is returned.</p>
      * @return the input stream of the request body

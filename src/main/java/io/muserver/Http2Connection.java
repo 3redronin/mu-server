@@ -554,12 +554,20 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
     }
 
     private void readHeaders(InputStream clientIn, Http2FrameHeader fh, FieldBlockDecoder fieldBlockDecoder) throws Http2Exception, IOException {
-        if (fh.streamId() <= lastStreamId || (fh.streamId() % 2) == 0) {
+        if (fh.streamId() == 0 || (fh.streamId() % 2) == 0) {
             throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Invalid stream ID " + fh.streamId());
         }
         try {
             var headerFragment = Http2HeadersFrame.readLogicalFrame(fh, fieldBlockDecoder, buffer, clientIn);
             log.info("Got headers " + headerFragment);
+            var existing = streams.get(headerFragment.streamId());
+            if (existing != null) {
+                existing.onTrailers(headerFragment);
+                return;
+            }
+            if (fh.streamId() <= lastStreamId) {
+                throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Invalid stream ID " + fh.streamId());
+            }
             boolean startRequest;
             writeQueueLock.lock();
             try {

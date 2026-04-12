@@ -54,6 +54,11 @@ public class NotImplementedMuRequest implements MuRequest {
     }
 
     @Override
+    public Headers trailers() {
+        return throwIt();
+    }
+
+    @Override
     public BodySize declaredBodySize() {
         return throwIt();
     }

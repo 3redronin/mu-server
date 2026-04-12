@@ -45,6 +45,8 @@ class Http1MessageParser implements Http1MessageReader {
     private final ByteArrayOutputStream buffer = new ByteArrayOutputStream();
     @Nullable
     private String headerName = null;
+    @Nullable
+    private FieldBlock trailers = null;
     private long curHeadersLen = 0L;
 
     final byte[] readBuffer =  new byte[8192];
@@ -372,9 +374,9 @@ class Http1MessageParser implements Http1MessageReader {
                             append(buffer, b);
                             var trailerPart = buffer.toString(StandardCharsets.US_ASCII);
                             if (trailerPart.endsWith("\r\n\r\n")) {
+                                trailers = parseTrailers(trailerPart);
                                 buffer.reset();
                                 onMessageEnded();
-                                // TODO: pass back the trailers
                                 return EndOfBodyBit;
                             }
                         } else throw new ParseException("state=" + state + " b=" + b, position);
@@ -442,6 +444,27 @@ class Http1MessageParser implements Http1MessageReader {
                 this.state = ParseState.RESPONSE_START;
             }
         }
+    }
+
+    @Nullable
+    FieldBlock takeTrailers() {
+        var current = trailers;
+        trailers = null;
+        return current;
+    }
+
+    private static FieldBlock parseTrailers(String trailerPart) {
+        var parsed = new FieldBlock();
+        for (String line : trailerPart.split("\\r\\n")) {
+            if (line.isEmpty()) continue;
+            String[] bits = line.split(":", 2);
+            String value = bits.length == 1 ? "" : bits[1].trim();
+            if (!value.isEmpty()) {
+                parsed.add(bits[0], value);
+            }
+        }
+        RequestTrailers.validate(parsed);
+        return parsed;
     }
 
     private enum ParseState {

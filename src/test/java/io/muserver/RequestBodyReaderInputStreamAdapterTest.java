@@ -199,6 +199,87 @@ public class RequestBodyReaderInputStreamAdapterTest {
 
     }
 
+    @Test
+    public void chunkedRequestTrailersCanBeReadAfterTheBody() throws Exception {
+        server = httpServer()
+            .addHandler((request, response) -> {
+                try (var isr = new InputStreamReader(request.inputStream().get())) {
+                    var buffer = new char[100];
+                    int read;
+                    var sb = new StringBuilder();
+                    while ((read = isr.read(buffer)) != -1) {
+                        sb.append(buffer, 0, read);
+                    }
+                    response.write(sb + "|" + request.trailers().get("checksum"));
+                }
+                return true;
+            })
+            .start();
+
+        try (var client = Http1Client.connect(server.uri())) {
+            client.writeRequestLine(Method.POST, "/")
+                .writeHeader("content-type", "text/plain")
+                .writeHeader("transfer-encoding", "chunked")
+                .endHeaders()
+                .writeAscii("5\r\nHello\r\n")
+                .writeAscii("1\r\n \r\n")
+                .writeAscii("5\r\nWorld\r\n")
+                .writeAscii("0\r\nchecksum: abc123\r\n\r\n")
+                .flush();
+            client.readLine();
+            var headers = client.readHeaders();
+            var body = client.readBody(headers);
+            assertThat(body, equalTo("Hello World|abc123"));
+        }
+    }
+
+    @Test
+    public void requestTrailersAreNotAvailableUntilTheBodyHasBeenFullyRead() throws Exception {
+        server = httpServer()
+            .addHandler((request, response) -> {
+                try (var input = request.inputStream().orElseThrow()) {
+                    assertThat(input.read(), equalTo((int) 'H'));
+                    try {
+                        request.trailers();
+                        response.write("nope");
+                    } catch (IllegalStateException expected) {
+                        response.write("not yet");
+                    }
+                }
+                return true;
+            })
+            .start();
+
+        try (var client = Http1Client.connect(server.uri())) {
+            client.writeRequestLine(Method.POST, "/")
+                .writeHeader("content-type", "text/plain")
+                .writeHeader("transfer-encoding", "chunked")
+                .endHeaders()
+                .writeAscii("5\r\nHello\r\n")
+                .writeAscii("0\r\nchecksum: abc123\r\n\r\n")
+                .flush();
+            client.readLine();
+            var headers = client.readHeaders();
+            var body = client.readBody(headers);
+            assertThat(body, equalTo("not yet"));
+        }
+    }
+
+    @Test
+    public void requestsWithoutBodiesHaveEmptyTrailers() throws Exception {
+        server = httpServer()
+            .addHandler((request, response) -> {
+                response.write(Boolean.toString(request.trailers().isEmpty()));
+                return true;
+            })
+            .start();
+
+        try (Response resp = call(request(server.uri()))) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.body().string(), equalTo("true"));
+        }
+    }
+
 
 
     @Test

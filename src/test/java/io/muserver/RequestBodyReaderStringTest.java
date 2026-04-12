@@ -108,6 +108,54 @@ public class RequestBodyReaderStringTest {
     }
 
     @Test
+    public void requestTrailersCanBeReadAfterReadBodyAsString() throws Exception {
+        server = ServerUtils.httpsServerForTest("http")
+            .addHandler((request, response) -> {
+                response.write(request.readBodyAsString() + "|" + request.trailers().get("checksum"));
+                return true;
+            })
+            .start();
+
+        try (var client = Http1Client.connect(server.uri())) {
+            client.writeRequestLine(Method.POST, "/")
+                .writeHeader("content-type", "text/plain; charset=utf-8")
+                .writeHeader("transfer-encoding", "chunked")
+                .endHeaders()
+                .writeAscii("5\r\nHello\r\n")
+                .writeAscii("1\r\n \r\n")
+                .writeAscii("5\r\nWorld\r\n")
+                .writeAscii("0\r\nchecksum: abc123\r\n\r\n")
+                .flush();
+
+            client.readLine();
+            var headers = client.readHeaders();
+            assertThat(client.readBody(headers), equalTo("Hello World|abc123"));
+        }
+    }
+
+    @Test
+    public void invalidTrailerFieldsResultInABadRequest() throws Exception {
+        server = ServerUtils.httpsServerForTest("http")
+            .addHandler((request, response) -> {
+                response.write(request.readBodyAsString());
+                return true;
+            })
+            .start();
+
+        try (var client = Http1Client.connect(server.uri())) {
+            client.writeRequestLine(Method.POST, "/")
+                .writeHeader("content-type", "text/plain; charset=utf-8")
+                .writeHeader("transfer-encoding", "chunked")
+                .endHeaders()
+                .writeAscii("5\r\nHello\r\n")
+                .writeAscii("0\r\ncontent-length: 123\r\n\r\n")
+                .flush();
+
+            assertThat(client.readLine(), equalTo("HTTP/1.1 400 Bad Request"));
+        }
+    }
+
+    @Test
     public void smallRequestBodiesCanBeReadAsStrings() throws IOException {
         server = ServerUtils.httpsServerForTest()
             .addHandler((request, response) -> {
