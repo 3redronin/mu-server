@@ -223,6 +223,10 @@ public final class HeaderNames {
      */
     public static final CharSequence PRAGMA = builtInHeader("pragma");
     /**
+     * {@code "keep-alive"}
+     */
+    public static final CharSequence KEEP_ALIVE = builtInHeader("keep-alive");
+    /**
      * {@code "proxy-authenticate"}
      */
     public static final CharSequence PROXY_AUTHENTICATE = builtInHeader("proxy-authenticate");
@@ -230,6 +234,10 @@ public final class HeaderNames {
      * {@code "proxy-authorization"}
      */
     public static final CharSequence PROXY_AUTHORIZATION = builtInHeader("proxy-authorization");
+    /**
+     * {@code "proxy-connection"}
+     */
+    public static final CharSequence PROXY_CONNECTION = builtInHeader("proxy-connection");
     /**
      * {@code "range"}
      */
