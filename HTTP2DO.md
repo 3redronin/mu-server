@@ -13,11 +13,11 @@ Legend:
  * 3.2. [x] Starting HTTP/2 for "https" URIs
  * 3.3. [ ] Starting HTTP/2 with Prior Knowledge (h2c intentionally unsupported)
  * 3.4. [x] HTTP/2 Connection Preface
-* 4. [~] HTTP Frames
+* 4. [x] HTTP Frames
  * 4.1. [x] Frame Format
  * 4.2. [x] Frame Size
- * 4.3. [~] Field Section Compression and Decompression
- * 4.3.1. [~] Compression State
+ * 4.3. [x] Field Section Compression and Decompression
+ * 4.3.1. [x] Compression State
 * 5. [~] Streams and Multiplexing
  * 5.1. [x] Stream States
  * 5.1.1. [x] Stream Identifiers
@@ -75,7 +75,7 @@ Legend:
  * 8.8.4. [~] Response with Body
  * 8.8.5. [ ] Informational Responses
 * 9. [ ] HTTP/2 Connections
- * 9.1. [ ] Connection Management
+ * 9.1. [~] Connection Management
  * 9.1.1. [ ] Connection Reuse
  * 9.2. [ ] Use of TLS Features
  * 9.2.1. [ ] TLS 1.2 Features
@@ -86,11 +86,11 @@ Legend:
  * 10.2. [ ] Cross-Protocol Attacks
  * 10.3. [ ] Intermediary Encapsulation Attacks
  * 10.4. [ ] Cacheability of Pushed Responses
- * 10.5. [ ] Denial-of-Service Considerations
- * 10.5.1. [ ] Limits on Field Block Size
+ * 10.5. [~] Denial-of-Service Considerations
+ * 10.5.1. [~] Limits on Field Block Size
  * 10.5.2. [ ] CONNECT Issues
- * 10.6. [ ] Use of Compression
- * 10.7. [ ] Use of Padding
+ * 10.6. [~] Use of Compression
+ * 10.7. [~] Use of Padding
  * 10.8. [ ] Privacy Considerations
  * 10.9. [ ] Remote Timing Attacks
 * 11. [ ] IANA Considerations
