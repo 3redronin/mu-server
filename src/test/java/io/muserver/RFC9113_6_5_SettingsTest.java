@@ -177,6 +177,24 @@ class RFC9113_6_5_SettingsTest {
     }
 
     @Test
+    void invalidEnablePushValuesAreProtocolErrors() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake()
+                .writeRaw(settingsFrame(2, 2))
+                .flush();
+
+            assertThat(con.readLogicalFrame(), equalTo(goAway(0, Http2ErrorCode.PROTOCOL_ERROR)));
+            assertThrows(IOException.class, con::readFrameHeader);
+        }
+    }
+
+    @Test
     void ordinarySettingsFramesAreAcked() throws Exception {
         server = httpsServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())

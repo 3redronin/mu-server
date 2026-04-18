@@ -475,9 +475,14 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
 
     private void readPriorityFrame(Http2FrameHeader fh) throws Http2Exception {
         int payloadLength = fh.length();
-        buffer.position(buffer.position() + payloadLength);
         if (payloadLength != 5) {
+            buffer.position(buffer.position() + payloadLength);
             throw Http2Exception.stream(Http2ErrorCode.FRAME_SIZE_ERROR, "PRIORITY frame payload must be 5 bytes", fh.streamId());
+        }
+        int streamDependency = buffer.getInt() & 0x7FFFFFFF;
+        buffer.get();
+        if (streamDependency == fh.streamId()) {
+            throw Http2Exception.stream(Http2ErrorCode.PROTOCOL_ERROR, "PRIORITY stream cannot depend on itself", fh.streamId());
         }
     }
 

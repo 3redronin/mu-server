@@ -182,6 +182,61 @@ class RFC9113_8_1_HttpMessageFramingTest {
         }
     }
 
+    @Test
+    void contentLengthMustMatchSingleDataFramePayloadLength() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.POST, "/hello", (request, response, pathParams) -> {
+                request.readBodyAsString();
+                response.status(200);
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            var headers = postHelloHeaders(getPort());
+            headers.add("content-length", "5");
+
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, false, headers))
+                .writeFrame(utf8DataFrame(1, true, "1234"))
+                .flush();
+
+            var reset = readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
+            assertThat(reset.streamId(), equalTo(1));
+            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+        }
+    }
+
+    @Test
+    void contentLengthMustMatchTheSumOfMultipleDataFrames() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.POST, "/hello", (request, response, pathParams) -> {
+                request.readBodyAsString();
+                response.status(200);
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            var headers = postHelloHeaders(getPort());
+            headers.add("content-length", "5");
+
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, false, headers))
+                .writeFrame(utf8DataFrame(1, false, "12"))
+                .writeFrame(utf8DataFrame(1, true, "34"))
+                .flush();
+
+            var reset = readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
+            assertThat(reset.streamId(), equalTo(1));
+            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+        }
+    }
+
     private int getPort() {
         return server.uri().getPort();
     }

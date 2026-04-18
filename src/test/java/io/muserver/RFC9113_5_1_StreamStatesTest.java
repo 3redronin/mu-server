@@ -169,6 +169,80 @@ class RFC9113_5_1_StreamStatesTest {
     }
 
     @Test
+    public void headersAfterAClientResetCauseAStreamClosedError() throws Exception {
+        var started = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.POST, "/hello", (request, response, pathParams) -> {
+                started.countDown();
+                release.await(5, TimeUnit.SECONDS);
+                response.status(204);
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, false, RFCTestUtils.postHelloHeaders(server.uri().getPort())))
+                .flush();
+
+            assertThat(started.await(5, TimeUnit.SECONDS), equalTo(true));
+
+            con.writeFrame(new Http2ResetStreamFrame(1, Http2ErrorCode.CANCEL.code()))
+                .writeFrame(new Http2HeadersFrame(1, true, getHelloHeaders()))
+                .flush();
+
+            var reset = con.readLogicalFrame(Http2ResetStreamFrame.class);
+            assertThat(reset.streamId(), equalTo(1));
+            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.STREAM_CLOSED));
+        } finally {
+            release.countDown();
+        }
+    }
+
+    @Test
+    public void headersOnHistoricallyClosedStreamsCurrentlyReturnProtocolError() throws Exception {
+
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
+                response.status(202);
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake();
+
+            con.writeFrame(new Http2HeadersFrame(1, true, getHelloHeaders()));
+            con.writeFrame(new Http2HeadersFrame(3, true, getHelloHeaders()));
+            con.flush();
+
+            var respHeaders = con.readLogicalFrame(Http2HeadersFrame.class);
+            assertThat(respHeaders.headers().get(":status"), equalTo("202"));
+            var nextHeaders = con.readLogicalFrame(Http2HeadersFrame.class);
+            assertThat(nextHeaders.headers().get(":status"), equalTo("202"));
+
+            con.writeFrame(new Http2HeadersFrame(1, true, getHelloHeaders()));
+            con.flush();
+
+            var goaway = con.readLogicalFrame(Http2GoAway.class);
+            // Spec-wise, this is more precisely a STREAM_CLOSED case because stream 1 previously existed
+            // and was then closed. We intentionally assert PROTOCOL_ERROR instead because this server
+            // does not retain historical closed-stream IDs after cleanup, avoiding per-connection memory
+            // growth for bookkeeping on misbehaving clients.
+            assertThat(goaway.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+
+            assertThrows(IOException.class, con::readFrameHeader);
+        }
+
+    }
+
+    @Test
     public void whenMaxConcurrentStreamsIsExceededStreamIsRefused() throws Exception {
 
         var okayLatch = new CountDownLatch(1);

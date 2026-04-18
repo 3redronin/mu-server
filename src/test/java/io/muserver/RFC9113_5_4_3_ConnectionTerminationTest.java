@@ -27,6 +27,24 @@ class RFC9113_5_4_3_ConnectionTerminationTest {
     private @Nullable MuServer server;
 
     @Test
+    public void idleConnectionsCloseCleanlyAfterAClientGoAway() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake()
+                .writeFrame(goAway(0, Http2ErrorCode.NO_ERROR))
+                .flush();
+
+            assertThat(con.readLogicalFrame(Http2GoAway.class), equalTo(goAway(0, Http2ErrorCode.NO_ERROR)));
+            assertThrows(IOException.class, con::readFrameHeader);
+        }
+    }
+
+    @Test
     public void afterReceivingGoAwayTheServerStopsAcceptingNewStreamsButFinishesExistingOnes() throws Exception {
         var goTime = new CountDownLatch(1);
         var started = new CountDownLatch(1);

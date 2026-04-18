@@ -55,6 +55,25 @@ class RFC9113_6_2_HeadersTest {
     }
 
     @Test
+    void invalidHeaderBlockFragmentsCauseConnectionCompressionErrors() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake()
+                .writeRaw(headersFrame(1, true, true, new byte[] {(byte) 0x80}))
+                .flush();
+
+            var goaway = con.readLogicalFrame(Http2GoAway.class);
+            assertThat(goaway.errorCodeEnum(), equalTo(Http2ErrorCode.COMPRESSION_ERROR));
+            assertThrows(java.io.IOException.class, con::readFrameHeader);
+        }
+    }
+
+    @Test
     void priorityFlagOnHeadersFramesIsIgnored() throws Exception {
         server = httpsServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())
@@ -71,6 +90,26 @@ class RFC9113_6_2_HeadersTest {
             var response = con.readLogicalFrame(Http2HeadersFrame.class);
             assertThat(response.streamId(), equalTo(1));
             assertThat(response.headers().get(":status"), equalTo("202"));
+        }
+    }
+
+    @Test
+    void headersFramesMustNotDependOnThemselves() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> response.status(202))
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake()
+                .writeRaw(priorityHeadersFrame(1, true, true, encodeFieldBlock(getHelloHeaders(getPort())), false, 1, 10))
+                .flush();
+
+            var reset = con.readLogicalFrame(Http2ResetStreamFrame.class);
+            assertThat(reset.streamId(), equalTo(1));
+            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
         }
     }
 

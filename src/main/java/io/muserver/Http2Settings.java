@@ -132,6 +132,10 @@ class Http2Settings implements LogicalHttp2Frame {
             long value = buffer.getInt() & 0xFFFFFFFFL;
             if (identifier == 0x01) {
                 tableHeaderSize = value > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) value;
+            } else if (identifier == 0x02) {
+                if (value != 0 && value != 1) {
+                    throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "Invalid ENABLE_PUSH value");
+                }
             } else if (identifier == 0x03) {
                 maxConcurrentStreams = value > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) value;
             } else if (identifier == 0x04) {

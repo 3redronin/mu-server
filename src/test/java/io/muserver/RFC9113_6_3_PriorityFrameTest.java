@@ -139,6 +139,25 @@ class RFC9113_6_3_PriorityFrameTest {
     }
 
     @Test
+    void priorityFramesMustNotDependOnThemselves() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake()
+                .writeFrame(new Http2PriorityFrame(3, false, 3, 10))
+                .flush();
+
+            var reset = con.readLogicalFrame(Http2ResetStreamFrame.class);
+            assertThat(reset.streamId(), equalTo(3));
+            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+        }
+    }
+
+    @Test
     void priorityFramesWithInvalidLengthAreStreamErrors() throws Exception {
         server = httpsServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())

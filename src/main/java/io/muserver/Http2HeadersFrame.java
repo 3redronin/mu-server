@@ -59,8 +59,11 @@ class Http2HeadersFrame implements LogicalHttp2Frame {
                 throw Http2Exception.connection(Http2ErrorCode.FRAME_SIZE_ERROR, "HEADERS priority fields require 5 bytes");
             }
             hpackLength -= 5;
-            // the exclusive, stream dependency and weight values are deprecated, so just reading past them
-            buffer.position(buffer.position() + 5);
+            int streamDependency = buffer.getInt() & 0x7FFFFFFF;
+            buffer.get();
+            if (streamDependency == frameHeader.streamId()) {
+                throw Http2Exception.stream(Http2ErrorCode.PROTOCOL_ERROR, "HEADERS stream cannot depend on itself", frameHeader.streamId());
+            }
         }
 
         // add name/value strings as:

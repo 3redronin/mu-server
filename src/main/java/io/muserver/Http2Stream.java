@@ -31,7 +31,13 @@ class Http2Stream implements ResponseInfo {
     private State state;
     private long endTime = 0;
     private final InputStream bodyInputStream;
+    private final @Nullable Long declaredRequestBodyLength;
+    private long receivedRequestBodyLength;
     Http2Stream(int id, Http2Connection connection, State state, Mu3Request request, Http2IncomingFlowController incomingFlowControl, Http2OutgoingFlowController outgoingFlowControl, InputStream bodyInputStream) {
+        this(id, connection, state, request, incomingFlowControl, outgoingFlowControl, bodyInputStream, request.declaredBodySize().size());
+    }
+
+    Http2Stream(int id, Http2Connection connection, State state, Mu3Request request, Http2IncomingFlowController incomingFlowControl, Http2OutgoingFlowController outgoingFlowControl, InputStream bodyInputStream, @Nullable Long declaredRequestBodyLength) {
         this.id = id;
         this.connection = connection;
         this.state = state;
@@ -39,6 +45,7 @@ class Http2Stream implements ResponseInfo {
         this.incomingFlowControl = incomingFlowControl;
         this.outgoingFlowControl = outgoingFlowControl;
         this.bodyInputStream = bodyInputStream;
+        this.declaredRequestBodyLength = declaredRequestBodyLength;
     }
 
     int maxFrameSize() {
@@ -110,6 +117,7 @@ class Http2Stream implements ResponseInfo {
         if (bodyInputStream instanceof Http2BodyInputStream) {
             ((Http2BodyInputStream) bodyInputStream).onTrailers(headersFrame.headers());
         }
+        validateRequestBodyLengthAtEnd();
         switch (state) {
             case OPEN:
                 state = State.HALF_CLOSED_REMOTE;
@@ -134,8 +142,13 @@ class Http2Stream implements ResponseInfo {
         }
 
         if (bodyInputStream instanceof Http2BodyInputStream) {
+            receivedRequestBodyLength += dataFrame.payloadLength();
+            if (declaredRequestBodyLength != null && receivedRequestBodyLength > declaredRequestBodyLength) {
+                throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "content-length does not match received DATA", id);
+            }
             ((Http2BodyInputStream)bodyInputStream).onData(dataFrame, flowControlSize);
             if (dataFrame.endStream()) {
+                validateRequestBodyLengthAtEnd();
                 switch (state) {
                     case OPEN:
                         state = State.HALF_CLOSED_REMOTE;
@@ -149,6 +162,12 @@ class Http2Stream implements ResponseInfo {
             }
         } else {
             throw new Http2Exception(Http2ErrorCode.INTERNAL_ERROR, "Received data on a stream with no body", id);
+        }
+    }
+
+    private void validateRequestBodyLengthAtEnd() throws Http2Exception {
+        if (declaredRequestBodyLength != null && receivedRequestBodyLength != declaredRequestBodyLength) {
+            throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "content-length does not match received DATA", id);
         }
     }
 
@@ -296,9 +315,13 @@ class Http2Stream implements ResponseInfo {
         );
         var request = new Mu3Request(connection, method, requestUri, serverUri, HttpVersion.HTTP_2, headers, bodySize, body);
 
+        if (headerFrame.endStream() && cl != null && cl != 0L) {
+            throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "content-length does not match received DATA", id);
+        }
+
 
         var state = headerFrame.endStream() ? State.HALF_CLOSED_REMOTE : State.OPEN;
-        Http2Stream stream = new Http2Stream(id, connection, state, request, incomingFlowControl, outgoingFlowControl, body);
+        Http2Stream stream = new Http2Stream(id, connection, state, request, incomingFlowControl, outgoingFlowControl, body, cl);
         stream.response = new Http2Response(stream, new FieldBlock(), request);
         return stream;
     }
