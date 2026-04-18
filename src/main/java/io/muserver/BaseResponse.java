@@ -179,10 +179,25 @@ abstract class BaseResponse implements MuResponse {
         }
     }
 
-    @Override
-    public void sendInformationalResponse(HttpStatus status, @Nullable Headers headers) {
-
+    protected final void validateInformationalResponse(HttpStatus status) {
+        if (!status.isInformational()) {
+            throw new IllegalArgumentException("Only informational status is allowed but received " + status);
+        }
+        if (responseState() != ResponseState.NOTHING) {
+            throw new IllegalStateException("Informational headers cannot be sent after the main response headers have been sent");
+        }
     }
+
+    protected final FieldBlock copyHeaders(@Nullable Headers headers) {
+        var copy = new FieldBlock();
+        if (headers != null) {
+            copy.add(headers);
+        }
+        return copy;
+    }
+
+    @Override
+    public abstract void sendInformationalResponse(HttpStatus status, @Nullable Headers headers);
 
     @Override
     public void addCompletionListener(ResponseCompleteListener listener) {

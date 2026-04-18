@@ -35,16 +35,12 @@ class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
 
     @Override
     public void sendInformationalResponse(HttpStatus status, @Nullable Headers headers) {
-        if (!status.isInformational()) {
-            throw new IllegalArgumentException("Only informational status is allowed but received " + status);
-        }
-        if (responseState() != ResponseState.NOTHING) {
-            throw new IllegalStateException("Informational headers cannot be sent after the main response headers have been sent");
-        }
+        validateInformationalResponse(status);
         try {
             socketOut.write(status.http11ResponseLine());
-            if (headers != null) {
-                ((FieldBlock) headers).writeAsHttp1(socketOut);
+            var responseHeaders = copyHeaders(headers);
+            if (!responseHeaders.isEmpty()) {
+                responseHeaders.writeAsHttp1(socketOut);
             }
             socketOut.write(ParseUtils.CRLF, 0, 2);
             socketOut.flush();

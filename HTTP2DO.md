@@ -52,7 +52,7 @@ Legend:
  * 6.9.3. [~] Reducing the Stream Window Size
  * 6.10. [x] CONTINUATION
 * 7. [x] Error Codes
-* 8. [x] Expressing HTTP Semantics in HTTP/2
+* 8. [~] Expressing HTTP Semantics in HTTP/2
  * 8.1. [x] HTTP Message Framing
  * 8.1.1. [x] Malformed Messages
  * 8.2. [x] HTTP Fields
@@ -73,7 +73,7 @@ Legend:
  * 8.8.2. [~] Simple Response
  * 8.8.3. [~] Complex Request
  * 8.8.4. [~] Response with Body
- * 8.8.5. [ ] Informational Responses
+ * 8.8.5. [x] Informational Responses
 * 9. [ ] HTTP/2 Connections
  * 9.1. [~] Connection Management
  * 9.1.1. [ ] Connection Reuse

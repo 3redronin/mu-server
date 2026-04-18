@@ -320,11 +320,15 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
 
             // and now just read frames
             while (readState.canSendFrames) {
+                Http2FrameHeader currentFrameHeader = null;
+                boolean readingFrameHeader = true;
                 try {
                     prepareForFrameRead();
                     Mutils.readAtLeast(buffer, clientIn, Http2FrameHeader.FRAME_HEADER_LENGTH);
 
-                    var fh = Http2FrameHeader.readFrom(buffer);
+                    currentFrameHeader = Http2FrameHeader.readFrom(buffer);
+                    readingFrameHeader = false;
+                    var fh = currentFrameHeader;
                     var len = fh.length();
                     Mutils.readAtLeast(buffer, clientIn, len);
                     log.info("read fh = " + fh);
@@ -396,12 +400,23 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
                         throw Http2Exception.connection(Http2ErrorCode.SETTINGS_TIMEOUT, "Timed out waiting for SETTINGS ack");
                     }
                     throw e;
-                } catch (EOFException | SocketException e) {
-                    log.warn(e.getClass() + " reading frame at read state " + readState + " writeState=" + writeState, e);
-                    // todo: read streams in a lock
-                    if (streams.isEmpty()) {
-                        setReadStateAndSignal(HState.COMPLETED); // todo: is this okay or an error?
+                } catch (EOFException e) {
+                    boolean noActiveStreams = streams.isEmpty();
+                    if (readingFrameHeader && noActiveStreams) {
+                        log.info("Client closed HTTP/2 connection while waiting for the next frame");
+                        setReadStateAndSignal(HState.COMPLETED);
                     } else {
+                        String frameDetails = readingFrameHeader ? "frame header" : "frame payload for " + currentFrameHeader;
+                        log.warn("EOF while reading {} at read state {} writeState={}", frameDetails, readState, writeState, e);
+                        setReadStateAndSignal(noActiveStreams ? HState.COMPLETED : HState.ERRORED);
+                    }
+                } catch (SocketException e) {
+                    boolean noActiveStreams = streams.isEmpty();
+                    if (noActiveStreams) {
+                        log.info("Socket closed while reading HTTP/2 frames at read state {} writeState={}: {}", readState, writeState, e.getMessage());
+                        setReadStateAndSignal(HState.COMPLETED);
+                    } else {
+                        log.warn("Socket exception while reading HTTP/2 frames at read state {} writeState={}", readState, writeState, e);
                         setReadStateAndSignal(HState.ERRORED);
                     }
                 }

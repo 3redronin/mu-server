@@ -1,8 +1,11 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.io.InterruptedIOException;
 import java.io.UncheckedIOException;
 import java.util.Date;
 
@@ -49,6 +52,23 @@ class Http2Response extends BaseResponse {
             stream.id, endOfStream, (FieldBlock) headers()
         );
         stream.blockingWrite(headerFragment);
+    }
+
+    @Override
+    public void sendInformationalResponse(HttpStatus status, @Nullable Headers headers) {
+        validateInformationalResponse(status);
+
+        var responseHeaders = copyHeaders(headers);
+        responseHeaders.add(0, new FieldLine(HeaderNames.PSEUDO_STATUS, HeaderString.valueOf(Integer.toString(status.code()), HeaderString.Type.VALUE)));
+
+        try {
+            stream.blockingWrite(new Http2HeadersFrame(stream.id, false, responseHeaders));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException(new InterruptedIOException("Interrupted while writing informational response"));
+        } catch (IOException e) {
+            throw new UncheckedIOException("Error writing information response", e);
+        }
     }
 
     @Override
