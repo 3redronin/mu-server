@@ -5,13 +5,13 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import java.io.IOException;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.RFCTestUtils.*;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * Tests for RFC 9113 §8.2 HTTP Fields.
@@ -274,6 +274,74 @@ class RFC9113_8_2_HttpFieldsTest {
             var response = readIgnoringWindowUpdates(con, Http2HeadersFrame.class);
             assertThat(response.streamId(), equalTo(3));
             assertThat(response.headers().get(":status"), equalTo("200"));
+        }
+    }
+
+    @Test
+    void splitCookieHeadersAreRejoinedForHttp2Requests() throws Exception {
+        var cookieHeader = new AtomicReference<String>();
+        var allCookieHeaders = new AtomicReference<List<String>>();
+
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
+                cookieHeader.set(request.headers().get("cookie"));
+                allCookieHeaders.set(request.headers().getAll("cookie"));
+                response.status(200);
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            var headers = getHelloHeaders(getPort());
+            headers.add("cookie", "a=1");
+            headers.add("cookie", "b=2");
+
+            con.handshake()
+                .writeRaw(headersFrame(1, true, true, encodeFieldBlock(headers)))
+                .flush();
+
+            var response = readIgnoringWindowUpdates(con, Http2HeadersFrame.class);
+            assertThat(response.streamId(), equalTo(1));
+            assertThat(response.headers().get(":status"), equalTo("200"));
+
+            assertThat(cookieHeader.get(), equalTo("a=1; b=2"));
+            assertThat(allCookieHeaders.get(), equalTo(List.of("a=1; b=2")));
+        }
+    }
+
+    @Test
+    void splitCookieHeadersStillPopulateCookieAccessors() throws Exception {
+        var cookieCount = new AtomicReference<Integer>();
+        var cookieB = new AtomicReference<String>();
+
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
+                cookieCount.set(request.cookies().size());
+                cookieB.set(request.cookie("b").orElse(null));
+                response.status(200);
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            var headers = getHelloHeaders(getPort());
+            headers.add("cookie", "a=1");
+            headers.add("cookie", "b=2");
+
+            con.handshake()
+                .writeRaw(headersFrame(1, true, true, encodeFieldBlock(headers)))
+                .flush();
+
+            var response = readIgnoringWindowUpdates(con, Http2HeadersFrame.class);
+            assertThat(response.streamId(), equalTo(1));
+            assertThat(response.headers().get(":status"), equalTo("200"));
+
+            assertThat(cookieCount.get(), equalTo(2));
+            assertThat(cookieB.get(), equalTo("2"));
         }
     }
 

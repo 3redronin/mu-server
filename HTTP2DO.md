@@ -58,7 +58,7 @@ Legend:
  * 8.2. [x] HTTP Fields
  * 8.2.1. [x] Field Validity
  * 8.2.2. [x] Connection-Specific Header Fields
- * 8.2.3. [ ] Compressing the Cookie Header Field
+ * 8.2.3. [x] Compressing the Cookie Header Field
  * 8.3. [x] HTTP Control Data
  * 8.3.1. [x] Request Pseudo-Header Fields
  * 8.3.2. [x] Response Pseudo-Header Fields
@@ -67,7 +67,7 @@ Legend:
  * 8.4.2. [ ] Push Responses (intentionally unsupported)
  * 8.5. [ ] The CONNECT Method
  * 8.6. [ ] The Upgrade Header Field (h2c upgrade intentionally unsupported)
- * 8.7. [~] Request Reliability
+ * 8.7. [x] Request Reliability
  * 8.8. [~] Examples
  * 8.8.1. [~] Simple Request
  * 8.8.2. [~] Simple Response

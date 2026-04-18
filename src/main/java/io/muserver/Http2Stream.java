@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.ArrayList;
 import java.util.concurrent.TimeUnit;
 
 class Http2Stream implements ResponseInfo {
@@ -257,6 +258,12 @@ class Http2Stream implements ResponseInfo {
             authority = host;
         } else if (host == null) {
             headers.add(HeaderNames.HOST, authority);
+        }
+
+        var cookies = new ArrayList<String>(2);
+        cookies.addAll(headers.getAll(HeaderNames.COOKIE));
+        if (cookies.size() > 1) {
+            headers.set(HeaderNames.COOKIE, String.join("; ", cookies));
         }
 
         BodySize bodySize;
