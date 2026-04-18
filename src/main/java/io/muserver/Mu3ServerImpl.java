@@ -296,8 +296,14 @@ class Mu3ServerImpl implements MuServer {
         var ih = builder.interfaceHost();
         var address = ih == null ? null : InetAddress.getByName(ih);
 
+        var configuredHttp2 = builder.http2Config();
+        Http2Config http2ConfigForHttp = configuredHttp2;
+        if (http2ConfigForHttp != null && http2ConfigForHttp.maxHeaderListSize() == -1) {
+            http2ConfigForHttp = http2ConfigForHttp.toBuilder().withMaxHeaderListSize(builder.maxHeadersSize()).build();
+        }
+
         if (builder.httpsPort() >= 0) {
-            var http2Config = builder.http2Config();
+            var http2Config = configuredHttp2;
             if (http2Config == null) {
                 http2Config = Http2ConfigBuilder.http2Config().withMaxHeaderListSize(builder.maxHeadersSize()).build();
             }
@@ -316,7 +322,7 @@ class Mu3ServerImpl implements MuServer {
             httpsConfig.setHttpsUri(acceptor.uri());
         }
         if (builder.httpPort() >= 0) {
-            acceptors.add(ConnectionAcceptor.create(impl, address, builder.httpPort(), null, null, executor, contentEncoders));
+            acceptors.add(ConnectionAcceptor.create(impl, address, builder.httpPort(), null, http2ConfigForHttp, executor, contentEncoders));
         }
         impl.startListening();
         return impl;

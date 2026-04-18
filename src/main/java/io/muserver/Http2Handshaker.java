@@ -16,6 +16,22 @@ class Http2Handshaker {
     private static final byte[] CLIENT_CONNECTION_PREFACE =
         "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n".getBytes(StandardCharsets.US_ASCII);
 
+    static int clientConnectionPrefaceLength() {
+        return CLIENT_CONNECTION_PREFACE.length;
+    }
+
+    static boolean isClientPrefacePrefix(byte[] data, int length) {
+        if (length > CLIENT_CONNECTION_PREFACE.length) {
+            return false;
+        }
+        for (int i = 0; i < length; i++) {
+            if (data[i] != CLIENT_CONNECTION_PREFACE[i]) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     /*
     Processes the client connection  preface
      */
@@ -31,9 +47,11 @@ class Http2Handshaker {
 
     private static void readClientPreface(InputStream inputStream) throws IOException, Http2Exception {
         byte[] prefaceBuffer = new byte[24];
-        int bytesRead = inputStream.read(prefaceBuffer);
+        ByteBuffer buffer = ByteBuffer.wrap(prefaceBuffer);
+        buffer.limit(0);
+        Mutils.readAtLeast(buffer, inputStream, prefaceBuffer.length);
 
-        if (bytesRead != 24 || !isClientPrefaceValid(prefaceBuffer)) {
+        if (!isClientPrefaceValid(prefaceBuffer)) {
             throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "Invalid connection prefix");
         }
     }

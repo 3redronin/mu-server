@@ -29,6 +29,7 @@ class H2Client implements Closeable  {
     public H2ClientConnection connect(MuServer server) throws IOException {
         return connect(server.uri().getPort());
     }
+
     public H2ClientConnection connect(int port) throws IOException {
         var socket = (SSLSocket) sslSocketFactory.createSocket("localhost", port);
         socket.setUseClientMode(true);
@@ -47,6 +48,18 @@ class H2Client implements Closeable  {
         return new H2ClientConnection(socket);
     }
 
+    public H2ClientConnection connectClearText(MuServer server) throws IOException {
+        var uri = server.httpUri();
+        if (uri == null) {
+            throw new IOException("Server does not have an HTTP listener");
+        }
+        return connectClearText(uri.getPort());
+    }
+
+    public H2ClientConnection connectClearText(int port) throws IOException {
+        return new H2ClientConnection(new Socket("localhost", port));
+    }
+
     @Override
     public void close() {
     }
@@ -54,7 +67,7 @@ class H2Client implements Closeable  {
 
 class H2ClientConnection implements Http2Peer, Closeable {
     private static final int MAX_LEGAL_FRAME_SIZE = 16_777_215;
-    private final SSLSocket socket;
+    private final Socket socket;
     private final InputStream inputStream;
     private final OutputStream outputStream;
     private final ByteBuffer readBuffer;
@@ -62,7 +75,7 @@ class H2ClientConnection implements Http2Peer, Closeable {
     private final FieldBlockEncoder fieldBlockEncoder = new FieldBlockEncoder(new HpackTable(Http2Settings.DEFAULT_CLIENT_SETTINGS.headerTableSize));
     private final FieldBlockDecoder fieldBlockDecoder = new FieldBlockDecoder(new HpackTable(Http2Settings.DEFAULT_CLIENT_SETTINGS.headerTableSize), 32768, 32768);
 
-    H2ClientConnection(SSLSocket socket) throws IOException {
+    H2ClientConnection(Socket socket) throws IOException {
         this.socket = socket;
         socket.setSoTimeout(10000);
         // TODO consider if each should be buffered

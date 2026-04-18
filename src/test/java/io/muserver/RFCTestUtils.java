@@ -113,23 +113,30 @@ class RFCTestUtils {
     }
 
     static @NonNull FieldBlock getHelloHeaders(int port) {
-        FieldBlock headers = baseHeaders(port);
+        FieldBlock headers = baseHeaders("https", port);
+        headers.add(":method", "GET");
+        headers.add(":path", "/hello");
+        return headers;
+    }
+
+    static @NonNull FieldBlock getHelloHeaders(String scheme, int port) {
+        FieldBlock headers = baseHeaders(scheme, port);
         headers.add(":method", "GET");
         headers.add(":path", "/hello");
         return headers;
     }
 
     static @NonNull FieldBlock postHelloHeaders(int port) {
-        FieldBlock headers = baseHeaders(port);
+        FieldBlock headers = baseHeaders("https", port);
         headers.add(":method", "POST");
         headers.add(":path", "/hello");
         headers.add("content-type", "text/plain; charset=utf-8");
         return headers;
     }
 
-    private static @NonNull FieldBlock baseHeaders(int port) {
+    private static @NonNull FieldBlock baseHeaders(String scheme, int port) {
         FieldBlock headers = new FieldBlock();
-        headers.add(":scheme", "https");
+        headers.add(":scheme", scheme);
         headers.add(":authority", "localhost:" + port);
         return headers;
     }

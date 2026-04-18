@@ -8,10 +8,10 @@ Legend:
 
 ---
 
-* 3. [~] Starting HTTP/2
+* 3. [x] Starting HTTP/2
  * 3.1. [x] HTTP/2 Version Identification
  * 3.2. [x] Starting HTTP/2 for "https" URIs
- * 3.3. [ ] Starting HTTP/2 with Prior Knowledge
+ * 3.3. [x] Starting HTTP/2 with Prior Knowledge
  * 3.4. [x] HTTP/2 Connection Preface
 * 4. [x] HTTP Frames
  * 4.1. [x] Frame Format

@@ -10,6 +10,7 @@ import javax.net.ssl.SSLSocket;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.PushbackInputStream;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.security.cert.Certificate;
@@ -186,6 +187,7 @@ class ConnectionAcceptor {
     private void handleClientSocket(Socket clientSocket, Instant startTime, boolean http2Enabled, boolean rejectDueToOverload) {
         Socket socket = clientSocket;
         Certificate clientCert = null;
+        PushbackInputStream inputStream = null;
 
         HttpsConfig hc = httpsConfig;
         HttpVersion httpVersion = HttpVersion.HTTP_1_1;
@@ -232,13 +234,46 @@ class ConnectionAcceptor {
                 server.getStatsImpl().onFailedToConnect();
                 return;
             }
+        } else if (http2Enabled) {
+            try {
+                inputStream = new PushbackInputStream(socket.getInputStream(), Http2Handshaker.clientConnectionPrefaceLength());
+                httpVersion = sniffClearTextHttpVersion(socket, inputStream);
+            } catch (IOException e) {
+                log.info("Failed while checking for cleartext HTTP/2 prior knowledge: {}", e.getMessage());
+                return;
+            }
         }
 
         if (rejectDueToOverload) {
             handleOverload(socket);
         } else {
-            handleRequest(socket, clientCert, startTime, httpVersion);
+            handleRequest(socket, clientCert, startTime, httpVersion, inputStream);
         }
+    }
+
+    private HttpVersion sniffClearTextHttpVersion(Socket socket, PushbackInputStream inputStream) throws IOException {
+        byte[] prefix = new byte[Http2Handshaker.clientConnectionPrefaceLength()];
+        int read = 0;
+        int originalTimeout = socket.getSoTimeout();
+        socket.setSoTimeout((int)Math.min(Integer.MAX_VALUE, server.requestIdleTimeoutMillis()));
+        try {
+            while (read < prefix.length) {
+                int next = inputStream.read();
+                if (next == -1) {
+                    break;
+                }
+                prefix[read++] = (byte) next;
+                if (!Http2Handshaker.isClientPrefacePrefix(prefix, read)) {
+                    break;
+                }
+            }
+        } finally {
+            socket.setSoTimeout(originalTimeout);
+            if (read > 0) {
+                inputStream.unread(prefix, 0, read);
+            }
+        }
+        return read == prefix.length ? HttpVersion.HTTP_2 : HttpVersion.HTTP_1_1;
     }
 
     private void handleOverload(Socket socket) {
@@ -265,16 +300,23 @@ class ConnectionAcceptor {
         }
     }
 
-    private void handleRequest(Socket socket, @Nullable Certificate clientCert, Instant startTime, HttpVersion httpVersion) {
-        BaseHttpConnection con = httpVersion == HttpVersion.HTTP_2
-            ? new Http2Connection(server, this, socket, clientCert, startTime, http2Config.initialSettings(), http2Config.settingsAckTimeoutMillis(), executorService)
-            : new Http1Connection(server, this, socket, clientCert, startTime);
+    private void handleRequest(Socket socket, @Nullable Certificate clientCert, Instant startTime, HttpVersion httpVersion, @Nullable InputStream providedInputStream) {
+        BaseHttpConnection con;
+        if (httpVersion == HttpVersion.HTTP_2) {
+            if (http2Config == null) {
+                throw new IllegalStateException("HTTP/2 was selected but no HTTP/2 config is available");
+            }
+            con = new Http2Connection(server, this, socket, clientCert, startTime, http2Config.initialSettings(), http2Config.settingsAckTimeoutMillis(), executorService);
+        } else {
+            con = new Http1Connection(server, this, socket, clientCert, startTime);
+        }
 
         connections.add(con);
         server.getStatsImpl().onConnectionOpened(con);
         try {
+            InputStream requestIn = providedInputStream == null ? socket.getInputStream() : providedInputStream;
             try (OutputStream clientOut = socket.getOutputStream();
-                 InputStream clientIn = new HttpConnectionInputStream(con, socket.getInputStream())) {
+                 InputStream clientIn = new HttpConnectionInputStream(con, requestIn)) {
                 con.start(clientIn, clientOut);
             }
         } catch (Throwable t) {
