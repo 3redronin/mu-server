@@ -100,6 +100,26 @@ class Http2BodyInputStreamTest {
         assertThat(discardCallbackValue.get(), equalTo((8L - firstReadSize) + 9L));
     }
 
+    @ParameterizedTest
+    @ValueSource(ints = {1, 2, 4})
+    void partialReadResetRefundsUnreadCreditOnlyOnce(int firstReadSize) throws Exception {
+        var readCallbackValue = new AtomicLong();
+        var discardCallbackValue = new AtomicLong();
+
+        try (var stream = new Http2BodyInputStream(10000, readCallbackValue::addAndGet, discardCallbackValue::addAndGet)) {
+            stream.onData(data("Hello", false), 8);
+
+            var buffer = new byte[8];
+            assertThat(stream.read(buffer, 0, firstReadSize), equalTo(firstReadSize));
+
+            stream.onStreamReset(new Http2ResetStreamFrame(1, Http2ErrorCode.CANCEL.code()));
+            stream.cancel(new IOException("second terminal call"));
+        }
+
+        assertThat(readCallbackValue.get(), equalTo((long) firstReadSize));
+        assertThat(discardCallbackValue.get(), equalTo(8L - firstReadSize));
+    }
+
     private Http2DataFrame data(String data, boolean eos) {
         byte[] bytes = data.getBytes(StandardCharsets.UTF_8);
         return new Http2DataFrame(1, eos, bytes, 0, bytes.length);

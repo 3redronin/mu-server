@@ -6,8 +6,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.CountDownLatch;
+
 import static io.muserver.MuServerBuilder.httpsServer;
-import static io.muserver.RFCTestUtils.postHelloHeaders;
+import static io.muserver.RFCTestUtils.*;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static scaffolding.MuAssert.assertNotTimedOut;
@@ -72,6 +73,111 @@ class RFC9113_5_2_FlowControlTest {
         } finally {
             holdLatch.countDown();
         }
+    }
+
+    @Test
+    void dataFramesRejectedAtStreamLevelStillRefundConnectionCredit() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.POST, "/hello", (request, response, pathParams) -> {
+                response.write(request.readBodyAsString());
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            byte[] sixteenKb = repeated('a', 16384);
+            byte[] lastChunk = repeated('b', 16383);
+
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, false, postHelloHeaders(getPort())))
+                .writeFrame(RFCTestUtils.utf8DataFrame(1, true, "ok"))
+                .flush();
+
+            var firstHeaders = readIgnoringWindowUpdatesAndStreamOneResets(con, Http2HeadersFrame.class);
+            assertThat(firstHeaders.streamId(), equalTo(1));
+            assertThat(firstHeaders.headers().get(":status"), equalTo("200"));
+            assertThat(readIgnoringWindowUpdatesAndStreamOneResets(con, Http2DataFrame.class).toUTF8(), equalTo("ok"));
+            assertThat(readIgnoringWindowUpdatesAndStreamOneResets(con, Http2DataFrame.class), equalTo(Http2DataFrame.eos(1)));
+
+            con.writeFrame(new Http2DataFrame(1, false, sixteenKb, 0, sixteenKb.length))
+                .writeFrame(new Http2DataFrame(1, false, sixteenKb, 0, sixteenKb.length))
+                .writeFrame(new Http2DataFrame(1, false, sixteenKb, 0, sixteenKb.length))
+                .writeFrame(new Http2DataFrame(1, false, lastChunk, 0, lastChunk.length))
+                .writeFrame(new Http2HeadersFrame(3, false, postHelloHeaders(getPort())))
+                .writeFrame(RFCTestUtils.utf8DataFrame(3, true, "x"))
+                .flush();
+
+            var secondHeaders = readIgnoringWindowUpdatesAndStreamOneResets(con, Http2HeadersFrame.class);
+            assertThat(secondHeaders.streamId(), equalTo(3));
+            assertThat(secondHeaders.headers().get(":status"), equalTo("200"));
+
+            var secondData = readIgnoringWindowUpdatesAndStreamOneResets(con, Http2DataFrame.class);
+            assertThat(secondData.streamId(), equalTo(3));
+            assertThat(secondData.toUTF8(), equalTo("x"));
+            assertThat(readIgnoringWindowUpdatesAndStreamOneResets(con, Http2DataFrame.class), equalTo(Http2DataFrame.eos(3)));
+        }
+    }
+
+    @Test
+    void blockedDataDoesNotBlockPingAck() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
+                response.write("hello");
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake()
+                .writeRaw(settingsFrame(4, 0))
+                .flush();
+
+            assertThat(con.readLogicalFrame(), equalTo(Http2Settings.ACK));
+
+            con.writeFrame(new Http2HeadersFrame(1, true, getHelloHeaders(getPort())))
+                .flush();
+
+            var headers = readIgnoringWindowUpdatesAndStreamOneResets(con, Http2HeadersFrame.class);
+            assertThat(headers.streamId(), equalTo(1));
+            assertThat(headers.headers().get(":status"), equalTo("200"));
+
+            assertNothingToRead(con.socket());
+
+            byte[] opaqueData = new byte[] {1, 2, 3, 4, 5, 6, 7, 8};
+            con.writeFrame(new Http2Ping(false, opaqueData))
+                .flush();
+
+            assertThat(con.readLogicalFrame(Http2Ping.class), equalTo(new Http2Ping(true, opaqueData)));
+
+            assertNothingToRead(con.socket());
+
+            con.writeFrame(new Http2WindowUpdate(1, 5))
+                .flush();
+
+            var data = readIgnoringWindowUpdatesAndStreamOneResets(con, Http2DataFrame.class);
+            assertThat(data.streamId(), equalTo(1));
+            assertThat(data.toUTF8(), equalTo("hello"));
+            assertThat(readIgnoringWindowUpdatesAndStreamOneResets(con, Http2DataFrame.class), equalTo(Http2DataFrame.eos(1)));
+        }
+    }
+
+    private static byte[] settingsFrame(int identifier, long value) {
+        return new byte[] {
+            0, 0, 6,
+            0x04,
+            0,
+            0, 0, 0, 0,
+            (byte) (identifier >> 8),
+            (byte) identifier,
+            (byte) (value >> 24),
+            (byte) (value >> 16),
+            (byte) (value >> 8),
+            (byte) value
+        };
     }
 
     private static <T extends LogicalHttp2Frame> T readIgnoringWindowUpdatesAndStreamOneResets(H2ClientConnection con, Class<T> clazz) throws Exception {

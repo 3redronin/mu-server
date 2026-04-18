@@ -11,7 +11,7 @@ Legend:
 * 3. [~] Starting HTTP/2
  * 3.1. [x] HTTP/2 Version Identification
  * 3.2. [x] Starting HTTP/2 for "https" URIs
- * 3.3. [ ] Starting HTTP/2 with Prior Knowledge (h2c intentionally unsupported)
+ * 3.3. [ ] Starting HTTP/2 with Prior Knowledge
  * 3.4. [x] HTTP/2 Connection Preface
 * 4. [x] HTTP Frames
  * 4.1. [x] Frame Format
@@ -22,9 +22,9 @@ Legend:
  * 5.1. [x] Stream States
  * 5.1.1. [x] Stream Identifiers
  * 5.1.2. [x] Stream Concurrency
- * 5.2. [~] Flow Control
- * 5.2.1. [~] Flow-Control Principles
- * 5.2.2. [ ] Appropriate Use of Flow Control
+ * 5.2. [x] Flow Control
+ * 5.2.1. [x] Flow-Control Principles
+ * 5.2.2. [x] Appropriate Use of Flow Control
  * 5.2.3. [ ] Flow-Control Performance
  * 5.3. [~] Prioritization
  * 5.3.1. [x] Background on Priority in RFC 7540

@@ -343,7 +343,6 @@ class RFC9113_6_9_WindowUpdateTest {
      */
 
 
-    // todo: make Http2BodyInputStream have multiple pending data frames, then cause stream reset, then check connection credit is fully reimbursed
 
     private int getPort() {
         return server.uri().getPort();
