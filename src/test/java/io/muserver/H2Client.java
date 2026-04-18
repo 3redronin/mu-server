@@ -30,12 +30,23 @@ class H2Client implements Closeable  {
         return connect(server.uri().getPort());
     }
 
+    public H2ClientConnection connect(MuServer server, String sniHostName) throws IOException {
+        return connect(server.uri().getPort(), sniHostName);
+    }
+
     public H2ClientConnection connect(int port) throws IOException {
+        return connect(port, null);
+    }
+
+    public H2ClientConnection connect(int port, String sniHostName) throws IOException {
         var socket = (SSLSocket) sslSocketFactory.createSocket("localhost", port);
         socket.setUseClientMode(true);
 
         var sslParameters = socket.getSSLParameters();
         sslParameters.setApplicationProtocols(new String[]{"h2"});
+        if (sniHostName != null) {
+            sslParameters.setServerNames(java.util.List.of(new SNIHostName(sniHostName)));
+        }
         socket.setSSLParameters(sslParameters);
 
         socket.startHandshake();

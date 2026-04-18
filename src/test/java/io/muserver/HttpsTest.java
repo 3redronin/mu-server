@@ -2,7 +2,6 @@ package io.muserver;
 
 import okhttp3.Response;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import scaffolding.MuAssert;
 import scaffolding.SSLSocketFactoryWrapper;
@@ -129,7 +128,6 @@ public class HttpsTest {
     }
 
     @Test
-    @Disabled
     public void canGetClientSniOnHttpsServer() throws Exception {
 
         /* jks-keystore-combine.jks generated with:
@@ -180,7 +178,6 @@ public class HttpsTest {
     }
 
     @Test
-    @Disabled
     public void canGetEmptyClientSniOnHttpServer() throws Exception {
 
         server = MuServerBuilder.httpServer()

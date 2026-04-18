@@ -2,7 +2,12 @@ package io.muserver;
 
 import org.jspecify.annotations.Nullable;
 
+import javax.net.ssl.ExtendedSSLSession;
+import javax.net.ssl.SNIHostName;
+import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SNIServerName;
+import javax.net.ssl.StandardConstants;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -200,6 +205,18 @@ abstract class BaseHttpConnection implements HttpConnection {
 
     @Override
     public Optional<String> sniHostName() {
-        throw new UnsupportedOperationException("Not implemented yet.");
+        if (!(clientSocket instanceof SSLSocket)) {
+            return Optional.empty();
+        }
+        SSLSession session = ((SSLSocket) clientSocket).getSession();
+        if (!(session instanceof ExtendedSSLSession)) {
+            return Optional.empty();
+        }
+        for (SNIServerName serverName : ((ExtendedSSLSession) session).getRequestedServerNames()) {
+            if (serverName.getType() == StandardConstants.SNI_HOST_NAME) {
+                return Optional.of(((SNIHostName) serverName).getAsciiName());
+            }
+        }
+        return Optional.empty();
     }
 }

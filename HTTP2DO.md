@@ -74,7 +74,7 @@ Legend:
  * 8.8.3. [~] Complex Request
  * 8.8.4. [~] Response with Body
  * 8.8.5. [x] Informational Responses
-* 9. [ ] HTTP/2 Connections
+* 9. [~] HTTP/2 Connections
  * 9.1. [~] Connection Management
  * 9.1.1. [ ] Connection Reuse
  * 9.2. [ ] Use of TLS Features
