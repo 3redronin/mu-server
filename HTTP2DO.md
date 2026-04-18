@@ -49,7 +49,7 @@ Legend:
  * 6.9. [x] WINDOW_UPDATE
  * 6.9.1. [x] The Flow-Control Window
  * 6.9.2. [x] Initial Flow-Control Window Size
- * 6.9.3. [~] Reducing the Stream Window Size
+ * 6.9.3. [x] Reducing the Stream Window Size
  * 6.10. [x] CONTINUATION
 * 7. [x] Error Codes
 * 8. [~] Expressing HTTP Semantics in HTTP/2

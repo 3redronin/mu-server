@@ -406,6 +406,125 @@ class RFC9113_6_5_SettingsTest {
     }
 
     @Test
+    void connectionWindowUpdatesDoNotUnblockAStreamMadeNegativeBySettingsReduction() throws Exception {
+        var maySendSecondChunk = new CountDownLatch(1);
+        var requestStarted = new CountDownLatch(1);
+
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
+                requestStarted.countDown();
+                response.sendChunk("0123456789");
+                assertNotTimedOut("waiting for second chunk", maySendSecondChunk);
+                response.sendChunk("A");
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, true, getHelloHeaders(getPort())))
+                .flush();
+
+            assertNotTimedOut("waiting for request to start", requestStarted);
+
+            var headers = readIgnoringWindowUpdates(con, Http2HeadersFrame.class);
+            assertThat(headers.streamId(), equalTo(1));
+            assertThat(headers.headers().get(":status"), equalTo("200"));
+
+            var firstChunk = readIgnoringWindowUpdates(con, Http2DataFrame.class);
+            assertThat(firstChunk.streamId(), equalTo(1));
+            assertThat(firstChunk.toUTF8(), equalTo("0123456789"));
+            assertThat(firstChunk.endStream(), equalTo(false));
+
+            con.writeRaw(settingsFrame(4, 5))
+                .flush();
+
+            assertThat(con.readLogicalFrame(), equalTo(Http2Settings.ACK));
+
+            maySendSecondChunk.countDown();
+
+            assertNothingToRead(con.socket());
+
+            con.writeFrame(new Http2WindowUpdate(0, 100))
+                .flush();
+
+            assertNothingToRead(con.socket());
+
+            con.writeFrame(new Http2WindowUpdate(1, 5))
+                .flush();
+
+            assertNothingToRead(con.socket());
+
+            con.writeFrame(new Http2WindowUpdate(1, 1))
+                .flush();
+
+            var secondChunk = readIgnoringWindowUpdatesForStream(con, Http2DataFrame.class, 1);
+            assertThat(secondChunk.toUTF8(), equalTo("A"));
+            assertThat(secondChunk.endStream(), equalTo(false));
+            assertThat(readIgnoringWindowUpdatesForStream(con, Http2DataFrame.class, 1), equalTo(Http2DataFrame.eos(1)));
+        }
+    }
+
+    @Test
+    void resettingAStreamUnblocksAWriterBlockedByANegativeWindow() throws Exception {
+        var maySendSecondChunk = new CountDownLatch(1);
+        var requestStarted = new CountDownLatch(1);
+        var completed = new CountDownLatch(1);
+        var failure = new java.util.concurrent.atomic.AtomicReference<ResponseInfo>();
+
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
+                requestStarted.countDown();
+                response.sendChunk("0123456789");
+                assertNotTimedOut("waiting for second chunk", maySendSecondChunk);
+                response.sendChunk("A");
+            })
+            .addResponseCompleteListener(info -> {
+                failure.set(info);
+                completed.countDown();
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, true, getHelloHeaders(getPort())))
+                .flush();
+
+            assertNotTimedOut("waiting for request to start", requestStarted);
+
+            var headers = readIgnoringWindowUpdates(con, Http2HeadersFrame.class);
+            assertThat(headers.streamId(), equalTo(1));
+            assertThat(headers.headers().get(":status"), equalTo("200"));
+
+            var firstChunk = readIgnoringWindowUpdates(con, Http2DataFrame.class);
+            assertThat(firstChunk.streamId(), equalTo(1));
+            assertThat(firstChunk.toUTF8(), equalTo("0123456789"));
+            assertThat(firstChunk.endStream(), equalTo(false));
+
+            con.writeRaw(settingsFrame(4, 5))
+                .flush();
+
+            assertThat(con.readLogicalFrame(), equalTo(Http2Settings.ACK));
+
+            maySendSecondChunk.countDown();
+
+            assertNothingToRead(con.socket());
+
+            con.writeFrame(new Http2ResetStreamFrame(1, Http2ErrorCode.CANCEL.code()))
+                .flush();
+
+            assertNotTimedOut("waiting for blocked writer to finish after reset", completed);
+            assertThat(failure.get().completedSuccessfully(), equalTo(false));
+            assertNothingToRead(con.socket());
+        }
+    }
+
+    @Test
     void serverSettingsAreOnlyAckPendingAfterTheyAreSent() throws Exception {
         server = httpsServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled().withSettingsAckTimeoutMillis(5000))

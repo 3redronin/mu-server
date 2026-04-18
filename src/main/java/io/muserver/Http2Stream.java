@@ -67,6 +67,7 @@ class Http2Stream implements ResponseInfo {
 
     void onReset(Http2ResetStreamFrame rstStream) {
         state = State.CLOSED;
+        outgoingFlowControl.terminate();
         if (bodyInputStream instanceof Http2BodyInputStream) {
             ((Http2BodyInputStream) bodyInputStream).onStreamReset(rstStream);
         }
@@ -78,6 +79,7 @@ class Http2Stream implements ResponseInfo {
 
     void cancel(IOException reason, boolean refundUnreadData) {
         state = State.CLOSED;
+        outgoingFlowControl.terminate();
         if (bodyInputStream instanceof Http2BodyInputStream) {
             ((Http2BodyInputStream) bodyInputStream).cancel(reason, refundUnreadData);
         }
@@ -331,6 +333,9 @@ class Http2Stream implements ResponseInfo {
         int neededCredit = frame.flowControlSize();
         if (neededCredit != 0) {
             if (!outgoingFlowControl.waitUntilWithdraw(neededCredit, 1, TimeUnit.HOURS)) {
+                if (outgoingFlowControl.terminated() || !canSendFrames()) {
+                    throw new IOException("Stream closed while waiting for flow control credit");
+                }
                 throw new IOException("Timed out waiting for flow control credit");
             }
         }

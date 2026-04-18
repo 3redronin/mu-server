@@ -13,6 +13,7 @@ class Http2OutgoingFlowController {
 
     private final int streamId;
     private int credit;
+    private boolean terminated;
     private final Lock lock = new ReentrantLock();
     private final Condition creditAvailable = lock.newCondition();
 
@@ -63,8 +64,11 @@ class Http2OutgoingFlowController {
         lock.lock();
         try {
             while (bytes > credit) {
+                if (terminated) {
+                    return false;
+                }
                 var signalled = creditAvailable.await(timeout, unit);
-                if (!signalled) {
+                if (!signalled && !terminated) {
                     return false;
                 }
             }
@@ -89,6 +93,25 @@ class Http2OutgoingFlowController {
                 return true;
             }
             return false;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    void terminate() {
+        lock.lock();
+        try {
+            terminated = true;
+            creditAvailable.signalAll();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    boolean terminated() {
+        lock.lock();
+        try {
+            return terminated;
         } finally {
             lock.unlock();
         }
