@@ -684,6 +684,11 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
                 stream.cleanup();
             } catch (Throwable e) {
                 log.info("Unhandled stream exception", e);
+                if (stream.response().hasStartedSendingData() && stream.canSendFrames() && !stream.response().responseState().endState()) {
+                    stream.response().setState(ResponseState.ERRORED);
+                    write(new Http2ResetStreamFrame(stream.id, Http2ErrorCode.INTERNAL_ERROR.code()));
+                    stream.cancel(new IOException("Unhandled stream exception", e), false);
+                }
             } finally {
                 onExchangeEnded(stream);
             }

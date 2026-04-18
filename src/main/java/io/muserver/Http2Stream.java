@@ -86,6 +86,10 @@ class Http2Stream implements ResponseInfo {
         return state == State.OPEN || state == State.HALF_CLOSED_LOCAL;
     }
 
+    boolean canSendFrames() {
+        return state == State.OPEN || state == State.HALF_CLOSED_REMOTE;
+    }
+
     void onTrailers(Http2HeadersFrame headersFrame) throws Http2Exception {
         if (!canReceiveData()) {
             state = State.CLOSED;
