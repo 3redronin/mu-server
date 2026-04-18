@@ -165,6 +165,85 @@ class RFC9113_5_2_FlowControlTest {
         }
     }
 
+    @Test
+    void streamCreditOfOneShouldEmitHelloOneByteAtATime() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
+                response.write("hello");
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake()
+                .writeRaw(settingsFrame(4, 1))
+                .flush();
+
+            assertThat(con.readLogicalFrame(), equalTo(Http2Settings.ACK));
+
+            con.writeFrame(new Http2HeadersFrame(1, true, getHelloHeaders(getPort())))
+                .flush();
+
+            var headers = readIgnoringWindowUpdates(con, Http2HeadersFrame.class);
+            assertThat(headers.streamId(), equalTo(1));
+            assertThat(headers.headers().get(":status"), equalTo("200"));
+
+            con.socket().setSoTimeout(2000);
+            assertHelloArrivesOneByteAtATime(con, 1, 1);
+        }
+    }
+
+    @Test
+    void connectionCreditOfOneShouldEmitHelloOneByteAtATime() throws Exception {
+        byte[] body = repeated('x', 65534);
+
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.GET, "/drain", (request, response, pathParams) -> {
+                response.outputStream().write(body);
+            })
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
+                response.write("hello");
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            var drainHeaders = getHelloHeaders(getPort());
+            drainHeaders.set(":path", "/drain");
+
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, true, drainHeaders))
+                .flush();
+
+            var drainResponse = readIgnoringWindowUpdates(con, Http2HeadersFrame.class);
+            assertThat(drainResponse.streamId(), equalTo(1));
+            assertThat(drainResponse.headers().get(":status"), equalTo("200"));
+
+            int received = 0;
+            while (received < body.length) {
+                var frame = readIgnoringWindowUpdates(con, Http2DataFrame.class);
+                assertThat(frame.streamId(), equalTo(1));
+                received += frame.payloadLength();
+            }
+            assertThat(received, equalTo(body.length));
+            assertThat(readIgnoringWindowUpdates(con, Http2DataFrame.class), equalTo(Http2DataFrame.eos(1)));
+
+            con.writeFrame(new Http2HeadersFrame(3, true, getHelloHeaders(getPort())))
+                .flush();
+
+            var headers = readIgnoringWindowUpdates(con, Http2HeadersFrame.class);
+            assertThat(headers.streamId(), equalTo(3));
+            assertThat(headers.headers().get(":status"), equalTo("200"));
+
+            con.socket().setSoTimeout(2000);
+            assertHelloArrivesOneByteAtATime(con, 3, 0);
+        }
+    }
+
     private static byte[] settingsFrame(int identifier, long value) {
         return new byte[] {
             0, 0, 6,
@@ -197,6 +276,20 @@ class RFC9113_5_2_FlowControlTest {
             }
             throw new IllegalStateException("Expected " + clazz.getName() + ", got " + frame);
         }
+    }
+
+    private static void assertHelloArrivesOneByteAtATime(H2ClientConnection con, int streamId, int windowUpdateStreamId) throws Exception {
+        for (char expected : "hello".toCharArray()) {
+            var data = readIgnoringWindowUpdates(con, Http2DataFrame.class);
+            assertThat(data.streamId(), equalTo(streamId));
+            assertThat(data.toUTF8(), equalTo(String.valueOf(expected)));
+            assertThat(data.endStream(), equalTo(false));
+            if (expected != 'o') {
+                con.writeFrame(new Http2WindowUpdate(windowUpdateStreamId, 1))
+                    .flush();
+            }
+        }
+        assertThat(readIgnoringWindowUpdates(con, Http2DataFrame.class), equalTo(Http2DataFrame.eos(streamId)));
     }
 
     private byte[] repeated(char c, int count) {

@@ -59,6 +59,25 @@ class Http2OutgoingFlowController {
         }
     }
 
+    boolean waitUntilAvailable(int bytes, long timeout, TimeUnit unit) throws InterruptedException {
+        if (bytes < 0) throw new IllegalArgumentException("Negative availability check");
+        lock.lock();
+        try {
+            while (bytes > credit) {
+                if (terminated) {
+                    return false;
+                }
+                var signalled = creditAvailable.await(timeout, unit);
+                if (!signalled && !terminated) {
+                    return false;
+                }
+            }
+            return true;
+        } finally {
+            lock.unlock();
+        }
+    }
+
     boolean waitUntilWithdraw(int bytes, long timeout, TimeUnit unit) throws InterruptedException {
         if (bytes < 0) throw new IllegalArgumentException("Negative withdrawal");
         lock.lock();

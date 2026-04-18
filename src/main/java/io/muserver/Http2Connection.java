@@ -99,6 +99,14 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         }
     }
 
+    int currentWriteCredit() {
+        return outgoingFlowControl.credit();
+    }
+
+    boolean waitUntilWriteCreditAvailable(int bytes, long timeout, TimeUnit unit) throws InterruptedException {
+        return outgoingFlowControl.waitUntilAvailable(bytes, timeout, unit);
+    }
+
     void write(LogicalHttp2Frame frame) {
         write(new WriteTask(frame, false));
     }

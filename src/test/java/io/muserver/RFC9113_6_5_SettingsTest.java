@@ -300,6 +300,84 @@ class RFC9113_6_5_SettingsTest {
     }
 
     @Test
+    void reducingInitialWindowSizeToOneOnAnExistingStreamShouldEmitHelloOneByteAtATime() throws Exception {
+        var goTime = new CountDownLatch(1);
+        var requestStarted = new CountDownLatch(1);
+
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
+                requestStarted.countDown();
+                assertNotTimedOut("waiting to write response", goTime);
+                response.write("hello");
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, true, getHelloHeaders(getPort())))
+                .flush();
+
+            assertNotTimedOut("waiting for request to start", requestStarted);
+
+            con.writeRaw(settingsFrame(4, 1))
+                .flush();
+
+            assertThat(con.readLogicalFrame(), equalTo(Http2Settings.ACK));
+
+            goTime.countDown();
+
+            var headers = con.readLogicalFrame(Http2HeadersFrame.class);
+            assertThat(headers.streamId(), equalTo(1));
+            assertThat(headers.headers().get(":status"), equalTo("200"));
+
+            con.socket().setSoTimeout(2000);
+            assertHelloArrivesOneByteAtATime(con, 1);
+        }
+    }
+
+    @Test
+    void multipleInitialWindowSizeValuesInOneSettingsFrameShouldUseTheLastValueForPartialEmission() throws Exception {
+        var goTime = new CountDownLatch(1);
+        var requestStarted = new CountDownLatch(1);
+
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
+                requestStarted.countDown();
+                assertNotTimedOut("waiting to write response", goTime);
+                response.write("hello");
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, true, getHelloHeaders(getPort())))
+                .flush();
+
+            assertNotTimedOut("waiting for request to start", requestStarted);
+
+            con.writeRaw(settingsFrameWithTwoEntries(4, 0, 4, 1))
+                .flush();
+
+            assertThat(con.readLogicalFrame(), equalTo(Http2Settings.ACK));
+
+            goTime.countDown();
+
+            var headers = con.readLogicalFrame(Http2HeadersFrame.class);
+            assertThat(headers.streamId(), equalTo(1));
+            assertThat(headers.headers().get(":status"), equalTo("200"));
+
+            con.socket().setSoTimeout(2000);
+            assertHelloArrivesOneByteAtATime(con, 1);
+        }
+    }
+
+    @Test
     void increasingInitialWindowSizeCanUnblockAnExistingStreamWithoutAStreamWindowUpdate() throws Exception {
         var goTime = new CountDownLatch(1);
         var requestStarted = new CountDownLatch(1);
@@ -592,6 +670,41 @@ class RFC9113_6_5_SettingsTest {
             (byte) (value >> 8),
             (byte) value
         };
+    }
+
+    private static byte[] settingsFrameWithTwoEntries(int identifier1, long value1, int identifier2, long value2) {
+        return new byte[] {
+            0, 0, 12,
+            0x04,
+            0,
+            0, 0, 0, 0,
+            (byte) (identifier1 >> 8),
+            (byte) identifier1,
+            (byte) (value1 >> 24),
+            (byte) (value1 >> 16),
+            (byte) (value1 >> 8),
+            (byte) value1,
+            (byte) (identifier2 >> 8),
+            (byte) identifier2,
+            (byte) (value2 >> 24),
+            (byte) (value2 >> 16),
+            (byte) (value2 >> 8),
+            (byte) value2
+        };
+    }
+
+    private static void assertHelloArrivesOneByteAtATime(H2ClientConnection con, int streamId) throws Exception {
+        for (char expected : "hello".toCharArray()) {
+            var data = con.readLogicalFrame(Http2DataFrame.class);
+            assertThat(data.streamId(), equalTo(streamId));
+            assertThat(data.toUTF8(), equalTo(String.valueOf(expected)));
+            assertThat(data.endStream(), equalTo(false));
+            if (expected != 'o') {
+                con.writeFrame(new Http2WindowUpdate(streamId, 1))
+                    .flush();
+            }
+        }
+        assertThat(con.readLogicalFrame(), equalTo(Http2DataFrame.eos(streamId)));
     }
 
     private int getPort() {

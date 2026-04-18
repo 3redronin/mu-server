@@ -52,6 +52,33 @@ class Http2Stream implements ResponseInfo {
         return connection.maxFrameSize();
     }
 
+    private int currentWritableDataCredit() {
+        return Math.max(0, Math.min(outgoingFlowControl.credit(), connection.currentWriteCredit()));
+    }
+
+    private boolean waitUntilWritableDataCreditAvailable(long timeout, TimeUnit unit) throws InterruptedException {
+        while (true) {
+            if (outgoingFlowControl.terminated() || !canSendFrames()) {
+                return false;
+            }
+            int streamCredit = outgoingFlowControl.credit();
+            int connectionCredit = connection.currentWriteCredit();
+            if (streamCredit > 0 && connectionCredit > 0) {
+                return true;
+            }
+            if (streamCredit <= 0) {
+                if (!outgoingFlowControl.waitUntilAvailable(1, timeout, unit)) {
+                    return false;
+                }
+            }
+            if (connectionCredit <= 0) {
+                if (!connection.waitUntilWriteCreditAvailable(1, timeout, unit)) {
+                    return false;
+                }
+            }
+        }
+    }
+
     @Override
     public long duration() {
         var end = endTime;
@@ -333,6 +360,26 @@ class Http2Stream implements ResponseInfo {
             response.cleanup();
         } finally {
             endTime = System.currentTimeMillis();
+        }
+    }
+
+    void blockingWriteData(byte[] payload, int offset, int length) throws IOException, InterruptedException {
+        int remaining = length;
+        int frameOffset = offset;
+        while (remaining > 0) {
+            if (!waitUntilWritableDataCreditAvailable(1, TimeUnit.HOURS)) {
+                if (outgoingFlowControl.terminated() || !canSendFrames()) {
+                    throw new IOException("Stream closed while waiting for flow control credit");
+                }
+                throw new IOException("Timed out waiting for flow control credit");
+            }
+            int frameLength = Math.min(Math.min(remaining, maxFrameSize()), currentWritableDataCredit());
+            if (frameLength <= 0) {
+                continue;
+            }
+            blockingWrite(new Http2DataFrame(id, false, payload, frameOffset, frameLength));
+            frameOffset += frameLength;
+            remaining -= frameLength;
         }
     }
 
