@@ -200,6 +200,58 @@ public class RequestBodyReaderInputStreamAdapterTest {
     }
 
     @Test
+    public void http10ExpectContinueIsIgnored() throws Exception {
+        server = httpServer()
+            .addHandler((request, response) -> {
+                response.write(request.readBodyAsString());
+                return true;
+            })
+            .start();
+
+        try (var client = Http1Client.connect(server.uri())) {
+            client.writeRequestLine(Method.POST, server.uri().resolve("/"), HttpVersion.HTTP_1_0, false)
+                .writeHeader("expect", "100-continue")
+                .writeHeader("content-type", "text/plain")
+                .writeHeader("content-length", "5")
+                .endHeaders()
+                .writeAscii("hello")
+                .flush();
+
+            String statusLine = client.readLine();
+            assertThat(statusLine, equalTo("HTTP/1.1 200 OK"));
+            var headers = client.readHeaders();
+            var body = client.readBody(headers);
+            assertThat(body, equalTo("hello"));
+            assertThat(statusLine, not(containsString("100 Continue")));
+        }
+    }
+
+    @Test
+    public void chunkedTransferEncodingIsRejectedForHttp10() throws Exception {
+        server = httpServer()
+            .addHandler((request, response) -> {
+                response.write("unexpected");
+                return true;
+            })
+            .start();
+
+        try (var client = Http1Client.connect(server.uri())) {
+            client.writeRequestLine(Method.POST, server.uri().resolve("/"), HttpVersion.HTTP_1_0, false)
+                .writeHeader("content-type", "text/plain")
+                .writeHeader("transfer-encoding", "chunked")
+                .endHeaders()
+                .writeAscii("5\r\nHello\r\n0\r\n\r\n")
+                .flush();
+
+            String statusLine = client.readLine();
+            assertThat(statusLine, equalTo("HTTP/1.1 400 Bad Request"));
+            var headers = client.readHeaders();
+            var body = client.readBody(headers);
+            assertThat(body, containsString("Chunked transfer encoding is not supported"));
+        }
+    }
+
+    @Test
     public void chunkedRequestTrailersCanBeReadAfterTheBody() throws Exception {
         server = httpServer()
             .addHandler((request, response) -> {
