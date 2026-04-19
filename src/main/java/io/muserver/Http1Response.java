@@ -13,6 +13,7 @@ class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
     private WebsocketConnection websocket;
     @Nullable
     private Long endMillis;
+    private boolean shouldCloseConnectionAfterResponse;
 
     Http1Response(Mu3Request muRequest, OutputStream socketOut) {
         super(muRequest, new FieldBlock());
@@ -58,8 +59,16 @@ class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
             OutputStream rawOut = request.method().isHead() ? DiscardingOutputStream.INSTANCE : socketOut;
 
             if (fixedLen == -1L) {
-                headers().set(HeaderNames.TRANSFER_ENCODING, HeaderValues.CHUNKED);
-                wrappedOut = new ChunkedOutputStream(rawOut);
+                if (request.httpVersion() == HttpVersion.HTTP_1_1) {
+                    headers().set(HeaderNames.TRANSFER_ENCODING, HeaderValues.CHUNKED);
+                    wrappedOut = new ChunkedOutputStream(rawOut);
+                } else {
+                    wrappedOut = new CloseDelimitedOutputStream(rawOut);
+                    if (!request.method().isHead() && status().canHaveContent()) {
+                        shouldCloseConnectionAfterResponse = true;
+                        headers().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
+                    }
+                }
             } else {
                 wrappedOut = new FixedSizeOutputStream(fixedLen, rawOut);
             }
@@ -140,5 +149,9 @@ class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
     @Nullable
     public WebsocketConnection getWebsocket() {
         return websocket;
+    }
+
+    boolean shouldCloseConnectionAfterResponse() {
+        return shouldCloseConnectionAfterResponse;
     }
 }

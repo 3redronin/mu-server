@@ -328,6 +328,147 @@ public class MuServerTest {
     }
 
     @Test
+    public void http10ResponsesWithoutContentLengthAreCloseDelimited() throws Exception {
+        server = httpServer()
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.outputStream().write("hello".getBytes(StandardCharsets.UTF_8));
+            })
+            .start();
+
+        try (RawClient rawClient = RawClient.create(server.uri())) {
+            rawClient.sendLine("GET / HTTP/1.0");
+            rawClient.sendHeader("Host", server.uri().getAuthority());
+            rawClient.sendHeader("Connection", "keep-alive");
+            rawClient.endHeaders();
+            rawClient.flushRequest();
+            rawClient.waitForFullResponse();
+
+            String response = rawClient.responseString();
+            String lower = response.toLowerCase();
+            assertThat(response, startsWith("HTTP/1.1 200 OK\r\n"));
+            assertThat(response, containsString("\r\n\r\nhello"));
+            assertThat(lower, not(containsString("transfer-encoding: chunked")));
+            assertThat(lower, containsString("connection: close"));
+        }
+    }
+
+    @Test
+    public void http10ResponsesWithOutputStreamButNoBodyBytesAreCloseDelimited() throws Exception {
+        server = httpServer()
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.outputStream().flush();
+            })
+            .start();
+
+        try (RawClient rawClient = RawClient.create(server.uri())) {
+            rawClient.sendLine("GET / HTTP/1.0");
+            rawClient.sendHeader("Host", server.uri().getAuthority());
+            rawClient.sendHeader("Connection", "keep-alive");
+            rawClient.endHeaders();
+            rawClient.flushRequest();
+            rawClient.waitForFullResponse();
+
+            String response = rawClient.responseString();
+            String lower = response.toLowerCase();
+            assertThat(response, startsWith("HTTP/1.1 200 OK\r\n"));
+            assertThat(response, endsWith("\r\n\r\n"));
+            assertThat(lower, not(containsString("transfer-encoding: chunked")));
+            assertThat(lower, not(containsString("content-length:")));
+            assertThat(lower, containsString("connection: close"));
+        }
+    }
+
+    @Test
+    public void http10UnknownLengthOutputStreamSupportsMultipleFlushes() throws Exception {
+        server = httpServer()
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                var out = response.outputStream();
+                out.write("abc".getBytes(StandardCharsets.UTF_8));
+                out.flush();
+                out.write("123".getBytes(StandardCharsets.UTF_8));
+                out.flush();
+            })
+            .start();
+
+        try (RawClient rawClient = RawClient.create(server.uri())) {
+            rawClient.sendLine("GET / HTTP/1.0");
+            rawClient.sendHeader("Host", server.uri().getAuthority());
+            rawClient.sendHeader("Connection", "keep-alive");
+            rawClient.endHeaders();
+            rawClient.flushRequest();
+            rawClient.waitForFullResponse();
+
+            String response = rawClient.responseString();
+            String lower = response.toLowerCase();
+            assertThat(response, containsString("\r\n\r\nabc123"));
+            assertThat(lower, not(containsString("transfer-encoding: chunked")));
+            assertThat(lower, not(containsString("content-length:")));
+            assertThat(lower, containsString("connection: close"));
+        }
+    }
+
+    @Test
+    public void http10SendChunkUsesCloseDelimitedSemantics() throws Exception {
+        server = httpServer()
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.sendChunk("first-");
+                response.sendChunk("second");
+            })
+            .start();
+
+        try (RawClient rawClient = RawClient.create(server.uri())) {
+            rawClient.sendLine("GET / HTTP/1.0");
+            rawClient.sendHeader("Host", server.uri().getAuthority());
+            rawClient.sendHeader("Connection", "keep-alive");
+            rawClient.endHeaders();
+            rawClient.flushRequest();
+            rawClient.waitForFullResponse();
+
+            String response = rawClient.responseString();
+            String lower = response.toLowerCase();
+            assertThat(response, containsString("\r\n\r\nfirst-second"));
+            assertThat(lower, not(containsString("transfer-encoding: chunked")));
+            assertThat(lower, not(containsString("content-length:")));
+            assertThat(lower, containsString("connection: close"));
+        }
+    }
+
+    @Test
+    public void http10FixedLengthResponsesCanRemainPersistent() throws Exception {
+        server = httpServer()
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.headers().set(HeaderNames.CONNECTION, HeaderValues.KEEP_ALIVE);
+                response.write("hello");
+            })
+            .start();
+
+        try (RawClient rawClient = RawClient.create(server.uri())) {
+            rawClient.sendLine("GET / HTTP/1.0");
+            rawClient.sendHeader("Host", server.uri().getAuthority());
+            rawClient.sendHeader("Connection", "keep-alive");
+            rawClient.endHeaders();
+            rawClient.flushRequest();
+            assertEventually(() -> rawClient.responseString(), containsString("\r\n\r\nhello"));
+
+            String firstResponse = rawClient.responseString().toLowerCase();
+            assertThat(firstResponse, containsString("content-length: 5"));
+            assertThat(firstResponse, not(containsString("connection: close")));
+
+            rawClient.sendLine("GET / HTTP/1.0");
+            rawClient.sendHeader("Host", server.uri().getAuthority());
+            rawClient.sendHeader("Connection", "keep-alive");
+            rawClient.endHeaders();
+            rawClient.flushRequest();
+            assertEventually(() -> rawClient.responseString().split("HTTP/1.1 200 OK\\r\\n", -1).length - 1, is(2));
+
+            String response = rawClient.responseString();
+            assertThat(response, containsString("HTTP/1.1 200 OK\r\n"));
+            assertThat(response.split("HTTP/1.1 200 OK\\r\\n", -1).length - 1, is(2));
+            assertThat(response, containsString("\r\n\r\nhelloHTTP/1.1 200 OK\r\n"));
+        }
+    }
+
+    @Test
     public void nonUTF8IsSupported() throws IOException {
         File warAndPeaceInRussian = FileUtils.warAndPeaceInRussian();
 

@@ -151,6 +151,9 @@ class Http1Connection extends BaseHttpConnection {
         if (!reallyClose) {
             reallyClose = muResponse.headers().closeConnectionRequested(muRequest.httpVersion());
         }
+        if (!reallyClose && muResponse.shouldCloseConnectionAfterResponse()) {
+            reallyClose = true;
+        }
         try {
             if (!muRequest.cleanup()) {
                 reallyClose = true;
@@ -265,4 +268,3 @@ class Http1Connection extends BaseHttpConnection {
 
     }
 }
-
