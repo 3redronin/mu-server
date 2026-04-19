@@ -12,6 +12,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.sameInstance;
 
 class Http1MessageParserTest {
@@ -106,6 +107,25 @@ class Http1MessageParserTest {
         assertThat(bit, sameInstance(MessageBodyBit.EndOfBodyBit));
     }
 
+    @Test
+    void http10RequestsDoNotRequireHostHeader() throws IOException, ParseException {
+        String requestString = "GET /legacy HTTP/1.0\r\n" +
+            "content-length: 0\r\n" +
+            "\r\n";
+        var parser = new Http1MessageParser(
+            HttpMessageType.REQUEST,
+            new ConcurrentLinkedQueue<>(),
+            new ByteArrayInputStream(requestString.getBytes(StandardCharsets.UTF_8)),
+            8192,
+            8192
+        );
+
+        var req = (HttpRequestTemp) parser.readNext();
+        assertThat(req.getHttpVersion(), equalTo(HttpVersion.HTTP_1_0));
+        assertThat(req.headers().contains(HeaderNames.HOST), equalTo(false));
+        assertThat(req.getRejectRequest(), nullValue());
+    }
+
     private static class MaxReadLengthInputStream extends FilterInputStream {
         private final byte[] temp;
 
@@ -128,5 +148,4 @@ class Http1MessageParserTest {
     }
 
 }
-
 
