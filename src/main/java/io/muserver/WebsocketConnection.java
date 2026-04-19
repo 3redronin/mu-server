@@ -128,6 +128,19 @@ class WebsocketConnection implements MuWebSocketSession {
                     readAtLeast(8);
                     payloadLength = buffer.getLong();
                 }
+                if (payloadLength < 0) {
+                    throw frameError(1002, "Invalid payload length");
+                }
+
+                boolean controlFrame = (opcode & 0x08) != 0;
+                if (controlFrame) {
+                    if (!fin) {
+                        throw frameError(1002, "Fragmented control frame");
+                    }
+                    if (payloadLength > 125) {
+                        throw frameError(1002, "Control frame payload cannot exceed 125 bytes");
+                    }
+                }
                 if (payloadLength > settings.maxFramePayloadLength) {
                     throw frameError(1009, "Max payload length of " + settings.maxFramePayloadLength + " exceeded with frame size " + payloadLength);
                 }
@@ -186,6 +199,9 @@ class WebsocketConnection implements MuWebSocketSession {
                         webSocket.onBinaryFragment(slice, false);
                     }
                 } else if (opcode == 0x8) {
+                    if (payloadLen == 1) {
+                        throw frameError(1002, "Close frame payload of 1 byte is invalid");
+                    }
                     if (state == WebsocketSessionState.OPEN) {
                         state = WebsocketSessionState.CLIENT_CLOSING;
                     }
@@ -325,13 +341,13 @@ class WebsocketConnection implements MuWebSocketSession {
     public void sendTextFragment(ByteBuffer fragment, boolean isLastFragment) throws IOException {
         writeLock.lock();
         try {
+            var payload = arrayBuffer(fragment);
+            int off = payload.arrayOffset() + payload.position();
+            int len = payload.remaining();
             if (isLastFragment && messageWritingState == MessageWritingState.NONE) {
                 // this is just a non-fragmented full message, so use the plain send
-                sendText(StandardCharsets.UTF_8.decode(fragment).toString());
+                writeFragment((byte) 0b10000001, payload.array(), off, len, MessageWritingState.NONE, MessageWritingState.NONE);
             } else {
-                var payload = arrayBuffer(fragment);
-                int off = payload.arrayOffset() + payload.position();
-                int len = payload.remaining();
                 if (!isLastFragment && messageWritingState == MessageWritingState.NONE) {
                     // the first message of a fragmented text message
                     writeFragment((byte) 0b00000001, payload.array(), off, len, MessageWritingState.NONE, MessageWritingState.TEXT);
