@@ -439,9 +439,132 @@ public class WebSocketsTest {
 
     }
 
+    @Test
+    public void fragmentedControlFramesAreRejectedWith1002() throws Exception {
+        server = MuServerBuilder.httpServer()
+            .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket)
+                .withPingInterval(0, TimeUnit.MILLISECONDS))
+            .start();
+
+        try (Socket socket = new Socket(server.uri().getHost(), server.uri().getPort());
+             OutputStream out = socket.getOutputStream();
+             InputStream in = socket.getInputStream()) {
+
+            socket.setSoTimeout(2_000);
+            handshake(out, in);
+
+            sendMaskedFrame(out, false, 0x9, "abc".getBytes(StandardCharsets.UTF_8), new byte[]{0x01, 0x02, 0x03, 0x04});
+            out.flush();
+
+            CloseFrame close = readCloseFrame(in);
+            assertThat(close.code, equalTo(1002));
+        }
+    }
+
+    @Test
+    public void controlFramesLargerThan125BytesAreRejectedWith1002() throws Exception {
+        server = MuServerBuilder.httpServer()
+            .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket)
+                .withPingInterval(0, TimeUnit.MILLISECONDS))
+            .start();
+
+        try (Socket socket = new Socket(server.uri().getHost(), server.uri().getPort());
+             OutputStream out = socket.getOutputStream();
+             InputStream in = socket.getInputStream()) {
+
+            socket.setSoTimeout(2_000);
+            handshake(out, in);
+
+            byte[] payload = StringUtils.randomAsciiStringOfLength(126).getBytes(StandardCharsets.UTF_8);
+            sendMaskedFrame(out, true, 0x9, payload, new byte[]{0x11, 0x22, 0x33, 0x44});
+            out.flush();
+
+            CloseFrame close = readCloseFrame(in);
+            assertThat(close.code, equalTo(1002));
+        }
+    }
+
+    @Test
+    public void framesWithNegative64BitPayloadLengthAreRejectedWith1002() throws Exception {
+        server = MuServerBuilder.httpServer()
+            .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket)
+                .withPingInterval(0, TimeUnit.MILLISECONDS))
+            .start();
+
+        try (Socket socket = new Socket(server.uri().getHost(), server.uri().getPort());
+             OutputStream out = socket.getOutputStream();
+             InputStream in = socket.getInputStream()) {
+
+            socket.setSoTimeout(2_000);
+            handshake(out, in);
+
+            // FIN + text opcode
+            out.write(0x81);
+            // masked + 64-bit payload length marker
+            out.write(0xFF);
+            // an invalid negative length (MSB set)
+            out.write(new byte[]{(byte) 0x80, 0, 0, 0, 0, 0, 0, 0});
+            // mask key
+            out.write(new byte[]{0x01, 0x02, 0x03, 0x04});
+            out.flush();
+
+            CloseFrame close = readCloseFrame(in);
+            assertThat(close.code, equalTo(1002));
+        }
+    }
+
     private static void maskPayload(int payloadLength, byte[] payload, byte[] maskKey) {
         for (int i = 0; i < payloadLength; i++) {
             payload[i] ^= maskKey[i % 4];
+        }
+    }
+
+    private static void sendMaskedFrame(OutputStream out, boolean fin, int opcode, byte[] payload, byte[] maskKey) throws IOException {
+        var frame = new ByteArrayOutputStream();
+        int firstByte = (fin ? 0x80 : 0x00) | (opcode & 0x0F);
+        frame.write(firstByte);
+
+        int payloadLength = payload.length;
+        if (payloadLength <= 125) {
+            frame.write(0x80 | payloadLength);
+        } else if (payloadLength <= 65535) {
+            frame.write(0x80 | 126);
+            frame.write((payloadLength >> 8) & 0xFF);
+            frame.write(payloadLength & 0xFF);
+        } else {
+            throw new IllegalArgumentException("Payload too large for test helper");
+        }
+
+        frame.write(maskKey);
+        byte[] maskedPayload = payload.clone();
+        maskPayload(maskedPayload.length, maskedPayload, maskKey);
+        frame.write(maskedPayload);
+        out.write(frame.toByteArray());
+    }
+
+    private static CloseFrame readCloseFrame(InputStream in) throws IOException {
+        int firstByte = in.read();
+        assertThat(firstByte, equalTo(0b10001000));
+        int secondByte = in.read();
+        int payloadLength = secondByte & 0x7F;
+        if (payloadLength == 126) {
+            payloadLength = ((in.read() & 0xFF) << 8) | (in.read() & 0xFF);
+        } else if (payloadLength == 127) {
+            throw new AssertionError("Close frame should not have 64-bit length");
+        }
+        byte[] payload = in.readNBytes(payloadLength);
+        int closeCode = payloadLength >= 2 ? ((payload[0] & 0xFF) << 8) | (payload[1] & 0xFF) : 1005;
+        String reason = payloadLength > 2 ? new String(payload, 2, payloadLength - 2, StandardCharsets.UTF_8) : "";
+        return new CloseFrame(closeCode, reason);
+    }
+
+    private static class CloseFrame {
+        private final int code;
+        private final String reason;
+
+        private CloseFrame(int code, String reason) {
+            this.code = code;
+            this.reason = reason;
         }
     }
 
@@ -693,6 +816,38 @@ public class WebSocketsTest {
         assertThat(listener.toString(), listener.events, contains(
             "onOpen", "onMessage text: Partial one Partial two Last one", "onMessage binary: Hello from binary",
             "onClosing 1000 Done", "onClosed 1000 Done"));
+    }
+
+    @Test
+    public void singleFinalTextFragmentCanBeSentWithoutFragmentMode() throws Exception {
+        CompletableFuture<String> result = new CompletableFuture<>();
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(webSocketHandler((request, responseHeaders) -> new SimpleWebSocket() {
+                @Override
+                public void onConnect(MuWebSocketSession session) throws Exception {
+                    super.onConnect(session);
+                    session.sendTextFragment(Mutils.toByteBuffer("Single chunk"), true);
+                    result.complete("Success");
+                }
+
+                @Override
+                public void onText(String message) {
+                }
+
+                @Override
+                public void onBinary(ByteBuffer buffer) {
+                }
+            }).withPath("/routed-websocket"))
+            .start();
+
+        ClientListener listener = new ClientListener();
+        WebSocket clientSocket = client.newWebSocket(webSocketRequest(server.uri().resolve("/routed-websocket")), listener);
+        assertThat(result.get(10, TimeUnit.SECONDS), is("Success"));
+        assertNotTimedOut("Client got message", listener.messageLatch);
+        clientSocket.close(1000, "Done");
+        assertNotTimedOut("Client closed", listener.closedLatch);
+        assertThat(listener.events, contains(
+            "onOpen", "onMessage text: Single chunk", "onClosing 1000 Done", "onClosed 1000 Done"));
     }
 
     @Test
