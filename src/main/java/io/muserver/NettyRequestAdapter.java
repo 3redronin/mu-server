@@ -4,6 +4,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http.*;
 import io.netty.handler.codec.http.cookie.ServerCookieDecoder;
 import io.netty.handler.codec.http.websocketx.WebSocketServerHandshaker;
@@ -398,12 +399,22 @@ class NettyRequestAdapter implements MuRequest {
             throw new UnsupportedOperationException();
         }
 
-        ctx.channel().pipeline().replace("idle", "idle",
-            new IdleStateHandler(idleReadTimeoutMills, pingAfterWriteMillis, 0, TimeUnit.MILLISECONDS));
         MuWebSocketSessionImpl session = new MuWebSocketSessionImpl(ctx, muWebSocket, connection());
-        handshaker.handshake(ctx.channel(), fullReq, responseHeaders, ctx.channel().newPromise())
+        ChannelPromise promise = ctx.channel().newPromise();
+
+        ScheduledFuture<?> handshakeTimeout = ctx.executor().schedule(() -> {
+            if (!promise.isDone()) {
+                promise.tryFailure(new TimeoutException("WebSocket handshake timed out"));
+                ctx.close();
+            }
+        }, 30, TimeUnit.SECONDS);
+
+        handshaker.handshake(ctx.channel(), fullReq, responseHeaders, promise)
             .addListener(future -> {
                 if (future.isSuccess()) {
+                    handshakeTimeout.cancel(false);
+                    ctx.channel().pipeline().replace("idle", "idle",
+                        new IdleStateHandler(idleReadTimeoutMills, pingAfterWriteMillis, 0, TimeUnit.MILLISECONDS));
                     ctx.pipeline().fireUserEventTriggered(new ExchangeUpgradeEvent(session));
                 } else {
                     ctx.pipeline().fireUserEventTriggered(new MuExceptionFiredEvent(httpExchange, 0, future.cause()));
