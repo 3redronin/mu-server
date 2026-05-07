@@ -402,10 +402,12 @@ class NettyRequestAdapter implements MuRequest {
         MuWebSocketSessionImpl session = new MuWebSocketSessionImpl(ctx, muWebSocket, connection());
         ChannelPromise promise = ctx.channel().newPromise();
 
+        // timeout scheduler to monitor the handshake,
+        // making sure connection can be close properly on timeout
         ScheduledFuture<?> handshakeTimeout = ctx.executor().schedule(() -> {
             if (!promise.isDone()) {
                 promise.tryFailure(new TimeoutException("WebSocket handshake timed out"));
-                ctx.close();
+                ctx.channel().close();
             }
         }, 30, TimeUnit.SECONDS);
 
