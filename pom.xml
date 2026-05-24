@@ -14,7 +14,9 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <netty.version>4.1.133.Final</netty.version>
+        <netty.version.4.1>4.1.133.Final</netty.version.4.1>
+        <netty.version.4.2>4.2.14.Final</netty.version.4.2>
+        <netty.version>${netty.version.4.1}</netty.version>
         <slf4j.version>1.7.36</slf4j.version>
         <jetty.version>9.4.58.v20250814</jetty.version>
     </properties>
@@ -326,6 +328,18 @@
     </build>
 
     <profiles>
+        <profile>
+            <id>netty-4.1</id>
+            <properties>
+                <netty.version>${netty.version.4.1}</netty.version>
+            </properties>
+        </profile>
+        <profile>
+            <id>netty-4.2</id>
+            <properties>
+                <netty.version>${netty.version.4.2}</netty.version>
+            </properties>
+        </profile>
         <profile>
             <id>release</id>
             <build>
