@@ -8,8 +8,8 @@ import jakarta.ws.rs.WebApplicationException;
 import okhttp3.Response;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.ServerUtils;
 
 import java.net.URI;
@@ -190,7 +190,7 @@ public class ProblemDetailsExceptionsTest {
         assertThat(builder.log5xxProblemDetailsInstanceIds(), is(true));
     }
 
-    @After
+    @AfterEach
     public void stop() {
         scaffolding.MuAssert.stopAndCheck(server);
     }
