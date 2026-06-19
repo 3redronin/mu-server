@@ -5,7 +5,10 @@ import java.io.Writer;
 import java.util.List;
 import java.util.Map;
 
-class Jsonizer {
+/**
+ * Internal JSON serialization helper. Not considered part of MuServer's official API so use at own risk.
+ */
+public class Jsonizer {
     private Jsonizer() {
     }
 
@@ -29,11 +32,39 @@ class Jsonizer {
             writer.append(',');
         }
         writer.append('"').append(jsonEncode(key)).append("\":");
-        appendValue(writer, value);
+        writeValue(writer, value);
         return false;
     }
 
-    private static void appendValue(Writer writer, Object value) throws IOException {
+    /**
+     * Writes a JSON object from the supplied map.
+     * <p>This is an internal helper and is intentionally minimal.</p>
+     * @param writer The writer to write to
+     * @param values The values to write
+     * @throws IOException Thrown if the writer throws this while writing
+     */
+    public static void writeObject(Writer writer, Map<String, ?> values) throws IOException {
+        writer.append('{');
+        boolean isFirst = true;
+        for (Map.Entry<String, ?> entry : values.entrySet()) {
+            if (!isFirst) {
+                writer.append(',');
+            }
+            writer.append('"').append(jsonEncode(entry.getKey())).append("\":");
+            writeValue(writer, entry.getValue());
+            isFirst = false;
+        }
+        writer.append('}');
+    }
+
+    /**
+     * Writes a JSON value.
+     * <p>This is an internal helper and is intentionally minimal.</p>
+     * @param writer The writer to write to
+     * @param value The value to write
+     * @throws IOException Thrown if the writer throws this while writing
+     */
+    public static void writeValue(Writer writer, Object value) throws IOException {
         if (value == null) {
             writer.append("null");
         } else if (value instanceof JsonWriter) {
@@ -46,19 +77,14 @@ class Jsonizer {
                 if (!isFirst) {
                     writer.append(',');
                 }
-                appendValue(writer, obj);
+                writeValue(writer, obj);
                 isFirst = false;
             }
             writer.append(']');
         } else if (value instanceof Map) {
-            writer.append('{');
             @SuppressWarnings("unchecked")
             Map<String, ?> map = (Map<String, ?>) value;
-            boolean isFirst = true;
-            for (Map.Entry<String, ?> entry : map.entrySet()) {
-                isFirst = append(writer, entry.getKey(), entry.getValue(), isFirst);
-            }
-            writer.append('}');
+            writeObject(writer, map);
         } else {
             if (value instanceof Number || value instanceof Boolean) {
                 writer.append(value.toString());
