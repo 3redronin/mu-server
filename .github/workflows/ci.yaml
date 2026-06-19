@@ -8,7 +8,8 @@ jobs:
     strategy:
       matrix:
         java: [ 8, 11, 17, 21, 25 ]
-    name: Java ${{ matrix.java }} build
+        netty-profile: [ netty-4.1, netty-4.2 ]
+    name: Java ${{ matrix.java }} / ${{ matrix.netty-profile }} build
     steps:
       - uses: actions/checkout@v4
       - name: Set up JDK ${{ matrix.java }}
@@ -17,5 +18,5 @@ jobs:
           java-version: ${{ matrix.java }}
           distribution: 'temurin'
           cache: 'maven'
-      - name: Build with Maven on JDK ${{ matrix.java }}
-        run: mvn --batch-mode --update-snapshots verify
+      - name: Build with Maven on JDK ${{ matrix.java }} and ${{ matrix.netty-profile }}
+        run: mvn --batch-mode --update-snapshots -P${{ matrix.netty-profile }} verify
