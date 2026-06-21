@@ -55,6 +55,7 @@ public class DocumentationExamples {
                 RestHandlerBuilder.restHandler(new Fruit(), new PetResource(), new PetStoreResource(), new UserResource(), new VehicleResource())
                     .withOpenApiHtmlUrl("/docs.html")
                     .withOpenApiJsonUrl("/api.json")
+                    .withOpenApiYamlUrl("/openapi.yaml")
                     .withCORS(CORSConfigBuilder.corsConfig().withAllOriginsAllowed()
                         .withAllowedHeaders("content-type")
                     )

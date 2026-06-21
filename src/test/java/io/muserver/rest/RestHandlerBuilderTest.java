@@ -18,9 +18,11 @@ public class RestHandlerBuilderTest {
         SchemaObject stringSchema = schemaObject().withDescription("Hi").build();
         RestHandlerBuilder builder = restHandler(new Object())
             .addCustomSchema(String.class, stringSchema)
-            .withOpenApiJsonUrl("/openapi.json");
+            .withOpenApiJsonUrl("/openapi.json")
+            .withOpenApiYamlUrl("/openapi.yaml");
 
         assertThat(builder.openApiJsonUrl(), is("/openapi.json"));
+        assertThat(builder.openApiYamlUrl(), is("/openapi.yaml"));
         assertThat(builder.openApiHtmlUrl(), nullValue());
 
         Map<Class<?>, SchemaObject> expectedMap = new HashMap<>();

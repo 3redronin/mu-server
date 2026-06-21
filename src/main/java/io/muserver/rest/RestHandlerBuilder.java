@@ -36,6 +36,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     private final List<ParamConverterProvider> customParamConverterProviders = new ArrayList<>();
     private final List<SchemaReference> customSchemas = new ArrayList<>();
     private String openApiJsonUrl = null;
+    private String openApiYamlUrl = null;
     private String openApiHtmlUrl = null;
     private OpenAPIObjectBuilder openAPIObject;
     private String openApiHtmlCss = null;
@@ -133,6 +134,21 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      */
     public RestHandlerBuilder withOpenApiJsonUrl(String url) {
         this.openApiJsonUrl = url;
+        return this;
+    }
+
+    /**
+     * Enables an <a href="https://www.openapis.org">Open API</a> YAML URL at the specified endpoint. This YAML describes the API exposed
+     * by the rest resources declared by this builder.
+     *
+     * @param url The URL to serve from, for example <code>/openapi.yaml</code> or <code>null</code> to disable the YAML endpoint. Disabled by default.
+     * @return The current Rest Handler Builder
+     * @see #withOpenApiDocument(OpenAPIObjectBuilder)
+     * @see #withOpenApiHtmlUrl(String)
+     * @see #withOpenApiJsonUrl(String)
+     */
+    public RestHandlerBuilder withOpenApiYamlUrl(String url) {
+        this.openApiYamlUrl = url;
         return this;
     }
 
@@ -463,6 +479,13 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     /**
      * @return The current value of this property
      */
+    public String openApiYamlUrl() {
+        return openApiYamlUrl;
+    }
+
+    /**
+     * @return The current value of this property
+     */
     public String openApiHtmlUrl() {
         return openApiHtmlUrl;
     }
@@ -555,7 +578,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
         List<ResourceClass> roots = Collections.unmodifiableList(list);
 
         OpenApiDocumentor documentor = null;
-        if (openApiHtmlUrl != null || openApiJsonUrl != null) {
+        if (openApiHtmlUrl != null || openApiJsonUrl != null || openApiYamlUrl != null) {
             if (openApiHtmlCss == null) {
                 InputStream cssStream = RestHandlerBuilder.class.getResourceAsStream("/io/muserver/resources/api.css");
                 Scanner scanner = new Scanner(cssStream, "UTF-8").useDelimiter("\\A");
@@ -565,7 +588,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
             }
             OpenAPIObjectBuilder openAPIObjectToUse = this.openAPIObject == null ? OpenAPIObjectBuilder.openAPIObject() : this.openAPIObject;
             openAPIObjectToUse.withPaths(pathsObject().build());
-            documentor = new OpenApiDocumentor(roots, openApiJsonUrl, openApiHtmlUrl, openAPIObjectToUse.build(), openApiHtmlCss, corsConfig, new ArrayList<>(customSchemas), schemaObjectCustomizer, paramConverterProviders);
+            documentor = new OpenApiDocumentor(roots, openApiJsonUrl, openApiYamlUrl, openApiHtmlUrl, openAPIObjectToUse.build(), openApiHtmlCss, corsConfig, new ArrayList<>(customSchemas), schemaObjectCustomizer, paramConverterProviders);
         }
 
         CustomExceptionMapper customExceptionMapper = new CustomExceptionMapper(exceptionMappers);
@@ -595,4 +618,3 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
         return new RestHandler(entityProviders, roots, documentor, customExceptionMapper, filterManagerThing, corsConfig, paramConverterProviders, schemaObjectCustomizer, readerInterceptors, writerInterceptors, cps);
     }
 }
-

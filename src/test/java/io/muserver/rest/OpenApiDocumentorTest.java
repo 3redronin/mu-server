@@ -17,6 +17,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.yaml.snakeyaml.Yaml;
 import scaffolding.MuAssert;
 
 import java.io.File;
@@ -59,6 +60,7 @@ public class OpenApiDocumentorTest {
                         .withUrl(URI.create("http://petstore.swagger.io"))
                         .build()))
                     .withOpenApiJsonUrl("/openapi.json")
+                    .withOpenApiYamlUrl("/openapi.yaml")
                     .withOpenApiHtmlUrl("/api.html")
             )
             .start();
@@ -120,6 +122,27 @@ public class OpenApiDocumentorTest {
             assertThat(updateByFormDataName.getString("type"), is("string"));
             assertThat(updateByFormDataName.getString("description"), is("Updated name of the pet - More details about that"));
 
+        }
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void hasYamlEndpoint() throws IOException {
+        server = serverWithPetStore();
+        try (okhttp3.Response resp = call(request().url(server.uri().resolve("/openapi.yaml").toString()))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.header("Content-Type"), equalTo("application/yaml"));
+            String yaml = resp.body().string();
+
+            Map<String, Object> doc = new Yaml().load(yaml);
+            assertThat(doc.get("openapi"), equalTo("3.0.1"));
+
+            Map<String, Object> paths = (Map<String, Object>) doc.get("paths");
+            assertThat(paths.containsKey("/pet"), is(true));
+
+            Map<String, Object> pet = (Map<String, Object>) paths.get("/pet");
+            Map<String, Object> put = (Map<String, Object>) pet.get("put");
+            assertThat(put.get("parameters"), instanceOf(List.class));
         }
     }
 

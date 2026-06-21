@@ -156,6 +156,11 @@ public class ContentTypes {
     public static final CharSequence APPLICATION_JSON = headerValue("application/json");
 
     /**
+     * YAML format:  {@code "application/yaml"}
+     */
+    public static final CharSequence APPLICATION_YAML = headerValue("application/yaml");
+
+    /**
      * Musical Instrument Digital Interface (MIDI):  {@code "audio/midi"}
      */
     public static final CharSequence AUDIO_MIDI = headerValue("audio/midi");

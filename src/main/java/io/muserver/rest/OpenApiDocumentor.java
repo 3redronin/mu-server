@@ -24,6 +24,7 @@ import static java.util.Collections.singletonList;
 class OpenApiDocumentor implements MuHandler {
     private final List<ResourceClass> roots;
     private final String openApiJsonUrl;
+    private final String openApiYamlUrl;
     private final OpenAPIObject openAPIObject;
     private final String openApiHtmlUrl;
     private final String openApiHtmlCss;
@@ -32,7 +33,7 @@ class OpenApiDocumentor implements MuHandler {
     private final SchemaObjectCustomizer schemaObjectCustomizer;
     private final List<ParamConverterProvider> paramConverterProviders;
 
-    OpenApiDocumentor(List<ResourceClass> roots, String openApiJsonUrl, String openApiHtmlUrl, OpenAPIObject openAPIObject, String openApiHtmlCss, CORSConfig corsConfig, List<SchemaReference> customSchemas, SchemaObjectCustomizer schemaObjectCustomizer, List<ParamConverterProvider> paramConverterProviders) {
+    OpenApiDocumentor(List<ResourceClass> roots, String openApiJsonUrl, String openApiYamlUrl, String openApiHtmlUrl, OpenAPIObject openAPIObject, String openApiHtmlCss, CORSConfig corsConfig, List<SchemaReference> customSchemas, SchemaObjectCustomizer schemaObjectCustomizer, List<ParamConverterProvider> paramConverterProviders) {
         this.customSchemas = customSchemas;
         this.schemaObjectCustomizer = schemaObjectCustomizer;
         this.paramConverterProviders = paramConverterProviders;
@@ -40,6 +41,7 @@ class OpenApiDocumentor implements MuHandler {
         this.corsConfig = corsConfig;
         this.roots = roots;
         this.openApiJsonUrl = openApiJsonUrl == null ? null : Mutils.trim(openApiJsonUrl, "/");
+        this.openApiYamlUrl = openApiYamlUrl == null ? null : Mutils.trim(openApiYamlUrl, "/");
         this.openApiHtmlUrl = openApiHtmlUrl == null ? null : Mutils.trim(openApiHtmlUrl, "/");
         this.openAPIObject = openAPIObject;
         this.openApiHtmlCss = openApiHtmlCss;
@@ -49,7 +51,7 @@ class OpenApiDocumentor implements MuHandler {
     public boolean handle(MuRequest request, MuResponse response) throws Exception {
         String relativePath = Mutils.trim(request.relativePath(), "/");
 
-        if (request.method() != Method.GET || (!relativePath.equals(openApiJsonUrl) && !relativePath.equals(openApiHtmlUrl))) {
+        if (request.method() != Method.GET || (!relativePath.equals(openApiJsonUrl) && !relativePath.equals(openApiYamlUrl) && !relativePath.equals(openApiHtmlUrl))) {
             return false;
         }
 
@@ -101,6 +103,15 @@ class OpenApiDocumentor implements MuHandler {
             try (OutputStreamWriter osw = new OutputStreamWriter(response.outputStream(), StandardCharsets.UTF_8);
                  BufferedWriter writer = new BufferedWriter(osw, 8192)) {
                 builtApi.writeJson(writer);
+            }
+        } else if (relativePath.equals(openApiYamlUrl)) {
+            response.contentType(ContentTypes.APPLICATION_YAML);
+            corsConfig.writeHeadersInternal(request, response, emptySet());
+            response.headers().set("Access-Control-Allow-Methods", "GET");
+
+            try (OutputStreamWriter osw = new OutputStreamWriter(response.outputStream(), StandardCharsets.UTF_8);
+                 BufferedWriter writer = new BufferedWriter(osw, 8192)) {
+                builtApi.writeYaml(writer);
             }
         } else {
             response.contentType(ContentTypes.TEXT_HTML_UTF8);
