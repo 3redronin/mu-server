@@ -47,7 +47,11 @@ class PreReader extends ChannelDuplexHandler {
     public void read(ChannelHandlerContext ctx) throws Exception {
         // The mu handler wants to read. Send it the pending message if it's there; otherwise wait
         wantsToRead = true;
-        ctx.executor().submit(() -> sendItMaybe(ctx));
+        if (ctx.executor().inEventLoop()) {
+            sendItMaybe(ctx);
+        } else {
+            ctx.executor().execute(() -> sendItMaybe(ctx));
+        }
     }
 
     @Override
