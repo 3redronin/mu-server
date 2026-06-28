@@ -384,6 +384,16 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
                 log.warn("Unexpected exception for " + httpExchange + " .onException " + toy, e);
                 super.onStreamError(ctx, outbound, cause, http2Ex);
             }
+        } else if (http2Ex instanceof Http2Exception.HeaderListSizeException
+            && ((Http2Exception.HeaderListSizeException) http2Ex).duringDecode()) {
+            // The request headers were too large to decode. Netty's super.onStreamError sends the
+            // 431 to the client itself (only when duringDecode() is true), so we just notify the
+            // listener here. An outbound HeaderListSizeException (response headers too large for the
+            // client's settings) is a response failure, not a rejected request, so it is excluded.
+            connectionStats.onInvalidRequest();
+            server.stats.onInvalidRequest();
+            nettyHandlerAdapter.onRequestRejected(new RejectedRequestImpl(431, "431 Request Header Fields Too Large", this));
+            super.onStreamError(ctx, outbound, cause, http2Ex);
         } else {
             super.onStreamError(ctx, outbound, cause, http2Ex);
         }
