@@ -309,6 +309,7 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
                 connectionStats.onInvalidRequest();
                 server.stats.onInvalidRequest();
             }
+            nettyHandlerAdapter.onRequestRejected(new RejectedRequestImpl(ihr.code, ihr.getMessage(), this));
             sendSimpleResponse(ctx, streamId, ihr.getMessage(), ihr.code);
         } catch (RedirectException e) {
             sendRedirect(ctx, streamId, e.location);

@@ -64,6 +64,7 @@ public class MuServerBuilder {
     private ExecutorService executor;
     private long maxRequestSize = 24 * 1024 * 1024;
     private List<ResponseCompleteListener> responseCompleteListeners;
+    private List<RequestRejectListener> requestRejectListeners;
     private HashedWheelTimer wheelTimer;
     private List<RateLimiterImpl> rateLimiters;
     private WriteBufferWaterMark writeBufferWaterMark = WriteBufferWaterMark.DEFAULT;
@@ -354,6 +355,25 @@ public class MuServerBuilder {
         return this;
     }
 
+    /**
+     * Adds a listener that is notified when a request is rejected at the protocol level before it
+     * becomes a normal request/response exchange (for example a <code>431</code> when the request
+     * headers are too large). Such rejections are never reported to
+     * {@link #addResponseCompleteListener(ResponseCompleteListener)}.
+     *
+     * @param listener A listener. If null, then nothing is added.
+     * @return Returns the server builder
+     */
+    public MuServerBuilder addRequestRejectListener(RequestRejectListener listener) {
+        if (listener != null) {
+            if (this.requestRejectListeners == null) {
+                this.requestRejectListeners = new ArrayList<>();
+            }
+            this.requestRejectListeners.add(listener);
+        }
+        return this;
+    }
+
     MuServerBuilder withWriteBufferWaterMark(int low, int high) {
         this.writeBufferWaterMark = new WriteBufferWaterMark(low, high);
         return this;
@@ -557,6 +577,13 @@ public class MuServerBuilder {
     /**
      * @return The current value of this property
      */
+    public List<RequestRejectListener> requestRejectListeners() {
+        return Collections.unmodifiableList(requestRejectListeners);
+    }
+
+    /**
+     * @return The current value of this property
+     */
     public List<RateLimiter> rateLimiters() {
         return rateLimiters.stream().map(RateLimiter.class::cast).collect(Collectors.toList());
     }
@@ -625,7 +652,7 @@ public class MuServerBuilder {
             DefaultThreadFactory threadFactory = new DefaultThreadFactory("muhandler");
             handlerExecutor = new ThreadPoolExecutor(8, 400, 60, TimeUnit.SECONDS, new SynchronousQueue<>(), threadFactory);
         }
-        NettyHandlerAdapter nettyHandlerAdapter = new NettyHandlerAdapter(handlerExecutor, handlers, responseCompleteListeners);
+        NettyHandlerAdapter nettyHandlerAdapter = new NettyHandlerAdapter(handlerExecutor, handlers, responseCompleteListeners, requestRejectListeners);
 
         NioEventLoopGroup bossGroup = new NioEventLoopGroup(1);
         NioEventLoopGroup workerGroup = new NioEventLoopGroup(this.nioThreads);
@@ -802,6 +829,7 @@ private  boolean gracefulWait(Duration gracefulDuration, MuStatsImpl stats) thro
             ", executor=" + executor +
             ", maxRequestSize=" + maxRequestSize +
             ", responseCompleteListeners=" + responseCompleteListeners +
+            ", requestRejectListeners=" + requestRejectListeners +
             ", rateLimiters=" + rateLimiters +
             '}';
     }

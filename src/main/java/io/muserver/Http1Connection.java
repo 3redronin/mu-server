@@ -118,6 +118,7 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
                     connectionStats.onInvalidRequest();
                     serverStats.onInvalidRequest();
                 }
+                nettyHandlerAdapter.onRequestRejected(new RejectedRequestImpl(ihr.code, ihr.getMessage(), this));
                 sendSimpleResponse(ctx, ihr.getMessage(), ihr.code);
                 ctx.channel().read();
             } catch (RedirectException e) {
