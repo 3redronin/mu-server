@@ -118,6 +118,10 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
                     connectionStats.onInvalidRequest();
                     serverStats.onInvalidRequest();
                 }
+                HttpRequest rejectedReq = (HttpRequest) msg;
+                String method = rejectedReq.method() == null ? null : rejectedReq.method().name();
+                String uri = rejectedReq.uri();
+                nettyHandlerAdapter.onRequestRejected(new RejectedRequestImpl(ihr.code, ihr.getMessage(), method, uri, this));
                 sendSimpleResponse(ctx, ihr.getMessage(), ihr.code);
                 ctx.channel().read();
             } catch (RedirectException e) {
