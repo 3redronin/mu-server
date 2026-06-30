@@ -10,6 +10,7 @@ import scaffolding.Http1Client;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -96,6 +97,8 @@ public class EventsTest {
         RejectedRequest info = rejected.get(10, TimeUnit.SECONDS);
         assertThat(info.status(), is(431));
         assertThat(info.reason(), is("431 Request Header Fields Too Large"));
+        assertThat(info.method(), is(Optional.of("GET")));
+        assertThat(info.uri().get().getPath(), is("/blah"));
         assertThat(info.connection(), notNullValue());
         assertThat(info.connection().protocol(), is("HTTP/1.1"));
         assertThat(info.connection().remoteAddress(), notNullValue());
@@ -121,6 +124,8 @@ public class EventsTest {
         RejectedRequest info = rejected.get(10, TimeUnit.SECONDS);
         assertThat(info.status(), is(413));
         assertThat(info.reason(), is("413 Payload Too Large"));
+        assertThat(info.method(), is(Optional.of("POST")));
+        assertThat(info.uri().get().getPath(), is("/blah"));
         assertThat(info.connection().protocol(), is("HTTP/2"));
     }
 
@@ -142,6 +147,8 @@ public class EventsTest {
         RejectedRequest info = rejected.get(10, TimeUnit.SECONDS);
         assertThat(info.status(), is(413));
         assertThat(info.reason(), is("413 Payload Too Large"));
+        assertThat(info.method(), is(Optional.of("POST")));
+        assertThat(info.uri().get().getPath(), is("/blah"));
         assertThat(info.connection().protocol(), is("HTTP/1.1"));
     }
 

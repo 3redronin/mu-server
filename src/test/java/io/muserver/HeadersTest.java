@@ -15,6 +15,7 @@ import java.net.URI;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -143,9 +144,11 @@ public class HeadersTest {
                 return true;
             }).start();
 
+        boolean isHttp2;
         try (Response resp = call(xSomethingHeader(randomAsciiStringOfLength(1025)))) {
             assertThat(resp.code(), is(431));
-            if (!isHttp2(resp)) { // for HTTP2, netty sends a 431 with no body
+            isHttp2 = isHttp2(resp);
+            if (!isHttp2) { // for HTTP2, netty sends a 431 with no body
                 assertThat(resp.body().string(), is("431 Request Header Fields Too Large"));
                 assertThat(resp.header("X-Something"), is(nullValue()));
                 assertThat(resp.header("Content-Type"), is("text/plain;charset=utf-8"));
@@ -155,6 +158,15 @@ public class HeadersTest {
         RejectedRequest info = rejected.get(10, TimeUnit.SECONDS);
         assertThat(info.status(), is(431));
         assertThat(info.reason(), is("431 Request Header Fields Too Large"));
+        if (isHttp2) {
+            // over HTTP/2 the header block is rejected during HPACK decoding, before the method or
+            // target can be read, so they are not available
+            assertThat(info.method(), is(Optional.empty()));
+            assertThat(info.uri(), is(Optional.empty()));
+        } else {
+            assertThat(info.method(), is(Optional.of("GET")));
+            assertThat(info.uri().get().getPath(), is("/"));
+        }
     }
 
     @Test

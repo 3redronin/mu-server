@@ -309,7 +309,9 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
                 connectionStats.onInvalidRequest();
                 server.stats.onInvalidRequest();
             }
-            nettyHandlerAdapter.onRequestRejected(new RejectedRequestImpl(ihr.code, ihr.getMessage(), this));
+            String method = headers.method() == null ? null : headers.method().toString();
+            String uri = headers.path() == null ? null : headers.path().toString();
+            nettyHandlerAdapter.onRequestRejected(new RejectedRequestImpl(ihr.code, ihr.getMessage(), method, uri, this));
             sendSimpleResponse(ctx, streamId, ihr.getMessage(), ihr.code);
         } catch (RedirectException e) {
             sendRedirect(ctx, streamId, e.location);
@@ -392,7 +394,8 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
             // client's settings) is a response failure, not a rejected request, so it is excluded.
             connectionStats.onInvalidRequest();
             server.stats.onInvalidRequest();
-            nettyHandlerAdapter.onRequestRejected(new RejectedRequestImpl(431, "431 Request Header Fields Too Large", this));
+            // The header block could not be decoded, so the method and target are not available here.
+            nettyHandlerAdapter.onRequestRejected(new RejectedRequestImpl(431, "431 Request Header Fields Too Large", null, null, this));
             super.onStreamError(ctx, outbound, cause, http2Ex);
         } else {
             super.onStreamError(ctx, outbound, cause, http2Ex);
