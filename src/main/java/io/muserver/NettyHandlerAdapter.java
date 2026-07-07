@@ -15,11 +15,13 @@ class NettyHandlerAdapter {
     private final List<MuHandler> muHandlers;
     private final ExecutorService executor;
     private final List<ResponseCompleteListener> completeListeners;
+    private final List<RequestRejectListener> rejectListeners;
 
-    NettyHandlerAdapter(ExecutorService executor, List<MuHandler> muHandlers, List<ResponseCompleteListener> completeListeners) {
+    NettyHandlerAdapter(ExecutorService executor, List<MuHandler> muHandlers, List<ResponseCompleteListener> completeListeners, List<RequestRejectListener> rejectListeners) {
         this.executor = executor;
         this.muHandlers = muHandlers;
         this.completeListeners = completeListeners;
+        this.rejectListeners = rejectListeners;
     }
 
     void onHeaders(HttpExchange muCtx) {
@@ -77,6 +79,18 @@ class NettyHandlerAdapter {
                     listener.onComplete(info);
                 } catch (Exception e) {
                     log.error("Error from completion listener", e);
+                }
+            }
+        }
+    }
+
+    void onRequestRejected(RejectedRequest info) {
+        if (rejectListeners != null) {
+            for (RequestRejectListener listener : rejectListeners) {
+                try {
+                    listener.onRejected(info);
+                } catch (Exception e) {
+                    log.error("Error from request reject listener", e);
                 }
             }
         }
