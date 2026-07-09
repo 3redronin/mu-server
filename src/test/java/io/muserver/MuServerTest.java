@@ -12,6 +12,7 @@ import scaffolding.*;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadInfo;
 import java.lang.management.ThreadMXBean;
@@ -54,6 +55,53 @@ public class MuServerTest {
         server = ServerUtils.httpsServerForTest().start();
         try (Response resp = call(request().url(server.uri().toString()))) {
             assertThat(resp.code(), is(404));
+        }
+    }
+
+    @Test
+    public void http2MaxConcurrentStreamsCanBeConfigured() throws Exception {
+        AtomicInteger activeRequests = new AtomicInteger();
+        AtomicInteger maxActiveRequests = new AtomicInteger();
+        server = MuServerBuilder.httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled().maxConcurrentStreams(1))
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                int active = activeRequests.incrementAndGet();
+                try {
+                    maxActiveRequests.updateAndGet(previous -> Math.max(previous, active));
+                    Thread.sleep(250);
+                    response.write("done");
+                } finally {
+                    activeRequests.decrementAndGet();
+                }
+            })
+            .start();
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<String> first = executor.submit(this::callAndReturnHttp2StreamResult);
+            Future<String> second = executor.submit(this::callAndReturnHttp2StreamResult);
+
+            assertThat(asList(first.get(20, TimeUnit.SECONDS), second.get(20, TimeUnit.SECONDS)), containsInAnyOrder("ok", "refused"));
+            assertThat(maxActiveRequests.get(), is(1));
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    private String callAndReturnHttp2StreamResult() {
+        try (Response resp = call(request(server.uri()))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), is("done"));
+            assertThat(resp.protocol().name(), is("HTTP_2"));
+            return "ok";
+        } catch (RuntimeException e) {
+            if (e.getCause() instanceof StreamResetException
+                && ((StreamResetException) e.getCause()).errorCode == ErrorCode.REFUSED_STREAM) {
+                return "refused";
+            }
+            throw e;
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
         }
     }
 

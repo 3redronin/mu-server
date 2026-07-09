@@ -6,6 +6,7 @@ package io.muserver;
 public class Http2ConfigBuilder {
 
     private boolean enabled = false;
+    private long maxConcurrentStreams = Http2Config.DEFAULT_MAX_CONCURRENT_STREAMS;
 
     /**
      * Specifies whether to enable HTTP2 or not.
@@ -24,12 +25,35 @@ public class Http2ConfigBuilder {
         return enabled;
     }
 
+
+    /**
+     * Specifies the maximum number of concurrent HTTP/2 streams allowed on a single connection.
+     * <p>The default is 200.</p>
+     *
+     * @param maxConcurrentStreams The maximum number of concurrent streams; must be greater than 0.
+     * @return This builder
+     */
+    public Http2ConfigBuilder maxConcurrentStreams(long maxConcurrentStreams) {
+        if (maxConcurrentStreams < 1) {
+            throw new IllegalArgumentException("maxConcurrentStreams must be greater than 0");
+        }
+        this.maxConcurrentStreams = maxConcurrentStreams;
+        return this;
+    }
+
+    /**
+     * @return The maximum number of concurrent HTTP/2 streams allowed on a single connection
+     */
+    public long maxConcurrentStreams() {
+        return maxConcurrentStreams;
+    }
+
     /**
      * Creates the HTTP2 settings object
      * @return A new Http2Config object
      */
     public Http2Config build() {
-        return new Http2Config(enabled);
+        return new Http2Config(enabled, maxConcurrentStreams);
     }
 
     /**
