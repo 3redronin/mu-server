@@ -22,6 +22,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -62,13 +63,19 @@ public class MuServerTest {
     public void http2MaxConcurrentStreamsCanBeConfigured() throws Exception {
         AtomicInteger activeRequests = new AtomicInteger();
         AtomicInteger maxActiveRequests = new AtomicInteger();
+        AtomicBoolean firstRequestSeen = new AtomicBoolean();
+        CountDownLatch firstRequestStartedLatch = new CountDownLatch(1);
+        CountDownLatch allowFirstRequestToCompleteLatch = new CountDownLatch(1);
         server = MuServerBuilder.httpsServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled().withMaxConcurrentStreams(1))
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 int active = activeRequests.incrementAndGet();
                 try {
                     maxActiveRequests.updateAndGet(previous -> Math.max(previous, active));
-                    Thread.sleep(250);
+                    if (firstRequestSeen.compareAndSet(false, true)) {
+                        firstRequestStartedLatch.countDown();
+                        MuAssert.assertNotTimedOut("allowFirstRequestToCompleteLatch", allowFirstRequestToCompleteLatch, 20, TimeUnit.SECONDS);
+                    }
                     response.write("done");
                 } finally {
                     activeRequests.decrementAndGet();
@@ -79,12 +86,16 @@ public class MuServerTest {
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
             Future<String> first = executor.submit(this::callAndReturnHttp2StreamResult);
+            MuAssert.assertNotTimedOut("firstRequestStartedLatch", firstRequestStartedLatch, 20, TimeUnit.SECONDS);
             Future<String> second = executor.submit(this::callAndReturnHttp2StreamResult);
+            allowFirstRequestToCompleteLatch.countDown();
 
             List<String> actual = asList(first.get(20, TimeUnit.SECONDS), second.get(20, TimeUnit.SECONDS));
-            assertThat(actual.toString(), actual, containsInAnyOrder("ok", "refused"));
+            assertThat(actual, hasItem("ok"));
+            assertThat(actual, everyItem(isIn(asList("ok", "refused"))));
             assertThat(maxActiveRequests.get(), is(1));
         } finally {
+            allowFirstRequestToCompleteLatch.countDown();
             executor.shutdownNow();
         }
     }
