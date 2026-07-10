@@ -63,7 +63,7 @@ public class MuServerTest {
         AtomicInteger activeRequests = new AtomicInteger();
         AtomicInteger maxActiveRequests = new AtomicInteger();
         server = MuServerBuilder.httpsServer()
-            .withHttp2Config(Http2ConfigBuilder.http2Enabled().maxConcurrentStreams(1))
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled().withMaxConcurrentStreams(1))
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 int active = activeRequests.incrementAndGet();
                 try {
@@ -81,7 +81,8 @@ public class MuServerTest {
             Future<String> first = executor.submit(this::callAndReturnHttp2StreamResult);
             Future<String> second = executor.submit(this::callAndReturnHttp2StreamResult);
 
-            assertThat(asList(first.get(20, TimeUnit.SECONDS), second.get(20, TimeUnit.SECONDS)), containsInAnyOrder("ok", "refused"));
+            List<String> actual = asList(first.get(20, TimeUnit.SECONDS), second.get(20, TimeUnit.SECONDS));
+            assertThat(actual.toString(), actual, containsInAnyOrder("ok", "refused"));
             assertThat(maxActiveRequests.get(), is(1));
         } finally {
             executor.shutdownNow();

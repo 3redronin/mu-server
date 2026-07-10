@@ -5,12 +5,11 @@ package io.muserver;
  * @see Http2ConfigBuilder
  */
 public class Http2Config {
-    static final long DEFAULT_MAX_CONCURRENT_STREAMS = 200;
 
     final boolean enabled;
-    final long maxConcurrentStreams;
+    final int maxConcurrentStreams;
 
-    Http2Config(boolean enabled, long maxConcurrentStreams) {
+    Http2Config(boolean enabled, int maxConcurrentStreams) {
         this.enabled = enabled;
         this.maxConcurrentStreams = maxConcurrentStreams;
     }
@@ -29,6 +28,6 @@ public class Http2Config {
     public Http2ConfigBuilder toBuilder() {
         return new Http2ConfigBuilder()
             .enabled(enabled)
-            .maxConcurrentStreams(maxConcurrentStreams);
+            .withMaxConcurrentStreams(maxConcurrentStreams);
     }
 }

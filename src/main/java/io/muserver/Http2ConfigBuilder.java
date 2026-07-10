@@ -6,7 +6,7 @@ package io.muserver;
 public class Http2ConfigBuilder {
 
     private boolean enabled = false;
-    private long maxConcurrentStreams = Http2Config.DEFAULT_MAX_CONCURRENT_STREAMS;
+    private int maxConcurrentStreams = 200;
 
     /**
      * Specifies whether to enable HTTP2 or not.
@@ -27,25 +27,39 @@ public class Http2ConfigBuilder {
 
 
     /**
-     * Specifies the maximum number of concurrent HTTP/2 streams allowed on a single connection.
-     * <p>The default is 200.</p>
+     * Gets the maximum number concurrent streams (HTTP requests) on a single HTTP2 connection.
      *
-     * @param maxConcurrentStreams The maximum number of concurrent streams; must be greater than 0.
-     * @return This builder
+     * @return the maximum number of concurrent streams allowed. Default is 200.
      */
-    public Http2ConfigBuilder maxConcurrentStreams(long maxConcurrentStreams) {
-        if (maxConcurrentStreams < 1) {
-            throw new IllegalArgumentException("maxConcurrentStreams must be greater than 0");
-        }
-        this.maxConcurrentStreams = maxConcurrentStreams;
-        return this;
+    public int maxConcurrentStreams() {
+        return maxConcurrentStreams;
     }
 
     /**
-     * @return The maximum number of concurrent HTTP/2 streams allowed on a single connection
+     * Sets the maximum number of concurrent streams allowed per HTTP2 connection.
+     *
+     * <p>The default is 200.</p>
+     *
+     * <p>This setting controls the maximum number of concurrent requests
+     * that can be initiated by the client for a single HTTP2 connection. A higher value can improve
+     * concurrency but may also lead to increased resource consumption.</p>
+     *
+     * <p>Limits:</p>
+     * <ul>
+     * <li>Minimum: 0 (note: a value of 0 is technically allowed but will prevent clients from sending requests)</li>
+     * <li>No specified maximum</li>
+     * </ul>
+     *
+     * @param maxConcurrentStreams the initial maximum number of concurrent streams.
+     * @return this builder
+     * @throws IllegalArgumentException if the number of streams is less than 0.
      */
-    public long maxConcurrentStreams() {
-        return maxConcurrentStreams;
+    public Http2ConfigBuilder withMaxConcurrentStreams(int maxConcurrentStreams) {
+        if (maxConcurrentStreams < 0) {
+            throw new IllegalArgumentException("Maximum concurrent streams must be non-negative.");
+        }
+        this.maxConcurrentStreams = maxConcurrentStreams;
+        return this;
     }
 
     /**
