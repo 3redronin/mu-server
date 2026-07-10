@@ -694,7 +694,7 @@ public class MuServerBuilder {
             SslContextProvider sslContextProvider = null;
 
             boolean http2Enabled = http2Config != null && http2Config.enabled;
-            MuServerImpl server = new MuServerImpl(stats, http2Enabled, settings, unhandledExceptionHandler);
+            MuServerImpl server = new MuServerImpl(stats, http2Config, settings, unhandledExceptionHandler);
 
             Channel httpChannel = httpPort < 0 ? null : createChannel(bossGroup, workerGroup, nettyHandlerAdapter, host, httpPort, null, trafficShapingHandler, server, false, idleTimeoutMills, writeBufferWaterMark, haProxyProtocolEnabled);
             Channel httpsChannel;

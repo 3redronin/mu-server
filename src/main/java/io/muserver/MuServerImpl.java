@@ -21,7 +21,7 @@ class MuServerImpl implements MuServer {
     final MuStatsImpl stats;
     private InetSocketAddress address;
     private SslContextProvider sslContextProvider;
-    private final boolean http2Enabled;
+    private final Http2Config http2Config;
     private final ServerSettings settings;
     private final Set<HttpConnection> connections = ConcurrentHashMap.newKeySet();
     final UnhandledExceptionHandler unhandledExceptionHandler;
@@ -37,11 +37,15 @@ class MuServerImpl implements MuServer {
         this.shutdown = shutdown;
     }
 
-    MuServerImpl(MuStatsImpl stats, boolean http2Enabled, ServerSettings settings, UnhandledExceptionHandler unhandledExceptionHandler) {
+    MuServerImpl(MuStatsImpl stats, Http2Config http2Config, ServerSettings settings, UnhandledExceptionHandler unhandledExceptionHandler) {
         this.stats = stats;
-        this.http2Enabled = http2Enabled;
+        this.http2Config = http2Config == null ? Http2ConfigBuilder.http2Config().build() : http2Config;
         this.settings = settings;
         this.unhandledExceptionHandler = unhandledExceptionHandler;
+    }
+
+    Http2Config http2Config() {
+        return http2Config;
     }
 
 
@@ -120,7 +124,7 @@ class MuServerImpl implements MuServer {
     public void changeHttpsConfig(HttpsConfigBuilder newHttpsConfig) {
         Mutils.notNull("newSSLContext", newHttpsConfig);
         try {
-            SslContext nettySslContext = newHttpsConfig.toNettySslContext(http2Enabled);
+            SslContext nettySslContext = newHttpsConfig.toNettySslContext(http2Config.enabled);
             sslContextProvider.set(nettySslContext);
             ((SSLInfoImpl) sslContextProvider.sslInfo()).setHttpsUri(httpsUri);
         } catch (Exception e) {

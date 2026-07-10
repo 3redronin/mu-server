@@ -15,7 +15,9 @@ class Http2ConnectionBuilder
 
     @Override
     public Http2Connection build() {
-        initialSettings().maxHeaderListSize(server.settings().maxHeadersSize);
+        initialSettings()
+            .maxHeaderListSize(server.settings().maxHeadersSize)
+            .maxConcurrentStreams(server.http2Config().maxConcurrentStreams);
         return super.build();
     }
 
