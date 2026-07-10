@@ -9,7 +9,7 @@
     <version>0.0.3-SNAPSHOT</version>
 
     <name>mu-server</name>
-    <description>A simple but powerful web server framework</description>
+    <description>A simple but powerful web server library</description>
     <url>https://muserver.io/</url>
 
     <properties>
