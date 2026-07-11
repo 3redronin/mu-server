@@ -25,7 +25,7 @@ class NewCookieHeaderDelegate implements RuntimeDelegate.HeaderDelegate<NewCooki
         io.muserver.Cookie muc = CookieBuilder.newCookie()
             .withName(cookie.getName())
             .withValue(cookie.getValue())
-            .withPath(cookie.getPath())
+            .withPath(cookie.getPath() == null ? "/" : cookie.getPath())
             .withDomain(cookie.getDomain())
             .secure(cookie.isSecure())
             .httpOnly(cookie.isHttpOnly())
