@@ -207,7 +207,9 @@ abstract class ResourceMethodParam {
                     : emptyList();
             boolean isSpecified = specifiedValue != null && !specifiedValue.isEmpty();
             if (encodedRequested && isSpecified) {
-                specifiedValue = specifiedValue.stream().map(Mutils::urlEncode).collect(Collectors.toList());
+                specifiedValue = specifiedValue.stream()
+                    .map(value -> source == ValueSource.FORM_PARAM ? FormUrlEncoder.formUrlEncode(value) : Mutils.urlEncode(value))
+                    .collect(Collectors.toList());
             }
             if (collection != null) {
                 if (isSpecified) {

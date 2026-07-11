@@ -26,7 +26,7 @@ class NewCookieHeaderDelegate implements RuntimeDelegate.HeaderDelegate<NewCooki
         nettyCookie.setDomain(cookie.getDomain());
         nettyCookie.setHttpOnly(cookie.isHttpOnly());
         nettyCookie.setMaxAge(cookie.getMaxAge());
-        nettyCookie.setPath(cookie.getPath());
+        nettyCookie.setPath(cookie.getPath() == null ? "/" : cookie.getPath());
         nettyCookie.setSecure(cookie.isSecure());
         return encoder.encode(nettyCookie);
     }
