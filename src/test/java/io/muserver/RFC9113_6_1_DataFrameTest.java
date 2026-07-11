@@ -264,6 +264,23 @@ class RFC9113_6_1_DataFrameTest {
     }
 
     @Test
+    void oversizedDataFrameClosesConnectionBecausePayloadCannotBeSkipped() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake()
+                .writeRaw(oversizedDataFrameWithPayloadPrefix(1, 16_385, new byte[] {0, 0, 0, 4, 0, 0, 0, 0, 0}))
+                .flush();
+
+            assertThat(con.readLogicalFrame(), equalTo(new Http2GoAway(0, Http2ErrorCode.FRAME_SIZE_ERROR.code(), new byte[0])));
+        }
+    }
+
+    @Test
     void aDataFrameReceivedOnAClosedStreamIsStreamError() throws Exception {
         var completedLatch = new CountDownLatch(1);
         server = httpsServer()
@@ -352,6 +369,21 @@ class RFC9113_6_1_DataFrameTest {
 
     private int getPort() {
         return server.uri().getPort();
+    }
+
+    private static byte[] oversizedDataFrameWithPayloadPrefix(int streamId, int payloadLength, byte[] payloadPrefix) {
+        var frame = new byte[Http2FrameHeader.FRAME_HEADER_LENGTH + payloadPrefix.length];
+        frame[0] = (byte) (payloadLength >> 16);
+        frame[1] = (byte) (payloadLength >> 8);
+        frame[2] = (byte) payloadLength;
+        frame[3] = 0x00;
+        frame[4] = 0;
+        frame[5] = (byte) (streamId >> 24);
+        frame[6] = (byte) (streamId >> 16);
+        frame[7] = (byte) (streamId >> 8);
+        frame[8] = (byte) streamId;
+        System.arraycopy(payloadPrefix, 0, frame, Http2FrameHeader.FRAME_HEADER_LENGTH, payloadPrefix.length);
+        return frame;
     }
 
     private static byte[] invalidPaddedDataFrame(int streamId, boolean endStream, byte[] data, int declaredPadLength) {

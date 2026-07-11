@@ -18,7 +18,7 @@ class ChunkedOutputStream extends OutputStream {
     public void write(int b) throws IOException {
         // write an HTTP chunk with size=1
         var array = new byte[6];
-        array[0] = 1;
+        array[0] = '1';
         array[1] = 13;
         array[2] = 10;
         array[3] = (byte)b;

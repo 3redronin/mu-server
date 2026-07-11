@@ -18,6 +18,16 @@ import static org.hamcrest.Matchers.sameInstance;
 class Http1MessageParserTest {
 
     @Test
+    void chunkedOutputStreamSingleByteWriteUsesAsciiChunkSize() throws Exception {
+        var raw = new ByteArrayOutputStream();
+        var out = new ChunkedOutputStream(raw);
+
+        out.write('x');
+
+        assertThat(raw.toByteArray(), equalTo(new byte[] {'1', '\r', '\n', 'x', '\r', '\n'}));
+    }
+
+    @Test
     void emptyHeaderValuesAreIgnored() throws IOException, ParseException {
         String requestString = "GET /blah HTTP/1.1\r\n" +
             "accept-encoding:\r\n" +
@@ -148,4 +158,3 @@ class Http1MessageParserTest {
     }
 
 }
-

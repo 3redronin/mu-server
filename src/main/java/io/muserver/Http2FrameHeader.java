@@ -41,12 +41,7 @@ class Http2FrameHeader {
         int streamId = buffer.getInt() & 0x7FFFFFFF;
         boolean hasStream = streamId != 0;
         if (length > buffer.capacity()) {
-            var errorType = !hasStream || frameType.hasFieldBlock() || frameType == Http2FrameType.UNKNOWN ? Http2Level.CONNECTION : Http2Level.STREAM;
-            if (errorType == Http2Level.CONNECTION) {
-                throw Http2Exception.connection(Http2ErrorCode.FRAME_SIZE_ERROR, "frame content too large");
-            } else {
-                throw Http2Exception.stream(Http2ErrorCode.FRAME_SIZE_ERROR, "frame content too large", streamId);
-            }
+            throw Http2Exception.connection(Http2ErrorCode.FRAME_SIZE_ERROR, "frame content too large");
         }
         var fixedSize = frameType.fixedSize();
         if (frameType != Http2FrameType.PRIORITY && fixedSize >= 0 && fixedSize != length) {
