@@ -3,7 +3,6 @@ package io.muserver.rest;
 import io.muserver.Mutils;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.handler.codec.http.QueryStringDecoder;
-import io.netty.handler.codec.http.QueryStringEncoder;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.Produces;
@@ -239,13 +238,15 @@ class StringEntityProviders {
 
         @Override
         public void writeTo(MultivaluedMap<String, String> form, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException, WebApplicationException {
-            QueryStringEncoder encoder = new QueryStringEncoder("");
+            StringBuilder sb = new StringBuilder();
             for (Map.Entry<String, List<String>> entry : form.entrySet()) {
+                String encodedKey = FormUrlEncoder.formUrlEncode(entry.getKey());
                 for (String value : entry.getValue()) {
-                    encoder.addParam(entry.getKey(), value);
+                    if (sb.length() > 0) sb.append('&');
+                    sb.append(encodedKey).append('=').append(FormUrlEncoder.formUrlEncode(value));
                 }
             }
-            entityStream.write(encoder.toString().substring(1).getBytes(EntityProviders.charsetFor(mediaType)));
+            entityStream.write(sb.toString().getBytes(EntityProviders.charsetFor(mediaType)));
         }
     }
 }

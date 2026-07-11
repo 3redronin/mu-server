@@ -171,7 +171,7 @@ public class StringEntityProvidersTest {
         )) {
             assertThat(resp.code(), equalTo(200));
             assertThat(resp.header("Content-Type"), equalTo("application/x-www-form-urlencoded"));
-            assertThat(resp.body().string(), equalTo("Umm=umm%20what%3F%22%5C%2F%3A&Blah=hello%201&Blah=hello%202"));
+            assertThat(resp.body().string(), equalTo("Umm=umm+what%3F%22%5C%2F%3A&Blah=hello+1&Blah=hello+2"));
         }
 
     }
