@@ -87,17 +87,19 @@ public class ResourceMethodParamTest {
 
         @Path("samples")
         class Sample {
-            @GET
+            @POST
             public String getIt(@QueryParam("one") String one,
                                 @QueryParam("two") @DefaultValue("Some default") String two,
-                                @QueryParam("three") @Encoded String three
+                                @QueryParam("three") @Encoded String three,
+                                @FormParam("four") @Encoded String four
             ) {
-                return one + " / " + two + " / " + three;
+                return one + " / " + two + " / " + three + " / " + four;
             }
         }
         server = httpsServerForTest().addHandler(restHandler(new Sample())).start();
-        try (Response resp = call(request().url(server.uri().resolve("/samples?one=some%20thing%2F&one=ignored&three=some%20thing%2F").toString()))) {
-            assertThat(resp.body().string(), equalTo("some thing/ / Some default / some%20thing%2F"));
+        try (Response resp = call(request().url(server.uri().resolve("/samples?one=some%20thing%2F&one=ignored&three=some%20thing%2F").toString())
+            .post(new FormBody.Builder().add("four", "some thing/").build()))) {
+            assertThat(resp.body().string(), equalTo("some thing/ / Some default / some%20thing%2F / some+thing%2F"));
         }
     }
 

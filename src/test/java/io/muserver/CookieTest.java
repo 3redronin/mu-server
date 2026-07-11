@@ -150,6 +150,37 @@ public class CookieTest {
     }
 
     @Test
+    public void newCookiesWithoutAnExplicitPathStillRoundTrip() throws IOException {
+        @Path("biscuits")
+        class Biscuits {
+            @GET
+            @Path("set")
+            public jakarta.ws.rs.core.Response setCookie() {
+                return jakarta.ws.rs.core.Response.noContent()
+                    .cookie(new NewCookie("Something", "123456"))
+                    .build();
+            }
+
+            @GET
+            @Path("get")
+            public String getCookie(@CookieParam("Something") String cookieValue) {
+                return cookieValue;
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new Biscuits())).start();
+
+        try (Response setResp = client.newCall(request().url(server.uri().resolve("/biscuits/set").toString()).build()).execute()) {
+            assertThat(setResp.code(), equalTo(204));
+        }
+        try (Response getResp = client.newCall(request().url(server.uri().resolve("/biscuits/get").toString()).build()).execute()) {
+            assertThat(getResp.code(), equalTo(200));
+            assertThat(getResp.body().string(), equalTo("123456"));
+        }
+    }
+
+    @Test
     public void multipleCookiesCanBeSetAndAreAllSentBackToTheServer() throws IOException {
         Set<Cookie> actualSentCookies = new HashSet<>();
         AtomicReference<Optional<String>> sessionLookup = new AtomicReference<>();

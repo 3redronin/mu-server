@@ -26,7 +26,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
-import static io.muserver.Mutils.urlEncode;
 import static java.util.Arrays.asList;
 
 class StringEntityProviders {
@@ -256,10 +255,10 @@ class StringEntityProviders {
         public void writeTo(MultivaluedMap<String, String> form, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException, WebApplicationException {
             var sb = new StringBuilder();
             for (String key : form.keySet()) {
-                String encodedKey = urlEncode(key);
+                String encodedKey = FormUrlEncoder.formUrlEncode(key);
                 for (String value : form.get(key)) {
                     if (sb.length() > 1) sb.append('&');
-                    sb.append(encodedKey).append('=').append(urlEncode(value));
+                    sb.append(encodedKey).append('=').append(FormUrlEncoder.formUrlEncode(value));
                 }
             }
             entityStream.write(sb.toString().getBytes(EntityProviders.charsetFor(mediaType)));
