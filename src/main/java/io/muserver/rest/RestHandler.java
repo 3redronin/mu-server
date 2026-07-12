@@ -269,11 +269,6 @@ public class RestHandler implements MuHandler {
                         Type entityGenericType = jaxRSResponse.getEntityType();
                         MessageBodyWriter messageBodyWriter = entityProviders.selectWriter(entityType, entityGenericType, writerAnnontations, responseMediaType);
 
-                        long size = messageBodyWriter.getSize(entity, entityType, entityGenericType, writerAnnontations, responseMediaType);
-                        if (size > -1) {
-                            jaxRSResponse.getHeaders().putSingle("content-length", size);
-                        }
-
                         String contentType = responseMediaType.toString();
                         if (responseMediaType.getType().equals("text") && !responseMediaType.getParameters().containsKey("charset")) {
                             contentType += ";charset=utf-8";
