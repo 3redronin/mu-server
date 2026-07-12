@@ -47,6 +47,7 @@ class SseBroadcasterImpl implements SseBroadcaster {
                 if (!info.completedSuccessfully()) {
                     Exception ex;
                     switch (info.response().responseState()) {
+                        case CLIENT_CANCELLED:
                         case CLIENT_DISCONNECTED:
                             ex = new ClientDisconnectedException();
                             break;

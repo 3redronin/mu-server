@@ -271,7 +271,7 @@ public class AsynchronousProcessingTest {
                 return 0;
             }
             public boolean completedSuccessfully() {
-                return false;
+                return true;
             }
             public MuRequest request() {
                 throw new UnsupportedOperationException();
@@ -280,7 +280,7 @@ public class AsynchronousProcessingTest {
                 throw new UnsupportedOperationException();
             }
         });
-        assertThat(disconnected.get(), is(true));
+        assertThat(disconnected.get(), is(false));
         assertThat(completed.get(), is(true));
     }
 

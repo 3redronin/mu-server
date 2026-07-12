@@ -62,6 +62,7 @@ class RFC9113_6_4_RstStreamTest {
 
         assertThat("Resetting the HTTP/2 stream did not complete the suspended request", completedStream, is(notNullValue()));
         assertThat(completedStream.completedSuccessfully(), is(false));
+        assertThat(completedStream.response().responseState(), is(ResponseState.CLIENT_CANCELLED));
     }
 
     @Test

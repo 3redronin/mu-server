@@ -33,7 +33,7 @@ class Mu3Request implements MuRequest {
     private boolean bodyClaimed;
     private boolean inputStreamAccessed;
     @Nullable private volatile Mu3AsyncHandleImpl asyncHandle;
-    private boolean clientDisconnected;
+    private boolean clientCancelled;
 
     Mu3Request(HttpConnection connection,
                Method method,
@@ -256,14 +256,14 @@ class Mu3Request implements MuRequest {
             assert response != null;
             asyncHandle = new Mu3AsyncHandleImpl(this, response);
         }
-        if (clientDisconnected) {
+        if (clientCancelled) {
             asyncHandle.complete();
         }
         return asyncHandle;
     }
 
-    synchronized void onClientDisconnected() {
-        clientDisconnected = true;
+    synchronized void onClientCancelled() {
+        clientCancelled = true;
         if (asyncHandle != null) {
             asyncHandle.complete();
         }

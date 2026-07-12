@@ -46,6 +46,11 @@ public enum ResponseState {
     TIMED_OUT(true, false),
 
     /**
+     * The client cancelled this request without necessarily closing the underlying connection.
+     */
+    CLIENT_CANCELLED(true, false),
+
+    /**
      * The client disconnected before the full request and response was completed.
      */
     CLIENT_DISCONNECTED(true, false),
@@ -82,4 +87,3 @@ public enum ResponseState {
         this.fullResponseSent = fullResponseSent;
     }
 }
-

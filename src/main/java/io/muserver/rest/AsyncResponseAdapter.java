@@ -181,7 +181,7 @@ class AsyncResponseAdapter implements AsyncResponse, ResponseCompleteListener {
 
     @Override
     public void onComplete(ResponseInfo info) {
-        if (!info.completedSuccessfully()) {
+        if (!info.completedSuccessfully() && info.response().responseState() == ResponseState.CLIENT_DISCONNECTED) {
             for (ConnectionCallback connectionCallback : connectionCallbacks) {
                 try {
                     connectionCallback.onDisconnect(this);
