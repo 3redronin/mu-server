@@ -2,6 +2,7 @@ package io.muserver;
 
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -40,6 +41,21 @@ class Http2BodyInputStreamTest {
 
         assertThat(received.toString(StandardCharsets.UTF_8), equalTo("Hello world"));
         assertThat(callbackValue.get(), equalTo(11L));
+    }
+
+    @Test
+    void doesNotReturnZeroAfterExactlyConsumingADataFrame() throws Exception {
+        var readCredit = new AtomicLong();
+
+        try (var stream = new Http2BodyInputStream(10000, readCredit::addAndGet, credit -> {})) {
+            stream.onData(data("Hello", false));
+            stream.onData(data("world", true));
+
+            byte[] buffer = new byte[5];
+            assertThat(stream.read(buffer, 0, 5), equalTo(5));
+            assertThat(stream.read(buffer, 0, 5), equalTo(5));
+            assertThat(new String(buffer, StandardCharsets.UTF_8), equalTo("world"));
+        }
     }
 
     @ParameterizedTest

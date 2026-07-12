@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Timeout;
 import scaffolding.*;
 
 import java.io.*;
+import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -24,6 +25,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static io.muserver.MuServerBuilder.httpServer;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static scaffolding.ClientUtils.*;
 import static scaffolding.MuAssert.assertEventually;
 import static scaffolding.MuAssert.assertNotTimedOut;
@@ -160,6 +162,26 @@ public class RequestBodyReaderInputStreamAdapterTest {
             assertThat(resp.code(), equalTo(200));
             assertThat(resp.body().string(), equalTo("Loop 0\nLoop 1\nLoop 2\nLoop 3\nLoop 4\nLoop 5\nLoop 6\nLoop 7\nLoop 8\nLoop 9\n"));
         }
+    }
+
+    @Test
+    public void inputStreamClaimsTheBody() {
+        var request = new Mu3Request(
+            null,
+            Method.POST,
+            URI.create("/"),
+            URI.create("https://localhost/"),
+            HttpVersion.HTTP_1_1,
+            new FieldBlock(),
+            new BodySize(BodyType.FIXED_SIZE, 7L),
+            new ByteArrayInputStream("a=1&b=2".getBytes(StandardCharsets.UTF_8))
+        );
+        request.headers().set(HeaderNames.CONTENT_TYPE, "application/x-www-form-urlencoded");
+
+        assertThat(request.inputStream().isPresent(), equalTo(true));
+
+        var ex = assertThrows(IllegalStateException.class, request::form);
+        assertThat(ex.getMessage(), containsString("cannot be read twice"));
     }
 
     @Test

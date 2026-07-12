@@ -32,6 +32,7 @@ class Mu3Request implements MuRequest {
     private String relativePath;
     @Nullable private List<Cookie> cookies;
     private boolean bodyClaimed;
+    private boolean inputStreamAccessed;
     @Nullable private Mu3AsyncHandleImpl asyncHandle;
 
     Mu3Request(HttpConnection connection,
@@ -61,7 +62,7 @@ class Mu3Request implements MuRequest {
     }
 
     private void claimbody() {
-        if (bodyClaimed) {
+        if (bodyClaimed || inputStreamAccessed) {
             throw new IllegalStateException("The body of the request message cannot be read twice. This can happen when calling any 2 of inputStream(), readBodyAsString(), or form() methods.");
         }
         bodyClaimed = true;
@@ -94,7 +95,11 @@ class Mu3Request implements MuRequest {
 
     @Override
     public Optional<InputStream> inputStream() {
-        return bodySize == BodySize.NONE ? Optional.empty() : Optional.of(body());
+        if (bodySize == BodySize.NONE) {
+            return Optional.empty();
+        }
+        inputStreamAccessed = true;
+        return Optional.of(body);
     }
 
     @Override
@@ -115,6 +120,7 @@ class Mu3Request implements MuRequest {
 
     @Override
     public InputStream body() {
+        claimbody();
         return body;
     }
 
@@ -132,7 +138,7 @@ class Mu3Request implements MuRequest {
         } else if (size == 0) {
             return "";
         } else {
-            try (InputStream b = body()) {
+            try (InputStream b = body) {
                 return new String(b.readAllBytes(),
                     Headtils.bodyCharset(mu3Headers, true));
             }
@@ -140,7 +146,7 @@ class Mu3Request implements MuRequest {
     }
 
     private String streamBodyToString(Charset cs) throws IOException {
-        try (var reader = new InputStreamReader(body(), cs)) {
+        try (var reader = new InputStreamReader(body, cs)) {
             StringBuilder result = new StringBuilder();
             char[] buffer = new char[4096];
             int charsRead;
@@ -180,7 +186,7 @@ class Mu3Request implements MuRequest {
                     }
                     Long declaredSize = bodySize.size();
                     int bufferSize = (int) min(8192, declaredSize != null ? declaredSize : 8192);
-                    try (InputStream b = body()) {
+                    try (InputStream b = body) {
                         MultipartFormParser formParser = new MultipartFormParser(server().tempDir(),
                             boundary, b, bufferSize, charset);
                         this.form = formParser.parseFully();
