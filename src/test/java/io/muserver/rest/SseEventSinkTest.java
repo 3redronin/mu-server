@@ -16,9 +16,11 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
@@ -38,6 +40,7 @@ public class SseEventSinkTest {
 
     @Test
     public void canPublishMessagesAndCustomDataWritersAreUsed() throws InterruptedException {
+        AtomicReference<Throwable> sendFailure = new AtomicReference<>();
 
         class Dog {
             final boolean hasTail;
@@ -70,15 +73,21 @@ public class SseEventSinkTest {
             public void eventStream(@Context SseEventSink eventSink,
                                     @Context Sse sse) {
                 executor.execute(() -> {
-                    try (SseEventSink sink = eventSink) {
-                        sink.send(sse.newEventBuilder()
-                            .reconnectDelay(100000)
-                            .comment("a comment")
-                            .data("event1")
-                            .build());
-                        sink.send(sse.newEvent("event2"));
-                        sink.send(sse.newEventBuilder().data(new Dog(true, "Little")).build());
-                        sink.send(sse.newEventBuilder().data(123).name("Number").id("123").build());
+                    try {
+                        CompletableFuture.allOf(
+                            eventSink.send(sse.newEventBuilder()
+                                .reconnectDelay(100000)
+                                .comment("a comment")
+                                .data("event1")
+                                .build()).toCompletableFuture(),
+                            eventSink.send(sse.newEvent("event2")).toCompletableFuture(),
+                            eventSink.send(sse.newEventBuilder().data(new Dog(true, "Little")).build()).toCompletableFuture(),
+                            eventSink.send(sse.newEventBuilder().data(123).name("Number").id("123").build()).toCompletableFuture()
+                        ).get(10, TimeUnit.SECONDS);
+                    } catch (Throwable e) {
+                        sendFailure.set(e);
+                    } finally {
+                        eventSink.close();
                     }
                 });
             }
@@ -91,6 +100,9 @@ public class SseEventSinkTest {
 
         try (SseClient.ServerSentEvent ignored = sseClient.newServerSentEvent(request().url(server.uri().resolve("/streamer/eventStream").toString()).build(), listener)) {
             listener.assertListenerIsClosed();
+        }
+        if (sendFailure.get() != null) {
+            throw new AssertionError("An SSE send failed", sendFailure.get());
         }
         for (String receivedMessage : listener.receivedMessages) {
             System.out.println(">> " + receivedMessage);

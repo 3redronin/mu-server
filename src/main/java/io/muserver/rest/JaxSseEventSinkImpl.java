@@ -4,6 +4,8 @@ import io.muserver.AsyncSsePublisher;
 import io.muserver.MuResponse;
 import io.muserver.ResponseCompleteListener;
 import jakarta.ws.rs.ServerErrorException;
+import jakarta.ws.rs.core.MultivaluedHashMap;
+import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.ext.MessageBodyWriter;
 import jakarta.ws.rs.sse.OutboundSseEvent;
 import jakarta.ws.rs.sse.SseEventSink;
@@ -22,13 +24,13 @@ class JaxSseEventSinkImpl implements SseEventSink {
     private static final Logger log = LoggerFactory.getLogger(JaxSseEventSinkImpl.class);
 
     private final AsyncSsePublisher ssePublisher;
-    private final MuResponse response;
     private final EntityProviders entityProviders;
+    private final MultivaluedMap<String, Object> writerHeaders;
 
     public JaxSseEventSinkImpl(AsyncSsePublisher ssePublisher, MuResponse response, EntityProviders entityProviders) {
         this.ssePublisher = ssePublisher;
-        this.response = response;
         this.entityProviders = entityProviders;
+        this.writerHeaders = muHeadersToJaxObj(response.headers());
     }
 
     void setResponseCompleteHandler(ResponseCompleteListener listener) {
@@ -62,7 +64,7 @@ class JaxSseEventSinkImpl implements SseEventSink {
                 } else {
                     try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
                         messageBodyWriter.writeTo(data, event.getType(), event.getGenericType(), JaxRSResponse.Builder.EMPTY_ANNOTATIONS,
-                            event.getMediaType(), muHeadersToJaxObj(response.headers()), out);
+                            event.getMediaType(), new MultivaluedHashMap<>(writerHeaders), out);
                         dataString = out.toString(UTF_8);
                     }
                 }
