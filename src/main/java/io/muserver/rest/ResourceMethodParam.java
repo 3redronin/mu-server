@@ -61,7 +61,7 @@ abstract class ResourceMethodParam {
             ParamConverter<?> converter = getParamConverter(parameterHandle, paramConverterProviders);
             boolean lazyDefaultValue = converter.getClass().getDeclaredAnnotation(ParamConverter.Lazy.class) != null;
             boolean explicitDefault = hasDeclared(parameterHandle, DefaultValue.class);
-            Object defaultValue = getDefaultValue(parameterHandle, converter, lazyDefaultValue);
+            Object defaultValue = getDefaultValue(parameterHandle, converter, lazyDefaultValue, source);
 
             isRequired |= (!explicitDefault && parameterHandle.getType().isPrimitive());
 
@@ -145,7 +145,7 @@ abstract class ResourceMethodParam {
 
         public Object defaultValue() {
             boolean skipConverter = defaultValue != null && !lazyDefaultValue;
-            return convertValue(parameterHandle, paramConverter, skipConverter, defaultValue);
+            return convertValue(parameterHandle, paramConverter, skipConverter, defaultValue, source);
         }
 
         public Object getValue(JaxRSRequest jaxRequest, RequestMatcher.MatchedMethod matchedMethod, CollectionParameterStrategy cps) throws IOException {
@@ -214,7 +214,7 @@ abstract class ResourceMethodParam {
             if (collection != null) {
                 if (isSpecified) {
                     for (String stringValue : specifiedValue) {
-                        collection.add(ResourceMethodParam.convertValue(parameterHandle, paramConverter, false, stringValue));
+                        collection.add(ResourceMethodParam.convertValue(parameterHandle, paramConverter, false, stringValue, source));
                     }
                 } else if (hasExplicitDefault()) {
                     collection.add(defaultValue());
@@ -224,7 +224,7 @@ abstract class ResourceMethodParam {
                     : (collection instanceof Set) ? Collections.unmodifiableSet((Set) collection)
                     : Collections.unmodifiableCollection(collection);
             } else {
-                return isSpecified ? ResourceMethodParam.convertValue(parameterHandle, paramConverter, false, specifiedValue.get(0)) : defaultValue();
+                return isSpecified ? ResourceMethodParam.convertValue(parameterHandle, paramConverter, false, specifiedValue.get(0), source) : defaultValue();
             }
         }
 
@@ -254,7 +254,9 @@ abstract class ResourceMethodParam {
         private List<String> matrixParamValue(String key, String path) {
             MuPathSegment last = MuUriInfo.pathStringToSegments(path, false).reduce((first, second) -> second).orElse(null);
             if (last != null && last.getMatrixParameters().containsKey(key)) {
-                return last.getMatrixParameters().get(key);
+                return last.getMatrixParameters().get(key).stream()
+                    .map(Jaxutils::leniantUrlDecode)
+                    .collect(Collectors.toList());
             }
             return emptyList();
         }
@@ -337,15 +339,15 @@ abstract class ResourceMethodParam {
         throw new MuException("Could not find a suitable ParamConverter for " + parameterizedType + " at " + parameterHandle.getDeclaringExecutable());
     }
 
-    private static Object getDefaultValue(Parameter parameterHandle, ParamConverter<?> converter, boolean lazyDefaultValue) {
+    private static Object getDefaultValue(Parameter parameterHandle, ParamConverter<?> converter, boolean lazyDefaultValue, ValueSource source) {
         DefaultValue annotation = parameterHandle.getDeclaredAnnotation(DefaultValue.class);
         if (annotation == null) {
             return converter instanceof HasDefaultValue ? ((HasDefaultValue) converter).getDefault() : null;
         }
-        return convertValue(parameterHandle, converter, lazyDefaultValue, annotation.value());
+        return convertValue(parameterHandle, converter, lazyDefaultValue, annotation.value(), source);
     }
 
-    private static Object convertValue(Parameter parameterHandle, ParamConverter<?> converter, boolean skipConverter, Object value) {
+    private static Object convertValue(Parameter parameterHandle, ParamConverter<?> converter, boolean skipConverter, Object value, ValueSource source) {
         if (converter == null || skipConverter) {
             return value;
         } else {
@@ -361,7 +363,8 @@ abstract class ResourceMethodParam {
             } catch (WebApplicationException e) {
                 throw e;
             } catch (Exception e) {
-                throw new BadRequestException("Could not convert String value \"" + value + "\" to a " + parameterHandle.getType() + " using " + converter + " on parameter " + parameterHandle, e);
+                String message = "Could not convert String value \"" + value + "\" to a " + parameterHandle.getType() + " using " + converter + " on parameter " + parameterHandle;
+                throw new BadRequestException(message, e);
             }
         }
     }

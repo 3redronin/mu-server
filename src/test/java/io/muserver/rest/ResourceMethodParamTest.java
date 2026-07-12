@@ -103,6 +103,21 @@ public class ResourceMethodParamTest {
         }
     }
 
+    @Test
+    public void matrixParamsPreservePlusSignsAndDecodePercentEncoding() throws IOException {
+        @Path("samples")
+        class Sample {
+            @GET
+            public String getIt(@MatrixParam("color") String color) {
+                return color;
+            }
+        }
+        server = httpsServerForTest().addHandler(restHandler(new Sample())).start();
+        try (Response resp = call(request().url(server.uri().resolve("/samples;color=red+green%20blue").toString()))) {
+            assertThat(resp.body().string(), equalTo("red+green blue"));
+        }
+    }
+
 
     @Test
     public void canConvertPrimitives() throws IOException {
