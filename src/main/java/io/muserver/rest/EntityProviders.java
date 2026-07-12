@@ -68,6 +68,10 @@ class EntityProviders {
         throw new InternalServerErrorException("Could not find a suitable entity provider to write " + type);
     }
 
+    boolean isBuiltInWriter(MessageBodyWriter<?> writer) {
+        return writers.stream().anyMatch(candidate -> candidate.provider == writer && candidate.isBuiltIn);
+    }
+
     public static List<MessageBodyReader> builtInReaders() {
         List<MessageBodyReader> readers = new ArrayList<>();
         readers.addAll(StringEntityProviders.stringEntityReaders);
@@ -94,4 +98,3 @@ class EntityProviders {
 
 
 }
-
