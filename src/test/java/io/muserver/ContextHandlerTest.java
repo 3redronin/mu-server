@@ -6,6 +6,8 @@ import jakarta.ws.rs.Path;
 import okhttp3.Response;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import scaffolding.ServerUtils;
 
 import java.io.IOException;
@@ -184,9 +186,10 @@ public class ContextHandlerTest {
         }
     }
 
-    @Test
-    public void unreservedCharactersComeThroughUnencoded() throws Exception {
-        server = ServerUtils.httpsServerForTest()
+    @ParameterizedTest
+    @ValueSource(strings = {"https", "h2"})
+    public void unreservedCharactersComeThroughUnencoded(String protocol) throws Exception {
+        server = ServerUtils.httpsServerForTest(protocol)
             .addHandler(context("~.-_")
                 .addHandler(Method.GET, "~.-_", (request, response, pathParams) -> {
                     response.write(request.contextPath() + " - " + request.relativePath());
@@ -198,6 +201,10 @@ public class ContextHandlerTest {
             assertThat(resp.code(), is(200));
         }
         try (Response resp = call(request(server.uri().resolve("/%7E%2E%2D%5F/%7E%2E%2D%5F")))) {
+            assertThat(resp.body().string(), is("/~.-_ - /~.-_"));
+            assertThat(resp.code(), is(200));
+        }
+        try (Response resp = call(request(server.uri().resolve("/%7e%2e%2d%5f/%7e%2e%2d%5f")))) {
             assertThat(resp.body().string(), is("/~.-_ - /~.-_"));
             assertThat(resp.code(), is(200));
         }

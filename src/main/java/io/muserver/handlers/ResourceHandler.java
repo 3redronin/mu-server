@@ -49,12 +49,12 @@ public class ResourceHandler implements MuHandler {
         if (requestPath.endsWith("/") && defaultFile != null) {
             requestPath += defaultFile;
         }
-        String decodedRelativePath = Mutils.urlDecode(requestPath);
+        String decodedRelativePath = java.net.URI.create(requestPath).getPath();
 
         ResourceProvider provider = resourceProviderFactory.get(decodedRelativePath);
         if (!provider.exists()) {
             if (directoryListingEnabled) {
-                provider = resourceProviderFactory.get(Mutils.urlDecode(request.relativePath()));
+                provider = resourceProviderFactory.get(java.net.URI.create(request.relativePath()).getPath());
                 if (!provider.isDirectory()) {
                     return false;
                 }

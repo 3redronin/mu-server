@@ -15,6 +15,16 @@ MuRequest and MuResponse API
 * `MuResponse.status()` now returns a `HttpStatus` value rather than an `int`. For the int, call
   `MuResponse.status().code()`
 
+Query string semicolons
+-----------------------
+
+Mu 3 only treats `&` as a query-parameter separator. Semicolons are data in parameter names and values, including when
+query parameters are decoded with HTML form compatibility. For example, `?value=a;b` produces a single parameter named
+`value` with the value `a;b`.
+
+This differs from Mu 2's Netty query decoder, which treats both `&` and `;` as separators. Applications that used
+semicolon-separated query parameters such as `?one=1;two=2` must change them to `?one=1&two=2` when upgrading to Mu 3.
+
 SSE
 ---
 
@@ -56,4 +66,3 @@ Mu 3 todo
 
 * Websocket permessage-deflate
 * Better HTTP 103 Early Hints support (especially for creating links)
-

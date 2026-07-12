@@ -20,6 +20,7 @@ import static java.util.Arrays.asList;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.call;
+import static scaffolding.ClientUtils.isHttp2;
 import static scaffolding.ClientUtils.request;
 import static scaffolding.MuAssert.assertEventually;
 
@@ -216,6 +217,18 @@ public class ParametersTest {
         assertThat(r, containsString("|serverRawQS=a%20space=a%20value&a+space=a+value2&a%2Bplus=a%2Bplus|"));
         assertThat(r, containsString("|qs=a space=a value&a+space=a+value2&a+plus=a+plus|"));
         assertThat(r, containsString("|rawQS=a%20space=a%20value&a+space=a+value2&a%2Bplus=a%2Bplus|"));
+    }
+
+    @Test
+    public void http2UsesTheSameRawAndDecodedUriSemantics() throws IOException {
+        server = ServerUtils.httpsServerForTest("h2").addHandler((request, response) -> {
+            response.write(request.uri().getRawPath() + "|" + request.uri().getRawQuery() + "|" + request.query().getAll("q"));
+            return true;
+        }).start();
+        try (var response = call(request().url(server.uri().resolve("/cars/blue%20green+plus?q=blue%20green&q=blue+green&q=blue%2Bgreen").toString()))) {
+            assertThat(isHttp2(response), is(true));
+            assertThat(response.body().string(), equalTo("/cars/blue%20green+plus|q=blue%20green&q=blue+green&q=blue%2Bgreen|[blue green, blue green, blue+green]"));
+        }
     }
 
     @AfterEach

@@ -149,13 +149,15 @@ public interface MuRequest {
     }
 
     /**
-     * <p>Gets the querystring parameters for this request.</p>
+     * <p>Gets query parameters decoded with {@code application/x-www-form-urlencoded} compatibility.
+     * Both {@code +} and {@code %20} are decoded to a space; use {@link #uri()}{@code .getRawQuery()} for the raw query.</p>
      * @return Returns an object allowing you to access the querystring parameters of this request.
      */
     RequestParameters query();
 
     /**
      * <p>Gets the form parameters for this request.</p>
+     * <p>For {@code application/x-www-form-urlencoded}, both {@code +} and {@code %20} decode to a space.</p>
      * <p>Note: this cannot be called after a call to {@link #inputStream()} or {@link #readBodyAsString()}</p>
      * @throws IOException Thrown when there is an error while reading the form, e.g. if a user closes their
      *                     browser before the form is fully read into memory.

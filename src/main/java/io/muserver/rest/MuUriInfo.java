@@ -12,7 +12,6 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static io.muserver.Mutils.urlDecode;
 import static io.muserver.Mutils.urlEncode;
 import static io.muserver.rest.ReadOnlyMultivaluedMap.readOnly;
 import static java.util.stream.Collectors.toList;
@@ -41,7 +40,7 @@ class MuUriInfo implements UriInfo {
 
     @Override
     public String getPath(boolean decode) {
-        return decode ? urlDecode(encodedRelativePath) : encodedRelativePath;
+        return decode ? Jaxutils.uriDecode(encodedRelativePath) : encodedRelativePath;
     }
 
     @Override
@@ -51,29 +50,36 @@ class MuUriInfo implements UriInfo {
 
     @Override
     public List<PathSegment> getPathSegments(boolean decode) {
-        return pathStringToSegments(getPath(decode), false)
+        return pathStringToSegments(encodedRelativePath, false, decode)
             .collect(Collectors.toList());
     }
 
     static Stream<MuPathSegment> pathStringToSegments(String path, boolean encodeSlashes) {
+        return pathStringToSegments(path, encodeSlashes, false);
+    }
+
+    static Stream<MuPathSegment> pathStringToSegments(String path, boolean encodeSlashes, boolean decode) {
         Stream<String> stream = encodeSlashes ? Stream.of(path) : Stream.of(path.split("/"));
         return stream
             .filter(s -> !s.isEmpty())
             .map(s -> {
-                String[] segments = s.split(";");
+                String[] segments = s.split(";", -1);
 
                 MultivaluedHashMap<String, String> params = new MultivaluedHashMap<>();
                 for (int i = 1; i < segments.length; i++) {
-                    String[] nv = segments[i].split("=");
-                    String paramName = nv[0];
+                    String[] nv = segments[i].split("=", 2);
+                    String paramName = decode ? Jaxutils.uriDecode(nv[0]) : nv[0];
                     if (nv.length == 1) {
                         params.add(paramName, "");
                     } else {
-                        String[] vals = nv[1].split(",");
+                        String[] vals = nv[1].split(",", -1);
+                        if (decode) {
+                            for (int j = 0; j < vals.length; j++) vals[j] = Jaxutils.uriDecode(vals[j]);
+                        }
                         params.addAll(paramName, vals);
                     }
                 }
-                return new MuPathSegment(segments[0], params);
+                return new MuPathSegment(decode ? Jaxutils.uriDecode(segments[0]) : segments[0], params);
             });
     }
 
@@ -161,10 +167,10 @@ class MuUriInfo implements UriInfo {
             return Collections.emptyList();
         }
         List<String> matchedURIs = new ArrayList<>();
-        matchedURIs.add(decode ? Mutils.urlDecode(encodedRelativePath) : encodedRelativePath);
+        matchedURIs.add(decode ? Jaxutils.uriDecode(encodedRelativePath) : encodedRelativePath);
         String methodSpecific = mm.pathMatch.regexMatcher().group();
         String path = encodedRelativePath.replace("/" + methodSpecific, "");
-        matchedURIs.add(decode ? Mutils.urlDecode(path) : path);
+        matchedURIs.add(decode ? Jaxutils.uriDecode(path) : path);
         return Collections.unmodifiableList(matchedURIs);
 
     }

@@ -26,8 +26,9 @@ public class Mutils {
     public static final String NEWLINE = String.format("%n");
 
     /**
+     * Encodes a UTF-8 value using HTML-form escaping, except spaces are emitted as {@code %20} and {@code ~} is left unescaped.
      * @param value the value to encode
-     * @return Returns the UTF-8 URL encoded value
+     * @return the encoded value
      */
     public static String urlEncode(String value) {
         return URLEncoder.encode(value, UTF_8)
@@ -37,8 +38,9 @@ public class Mutils {
     }
 
     /**
+     * Decodes a UTF-8 HTML-form-style value, so both {@code +} and {@code %20} become spaces.
      * @param value the value to decode
-     * @return Returns the UTF-8 URL decoded value
+     * @return the decoded value
      */
     public static String urlDecode(String value) {
         return URLDecoder.decode(value, UTF_8);
@@ -303,12 +305,7 @@ public class Mutils {
             if (Mutils.nullOrEmpty(s)) {
                 s = "/";
             } else {
-                // TODO: consider a redirect if the URL is changed? Handle other percent-encoded characters?
-                s = s.replace("%7E", "~")
-                    .replace("%5F", "_")
-                    .replace("%2E", ".")
-                    .replace("%2D", "-")
-                ;
+                s = decodeUnreserved(s);
             }
             String q = requestUri.getRawQuery();
             if (q != null) {
@@ -319,6 +316,29 @@ public class Mutils {
             if (e instanceof HttpException) throw (HttpException) e;
             throw new HttpException(HttpStatus.BAD_REQUEST_400, "Invalid request URL");
         }
+    }
+
+    static String decodeUnreserved(String value) {
+        int percent = value.indexOf('%');
+        if (percent < 0) return value;
+        StringBuilder result = null;
+        int copiedUntil = 0;
+        for (int i = percent; i + 2 < value.length(); i++) {
+            if (value.charAt(i) != '%') continue;
+            int high = Character.digit(value.charAt(i + 1), 16);
+            int low = Character.digit(value.charAt(i + 2), 16);
+            if (high < 0 || low < 0) continue;
+            int decoded = (high << 4) | low;
+            if ((decoded >= 'a' && decoded <= 'z') || (decoded >= 'A' && decoded <= 'Z') ||
+                (decoded >= '0' && decoded <= '9') || decoded == '-' || decoded == '.' ||
+                decoded == '_' || decoded == '~') {
+                if (result == null) result = new StringBuilder(value.length());
+                result.append(value, copiedUntil, i).append((char) decoded);
+                copiedUntil = i + 3;
+                i += 2;
+            }
+        }
+        return result == null ? value : result.append(value, copiedUntil, value.length()).toString();
     }
 
     private static final ByteBuffer EMPTY_BUFFER = ByteBuffer.allocate(0);

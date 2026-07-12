@@ -176,6 +176,12 @@ public class StringEntityProvidersTest {
             assertThat(resp.header("Content-Type"), equalTo("application/x-www-form-urlencoded"));
             assertThat(resp.body().string(), equalTo("Umm=umm+what%3F%22%5C%2F%3A&Blah=hello+1&Blah=hello+2"));
         }
+        try (Response resp = call(request().url(server.uri().resolve("/samples").toString())
+            .addHeader("Accept", "text/plain")
+            .post(RequestBody.create("colour=blue%20green&colour=blue+green&colour=blue%2Bgreen",
+                MediaType.parse("application/x-www-form-urlencoded;charset=UTF-8"))))) {
+            assertThat(resp.body().string(), equalTo("Got colour = [blue green, blue green, blue+green] - "));
+        }
 
     }
 
