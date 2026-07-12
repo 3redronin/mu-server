@@ -4,6 +4,7 @@ import io.netty.handler.codec.http.cookie.ClientCookieDecoder;
 import io.netty.handler.codec.http.cookie.Cookie;
 import io.netty.handler.codec.http.cookie.DefaultCookie;
 import io.netty.handler.codec.http.cookie.ServerCookieEncoder;
+import io.muserver.Mutils;
 import jakarta.ws.rs.core.NewCookie;
 import jakarta.ws.rs.ext.RuntimeDelegate;
 
@@ -16,17 +17,29 @@ class NewCookieHeaderDelegate implements RuntimeDelegate.HeaderDelegate<NewCooki
 
     @Override
     public NewCookie fromString(String value) {
+        Mutils.notNull("value", value);
         Cookie cookie = decoder.decode(value);
-        return new NewCookie(cookie.name(), cookie.value(), cookie.path(), cookie.domain(), null, (int)cookie.maxAge(), cookie.isSecure(), cookie.isHttpOnly());
+        if (cookie == null) {
+            throw new IllegalArgumentException("Could not parse cookie header value: " + value);
+        }
+        int maxAge = cookie.maxAge() == DefaultCookie.UNDEFINED_MAX_AGE ? NewCookie.DEFAULT_MAX_AGE : (int) cookie.maxAge();
+        return new NewCookie(cookie.name(), cookie.value(), cookie.path(), cookie.domain(), null, maxAge, cookie.isSecure(), cookie.isHttpOnly());
     }
 
     @Override
     public String toString(NewCookie cookie) {
+        Mutils.notNull("cookie", cookie);
         DefaultCookie nettyCookie = new DefaultCookie(cookie.getName(), cookie.getValue());
-        nettyCookie.setDomain(cookie.getDomain());
+        if (cookie.getDomain() != null) {
+            nettyCookie.setDomain(cookie.getDomain());
+        }
         nettyCookie.setHttpOnly(cookie.isHttpOnly());
-        nettyCookie.setMaxAge(cookie.getMaxAge());
-        nettyCookie.setPath(cookie.getPath() == null ? "/" : cookie.getPath());
+        if (cookie.getMaxAge() != NewCookie.DEFAULT_MAX_AGE) {
+            nettyCookie.setMaxAge(cookie.getMaxAge());
+        }
+        if (cookie.getPath() != null) {
+            nettyCookie.setPath(cookie.getPath());
+        }
         nettyCookie.setSecure(cookie.isSecure());
         return encoder.encode(nettyCookie);
     }

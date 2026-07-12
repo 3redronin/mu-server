@@ -2,6 +2,7 @@ package io.muserver;
 
 import io.muserver.rest.MuRuntimeDelegate;
 import jakarta.ws.rs.CookieParam;
+import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.core.NewCookie;
@@ -19,6 +20,7 @@ import scaffolding.RawClient;
 import scaffolding.ServerUtils;
 
 import java.io.IOException;
+import java.lang.reflect.Constructor;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
@@ -146,6 +148,62 @@ public class CookieTest {
         }
         try (Response getResp = client.newCall(request().url(server.uri().resolve("/biscuits/nullMuCookie").toString()).build()).execute()) {
             assertThat(getResp.body().string(), equalTo("cookie=null"));
+        }
+    }
+
+    @Test
+    public void constructorBasedCookieParamsUseTheCookieValueInsteadOfTheDefault() throws IOException {
+        @Path("biscuits")
+        class Biscuits {
+            @GET
+            @Path("set")
+            public jakarta.ws.rs.core.Response setCookie() {
+                return jakarta.ws.rs.core.Response.noContent()
+                    .cookie(new NewCookie("ParamEntityWithConstructor", "JAXRS_SPEC_5.2"))
+                    .build();
+            }
+
+            @GET
+            @Path("get")
+            public String getCookie(@CookieParam("ParamEntityWithConstructor") @DefaultValue("CookieParamTest") ConstructorCookie cookie) {
+                return "ParamEntityWithConstructor=" + cookie.getValue();
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new Biscuits())).start();
+
+        try (Response setResp = client.newCall(request().url(server.uri().resolve("/biscuits/set").toString()).build()).execute()) {
+            assertThat(setResp.code(), equalTo(204));
+        }
+
+        try (Response getResp = client.newCall(request().url(server.uri().resolve("/biscuits/get").toString()).build()).execute()) {
+            assertThat(getResp.code(), equalTo(200));
+            assertThat(getResp.body().string(), equalTo("ParamEntityWithConstructor=JAXRS_SPEC_5.2"));
+        }
+    }
+
+    @Test
+    public void sessionCookiesShouldNotBeSerializedAsAlreadyExpired() throws IOException {
+        @Path("biscuits")
+        class Biscuits {
+            @GET
+            @Path("set")
+            public jakarta.ws.rs.core.Response setCookie() {
+                return jakarta.ws.rs.core.Response.noContent()
+                    .cookie(new NewCookie("ParamEntityWithConstructor", "JAXRS_SPEC_5.2"))
+                    .build();
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new Biscuits())).start();
+
+        try (Response setResp = client.newCall(request().url(server.uri().resolve("/biscuits/set").toString()).build()).execute()) {
+            assertThat(setResp.code(), equalTo(204));
+            String setCookie = setResp.header("set-cookie");
+            assertThat(setCookie, not(containsString("Expires=")));
+            assertThat(setCookie, not(containsString("Max-Age=")));
         }
     }
 
@@ -298,6 +356,18 @@ public class CookieTest {
         public List<okhttp3.Cookie> loadForRequest(HttpUrl url) {
             List<okhttp3.Cookie> cookies = cookieStore.get(url.host());
             return cookies != null ? cookies : new ArrayList<>();
+        }
+    }
+
+    public static class ConstructorCookie {
+        private final String value;
+
+        public ConstructorCookie(String value) {
+            this.value = value;
+        }
+
+        public String getValue() {
+            return value;
         }
     }
 }
