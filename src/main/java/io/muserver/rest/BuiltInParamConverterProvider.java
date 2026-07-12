@@ -176,11 +176,14 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
 
     private static class EnumConverter<E extends Enum<E>>  implements ParamConverter<E> {
         private final Class<E> enumClass;
+        private final StaticMethodConverter<E> fromStringConverter;
         private EnumConverter(Class<E> enumClass) {
             this.enumClass = enumClass;
+            this.fromStringConverter = StaticMethodConverter.tryToCreateFromString(enumClass);
         }
         public E fromString(String value) {
             if (Mutils.nullOrEmpty(value)) return null;
+            if (fromStringConverter != null) return fromStringConverter.fromString(value);
             return Enum.valueOf(enumClass, value);
         }
         public String toString(E value) {
@@ -258,6 +261,14 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
             if (staticMethod == null) {
                 return null;
             }
+            staticMethod.setAccessible(true);
+            return new StaticMethodConverter<>(staticMethod);
+        }
+
+        static <T> StaticMethodConverter<T> tryToCreateFromString(Class clazz) {
+            Method[] declaredMethods = clazz.getDeclaredMethods();
+            Method staticMethod = getSingleParamPublicStaticMethodNamed(clazz, declaredMethods, "fromString");
+            if (staticMethod == null) return null;
             staticMethod.setAccessible(true);
             return new StaticMethodConverter<>(staticMethod);
         }
