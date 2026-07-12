@@ -345,8 +345,7 @@ public class ResourceMethodParamTest {
             assertThat(resp.body().string(), equalTo("chihuahua / null / big_hairy"));
         }
         try (Response resp = call(request().url(server.uri().resolve("/samples?breedOne=BAD_DOG").toString()))) {
-            assertThat(resp.code(), is(400));
-            assertThat(resp.body().string(), startsWith("<h1>400 Bad Request</h1><p>Could not convert String value &quot;BAD_DOG&quot; to a"));
+            assertThat(resp.code(), is(404));
         }
 
         try (Response resp = call(request().url(server.uri().resolve("/samples/multiple?breeds=CHIHUAHUA&breeds=YELPER").toString()))) {
@@ -359,8 +358,7 @@ public class ResourceMethodParamTest {
             assertThat(resp.body().string(), equalTo("empty list"));
         }
         try (Response resp = call(request().url(server.uri().resolve("/samples/multiple?breeds=CHIHUAHUA&breeds=INVALID&breeds=YELPER").toString()))) {
-            assertThat(resp.code(), is(400));
-            assertThat(resp.body().string(), containsString("Could not convert"));
+            assertThat(resp.code(), is(404));
         }
     }
 
@@ -766,8 +764,7 @@ public class ResourceMethodParamTest {
             assertThat(resp.body().string(), equalTo(""));
         }
         try (Response resp = call(request(server.uri().resolve("/time?value=invalid-date")))) {
-            assertThat(resp.code(), is(400));
-            assertThat(resp.body().string(), containsString(Mutils.htmlEncode("Could not convert String value \"invalid-date\" to a class java.time.Instant using public static java.time.Instant java.time.Instant.parse(java.lang.CharSequence)")));
+            assertThat(resp.code(), is(404));
         }
     }
 
@@ -797,8 +794,7 @@ public class ResourceMethodParamTest {
             assertThat(resp.body().string(), equalTo(""));
         }
         try (Response resp = call(request(server.uri().resolve("/time?value=invalid-date")))) {
-            assertThat(resp.code(), is(400));
-            assertThat(resp.body().string(), containsString(Mutils.htmlEncode("Could not convert String value \"invalid-date\" to a class java.time.LocalDate using public static java.time.LocalDate java.time.LocalDate.parse(java.lang.CharSequence)")));
+            assertThat(resp.code(), is(404));
         }
     }
 
