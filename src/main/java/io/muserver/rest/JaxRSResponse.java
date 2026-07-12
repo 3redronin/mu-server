@@ -158,7 +158,7 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
     @Override
     public void setEntity(Object entity, Annotation[] annotations, MediaType mediaType) {
         setEntity(entity);
-        setAnnotations(annotations);
+        setAnnotations(annotations == null ? Builder.EMPTY_ANNOTATIONS : annotations);
         setMediaType(mediaType);
     }
 
