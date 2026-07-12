@@ -183,6 +183,18 @@ public class RestHandler implements MuHandler {
     }
 
     private void dealWithUnhandledException(int nestingLevel, JaxRSRequest request, MuResponse muResponse, Exception ex, List<MediaType> acceptHeaders, List<MediaType> producesRef, List<MediaType> directlyProducesRef) throws Exception {
+        if (nestingLevel >= 2) {
+            if (muResponse.hasStartedSendingData()) {
+                log.warn("An unhandled exception " + ex + " was thrown for " + request.muRequest + ", however a 500 response cannot be sent as some data was already sent.");
+            } else {
+                String errorID = "ERR-" + UUID.randomUUID().toString();
+                log.info("Sending a 500 to the client with ErrorID=" + errorID + " for " + request.muRequest, ex);
+                muResponse.status(500);
+                muResponse.contentType(ContentTypes.TEXT_HTML_UTF8);
+                muResponse.write("<h1>500 Internal Server Error</h1><p>ErrorID=" + errorID + "</p>");
+            }
+            return;
+        }
         Response response = customExceptionMapper.toResponse(ex);
         if (response == null && ex instanceof WebApplicationException) {
             dealWithWebApplicationException(nestingLevel, request, muResponse, (WebApplicationException) ex, acceptHeaders, producesRef == null ? emptyList() : producesRef, directlyProducesRef == null ? emptyList() : directlyProducesRef);
