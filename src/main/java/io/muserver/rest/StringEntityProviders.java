@@ -36,7 +36,7 @@ class StringEntityProviders {
     );
     static final List<MessageBodyWriter> stringEntityWriters = asList(
         StringMessageReaderWriter.INSTANCE, CharArrayReaderWriter.INSTANCE, new FormUrlEncodedWriter(),
-        TemporalEntityReaderWriter.INSTANCE
+        TemporalEntityReaderWriter.INSTANCE, new ReaderEntityWriter()
     );
 
 
@@ -217,6 +217,25 @@ class StringEntityProviders {
 
         public Reader readFrom(Class<Reader> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
             return new InputStreamReader(entityStream, EntityProviders.charsetFor(mediaType));
+        }
+    }
+
+    @Produces("*/*")
+    static class ReaderEntityWriter implements MessageBodyWriter<Reader> {
+        @Override
+        public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
+            return Reader.class.isAssignableFrom(type);
+        }
+
+        @Override
+        public void writeTo(Reader reader, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException, WebApplicationException {
+            OutputStreamWriter writer = new OutputStreamWriter(entityStream, EntityProviders.charsetFor(mediaType));
+            char[] buffer = new char[8192];
+            int read;
+            while ((read = reader.read(buffer)) != -1) {
+                writer.write(buffer, 0, read);
+            }
+            writer.flush();
         }
     }
 
