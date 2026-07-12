@@ -350,6 +350,7 @@ class Http2Stream implements ResponseInfo {
         var state = headerFrame.endStream() ? State.HALF_CLOSED_REMOTE : State.OPEN;
         Http2Stream stream = new Http2Stream(id, connection, state, request, incomingFlowControl, outgoingFlowControl, body, cl);
         stream.response = new Http2Response(stream, new FieldBlock(), request);
+        request.setResponse(stream.response);
         return stream;
     }
 

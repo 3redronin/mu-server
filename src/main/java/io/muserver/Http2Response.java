@@ -74,19 +74,24 @@ class Http2Response extends BaseResponse {
     @Override
     public OutputStream outputStream(int bufferSize) {
         if (wrappedOut == null) {
+            ContentEncoder responseEncoder = contentEncoder();
             // TODO don't do this here...
             try {
                 if (responseState() == ResponseState.NOTHING) {
                     writeStatusAndHeaders(false);
                 }
             } catch (InterruptedException e) {
-                throw new RuntimeException(e);
+                throw new RuntimeException("Interrupted while writing status headers", e);
             } catch (IOException e) {
                 throw new UncheckedIOException(e);
             }
             BufferedOutputStream os = new BufferedOutputStream(new Http2DataFrameOutputStream(stream), bufferSize);
-            wrappedOut = os;
-            return os;
+            try {
+                wrappedOut = responseEncoder == null ? os : responseEncoder.wrapStream(request, this, os);
+            } catch (IOException e) {
+                throw new UncheckedIOException("Error while setting up output stream", e);
+            }
+            return wrappedOut;
         } else {
             throw new IllegalStateException("Cannot specify buffer size for response output stream when it has already been created");
         }

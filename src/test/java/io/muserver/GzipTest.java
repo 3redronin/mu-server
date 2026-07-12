@@ -7,10 +7,12 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.StreamingOutput;
 import okhttp3.Response;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import scaffolding.MuAssert;
 import scaffolding.StringUtils;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -29,17 +31,19 @@ public class GzipTest {
     private static final String LOTS_OF_TEXT = StringUtils.randomAsciiStringOfLength(20000);
     private MuServer server;
 
-    @Test
-    public void resourcesCanBeGzipped() throws IOException {
-        server = httpsServerForTest()
+    @ParameterizedTest
+    @ValueSource(strings = {"http", "https", "h2"})
+    public void resourcesCanBeGzipped(String protocol) throws IOException {
+        server = httpsServerForTest(protocol)
             .addHandler(classpathHandler("/sample-static"))
             .start();
         compareZippedVsNotZipped("/overview.txt");
     }
 
-    @Test
-    public void responseWriteCanBeGZipped() throws IOException {
-        server = httpsServerForTest()
+    @ParameterizedTest
+    @ValueSource(strings = {"http", "https", "h2"})
+    public void responseWriteCanBeGZipped(String protocol) throws IOException {
+        server = httpsServerForTest(protocol)
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.contentType(ContentTypes.TEXT_PLAIN_UTF8);
                 response.write(LOTS_OF_TEXT);
@@ -48,9 +52,10 @@ public class GzipTest {
         compareZippedVsNotZipped("/");
     }
 
-    @Test
-    public void ifMimeTypesDoNotHaveResponseThenThereIsNoGzipping() throws IOException {
-        server = httpsServerForTest()
+    @ParameterizedTest
+    @ValueSource(strings = {"http", "https", "h2"})
+    public void ifMimeTypesDoNotHaveResponseThenThereIsNoGzipping(String protocol) throws IOException {
+        server = httpsServerForTest(protocol)
             .withGzip(0, Collections.singleton("text/html"))
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.contentType(ContentTypes.TEXT_PLAIN_UTF8);
@@ -65,9 +70,10 @@ public class GzipTest {
         }
     }
 
-    @Test
-    public void asyncWritesCanBeGzipped() throws IOException {
-        server = httpsServerForTest()
+    @ParameterizedTest
+    @ValueSource(strings = {"http", "https", "h2"})
+    public void asyncWritesCanBeGzipped(String protocol) throws IOException {
+        server = httpsServerForTest(protocol)
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.contentType(ContentTypes.TEXT_PLAIN_UTF8);
                 AsyncHandle asyncHandle = request.handleAsync();
@@ -79,9 +85,10 @@ public class GzipTest {
         compareZippedVsNotZipped("/");
     }
 
-    @Test
-    public void thatWhichIsEncodedShallNotBeEncodedAgain() throws IOException {
-        server = httpsServerForTest()
+    @ParameterizedTest
+    @ValueSource(strings = {"http", "https", "h2"})
+    public void thatWhichIsEncodedShallNotBeEncodedAgain(String protocol) throws IOException {
+        server = httpsServerForTest(protocol)
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.contentType(ContentTypes.TEXT_PLAIN_UTF8);
                 response.headers().set(HeaderNames.CONTENT_ENCODING, "identity");
@@ -96,10 +103,11 @@ public class GzipTest {
         }
     }
 
-    @Test
-    public void sendChunkCanBeGzipped() throws IOException {
+    @ParameterizedTest
+    @ValueSource(strings = {"http", "https", "h2"})
+    public void sendChunkCanBeGzipped(String protocol) throws IOException {
         String someText = StringUtils.randomAsciiStringOfLength(800);
-        server = httpsServerForTest()
+        server = httpsServerForTest(protocol)
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.contentType(ContentTypes.TEXT_PLAIN_UTF8);
                 for (int i = 0; i < 20; i++) {
@@ -110,8 +118,9 @@ public class GzipTest {
         compareZippedVsNotZipped("/");
     }
 
-    @Test
-    public void jaxRSResponsesAreGZipped() throws IOException {
+    @ParameterizedTest
+    @ValueSource(strings = {"http", "https", "h2"})
+    public void jaxRSResponsesAreGZipped(String protocol) throws IOException {
         String someText = StringUtils.randomAsciiStringOfLength(8192);
         @Path("/strings")
         @Produces("application/json")
@@ -128,7 +137,7 @@ public class GzipTest {
             }
 
         }
-        server = httpsServerForTest()
+        server = httpsServerForTest(protocol)
             .addHandler(RestHandlerBuilder.restHandler(new StringResource()))
             .start();
         compareZippedVsNotZipped("/strings");
@@ -156,9 +165,10 @@ public class GzipTest {
         }
     }
 
-    @Test
-    public void ifTheResponseIsAlreadyCompressedThenDoNotRecompress() throws IOException {
-        server = httpsServerForTest()
+    @ParameterizedTest
+    @ValueSource(strings = {"http", "https", "h2"})
+    public void ifTheResponseIsAlreadyCompressedThenDoNotRecompress(String protocol) throws IOException {
+        server = httpsServerForTest(protocol)
             .addHandler(Method.GET, "/overview.txt", (request, response, pathParams) -> {
                 response.headers().set(HeaderNames.CONTENT_TYPE, ContentTypes.TEXT_PLAIN_UTF8);
                 response.headers().set(HeaderNames.CONTENT_ENCODING, "gzip");
