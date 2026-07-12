@@ -77,6 +77,10 @@ public class RoutesTest {
             .start();
         assertThat(respBody(Method.GET, "/blah%20ha/hello%20goodbye/ha"),
             equalTo("hello goodbye"));
+        assertThat(respBody(Method.GET, "/blah%20ha/hello+goodbye/ha"),
+            equalTo("hello+goodbye"));
+        assertThat(respBody(Method.GET, "/blah%20ha/hello%2Bgoodbye/ha"),
+            equalTo("hello+goodbye"));
     }
 
     @Test
@@ -93,6 +97,19 @@ public class RoutesTest {
             .start();
         assertThat(respBody(Method.GET, "/context/blah%20ha;h%20i=h%20i;a=b/hello%20goodbye/ha%20ha;h%20i=h%20i;a=b"),
             equalTo("ha ha - h i"));
+    }
+
+    @Test
+    public void matrixParameterNamesAndValuesUseUriDecoding() throws IOException {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(Method.GET, "/cars/{car}", (request, response, ignored) -> {
+                PathSegment car = UriPattern.uriTemplateToRegex("/cars/{car}").matcher(request.uri()).segments().get("car");
+                response.write(car.getMatrixParameters().toString());
+            }).start();
+
+        assertThat(respBody(Method.GET, "/cars/e55;col%20our=blue%20green"), equalTo("{col our=[blue green]}"));
+        assertThat(respBody(Method.GET, "/cars/e55;col+our=blue+green"), equalTo("{col+our=[blue+green]}"));
+        assertThat(respBody(Method.GET, "/cars/e55;colour=blue%2Bgreen"), equalTo("{colour=[blue+green]}"));
     }
 
     private int call(Method method, String path) {

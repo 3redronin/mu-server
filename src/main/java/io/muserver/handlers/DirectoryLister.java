@@ -34,7 +34,7 @@ class DirectoryLister {
     void render() throws IOException {
         El html = new El("html").open();
         El head = new El("head").open();
-        String title = "Index of " + Mutils.urlDecode(contextPath + relativePath);
+        String title = "Index of " + java.net.URI.create(contextPath + relativePath).getPath();
         render("title", title);
         new El("style").open().contentRaw(directoryListingCss).close();
         head.close();

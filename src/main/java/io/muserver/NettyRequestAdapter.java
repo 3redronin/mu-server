@@ -546,4 +546,3 @@ class NettyRequestAdapter implements MuRequest {
     }
 
 }
-

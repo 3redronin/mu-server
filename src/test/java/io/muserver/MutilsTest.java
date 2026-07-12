@@ -25,6 +25,13 @@ public class MutilsTest {
     }
 
     @Test
+    public void requestPathNormalizationDecodesOnlyUnreservedCharactersRegardlessOfHexCase() {
+        assertThat(Mutils.decodeUnreserved("/%41%5a%61%7A%30%39%2d%2E%5f%7e"), equalTo("/AZaz09-._~"));
+        assertThat(Mutils.decodeUnreserved("/%2F%5c%3F%23%3B%26%3D%2B%20"),
+            equalTo("/%2F%5c%3F%23%3B%26%3D%2B%20"));
+    }
+
+    @Test
     public void joinJoinsThingsToBeJoined() {
         assertThat(join("/sample-static/", "/", "/something.txt"), equalTo("/sample-static/something.txt"));
         assertThat(join("/sample-static", "/", "/something.txt"), equalTo("/sample-static/something.txt"));

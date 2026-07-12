@@ -8,7 +8,6 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import static io.muserver.Mutils.urlDecode;
 
 /**
  * A pattern representing a URI template, such as <code>/fruit</code> or <code>/fruit/{name}</code> etc.
@@ -76,7 +75,7 @@ public class UriPattern {
         if (matcher.matches()) {
             HashMap<String, PathSegment> params = new HashMap<>();
             for (String namedGroup : namedGroups) {
-                MuPathSegment segment = MuUriInfo.pathStringToSegments(urlDecode(matcher.group(namedGroup)), true).findFirst().orElse(null);
+                MuPathSegment segment = MuUriInfo.pathStringToSegments(matcher.group(namedGroup), true, true).findFirst().orElse(null);
                 if (segment != null) {
                     params.put(namedGroup, segment);
                 }

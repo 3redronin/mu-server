@@ -1,6 +1,8 @@
 package io.muserver;
 
 import okhttp3.FormBody;
+import okhttp3.MediaType;
+import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Test;
@@ -218,6 +220,43 @@ public class ParametersTest {
         assertThat(r, containsString("|serverRawQS=a%20space=a%20value&a+space=a+value2&a%2Bplus=a%2Bplus|"));
         assertThat(r, containsString("|qs=a space=a value&a+space=a+value2&a+plus=a+plus|"));
         assertThat(r, containsString("|rawQS=a%20space=a%20value&a+space=a+value2&a%2Bplus=a%2Bplus|"));
+    }
+
+    @Test
+    public void decodedQueriesSupportHtmlGetFormSemantics() throws Exception {
+        server = httpServer().addHandler((request, response) -> {
+            response.write(request.uri().getRawQuery() + "\n" + request.query().all());
+            return true;
+        }).start();
+        String response;
+        try (RawClient client = RawClient.create(server.uri())) {
+            client.sendStartLine("GET", "/search?q=blue%20green&q=blue+green&q=blue%2Bgreen&empty=&bare&na%20me=a=b&semi=x;y");
+            client.sendHeader("Host", server.uri().getAuthority());
+            client.endHeaders();
+            client.flushRequest();
+            while (client.bytesReceived() == 0) Thread.sleep(10);
+            response = client.responseString();
+        }
+        assertThat(response, containsString("q=blue%20green&q=blue+green&q=blue%2Bgreen&empty=&bare&na%20me=a=b&semi=x;y"));
+        assertThat(response, containsString("q=[blue green, blue green, blue+green]"));
+        assertThat(response, containsString("empty=[]"));
+        assertThat(response, containsString("bare=[]"));
+        assertThat(response, containsString("na me=[a=b]"));
+        assertThat(response, containsString("semi=[x]"));
+        assertThat(response, containsString("y=[]"));
+    }
+
+    @Test
+    public void urlEncodedFormBodiesUseFormDecoding() throws Exception {
+        server = httpServer().addHandler((request, response) -> {
+            response.write(request.form().getAll("colour").toString());
+            return true;
+        }).start();
+        RequestBody body = RequestBody.create("colour=blue%20green&colour=blue+green&colour=blue%2Bgreen&utf8=%E4%BD%A0%E5%A5%BD",
+            MediaType.get("application/x-www-form-urlencoded;charset=UTF-8"));
+        try (Response response = call(request(server.uri()).post(body))) {
+            assertThat(response.body().string(), equalTo("[blue green, blue green, blue+green]"));
+        }
     }
 
     @After
