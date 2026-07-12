@@ -181,6 +181,30 @@ public class CookieTest {
     }
 
     @Test
+    public void sessionCookiesShouldNotBeSerializedAsAlreadyExpired() throws IOException {
+        @Path("biscuits")
+        class Biscuits {
+            @GET
+            @Path("set")
+            public jakarta.ws.rs.core.Response setCookie() {
+                return jakarta.ws.rs.core.Response.noContent()
+                    .cookie(new NewCookie("ParamEntityWithConstructor", "JAXRS_SPEC_5.2"))
+                    .build();
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new Biscuits())).start();
+
+        try (Response setResp = client.newCall(request().url(server.uri().resolve("/biscuits/set").toString()).build()).execute()) {
+            assertThat(setResp.code(), equalTo(204));
+            String setCookie = setResp.header("set-cookie");
+            assertThat(setCookie, not(containsString("Max-Age=")));
+            assertThat(setCookie, not(containsString("Expires=")));
+        }
+    }
+
+    @Test
     public void multipleCookiesCanBeSetAndAreAllSentBackToTheServer() throws IOException {
         Set<Cookie> actualSentCookies = new HashSet<>();
         AtomicReference<Optional<String>> sessionLookup = new AtomicReference<>();
