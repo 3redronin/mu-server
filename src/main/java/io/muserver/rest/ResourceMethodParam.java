@@ -364,6 +364,9 @@ abstract class ResourceMethodParam {
                 throw e;
             } catch (Exception e) {
                 String message = "Could not convert String value \"" + value + "\" to a " + parameterHandle.getType() + " using " + converter + " on parameter " + parameterHandle;
+                if (source == ValueSource.MATRIX_PARAM || source == ValueSource.QUERY_PARAM || source == ValueSource.PATH_PARAM) {
+                    throw new NotFoundException(message, e);
+                }
                 throw new BadRequestException(message, e);
             }
         }
