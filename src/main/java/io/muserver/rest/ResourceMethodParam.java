@@ -254,7 +254,9 @@ abstract class ResourceMethodParam {
         private List<String> matrixParamValue(String key, String path) {
             MuPathSegment last = MuUriInfo.pathStringToSegments(path, false).reduce((first, second) -> second).orElse(null);
             if (last != null && last.getMatrixParameters().containsKey(key)) {
-                return last.getMatrixParameters().get(key);
+                return last.getMatrixParameters().get(key).stream()
+                    .map(Mutils::urlDecode)
+                    .collect(Collectors.toList());
             }
             return emptyList();
         }
