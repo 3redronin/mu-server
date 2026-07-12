@@ -25,8 +25,30 @@ class Http1Connection extends BaseHttpConnection {
 
     private static final Logger log = LoggerFactory.getLogger(Http1Connection.class);
     private final Queue<HttpRequestTemp> requestPipeline = new ConcurrentLinkedQueue<>();
-    private final AtomicReference<@Nullable Object> currentRequest = new AtomicReference<>();
-    protected HttpConnectionState state = HttpConnectionState.OPEN;
+    // At most one active exchange exists on HTTP/1.1: either an HTTP request/response or a websocket takeover.
+    private final AtomicReference<@Nullable ActiveExchange> activeExchange = new AtomicReference<>();
+    // Lifecycle is cross-thread: connection loop + timeout thread + shutdown thread.
+    private final AtomicReference<HttpConnectionState> state = new AtomicReference<>(HttpConnectionState.OPEN);
+
+    private static final class ActiveExchange {
+        @Nullable
+        final Mu3Request request;
+        @Nullable
+        final WebsocketConnection websocket;
+
+        private ActiveExchange(@Nullable Mu3Request request, @Nullable WebsocketConnection websocket) {
+            this.request = request;
+            this.websocket = websocket;
+        }
+
+        static ActiveExchange forRequest(Mu3Request request) {
+            return new ActiveExchange(request, null);
+        }
+
+        static ActiveExchange forWebsocket(WebsocketConnection websocket) {
+            return new ActiveExchange(null, websocket);
+        }
+    }
 
     Http1Connection(Mu3ServerImpl server, ConnectionAcceptor creator, Socket clientSocket, @Nullable Certificate clientCertificate, Instant handshakeStartTime) {
         super(server, creator, clientSocket, clientCertificate, handshakeStartTime);
@@ -57,6 +79,7 @@ class Http1Connection extends BaseHttpConnection {
                 if (msg == EOFMsg) {
                     log.info("EOF detected");
 //                    reqStream.closeQuietly() // TODO: confirm if the input stream should be closed
+                    markRemoteClosed();
                     clientSocket.shutdownInput();
                     break;
                 }
@@ -130,19 +153,20 @@ class Http1Connection extends BaseHttpConnection {
                     }
                     var websocket = muResponse.getWebsocket();
                     if (!closeConnection && websocket != null) {
-                        currentRequest.set(websocket);
+                        activeExchange.set(ActiveExchange.forWebsocket(websocket));
                         clientSocket.setSoTimeout(websocket.settings.idleReadTimeoutMillis);
                         websocket.runAndBlockUntilDone(inputStream, outputStream, requestParser.readBuffer);
                         closeConnection = true;
                     }
                 }
-                closeConnection = closeConnection || state != HttpConnectionState.OPEN;
+                closeConnection = closeConnection || state.get() != HttpConnectionState.OPEN || closed.get();
             }
         } catch (Exception e) {
             // probably shouldn't log here so much for things like IO errors which would be common when clients disconnect
             log.error("Unhandled error at the socket", e);
         } finally {
-            Mutils.closeSilently(clientSocket);
+            activeExchange.set(null);
+            closeTransportQuietly();
         }
     }
 
@@ -171,13 +195,13 @@ class Http1Connection extends BaseHttpConnection {
 
     @Override
     public void onRequestStarted(Mu3Request req) {
-        currentRequest.set(req);
+        activeExchange.set(ActiveExchange.forRequest(req));
         super.onRequestStarted(req);
     }
 
     @Override
     public void onExchangeEnded(ResponseInfo exchange) {
-        currentRequest.set(null);
+        activeExchange.updateAndGet(cur -> cur != null && cur.request == exchange.request() ? null : cur);
         super.onExchangeEnded(exchange);
     }
 
@@ -189,55 +213,43 @@ class Http1Connection extends BaseHttpConnection {
 
     @Override
     public Set<MuRequest> activeRequests() {
-        var cur = currentRequest.get();
-        return cur instanceof MuRequest ? Set.of((MuRequest) cur) : emptySet();
+        var cur = activeExchange.get();
+        return cur != null && cur.request != null ? Set.of(cur.request) : emptySet();
     }
 
     @Override
     public Set<MuWebSocket> activeWebsockets() {
-        var cur = currentRequest.get();
-        return cur instanceof MuWebSocket ? Set.of((MuWebSocket) cur) : emptySet();
+        var cur = activeExchange.get();
+        return cur != null && cur.websocket != null ? Set.of(cur.websocket.webSocket()) : emptySet();
     }
 
     @Override
     public void abort() throws IOException {
         if (closed.compareAndSet(false, true)) {
-            var cur = currentRequest.get();
-            if (cur instanceof Mu3Request) {
-                Mu3AsyncHandleImpl asyncHandle = ((Mu3Request) cur).getAsyncHandle();
-                if (asyncHandle != null) {
-                    asyncHandle.complete(new MuException("Connection aborted"));
-                }
-            }
+            completeAsyncRequest(new MuException("Connection aborted"));
+            state.set(HttpConnectionState.CLOSED);
             clientSocket.close();
+        } else {
+            state.set(HttpConnectionState.CLOSED);
         }
     }
 
     @Override
     public void abortWithTimeout() throws IOException {
         if (closed.compareAndSet(false, true)) {
-            var cur = currentRequest.get();
-            if (cur != null) {
-                if (cur instanceof Mu3Request) {
-                    Mu3AsyncHandleImpl asyncHandle = ((Mu3Request) cur).getAsyncHandle();
-                    if (asyncHandle != null) {
-                        asyncHandle.complete(new TimeoutException("Idle timeout exceeded"));
-                    }
-                } else if (cur instanceof WebsocketConnection) {
-                    ((WebsocketConnection)cur).onTimeout();
-                }
-            }
+            completeAsyncRequest(new TimeoutException("Idle timeout exceeded"));
+            notifyWebsocketTimeout();
+            state.set(HttpConnectionState.CLOSED);
             clientSocket.close();
+        } else {
+            state.set(HttpConnectionState.CLOSED);
         }
     }
 
 
     @Override
     void initiateGracefulShutdown() {
-        // TODO thread safety
-        if (state == HttpConnectionState.OPEN) {
-            state = HttpConnectionState.CLOSED_LOCAL;
-        }
+        requestLocalShutdown();
         if (isIdle()) {
             log.info("Connection is idle; shutting down");
             forceShutdown();
@@ -255,16 +267,50 @@ class Http1Connection extends BaseHttpConnection {
 
     @Override
     void forceShutdown() {
-        // todo thread safety
-        if (state == HttpConnectionState.CLOSED) {
+        state.set(HttpConnectionState.CLOSED);
+        closeTransportQuietly();
+    }
+
+    private void requestLocalShutdown() {
+        state.compareAndSet(HttpConnectionState.OPEN, HttpConnectionState.CLOSED_LOCAL);
+    }
+
+    private void markRemoteClosed() {
+        if (state.compareAndSet(HttpConnectionState.OPEN, HttpConnectionState.CLOSED_REMOTE)) {
             return;
         }
-        try {
-            clientSocket.close();
-        } catch (IOException ignored) {
-        } finally {
-            state = HttpConnectionState.CLOSED;
+        if (state.get() == HttpConnectionState.CLOSED_LOCAL) {
+            state.compareAndSet(HttpConnectionState.CLOSED_LOCAL, HttpConnectionState.CLOSED);
         }
+    }
 
+    private void closeTransportQuietly() {
+        if (closed.compareAndSet(false, true)) {
+            try {
+                clientSocket.close();
+            } catch (IOException ignored) {
+            } finally {
+                state.set(HttpConnectionState.CLOSED);
+            }
+        } else {
+            state.set(HttpConnectionState.CLOSED);
+        }
+    }
+
+    private void completeAsyncRequest(Exception error) {
+        var cur = activeExchange.get();
+        if (cur != null && cur.request != null) {
+            Mu3AsyncHandleImpl asyncHandle = cur.request.getAsyncHandle();
+            if (asyncHandle != null) {
+                asyncHandle.complete(error);
+            }
+        }
+    }
+
+    private void notifyWebsocketTimeout() {
+        var cur = activeExchange.get();
+        if (cur != null && cur.websocket != null) {
+            cur.websocket.onTimeout();
+        }
     }
 }

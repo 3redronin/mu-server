@@ -1,6 +1,8 @@
 package io.muserver;
 
 import okhttp3.Response;
+import okhttp3.WebSocket;
+import okhttp3.WebSocketListener;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -14,10 +16,12 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static io.muserver.WebSocketHandlerBuilder.webSocketHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static scaffolding.ClientUtils.call;
+import static scaffolding.ClientUtils.client;
 import static scaffolding.ClientUtils.request;
 
 @Timeout(30)
@@ -112,6 +116,61 @@ public class StopTest {
         // the previous in flight request should be aborted
         assertThat(clientReceivedLatch.await(2, TimeUnit.SECONDS), is(true));
         assertThat(clientException.get().getCause().getCause(), is(instanceOf(java.io.EOFException.class)));
+    }
+
+    @Test
+    public void gracefulShutdown_notifiesActiveWebsocket() throws InterruptedException {
+        CountDownLatch serverSocketConnected = new CountDownLatch(1);
+        CountDownLatch clientSocketOpened = new CountDownLatch(1);
+        CountDownLatch serverShuttingDown = new CountDownLatch(1);
+
+        server = MuServerBuilder
+            .httpServer()
+            .addHandler(webSocketHandler((request, responseHeaders) -> new SimpleWebSocket() {
+                @Override
+                public void onConnect(MuWebSocketSession session) throws Exception {
+                    super.onConnect(session);
+                    serverSocketConnected.countDown();
+                }
+
+                @Override
+                public void onText(String message) {
+                }
+
+                @Override
+                public void onBinary(java.nio.ByteBuffer buffer) {
+                }
+
+                @Override
+                public void onServerShuttingDown() throws Exception {
+                    serverShuttingDown.countDown();
+                    session().close(1001, "Going away");
+                }
+            }))
+            .start();
+
+        String wsUri = server.uri().toString().replaceFirst("^http", "ws");
+        WebSocket socket = client.newWebSocket(new okhttp3.Request.Builder().url(wsUri).build(), new WebSocketListener() {
+            @Override
+            public void onOpen(WebSocket webSocket, Response response) {
+                clientSocketOpened.countDown();
+            }
+
+            @Override
+            public void onClosed(WebSocket webSocket, int code, String reason) {
+            }
+
+            @Override
+            public void onFailure(WebSocket webSocket, Throwable t, @Nullable Response response) {
+            }
+        });
+
+        assertThat(serverSocketConnected.await(2, TimeUnit.SECONDS), is(true));
+        assertThat(clientSocketOpened.await(2, TimeUnit.SECONDS), is(true));
+        server.stop(2, TimeUnit.SECONDS);
+        assertThat(serverShuttingDown.await(2, TimeUnit.SECONDS), is(true));
+
+        socket.cancel();
     }
 
 }

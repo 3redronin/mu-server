@@ -55,6 +55,11 @@ class WebsocketConnection implements MuWebSocketSession {
             HttpsConfigBuilder.random.nextBytes(header);
             pingBuffer.put(header);
         }
+
+    }
+
+    MuWebSocket webSocket() {
+        return webSocket;
     }
 
 
