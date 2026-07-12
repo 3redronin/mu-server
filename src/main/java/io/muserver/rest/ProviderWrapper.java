@@ -35,13 +35,35 @@ class ProviderWrapper<T> implements Comparable<ProviderWrapper<T>> {
         if (instance instanceof PrimitiveEntityProvider) {
             return ((PrimitiveEntityProvider) instance).boxedClass;
         }
-        for (Type type : instance.getClass().getGenericInterfaces()) {
-            if (type instanceof ParameterizedType) {
-                ParameterizedType pt = (ParameterizedType) type;
+        return genericTypeOf(instance.getClass(), implementedInterface);
+    }
+
+    private static Type genericTypeOf(Class<?> type, Class implementedInterface) {
+        for (Type interfaceType : type.getGenericInterfaces()) {
+            if (interfaceType instanceof ParameterizedType) {
+                ParameterizedType pt = (ParameterizedType) interfaceType;
                 if (pt.getRawType().equals(implementedInterface)) {
                     return pt.getActualTypeArguments()[0];
                 }
+                if (pt.getRawType() instanceof Class) {
+                    Type nested = genericTypeOf((Class<?>) pt.getRawType(), implementedInterface);
+                    if (nested != Object.class) {
+                        return nested;
+                    }
+                }
+            } else if (interfaceType instanceof Class) {
+                Type nested = genericTypeOf((Class<?>) interfaceType, implementedInterface);
+                if (nested != Object.class) {
+                    return nested;
+                }
             }
+        }
+        Type superclass = type.getGenericSuperclass();
+        if (superclass instanceof Class) {
+            return genericTypeOf((Class<?>) superclass, implementedInterface);
+        }
+        if (superclass instanceof ParameterizedType && ((ParameterizedType) superclass).getRawType() instanceof Class) {
+            return genericTypeOf((Class<?>) ((ParameterizedType) superclass).getRawType(), implementedInterface);
         }
         return Object.class;
     }
