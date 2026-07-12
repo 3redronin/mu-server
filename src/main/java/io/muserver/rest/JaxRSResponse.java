@@ -464,6 +464,9 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
 
         @Override
         public Response build() {
+            if (this.status == null) {
+                this.status = Status.fromStatusCode(entity == null ? 204 : 200);
+            }
             for (Link linkHeader : linkHeaders) {
                 headers.add(HeaderNames.LINK.toString(), linkHeader.toString());
             }

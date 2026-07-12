@@ -157,6 +157,12 @@ public class JaxRSResponseTest {
     }
 
     @Test
+    public void responseBuilderUsesDefaultStatusBasedOnEntity() {
+        assertThat(new JaxRSResponse.Builder().entity("entity").build().getStatus(), is(200));
+        assertThat(new JaxRSResponse.Builder().entity(null).build().getStatus(), is(204));
+    }
+
+    @Test
     public void canBufferInputStreams() throws IOException {
         AtomicInteger closeCount = new AtomicInteger(0);
         try (InputStream inputStream = new ByteArrayInputStream("Hello world".getBytes(StandardCharsets.UTF_8)) {
