@@ -25,7 +25,7 @@ abstract class BaseResponse implements MuResponse {
     @Nullable
     private ConcurrentLinkedQueue<ResponseCompleteListener> completionListeners = null;
 
-    private ResponseState state = ResponseState.NOTHING;
+    private volatile ResponseState state = ResponseState.NOTHING;
 
     BaseResponse(Mu3Request request, FieldBlock headers) {
         this.request = request;

@@ -102,6 +102,10 @@ class Http2Stream implements ResponseInfo {
     void onReset(Http2ResetStreamFrame rstStream) {
         state = State.CLOSED;
         outgoingFlowControl.terminate();
+        if (!response.responseState().endState()) {
+            response.setState(ResponseState.CLIENT_DISCONNECTED);
+        }
+        request.onClientDisconnected();
         if (bodyInputStream instanceof Http2BodyInputStream) {
             ((Http2BodyInputStream) bodyInputStream).onStreamReset(rstStream);
         }

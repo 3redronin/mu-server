@@ -7,6 +7,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import scaffolding.Http1Client;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 import scaffolding.StringUtils;
@@ -181,6 +182,45 @@ public class AsyncTest {
         assertThat(connectionsDuringListening.get(), is(1L));
         assertEventually(() -> server.stats().completedRequests(), is(1L));
         assertThat(server.stats().activeRequests().size(), is(0));
+    }
+
+    @Test
+    public void disconnectingAnHttp1ClientCompletesASuspendedRequest() throws Exception {
+        var requestStarted = new CountDownLatch(1);
+        var requestCompleted = new CountDownLatch(1);
+        var handleRef = new AtomicReference<AsyncHandle>();
+        var responseInfoRef = new AtomicReference<ResponseInfo>();
+        server = ServerUtils.httpsServerForTest("http")
+            .addHandler((request, response) -> {
+                AsyncHandle handle = request.handleAsync();
+                handleRef.set(handle);
+                handle.addResponseCompleteHandler(info -> {
+                    responseInfoRef.set(info);
+                    requestCompleted.countDown();
+                });
+                requestStarted.countDown();
+                return true;
+            })
+            .start();
+
+        boolean completedAfterDisconnect;
+        ResponseInfo responseInfo;
+        try (var http1Client = Http1Client.connect(server)) {
+            http1Client.writeRequestLine(Method.GET, "/").flushHeaders();
+            assertThat("The request did not start", requestStarted.await(5, TimeUnit.SECONDS), is(true));
+            http1Client.close();
+            completedAfterDisconnect = requestCompleted.await(3, TimeUnit.SECONDS);
+            responseInfo = responseInfoRef.get();
+        } finally {
+            AsyncHandle handle = handleRef.get();
+            if (handle != null) {
+                handle.complete();
+            }
+        }
+
+        assertThat("Closing the HTTP/1 client did not complete the suspended request", completedAfterDisconnect, is(true));
+        assertThat(responseInfo, is(notNullValue()));
+        assertThat(responseInfo.completedSuccessfully(), is(false));
     }
 
     @Test

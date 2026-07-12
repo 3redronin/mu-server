@@ -32,7 +32,8 @@ class Mu3Request implements MuRequest {
     @Nullable private List<Cookie> cookies;
     private boolean bodyClaimed;
     private boolean inputStreamAccessed;
-    @Nullable private Mu3AsyncHandleImpl asyncHandle;
+    @Nullable private volatile Mu3AsyncHandleImpl asyncHandle;
+    private boolean clientDisconnected;
 
     Mu3Request(HttpConnection connection,
                Method method,
@@ -250,12 +251,22 @@ class Mu3Request implements MuRequest {
 
     @Deprecated
     @Override
-    public AsyncHandle handleAsync() {
+    public synchronized AsyncHandle handleAsync() {
         if (asyncHandle == null) {
             assert response != null;
             asyncHandle = new Mu3AsyncHandleImpl(this, response);
         }
+        if (clientDisconnected) {
+            asyncHandle.complete();
+        }
         return asyncHandle;
+    }
+
+    synchronized void onClientDisconnected() {
+        clientDisconnected = true;
+        if (asyncHandle != null) {
+            asyncHandle.complete();
+        }
     }
 
     @Override

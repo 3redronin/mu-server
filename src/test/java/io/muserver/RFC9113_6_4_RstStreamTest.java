@@ -13,6 +13,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.RFCTestUtils.*;
@@ -23,6 +24,45 @@ import static org.hamcrest.Matchers.*;
 class RFC9113_6_4_RstStreamTest {
 
     private @Nullable MuServer server;
+
+    @Test
+    void resettingAStreamCompletesASuspendedRequest() throws Exception {
+        var requestStarted = new CountDownLatch(1);
+        var completedStreams = new LinkedBlockingQueue<ResponseInfo>(1);
+        var handleRef = new AtomicReference<AsyncHandle>();
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
+                AsyncHandle handle = request.handleAsync();
+                handleRef.set(handle);
+                handle.addResponseCompleteHandler(completedStreams::add);
+                requestStarted.countDown();
+            })
+            .start();
+
+        ResponseInfo completedStream;
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            try {
+                con.handshake()
+                    .writeFrame(new Http2HeadersFrame(1, true, getHelloHeaders(getPort())))
+                    .flush();
+                assertThat("The request did not start", requestStarted.await(5, TimeUnit.SECONDS), is(true));
+
+                con.writeFrame(new Http2ResetStreamFrame(1, Http2ErrorCode.CANCEL.code()))
+                    .flush();
+                completedStream = completedStreams.poll(3, TimeUnit.SECONDS);
+            } finally {
+                AsyncHandle handle = handleRef.get();
+                if (handle != null) {
+                    handle.complete();
+                }
+            }
+        }
+
+        assertThat("Resetting the HTTP/2 stream did not complete the suspended request", completedStream, is(notNullValue()));
+        assertThat(completedStream.completedSuccessfully(), is(false));
+    }
 
     @Test
     void afterAClientResetsAStreamNoMoreDataShouldBeSent() throws Exception {

@@ -1,7 +1,6 @@
 package io.muserver.rest;
 
-import io.muserver.MuServer;
-import io.muserver.Mutils;
+import io.muserver.*;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.container.AsyncResponse;
 import jakarta.ws.rs.container.CompletionCallback;
@@ -10,14 +9,11 @@ import jakarta.ws.rs.container.Suspended;
 import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.ext.MessageBodyWriter;
 import okhttp3.MediaType;
-import okhttp3.OkHttpClient;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import okio.BufferedSink;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
 import scaffolding.ClientUtils;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
@@ -29,7 +25,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
-import java.net.SocketTimeoutException;
+import java.nio.ByteBuffer;
 import java.util.Collection;
 import java.util.Date;
 import java.util.Map;
@@ -239,43 +235,53 @@ public class AsynchronousProcessingTest {
 
 
     @Test
-    @Timeout(30)
-    public void completionCallbacksCanBeRegistered() throws Exception {
-        var completedLatch = new CountDownLatch(1);
-        var disconnectedLatch = new CountDownLatch(1);
-        var clientTimeoutLatch = new CountDownLatch(1);
-        AtomicReference<Map<Class<?>, Collection<Class<?>>>> registered = new AtomicReference<>();
-
-        @Path("samples")
-        class Sample {
-            @GET
-            public void go(@Suspended AsyncResponse ar, @QueryParam("retryDate") Long retryDate, @QueryParam("retrySeconds") Integer retrySeconds) {
-                registered.set(ar.register(
-                    (ConnectionCallback) disconnected -> disconnectedLatch.countDown(),
-                    (CompletionCallback) completed -> completedLatch.countDown())
-                );
-                try {
-                    clientTimeoutLatch.await();
-                    ar.resume("Oh hello");
-                } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
-                }
+    public void completionCallbacksCanBeRegistered() {
+        var responseCompleteHandler = new AtomicReference<ResponseCompleteListener>();
+        AsyncHandle asyncHandle = new AsyncHandle() {
+            public void setReadListener(RequestBodyListener readListener) {
+                throw new UnsupportedOperationException();
             }
-        }
-        this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Sample())).start();
-        OkHttpClient impatientClient = ClientUtils.client.newBuilder()
-            .readTimeout(200, TimeUnit.MILLISECONDS)
-            .build();
-        try (Response ignored = impatientClient.newCall(request().url(server.uri().resolve("/samples").toString()).build()).execute()) {
-            Assertions.fail("This test expected a client timeout");
-        } catch (SocketTimeoutException te) {
-            clientTimeoutLatch.countDown();
-            assertNotTimedOut("waiting for disconnect callback", disconnectedLatch);
-            assertNotTimedOut("waiting for completed callback", completedLatch);
-        }
+            public void complete() {
+            }
+            public void complete(Throwable throwable) {
+            }
+            public void write(ByteBuffer data, DoneCallback callback) {
+                throw new UnsupportedOperationException();
+            }
+            public Future<Void> write(ByteBuffer data) {
+                throw new UnsupportedOperationException();
+            }
+            public void addResponseCompleteHandler(ResponseCompleteListener listener) {
+                responseCompleteHandler.set(listener);
+            }
+        };
+        var asyncResponse = new AsyncResponseAdapter(asyncHandle, response -> {});
+        var disconnected = new AtomicBoolean();
+        var completed = new AtomicBoolean();
 
-        assertThat(registered.get().values().stream().flatMap(Collection::stream).collect(toSet()),
+        Map<Class<?>, Collection<Class<?>>> registered = asyncResponse.register(
+            (ConnectionCallback) ignored -> disconnected.set(true),
+            (CompletionCallback) ignored -> completed.set(true)
+        );
+
+        assertThat(registered.values().stream().flatMap(Collection::stream).collect(toSet()),
             containsInAnyOrder(ConnectionCallback.class, CompletionCallback.class));
+        responseCompleteHandler.get().onComplete(new ResponseInfo() {
+            public long duration() {
+                return 0;
+            }
+            public boolean completedSuccessfully() {
+                return false;
+            }
+            public MuRequest request() {
+                throw new UnsupportedOperationException();
+            }
+            public MuResponse response() {
+                throw new UnsupportedOperationException();
+            }
+        });
+        assertThat(disconnected.get(), is(true));
+        assertThat(completed.get(), is(true));
     }
 
     @Test
