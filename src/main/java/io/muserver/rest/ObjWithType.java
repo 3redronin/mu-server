@@ -39,7 +39,7 @@ class ObjWithType {
         Object entity;
         JaxRSResponse response;
         if (valueFromMethod instanceof Response) {
-            response = (JaxRSResponse)valueFromMethod;
+            response = JaxRSResponse.from((Response) valueFromMethod);
             entity = response.getEntity();
         } else {
             response = null;
