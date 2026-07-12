@@ -106,6 +106,23 @@ public class Http1Client implements AutoCloseable {
         }
     }
 
+    public void shutdownOutput() {
+        try {
+            socket.shutdownOutput();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    public void abort() {
+        try {
+            socket.setSoLinger(true, 0);
+            socket.close();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
     public Http1Client flush() {
         try {
             outputStream.flush();

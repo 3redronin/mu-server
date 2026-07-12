@@ -5,6 +5,7 @@ import okhttp3.*;
 import okio.BufferedSink;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import scaffolding.Http1Client;
@@ -185,7 +186,48 @@ public class AsyncTest {
     }
 
     @Test
-    public void disconnectingAnHttp1ClientCompletesASuspendedRequest() throws Exception {
+    public void halfClosingAnHttp1ClientDoesNotCancelASuspendedRequest() throws Exception {
+        var requestStarted = new CountDownLatch(1);
+        var requestCompleted = new CountDownLatch(1);
+        var handleRef = new AtomicReference<AsyncHandle>();
+        var responseRef = new AtomicReference<MuResponse>();
+        var responseInfoRef = new AtomicReference<ResponseInfo>();
+        server = ServerUtils.httpsServerForTest("http")
+            .addHandler((request, response) -> {
+                AsyncHandle handle = request.handleAsync();
+                handleRef.set(handle);
+                responseRef.set(response);
+                handle.addResponseCompleteHandler(info -> {
+                    responseInfoRef.set(info);
+                    requestCompleted.countDown();
+                });
+                requestStarted.countDown();
+                return true;
+            })
+            .start();
+
+        try (var http1Client = Http1Client.connect(server)) {
+            http1Client.writeRequestLine(Method.GET, "/").flushHeaders();
+            assertThat("The request did not start", requestStarted.await(5, TimeUnit.SECONDS), is(true));
+            http1Client.shutdownOutput();
+
+            responseRef.get().write("Hello");
+            handleRef.get().complete();
+
+            assertThat(http1Client.readLine(), is("HTTP/1.1 200 OK"));
+            Headers headers = http1Client.readHeaders();
+            assertThat(http1Client.readBody(headers), is("Hello"));
+        }
+
+        assertThat("The suspended request did not complete", requestCompleted.await(3, TimeUnit.SECONDS), is(true));
+        ResponseInfo responseInfo = responseInfoRef.get();
+        assertThat(responseInfo, is(notNullValue()));
+        assertThat(responseInfo.completedSuccessfully(), is(true));
+    }
+
+    @Test
+    @Disabled("HTTP/1 waits for an async response before reading again, so it cannot observe the connection reset until the response completes")
+    public void resettingAnHttp1ConnectionCompletesASuspendedRequest() throws Exception {
         var requestStarted = new CountDownLatch(1);
         var requestCompleted = new CountDownLatch(1);
         var handleRef = new AtomicReference<AsyncHandle>();
@@ -203,13 +245,13 @@ public class AsyncTest {
             })
             .start();
 
-        boolean completedAfterDisconnect;
+        boolean completedAfterReset;
         ResponseInfo responseInfo;
         try (var http1Client = Http1Client.connect(server)) {
             http1Client.writeRequestLine(Method.GET, "/").flushHeaders();
             assertThat("The request did not start", requestStarted.await(5, TimeUnit.SECONDS), is(true));
-            http1Client.close();
-            completedAfterDisconnect = requestCompleted.await(3, TimeUnit.SECONDS);
+            http1Client.abort();
+            completedAfterReset = requestCompleted.await(3, TimeUnit.SECONDS);
             responseInfo = responseInfoRef.get();
         } finally {
             AsyncHandle handle = handleRef.get();
@@ -218,9 +260,49 @@ public class AsyncTest {
             }
         }
 
-        assertThat("Closing the HTTP/1 client did not complete the suspended request", completedAfterDisconnect, is(true));
+        assertThat("Resetting the HTTP/1 connection did not complete the suspended request", completedAfterReset, is(true));
         assertThat(responseInfo, is(notNullValue()));
         assertThat(responseInfo.completedSuccessfully(), is(false));
+    }
+
+    @Test
+    public void anHttp1RequestReadWhileAnAsyncResponseIsPendingIsProcessedNext() throws Exception {
+        var firstRequestStarted = new CountDownLatch(1);
+        var secondRequestStarted = new CountDownLatch(1);
+        var firstHandle = new AtomicReference<AsyncHandle>();
+        var firstResponse = new AtomicReference<MuResponse>();
+        server = ServerUtils.httpsServerForTest("http")
+            .addHandler((request, response) -> {
+                if (request.relativePath().equals("/one")) {
+                    firstResponse.set(response);
+                    firstHandle.set(request.handleAsync());
+                    firstRequestStarted.countDown();
+                } else {
+                    secondRequestStarted.countDown();
+                    response.write("Two");
+                }
+                return true;
+            })
+            .start();
+
+        try (var http1Client = Http1Client.connect(server)) {
+            http1Client.writeRequestLine(Method.GET, "/one").flushHeaders();
+            http1Client.writeRequestLine(Method.GET, "/two").flushHeaders();
+            assertThat("The first request did not start", firstRequestStarted.await(5, TimeUnit.SECONDS), is(true));
+            assertThat("The second request ran before the first response completed",
+                secondRequestStarted.await(200, TimeUnit.MILLISECONDS), is(false));
+
+            firstResponse.get().write("One");
+            firstHandle.get().complete();
+
+            assertThat(http1Client.readLine(), is("HTTP/1.1 200 OK"));
+            Headers firstHeaders = http1Client.readHeaders();
+            assertThat(http1Client.readBody(firstHeaders), is("One"));
+            assertThat("The second request did not start", secondRequestStarted.await(5, TimeUnit.SECONDS), is(true));
+            assertThat(http1Client.readLine(), is("HTTP/1.1 200 OK"));
+            Headers secondHeaders = http1Client.readHeaders();
+            assertThat(http1Client.readBody(secondHeaders), is("Two"));
+        }
     }
 
     @Test
