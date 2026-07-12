@@ -29,6 +29,20 @@ public class MuUriBuilderTest {
     }
 
     @Test
+    public void spacesAndPlusesAreSerializedUnambiguouslyInComponents() {
+        URI uri = new MuUriBuilder().path("blue green").segment("blue+green")
+            .matrixParam("col our", "blue+green")
+            .queryParam("q space", "blue green", "blue+green").build();
+        assertThat(uri.toString(), equalTo("blue%20green/blue%2Bgreen;col%20our=blue%2Bgreen?q%20space=blue%20green&q%20space=blue%2Bgreen"));
+    }
+
+    @Test
+    public void replacingAQuerySupportsHtmlGetFormSemantics() {
+        assertThat(new MuUriBuilder().replaceQuery("q=blue%20green&q=blue+green&q=blue%2Bgreen").build().toString(),
+            equalTo("?q=blue%20green&q=blue%20green&q=blue%2Bgreen"));
+    }
+
+    @Test
     public void prettyMuchEverythingCanHaveTemplateParameters() {
         UriBuilder builder = new MuUriBuilder()
             .scheme("http{s}")

@@ -8,7 +8,6 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.URI;
 import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 import static java.lang.Math.min;
@@ -176,7 +175,7 @@ class Mu3Request implements MuRequest {
                 String type = bodyType.getType().toLowerCase();
                 String subtype = bodyType.getSubtype().toLowerCase();
                 if ("application".equals(type) && "x-www-form-urlencoded".equals(subtype)) {
-                    String text = streamBodyToString(StandardCharsets.UTF_8);
+                    String text = streamBodyToString(Headtils.bodyCharset(mu3Headers, true));
                     this.form = UrlEncodedMuForm.parse(text);
                 } else if ("multipart".equals(type) && "form-data".equals(subtype)) {
                     var charset = Headtils.bodyCharset(mu3Headers, true);

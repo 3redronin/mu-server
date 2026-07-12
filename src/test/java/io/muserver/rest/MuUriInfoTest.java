@@ -128,6 +128,17 @@ public class MuUriInfoTest {
     }
 
     @Test
+    public void queryAndPathAccessorsDistinguishSpaceAndPlus() {
+        MuUriInfo sample = create("http://example.org/cars/blue%20green/blue+green?q=blue%20green&q=blue+green&q=blue%2Bgreen&na%20me=value");
+        assertThat(sample.getPath(true), equalTo("cars/blue green/blue+green"));
+        assertThat(sample.getPath(false), equalTo("cars/blue%20green/blue+green"));
+        assertThat(sample.getPathSegments(true), contains(segment("cars"), segment("blue green"), segment("blue+green")));
+        assertThat(sample.getQueryParameters(true).get("q"), contains("blue green", "blue green", "blue+green"));
+        assertThat(sample.getQueryParameters(false).get("q"), contains("blue%20green", "blue%20green", "blue%2Bgreen"));
+        assertThat(sample.getQueryParameters(false).get("na me"), contains("value"));
+    }
+
+    @Test
     public void uriInfoInAJaxRsContextReturnsCorrectValues() {
 
         AtomicReference<UriInfo> uriRef = new AtomicReference<>();

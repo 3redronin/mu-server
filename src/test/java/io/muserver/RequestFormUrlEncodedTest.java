@@ -1,6 +1,8 @@
 package io.muserver;
 
 import okhttp3.FormBody;
+import okhttp3.MediaType;
+import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -96,6 +98,19 @@ public class RequestFormUrlEncodedTest {
         assertThat(actual[0], equalTo(asList("something", "somethingAgain")));
         assertThat(actual[1], equalTo(asList("something else i think")));
         assertThat(actual[2], equalTo(Collections.<String>emptyList()));
+    }
+
+    @Test
+    public void percentSpacePlusAndEncodedPlusUseFormSemantics() throws IOException {
+        server = ServerUtils.httpsServerForTest().addHandler((request, response) -> {
+            response.write(request.form().getAll("colour").toString());
+            return true;
+        }).start();
+        var body = RequestBody.create("colour=blue%20green&colour=blue+green&colour=blue%2Bgreen&utf8=%E4%BD%A0%E5%A5%BD",
+            MediaType.get("application/x-www-form-urlencoded;charset=UTF-8"));
+        try (var response = call(request(server.uri()).post(body))) {
+            assertThat(response.body().string(), equalTo("[blue green, blue green, blue+green]"));
+        }
     }
 
     @Test

@@ -73,7 +73,7 @@ public class QueryString implements RequestParameters {
         for (String key : map.keySet()) {
             String encodedKey = urlEncode(key);
             for (String value : map.get(key)) {
-                if (sb.length() > 1) sb.append('&');
+                if (sb.length() > 0) sb.append('&');
                 sb.append(encodedKey).append('=').append(urlEncode(value));
             }
         }

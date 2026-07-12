@@ -77,6 +77,38 @@ public class QueryStringTest {
     }
 
     @Test
+    public void queryDecodingSupportsHtmlGetFormSemantics() {
+        assertThat(QueryString.parse("q=blue%20green&q=blue+green&q=blue%2Bgreen").getAll("q"),
+            contains("blue green", "blue green", "blue+green"));
+    }
+
+    @Test
+    public void valuesMayContainEqualsAndSemicolonsAreData() {
+        assertThat(qs("na%20me=a=b&bare&empty=&semi=x;y").all(), equalTo(Map.of(
+            "na me", List.of("a=b"), "bare", List.of(""), "empty", List.of(""), "semi", List.of("x;y"))));
+    }
+
+    @Test
+    public void literalSemicolonsDoNotSeparateQueryParameters() {
+        assertThat(qs("value=a;b&other=c;d=e&bare;name").all(), equalTo(Map.of(
+            "value", List.of("a;b"),
+            "other", List.of("c;d=e"),
+            "bare;name", List.of(""))));
+    }
+
+    @Test
+    public void encodedSemicolonsAreDataInNamesAndValues() {
+        assertThat(qs("na%3Bme=one%3Btwo&na;me=three").all(), equalTo(Map.of(
+            "na;me", List.of("one;two", "three"))));
+    }
+
+    @Test
+    public void semicolonsArePercentEncodedWhenSerializing() {
+        assertThat(qs("na;me=one;two&other=three").toString(),
+            equalTo("na%3Bme=one%3Btwo&other=three"));
+    }
+
+    @Test
     public void french() {
         assertThat(qs("prénom=Jean&âge=25&ville=Paris"), equalTo(qs(Map.of("prénom", "Jean", "âge", "25", "ville", "Paris"))));
         assertThat(qs("pr%C3%A9nom=Jean&âge=25&ville=Paris"), equalTo(qs(Map.of("prénom", "Jean", "âge", "25", "ville", "Paris"))));

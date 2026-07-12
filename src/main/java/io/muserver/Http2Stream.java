@@ -323,8 +323,9 @@ class Http2Stream implements ResponseInfo {
             bodySize = BodySize.UNSPECIFIED;
         }
 
-        var serverUri = connection.creator.uri().resolve(path.toString());
-        var requestUri = Headtils.getUri(log, headers, path.toString(), serverUri);
+        var relativeUrl = Mutils.getRelativeUrl(path.toString());
+        var serverUri = connection.creator.uri().resolve(relativeUrl);
+        var requestUri = Headtils.getUri(log, headers, relativeUrl, serverUri);
 
         var outgoingFlowControl = new Http2OutgoingFlowController(id, clientSettings.initialWindowSize);
         var incomingFlowControl = new Http2IncomingFlowController(id, serverSettings.initialWindowSize);
