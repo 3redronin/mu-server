@@ -29,7 +29,14 @@ class FieldBlockDecoder {
                 // RFC7541 6.1. Indexed Header Field Representation
                 canChangeTableSize = false;
                 int index = readHpackInt(7, b, buffer);
-                fb.add(table.getValue(index));
+                var line = table.getValue(index);
+                if (line.name() == HeaderNames.PSEUDO_PATH) {
+                    uriLen += line.value().length();
+                }
+                totalLen += line.length();
+                if (totalLen <= maxHeadersSize) {
+                    fb.add(line);
+                }
             } else {
                 // RFC7541 6.3. Dynamic Table Size Update
                 boolean tableSizeUpdate = (b & 0b11100000) == 0b00100000;

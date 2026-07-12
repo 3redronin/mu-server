@@ -64,65 +64,71 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
     public int read(byte[] b, int off, int len) throws IOException {
         lock.lock();
         try {
-            Object frame;
-            while ((frame = frames.peek()) == null) {
-                try {
-                    if (!hasData.await(readTimeoutMillis, TimeUnit.MILLISECONDS)) {
-                        throw new IOException("Timed out waiting for data");
+            while (true) {
+                Object frame;
+                while ((frame = frames.peek()) == null) {
+                    try {
+                        if (!hasData.await(readTimeoutMillis, TimeUnit.MILLISECONDS)) {
+                            throw new IOException("Timed out waiting for data");
+                        }
+                    } catch (InterruptedException e) {
+                        throw new InterruptedIOException("Interrupted waiting for data");
                     }
-                } catch (InterruptedException e) {
-                    throw new InterruptedIOException("Interrupted waiting for data");
                 }
-            }
 
-            if (frame instanceof PendingDataFrame) {
-                var pending = (PendingDataFrame) frame;
-                var data = pending.dataFrame;
+                if (frame instanceof PendingDataFrame) {
+                    var pending = (PendingDataFrame) frame;
+                    var data = pending.dataFrame;
 
-                int offset = data.payloadOffset() + pending.currentOffset;
-                int remaining = data.payloadLength() - pending.currentOffset;
-                if (remaining == 0 && data.endStream()) {
-                    return -1;
-                }
-                int readAmount;
-                int creditToReturn;
-                if (remaining < len) {
-                    // the user wants more than what is available in the first frame, so give all the rest of it
-                    System.arraycopy(data.payload(), offset, b, off, remaining);
-                    // TODO: how about waiting for more data?
-                    pending.currentOffset += remaining;
-                    if (!data.endStream()) {
+                    int offset = data.payloadOffset() + pending.currentOffset;
+                    int remaining = data.payloadLength() - pending.currentOffset;
+                    if (remaining == 0) {
+                        if (data.endStream()) {
+                            return -1;
+                        }
+                        frames.remove();
+                        continue;
+                    }
+                    int readAmount;
+                    int creditToReturn;
+                    if (remaining < len) {
+                        // the user wants more than what is available in the first frame, so give all the rest of it
+                        System.arraycopy(data.payload(), offset, b, off, remaining);
+                        // TODO: how about waiting for more data?
+                        pending.currentOffset += remaining;
+                        readAmount = remaining;
+                    } else {
+                        // the user wants less than what is available
+                        System.arraycopy(data.payload(), offset, b, off, len);
+                        pending.currentOffset += len;
+                        readAmount = len;
+                    }
+
+                    if (pending.currentOffset == data.payloadLength() && !data.endStream()) {
                         frames.remove();
                     }
-                    readAmount = remaining;
+
+                    creditToReturn = readAmount;
+                    if (pending.currentOffset == data.payloadLength()) {
+                        creditToReturn += pending.flowControlSize - data.payloadLength();
+                    }
+                    pending.creditReturned += creditToReturn;
+
+                    try {
+                        onDataReadCallback.creditAvailable(creditToReturn);
+                    } catch (Http2Exception e) {
+                        throw new IOException("Http2 error updating flow control", e);
+                    }
+                    return readAmount;
+                } else if (frame == END_OF_STREAM) {
+                    return -1;
+                } else if (frame instanceof IOException) {
+                    throw (IOException) frame;
                 } else {
-                    // the user wants less than what is available
-                    System.arraycopy(data.payload(), offset, b, off, len);
-                    pending.currentOffset += len;
-                    readAmount = len;
+                    // not possible, I swear
+                    throw new IllegalStateException("Unexpected frame type: " + frame.getClass().getName());
                 }
-
-                creditToReturn = readAmount;
-                if (pending.currentOffset == data.payloadLength()) {
-                    creditToReturn += pending.flowControlSize - data.payloadLength();
-                }
-                pending.creditReturned += creditToReturn;
-
-                try {
-                    onDataReadCallback.creditAvailable(creditToReturn);
-                } catch (Http2Exception e) {
-                    throw new IOException("Http2 error updating flow control", e);
-                }
-                return readAmount;
-            } else if (frame == END_OF_STREAM) {
-                return -1;
-            } else if (frame instanceof IOException) {
-                throw (IOException) frame;
-            } else {
-                // not possible, I swear
-                throw new IllegalStateException("Unexpected frame type: " + frame.getClass().getName());
             }
-
         } finally {
             lock.unlock();
         }

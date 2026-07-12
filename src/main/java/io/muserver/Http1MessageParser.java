@@ -133,6 +133,7 @@ class Http1MessageParser implements Http1MessageReader {
                     case REQUEST_LINE_ENDING: {
                         if (b == LF) {
                             exchange.setHttpVersion(consumeHttpVersion(buffer));
+                            curHeadersLen = 0;
                             state = ParseState.HEADER_START;
                         } else throw new ParseException("state=" + state + " b=" + b, position);
                         break;
@@ -181,13 +182,13 @@ class Http1MessageParser implements Http1MessageReader {
                     case STATUS_LINE_ENDING: {
                         if (b == LF) {
                             response().setReason(consumeAscii(buffer));
+                            curHeadersLen = 0;
                             state = ParseState.HEADER_START;
                         } else throw new ParseException("state=" + state + " b=" + b, position);
                         break;
                     }
 
                     case HEADER_START: {
-                        curHeadersLen = 1;
                         if (isTChar(b)) {
                             append(buffer, toLower(b));
                             state = ParseState.HEADER_NAME;
@@ -549,5 +550,4 @@ class Http1MessageParser implements Http1MessageReader {
         throw new HttpException(HttpStatus.HTTP_VERSION_NOT_SUPPORTED_505);
     }
 }
-
 

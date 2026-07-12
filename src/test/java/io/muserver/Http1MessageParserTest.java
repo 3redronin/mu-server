@@ -12,6 +12,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.sameInstance;
 
@@ -134,6 +135,26 @@ class Http1MessageParserTest {
         assertThat(req.getHttpVersion(), equalTo(HttpVersion.HTTP_1_0));
         assertThat(req.headers().contains(HeaderNames.HOST), equalTo(false));
         assertThat(req.getRejectRequest(), nullValue());
+    }
+
+    @Test
+    void maxHeadersSizeAppliesToTheWholeHeaderSection() throws IOException, ParseException {
+        String requestString = "GET /blah HTTP/1.1\r\n" +
+            "a: 12345\r\n" +
+            "b: 12345\r\n" +
+            "\r\n";
+
+        var parser = new Http1MessageParser(
+            HttpMessageType.REQUEST,
+            new ConcurrentLinkedQueue<>(),
+            new ByteArrayInputStream(requestString.getBytes(StandardCharsets.UTF_8)),
+            12,
+            8192
+        );
+
+        var req = (HttpRequestTemp) parser.readNext();
+        assertThat(req.getRejectRequest(), notNullValue());
+        assertThat(req.getRejectRequest().status(), equalTo(HttpStatus.REQUEST_HEADER_FIELDS_TOO_LARGE_431));
     }
 
     private static class MaxReadLengthInputStream extends FilterInputStream {

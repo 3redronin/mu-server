@@ -4,6 +4,7 @@ import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 
 import static io.muserver.FieldBlockDecoder.readHpackInt;
 import static io.muserver.FieldBlockEncoderTest.hexToByteArray;
@@ -215,6 +216,28 @@ class FieldBlockDecoderTest {
         assertThat(table.getValue(63), equalTo(fieldLine("cache-control", "no-cache")));
         assertThat(table.getValue(64), equalTo(fieldLine(":authority", "www.example.com")));
         assertThat(table.dynamicTableSizeInBytes(), equalTo(164));
+    }
+
+    @Test
+    void indexedHpackFieldsCountTowardMaxHeaderSize() {
+        byte[] indexedAcceptEncoding = new byte[100];
+        Arrays.fill(indexedAcceptEncoding, (byte) 0x90); // static index 16: accept-encoding: gzip, deflate
+
+        var decoder = new FieldBlockDecoder(new HpackTable(4096), 8192, 64);
+
+        var ex = assertThrows(HttpException.class, () -> decoder.decodeFrom(ByteBuffer.wrap(indexedAcceptEncoding)));
+        assertThat(ex.status(), equalTo(HttpStatus.REQUEST_HEADER_FIELDS_TOO_LARGE_431));
+    }
+
+    @Test
+    void indexedHpackPathFieldsCountTowardMaxUrlSize() {
+        byte[] indexedRootPaths = new byte[20];
+        Arrays.fill(indexedRootPaths, (byte) 0x84); // static index 4: :path: /
+
+        var decoder = new FieldBlockDecoder(new HpackTable(4096), 8, 8192);
+
+        var ex = assertThrows(HttpException.class, () -> decoder.decodeFrom(ByteBuffer.wrap(indexedRootPaths)));
+        assertThat(ex.status(), equalTo(HttpStatus.URI_TOO_LONG_414));
     }
 
 
