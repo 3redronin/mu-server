@@ -23,6 +23,7 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
@@ -634,6 +635,41 @@ public class FilterTest {
             .addHeader("list", "value two")
         )) {
             assertThat(resp.body().string(), is("original value null something new a changed value and list: VALUE ONE, VALUE TWO"));
+        }
+    }
+
+    @Test
+    public void responseFilterFailureDoesNotRecursivelyProcessErrorResponse() throws IOException {
+        AtomicInteger responseFilterCalls = new AtomicInteger();
+
+        server = httpsServerForTest()
+            .addHandler(restHandler(new BrokenResource())
+                .addResponseFilter(new ContainerResponseFilter() {
+                    @Override
+                    public void filter(
+                        ContainerRequestContext requestContext,
+                        ContainerResponseContext responseContext
+                    ) {
+                        responseFilterCalls.incrementAndGet();
+                        requestContext.abortWith(jakarta.ws.rs.core.Response.ok().build());
+                    }
+                }))
+            .start();
+
+        try (Response response = call(request(server.uri().resolve("/broken")))) {
+            assertThat(response.code(), equalTo(500));
+            assertThat(response.body().string(), containsString("500 Internal Server Error"));
+        }
+
+        assertThat(responseFilterCalls.get(), equalTo(2));
+    }
+
+    @Path("/broken")
+    public static class BrokenResource {
+
+        @GET
+        public String broken() {
+            return "resource response";
         }
     }
 
