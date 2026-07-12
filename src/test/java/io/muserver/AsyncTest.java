@@ -5,7 +5,6 @@ import okhttp3.*;
 import okio.BufferedSink;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import scaffolding.Http1Client;
@@ -226,7 +225,6 @@ public class AsyncTest {
     }
 
     @Test
-    @Disabled("HTTP/1 waits for an async response before reading again, so it cannot observe the connection reset until the response completes")
     public void resettingAnHttp1ConnectionCompletesASuspendedRequest() throws Exception {
         var requestStarted = new CountDownLatch(1);
         var requestCompleted = new CountDownLatch(1);

@@ -308,7 +308,7 @@ class ConnectionAcceptor {
             }
             con = new Http2Connection(server, this, socket, clientCert, startTime, http2Config.initialSettings(), http2Config.settingsAckTimeoutMillis(), executorService);
         } else {
-            con = new Http1Connection(server, this, socket, clientCert, startTime);
+            con = new Http1Connection(server, this, socket, clientCert, startTime, executorService);
         }
 
         connections.add(con);

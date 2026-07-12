@@ -11,10 +11,14 @@ import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.security.cert.Certificate;
+import java.text.ParseException;
 import java.time.Instant;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -25,6 +29,11 @@ class Http1Connection extends BaseHttpConnection {
 
     private static final Logger log = LoggerFactory.getLogger(Http1Connection.class);
     private final Queue<HttpRequestTemp> requestPipeline = new ConcurrentLinkedQueue<>();
+    private final ExecutorService executorService;
+    @Nullable
+    private Http1MessageParser requestParser;
+    @Nullable
+    private Future<Http1ConnectionMsg> pendingRead;
     // At most one active exchange exists on HTTP/1.1: either an HTTP request/response or a websocket takeover.
     private final AtomicReference<@Nullable ActiveExchange> activeExchange = new AtomicReference<>();
     // Lifecycle is cross-thread: connection loop + timeout thread + shutdown thread.
@@ -50,15 +59,16 @@ class Http1Connection extends BaseHttpConnection {
         }
     }
 
-    Http1Connection(Mu3ServerImpl server, ConnectionAcceptor creator, Socket clientSocket, @Nullable Certificate clientCertificate, Instant handshakeStartTime) {
+    Http1Connection(Mu3ServerImpl server, ConnectionAcceptor creator, Socket clientSocket, @Nullable Certificate clientCertificate, Instant handshakeStartTime, ExecutorService executorService) {
         super(server, creator, clientSocket, clientCertificate, handshakeStartTime);
+        this.executorService = executorService;
     }
 
     @Override
     public void start(InputStream inputStream, OutputStream outputStream) {
 
         try {
-            var requestParser = new Http1MessageParser(
+            requestParser = new Http1MessageParser(
                 HttpMessageType.REQUEST,
                 requestPipeline,
                 inputStream,
@@ -69,7 +79,7 @@ class Http1Connection extends BaseHttpConnection {
             while (!closeConnection) {
                 Http1ConnectionMsg msg;
                 try {
-                    msg = requestParser.readNext();
+                    msg = readNext();
                 } catch (SocketTimeoutException ste) {
                     throw HttpException.requestTimeout();
                 } catch (IOException e) {
@@ -167,6 +177,61 @@ class Http1Connection extends BaseHttpConnection {
         } finally {
             activeExchange.set(null);
             closeTransportQuietly();
+        }
+    }
+
+    @Override
+    protected void beforeAsyncWait(Mu3Request request, BaseResponse response) throws IOException {
+        if (!request.completedSuccessfully() || pendingRead != null) {
+            return;
+        }
+        Http1MessageParser parser = requestParser;
+        if (parser == null) {
+            throw new IllegalStateException("Request parser not initialized");
+        }
+        clientSocket.setSoTimeout(0);
+        pendingRead = executorService.submit(() -> {
+            try {
+                Http1ConnectionMsg message = parser.readNext();
+                if (message == EOFMsg) {
+                    markRemoteClosed();
+                }
+                return message;
+            } catch (IOException e) {
+                if (state.get() == HttpConnectionState.OPEN) {
+                    markRemoteClosed();
+                    ActiveExchange current = activeExchange.get();
+                    if (current != null && current.request == request && !response.responseState().endState()) {
+                        response.setState(ResponseState.CLIENT_DISCONNECTED);
+                        request.onClientDisconnected();
+                    }
+                }
+                throw e;
+            }
+        });
+    }
+
+    private Http1ConnectionMsg readNext() throws IOException, ParseException {
+        Future<Http1ConnectionMsg> read = pendingRead;
+        if (read == null) {
+            Http1MessageParser parser = requestParser;
+            if (parser == null) {
+                throw new IllegalStateException("Request parser not initialized");
+            }
+            return parser.readNext();
+        }
+        pendingRead = null;
+        try {
+            return read.get();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Interrupted while waiting for HTTP/1 input", e);
+        } catch (ExecutionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof IOException) throw (IOException) cause;
+            if (cause instanceof ParseException) throw (ParseException) cause;
+            if (cause instanceof RuntimeException) throw (RuntimeException) cause;
+            throw new IOException("Error while reading HTTP/1 input", cause);
         }
     }
 

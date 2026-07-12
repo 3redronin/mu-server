@@ -76,6 +76,7 @@ abstract class BaseHttpConnection implements HttpConnection {
             if (!handled) throw new HttpException(HttpStatus.NOT_FOUND_404, "This page is not available. Sorry about that.");
 
             if (muRequest.isAsync()) {
+                beforeAsyncWait(muRequest, muResponse);
                 var asyncHandle = muRequest.getAsyncHandle();
                     // TODO set proper timeout
                 asyncHandle.waitForCompletion(Long.MAX_VALUE);
@@ -89,6 +90,9 @@ abstract class BaseHttpConnection implements HttpConnection {
                 server.exceptionHandler().handle(muRequest, muResponse, e);
             }
         }
+    }
+
+    protected void beforeAsyncWait(Mu3Request request, BaseResponse response) throws Exception {
     }
 
     protected void onExchangeEnded(ResponseInfo exchange) {
