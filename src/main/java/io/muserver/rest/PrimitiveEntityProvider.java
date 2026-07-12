@@ -15,6 +15,8 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.nio.charset.Charset;
 import java.util.List;
 import java.util.function.Function;
@@ -33,7 +35,9 @@ class PrimitiveEntityProvider<T> implements MessageBodyWriter<T>, MessageBodyRea
         new PrimitiveEntityProvider<>(byte.class, Byte.class, Byte::parseByte),
         new PrimitiveEntityProvider<>(float.class, Float.class, Float::parseFloat),
         new PrimitiveEntityProvider<>(double.class, Double.class, Double::parseDouble),
-        new PrimitiveEntityProvider<>(boolean.class, Boolean.class, Boolean::parseBoolean)
+        new PrimitiveEntityProvider<>(boolean.class, Boolean.class, Boolean::parseBoolean),
+        new PrimitiveEntityProvider<>(BigDecimal.class, BigDecimal.class, BigDecimal::new),
+        new PrimitiveEntityProvider<>(BigInteger.class, BigInteger.class, BigInteger::new)
     );
 
     private final Class primitiveClass;
@@ -54,11 +58,7 @@ class PrimitiveEntityProvider<T> implements MessageBodyWriter<T>, MessageBodyRea
         Charset charset = EntityProviders.charsetFor(mediaType);
         byte[] bytes = Mutils.toByteArray(entityStream, 2048);
         if (bytes.length == 0) {
-            if (type.isPrimitive()) {
-                throw new NoContentException("No value specified for this " + type.getName() + " parameter. If optional, then use a @DefaultValue annotation.");
-            } else {
-                return null;
-            }
+            throw new NoContentException("No value specified for this " + type.getName() + " parameter. If optional, then use a @DefaultValue annotation.");
         }
         String stringVal = new String(bytes, charset);
         return stringToValue.apply(stringVal);
