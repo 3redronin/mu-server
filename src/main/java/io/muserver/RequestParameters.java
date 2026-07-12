@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Provides access to QueryString or Form values.
+ * Provides access to query-string or form values. Both use HTML form-compatible decoding where a plus is a space.
  */
 public interface RequestParameters {
 
@@ -91,4 +91,3 @@ public interface RequestParameters {
      */
     boolean contains(String name);
 }
-

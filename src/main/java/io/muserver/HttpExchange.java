@@ -316,12 +316,7 @@ class HttpExchange implements ResponseInfo, Exchange {
             if (Mutils.nullOrEmpty(s)) {
                 s = "/";
             } else {
-                // TODO: consider a redirect if the URL is changed? Handle other percent-encoded characters?
-                s = s.replace("%7E", "~")
-                    .replace("%5F", "_")
-                    .replace("%2E", ".")
-                    .replace("%2D", "-")
-                ;
+                s = Mutils.decodeUnreserved(s);
             }
             String q = requestUri.getRawQuery();
             if (q != null) {
