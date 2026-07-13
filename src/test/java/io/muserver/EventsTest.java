@@ -4,11 +4,14 @@ import okhttp3.Request;
 import okhttp3.Response;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import scaffolding.Http1Client;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -16,6 +19,7 @@ import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 import static scaffolding.MuAssert.assertEventually;
+import static scaffolding.StringUtils.randomAsciiStringOfLength;
 
 public class EventsTest {
 
@@ -66,6 +70,51 @@ public class EventsTest {
         }
 
         assertEventually(completeStateSnapshot::get, is("true"));
+    }
+
+    @Test
+    public void rejectListenerIsCalledWhenHeadersAreTooLarge431_OverHttp1() throws Exception {
+        CompletableFuture<RejectedRequest> rejected = new CompletableFuture<>();
+        AtomicBoolean completeListenerCalled = new AtomicBoolean(false);
+        server = ServerUtils.httpsServerForTest()
+            .withHttp2Config(Http2ConfigBuilder.http2Config().enabled(false))
+            .withMaxHeadersSize(1024)
+            .addRequestRejectListener(rejected::complete)
+            .addResponseCompleteListener(info -> completeListenerCalled.set(true))
+            .addHandler(Method.GET, "/blah", (req, resp, pp) -> resp.write("Hello"))
+            .start();
+
+        try (Http1Client client = Http1Client.connect(server)) {
+            client.writeRequestLine(Method.GET, "/blah")
+                .writeHeader("X-Big", randomAsciiStringOfLength(2000))
+                .endHeaders()
+                .flush();
+            assertThat(client.readLine(), containsString("431"));
+        }
+
+        RejectedRequest info = rejected.get(10, TimeUnit.SECONDS);
+        assertThat(info.status(), is(431));
+        assertThat(info.reason(), is("431 Request Header Fields Too Large"));
+        assertThat(info.method(), is(Optional.of("GET")));
+        assertThat(info.uri().get().getPath(), is("/blah"));
+        assertThat(info.connection(), notNullValue());
+        assertThat(info.connection().protocol(), is("HTTP/1.1"));
+        assertThat(info.connection().remoteAddress(), notNullValue());
+        assertThat("The response complete listener should not fire for a rejected request",
+            completeListenerCalled.get(), is(false));
+    }
+
+    @Test
+    public void rejectListenerIsNotCalledForSuccessfulRequests() {
+        AtomicBoolean rejectListenerCalled = new AtomicBoolean(false);
+        server = ServerUtils.httpsServerForTest()
+            .addRequestRejectListener(info -> rejectListenerCalled.set(true))
+            .addHandler(Method.GET, "/blah", (req, resp, pp) -> resp.write("Hello"))
+            .start();
+        try (Response resp = call(request(server.uri().resolve("/blah")))) {
+            assertThat(resp.code(), is(200));
+        }
+        assertThat(rejectListenerCalled.get(), is(false));
     }
 
     @AfterEach

@@ -17,9 +17,12 @@ import static java.util.Collections.emptyList;
 
 class Mu3ServerImpl implements MuServer {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(Mu3ServerImpl.class);
+
     private final List<ConnectionAcceptor> acceptors;
     final List<MuHandler> handlers;
     private final List<ResponseCompleteListener> responseCompleteListeners;
+    private final List<RequestRejectListener> requestRejectListeners;
     final UnhandledExceptionHandler exceptionHandler;
     final Long maxRequestBodySize;
     private final List<ContentEncoder> contentEncoders;
@@ -33,10 +36,11 @@ class Mu3ServerImpl implements MuServer {
     private final Mu3StatsImpl statsImpl = new Mu3StatsImpl();
     private final ScheduledExecutorService scheduledExecutor;
 
-    Mu3ServerImpl(List<ConnectionAcceptor> acceptors, List<MuHandler> handlers, List<ResponseCompleteListener> responseCompleteListeners, UnhandledExceptionHandler exceptionHandler, Long maxRequestBodySize, List<ContentEncoder> contentEncoders, Long requestIdleTimeoutMillis, Long idleTimeoutMillis, int maxUrlSize, int maxHeadersSize, List<RateLimiterImpl> rateLimiters, Path tempDir, ExecutorService executorService) {
+    Mu3ServerImpl(List<ConnectionAcceptor> acceptors, List<MuHandler> handlers, List<ResponseCompleteListener> responseCompleteListeners, List<RequestRejectListener> requestRejectListeners, UnhandledExceptionHandler exceptionHandler, Long maxRequestBodySize, List<ContentEncoder> contentEncoders, Long requestIdleTimeoutMillis, Long idleTimeoutMillis, int maxUrlSize, int maxHeadersSize, List<RateLimiterImpl> rateLimiters, Path tempDir, ExecutorService executorService) {
         this.acceptors = acceptors;
         this.handlers = handlers;
         this.responseCompleteListeners = responseCompleteListeners;
+        this.requestRejectListeners = requestRejectListeners;
         this.exceptionHandler = exceptionHandler;
         this.maxRequestBodySize = maxRequestBodySize;
         this.contentEncoders = contentEncoders;
@@ -246,6 +250,16 @@ class Mu3ServerImpl implements MuServer {
         }
     }
 
+    void onRequestRejected(RejectedRequest info) {
+        for (var listener : requestRejectListeners) {
+            try {
+                listener.onRejected(info);
+            } catch (Exception e) {
+                log.error("Error from request reject listener", e);
+            }
+        }
+    }
+
     static MuServer start(MuServerBuilder builder) throws IOException {
 
         var exceptionHandler = UnhandledExceptionHandler.getDefault(builder.unhandledExceptionHandler());
@@ -281,6 +295,7 @@ class Mu3ServerImpl implements MuServer {
             acceptors,
             actualHandlers,
             builder.responseCompleteListeners(),
+            builder.requestRejectListeners(),
             exceptionHandler,
             builder.maxRequestSize(),
             contentEncoders,

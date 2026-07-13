@@ -130,6 +130,10 @@ class Http1Connection extends BaseHttpConnection {
 
                 if (rejectException != null) {
                     onInvalidRequest(rejectException);
+                    String rejectedMethod = method.name();
+                    String rejectReason = rejectException.getMessage() != null ? rejectException.getMessage() : rejectException.status().toString();
+                    server.onRequestRejected(new RejectedRequestImpl(rejectException.status().code(),
+                        rejectReason, rejectedMethod, requestUri.toString(), this));
                     muResponse.status(rejectException.status());
                     muResponse.headers().set(rejectException.responseHeaders());
                     if (rejectException.getMessage() != null) {

@@ -17,7 +17,12 @@ import java.net.URI;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -136,9 +141,11 @@ public class HeadersTest {
 
     @ParameterizedTest
     @ArgumentsSource(ServerTypeArgs.class)
-    public void a431IsReturnedIfTheHeadersAreTooLarge(String protocol) throws IOException {
+    public void a431IsReturnedIfTheHeadersAreTooLarge(String protocol) throws IOException, ExecutionException, InterruptedException, TimeoutException {
+        CompletableFuture<RejectedRequest> rejected = new CompletableFuture<>();
         server = ServerUtils.httpsServerForTest(protocol)
             .withMaxHeadersSize(1024)
+            .addRequestRejectListener(rejected::complete)
             .addHandler((request, response) -> {
                 response.headers().add(request.headers());
                 return true;
@@ -149,6 +156,19 @@ public class HeadersTest {
             assertThat(resp.body().string(), is("431 Request Header Fields Too Large"));
             assertThat(resp.header("X-Something"), is(nullValue()));
             assertThat(resp.header("Content-Type"), is("text/plain;charset=utf-8"));
+        }
+
+        RejectedRequest info = rejected.get(10, TimeUnit.SECONDS);
+        assertThat(info.status(), is(431));
+        assertThat(info.reason(), is("431 Request Header Fields Too Large"));
+        if (protocol.equals("h2")) {
+            // over HTTP/2 the header block is rejected during HPACK decoding, before the method or
+            // target can be read, so they are not available
+            assertThat(info.method(), is(Optional.empty()));
+            assertThat(info.uri(), is(Optional.empty()));
+        } else {
+            assertThat(info.method(), is(Optional.of("GET")));
+            assertThat(info.uri().get().getPath(), is("/"));
         }
     }
 
