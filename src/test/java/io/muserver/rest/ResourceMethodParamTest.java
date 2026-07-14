@@ -334,6 +334,18 @@ public class ResourceMethodParamTest {
                 if (breeds.isEmpty()) return "empty list";
                 return breeds.stream().map(breed -> breed == null ? "nullinlist" : breed.name()).collect(Collectors.joining(","));
             }
+
+            @GET
+            @Path("matrix")
+            public String getMatrix(@MatrixParam("breed") Breed breed) {
+                return breed.name();
+            }
+
+            @GET
+            @Path("path/{breed}")
+            public String getPath(@PathParam("breed") Breed breed) {
+                return breed.name();
+            }
         }
         server = httpsServerForTest().addHandler(restHandler(new Sample()).withCollectionParameterStrategy(CollectionParameterStrategy.NO_TRANSFORM)).start();
         try (Response resp = call(request()
@@ -347,6 +359,16 @@ public class ResourceMethodParamTest {
         try (Response resp = call(request().url(server.uri().resolve("/samples?breedOne=BAD_DOG").toString()))) {
             assertThat(resp.code(), is(404));
         }
+        try (Response resp = call(request().url(server.uri().resolve("/samples/matrix;breed=BAD_DOG").toString()))) {
+            assertThat(resp.code(), is(404));
+        }
+        try (Response resp = call(request().url(server.uri().resolve("/samples/path/BAD_DOG").toString()))) {
+            assertThat(resp.code(), is(404));
+        }
+        try (Response resp = call(request().url(server.uri().resolve("/samples/headers").toString())
+            .header("breedOne", "BAD_DOG"))) {
+            assertThat(resp.code(), is(400));
+        }
 
         try (Response resp = call(request().url(server.uri().resolve("/samples/multiple?breeds=CHIHUAHUA&breeds=YELPER").toString()))) {
             assertThat(resp.body().string(), equalTo("CHIHUAHUA,YELPER"));
@@ -359,6 +381,31 @@ public class ResourceMethodParamTest {
         }
         try (Response resp = call(request().url(server.uri().resolve("/samples/multiple?breeds=CHIHUAHUA&breeds=INVALID&breeds=YELPER").toString()))) {
             assertThat(resp.code(), is(404));
+        }
+    }
+
+    @Test
+    public void uriParameterConversionExceptionsCanBeMapped() throws IOException {
+        @Path("samples")
+        class Sample {
+            @GET
+            public String get(@QueryParam("breed") Breed breed) {
+                return breed.name();
+            }
+        }
+        server = httpsServerForTest()
+            .addHandler(restHandler(new Sample())
+                .addExceptionMapper(UriParameterConversionException.class, exception ->
+                    jakarta.ws.rs.core.Response.status(400)
+                        .type(jakarta.ws.rs.core.MediaType.TEXT_PLAIN_TYPE)
+                        .entity(exception.getParameterName() + "|" + exception.getParameterValue() + "|"
+                            + exception.getTargetType().getName() + "|" + (exception.getCause() != null))
+                        .build()))
+            .start();
+
+        try (Response resp = call(request(server.uri().resolve("/samples?breed=BAD_DOG")))) {
+            assertThat(resp.code(), is(400));
+            assertThat(resp.body().string(), is("breed|BAD_DOG|" + Breed.class.getName() + "|true"));
         }
     }
 
