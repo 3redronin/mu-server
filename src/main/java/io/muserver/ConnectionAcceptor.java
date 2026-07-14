@@ -25,6 +25,7 @@ import java.util.concurrent.RejectedExecutionException;
 
 class ConnectionAcceptor {
     private static final Logger log = LoggerFactory.getLogger(ConnectionAcceptor.class);
+    private static final int ACCEPT_BACKLOG = 50;
 
     private final Mu3ServerImpl server;
     private final ServerSocket socketServer;
@@ -96,6 +97,7 @@ class ConnectionAcceptor {
         while (state == State.STARTED) {
             try {
                 Socket clientSocket = socketServer.accept();
+                clientSocket.setTcpNoDelay(true);
                 Instant startTime = Instant.now();
                 try {
                     executorService.submit(() -> {
@@ -399,7 +401,7 @@ class ConnectionAcceptor {
         ExecutorService executor,
         List<ContentEncoder> contentEncoders) throws IOException {
 
-        ServerSocket socketServer = new ServerSocket(bindPort, 50, address);
+        ServerSocket socketServer = new ServerSocket(bindPort, ACCEPT_BACKLOG, address);
         configureSocketOptions(socketServer);
 
         String uriHost = address != null ? address.getHostName() : "localhost";
