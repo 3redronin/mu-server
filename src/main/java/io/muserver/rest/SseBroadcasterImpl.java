@@ -78,16 +78,29 @@ class SseBroadcasterImpl implements SseBroadcaster {
                 sendOnCloseEvent(sink);
                 sendComplete(completableFuture, count);
             } else {
-                sink.send(event).whenComplete((o, throwable) -> {
-                    if (throwable != null) {
-                        onSinkErrored(sink, throwable);
-                    }
-                    sendComplete(completableFuture, count);
-                });
+                sendToSink(event, sink, completableFuture, count);
             }
         }
 
         return completableFuture;
+    }
+
+    private void sendToSink(OutboundSseEvent event, SseEventSink sink, CompletableFuture<?> broadcastFuture, AtomicInteger count) {
+        CompletionStage<?> sendStage;
+        try {
+            sendStage = sink.send(event);
+        } catch (Throwable throwable) {
+            completeSinkSend(sink, throwable, broadcastFuture, count);
+            return;
+        }
+        sendStage.whenComplete((o, throwable) -> completeSinkSend(sink, throwable, broadcastFuture, count));
+    }
+
+    private void completeSinkSend(SseEventSink sink, Throwable throwable, CompletableFuture<?> broadcastFuture, AtomicInteger count) {
+        if (throwable != null) {
+            onSinkErrored(sink, throwable);
+        }
+        sendComplete(broadcastFuture, count);
     }
 
     private void onSinkErrored(SseEventSink sink, Throwable throwable) {
