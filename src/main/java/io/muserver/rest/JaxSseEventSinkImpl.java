@@ -47,9 +47,9 @@ class JaxSseEventSinkImpl implements SseEventSink {
     public CompletionStage<?> send(OutboundSseEvent event) {
 
         CompletionStage<?> stage = null;
-        MultivaluedMap<String, Object> writerHeaders = writerHeadersSnapshot();
 
         try {
+            MultivaluedMap<String, Object> writerHeaders = writerHeadersSnapshot();
             if (event.isReconnectDelaySet()) {
                 stage = ssePublisher.setClientReconnectTime(event.getReconnectDelay(), TimeUnit.MILLISECONDS);
             }
