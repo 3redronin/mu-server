@@ -59,11 +59,14 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
         }
         MultivaluedMap<String, Object> headers = new LowercasedMultivaluedHashMap<>();
         headers.putAll(response.getMetadata());
+        NewCookie[] cookies = headers.containsKey(HttpHeaders.SET_COOKIE)
+            ? new NewCookie[0]
+            : response.getCookies().values().toArray(new NewCookie[0]);
         return new JaxRSResponse(
             response.getStatusInfo(),
             headers,
             ObjWithType.objType(response.getEntity()),
-            response.getCookies().values().toArray(new NewCookie[0]),
+            cookies,
             new ArrayList<>(response.getLinks()),
             Builder.EMPTY_ANNOTATIONS
         );
