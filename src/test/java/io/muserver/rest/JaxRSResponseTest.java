@@ -133,6 +133,76 @@ public class JaxRSResponseTest {
     }
 
     @Test
+    public void externalResponseCookiesAreWrittenOnce() {
+        NewCookie cookie = new NewCookie("external", "yes");
+        Response externalDelegate = Response.noContent().cookie(cookie).build();
+        externalDelegate.getMetadata().add(HttpHeaders.SET_COOKIE, cookie);
+        Response source = externalResponse(externalDelegate);
+        JaxRSResponse wrapped = JaxRSResponse.from(source);
+        java.util.List<String> writtenCookies = new java.util.ArrayList<>();
+        io.muserver.Headers headers = (io.muserver.Headers) java.lang.reflect.Proxy.newProxyInstance(
+            getClass().getClassLoader(),
+            new Class<?>[]{io.muserver.Headers.class},
+            (proxy, method, args) -> {
+                if (method.getName().equals("add")) {
+                    if (args[0].toString().equalsIgnoreCase(HttpHeaders.SET_COOKIE)) {
+                        Object values = args[1];
+                        if (values instanceof Iterable) {
+                            for (Object value : (Iterable<?>) values) writtenCookies.add(value.toString());
+                        } else {
+                            writtenCookies.add(values.toString());
+                        }
+                    }
+                    return proxy;
+                }
+                throw new UnsupportedOperationException(method.toString());
+            });
+        io.muserver.MuResponse target = (io.muserver.MuResponse) java.lang.reflect.Proxy.newProxyInstance(
+            getClass().getClassLoader(),
+            new Class<?>[]{io.muserver.MuResponse.class},
+            (proxy, method, args) -> {
+                if (method.getName().equals("headers")) return headers;
+                throw new UnsupportedOperationException(method.toString());
+            });
+
+        MuRuntimeDelegate.writeResponseHeaders(URI.create("https://example.org/"), wrapped, target, true);
+
+        assertThat(writtenCookies, hasSize(1));
+        assertThat(writtenCookies.get(0), containsString("external=yes"));
+    }
+
+    private static Response externalResponse(Response delegate) {
+        return new Response() {
+            @Override public int getStatus() { return delegate.getStatus(); }
+            @Override public StatusType getStatusInfo() { return delegate.getStatusInfo(); }
+            @Override public Object getEntity() { return delegate.getEntity(); }
+            @Override public <T> T readEntity(Class<T> entityType) { return delegate.readEntity(entityType); }
+            @Override public <T> T readEntity(GenericType<T> entityType) { return delegate.readEntity(entityType); }
+            @Override public <T> T readEntity(Class<T> entityType, Annotation[] annotations) { return delegate.readEntity(entityType, annotations); }
+            @Override public <T> T readEntity(GenericType<T> entityType, Annotation[] annotations) { return delegate.readEntity(entityType, annotations); }
+            @Override public boolean hasEntity() { return delegate.hasEntity(); }
+            @Override public boolean bufferEntity() { return delegate.bufferEntity(); }
+            @Override public void close() { delegate.close(); }
+            @Override public MediaType getMediaType() { return delegate.getMediaType(); }
+            @Override public Locale getLanguage() { return delegate.getLanguage(); }
+            @Override public int getLength() { return delegate.getLength(); }
+            @Override public java.util.Set<String> getAllowedMethods() { return delegate.getAllowedMethods(); }
+            @Override public java.util.Map<String, NewCookie> getCookies() { return delegate.getCookies(); }
+            @Override public EntityTag getEntityTag() { return delegate.getEntityTag(); }
+            @Override public Date getDate() { return delegate.getDate(); }
+            @Override public Date getLastModified() { return delegate.getLastModified(); }
+            @Override public URI getLocation() { return delegate.getLocation(); }
+            @Override public java.util.Set<Link> getLinks() { return delegate.getLinks(); }
+            @Override public boolean hasLink(String relation) { return delegate.hasLink(relation); }
+            @Override public Link getLink(String relation) { return delegate.getLink(relation); }
+            @Override public Link.Builder getLinkBuilder(String relation) { return delegate.getLinkBuilder(relation); }
+            @Override public MultivaluedMap<String, Object> getMetadata() { return delegate.getMetadata(); }
+            @Override public MultivaluedMap<String, String> getStringHeaders() { return delegate.getStringHeaders(); }
+            @Override public String getHeaderString(String name) { return delegate.getHeaderString(name); }
+        };
+    }
+
+    @Test
     public void usesHeaderDelegatesIfAvailable() {
         NewCookie newCookie = new NewCookie("some-name", "some value", "/path", "example.org", "comment", 32, true, true);
         Response resp = JaxRSResponse.ok()
