@@ -24,13 +24,14 @@ class JaxSseEventSinkImpl implements SseEventSink {
     private static final Logger log = LoggerFactory.getLogger(JaxSseEventSinkImpl.class);
 
     private final AsyncSsePublisher ssePublisher;
+    private final MuResponse response;
     private final EntityProviders entityProviders;
-    private final MultivaluedMap<String, Object> writerHeaders;
+    private volatile MultivaluedMap<String, Object> writerHeadersSnapshot;
 
     public JaxSseEventSinkImpl(AsyncSsePublisher ssePublisher, MuResponse response, EntityProviders entityProviders) {
         this.ssePublisher = ssePublisher;
+        this.response = response;
         this.entityProviders = entityProviders;
-        this.writerHeaders = muHeadersToJaxObj(response.headers());
     }
 
     void setResponseCompleteHandler(ResponseCompleteListener listener) {
@@ -46,6 +47,7 @@ class JaxSseEventSinkImpl implements SseEventSink {
     public CompletionStage<?> send(OutboundSseEvent event) {
 
         CompletionStage<?> stage = null;
+        MultivaluedMap<String, Object> writerHeaders = writerHeadersSnapshot();
 
         try {
             if (event.isReconnectDelaySet()) {
@@ -82,6 +84,21 @@ class JaxSseEventSinkImpl implements SseEventSink {
             stage = f;
         }
         return stage;
+    }
+
+    private MultivaluedMap<String, Object> writerHeadersSnapshot() {
+        MultivaluedMap<String, Object> result = writerHeadersSnapshot;
+        if (result == null) {
+            synchronized (this) {
+                result = writerHeadersSnapshot;
+                if (result == null) {
+                    // Capture application headers before the first SSE write can commit the response.
+                    result = muHeadersToJaxObj(response.headers());
+                    writerHeadersSnapshot = result;
+                }
+            }
+        }
+        return result;
     }
 
     @Override

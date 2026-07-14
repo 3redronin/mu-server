@@ -1,5 +1,6 @@
 package io.muserver.rest;
 
+import io.muserver.MuResponse;
 import io.muserver.MuServer;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.Context;
@@ -41,6 +42,7 @@ public class SseEventSinkTest {
     @Test
     public void canPublishMessagesAndCustomDataWritersAreUsed() throws InterruptedException {
         AtomicReference<Throwable> sendFailure = new AtomicReference<>();
+        AtomicReference<Object> customWriterHeader = new AtomicReference<>();
 
         class Dog {
             final boolean hasTail;
@@ -60,6 +62,7 @@ public class SseEventSinkTest {
 
             @Override
             public void writeTo(Dog dog, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException, WebApplicationException {
+                customWriterHeader.set(httpHeaders.getFirst("x-sse-test"));
                 entityStream.write(("Dog " + dog.name + " has tail? " + dog.hasTail).getBytes(UTF_8));
             }
         }
@@ -71,7 +74,9 @@ public class SseEventSinkTest {
             @Path("eventStream")
             @Produces(MediaType.SERVER_SENT_EVENTS)
             public void eventStream(@Context SseEventSink eventSink,
-                                    @Context Sse sse) {
+                                    @Context Sse sse,
+                                    @Context MuResponse response) {
+                response.headers().set("x-sse-test", "present");
                 executor.execute(() -> {
                     try {
                         CompletableFuture.allOf(
@@ -104,6 +109,7 @@ public class SseEventSinkTest {
         if (sendFailure.get() != null) {
             throw new AssertionError("An SSE send failed", sendFailure.get());
         }
+        assertThat(customWriterHeader.get(), equalTo("present"));
         for (String receivedMessage : listener.receivedMessages) {
             System.out.println(">> " + receivedMessage);
         }
