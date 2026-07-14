@@ -386,8 +386,14 @@ class RFC9113_6_4_RstStreamTest {
 
     @Test
     void ifLengthIsNotFourThenConnectionError() throws Exception {
+        var requestStarted = new CountDownLatch(1);
+        var handleRef = new AtomicReference<AsyncHandle>();
         server = httpsServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.POST, "/hello", (request, response, pathParams) -> {
+                handleRef.set(request.handleAsync());
+                requestStarted.countDown();
+            })
             .start();
 
         try (var client = new H2Client();
@@ -397,7 +403,11 @@ class RFC9113_6_4_RstStreamTest {
             var errorCode = Http2ErrorCode.NO_ERROR.code();
             con.handshake()
                 .writeFrame(new Http2HeadersFrame(1, true, postHelloHeaders(getPort())))
-                .writeRaw(new byte[] {
+                .flush();
+            assertThat("The request did not start", requestStarted.await(5, TimeUnit.SECONDS), is(true));
+
+            try {
+                con.writeRaw(new byte[] {
                     // payload length
                     0b00000000,
                     0b00000000,
@@ -424,11 +434,14 @@ class RFC9113_6_4_RstStreamTest {
                     // the invalid extra payload
                     (byte)1
                 })
-                .flush();
+                    .flush();
 
-            var goaway = con.readLogicalFrame(Http2GoAway.class);
-            assertThat(goaway.lastStreamId(), equalTo(1));
-            assertThat(goaway.errorCodeEnum(), equalTo(Http2ErrorCode.FRAME_SIZE_ERROR));
+                var goaway = con.readLogicalFrame(Http2GoAway.class);
+                assertThat(goaway.lastStreamId(), equalTo(1));
+                assertThat(goaway.errorCodeEnum(), equalTo(Http2ErrorCode.FRAME_SIZE_ERROR));
+            } finally {
+                handleRef.get().complete();
+            }
         }
 
     }
