@@ -54,6 +54,25 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
         this.annotations = annotations;
     }
 
+    static JaxRSResponse from(Response response) {
+        if (response instanceof JaxRSResponse) {
+            return (JaxRSResponse) response;
+        }
+        MultivaluedMap<String, Object> headers = new LowercasedMultivaluedHashMap<>();
+        headers.putAll(response.getMetadata());
+        NewCookie[] cookies = headers.containsKey(HttpHeaders.SET_COOKIE)
+            ? new NewCookie[0]
+            : response.getCookies().values().toArray(new NewCookie[0]);
+        return new JaxRSResponse(
+            response.getStatusInfo(),
+            headers,
+            ObjWithType.objType(response.getEntity()),
+            cookies,
+            new ArrayList<>(response.getLinks()),
+            Builder.EMPTY_ANNOTATIONS
+        );
+    }
+
     public Annotation[] getAnnotations() {
         return annotations;
     }
@@ -143,7 +162,7 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
     @Override
     public void setEntity(Object entity, Annotation[] annotations, MediaType mediaType) {
         setEntity(entity);
-        setAnnotations(annotations);
+        setAnnotations(annotations == null ? Builder.EMPTY_ANNOTATIONS : annotations);
         setMediaType(mediaType);
     }
 

@@ -334,6 +334,18 @@ public class ResourceMethodParamTest {
                 if (breeds.isEmpty()) return "empty list";
                 return breeds.stream().map(breed -> breed == null ? "nullinlist" : breed.name()).collect(Collectors.joining(","));
             }
+
+            @GET
+            @Path("matrix")
+            public String getMatrix(@MatrixParam("breed") Breed breed) {
+                return breed.name();
+            }
+
+            @GET
+            @Path("path/{breed}")
+            public String getPath(@PathParam("breed") Breed breed) {
+                return breed.name();
+            }
         }
         server = httpsServerForTest().addHandler(restHandler(new Sample()).withCollectionParameterStrategy(CollectionParameterStrategy.NO_TRANSFORM)).start();
         try (Response resp = call(request()
@@ -345,8 +357,17 @@ public class ResourceMethodParamTest {
             assertThat(resp.body().string(), equalTo("chihuahua / null / big_hairy"));
         }
         try (Response resp = call(request().url(server.uri().resolve("/samples?breedOne=BAD_DOG").toString()))) {
+            assertThat(resp.code(), is(404));
+        }
+        try (Response resp = call(request().url(server.uri().resolve("/samples/matrix;breed=BAD_DOG").toString()))) {
+            assertThat(resp.code(), is(404));
+        }
+        try (Response resp = call(request().url(server.uri().resolve("/samples/path/BAD_DOG").toString()))) {
+            assertThat(resp.code(), is(404));
+        }
+        try (Response resp = call(request().url(server.uri().resolve("/samples/headers").toString())
+            .header("breedOne", "BAD_DOG"))) {
             assertThat(resp.code(), is(400));
-            assertThat(resp.body().string(), startsWith("<h1>400 Bad Request</h1><p>Could not convert String value &quot;BAD_DOG&quot; to a"));
         }
 
         try (Response resp = call(request().url(server.uri().resolve("/samples/multiple?breeds=CHIHUAHUA&breeds=YELPER").toString()))) {
@@ -359,8 +380,32 @@ public class ResourceMethodParamTest {
             assertThat(resp.body().string(), equalTo("empty list"));
         }
         try (Response resp = call(request().url(server.uri().resolve("/samples/multiple?breeds=CHIHUAHUA&breeds=INVALID&breeds=YELPER").toString()))) {
+            assertThat(resp.code(), is(404));
+        }
+    }
+
+    @Test
+    public void uriParameterConversionExceptionsCanBeMapped() throws IOException {
+        @Path("samples")
+        class Sample {
+            @GET
+            public String get(@QueryParam("breed") Breed breed) {
+                return breed.name();
+            }
+        }
+        server = httpsServerForTest()
+            .addHandler(restHandler(new Sample())
+                .addExceptionMapper(UriParameterConversionException.class, exception ->
+                    jakarta.ws.rs.core.Response.status(400)
+                        .type(jakarta.ws.rs.core.MediaType.TEXT_PLAIN_TYPE)
+                        .entity(exception.getParameterName() + "|" + exception.getParameterValue() + "|"
+                            + exception.getTargetType().getName() + "|" + (exception.getCause() != null))
+                        .build()))
+            .start();
+
+        try (Response resp = call(request(server.uri().resolve("/samples?breed=BAD_DOG")))) {
             assertThat(resp.code(), is(400));
-            assertThat(resp.body().string(), containsString("Could not convert"));
+            assertThat(resp.body().string(), is("breed|BAD_DOG|" + Breed.class.getName() + "|true"));
         }
     }
 
@@ -766,8 +811,7 @@ public class ResourceMethodParamTest {
             assertThat(resp.body().string(), equalTo(""));
         }
         try (Response resp = call(request(server.uri().resolve("/time?value=invalid-date")))) {
-            assertThat(resp.code(), is(400));
-            assertThat(resp.body().string(), containsString(Mutils.htmlEncode("Could not convert String value \"invalid-date\" to a class java.time.Instant using public static java.time.Instant java.time.Instant.parse(java.lang.CharSequence)")));
+            assertThat(resp.code(), is(404));
         }
     }
 
@@ -797,8 +841,7 @@ public class ResourceMethodParamTest {
             assertThat(resp.body().string(), equalTo(""));
         }
         try (Response resp = call(request(server.uri().resolve("/time?value=invalid-date")))) {
-            assertThat(resp.code(), is(400));
-            assertThat(resp.body().string(), containsString(Mutils.htmlEncode("Could not convert String value \"invalid-date\" to a class java.time.LocalDate using public static java.time.LocalDate java.time.LocalDate.parse(java.lang.CharSequence)")));
+            assertThat(resp.code(), is(404));
         }
     }
 
