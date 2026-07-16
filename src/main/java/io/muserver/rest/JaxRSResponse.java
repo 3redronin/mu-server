@@ -393,7 +393,9 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
     static MultivaluedMap<String, Object> muHeadersToJaxObj(Headers headers) {
         MultivaluedMap<String, Object> map = new LowercasedMultivaluedHashMap<>();
         for (String name : headers.names()) {
-            map.addAll(name, headers.getAll(name));
+            for (String value : headers.getAll(name)) {
+                map.add(name, value);
+            }
         }
         return map;
     }

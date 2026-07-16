@@ -9,6 +9,7 @@ import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.ext.MessageBodyWriter;
+import jakarta.ws.rs.sse.OutboundSseEvent;
 import jakarta.ws.rs.sse.Sse;
 import jakarta.ws.rs.sse.SseBroadcaster;
 import jakarta.ws.rs.sse.SseEventSink;
@@ -25,6 +26,8 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -151,6 +154,63 @@ public class SseBroadcasterImplTest {
         sse.close();
         streamer.endBroadcast();
         listener.assertListenerIsClosed();
+    }
+
+    @Test
+    public void synchronousSinkFailuresDoNotStopBroadcasting() throws Exception {
+        RuntimeException sendFailure = new IllegalStateException("Sink closed before send");
+        AtomicReference<Throwable> reportedFailure = new AtomicReference<>();
+        AtomicReference<OutboundSseEvent> receivedEvent = new AtomicReference<>();
+
+        class FailingSink implements SseEventSink {
+            private boolean closed;
+
+            @Override
+            public CompletionStage<?> send(OutboundSseEvent event) {
+                throw sendFailure;
+            }
+
+            @Override
+            public boolean isClosed() {
+                return closed;
+            }
+
+            @Override
+            public void close() {
+                closed = true;
+            }
+        }
+
+        class RecordingSink implements SseEventSink {
+            @Override
+            public CompletionStage<?> send(OutboundSseEvent event) {
+                receivedEvent.set(event);
+                return CompletableFuture.completedFuture(null);
+            }
+
+            @Override
+            public boolean isClosed() {
+                return false;
+            }
+
+            @Override
+            public void close() {
+            }
+        }
+
+        SseBroadcasterImpl broadcaster = new SseBroadcasterImpl();
+        FailingSink failingSink = new FailingSink();
+        broadcaster.register(failingSink);
+        broadcaster.register(new RecordingSink());
+        broadcaster.onError((sink, throwable) -> reportedFailure.set(throwable));
+
+        OutboundSseEvent event = MuRuntimeDelegate.createSseFactory().newEvent("hello");
+        broadcaster.broadcast(event).toCompletableFuture().get(10, TimeUnit.SECONDS);
+
+        assertThat(reportedFailure.get(), sameInstance(sendFailure));
+        assertThat(failingSink.isClosed(), is(true));
+        assertThat(receivedEvent.get(), sameInstance(event));
+        assertThat(broadcaster.connectedSinksCount(), is(1));
     }
 
 
