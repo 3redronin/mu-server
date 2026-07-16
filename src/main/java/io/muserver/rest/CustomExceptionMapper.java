@@ -6,6 +6,7 @@ import jakarta.ws.rs.ext.ExceptionMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.reflect.InvocationTargetException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -21,6 +22,10 @@ class CustomExceptionMapper {
 
     @SuppressWarnings("unchecked")
     Response toResponse(Throwable ex) {
+
+        if (ex instanceof InvocationTargetException && ex.getCause() != null) {
+            ex = ex.getCause();
+        }
 
         Class<? extends Throwable> exClass = ex.getClass();
 

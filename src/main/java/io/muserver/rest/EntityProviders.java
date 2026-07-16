@@ -28,11 +28,27 @@ class EntityProviders {
     public MessageBodyReader<?> selectReader(Class<?> type, Type genericType, Annotation[] annotations, MediaType requestBodyMediaType) {
         for (ProviderWrapper<MessageBodyReader<?>> reader : readers) {
             boolean mediaTypeSupported = reader.mediaTypes.stream().anyMatch(mt -> mt.isCompatible(requestBodyMediaType));
-            if (mediaTypeSupported && reader.provider.isReadable(type, genericType, annotations, requestBodyMediaType)) {
+            boolean typeSupported = !(reader.genericType instanceof Class) || ((Class<?>) reader.genericType).isAssignableFrom(box(type));
+            if (mediaTypeSupported && typeSupported && reader.provider.isReadable(type, genericType, annotations, requestBodyMediaType)) {
                 return reader.provider;
             }
         }
         throw new NotSupportedException("Could not find a suitable entity provider to read " + type);
+    }
+
+    private static Class<?> box(Class<?> type) {
+        if (!type.isPrimitive()) {
+            return type;
+        }
+        if (type == boolean.class) return Boolean.class;
+        if (type == byte.class) return Byte.class;
+        if (type == char.class) return Character.class;
+        if (type == short.class) return Short.class;
+        if (type == int.class) return Integer.class;
+        if (type == long.class) return Long.class;
+        if (type == float.class) return Float.class;
+        if (type == double.class) return Double.class;
+        return type;
     }
     public MessageBodyWriter<?> selectWriter(Class<?> type, Type genericType, Annotation[] annotations, MediaType responseMediaType) {
         // From 4.2.2
@@ -68,6 +84,10 @@ class EntityProviders {
         throw new InternalServerErrorException("Could not find a suitable entity provider to write " + type);
     }
 
+    boolean isBuiltInWriter(MessageBodyWriter<?> writer) {
+        return writers.stream().anyMatch(candidate -> candidate.provider == writer && candidate.isBuiltIn);
+    }
+
     public static List<MessageBodyReader> builtInReaders() {
         List<MessageBodyReader> readers = new ArrayList<>();
         readers.addAll(StringEntityProviders.stringEntityReaders);
@@ -94,4 +114,3 @@ class EntityProviders {
 
 
 }
-

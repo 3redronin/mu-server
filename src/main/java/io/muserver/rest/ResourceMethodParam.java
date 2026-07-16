@@ -363,10 +363,20 @@ abstract class ResourceMethodParam {
             } catch (WebApplicationException e) {
                 throw e;
             } catch (Exception e) {
+                if (source == ValueSource.MATRIX_PARAM || source == ValueSource.QUERY_PARAM || source == ValueSource.PATH_PARAM) {
+                    throw new UriParameterConversionException(uriParameterName(parameterHandle, source), (String) value, parameterHandle.getType(), e);
+                }
                 String message = "Could not convert String value \"" + value + "\" to a " + parameterHandle.getType() + " using " + converter + " on parameter " + parameterHandle;
                 throw new BadRequestException(message, e);
             }
         }
+    }
+
+    private static String uriParameterName(Parameter parameter, ValueSource source) {
+        if (source == ValueSource.MATRIX_PARAM) return parameter.getDeclaredAnnotation(MatrixParam.class).value();
+        if (source == ValueSource.QUERY_PARAM) return parameter.getDeclaredAnnotation(QueryParam.class).value();
+        if (source == ValueSource.PATH_PARAM) return parameter.getDeclaredAnnotation(PathParam.class).value();
+        throw new IllegalArgumentException("Not a URI parameter source: " + source);
     }
 
     enum ValueSource {

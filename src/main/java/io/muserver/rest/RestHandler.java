@@ -269,9 +269,11 @@ public class RestHandler implements MuHandler {
                         Type entityGenericType = jaxRSResponse.getEntityType();
                         MessageBodyWriter messageBodyWriter = entityProviders.selectWriter(entityType, entityGenericType, writerAnnontations, responseMediaType);
 
-                        long size = messageBodyWriter.getSize(entity, entityType, entityGenericType, writerAnnontations, responseMediaType);
-                        if (size > -1) {
-                            jaxRSResponse.getHeaders().putSingle("content-length", size);
+                        if (entityProviders.isBuiltInWriter(messageBodyWriter)) {
+                            long size = messageBodyWriter.getSize(jaxRSResponse.getEntity(), jaxRSResponse.getType(), jaxRSResponse.getGenericType(), writerAnnontations, responseMediaType);
+                            if (size >= 0) {
+                                jaxRSResponse.getHeaders().putSingle("content-length", Long.toString(size));
+                            }
                         }
 
                         String contentType = responseMediaType.toString();
