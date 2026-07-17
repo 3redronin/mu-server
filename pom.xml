@@ -6,7 +6,7 @@
 
     <groupId>io.muserver</groupId>
     <artifactId>mu-server</artifactId>
-    <version>2.4-SNAPSHOT</version>
+    <version>0.0.3-SNAPSHOT</version>
 
     <name>mu-server</name>
     <description>A simple but powerful web server library</description>
@@ -18,7 +18,7 @@
         <netty.version.4.2>4.2.14.Final</netty.version.4.2>
         <netty.version>${netty.version.4.1}</netty.version>
         <netty.codec.artifactId>netty-codec</netty.codec.artifactId>
-        <slf4j.version>1.7.36</slf4j.version>
+        <slf4j.version>2.0.18</slf4j.version>
         <jetty.version>9.4.58.v20250814</jetty.version>
     </properties>
 
@@ -230,8 +230,9 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.15.0</version>
                 <configuration>
-                    <source>1.8</source>
-                    <target>1.8</target>
+                    <source>11</source>
+                    <target>11</target>
+                    <release>11</release>
                     <failOnWarning>true</failOnWarning>
                     <showWarnings>true</showWarnings>
                     <compilerArgs>
@@ -262,7 +263,7 @@
                 <artifactId>maven-javadoc-plugin</artifactId>
                 <version>3.6.3</version>
                 <configuration>
-                    <source>8</source>
+                    <source>11</source>
                     <detectJavaApiLink>false</detectJavaApiLink>
                 </configuration>
                 <executions>
@@ -318,7 +319,7 @@
                                     <version>3.0.4</version>
                                 </requireMavenVersion>
                                 <requireJavaVersion>
-                                    <version>1.8.0</version>
+                                    <version>11</version>
                                 </requireJavaVersion>
                             </rules>
                         </configuration>
@@ -374,23 +375,6 @@
                                 </configuration>
                             </execution>
                         </executions>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
-        <profile>
-            <id>java-8-api</id>
-            <activation>
-                <jdk>[9,)</jdk>
-            </activation>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-compiler-plugin</artifactId>
-                        <configuration>
-                            <release>8</release>
-                        </configuration>
                     </plugin>
                 </plugins>
             </build>

@@ -261,6 +261,7 @@ public class HttpsConfigBuilder {
      * @return Creates an SSLContext
      * @deprecated Pass this builder itself to the HttpsConfig rather than building an SSLContext
      */
+    @Deprecated
     SSLContext build() {
         if (keystoreBytes == null) {
             throw new MuException("No keystore has been set");
