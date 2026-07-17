@@ -5,4 +5,5 @@
  * @see io.muserver.MuRequest
  * @see io.muserver.MuResponse
  */
+@org.jspecify.annotations.NullMarked
 package io.muserver;

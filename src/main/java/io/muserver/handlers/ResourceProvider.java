@@ -17,14 +17,16 @@ import java.nio.file.*;
 import java.util.*;
 import java.util.stream.Stream;
 
+import org.jspecify.annotations.Nullable;
+
 interface ResourceProvider {
     boolean exists();
 
     boolean isDirectory();
 
-    Long fileSize();
+    @Nullable Long fileSize();
 
-    Date lastModified();
+    @Nullable Date lastModified();
 
     boolean skipIfPossible(long bytes);
 
@@ -153,11 +155,11 @@ class ClasspathCache implements ResourceProviderFactory {
             return false;
         }
 
-        public Long fileSize() {
+        public @Nullable Long fileSize() {
             return null;
         }
 
-        public Date lastModified() {
+        public @Nullable Date lastModified() {
             return null;
         }
 
@@ -201,7 +203,7 @@ class AsyncFileProvider implements ResourceProvider, CompletionHandler<Integer, 
         return Files.isDirectory(localPath);
     }
 
-    public Long fileSize() {
+    public @Nullable Long fileSize() {
         try {
             long size = Files.size(localPath);
             if (size == 0L && isDirectory()) {
@@ -215,7 +217,7 @@ class AsyncFileProvider implements ResourceProvider, CompletionHandler<Integer, 
     }
 
     @Override
-    public Date lastModified() {
+    public @Nullable Date lastModified() {
         try {
             return new Date(Files.getLastModifiedTime(localPath).toMillis());
         } catch (IOException e) {
@@ -291,12 +293,12 @@ class AsyncFileProvider implements ResourceProvider, CompletionHandler<Integer, 
 class ClasspathResourceProvider implements ResourceProvider {
     private final boolean exists;
     private final boolean isDir;
-    private final Long fileSize;
-    private final Date lastModified;
+    private final @Nullable Long fileSize;
+    private final @Nullable Date lastModified;
     private final Path path;
     private final InputStream inputStream;
 
-    ClasspathResourceProvider(boolean exists, boolean isDir, Long fileSize, Date lastModified, Path path, InputStream inputStream) {
+    ClasspathResourceProvider(boolean exists, boolean isDir, @Nullable Long fileSize, @Nullable Date lastModified, Path path, @Nullable InputStream inputStream) {
         this.exists = exists;
         this.isDir = isDir;
         this.path = path;
@@ -306,7 +308,7 @@ class ClasspathResourceProvider implements ResourceProvider {
     }
 
     ClasspathResourceProvider newWithInputStream() {
-        InputStream inputStream;
+        @Nullable InputStream inputStream;
         try {
             inputStream = isDir ? null : Files.newInputStream(path, StandardOpenOption.READ);
         } catch (IOException e) {

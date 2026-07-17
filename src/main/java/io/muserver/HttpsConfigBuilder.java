@@ -3,6 +3,7 @@ package io.muserver;
 import io.netty.handler.ssl.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.jspecify.annotations.Nullable;
 
 import javax.net.ssl.*;
 import java.io.*;
@@ -24,20 +25,20 @@ import static java.util.Arrays.asList;
 public class HttpsConfigBuilder {
 
     private static final Logger log = LoggerFactory.getLogger(HttpsConfigBuilder.class);
-    private String[] protocols = null;
+    private String @Nullable [] protocols = null;
     private String keystoreType = "JKS";
     private char[] keystorePassword = new char[0];
     private char[] keyPassword = new char[0];
-    private byte[] keystoreBytes;
-    private SSLContext sslContext;
-    private CipherSuiteFilter nettyCipherSuiteFilter;
-    private KeyManagerFactory keyManagerFactory;
-    private String defaultAlias;
+    private byte @Nullable [] keystoreBytes;
+    private @Nullable SSLContext sslContext;
+    private @Nullable CipherSuiteFilter nettyCipherSuiteFilter;
+    private @Nullable KeyManagerFactory keyManagerFactory;
+    private @Nullable String defaultAlias;
 
     /**
      * Only used by HttpsConfigBuilder
      */
-    protected TrustManager trustManager;
+    protected @Nullable TrustManager trustManager;
 
     /**
      * The type of keystore, such as JKS, JCEKS, PKCS12, etc
@@ -196,7 +197,7 @@ public class HttpsConfigBuilder {
      * @param keyManagerFactory The key manager factory to use
      * @return This builder
      */
-    public HttpsConfigBuilder withKeyManagerFactory(KeyManagerFactory keyManagerFactory) {
+    public HttpsConfigBuilder withKeyManagerFactory(@Nullable KeyManagerFactory keyManagerFactory) {
         this.keystoreBytes = null;
         this.sslContext = null;
         this.keyManagerFactory = keyManagerFactory;
@@ -212,7 +213,7 @@ public class HttpsConfigBuilder {
      *                     order.
      * @return This builder
      */
-    public HttpsConfigBuilder withCipherFilter(SSLCipherFilter cipherFilter) {
+    public HttpsConfigBuilder withCipherFilter(@Nullable SSLCipherFilter cipherFilter) {
         if (cipherFilter == null) {
             this.nettyCipherSuiteFilter = null;
         } else {
@@ -237,7 +238,7 @@ public class HttpsConfigBuilder {
      * @param protocols The protocols to use, or null to use the default.
      * @return This builder.
      */
-    public HttpsConfigBuilder withProtocols(String... protocols) {
+    public HttpsConfigBuilder withProtocols(String @Nullable... protocols) {
         this.protocols = protocols;
         return this;
     }
@@ -252,7 +253,7 @@ public class HttpsConfigBuilder {
      *                  cert to be picked (normally the first one).
      * @return This builder
      */
-    public HttpsConfigBuilder withDefaultAlias(String certAlias) {
+    public HttpsConfigBuilder withDefaultAlias(@Nullable String certAlias) {
         this.defaultAlias = certAlias;
         return this;
     }
@@ -436,7 +437,7 @@ public class HttpsConfigBuilder {
      * @param trustManager The trust manager to use to validate client certificates
      * @return This builder.
      */
-    public HttpsConfigBuilder withClientCertificateTrustManager(TrustManager trustManager) {
+    public HttpsConfigBuilder withClientCertificateTrustManager(@Nullable TrustManager trustManager) {
         this.trustManager = trustManager;
         return this;
     }

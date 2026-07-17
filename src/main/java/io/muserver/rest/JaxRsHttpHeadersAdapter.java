@@ -10,6 +10,8 @@ import jakarta.ws.rs.core.MultivaluedMap;
 
 import java.util.*;
 
+import org.jspecify.annotations.Nullable;
+
 import static java.util.stream.Collectors.toList;
 
 class JaxRsHttpHeadersAdapter implements HttpHeaders {
@@ -26,12 +28,12 @@ class JaxRsHttpHeadersAdapter implements HttpHeaders {
 
 
     @Override
-    public List<String> getRequestHeader(String name) {
+    public @Nullable List<String> getRequestHeader(String name) {
         return getMutableRequestHeaders().get(name);
     }
 
     @Override
-    public String getHeaderString(String name) {
+    public @Nullable String getHeaderString(String name) {
         List<String> vals = getRequestHeader(name);
         if (vals == null) {
             return null;
@@ -73,7 +75,7 @@ class JaxRsHttpHeadersAdapter implements HttpHeaders {
         }
     }
 
-    private List<Locale> getLocalesFromHeader(CharSequence headerName, List<Locale> defaultLocales) {
+    private @Nullable List<Locale> getLocalesFromHeader(CharSequence headerName, @Nullable List<Locale> defaultLocales) {
         List<String> all = muHeaders.getAll(headerName);
         if (all.isEmpty()) {
             return defaultLocales;
@@ -96,13 +98,13 @@ class JaxRsHttpHeadersAdapter implements HttpHeaders {
     }
 
     @Override
-    public MediaType getMediaType() {
+    public @Nullable MediaType getMediaType() {
         String type = muHeaders.get(HeaderNames.CONTENT_TYPE);
         return type == null ? null : MediaType.valueOf(type);
     }
 
     @Override
-    public Locale getLanguage() {
+    public @Nullable Locale getLanguage() {
         List<Locale> localesFromHeader = getLocalesFromHeader(HeaderNames.CONTENT_LANGUAGE, null);
         return localesFromHeader == null || localesFromHeader.isEmpty() ? null : localesFromHeader.get(0);
     }
@@ -117,7 +119,7 @@ class JaxRsHttpHeadersAdapter implements HttpHeaders {
     }
 
     @Override
-    public Date getDate() {
+    public @Nullable Date getDate() {
         long timeMillis = muHeaders.getTimeMillis(HeaderNames.DATE, -1);
         return timeMillis < 0 ? null : new Date(timeMillis);
     }

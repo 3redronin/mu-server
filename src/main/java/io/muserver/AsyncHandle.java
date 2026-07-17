@@ -3,6 +3,8 @@ package io.muserver;
 import java.nio.ByteBuffer;
 import java.util.concurrent.Future;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * <p>A class to handle the request and response handling when using asynchronous request handling.</p>
  * <p>To asynchronously read the request body, see {@link #setReadListener(RequestBodyListener)}. To
@@ -29,7 +31,7 @@ public interface AsyncHandle {
      * a <code>500 Internal Server Error</code> message will be sent to the client.
      * @param throwable an exception to log, or null if there was no problem
      */
-    void complete(Throwable throwable);
+    void complete(@Nullable Throwable throwable);
 
     /**
      * <p>Writes data to the response asynchronously.</p>

@@ -11,6 +11,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import org.jspecify.annotations.Nullable;
+
 import static io.muserver.Mutils.notNull;
 import static io.muserver.openapi.ComponentsObjectBuilder.componentsObject;
 import static io.muserver.openapi.PathItemObjectBuilder.pathItemObject;
@@ -224,7 +226,7 @@ class SchemaReference {
         this.schema = schema;
     }
 
-    static SchemaReference find(List<SchemaReference> references, Class<?> type, Type genericType) {
+    static @Nullable SchemaReference find(List<SchemaReference> references, Class<?> type, Type genericType) {
         for (SchemaReference reference : references) {
             if (reference.type.equals(type)) {
                 return reference;

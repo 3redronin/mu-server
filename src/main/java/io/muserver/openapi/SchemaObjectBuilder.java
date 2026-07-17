@@ -13,6 +13,8 @@ import java.time.temporal.Temporal;
 import java.util.*;
 import java.util.regex.Pattern;
 
+import org.jspecify.annotations.Nullable;
+
 import static io.muserver.openapi.OpenApiUtils.immutable;
 import static java.util.Arrays.asList;
 
@@ -790,7 +792,7 @@ public class SchemaObjectBuilder {
      * @param required True if it's a required value
      * @return A new builder
      */
-    public static SchemaObjectBuilder schemaObjectFrom(Class<?> from, Type parameterizedType, boolean required) {
+    public static SchemaObjectBuilder schemaObjectFrom(Class<?> from, @Nullable Type parameterizedType, boolean required) {
         Objects.requireNonNull(from, "from");
         if (from.equals(void.class) || from.equals(Void.class)) {
             return schemaObject();
@@ -813,7 +815,7 @@ public class SchemaObjectBuilder {
         return schemaObjectBuilder;
     }
 
-    private static Object example(Class<?> clazz) {
+    private static @Nullable Object example(Class<?> clazz) {
         if (clazz.equals(UUID.class)) {
             return UUID.randomUUID();
         } else if (Temporal.class.isAssignableFrom(clazz)) {
@@ -824,14 +826,14 @@ public class SchemaObjectBuilder {
         return null;
     }
 
-    private static Type getUpperBound(Type parameterizedType) {
+    private static @Nullable Type getUpperBound(@Nullable Type parameterizedType) {
         if (parameterizedType instanceof WildcardType && ((WildcardType)parameterizedType).getUpperBounds().length > 0) {
             parameterizedType = ((WildcardType)parameterizedType).getUpperBounds()[0];
         }
         return parameterizedType;
     }
 
-    private static SchemaObject itemsFor(Class<?> from, Type parameterizedType, boolean isJsonArray) {
+    private static @Nullable SchemaObject itemsFor(Class<?> from, @Nullable Type parameterizedType, boolean isJsonArray) {
         Class<?> componentType = from.getComponentType();
         if (componentType == null) {
             if (isJsonArray) {
@@ -871,7 +873,7 @@ public class SchemaObjectBuilder {
         return "object";
     }
 
-    private static String jsonFormat(Class<?> type) {
+    private static @Nullable String jsonFormat(Class<?> type) {
         if (type.equals(int.class) || type.equals(Integer.class)) {
             return "int32";
         } else if (type.equals(long.class) || type.equals(Long.class)) {

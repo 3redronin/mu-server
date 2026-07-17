@@ -9,6 +9,8 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * A web server handler. Create and start a web server by using {@link MuServerBuilder#httpsServer()} or
  * {@link MuServerBuilder#httpServer()}
@@ -45,12 +47,12 @@ public interface MuServer {
     /**
      * @return The HTTP URI of the web server, if HTTP is supported; otherwise null
      */
-    URI httpUri();
+    @Nullable URI httpUri();
 
     /**
      * @return The HTTPS URI of the web server, if HTTPS is supported; otherwise null
      */
-    URI httpsUri();
+    @Nullable URI httpsUri();
 
     /**
      * @return Provides stats about the server
@@ -159,7 +161,7 @@ public interface MuServer {
      *
      * @return A description of the actual SSL settings used, or null.
      */
-    SSLInfo sslInfo();
+    @Nullable SSLInfo sslInfo();
 
     /**
      * @return The rate limiters added to the server with {@link MuServerBuilder#withRateLimiter(RateLimitSelector)}, in the order they are applied.

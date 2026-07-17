@@ -12,6 +12,8 @@ import java.util.List;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
+import org.jspecify.annotations.Nullable;
+
 import static java.util.Arrays.asList;
 
 /**
@@ -31,7 +33,7 @@ public class CORSConfigBuilder {
      * @return This builder
      */
     public CORSConfigBuilder withAllOriginsAllowed() {
-        return withAllowedOrigins((Collection<String>)null);
+        return withAllowedOrigins((Collection<String>) null);
     }
 
     /**
@@ -49,7 +51,7 @@ public class CORSConfigBuilder {
      * @param allowedOrigins Allowed origins, such as <code>https://example.org</code> or <code>http://localhost:8080</code>
      * @return This builder
      */
-    public CORSConfigBuilder withAllowedOrigins(Collection<String> allowedOrigins) {
+    public CORSConfigBuilder withAllowedOrigins(@Nullable Collection<String> allowedOrigins) {
         if (allowedOrigins != null) {
             for (String allowedOrigin : allowedOrigins) {
                 if (!allowedOrigin.startsWith("http://") && !allowedOrigin.startsWith("https://")) {
@@ -81,7 +83,7 @@ public class CORSConfigBuilder {
      *                           all subdomains of <code>example.org</code> over HTTPS.
      * @return This builder
      */
-    public CORSConfigBuilder withAllowedOriginRegex(Pattern allowedOriginRegex) {
+    public CORSConfigBuilder withAllowedOriginRegex(@Nullable Pattern allowedOriginRegex) {
         if (allowedOriginRegex != null) {
             this.allowedOriginRegex.add(allowedOriginRegex);
         }
@@ -97,7 +99,7 @@ public class CORSConfigBuilder {
      * @return This builder
      * @throws PatternSyntaxException If the expression's syntax is invalid
      */
-    public CORSConfigBuilder withAllowedOriginRegex(String allowedOriginRegex) {
+    public CORSConfigBuilder withAllowedOriginRegex(@Nullable String allowedOriginRegex) {
         if (allowedOriginRegex == null) {
             return this;
         }

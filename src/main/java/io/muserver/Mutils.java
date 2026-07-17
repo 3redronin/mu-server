@@ -13,6 +13,8 @@ import java.util.Date;
 import java.util.Objects;
 import java.util.stream.Stream;
 
+import org.jspecify.annotations.Nullable;
+
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 /**
@@ -220,7 +222,7 @@ public class Mutils {
      * @param value A value
      * @return A value that can be safely included inside HTML tags.
      */
-    public static String htmlEncode(String value) {
+    public static String htmlEncode(@Nullable String value) {
         if (value == null) {
             return "";
         }
@@ -241,7 +243,7 @@ public class Mutils {
      * @param <T>    The type of the value
      * @return The first object in the list that is not null (or null, if all are null)
      */
-    public static <T> T coalesce(T... values) {
+    public static <T> @Nullable T coalesce(@Nullable T... values) {
         return Stream.of(values).filter(Objects::nonNull).findFirst().orElse(null);
     }
 

@@ -2,6 +2,8 @@ package io.muserver;
 
 import java.util.*;
 
+import org.jspecify.annotations.Nullable;
+
 import static java.util.Collections.emptyList;
 import static java.util.Collections.emptyMap;
 
@@ -24,7 +26,7 @@ public class ForwardedHeader {
      * @param proto The protocol the client used, or null
      * @param extensions Any extensions, or null
      */
-    public ForwardedHeader(String by, String forValue, String host, String proto, Map<String, String> extensions) {
+    public ForwardedHeader(@Nullable String by, @Nullable String forValue, @Nullable String host, @Nullable String proto, @Nullable Map<String, String> extensions) {
         this.by = by;
         this.forValue = forValue;
         this.host = host;
@@ -36,7 +38,7 @@ public class ForwardedHeader {
      * @return The interface where the request came in to the proxy server (e.g. the IP address of the reverse
      * proxy that forwarded this request), or <code>null</code> if not specified.
      */
-    public String by() {
+    public @Nullable String by() {
         return by;
     }
 
@@ -44,7 +46,7 @@ public class ForwardedHeader {
      * @return The interface where the request came in to the proxy server, e.g. the IP address of the client
      * that originated the request), or <code>null</code> if not specified.
      */
-    public String forValue() {
+    public @Nullable String forValue() {
         return forValue;
     }
 
@@ -52,7 +54,7 @@ public class ForwardedHeader {
      * @return The Host request header field as received by the proxy (e.g. the hostname used on the original
      * request), or <code>null</code> if not specified.
      */
-    public String host() {
+    public @Nullable String host() {
         return host;
     }
 
@@ -60,7 +62,7 @@ public class ForwardedHeader {
      * @return Indicates which protocol was used to make the request (typically "http" or "https"), or
      * <code>null</code> if not specified.
      */
-    public String proto() {
+    public @Nullable String proto() {
         return proto;
     }
 

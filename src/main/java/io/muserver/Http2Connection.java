@@ -18,6 +18,8 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.RejectedExecutionException;
 
+import org.jspecify.annotations.Nullable;
+
 import static io.netty.buffer.Unpooled.EMPTY_BUFFER;
 import static io.netty.buffer.Unpooled.copiedBuffer;
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -131,10 +133,10 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
     private final ConcurrentHashMap<Integer, HttpExchange> exchanges = new ConcurrentHashMap<>();
     private volatile int lastStreamId = 0;
     private final MuStatsImpl connectionStats = new MuStatsImpl(null);
-    private InetSocketAddress remoteAddress;
+    private @Nullable InetSocketAddress remoteAddress;
     private final Instant startTime = Instant.now();
-    private ChannelHandlerContext nettyContext;
-    private ProxiedConnectionInfoImpl proxyInfo;
+    private @Nullable ChannelHandlerContext nettyContext;
+    private @Nullable ProxiedConnectionInfoImpl proxyInfo;
 
     Http2Connection(Http2ConnectionDecoder decoder, Http2ConnectionEncoder encoder,
                     Http2Settings initialSettings, MuServerImpl server, NettyHandlerAdapter nettyHandlerAdapter) {
@@ -166,7 +168,7 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
         closeAllAndDisconnect(ctx, Http2Error.INTERNAL_ERROR, ResponseState.ERRORED);
     }
 
-    private void closeAllAndDisconnect(ChannelHandlerContext ctx, Http2Error error, ResponseState reason) {
+    private void closeAllAndDisconnect(ChannelHandlerContext ctx, @Nullable Http2Error error, ResponseState reason) {
         if (error != null) {
             encoder().writeGoAway(ctx, lastStreamId, error.code(), EMPTY_BUFFER, ctx.channel().voidPromise());
         }
@@ -579,4 +581,3 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
     }
 
 }
-

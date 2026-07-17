@@ -8,6 +8,8 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * The result of matching a template URI against a real request URI. If there is a match, then any path parameters
  * are available in the {@link #params()} map.
@@ -78,7 +80,7 @@ public class PathMatch {
     /**
      * @return Returns the last captured group value, which may be null
      */
-    String lastGroup() {
+    @Nullable String lastGroup() {
         String group = matcher.group(matcher.groupCount());
         return "/".equals(group) ? null : group;
     }

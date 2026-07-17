@@ -11,6 +11,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
+import org.jspecify.annotations.Nullable;
+
 class CustomExceptionMapper {
     private static final Logger log = LoggerFactory.getLogger(CustomExceptionMapper.class);
 
@@ -21,7 +23,7 @@ class CustomExceptionMapper {
     }
 
     @SuppressWarnings("unchecked")
-    Response toResponse(Throwable ex) {
+    @Nullable Response toResponse(Throwable ex) {
 
         if (ex instanceof InvocationTargetException && ex.getCause() != null) {
             ex = ex.getCause();
@@ -57,7 +59,7 @@ class CustomExceptionMapper {
     }
 
     @SuppressWarnings("unchecked")
-    private ExceptionMapper findBestMatchingExceptionMapper(Class<? extends Throwable> exClass, int maxDepth) {
+    private @Nullable ExceptionMapper findBestMatchingExceptionMapper(Class<? extends Throwable> exClass, int maxDepth) {
         ExceptionMapper exceptionMapper = null;
         for (Map.Entry<Class<? extends Throwable>, ExceptionMapper<? extends Throwable>> entry : mappers.entrySet()) {
             Class mapperClass = entry.getKey();

@@ -33,6 +33,8 @@ import java.util.concurrent.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * <p>A builder for creating a web server.</p>
  * <p>Use the <code>withXXX()</code> methods to set the ports, config, and request handlers needed.</p>
@@ -297,7 +299,7 @@ public class MuServerBuilder {
      * @return The current Mu Server Handler.
      * @see #addHandler(Method, String, RouteHandler)
      */
-    public MuServerBuilder addHandler(MuHandlerBuilder handler) {
+    public MuServerBuilder addHandler(@Nullable MuHandlerBuilder handler) {
         if (handler == null) {
             return this;
         }
@@ -313,7 +315,7 @@ public class MuServerBuilder {
      * @return The current Mu Server Handler.
      * @see #addHandler(Method, String, RouteHandler)
      */
-    public MuServerBuilder addHandler(MuHandler handler) {
+    public MuServerBuilder addHandler(@Nullable MuHandler handler) {
         if (handler != null) {
             handlers.add(handler);
         }
@@ -332,7 +334,7 @@ public class MuServerBuilder {
      * @param handler     The handler to invoke if the method and URI matches. If null, then no handler is added.
      * @return Returns the server builder
      */
-    public MuServerBuilder addHandler(Method method, String uriTemplate, RouteHandler handler) {
+    public MuServerBuilder addHandler(@Nullable Method method, String uriTemplate, @Nullable RouteHandler handler) {
         if (handler == null) {
             return this;
         }
@@ -345,7 +347,7 @@ public class MuServerBuilder {
      * @param listener A listener. If null, then nothing is added.
      * @return Returns the server builder
      */
-    public MuServerBuilder addResponseCompleteListener(ResponseCompleteListener listener) {
+    public MuServerBuilder addResponseCompleteListener(@Nullable ResponseCompleteListener listener) {
         if (listener != null) {
             if (this.responseCompleteListeners == null) {
                 this.responseCompleteListeners = new ArrayList<>();
@@ -364,7 +366,7 @@ public class MuServerBuilder {
      * @param listener A listener. If null, then nothing is added.
      * @return Returns the server builder
      */
-    public MuServerBuilder addRequestRejectListener(RequestRejectListener listener) {
+    public MuServerBuilder addRequestRejectListener(@Nullable RequestRejectListener listener) {
         if (listener != null) {
             if (this.requestRejectListeners == null) {
                 this.requestRejectListeners = new ArrayList<>();

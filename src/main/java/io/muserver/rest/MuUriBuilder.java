@@ -17,6 +17,8 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.jspecify.annotations.Nullable;
+
 import static java.util.Collections.emptyMap;
 import static java.util.stream.Collectors.toList;
 
@@ -399,7 +401,7 @@ class MuUriBuilder extends UriBuilder {
         return copy;
     }
 
-    static String resolve(String template, String name, String value) {
+    static @Nullable String resolve(@Nullable String template, String name, String value) {
         if (template == null) {
             return null;
         }

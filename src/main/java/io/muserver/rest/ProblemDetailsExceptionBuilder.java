@@ -3,6 +3,8 @@ package io.muserver.rest;
 import java.net.URI;
 import java.util.*;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Builds {@link ProblemDetailsException} instances that can be serialized by
  * {@link ProblemDetailsExceptionMapper} as RFC 9457 problem-details JSON.
@@ -17,12 +19,12 @@ public class ProblemDetailsExceptionBuilder {
     private static final String ABOUT_BLANK = "about:blank";
 
     private int status = 500;
-    private String title;
-    private String detail;
-    private URI type;
-    private URI instance;
-    private Throwable cause;
-    private final Map<String, Object> extensionMembers = new LinkedHashMap<>();
+    private @Nullable String title;
+    private @Nullable String detail;
+    private @Nullable URI type;
+    private @Nullable URI instance;
+    private @Nullable Throwable cause;
+    private final Map<String, @Nullable Object> extensionMembers = new LinkedHashMap<>();
 
     /**
      * Creates a builder with the default 500 status.
@@ -67,7 +69,7 @@ public class ProblemDetailsExceptionBuilder {
      * @param title The title.
      * @return This builder.
      */
-    public ProblemDetailsExceptionBuilder withTitle(String title) {
+    public ProblemDetailsExceptionBuilder withTitle(@Nullable String title) {
         this.title = title;
         return this;
     }
@@ -81,7 +83,7 @@ public class ProblemDetailsExceptionBuilder {
      * @param detail The detail.
      * @return This builder.
      */
-    public ProblemDetailsExceptionBuilder withDetail(String detail) {
+    public ProblemDetailsExceptionBuilder withDetail(@Nullable String detail) {
         this.detail = detail;
         return this;
     }
@@ -96,7 +98,7 @@ public class ProblemDetailsExceptionBuilder {
      * @param cause The cause.
      * @return This builder.
      */
-    public ProblemDetailsExceptionBuilder withCause(Throwable cause) {
+    public ProblemDetailsExceptionBuilder withCause(@Nullable Throwable cause) {
         this.cause = cause;
         return this;
     }
@@ -116,7 +118,7 @@ public class ProblemDetailsExceptionBuilder {
      * @param type The type URI.
      * @return This builder.
      */
-    public ProblemDetailsExceptionBuilder withType(URI type) {
+    public ProblemDetailsExceptionBuilder withType(@Nullable URI type) {
         this.type = type;
         return this;
     }
@@ -136,7 +138,7 @@ public class ProblemDetailsExceptionBuilder {
      * @param instance The instance URI.
      * @return This builder.
      */
-    public ProblemDetailsExceptionBuilder withInstance(URI instance) {
+    public ProblemDetailsExceptionBuilder withInstance(@Nullable URI instance) {
         this.instance = instance;
         return this;
     }
@@ -151,7 +153,7 @@ public class ProblemDetailsExceptionBuilder {
      * @param extensionMembers The extension members to use.
      * @return This builder.
      */
-    public ProblemDetailsExceptionBuilder withExtensionMembers(Map<String, Object> extensionMembers) {
+    public ProblemDetailsExceptionBuilder withExtensionMembers(Map<String, @Nullable Object> extensionMembers) {
         Objects.requireNonNull(extensionMembers, "extensionMembers");
         this.extensionMembers.clear();
         for (Map.Entry<String, Object> entry : extensionMembers.entrySet()) {
@@ -171,7 +173,7 @@ public class ProblemDetailsExceptionBuilder {
      * @param value The extension member value.
      * @return This builder.
      */
-    public ProblemDetailsExceptionBuilder addExtensionMember(String name, Object value) {
+    public ProblemDetailsExceptionBuilder addExtensionMember(String name, @Nullable Object value) {
         validateExtensionName(name);
         extensionMembers.put(name, value);
         return this;
@@ -187,42 +189,42 @@ public class ProblemDetailsExceptionBuilder {
     /**
      * @return The title currently configured for the problem, or {@code null}.
      */
-    public String title() {
+    public @Nullable String title() {
         return title;
     }
 
     /**
      * @return The detail currently configured for the problem, or {@code null}.
      */
-    public String detail() {
+    public @Nullable String detail() {
         return detail;
     }
 
     /**
      * @return The cause currently configured for the problem, or {@code null}.
      */
-    public Throwable cause() {
+    public @Nullable Throwable cause() {
         return cause;
     }
 
     /**
      * @return The type URI currently configured for the problem, or {@code null}.
      */
-    public URI type() {
+    public @Nullable URI type() {
         return type;
     }
 
     /**
      * @return The instance URI currently configured for the problem, or {@code null}.
      */
-    public URI instance() {
+    public @Nullable URI instance() {
         return instance;
     }
 
     /**
      * @return The extension members currently configured for the problem.
      */
-    public Map<String, Object> extensionMembers() {
+    public Map<String, @Nullable Object> extensionMembers() {
         return Collections.unmodifiableMap(extensionMembers);
     }
 

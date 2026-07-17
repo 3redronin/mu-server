@@ -2,18 +2,20 @@ package io.muserver.openapi;
 
 import java.util.*;
 
+import org.jspecify.annotations.Nullable;
+
 class OpenApiUtils {
 
     private OpenApiUtils() {}
 
-    static <K, V> Map<K, V> immutable(Map<K, V> map) {
+    static <K, V> @Nullable Map<K, V> immutable(@Nullable Map<K, V> map) {
         if (map == null) {
             return null;
         }
         return Collections.unmodifiableMap(new HashMap<>(map));
     }
 
-    static <T> List<T> immutable(List<T> list) {
+    static <T> @Nullable List<T> immutable(@Nullable List<T> list) {
         if (list == null) {
             return null;
         }

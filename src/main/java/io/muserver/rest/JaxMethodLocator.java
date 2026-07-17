@@ -2,6 +2,8 @@ package io.muserver.rest;
 
 import java.lang.reflect.Method;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Given a Method reference, finds the actual method to load jax-rs annotations from, following the spec section 3.6
  */
@@ -28,7 +30,7 @@ class JaxMethodLocator {
         return start;
     }
 
-    private static Method getMethodIfGood(Method start, Class<?> clazz) {
+    private static @Nullable Method getMethodIfGood(Method start, Class<?> clazz) {
         try {
             Method cur = clazz.getDeclaredMethod(start.getName(), start.getParameterTypes());
             if (JaxClassLocator.hasAtLeastOneJaxRSAnnotation(cur.getDeclaredAnnotations())) {

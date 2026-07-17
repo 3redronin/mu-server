@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.concurrent.TimeUnit;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * <p>An interface for sending Server-Sent Events (SSE) to a client.</p>
  * <p>The following example creates a publisher and publishes 10 messages to it from another thread:</p>
@@ -50,7 +52,7 @@ public interface SsePublisher {
      * @param event An event name. If <code>null</code> is specified, clients default to a message type of <code>message</code>
      * @throws IOException Thrown if there is an error writing to the client, for example if the user has closed their browser.
      */
-    void send(String message, String event) throws IOException;
+    void send(String message, @Nullable String event) throws IOException;
 
     /**
      * <p>Sends a message with an event type and ID.</p>
@@ -67,7 +69,7 @@ public interface SsePublisher {
      *                sent by the browser in the <code>Last-Event-ID</code> request header.
      * @throws IOException Thrown if there is an error writing to the client, for example if the user has closed their browser.
      */
-    void send(String message, String event, String eventID) throws IOException;
+    void send(String message, @Nullable String event, @Nullable String eventID) throws IOException;
 
     /**
      * <p>Stops the event stream.</p>
