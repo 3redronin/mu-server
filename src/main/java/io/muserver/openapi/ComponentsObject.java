@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.IOException;
 import java.io.Writer;
 import java.util.Map;
@@ -12,17 +14,17 @@ import static io.muserver.openapi.Jsonizer.append;
  */
 public class ComponentsObject implements JsonWriter {
 
-    private final Map<String, SchemaObject> schemas;
-    private final Map<String, ResponseObject> responses;
-    private final Map<String, ParameterObject> parameters;
-    private final Map<String, ExampleObject> examples;
-    private final Map<String, RequestBodyObject> requestBodies;
-    private final Map<String, HeaderObject> headers;
-    private final Map<String, SecuritySchemeObject> securitySchemes;
-    private final Map<String, LinkObject> links;
-    private final Map<String, CallbackObject> callbacks;
+    private final @Nullable Map<String, SchemaObject> schemas;
+    private final @Nullable Map<String, ResponseObject> responses;
+    private final @Nullable Map<String, ParameterObject> parameters;
+    private final @Nullable Map<String, ExampleObject> examples;
+    private final @Nullable Map<String, RequestBodyObject> requestBodies;
+    private final @Nullable Map<String, HeaderObject> headers;
+    private final @Nullable Map<String, SecuritySchemeObject> securitySchemes;
+    private final @Nullable Map<String, LinkObject> links;
+    private final @Nullable Map<String, CallbackObject> callbacks;
 
-    ComponentsObject(Map<String, SchemaObject> schemas, Map<String, ResponseObject> responses, Map<String, ParameterObject> parameters, Map<String, ExampleObject> examples, Map<String, RequestBodyObject> requestBodies, Map<String, HeaderObject> headers, Map<String, SecuritySchemeObject> securitySchemes, Map<String, LinkObject> links, Map<String, CallbackObject> callbacks) {
+    ComponentsObject(@Nullable Map<String, SchemaObject> schemas, @Nullable Map<String, ResponseObject> responses, @Nullable Map<String, ParameterObject> parameters, @Nullable Map<String, ExampleObject> examples, @Nullable Map<String, RequestBodyObject> requestBodies, @Nullable Map<String, HeaderObject> headers, @Nullable Map<String, SecuritySchemeObject> securitySchemes, @Nullable Map<String, LinkObject> links, @Nullable Map<String, CallbackObject> callbacks) {
         checkKey(schemas, responses, parameters, examples, requestBodies, headers, securitySchemes, links, callbacks);
         this.schemas = schemas;
         this.responses = responses;
@@ -35,10 +37,10 @@ public class ComponentsObject implements JsonWriter {
         this.callbacks = callbacks;
     }
 
-    private void checkKey(Map<String, ?>... maps) {
+    private void checkKey(@Nullable Map<String, ?>... maps) {
         Pattern keyPattern = Pattern.compile("^[a-zA-Z0-9.\\-_]+$");
 
-        for (Map<String, ?> map : maps) {
+        for (@Nullable Map<String, ?> map : maps) {
             if (map != null) {
                 for (String key : map.keySet()) {
                     if (!keyPattern.matcher(key).matches()) {
@@ -68,63 +70,63 @@ public class ComponentsObject implements JsonWriter {
     /**
      * @return The value described by {@link ComponentsObjectBuilder#withSchemas}
      */
-    public Map<String, SchemaObject> schemas() {
+    public @Nullable Map<String, SchemaObject> schemas() {
         return schemas;
     }
 
     /**
       @return The value described by {@link ComponentsObjectBuilder#withResponses}
      */
-    public Map<String, ResponseObject> responses() {
+    public @Nullable Map<String, ResponseObject> responses() {
         return responses;
     }
 
     /**
       @return The value described by {@link ComponentsObjectBuilder#withParameters}
      */
-    public Map<String, ParameterObject> parameters() {
+    public @Nullable Map<String, ParameterObject> parameters() {
         return parameters;
     }
 
     /**
       @return The value described by {@link ComponentsObjectBuilder#withExamples}
      */
-    public Map<String, ExampleObject> examples() {
+    public @Nullable Map<String, ExampleObject> examples() {
         return examples;
     }
 
     /**
       @return The value described by {@link ComponentsObjectBuilder#withRequestBodies}
      */
-    public Map<String, RequestBodyObject> requestBodies() {
+    public @Nullable Map<String, RequestBodyObject> requestBodies() {
         return requestBodies;
     }
 
     /**
       @return The value described by {@link ComponentsObjectBuilder#withHeaders}
      */
-    public Map<String, HeaderObject> headers() {
+    public @Nullable Map<String, HeaderObject> headers() {
         return headers;
     }
 
     /**
       @return The value described by {@link ComponentsObjectBuilder#withSecuritySchemes}
      */
-    public Map<String, SecuritySchemeObject> securitySchemes() {
+    public @Nullable Map<String, SecuritySchemeObject> securitySchemes() {
         return securitySchemes;
     }
 
     /**
       @return The value described by {@link ComponentsObjectBuilder#withLinks}
      */
-    public Map<String, LinkObject> links() {
+    public @Nullable Map<String, LinkObject> links() {
         return links;
     }
 
     /**
       @return The value described by {@link ComponentsObjectBuilder#withCallbacks}
      */
-    public Map<String, CallbackObject> callbacks() {
+    public @Nullable Map<String, CallbackObject> callbacks() {
         return callbacks;
     }
 }

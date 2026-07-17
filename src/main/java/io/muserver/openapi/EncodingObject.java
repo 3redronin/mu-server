@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.IOException;
 import java.io.Writer;
 import java.util.Map;
@@ -12,13 +14,13 @@ import static io.muserver.openapi.ParameterObject.allowedStyles;
  */
 public class EncodingObject implements JsonWriter {
 
-    private final String contentType;
-    private final Map<String, HeaderObject> headers;
-    private final String style;
-    private final Boolean explode;
-    private final Boolean allowReserved;
+    private final @Nullable String contentType;
+    private final @Nullable Map<String, HeaderObject> headers;
+    private final @Nullable String style;
+    private final @Nullable Boolean explode;
+    private final @Nullable Boolean allowReserved;
 
-    EncodingObject(String contentType, Map<String, HeaderObject> headers, String style, Boolean explode, Boolean allowReserved) {
+    EncodingObject(@Nullable String contentType, @Nullable Map<String, HeaderObject> headers, @Nullable String style, @Nullable Boolean explode, @Nullable Boolean allowReserved) {
         if (style != null && !allowedStyles().contains(style)) {
             throw new IllegalArgumentException("'style' must be one of " + allowedStyles() + " but was " + style);
         }
@@ -44,21 +46,21 @@ public class EncodingObject implements JsonWriter {
     /**
      * @return The value described by {@link EncodingObjectBuilder#withContentType}
      */
-    public String contentType() {
+    public @Nullable String contentType() {
         return contentType;
     }
 
     /**
      * @return The value described by {@link EncodingObjectBuilder#withHeaders}
      */
-    public Map<String, HeaderObject> headers() {
+    public @Nullable Map<String, HeaderObject> headers() {
         return headers;
     }
 
     /**
      * @return The value described by {@link EncodingObjectBuilder#withStyle}
      */
-    public String style() {
+    public @Nullable String style() {
         return style;
     }
 

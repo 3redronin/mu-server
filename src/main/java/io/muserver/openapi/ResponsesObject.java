@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.IOException;
 import java.io.Writer;
 import java.util.Map;
@@ -12,10 +14,10 @@ import static io.muserver.openapi.Jsonizer.append;
  */
 public class ResponsesObject implements JsonWriter {
 
-    private final ResponseObject defaultValue;
+    private final @Nullable ResponseObject defaultValue;
     private final Map<String, ResponseObject> httpStatusCodes;
 
-    ResponsesObject(ResponseObject defaultValue, Map<String, ResponseObject> httpStatusCodes) {
+    ResponsesObject(@Nullable ResponseObject defaultValue, Map<String, ResponseObject> httpStatusCodes) {
         notNull("httpStatusCodes", httpStatusCodes);
         if (httpStatusCodes.isEmpty()) {
             throw new IllegalArgumentException("'httpStatusCodes' must contain at least one value");
@@ -38,7 +40,7 @@ public class ResponsesObject implements JsonWriter {
     /**
      * @return the value described by {@link ResponsesObjectBuilder#withDefaultValue}
      */
-    public ResponseObject defaultValue() {
+    public @Nullable ResponseObject defaultValue() {
         return defaultValue;
     }
 

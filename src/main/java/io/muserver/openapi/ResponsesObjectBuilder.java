@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import io.muserver.Mutils;
 
 import java.util.HashMap;
@@ -19,15 +21,15 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * successful operation call.</p>
  */
 public class ResponsesObjectBuilder {
-    private ResponseObject defaultValue;
-    private Map<String, ResponseObject> httpStatusCodes;
+    private @Nullable ResponseObject defaultValue;
+    private @Nullable Map<String, ResponseObject> httpStatusCodes;
 
     /**
      * @param defaultValue The documentation of responses other than the ones declared for specific HTTP response codes.
      *                     Use this field to cover undeclared responses.
      * @return The current builder
      */
-    public ResponsesObjectBuilder withDefaultValue(ResponseObject defaultValue) {
+    public ResponsesObjectBuilder withDefaultValue(@Nullable ResponseObject defaultValue) {
         this.defaultValue = defaultValue;
         return this;
     }

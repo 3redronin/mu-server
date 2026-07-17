@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.IOException;
 import java.io.Writer;
 import java.util.List;
@@ -14,14 +16,14 @@ import static java.util.stream.Collectors.toSet;
  */
 public class PathItemObject implements JsonWriter {
 
-    private final String summary;
-    private final String description;
-    private final Map<String, OperationObject> operations;
-    private final List<ServerObject> servers;
-    private final List<ParameterObject> parameters;
+    private final @Nullable String summary;
+    private final @Nullable String description;
+    private final @Nullable Map<String, OperationObject> operations;
+    private final @Nullable List<ServerObject> servers;
+    private final @Nullable List<ParameterObject> parameters;
 
-    PathItemObject(String summary, String description, Map<String, OperationObject> operations,
-                          List<ServerObject> servers, List<ParameterObject> parameters) {
+    PathItemObject(@Nullable String summary, @Nullable String description, @Nullable Map<String, OperationObject> operations,
+                          @Nullable List<ServerObject> servers, @Nullable List<ParameterObject> parameters) {
         if (parameters != null) {
             Set<String> nameIns = parameters.stream().map(p -> p.name() + "\0" + p.in()).collect(toSet());
             if (nameIns.size() != parameters.size()) {
@@ -54,35 +56,35 @@ public class PathItemObject implements JsonWriter {
     /**
      * @return the value described by {@link PathItemObjectBuilder#withSummary}
      */
-    public String summary() {
+    public @Nullable String summary() {
         return summary;
     }
 
     /**
       @return the value described by {@link PathItemObjectBuilder#withDescription}
      */
-    public String description() {
+    public @Nullable String description() {
         return description;
     }
 
     /**
       @return the value described by {@link PathItemObjectBuilder#withOperations}
      */
-    public Map<String, OperationObject> operations() {
+    public @Nullable Map<String, OperationObject> operations() {
         return operations;
     }
 
     /**
       @return the value described by {@link PathItemObjectBuilder#withServers}
      */
-    public List<ServerObject> servers() {
+    public @Nullable List<ServerObject> servers() {
         return servers;
     }
 
     /**
       @return the value described by {@link PathItemObjectBuilder#withParameters}
      */
-    public List<ParameterObject> parameters() {
+    public @Nullable List<ParameterObject> parameters() {
         return parameters;
     }
 }

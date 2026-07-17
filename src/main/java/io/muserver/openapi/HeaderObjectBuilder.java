@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.Map;
 
 import static io.muserver.openapi.OpenApiUtils.immutable;
@@ -8,22 +10,22 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * A builder for {@link HeaderObject} objects
  */
 public class HeaderObjectBuilder {
-    private String description;
-    private Boolean required;
-    private Boolean deprecated;
-    private String style;
-    private Boolean explode;
-    private SchemaObject schema;
-    private Object example;
-    private Map<String, ExampleObject> examples;
-    private Map<String, MediaTypeObject> content;
+    private @Nullable String description;
+    private @Nullable Boolean required;
+    private @Nullable Boolean deprecated;
+    private @Nullable String style;
+    private @Nullable Boolean explode;
+    private @Nullable SchemaObject schema;
+    private @Nullable Object example;
+    private @Nullable Map<String, ExampleObject> examples;
+    private @Nullable Map<String, MediaTypeObject> content;
 
     /**
      * @param description A brief description of the header. This could contain examples of use.
      *                    <a href="http://spec.commonmark.org/">CommonMark syntax</a> MAY be used for rich text representation.
      * @return The current builder
      */
-    public HeaderObjectBuilder withDescription(String description) {
+    public HeaderObjectBuilder withDescription(@Nullable String description) {
         this.description = description;
         return this;
     }
@@ -32,7 +34,7 @@ public class HeaderObjectBuilder {
      * @param required Determines whether this header is mandatory. The default value is <code>false</code>.
      * @return The current builder
      */
-    public HeaderObjectBuilder withRequired(Boolean required) {
+    public HeaderObjectBuilder withRequired(@Nullable Boolean required) {
         this.required = required;
         return this;
     }
@@ -41,7 +43,7 @@ public class HeaderObjectBuilder {
      * @param deprecated Specifies that a header is deprecated and SHOULD be transitioned out of usage.
      * @return The current builder
      */
-    public HeaderObjectBuilder withDeprecated(Boolean deprecated) {
+    public HeaderObjectBuilder withDeprecated(@Nullable Boolean deprecated) {
         this.deprecated = deprecated;
         return this;
     }
@@ -69,7 +71,7 @@ public class HeaderObjectBuilder {
      *              </table>
      * @return The current builder
      */
-    public HeaderObjectBuilder withStyle(String style) {
+    public HeaderObjectBuilder withStyle(@Nullable String style) {
         this.style = style;
         return this;
     }
@@ -81,7 +83,7 @@ public class HeaderObjectBuilder {
      *                default value is <code>true</code>. For all other styles, the default value is <code>false</code>.
      * @return The current builder
      */
-    public HeaderObjectBuilder withExplode(Boolean explode) {
+    public HeaderObjectBuilder withExplode(@Nullable Boolean explode) {
         this.explode = explode;
         return this;
     }
@@ -90,7 +92,7 @@ public class HeaderObjectBuilder {
      * @param schema The schema defining the type used for the header.
      * @return The current builder
      */
-    public HeaderObjectBuilder withSchema(SchemaObject schema) {
+    public HeaderObjectBuilder withSchema(@Nullable SchemaObject schema) {
         this.schema = schema;
         return this;
     }
@@ -104,7 +106,7 @@ public class HeaderObjectBuilder {
      *                a string value can contain the example with escaping where necessary.
      * @return The current builder
      */
-    public HeaderObjectBuilder withExample(Object example) {
+    public HeaderObjectBuilder withExample(@Nullable Object example) {
         this.example = example;
         return this;
     }
@@ -117,7 +119,7 @@ public class HeaderObjectBuilder {
      *                 provided by the schema.
      * @return The current builder
      */
-    public HeaderObjectBuilder withExamples(Map<String, ExampleObject> examples) {
+    public HeaderObjectBuilder withExamples(@Nullable Map<String, ExampleObject> examples) {
         this.examples = examples;
         return this;
     }
@@ -127,7 +129,7 @@ public class HeaderObjectBuilder {
      *                The map MUST only contain one entry.
      * @return The current builder
      */
-    public HeaderObjectBuilder withContent(Map<String, MediaTypeObject> content) {
+    public HeaderObjectBuilder withContent(@Nullable Map<String, MediaTypeObject> content) {
         this.content = content;
         return this;
     }

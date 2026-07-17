@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 
 import java.io.IOException;
 import java.io.Writer;
@@ -14,14 +16,15 @@ import static io.muserver.openapi.Jsonizer.append;
 public class InfoObject implements JsonWriter {
 
     private final String title;
-    private final String description;
-    private final URI termsOfService;
-    private final ContactObject contact;
-    private final LicenseObject license;
+    private final @Nullable String description;
+    private final @Nullable URI termsOfService;
+    private final @Nullable ContactObject contact;
+    private final @Nullable LicenseObject license;
     private final String version;
 
 
-    InfoObject(String title, String description, URI termsOfService, ContactObject contact, LicenseObject license, String version) {
+    InfoObject(String title, @Nullable String description, @Nullable URI termsOfService,
+               @Nullable ContactObject contact, @Nullable LicenseObject license, String version) {
         notNull("title", title);
         notNull("version", version);
         this.title = title;
@@ -55,28 +58,28 @@ public class InfoObject implements JsonWriter {
     /**
       @return the value described by {@link InfoObjectBuilder#withDescription}
      */
-    public String description() {
+    public @Nullable String description() {
         return description;
     }
 
     /**
       @return the value described by {@link InfoObjectBuilder#withTermsOfService}
      */
-    public URI termsOfService() {
+    public @Nullable URI termsOfService() {
         return termsOfService;
     }
 
     /**
       @return the value described by {@link InfoObjectBuilder#withContact}
      */
-    public ContactObject contact() {
+    public @Nullable ContactObject contact() {
         return contact;
     }
 
     /**
       @return the value described by {@link InfoObjectBuilder#withLicense}
      */
-    public LicenseObject license() {
+    public @Nullable LicenseObject license() {
         return license;
     }
 

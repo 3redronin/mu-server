@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.IOException;
 import java.io.Writer;
 import java.util.Map;
@@ -12,9 +14,9 @@ import static io.muserver.openapi.Jsonizer.append;
  */
 public class DiscriminatorObject implements JsonWriter {
     private final String propertyName;
-    private final Map<String, String> mapping;
+    private final @Nullable Map<String, String> mapping;
 
-    DiscriminatorObject(String propertyName, Map<String, String> mapping) {
+    DiscriminatorObject(String propertyName, @Nullable Map<String, String> mapping) {
         notNull("propertyName", propertyName);
         this.propertyName = propertyName;
         this.mapping = mapping;
@@ -39,7 +41,7 @@ public class DiscriminatorObject implements JsonWriter {
     /**
       @return The value described by {@link DiscriminatorObjectBuilder#withMapping}
      */
-    public Map<String, String> mapping() {
+    public @Nullable Map<String, String> mapping() {
         return mapping;
     }
 }

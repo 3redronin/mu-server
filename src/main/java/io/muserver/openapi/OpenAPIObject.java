@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.IOException;
 import java.io.Writer;
 import java.util.List;
@@ -13,16 +15,16 @@ import static io.muserver.openapi.Jsonizer.append;
  */
 public class OpenAPIObject implements JsonWriter {
 
-    private final String openapi = "3.0.1";
+    private final @Nullable String openapi = "3.0.1";
     private final InfoObject info;
-    private final List<ServerObject> servers;
+    private final @Nullable List<ServerObject> servers;
     private final PathsObject paths;
-    private final ComponentsObject components;
-    private final List<SecurityRequirementObject> security;
-    private final List<TagObject> tags;
-    private final ExternalDocumentationObject externalDocs;
+    private final @Nullable ComponentsObject components;
+    private final @Nullable List<SecurityRequirementObject> security;
+    private final @Nullable List<TagObject> tags;
+    private final @Nullable ExternalDocumentationObject externalDocs;
 
-    OpenAPIObject(InfoObject info, List<ServerObject> servers, PathsObject paths, ComponentsObject components, List<SecurityRequirementObject> security, List<TagObject> tags, ExternalDocumentationObject externalDocs) {
+    OpenAPIObject(InfoObject info, @Nullable List<ServerObject> servers, PathsObject paths, @Nullable ComponentsObject components, @Nullable List<SecurityRequirementObject> security, @Nullable List<TagObject> tags, @Nullable ExternalDocumentationObject externalDocs) {
         notNull("info", info);
         notNull("paths", paths);
         if (tags != null && tags.size() != tags.stream().map(t -> t.name()).collect(Collectors.toSet()).size()) {
@@ -69,7 +71,7 @@ public class OpenAPIObject implements JsonWriter {
     /**
       @return the value described in {@link OpenAPIObjectBuilder#withServers}
      */
-    public List<ServerObject> servers() {
+    public @Nullable List<ServerObject> servers() {
         return servers;
     }
 
@@ -83,28 +85,28 @@ public class OpenAPIObject implements JsonWriter {
     /**
       @return the value described in {@link OpenAPIObjectBuilder#withComponents}
      */
-    public ComponentsObject components() {
+    public @Nullable ComponentsObject components() {
         return components;
     }
 
     /**
       @return the value described in {@link OpenAPIObjectBuilder#withSecurity}
      */
-    public List<SecurityRequirementObject> security() {
+    public @Nullable List<SecurityRequirementObject> security() {
         return security;
     }
 
     /**
       @return the value described in {@link OpenAPIObjectBuilder#withTags}
      */
-    public List<TagObject> tags() {
+    public @Nullable List<TagObject> tags() {
         return tags;
     }
 
     /**
       @return the value described in {@link OpenAPIObjectBuilder#withExternalDocs}
      */
-    public ExternalDocumentationObject externalDocs() {
+    public @Nullable ExternalDocumentationObject externalDocs() {
         return externalDocs;
     }
 }

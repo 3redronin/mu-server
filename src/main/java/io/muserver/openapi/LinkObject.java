@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.IOException;
 import java.io.Writer;
 import java.util.Map;
@@ -11,13 +13,13 @@ import static io.muserver.openapi.Jsonizer.append;
  */
 public class LinkObject implements JsonWriter {
 
-    private final String operationId;
-    private final Map<String, Object> parameters;
-    private final Object requestBody;
-    private final String description;
-    private final ServerObject server;
+    private final @Nullable String operationId;
+    private final @Nullable Map<String, Object> parameters;
+    private final @Nullable Object requestBody;
+    private final @Nullable String description;
+    private final @Nullable ServerObject server;
 
-    LinkObject(String operationId, Map<String, Object> parameters, Object requestBody, String description, ServerObject server) {
+    LinkObject(@Nullable String operationId, @Nullable Map<String, Object> parameters, @Nullable Object requestBody, @Nullable String description, @Nullable ServerObject server) {
         this.operationId = operationId;
         this.parameters = parameters;
         this.requestBody = requestBody;
@@ -40,35 +42,35 @@ public class LinkObject implements JsonWriter {
     /**
      * @return the value described by {@link LinkObjectBuilder#withOperationId}
      */
-    public String operationId() {
+    public @Nullable String operationId() {
         return operationId;
     }
 
     /**
       @return the value described by {@link LinkObjectBuilder#withParameters}
      */
-    public Map<String, Object> parameters() {
+    public @Nullable Map<String, Object> parameters() {
         return parameters;
     }
 
     /**
       @return the value described by {@link LinkObjectBuilder#withRequestBody}
      */
-    public Object requestBody() {
+    public @Nullable Object requestBody() {
         return requestBody;
     }
 
     /**
       @return the value described by {@link LinkObjectBuilder#withDescription}
      */
-    public String description() {
+    public @Nullable String description() {
         return description;
     }
 
     /**
       @return the value described by {@link LinkObjectBuilder#withServer}
      */
-    public ServerObject server() {
+    public @Nullable ServerObject server() {
         return server;
     }
 }

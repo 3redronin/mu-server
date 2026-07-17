@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.List;
 import java.util.Map;
 
@@ -9,24 +11,24 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * Describes a single API operation on a path.
  */
 public class OperationObjectBuilder {
-    private List<String> tags;
-    private String summary;
-    private String description;
-    private ExternalDocumentationObject externalDocs;
-    private String operationId;
-    private List<ParameterObject> parameters;
-    private RequestBodyObject requestBody;
-    private ResponsesObject responses;
-    private Map<String, CallbackObject> callbacks;
-    private Boolean deprecated;
-    private List<SecurityRequirementObject> security;
-    private List<ServerObject> servers;
+    private @Nullable List<String> tags;
+    private @Nullable String summary;
+    private @Nullable String description;
+    private @Nullable ExternalDocumentationObject externalDocs;
+    private @Nullable String operationId;
+    private @Nullable List<ParameterObject> parameters;
+    private @Nullable RequestBodyObject requestBody;
+    private @Nullable ResponsesObject responses;
+    private @Nullable Map<String, CallbackObject> callbacks;
+    private @Nullable Boolean deprecated;
+    private @Nullable List<SecurityRequirementObject> security;
+    private @Nullable List<ServerObject> servers;
 
     /**
      * @param tags A list of tags for API documentation control. Tags can be used for logical grouping of operations by resources or any other qualifier.
      * @return The current builder
      */
-    public OperationObjectBuilder withTags(List<String> tags) {
+    public OperationObjectBuilder withTags(@Nullable List<String> tags) {
         this.tags = tags;
         return this;
     }
@@ -35,7 +37,7 @@ public class OperationObjectBuilder {
      * @param summary A short summary of what the operation does.
      * @return The current builder
      */
-    public OperationObjectBuilder withSummary(String summary) {
+    public OperationObjectBuilder withSummary(@Nullable String summary) {
         this.summary = summary;
         return this;
     }
@@ -45,7 +47,7 @@ public class OperationObjectBuilder {
      *                    <a href="http://spec.commonmark.org/">CommonMark syntax</a> MAY be used for rich text representation.
      * @return The current builder
      */
-    public OperationObjectBuilder withDescription(String description) {
+    public OperationObjectBuilder withDescription(@Nullable String description) {
         this.description = description;
         return this;
     }
@@ -54,7 +56,7 @@ public class OperationObjectBuilder {
      * @param externalDocs Additional external documentation for this operation.
      * @return The current builder
      */
-    public OperationObjectBuilder withExternalDocs(ExternalDocumentationObject externalDocs) {
+    public OperationObjectBuilder withExternalDocs(@Nullable ExternalDocumentationObject externalDocs) {
         this.externalDocs = externalDocs;
         return this;
     }
@@ -65,7 +67,7 @@ public class OperationObjectBuilder {
      *                    operation, therefore, it is RECOMMENDED to follow common programming naming conventions.
      * @return The current builder
      */
-    public OperationObjectBuilder withOperationId(String operationId) {
+    public OperationObjectBuilder withOperationId(@Nullable String operationId) {
         this.operationId = operationId;
         return this;
     }
@@ -77,7 +79,7 @@ public class OperationObjectBuilder {
      *                   of a name and location.
      * @return The current builder
      */
-    public OperationObjectBuilder withParameters(List<ParameterObject> parameters) {
+    public OperationObjectBuilder withParameters(@Nullable List<ParameterObject> parameters) {
         this.parameters = parameters;
         return this;
     }
@@ -90,7 +92,7 @@ public class OperationObjectBuilder {
      *                    <code>requestBody</code> SHALL be ignored by consumers.
      * @return The current builder
      */
-    public OperationObjectBuilder withRequestBody(RequestBodyObject requestBody) {
+    public OperationObjectBuilder withRequestBody(@Nullable RequestBodyObject requestBody) {
         this.requestBody = requestBody;
         return this;
     }
@@ -112,7 +114,7 @@ public class OperationObjectBuilder {
      *                  that identifies a URL to use for the callback operation.
      * @return The current builder
      */
-    public OperationObjectBuilder withCallbacks(Map<String, CallbackObject> callbacks) {
+    public OperationObjectBuilder withCallbacks(@Nullable Map<String, CallbackObject> callbacks) {
         this.callbacks = callbacks;
         return this;
     }
@@ -121,7 +123,7 @@ public class OperationObjectBuilder {
      * @param deprecated Declares this operation to be deprecated. Consumers SHOULD refrain from usage of the declared operation. Default value is <code>false</code>.
      * @return The current builder
      */
-    public OperationObjectBuilder withDeprecated(Boolean deprecated) {
+    public OperationObjectBuilder withDeprecated(@Nullable Boolean deprecated) {
         this.deprecated = deprecated;
         return this;
     }
@@ -134,7 +136,7 @@ public class OperationObjectBuilder {
      *                 can be used.
      * @return The current builder
      */
-    public OperationObjectBuilder withSecurity(List<SecurityRequirementObject> security) {
+    public OperationObjectBuilder withSecurity(@Nullable List<SecurityRequirementObject> security) {
         this.security = security;
         return this;
     }
@@ -145,7 +147,7 @@ public class OperationObjectBuilder {
      *                overridden by this value.
      * @return The current builder
      */
-    public OperationObjectBuilder withServers(List<ServerObject> servers) {
+    public OperationObjectBuilder withServers(@Nullable List<ServerObject> servers) {
         this.servers = servers;
         return this;
     }
