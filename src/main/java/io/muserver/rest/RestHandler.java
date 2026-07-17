@@ -260,7 +260,7 @@ public class RestHandler implements MuHandler {
                         if (status != 204 && status != 304 && status != 205) {
                             jaxRSResponse.getHeaders().putSingle("content-length", "0");
                         }
-                        MuRuntimeDelegate.writeResponseHeaders(requestContext.muRequest.uri(), jaxRSResponse, muResponse, isHttp1);
+                        MuRuntimeDelegate.writeResponseHeaders(requestContext.getUriInfo().getBaseUri(), jaxRSResponse, muResponse, isHttp1);
                     } else {
 
                         MediaType responseMediaType = jaxRSResponse.getMediaType();
@@ -282,7 +282,7 @@ public class RestHandler implements MuHandler {
                         }
                         jaxRSResponse.getHeaders().putSingle("content-type", contentType);
 
-                        MuRuntimeDelegate.writeResponseHeaders(requestContext.muRequest.uri(), jaxRSResponse, muResponse, isHttp1);
+                        MuRuntimeDelegate.writeResponseHeaders(requestContext.getUriInfo().getBaseUri(), jaxRSResponse, muResponse, isHttp1);
 
                         try {
                             messageBodyWriter.writeTo(jaxRSResponse.getEntity(), jaxRSResponse.getType(), jaxRSResponse.getGenericType(), writerAnnontations,
