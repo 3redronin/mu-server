@@ -38,6 +38,7 @@ public class MuServerBuilder {
     private @Nullable ExecutorService executor;
     private long maxRequestSize = 24 * 1024 * 1024;
     private @Nullable List<ResponseCompleteListener> responseCompleteListeners;
+    private @Nullable List<RequestRejectListener> requestRejectListeners;
     @Nullable List<RateLimiterImpl> rateLimiters;
     private @Nullable UnhandledExceptionHandler unhandledExceptionHandler;
     private boolean autoHandleExpectContinue = true;
@@ -353,6 +354,25 @@ public class MuServerBuilder {
         return this;
     }
 
+    /**
+     * Adds a listener that is notified when a request is rejected at the protocol level before it
+     * becomes a normal request/response exchange (for example a <code>431</code> when the request
+     * headers are too large). Such rejections are never reported to
+     * {@link #addResponseCompleteListener(ResponseCompleteListener)}.
+     *
+     * @param listener A listener. If <code>null</code>, then nothing is added.
+     * @return Returns the server builder
+     */
+    public MuServerBuilder addRequestRejectListener(@Nullable RequestRejectListener listener) {
+        if (listener != null) {
+            if (this.requestRejectListeners == null) {
+                this.requestRejectListeners = new ArrayList<>();
+            }
+            this.requestRejectListeners.add(listener);
+        }
+        return this;
+    }
+
 
     /**
      * <p>Adds a rate limiter to incoming requests.</p>
@@ -545,6 +565,13 @@ public class MuServerBuilder {
     /**
      * @return The current value of this property
      */
+    public List<RequestRejectListener> requestRejectListeners() {
+        return requestRejectListeners == null ? Collections.emptyList() : Collections.unmodifiableList(requestRejectListeners);
+    }
+
+    /**
+     * @return The current value of this property
+     */
     public List<RateLimiter> rateLimiters() {
         var rl = rateLimiters;
         if (rl == null) {
@@ -621,6 +648,7 @@ public class MuServerBuilder {
             ", executor=" + executor +
             ", maxRequestSize=" + maxRequestSize +
             ", responseCompleteListeners=" + responseCompleteListeners +
+            ", requestRejectListeners=" + requestRejectListeners +
             ", rateLimiters=" + rateLimiters +
             '}';
     }

@@ -636,6 +636,10 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
             }
         } catch (HttpException e) {
             // return an http response
+            // The header block could not be decoded (for example a 431 rejected during HPACK
+            // decoding), so the method and target are not available here.
+            String rejectReason = e.getMessage() != null ? e.getMessage() : e.status().toString();
+            server.onRequestRejected(new RejectedRequestImpl(e.status().code(), rejectReason, null, null, this));
             FieldBlock errorHeaders = new FieldBlock();
             errorHeaders.add(HeaderNames.PSEUDO_STATUS, e.status());
             errorHeaders.add(e.responseHeaders());
