@@ -1,21 +1,23 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.net.URI;
 
 /**
  * A builder for {@link ExampleObject} objects
  */
 public class ExampleObjectBuilder {
-    private String summary;
-    private String description;
-    private Object value;
-    private URI externalValue;
+    private @Nullable String summary;
+    private @Nullable String description;
+    private @Nullable Object value;
+    private @Nullable URI externalValue;
 
     /**
      * @param summary Short description for the example.
      * @return The current builder
      */
-    public ExampleObjectBuilder withSummary(String summary) {
+    public ExampleObjectBuilder withSummary(@Nullable String summary) {
         this.summary = summary;
         return this;
     }
@@ -25,7 +27,7 @@ public class ExampleObjectBuilder {
      *                    MAY be used for rich text representation.
      * @return The current builder
      */
-    public ExampleObjectBuilder withDescription(String description) {
+    public ExampleObjectBuilder withDescription(@Nullable String description) {
         this.description = description;
         return this;
     }
@@ -36,7 +38,7 @@ public class ExampleObjectBuilder {
      *              a string value to contain the example, escaping where necessary.
      * @return The current builder
      */
-    public ExampleObjectBuilder withValue(Object value) {
+    public ExampleObjectBuilder withValue(@Nullable Object value) {
         this.value = value;
         return this;
     }
@@ -47,7 +49,7 @@ public class ExampleObjectBuilder {
      *                      and <code>externalValue</code> field are mutually exclusive.
      * @return The current builder
      */
-    public ExampleObjectBuilder withExternalValue(URI externalValue) {
+    public ExampleObjectBuilder withExternalValue(@Nullable URI externalValue) {
         this.externalValue = externalValue;
         return this;
     }

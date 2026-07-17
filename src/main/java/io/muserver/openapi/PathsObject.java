@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.IOException;
 import java.io.Writer;
 import java.util.*;
@@ -10,9 +12,9 @@ import java.util.stream.Collectors;
  */
 public class PathsObject implements JsonWriter {
 
-    private final Map<String, PathItemObject> pathItemObjects;
+    private final @Nullable Map<String, PathItemObject> pathItemObjects;
 
-    PathsObject(Map<String, PathItemObject> pathItemObjects) {
+    PathsObject(@Nullable Map<String, PathItemObject> pathItemObjects) {
         if (pathItemObjects != null) {
             for (String path : pathItemObjects.keySet()) {
                 if (!path.startsWith("/")) {
@@ -59,7 +61,7 @@ public class PathsObject implements JsonWriter {
     /**
      * @return the value described by {@link PathsObjectBuilder#withPathItemObjects}
      */
-    public Map<String, PathItemObject> pathItemObjects() {
+    public @Nullable Map<String, PathItemObject> pathItemObjects() {
         return pathItemObjects;
     }
 }

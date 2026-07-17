@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.IOException;
 import java.io.Writer;
 import java.util.Map;
@@ -13,11 +15,11 @@ import static io.muserver.openapi.Jsonizer.append;
 public class ResponseObject implements JsonWriter {
 
     private final String description;
-    private final Map<String, HeaderObject> headers;
-    private final Map<String, MediaTypeObject> content;
-    private final Map<String, LinkObject> links;
+    private final @Nullable Map<String, HeaderObject> headers;
+    private final @Nullable Map<String, MediaTypeObject> content;
+    private final @Nullable Map<String, LinkObject> links;
 
-    ResponseObject(String description, Map<String, HeaderObject> headers, Map<String, MediaTypeObject> content, Map<String, LinkObject> links) {
+    ResponseObject(String description, @Nullable Map<String, HeaderObject> headers, @Nullable Map<String, MediaTypeObject> content, @Nullable Map<String, LinkObject> links) {
         notNull("description", description);
         this.description = description;
         this.headers = headers;
@@ -46,21 +48,21 @@ public class ResponseObject implements JsonWriter {
     /**
       @return the value described by {@link ResponseObjectBuilder#withHeaders}
      */
-    public Map<String, HeaderObject> headers() {
+    public @Nullable Map<String, HeaderObject> headers() {
         return headers;
     }
 
     /**
       @return the value described by {@link ResponseObjectBuilder#withContent}
      */
-    public Map<String, MediaTypeObject> content() {
+    public @Nullable Map<String, MediaTypeObject> content() {
         return content;
     }
 
     /**
       @return the value described by {@link ResponseObjectBuilder#withLinks}
      */
-    public Map<String, LinkObject> links() {
+    public @Nullable Map<String, LinkObject> links() {
         return links;
     }
 }

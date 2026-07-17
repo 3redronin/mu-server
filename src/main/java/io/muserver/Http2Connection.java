@@ -516,12 +516,12 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
     }
 
     @Override
-    public String httpsProtocol() {
+    public @Nullable String httpsProtocol() {
         return Http1Connection.getSslSession(nettyContext).getProtocol();
     }
 
     @Override
-    public String cipher() {
+    public @Nullable String cipher() {
         return Http1Connection.getSslSession(nettyContext).getCipherSuite();
     }
 

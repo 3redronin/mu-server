@@ -1,5 +1,7 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
+
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
@@ -223,12 +225,12 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
     }
 
     @Override
-    public String httpsProtocol() {
+    public @Nullable String httpsProtocol() {
         return isHttps() ? getSslSession(nettyCtx).getProtocol() : null;
     }
 
     @Override
-    public String cipher() {
+    public @Nullable String cipher() {
         return isHttps() ? getSslSession(nettyCtx).getCipherSuite() : null;
     }
 

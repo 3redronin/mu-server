@@ -1,13 +1,15 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Adds metadata to a single tag that is used by the {@link OperationObject}. It is not mandatory to have a Tag Object
  * per tag defined in the Operation Object instances.
  */
 public class TagObjectBuilder {
-    private String name;
-    private String description;
-    private ExternalDocumentationObject externalDocs;
+    private @Nullable String name;
+    private @Nullable String description;
+    private @Nullable ExternalDocumentationObject externalDocs;
 
     /**
      * @param name REQUIRED. The name of the tag.
@@ -22,7 +24,7 @@ public class TagObjectBuilder {
      * @param description A short description for the tag. CommonMark syntax MAY be used for rich text representation.
      * @return The current builder
      */
-    public TagObjectBuilder withDescription(String description) {
+    public TagObjectBuilder withDescription(@Nullable String description) {
         this.description = description;
         return this;
     }
@@ -31,7 +33,7 @@ public class TagObjectBuilder {
      * @param externalDocs Additional external documentation for this tag.
      * @return The current builder
      */
-    public TagObjectBuilder withExternalDocs(ExternalDocumentationObject externalDocs) {
+    public TagObjectBuilder withExternalDocs(@Nullable ExternalDocumentationObject externalDocs) {
         this.externalDocs = externalDocs;
         return this;
     }

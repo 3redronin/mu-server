@@ -373,7 +373,7 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
      *
      * @return The media type of the content specified by the headers, or <code>null</code> if not set.
      */
-    MediaType contentType();
+    @Nullable MediaType contentType();
 
     /**
      * Returns a string representation of the headers.

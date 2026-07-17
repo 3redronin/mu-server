@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.IOException;
 import java.io.Writer;
 import java.net.URI;
@@ -11,10 +13,10 @@ import static io.muserver.openapi.Jsonizer.append;
  * @see ExternalDocumentationObjectBuilder
  */
 public class ExternalDocumentationObject implements JsonWriter {
-    private final String description;
+    private final @Nullable String description;
     private final URI url;
 
-    ExternalDocumentationObject(String description, URI url) {
+    ExternalDocumentationObject(@Nullable String description, URI url) {
         notNull("url", url);
         this.description = description;
         this.url = url;
@@ -32,7 +34,7 @@ public class ExternalDocumentationObject implements JsonWriter {
     /**
      * @return the value described by {@link ExternalDocumentationObjectBuilder#withDescription}
      */
-    public String description() {
+    public @Nullable String description() {
         return description;
     }
 

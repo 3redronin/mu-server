@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.HashMap;
 import java.util.Map;
 
@@ -10,10 +12,10 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * based on the response.</p>
  */
 public class ResponseObjectBuilder {
-    private String description;
-    private Map<String, HeaderObject> headers;
-    private Map<String, MediaTypeObject> content;
-    private Map<String, LinkObject> links;
+    private @Nullable String description;
+    private @Nullable Map<String, HeaderObject> headers;
+    private @Nullable Map<String, MediaTypeObject> content;
+    private @Nullable Map<String, LinkObject> links;
 
     /**
      * @param description <strong>REQUIRED</strong>. A short description of the response.
@@ -31,7 +33,7 @@ public class ResponseObjectBuilder {
      *                <code>"Content-Type"</code>, it SHALL be ignored.
      * @return The current builder
      */
-    public ResponseObjectBuilder withHeaders(Map<String, HeaderObject> headers) {
+    public ResponseObjectBuilder withHeaders(@Nullable Map<String, HeaderObject> headers) {
         this.headers = headers;
         return this;
     }
@@ -43,7 +45,7 @@ public class ResponseObjectBuilder {
      *                e.g. text/plain overrides text/*
      * @return The current builder
      */
-    public ResponseObjectBuilder withContent(Map<String, MediaTypeObject> content) {
+    public ResponseObjectBuilder withContent(@Nullable Map<String, MediaTypeObject> content) {
         this.content = content;
         return this;
     }
@@ -52,7 +54,7 @@ public class ResponseObjectBuilder {
      * @param links A map of operations links that can be followed from the response.
      * @return The current builder
      */
-    public ResponseObjectBuilder withLinks(Map<String, LinkObject> links) {
+    public ResponseObjectBuilder withLinks(@Nullable Map<String, LinkObject> links) {
         this.links = links;
         return this;
     }
@@ -80,7 +82,7 @@ public class ResponseObjectBuilder {
      * @param secondary The other responses object
      * @return A builder that is the merged value of the two given ones
      */
-    public static ResponseObjectBuilder mergeResponses(ResponseObject primary, ResponseObject secondary) {
+    public static ResponseObjectBuilder mergeResponses(@Nullable ResponseObject primary, @Nullable ResponseObject secondary) {
 
 
         Map<String, HeaderObject> mergedHeaders = new HashMap<>();
@@ -95,14 +97,15 @@ public class ResponseObjectBuilder {
         addLinks(mergedLinks, primary);
         addLinks(mergedLinks, secondary);
 
-        return responseObject()
-            .withDescription(primary != null ? primary.description() : secondary != null ? secondary.description() : null)
+        ResponseObjectBuilder builder = responseObject()
             .withHeaders(mergedHeaders.isEmpty() ? null : mergedHeaders)
             .withContent(mergedContent.isEmpty() ? null : mergedContent)
             .withLinks(mergedLinks.isEmpty() ? null : mergedLinks);
+        String description = primary != null ? primary.description() : secondary != null ? secondary.description() : null;
+        return description == null ? builder : builder.withDescription(description);
     }
 
-    private static void addLinks(Map<String, LinkObject> dest, ResponseObject source) {
+    private static void addLinks(Map<String, LinkObject> dest, @Nullable ResponseObject source) {
         if (source != null && source.links() != null) {
             for (Map.Entry<String, LinkObject> entry : source.links().entrySet()) {
                 String name = entry.getKey();
@@ -113,7 +116,7 @@ public class ResponseObjectBuilder {
         }
     }
 
-    private static void addContent(Map<String, MediaTypeObject> dest, ResponseObject source) {
+    private static void addContent(Map<String, MediaTypeObject> dest, @Nullable ResponseObject source) {
         if (source != null && source.content() != null) {
             for (Map.Entry<String, MediaTypeObject> entry : source.content().entrySet()) {
                 String name = entry.getKey();
@@ -124,7 +127,7 @@ public class ResponseObjectBuilder {
         }
     }
 
-    private static void addHeaders(Map<String, HeaderObject> dest, ResponseObject source) {
+    private static void addHeaders(Map<String, HeaderObject> dest, @Nullable ResponseObject source) {
         if (source != null && source.headers() != null) {
             for (Map.Entry<String, HeaderObject> entry : source.headers().entrySet()) {
                 String name = entry.getKey();

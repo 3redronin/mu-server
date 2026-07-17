@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.IOException;
 import java.io.Writer;
 import java.util.Map;
@@ -9,12 +11,12 @@ import java.util.Map;
  */
 public class MediaTypeObject implements JsonWriter {
 
-    private final SchemaObject schema;
-    private final Object example;
-    private final Map<String, ExampleObject> examples;
-    private final Map<String, EncodingObject> encoding;
+    private final @Nullable SchemaObject schema;
+    private final @Nullable Object example;
+    private final @Nullable Map<String, ExampleObject> examples;
+    private final @Nullable Map<String, EncodingObject> encoding;
 
-    MediaTypeObject(SchemaObject schema, Object example, Map<String, ExampleObject> examples, Map<String, EncodingObject> encoding) {
+    MediaTypeObject(@Nullable SchemaObject schema, @Nullable Object example, @Nullable Map<String, ExampleObject> examples, @Nullable Map<String, EncodingObject> encoding) {
         if (example != null && examples != null) {
             throw new IllegalArgumentException("Only one of 'example' and 'examples' can be supplied");
         }
@@ -38,28 +40,28 @@ public class MediaTypeObject implements JsonWriter {
     /**
      * @return the value described by {@link MediaTypeObjectBuilder#withSchema}
      */
-    public SchemaObject schema() {
+    public @Nullable SchemaObject schema() {
         return schema;
     }
 
     /**
       @return the value described by {@link MediaTypeObjectBuilder#withExample}
      */
-    public Object example() {
+    public @Nullable Object example() {
         return example;
     }
 
     /**
       @return the value described by {@link MediaTypeObjectBuilder#withExamples}
      */
-    public Map<String, ExampleObject> examples() {
+    public @Nullable Map<String, ExampleObject> examples() {
         return examples;
     }
 
     /**
       @return the value described by {@link MediaTypeObjectBuilder#withEncoding}
      */
-    public Map<String, EncodingObject> encoding() {
+    public @Nullable Map<String, EncodingObject> encoding() {
         return encoding;
     }
 }

@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.IOException;
 import java.io.Writer;
 import java.util.ArrayList;
@@ -15,43 +17,56 @@ import static io.muserver.openapi.Jsonizer.append;
  */
 public class SchemaObject implements JsonWriter {
 
-    private final String title;
-    private final Double multipleOf;
-    private final Double maximum;
-    private final Boolean exclusiveMaximum;
-    private final Double minimum;
-    private final Boolean exclusiveMinimum;
-    private final Integer maxLength;
-    private final Integer minLength;
-    private final Pattern pattern;
-    private final Integer maxItems;
-    private final Integer minItems;
-    private final Boolean uniqueItems;
-    private final Integer maxProperties;
-    private final Integer minProperties;
-    private final List<String> required;
-    private final List<Object> enumValue;
-    private final String type;
-    private final List<SchemaObject> allOf;
-    private final List<SchemaObject> oneOf;
-    private final List<SchemaObject> anyOf;
-    private final List<SchemaObject> not;
-    private final SchemaObject items;
-    private final Map<String, SchemaObject> properties;
-    private final Object additionalProperties;
-    private final String description;
-    private final String format;
-    private final Object defaultValue;
-    private final Boolean nullable;
-    private final DiscriminatorObject discriminator;
-    private final Boolean readOnly;
-    private final Boolean writeOnly;
-    private final XmlObject xml;
-    private final ExternalDocumentationObject externalDocs;
-    private final Object example;
-    private final Boolean deprecated;
+    private final @Nullable String title;
+    private final @Nullable Double multipleOf;
+    private final @Nullable Double maximum;
+    private final @Nullable Boolean exclusiveMaximum;
+    private final @Nullable Double minimum;
+    private final @Nullable Boolean exclusiveMinimum;
+    private final @Nullable Integer maxLength;
+    private final @Nullable Integer minLength;
+    private final @Nullable Pattern pattern;
+    private final @Nullable Integer maxItems;
+    private final @Nullable Integer minItems;
+    private final @Nullable Boolean uniqueItems;
+    private final @Nullable Integer maxProperties;
+    private final @Nullable Integer minProperties;
+    private final @Nullable List<String> required;
+    private final @Nullable List<Object> enumValue;
+    private final @Nullable String type;
+    private final @Nullable List<SchemaObject> allOf;
+    private final @Nullable List<SchemaObject> oneOf;
+    private final @Nullable List<SchemaObject> anyOf;
+    private final @Nullable List<SchemaObject> not;
+    private final @Nullable SchemaObject items;
+    private final @Nullable Map<String, SchemaObject> properties;
+    private final @Nullable Object additionalProperties;
+    private final @Nullable String description;
+    private final @Nullable String format;
+    private final @Nullable Object defaultValue;
+    private final @Nullable Boolean nullable;
+    private final @Nullable DiscriminatorObject discriminator;
+    private final @Nullable Boolean readOnly;
+    private final @Nullable Boolean writeOnly;
+    private final @Nullable XmlObject xml;
+    private final @Nullable ExternalDocumentationObject externalDocs;
+    private final @Nullable Object example;
+    private final @Nullable Boolean deprecated;
 
-    SchemaObject(String title, Double multipleOf, Double maximum, Boolean exclusiveMaximum, Double minimum, Boolean exclusiveMinimum, Integer maxLength, Integer minLength, Pattern pattern, Integer maxItems, Integer minItems, Boolean uniqueItems, Integer maxProperties, Integer minProperties, List<String> required, List<Object> enumValue, String type, List<SchemaObject> allOf, List<SchemaObject> oneOf, List<SchemaObject> anyOf, List<SchemaObject> not, SchemaObject items, Map<String, SchemaObject> properties, Object additionalProperties, String description, String format, Object defaultValue, Boolean nullable, DiscriminatorObject discriminator, Boolean readOnly, Boolean writeOnly, XmlObject xml, ExternalDocumentationObject externalDocs, Object example, Boolean deprecated) {
+    SchemaObject(@Nullable String title, @Nullable Double multipleOf, @Nullable Double maximum,
+                 @Nullable Boolean exclusiveMaximum, @Nullable Double minimum, @Nullable Boolean exclusiveMinimum,
+                 @Nullable Integer maxLength, @Nullable Integer minLength, @Nullable Pattern pattern,
+                 @Nullable Integer maxItems, @Nullable Integer minItems, @Nullable Boolean uniqueItems,
+                 @Nullable Integer maxProperties, @Nullable Integer minProperties, @Nullable List<String> required,
+                 @Nullable List<Object> enumValue, @Nullable String type, @Nullable List<SchemaObject> allOf,
+                 @Nullable List<SchemaObject> oneOf, @Nullable List<SchemaObject> anyOf,
+                 @Nullable List<SchemaObject> not, @Nullable SchemaObject items,
+                 @Nullable Map<String, SchemaObject> properties, @Nullable Object additionalProperties,
+                 @Nullable String description, @Nullable String format, @Nullable Object defaultValue,
+                 @Nullable Boolean nullable, @Nullable DiscriminatorObject discriminator, @Nullable Boolean readOnly,
+                 @Nullable Boolean writeOnly, @Nullable XmlObject xml,
+                 @Nullable ExternalDocumentationObject externalDocs, @Nullable Object example,
+                 @Nullable Boolean deprecated) {
         if (readOnly != null && readOnly && writeOnly != null && writeOnly) {
             throw new IllegalArgumentException("A schema cannot be both read only and write only");
         }
@@ -136,7 +151,7 @@ public class SchemaObject implements JsonWriter {
         isFirst = append(writer, "minProperties", minProperties, isFirst);
         isFirst = append(writer, "required", required, isFirst);
         if (this.enumValue != null) {
-            List<String> enums = new ArrayList<>();
+            List<@Nullable String> enums = new ArrayList<>();
             if (nullable != null && nullable) {
                 enums.add(null);
             }
@@ -260,245 +275,245 @@ public class SchemaObject implements JsonWriter {
     /**
      * @return the value described by {@link SchemaObjectBuilder#withTitle}
      */
-    public String title() {
+    public @Nullable String title() {
         return title;
     }
 
     /**
      * @return the value described by {@link SchemaObjectBuilder#withMultipleOf}
      */
-    public Double multipleOf() {
+    public @Nullable Double multipleOf() {
         return multipleOf;
     }
 
     /**
      * @return the value described by {@link SchemaObjectBuilder#withMaximum}
      */
-    public Double maximum() {
+    public @Nullable Double maximum() {
         return maximum;
     }
 
     /**
      * @return the value described by {@link SchemaObjectBuilder#withExclusiveMaximum}
      */
-    public Boolean exclusiveMaximum() {
+    public @Nullable Boolean exclusiveMaximum() {
         return exclusiveMaximum;
     }
 
     /**
      * @return the value described by {@link SchemaObjectBuilder#withMinimum}
      */
-    public Double minimum() {
+    public @Nullable Double minimum() {
         return minimum;
     }
 
     /**
      * @return the value described by {@link SchemaObjectBuilder#withExclusiveMinimum}
      */
-    public Boolean exclusiveMinimum() {
+    public @Nullable Boolean exclusiveMinimum() {
         return exclusiveMinimum;
     }
 
     /**
      * @return the value described by {@link SchemaObjectBuilder#withMaxLength}
      */
-    public Integer maxLength() {
+    public @Nullable Integer maxLength() {
         return maxLength;
     }
 
     /**
      * @return the value described by {@link SchemaObjectBuilder#withMinLength}
      */
-    public Integer minLength() {
+    public @Nullable Integer minLength() {
         return minLength;
     }
 
     /**
      * @return the value described by {@link SchemaObjectBuilder#withPattern}
      */
-    public Pattern pattern() {
+    public @Nullable Pattern pattern() {
         return pattern;
     }
 
     /**
      * @return the value described by {@link SchemaObjectBuilder#withMaxItems}
      */
-    public Integer maxItems() {
+    public @Nullable Integer maxItems() {
         return maxItems;
     }
 
     /**
      * @return the value described by {@link SchemaObjectBuilder#withMinItems}
      */
-    public Integer minItems() {
+    public @Nullable Integer minItems() {
         return minItems;
     }
 
     /**
      * @return the value described by {@link SchemaObjectBuilder#withUniqueItems}
      */
-    public Boolean uniqueItems() {
+    public @Nullable Boolean uniqueItems() {
         return uniqueItems;
     }
 
     /**
      * @return the value described by {@link SchemaObjectBuilder#withMaxProperties}
      */
-    public Integer maxProperties() {
+    public @Nullable Integer maxProperties() {
         return maxProperties;
     }
 
     /**
      * @return the value described by {@link SchemaObjectBuilder#withMinProperties}
      */
-    public Integer minProperties() {
+    public @Nullable Integer minProperties() {
         return minProperties;
     }
 
     /**
      * @return the value described by {@link SchemaObjectBuilder#withRequired}
      */
-    public List<String> required() {
+    public @Nullable List<String> required() {
         return required;
     }
 
     /**
      * @return the value described by {@link SchemaObjectBuilder#withEnumValue}
      */
-    public List<Object> enumValue() {
+    public @Nullable List<Object> enumValue() {
         return enumValue;
     }
 
     /**
      * @return the value described by {@link SchemaObjectBuilder#withType}
      */
-    public String type() {
+    public @Nullable String type() {
         return type;
     }
 
     /**
      * @return the value described by {@link SchemaObjectBuilder#withAllOf}
      */
-    public List<SchemaObject> allOf() {
+    public @Nullable List<SchemaObject> allOf() {
         return allOf;
     }
 
     /**
      * @return the value described by {@link SchemaObjectBuilder#withOneOf}
      */
-    public List<SchemaObject> oneOf() {
+    public @Nullable List<SchemaObject> oneOf() {
         return oneOf;
     }
 
     /**
      * @return the value described by {@link SchemaObjectBuilder#withAnyOf}
      */
-    public List<SchemaObject> anyOf() {
+    public @Nullable List<SchemaObject> anyOf() {
         return anyOf;
     }
 
     /**
      * @return the value described by {@link SchemaObjectBuilder#withNot}
      */
-    public List<SchemaObject> not() {
+    public @Nullable List<SchemaObject> not() {
         return not;
     }
 
     /**
      * @return the value described by {@link SchemaObjectBuilder#withItems}
      */
-    public SchemaObject items() {
+    public @Nullable SchemaObject items() {
         return items;
     }
 
     /**
      * @return the value described by {@link SchemaObjectBuilder#withProperties}
      */
-    public Map<String, SchemaObject> properties() {
+    public @Nullable Map<String, SchemaObject> properties() {
         return properties;
     }
 
     /**
      * @return the value described by {@link SchemaObjectBuilder#withAdditionalProperties}
      */
-    public Object additionalProperties() {
+    public @Nullable Object additionalProperties() {
         return additionalProperties;
     }
 
     /**
      * @return the value described by {@link SchemaObjectBuilder#withDescription}
      */
-    public String description() {
+    public @Nullable String description() {
         return description;
     }
 
     /**
      * @return the value described by {@link SchemaObjectBuilder#withFormat}
      */
-    public String format() {
+    public @Nullable String format() {
         return format;
     }
 
     /**
      * @return the value described by {@link SchemaObjectBuilder#withDefaultValue}
      */
-    public Object defaultValue() {
+    public @Nullable Object defaultValue() {
         return defaultValue;
     }
 
     /**
      * @return the value described by {@link SchemaObjectBuilder#withNullable}
      */
-    public Boolean nullable() {
+    public @Nullable Boolean nullable() {
         return nullable;
     }
 
     /**
      * @return the value described by {@link SchemaObjectBuilder#withDiscriminator}
      */
-    public DiscriminatorObject discriminator() {
+    public @Nullable DiscriminatorObject discriminator() {
         return discriminator;
     }
 
     /**
      * @return the value described by {@link SchemaObjectBuilder#withReadOnly}
      */
-    public Boolean readOnly() {
+    public @Nullable Boolean readOnly() {
         return readOnly;
     }
 
     /**
      * @return the value described by {@link SchemaObjectBuilder#withWriteOnly}
      */
-    public Boolean writeOnly() {
+    public @Nullable Boolean writeOnly() {
         return writeOnly;
     }
 
     /**
      * @return the value described by {@link SchemaObjectBuilder#withXml}
      */
-    public XmlObject xml() {
+    public @Nullable XmlObject xml() {
         return xml;
     }
 
     /**
      * @return the value described by {@link SchemaObjectBuilder#withExternalDocs}
      */
-    public ExternalDocumentationObject externalDocs() {
+    public @Nullable ExternalDocumentationObject externalDocs() {
         return externalDocs;
     }
 
     /**
      * @return the value described by {@link SchemaObjectBuilder#withExample}
      */
-    public Object example() {
+    public @Nullable Object example() {
         return example;
     }
 
     /**
      * @return the value described by {@link SchemaObjectBuilder#withDeprecated}
      */
-    public Boolean deprecated() {
+    public @Nullable Boolean deprecated() {
         return deprecated;
     }
 }

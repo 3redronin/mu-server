@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.IOException;
 import java.io.Writer;
 import java.util.Objects;
@@ -13,10 +15,10 @@ import static io.muserver.openapi.Jsonizer.append;
 public class TagObject implements JsonWriter {
 
     private final String name;
-    private final String description;
-    private final ExternalDocumentationObject externalDocs;
+    private final @Nullable String description;
+    private final @Nullable ExternalDocumentationObject externalDocs;
 
-    TagObject(String name, String description, ExternalDocumentationObject externalDocs) {
+    TagObject(String name, @Nullable String description, @Nullable ExternalDocumentationObject externalDocs) {
         notNull("name", name);
         this.name = name;
         this.description = description;
@@ -34,7 +36,7 @@ public class TagObject implements JsonWriter {
     }
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equals(@Nullable Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         TagObject tagObject = (TagObject) o;
@@ -56,14 +58,14 @@ public class TagObject implements JsonWriter {
     /**
       @return the value described by {@link TagObjectBuilder#withDescription}
      */
-    public String description() {
+    public @Nullable String description() {
         return description;
     }
 
     /**
       @return the value described by {@link TagObjectBuilder#withExternalDocs}
      */
-    public ExternalDocumentationObject externalDocs() {
+    public @Nullable ExternalDocumentationObject externalDocs() {
         return externalDocs;
     }
 }

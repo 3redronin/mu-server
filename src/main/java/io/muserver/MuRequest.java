@@ -30,7 +30,7 @@ public interface MuRequest {
      * or <code>null</code> if there is no body.
      * @see Headers#contentType()
      */
-    String contentType();
+    @Nullable String contentType();
 
     /**
      * @return The time as epoch millis when this request was received on the server.

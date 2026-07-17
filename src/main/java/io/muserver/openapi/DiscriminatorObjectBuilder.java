@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.Map;
 
 import static io.muserver.openapi.OpenApiUtils.immutable;
@@ -11,8 +13,8 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * <p>When using the discriminator, <em>inline</em> schemas will not be considered.</p>
  */
 public class DiscriminatorObjectBuilder {
-    private String propertyName;
-    private Map<String, String> mapping;
+    private @Nullable String propertyName;
+    private @Nullable Map<String, String> mapping;
 
     /**
      * @param propertyName <strong>REQUIRED</strong>. The name of the property in the payload that will hold the discriminator value.
@@ -27,7 +29,7 @@ public class DiscriminatorObjectBuilder {
      * @param mapping An object to hold mappings between payload values and schema names or references.
      * @return The current builder
      */
-    public DiscriminatorObjectBuilder withMapping(Map<String, String> mapping) {
+    public DiscriminatorObjectBuilder withMapping(@Nullable Map<String, String> mapping) {
         this.mapping = mapping;
         return this;
     }

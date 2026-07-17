@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.Map;
 
 import static io.muserver.openapi.OpenApiUtils.immutable;
@@ -21,19 +23,19 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * </ul>
  */
 public class ParameterObjectBuilder {
-    private String name;
-    private String in;
-    private String description;
-    private Boolean required;
-    private Boolean deprecated;
-    private Boolean allowEmptyValue;
-    private String style;
-    private Boolean explode;
-    private Boolean allowReserved;
-    private SchemaObject schema;
-    private Object example;
-    private Map<String, ExampleObject> examples;
-    private Map<String, MediaTypeObject> content;
+    private @Nullable String name;
+    private @Nullable String in;
+    private @Nullable String description;
+    private @Nullable Boolean required;
+    private @Nullable Boolean deprecated;
+    private @Nullable Boolean allowEmptyValue;
+    private @Nullable String style;
+    private @Nullable Boolean explode;
+    private @Nullable Boolean allowReserved;
+    private @Nullable SchemaObject schema;
+    private @Nullable Object example;
+    private @Nullable Map<String, ExampleObject> examples;
+    private @Nullable Map<String, MediaTypeObject> content;
 
     /**
      * @param name <strong>REQUIRED</strong>. The name of the parameter. Parameter names are <em>case sensitive</em>.
@@ -67,7 +69,7 @@ public class ParameterObjectBuilder {
      *                    <a href="http://spec.commonmark.org/">CommonMark syntax</a> MAY be used for rich text representation.
      * @return The current builder
      */
-    public ParameterObjectBuilder withDescription(String description) {
+    public ParameterObjectBuilder withDescription(@Nullable String description) {
         this.description = description;
         return this;
     }
@@ -78,7 +80,7 @@ public class ParameterObjectBuilder {
      *                 Otherwise, the property MAY be included and its default value is <code>false</code>.
      * @return The current builder
      */
-    public ParameterObjectBuilder withRequired(Boolean required) {
+    public ParameterObjectBuilder withRequired(@Nullable Boolean required) {
         this.required = required;
         return this;
     }
@@ -87,7 +89,7 @@ public class ParameterObjectBuilder {
      * @param deprecated Specifies that a parameter is deprecated and SHOULD be transitioned out of usage.
      * @return The current builder
      */
-    public ParameterObjectBuilder withDeprecated(Boolean deprecated) {
+    public ParameterObjectBuilder withDeprecated(@Nullable Boolean deprecated) {
         this.deprecated = deprecated;
         return this;
     }
@@ -100,7 +102,7 @@ public class ParameterObjectBuilder {
      *                        SHALL be ignored.
      * @return The current builder
      */
-    public ParameterObjectBuilder withAllowEmptyValue(Boolean allowEmptyValue) {
+    public ParameterObjectBuilder withAllowEmptyValue(@Nullable Boolean allowEmptyValue) {
         this.allowEmptyValue = allowEmptyValue;
         return this;
     }
@@ -168,7 +170,7 @@ public class ParameterObjectBuilder {
      *              </table>
      * @return The current builder
      */
-    public ParameterObjectBuilder withStyle(String style) {
+    public ParameterObjectBuilder withStyle(@Nullable String style) {
         this.style = style;
         return this;
     }
@@ -180,7 +182,7 @@ public class ParameterObjectBuilder {
      *                default value is <code>true</code>. For all other styles, the default value is <code>false</code>.
      * @return The current builder
      */
-    public ParameterObjectBuilder withExplode(Boolean explode) {
+    public ParameterObjectBuilder withExplode(@Nullable Boolean explode) {
         this.explode = explode;
         return this;
     }
@@ -193,7 +195,7 @@ public class ParameterObjectBuilder {
      *                      default value is <code>false</code>.
      * @return The current builder
      */
-    public ParameterObjectBuilder withAllowReserved(Boolean allowReserved) {
+    public ParameterObjectBuilder withAllowReserved(@Nullable Boolean allowReserved) {
         this.allowReserved = allowReserved;
         return this;
     }
@@ -202,7 +204,7 @@ public class ParameterObjectBuilder {
      * @param schema The schema defining the type used for the parameter.
      * @return The current builder
      */
-    public ParameterObjectBuilder withSchema(SchemaObject schema) {
+    public ParameterObjectBuilder withSchema(@Nullable SchemaObject schema) {
         this.schema = schema;
         return this;
     }
@@ -216,7 +218,7 @@ public class ParameterObjectBuilder {
      *                a string value can contain the example with escaping where necessary.
      * @return The current builder
      */
-    public ParameterObjectBuilder withExample(Object example) {
+    public ParameterObjectBuilder withExample(@Nullable Object example) {
         this.example = example;
         return this;
     }
@@ -229,7 +231,7 @@ public class ParameterObjectBuilder {
      *                 provided by the schema.
      * @return The current builder
      */
-    public ParameterObjectBuilder withExamples(Map<String, ExampleObject> examples) {
+    public ParameterObjectBuilder withExamples(@Nullable Map<String, ExampleObject> examples) {
         this.examples = examples;
         return this;
     }
@@ -239,7 +241,7 @@ public class ParameterObjectBuilder {
      *                The map MUST only contain one entry.
      * @return The current builder
      */
-    public ParameterObjectBuilder withContent(Map<String, MediaTypeObject> content) {
+    public ParameterObjectBuilder withContent(@Nullable Map<String, MediaTypeObject> content) {
         this.content = content;
         return this;
     }
