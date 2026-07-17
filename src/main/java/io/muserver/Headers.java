@@ -282,7 +282,7 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
      * @param value The value
      * @return This headers object
      */
-    default Headers set(String name, Object value) {
+    default Headers set(String name, @Nullable Object value) {
         return set((CharSequence) name, value);
     }
 
@@ -294,7 +294,7 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
      * @return This headers object
      * @throws NullPointerException if name is <code>null</code>
      */
-    Headers set(CharSequence name, Object value);
+    Headers set(CharSequence name, @Nullable Object value);
 
     /**
      * Sets a header value list. If a header with the given name already exists then this replaces it.
