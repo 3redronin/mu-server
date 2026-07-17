@@ -15,6 +15,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Scanner;
 
+import org.jspecify.annotations.Nullable;
+
 import static io.muserver.handlers.ResourceType.DEFAULT_EXTENSION_MAPPINGS;
 
 /**
@@ -49,7 +51,7 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
      * @param defaultFile The default file to use when a directory is requested, or <code>null</code> for no default.
      * @return This builder
      */
-    public ResourceHandlerBuilder withDefaultFile(String defaultFile) {
+    public ResourceHandlerBuilder withDefaultFile(@Nullable String defaultFile) {
         this.defaultFile = defaultFile;
         return this;
     }
@@ -77,7 +79,7 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
      * @param dateTimeFormatter A format object, or null to use the default
      * @return This builder
      */
-    public ResourceHandlerBuilder withDirectoryListingDateFormatter(DateTimeFormatter dateTimeFormatter) {
+    public ResourceHandlerBuilder withDirectoryListingDateFormatter(@Nullable DateTimeFormatter dateTimeFormatter) {
         this.directoryListingDateFormatter = dateTimeFormatter;
         return this;
     }
@@ -87,7 +89,7 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
      * @param css CSS styles to use, or null for the default
      * @return This builder
      */
-    public ResourceHandlerBuilder withDirectoryListingCSS(String css) {
+    public ResourceHandlerBuilder withDirectoryListingCSS(@Nullable String css) {
         this.directoryListingCss = css;
         return this;
     }
@@ -97,7 +99,7 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
      * @param resourceCustomizer A class to intercept responses
      * @return This builder
      */
-    public ResourceHandlerBuilder withResourceCustomizer(ResourceCustomizer resourceCustomizer) {
+    public ResourceHandlerBuilder withResourceCustomizer(@Nullable ResourceCustomizer resourceCustomizer) {
         this.resourceCustomizer = resourceCustomizer;
         return this;
     }

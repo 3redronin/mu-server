@@ -2,6 +2,8 @@ package io.muserver;
 
 import java.util.concurrent.TimeUnit;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * <p>Used to create handlers for web sockets.</p>
  */
@@ -34,7 +36,7 @@ public class WebSocketHandlerBuilder implements MuHandlerBuilder<WebSocketHandle
      * @param path The path of this web socket endpoint.
      * @return This builder
      */
-    public WebSocketHandlerBuilder withPath(String path) {
+    public WebSocketHandlerBuilder withPath(@Nullable String path) {
         this.path = path;
         return this;
     }

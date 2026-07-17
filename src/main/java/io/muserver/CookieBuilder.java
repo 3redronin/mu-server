@@ -6,6 +6,8 @@ import io.netty.handler.codec.http.cookie.DefaultCookie;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * A builder to create cookies that will be sent on a Response with {@link MuResponse#addCookie(Cookie)}
  */
@@ -75,7 +77,7 @@ public class CookieBuilder {
      * @param domain The host part of a URL (without scheme or port), e.g. <code>example.org</code>
      * @return This builder
      */
-    public CookieBuilder withDomain(String domain) {
+    public CookieBuilder withDomain(@Nullable String domain) {
         if (domain != null && domain.contains(":")) {
             throw new IllegalArgumentException("The domain value should only be a host name (and should not include the scheme or the port)");
         }
@@ -90,7 +92,7 @@ public class CookieBuilder {
      *             to paths such as <code>/order</code> and <code>/order/checkout</code> etc.
      * @return This builder
      */
-    public CookieBuilder withPath(String path) {
+    public CookieBuilder withPath(@Nullable String path) {
         this.path = path;
         return this;
     }

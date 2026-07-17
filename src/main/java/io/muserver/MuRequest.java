@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * <p>An HTTP request from a client.</p>
  * <p>Call {@link #method()} and {@link #uri()} to find the method and URL of this request.</p>
@@ -104,7 +106,7 @@ public interface MuRequest {
      * @throws IOException Thrown when there is an error while reading the file, e.g. if a user closes their
      *                     browser before the upload is complete.
      */
-    UploadedFile uploadedFile(String name) throws IOException;
+    @Nullable UploadedFile uploadedFile(String name) throws IOException;
 
     /**
      * <p>Gets query parameters decoded with {@code application/x-www-form-urlencoded} compatibility.
@@ -169,7 +171,7 @@ public interface MuRequest {
      * @param key The key the object is associated with.
      * @return An object previously set by {@link #attribute(String, Object)}, or <code>null</code> if it was never set.
      */
-    Object attribute(String key);
+    @Nullable Object attribute(String key);
 
     /**
      * <p>Sets the given object as state associated with the given key that is bound to this request which any subsequent handlers can access.</p>
@@ -178,7 +180,7 @@ public interface MuRequest {
      * @param key The key to associate the value with.
      * @param value Any object to store as state.
      */
-    void attribute(String key, Object value);
+    void attribute(String key, @Nullable Object value);
 
     /**
      * <p>Returns the map containing all the attributes.</p>
@@ -202,7 +204,7 @@ public interface MuRequest {
      * <p>If you want to know the client's IP address when reverse proxies are used, consider using {@link #clientIP()}</p>
      * @return The IP address of the client, or of a gateway with NAT, etc, or null if the client has already disconnected.
      */
-    String remoteAddress();
+    @Nullable String remoteAddress();
 
     /**
      * Makes a best-effort guess at the client's IP address, taking into account any <code>Forwarded</code> or <code>X-Forwarded-*</code> headers.

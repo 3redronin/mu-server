@@ -1,5 +1,7 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
+
 import io.netty.handler.codec.HeadersUtils;
 import jakarta.ws.rs.core.MediaType;
 
@@ -80,7 +82,7 @@ class Headtils {
         return MediaTypeParser.fromString(value);
     }
 
-    static String toString(Headers headers, Collection<String> toSuppress) {
+    static String toString(Headers headers, @Nullable Collection<String> toSuppress) {
         return HeadersUtils.toString(headers.getClass(), new RedactorIterator(headers.iterator(), toSuppress), headers.size());
     }
 
@@ -89,7 +91,7 @@ class Headtils {
         private final Iterator<Map.Entry<String, String>> iterator;
         private final Collection<String> toSuppress;
 
-        public RedactorIterator(Iterator<Map.Entry<String, String>> iterator, Collection<String> toSuppress) {
+        public RedactorIterator(Iterator<Map.Entry<String, String>> iterator, @Nullable Collection<String> toSuppress) {
             this.iterator = iterator;
             if (toSuppress == null) {
                 this.toSuppress = sensitiveOnes;

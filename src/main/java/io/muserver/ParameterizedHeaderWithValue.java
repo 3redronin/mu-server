@@ -2,6 +2,8 @@ package io.muserver;
 
 import java.util.*;
 
+import org.jspecify.annotations.Nullable;
+
 import static io.muserver.Mutils.notNull;
 import static java.util.Collections.emptyList;
 
@@ -46,7 +48,7 @@ public class ParameterizedHeaderWithValue {
      * @param name The name of the parameter to get
      * @return Gets a single parameter, or null if there is no value
      */
-    public String parameter(String name) {
+    public @Nullable String parameter(String name) {
         return parameters.get(name);
     }
 
@@ -55,7 +57,7 @@ public class ParameterizedHeaderWithValue {
      * @param defaultValue The value to return if no parameter was set
      * @return Gets a single parameter, or null if there is no value
      */
-    public String parameter(String name, String defaultValue) {
+    public @Nullable String parameter(String name, @Nullable String defaultValue) {
         return parameters.getOrDefault(name, defaultValue);
     }
 
@@ -68,7 +70,7 @@ public class ParameterizedHeaderWithValue {
      * @return A list of ParameterizedHeaderWithValue objects
      * @throws IllegalArgumentException The value cannot be parsed
      */
-    public static List<ParameterizedHeaderWithValue> fromString(String input) {
+    public static List<ParameterizedHeaderWithValue> fromString(@Nullable String input) {
         if (input == null || input.trim().isEmpty()) {
             return emptyList();
         }
@@ -199,7 +201,7 @@ public class ParameterizedHeaderWithValue {
     }
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equals(@Nullable Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         ParameterizedHeaderWithValue that = (ParameterizedHeaderWithValue) o;

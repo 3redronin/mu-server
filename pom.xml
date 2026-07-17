@@ -96,6 +96,11 @@
             <artifactId>jakarta.ws.rs-api</artifactId>
             <version>3.0.0</version>
         </dependency>
+        <dependency>
+            <groupId>org.jspecify</groupId>
+            <artifactId>jspecify</artifactId>
+            <version>1.0.0</version>
+        </dependency>
 
         <dependency>
             <groupId>org.hamcrest</groupId>
@@ -312,6 +317,7 @@
                                         <include>org.slf4j:slf4j-api</include>
                                         <include>jakarta.ws.rs:jakarta.ws.rs-api</include>
                                         <include>io.netty:*</include>
+                                        <include>org.jspecify:jspecify</include>
                                     </includes>
                                 </bannedDependencies>
                                 <dependencyConvergence/>

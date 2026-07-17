@@ -3,6 +3,8 @@ package io.muserver;
 import java.util.List;
 import java.util.Map;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Provides access to query-string or form values. Both use HTML form-compatible decoding where a plus is a space.
  */
@@ -21,7 +23,7 @@ public interface RequestParameters {
      * @param name The name of the parameter to get
      * @return The value, or null
      */
-    String get(String name);
+    @Nullable String get(String name);
 
     /**
      * <p>Gets the value with the given name, or the default value if there is no parameter with that name.</p>
@@ -31,7 +33,7 @@ public interface RequestParameters {
      * @param defaultValue The default value to use if there is no given value
      * @return The value of the parameter, or the default value
      */
-    String get(String name, String defaultValue);
+    @Nullable String get(String name, @Nullable String defaultValue);
 
     /**
      * Gets the parameter as an integer, or returns the default value if it was not specified or was in an invalid format.

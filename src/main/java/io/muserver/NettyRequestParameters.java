@@ -1,5 +1,7 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -22,12 +24,12 @@ class NettyRequestParameters implements RequestParameters {
     }
 
     @Override
-    public String get(String name) {
+    public @Nullable String get(String name) {
         return get(name, null);
     }
 
     @Override
-    public String get(String name, String defaultValue) {
+    public @Nullable String get(String name, @Nullable String defaultValue) {
         List<String> values = parameters.get(name);
         if (values == null) {
             return defaultValue;

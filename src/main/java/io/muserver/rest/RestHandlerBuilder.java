@@ -18,6 +18,8 @@ import java.lang.reflect.Type;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import org.jspecify.annotations.Nullable;
+
 import static io.muserver.openapi.PathsObjectBuilder.pathsObject;
 import static java.util.Arrays.asList;
 
@@ -131,7 +133,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * @see #withOpenApiDocument(OpenAPIObjectBuilder)
      * @see #withOpenApiHtmlUrl(String)
      */
-    public RestHandlerBuilder withOpenApiJsonUrl(String url) {
+    public RestHandlerBuilder withOpenApiJsonUrl(@Nullable String url) {
         this.openApiJsonUrl = url;
         return this;
     }
@@ -145,7 +147,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * @see #withOpenApiJsonUrl(String)
      * @see #withOpenApiHtmlCss(String)
      */
-    public RestHandlerBuilder withOpenApiHtmlUrl(String url) {
+    public RestHandlerBuilder withOpenApiHtmlUrl(@Nullable String url) {
         this.openApiHtmlUrl = url;
         return this;
     }
@@ -173,7 +175,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * @param css A string containing a style sheet definition.
      * @return The current Rest Handler Builder
      */
-    public RestHandlerBuilder withOpenApiHtmlCss(String css) {
+    public RestHandlerBuilder withOpenApiHtmlCss(@Nullable String css) {
         this.openApiHtmlCss = css;
         return this;
     }
@@ -378,7 +380,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * @param writerInterceptor The interceptor to add. If <code>null</code> then this is a no-op.
      * @return This builder
      */
-    public RestHandlerBuilder addWriterInterceptor(WriterInterceptor writerInterceptor) {
+    public RestHandlerBuilder addWriterInterceptor(@Nullable WriterInterceptor writerInterceptor) {
         if (writerInterceptor != null) {
             this.writerInterceptors.add(writerInterceptor);
         }
@@ -397,7 +399,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * @param readerInterceptor The interceptor to add. If <code>null</code> then this is a no-op.
      * @return This builder
      */
-    public RestHandlerBuilder addReaderInterceptor(ReaderInterceptor readerInterceptor) {
+    public RestHandlerBuilder addReaderInterceptor(@Nullable ReaderInterceptor readerInterceptor) {
         if (readerInterceptor != null) {
             this.readerInterceptors.add(0, readerInterceptor);
         }
@@ -595,4 +597,3 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
         return new RestHandler(entityProviders, roots, documentor, customExceptionMapper, filterManagerThing, corsConfig, paramConverterProviders, schemaObjectCustomizer, readerInterceptors, writerInterceptors, cps);
     }
 }
-

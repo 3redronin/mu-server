@@ -23,6 +23,8 @@ import java.util.Date;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import org.jspecify.annotations.Nullable;
+
 import static io.muserver.ContentTypes.TEXT_PLAIN_UTF8;
 
 abstract class NettyResponseAdaptor implements MuResponse {
@@ -32,12 +34,12 @@ abstract class NettyResponseAdaptor implements MuResponse {
     protected final NettyRequestAdapter request;
     private final Headers headers;
     protected int status = 200;
-    private volatile PrintWriter writer;
-    private volatile OutputStream outputStream;
+    private volatile @Nullable PrintWriter writer;
+    private volatile @Nullable OutputStream outputStream;
     protected long bytesStreamed = 0;
     protected long declaredLength = -1;
     private final List<ResponseStateChangeListener> listeners = new CopyOnWriteArrayList<>();
-    protected HttpExchange httpExchange;
+    protected @Nullable HttpExchange httpExchange;
 
     public void setExchange(HttpExchange httpExchange) {
         this.httpExchange = httpExchange;
@@ -62,7 +64,7 @@ abstract class NettyResponseAdaptor implements MuResponse {
      * @param future       A future to wait for, or null to set the state now
      * @param successState The state to set if the future completes successfully
      */
-    protected void outputState(io.netty.util.concurrent.Future<? super Void> future, ResponseState successState) {
+    protected void outputState(io.netty.util.concurrent.@Nullable Future<? super Void> future, ResponseState successState) {
         if (future == null) {
             outputState(successState);
             return;
@@ -116,7 +118,7 @@ abstract class NettyResponseAdaptor implements MuResponse {
         status = value;
     }
 
-    protected ChannelFuture startStreaming() {
+    protected @Nullable ChannelFuture startStreaming() {
         assert httpExchange.inLoop() : "Not in event loop";
         if (state != ResponseState.NOTHING) {
             throw new IllegalStateException("Cannot start streaming when state is " + state);
@@ -128,7 +130,7 @@ abstract class NettyResponseAdaptor implements MuResponse {
         return null;
     }
 
-    static CharSequence getVaryWithAE(String curValue) {
+    static CharSequence getVaryWithAE(@Nullable String curValue) {
         if (Mutils.nullOrEmpty(curValue)) {
             return HeaderNames.ACCEPT_ENCODING;
         } else {
@@ -213,7 +215,7 @@ abstract class NettyResponseAdaptor implements MuResponse {
         });
     }
 
-    private ByteBuf textToBuffer(String text) {
+    private ByteBuf textToBuffer(@Nullable String text) {
         if (text == null) text = "";
         Charset charset = NettyRequestAdapter.bodyCharset(headers, false);
         return Unpooled.copiedBuffer(text, charset);
@@ -227,7 +229,7 @@ abstract class NettyResponseAdaptor implements MuResponse {
         return headers;
     }
 
-    public void contentType(CharSequence contentType) {
+    public void contentType(@Nullable CharSequence contentType) {
         headers.set(HeaderNames.CONTENT_TYPE, contentType);
     }
 

@@ -4,6 +4,8 @@ import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.URI;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * <p>A response sent to a client.</p>
  * <p>The {@link #status(int)} and {@link #headers()} methods are used to set the response code and response headers.</p>
@@ -73,7 +75,7 @@ public interface MuResponse {
      * @see ContentTypes
      * @param contentType The content type of the response, for example <code>application/json</code>
      */
-    void contentType(CharSequence contentType);
+    void contentType(@Nullable CharSequence contentType);
 
     /**
      * <p>Sends a cookie to the client.</p>

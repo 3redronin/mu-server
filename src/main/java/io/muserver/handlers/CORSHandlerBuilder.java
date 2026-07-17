@@ -9,6 +9,8 @@ import io.muserver.rest.CORSConfigBuilder;
 import java.util.HashSet;
 import java.util.Set;
 
+import org.jspecify.annotations.Nullable;
+
 import static java.util.Arrays.asList;
 
 /**
@@ -45,7 +47,7 @@ public class CORSHandlerBuilder implements MuHandlerBuilder<CORSHandler> {
      * @param methods The methods to allow, or null to allow all except Trace and Connect.
      * @return This builder.
      */
-    public CORSHandlerBuilder withAllowedMethods(Method... methods) {
+    public CORSHandlerBuilder withAllowedMethods(Method @Nullable... methods) {
         if (methods == null) {
             allowedMethods = null;
         } else {

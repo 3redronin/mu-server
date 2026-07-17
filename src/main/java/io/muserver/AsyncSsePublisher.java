@@ -4,6 +4,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.TimeUnit;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * <p>An interface for sending Server-Sent Events (SSE) to a client with async callbacks.</p>
  * <p>This is preferrable to the (blocking) {@link SsePublisher} when you have a large number of subscribers as
@@ -38,7 +40,7 @@ public interface AsyncSsePublisher {
      * @return completion stage that completes when the event has been sent. If there is a problem during sending of
      * an event, completion stage will be completed exceptionally.
      */
-    CompletionStage<?> send(String message, String event);
+    CompletionStage<?> send(String message, @Nullable String event);
 
     /**
      * <p>Sends a message with an event type and ID.</p>
@@ -56,7 +58,7 @@ public interface AsyncSsePublisher {
      * @return completion stage that completes when the event has been sent. If there is a problem during sending of
      * an event, completion stage will be completed exceptionally.
      */
-    CompletionStage<?> send(String message, String event, String eventID);
+    CompletionStage<?> send(String message, @Nullable String event, @Nullable String eventID);
 
     /**
      * <p>Stops the event stream.</p>

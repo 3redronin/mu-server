@@ -8,6 +8,8 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * <p>Builder for {@link CSRFProtectionHandler} which protects against Cross-Site Request Forgery (CSRF) by rejecting non-safe
  * cross-origin browser requests.</p>
@@ -61,7 +63,7 @@ public class CSRFProtectionHandlerBuilder implements MuHandlerBuilder<CSRFProtec
      *                for a default handler.
      * @return This builder instance for method chaining.
      */
-    public CSRFProtectionHandlerBuilder withRejectionHandler(MuHandler handler) {
+    public CSRFProtectionHandlerBuilder withRejectionHandler(@Nullable MuHandler handler) {
         this.rejectionHandler = handler;
         return this;
     }

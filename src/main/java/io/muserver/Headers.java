@@ -4,6 +4,8 @@ import jakarta.ws.rs.core.MediaType;
 
 import java.util.*;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * HTTP headers
  */
@@ -15,7 +17,7 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
      * @param name The name of the parameter to get
      * @return The value, or null
      */
-    String get(String name);
+    @Nullable String get(String name);
 
     /**
      * <p>Gets the value with the given name, or null if there is no parameter with that name.</p>
@@ -24,7 +26,7 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
      * @param name The name of the parameter to get
      * @return The value, or null
      */
-    String get(CharSequence name);
+    @Nullable String get(CharSequence name);
 
     /**
      * <p>Gets the value with the given name, or the default value if there is no parameter with that name.</p>
@@ -34,7 +36,7 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
      * @param defaultValue The default value to use if there is no given value
      * @return The value of the parameter, or the default value
      */
-    String get(CharSequence name, String defaultValue);
+    @Nullable String get(CharSequence name, @Nullable String defaultValue);
 
     /**
      * Gets the parameter as an integer, or returns the default value if it was not specified or was in an invalid format.
@@ -83,7 +85,7 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
      * @param name The header name
      * @return The value in milliseconds of the date header, or null if not found
      */
-    Long getTimeMillis(CharSequence name);
+    @Nullable Long getTimeMillis(CharSequence name);
 
     /**
      * Gets a date header.
@@ -392,7 +394,7 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
      *                   the header values as defined on {@link #toString()}.
      * @return a string representation of these headers
      */
-    String toString(Collection<String> toSuppress);
+    String toString(@Nullable Collection<String> toSuppress);
 
     /**
      * Creates new headers for HTTP1 requests

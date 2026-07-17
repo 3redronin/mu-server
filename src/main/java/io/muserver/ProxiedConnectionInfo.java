@@ -4,6 +4,8 @@ import io.netty.handler.codec.haproxy.HAProxyMessage;
 
 import java.util.Objects;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Information about the connection provided by an intermediate proxy using the
  * <a href="https://www.haproxy.org/download/1.8/doc/proxy-protocol.txt">HA Proxy Protocol</a>.
@@ -14,7 +16,7 @@ public interface ProxiedConnectionInfo {
      * The address of the client that connected to the proxy
      * @return A human-readable address, or null if none was set
      */
-    String sourceAddress();
+    @Nullable String sourceAddress();
 
     /**
      * The port of the client that connected to the proxy
@@ -26,7 +28,7 @@ public interface ProxiedConnectionInfo {
      * The destination address that the proxy set
      * @return The destination address that the proxy set
      */
-    String destinationAddress();
+    @Nullable String destinationAddress();
 
     /**
      * The destination port

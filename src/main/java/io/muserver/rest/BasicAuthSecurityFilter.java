@@ -12,6 +12,8 @@ import java.io.IOException;
 import java.security.Principal;
 import java.util.Base64;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * <p>A filter that can handle Basic Authentication</p>
  * <p>Construct this class and a username/password authenticator and a class that can check if your users are
@@ -69,7 +71,7 @@ public class BasicAuthSecurityFilter implements ContainerRequestFilter {
             return;
         }
 
-        Principal principal = authenticator.authenticate(userPass[0], userPass[1]);
+        @Nullable Principal principal = authenticator.authenticate(userPass[0], userPass[1]);
         boolean isHttps = "https".equalsIgnoreCase(filterContext.getUriInfo().getRequestUri().getScheme());
 
         MuSecurityContext securityContext;

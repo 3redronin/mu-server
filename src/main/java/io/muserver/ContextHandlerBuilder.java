@@ -3,6 +3,7 @@ package io.muserver;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.jspecify.annotations.Nullable;
 
 /**
  * Use this to serve a list of handlers from a base path.
@@ -18,7 +19,7 @@ public class ContextHandlerBuilder implements MuHandlerBuilder<ContextHandler> {
      * @param path The path, such as <code>api</code> or <code>/api/</code> etc
      * @return Returns the current builder.
      */
-    public ContextHandlerBuilder withPath(String path) {
+    public ContextHandlerBuilder withPath(@Nullable String path) {
         this.path = path;
         return this;
     }
@@ -33,7 +34,7 @@ public class ContextHandlerBuilder implements MuHandlerBuilder<ContextHandler> {
      * @param path The path to serve handlers from, for example <code>api</code> or <code>/api/</code> (which are equivalent).
      * @return Returns a builder with methods to add handlers to this context.
      */
-    public static ContextHandlerBuilder context(String path) {
+    public static ContextHandlerBuilder context(@Nullable String path) {
         return new ContextHandlerBuilder()
             .withPath(path);
     }
@@ -48,7 +49,7 @@ public class ContextHandlerBuilder implements MuHandlerBuilder<ContextHandler> {
      * @return The current Mu-Server Handler.
      * @see #addHandler(Method, String, RouteHandler)
      */
-    public ContextHandlerBuilder addHandler(MuHandlerBuilder handler) {
+    public ContextHandlerBuilder addHandler(@Nullable MuHandlerBuilder handler) {
         if (handler == null) {
             return this;
         }
@@ -64,7 +65,7 @@ public class ContextHandlerBuilder implements MuHandlerBuilder<ContextHandler> {
      * @return The current Mu-Server Handler.
      * @see #addHandler(Method, String, RouteHandler)
      */
-    public ContextHandlerBuilder addHandler(MuHandler handler) {
+    public ContextHandlerBuilder addHandler(@Nullable MuHandler handler) {
         if (handler != null) {
             handlers.add(handler);
         }
@@ -83,7 +84,7 @@ public class ContextHandlerBuilder implements MuHandlerBuilder<ContextHandler> {
      * @param handler     The handler to invoke if the method and URI matches.
      * @return Returns the server builder
      */
-    public ContextHandlerBuilder addHandler(Method method, String uriTemplate, RouteHandler handler) {
+    public ContextHandlerBuilder addHandler(@Nullable Method method, String uriTemplate, @Nullable RouteHandler handler) {
         if (handler == null) {
             return this;
         }

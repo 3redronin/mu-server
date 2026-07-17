@@ -1,5 +1,7 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
+
 import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
@@ -22,17 +24,17 @@ class Http1Headers implements Headers {
     }
 
     @Override
-    public String get(String name) {
+    public @Nullable String get(String name) {
         return entries.get(name);
     }
 
     @Override
-    public String get(CharSequence name) {
+    public @Nullable String get(CharSequence name) {
         return entries.get(name);
     }
 
     @Override
-    public String get(CharSequence name, String defaultValue) {
+    public @Nullable String get(CharSequence name, @Nullable String defaultValue) {
         return entries.get(name, defaultValue);
     }
 
@@ -277,7 +279,7 @@ class Http1Headers implements Headers {
     }
 
     @Override
-    public String toString(Collection<String> toSuppress) {
+    public String toString(@Nullable Collection<String> toSuppress) {
         return Headtils.toString(this, toSuppress);
     }
 

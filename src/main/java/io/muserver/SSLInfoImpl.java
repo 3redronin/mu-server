@@ -12,13 +12,15 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import org.jspecify.annotations.Nullable;
+
 class SSLInfoImpl implements SSLInfo {
     private static final Logger log = LoggerFactory.getLogger(SSLInfoImpl.class);
     private final String providerName;
     private final List<String> protocols;
     private final List<String> ciphers;
-    private volatile List<X509Certificate> cachedCerts = null;
-    private volatile URI httpsUri;
+    private volatile @Nullable List<X509Certificate> cachedCerts = null;
+    private volatile @Nullable URI httpsUri;
 
     SSLInfoImpl(String providerName, List<String> protocols, List<String> ciphers) {
         this.providerName = providerName;
@@ -55,7 +57,7 @@ class SSLInfoImpl implements SSLInfo {
                     public void checkServerTrusted(X509Certificate[] x509Certificates, String s) {
                     }
                     public X509Certificate[] getAcceptedIssuers() {
-                        return null;
+                        return new X509Certificate[0];
                     }
                 }},
                 new SecureRandom());
@@ -91,7 +93,7 @@ class SSLInfoImpl implements SSLInfo {
             '}';
     }
 
-    void setHttpsUri(URI httpsUri) {
+    void setHttpsUri(@Nullable URI httpsUri) {
         this.httpsUri = httpsUri;
     }
 }

@@ -5,6 +5,8 @@ import io.muserver.*;
 import java.util.*;
 import java.util.regex.Pattern;
 
+import org.jspecify.annotations.Nullable;
+
 import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toSet;
 
@@ -14,7 +16,7 @@ import static java.util.stream.Collectors.toSet;
 public class CORSConfig {
 
     private final boolean allowCredentials;
-    private final Collection<String> allowedOrigins;
+    private final @Nullable Collection<String> allowedOrigins;
     private final List<Pattern> allowedOriginRegex;
     private final Collection<String> exposedHeaders;
     private final long maxAge;
@@ -22,7 +24,7 @@ public class CORSConfig {
     private final String exposedHeadersCSV;
     private final String allowedHeadersCSV;
 
-    CORSConfig(boolean allowCredentials, Collection<String> allowedOrigins, List<Pattern> allowedOriginRegex, Collection<String> allowedHeaders, Collection<String> exposedHeaders, long maxAge) {
+    CORSConfig(boolean allowCredentials, @Nullable Collection<String> allowedOrigins, List<Pattern> allowedOriginRegex, Collection<String> allowedHeaders, Collection<String> exposedHeaders, long maxAge) {
         Mutils.notNull("allowedOriginRegex", allowedOriginRegex);
         this.allowCredentials = allowCredentials;
         this.allowedOrigins = allowedOrigins == null ? null : Collections.unmodifiableCollection(allowedOrigins);
@@ -124,7 +126,7 @@ public class CORSConfig {
     /**
       @return the value described by {@link CORSConfigBuilder#withAllowedOrigins}
      */
-    public Collection<String> allowedOrigins() {
+    public @Nullable Collection<String> allowedOrigins() {
         return allowedOrigins;
     }
 

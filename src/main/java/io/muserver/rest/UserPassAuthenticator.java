@@ -4,6 +4,8 @@ import jakarta.ws.rs.core.SecurityContext;
 
 import java.security.Principal;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * An authenticator used by {@link BasicAuthSecurityFilter} which can look up a user based on a username and password.
  */
@@ -18,5 +20,5 @@ public interface UserPassAuthenticator {
      * @param password The password
      * @return The user, or <code>null</code> if the credentials are invalid.
      */
-    Principal authenticate(String username, String password);
+    @Nullable Principal authenticate(String username, String password);
 }

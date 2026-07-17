@@ -6,6 +6,8 @@ import jakarta.ws.rs.core.Variant;
 
 import java.util.*;
 
+import org.jspecify.annotations.Nullable;
+
 import static java.util.Arrays.asList;
 import static java.util.Collections.singleton;
 import static java.util.Collections.singletonList;
@@ -70,7 +72,7 @@ class MuVariantListBuilder extends Variant.VariantListBuilder {
         return this;
     }
 
-    static Variant selectVariant(List<Variant> available, List<Locale.LanguageRange> preferredLanguages, List<MediaType> acceptableMediaTypes, List<ParameterizedHeaderWithValue> acceptableEncodings) {
+    static @Nullable Variant selectVariant(List<Variant> available, List<Locale.LanguageRange> preferredLanguages, List<MediaType> acceptableMediaTypes, List<ParameterizedHeaderWithValue> acceptableEncodings) {
         Locale.LanguageRange wildcardRanger = new Locale.LanguageRange("*");
 
         List<Variant> candidates = new ArrayList<>();
@@ -123,7 +125,7 @@ class MuVariantListBuilder extends Variant.VariantListBuilder {
 
     }
 
-    private static MediaType bestMediaType(List<MediaType> acceptableMediaTypes, Collection<MediaType> candidates) {
+    private static @Nullable MediaType bestMediaType(List<MediaType> acceptableMediaTypes, Collection<MediaType> candidates) {
 
         Map<CombinedMediaType, MediaType> combinedToServerType = new HashMap<>();
         List<CombinedMediaType> m = new ArrayList<>();

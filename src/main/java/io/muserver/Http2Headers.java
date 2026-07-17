@@ -1,5 +1,7 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
+
 import io.netty.handler.codec.http2.DefaultHttp2Headers;
 import jakarta.ws.rs.core.MediaType;
 
@@ -33,18 +35,18 @@ class Http2Headers implements Headers {
     }
 
     @Override
-    public String get(String name) {
+    public @Nullable String get(String name) {
         return get((CharSequence) name);
     }
 
     @Override
-    public String get(CharSequence name) {
+    public @Nullable String get(CharSequence name) {
         CharSequence val = entries.get(toLower(name));
         return val == null ? null : val.toString();
     }
 
     @Override
-    public String get(CharSequence name, String defaultValue) {
+    public @Nullable String get(CharSequence name, @Nullable String defaultValue) {
         CharSequence val = entries.get(toLower(name), defaultValue);
         return val == null ? null : val.toString();
     }
@@ -301,7 +303,7 @@ class Http2Headers implements Headers {
     }
 
     @Override
-    public String toString(Collection<String> toSuppress) {
+    public String toString(@Nullable Collection<String> toSuppress) {
         return Headtils.toString(this, toSuppress);
     }
 

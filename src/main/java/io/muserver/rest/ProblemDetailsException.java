@@ -7,18 +7,20 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * An RFC 9457 problem-details exception.
  */
 public class ProblemDetailsException extends WebApplicationException {
     private final int status;
     private final String title;
-    private final String detail;
-    private final URI type;
-    private final URI instance;
-    private final Map<String, Object> extensionMembers;
+    private final @Nullable String detail;
+    private final @Nullable URI type;
+    private final @Nullable URI instance;
+    private final Map<String, @Nullable Object> extensionMembers;
 
-    ProblemDetailsException(int status, String title, String detail, URI type, URI instance, Map<String, Object> extensionMembers, Throwable cause) {
+    ProblemDetailsException(int status, String title, @Nullable String detail, @Nullable URI type, @Nullable URI instance, Map<String, @Nullable Object> extensionMembers, Throwable cause) {
         super(detail != null ? detail : title, cause, status);
         this.status = status;
         this.title = title;
@@ -45,28 +47,28 @@ public class ProblemDetailsException extends WebApplicationException {
     /**
      * @return The human-readable detail for the problem response, or {@code null}.
      */
-    public String getDetail() {
+    public @Nullable String getDetail() {
         return detail;
     }
 
     /**
      * @return The problem type URI.
      */
-    public URI getType() {
+    public @Nullable URI getType() {
         return type;
     }
 
     /**
      * @return The problem instance URI.
      */
-    public URI getInstance() {
+    public @Nullable URI getInstance() {
         return instance;
     }
 
     /**
      * @return Any RFC 9457 extension members.
      */
-    public Map<String, Object> getExtensionMembers() {
+    public Map<String, @Nullable Object> getExtensionMembers() {
         return extensionMembers;
     }
 

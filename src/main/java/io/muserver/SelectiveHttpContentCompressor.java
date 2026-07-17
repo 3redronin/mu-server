@@ -4,6 +4,8 @@ import io.netty.handler.codec.http.HttpContentCompressor;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpResponse;
 
+import org.jspecify.annotations.Nullable;
+
 import static io.muserver.NettyResponseAdaptor.getVaryWithAE;
 
 class SelectiveHttpContentCompressor extends HttpContentCompressor {
@@ -15,7 +17,7 @@ class SelectiveHttpContentCompressor extends HttpContentCompressor {
     }
 
     @Override
-    protected Result beginEncode(HttpResponse response, String acceptEncoding) throws Exception {
+    protected @Nullable Result beginEncode(HttpResponse response, String acceptEncoding) throws Exception {
         String declaredLength = response.headers().get(HttpHeaderNames.CONTENT_LENGTH);
         String declaredType = response.headers().get(HttpHeaderNames.CONTENT_TYPE);
         if (settings.shouldCompress(declaredLength, declaredType)) {
