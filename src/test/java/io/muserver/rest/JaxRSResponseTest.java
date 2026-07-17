@@ -33,6 +33,38 @@ public class JaxRSResponseTest {
     private MuServer server;
 
     @Test
+    public void relativeLocationsAreResolvedAgainstTheApplicationBaseUri() {
+        @Path("/resource")
+        class ResourceWithRelativeLocation {
+            @GET
+            @Path("/created")
+            public Response created() {
+                return Response.created(URI.create("created")).status(200).build();
+            }
+        }
+
+        RestHandler handler = restHandler(new ResourceWithRelativeLocation()).build();
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(handler)
+            .addHandler(io.muserver.ContextHandlerBuilder.context("/app")
+                .addHandler(handler))
+            .addHandler(io.muserver.ContextHandlerBuilder.context("/outer")
+                .addHandler(io.muserver.ContextHandlerBuilder.context("/inner")
+                    .addHandler(handler)))
+            .start();
+
+        assertRelativeLocation("/resource/created", "/created");
+        assertRelativeLocation("/app/resource/created", "/app/created");
+        assertRelativeLocation("/outer/inner/resource/created", "/outer/inner/created");
+    }
+
+    private void assertRelativeLocation(String requestPath, String expectedLocationPath) {
+        try (okhttp3.Response response = call(request(server.uri().resolve(requestPath)))) {
+            assertThat(response.header(HttpHeaders.LOCATION), is(server.uri().resolve(expectedLocationPath).toString()));
+        }
+    }
+
+    @Test
     public void headersCanBeGottenFromIt() {
         Response.ResponseBuilder builder = new JaxRSResponse.Builder()
             .allow("GET", "HEAD")
