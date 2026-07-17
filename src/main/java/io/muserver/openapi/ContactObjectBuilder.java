@@ -1,20 +1,22 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.net.URI;
 
 /**
  * Contact information for the exposed API.
  */
 public class ContactObjectBuilder {
-    private String name;
-    private URI url;
-    private String email;
+    private @Nullable String name;
+    private @Nullable URI url;
+    private @Nullable String email;
 
     /**
      * @param name The identifying name of the contact person/organization.
      * @return The current builder
      */
-    public ContactObjectBuilder withName(String name) {
+    public ContactObjectBuilder withName(@Nullable String name) {
         this.name = name;
         return this;
     }
@@ -23,7 +25,7 @@ public class ContactObjectBuilder {
      * @param url The URL pointing to the contact information.
      * @return The current builder
      */
-    public ContactObjectBuilder withUrl(URI url) {
+    public ContactObjectBuilder withUrl(@Nullable URI url) {
         this.url = url;
         return this;
     }
@@ -32,7 +34,7 @@ public class ContactObjectBuilder {
      * @param email The email address of the contact person/organization. MUST be in the format of an email address.
      * @return The current builder
      */
-    public ContactObjectBuilder withEmail(String email) {
+    public ContactObjectBuilder withEmail(@Nullable String email) {
         this.email = email;
         return this;
     }

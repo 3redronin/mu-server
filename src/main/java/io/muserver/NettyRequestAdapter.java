@@ -1,5 +1,7 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
@@ -93,7 +95,7 @@ class NettyRequestAdapter implements MuRequest {
     }
 
     @Override
-    public String contentType() {
+    public @Nullable String contentType() {
         String c = headers.get(HttpHeaderNames.CONTENT_TYPE);
         if (c == null) return null;
         if (c.contains(";")) {

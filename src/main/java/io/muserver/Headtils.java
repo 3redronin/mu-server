@@ -74,7 +74,7 @@ class Headtils {
         return ParameterizedHeaderWithValue.fromString(input);
     }
 
-    static MediaType getMediaType(Headers headers) {
+    static @Nullable MediaType getMediaType(Headers headers) {
         String value = headers.get(HeaderNames.CONTENT_TYPE);
         if (value == null) {
             return null;

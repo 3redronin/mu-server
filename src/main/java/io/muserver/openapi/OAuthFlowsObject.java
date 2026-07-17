@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.IOException;
 import java.io.Writer;
 
@@ -10,12 +12,12 @@ import static io.muserver.openapi.Jsonizer.append;
  */
 public class OAuthFlowsObject implements JsonWriter {
 
-    private final OAuthFlowObject implicit;
-    private final OAuthFlowObject password;
-    private final OAuthFlowObject clientCredentials;
-    private final OAuthFlowObject authorizationCode;
+    private final @Nullable OAuthFlowObject implicit;
+    private final @Nullable OAuthFlowObject password;
+    private final @Nullable OAuthFlowObject clientCredentials;
+    private final @Nullable OAuthFlowObject authorizationCode;
 
-    OAuthFlowsObject(OAuthFlowObject implicit, OAuthFlowObject password, OAuthFlowObject clientCredentials, OAuthFlowObject authorizationCode) {
+    OAuthFlowsObject(@Nullable OAuthFlowObject implicit, @Nullable OAuthFlowObject password, @Nullable OAuthFlowObject clientCredentials, @Nullable OAuthFlowObject authorizationCode) {
         this.implicit = implicit;
         this.password = password;
         this.clientCredentials = clientCredentials;
@@ -37,28 +39,28 @@ public class OAuthFlowsObject implements JsonWriter {
     /**
      * @return the value described by {@link OAuthFlowsObjectBuilder#withImplicit}
      */
-    public OAuthFlowObject implicit() {
+    public @Nullable OAuthFlowObject implicit() {
         return implicit;
     }
 
     /**
       @return the value described by {@link OAuthFlowsObjectBuilder#withPassword}
      */
-    public OAuthFlowObject password() {
+    public @Nullable OAuthFlowObject password() {
         return password;
     }
 
     /**
       @return the value described by {@link OAuthFlowsObjectBuilder#withClientCredentials}
      */
-    public OAuthFlowObject clientCredentials() {
+    public @Nullable OAuthFlowObject clientCredentials() {
         return clientCredentials;
     }
 
     /**
       @return the value described by {@link OAuthFlowsObjectBuilder#withAuthorizationCode}
      */
-    public OAuthFlowObject authorizationCode() {
+    public @Nullable OAuthFlowObject authorizationCode() {
         return authorizationCode;
     }
 }

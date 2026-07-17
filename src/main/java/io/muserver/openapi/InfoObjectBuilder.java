@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.net.URI;
 
 /**
@@ -8,10 +10,10 @@ import java.net.URI;
  */
 public class InfoObjectBuilder {
     private String title = "API Documentation";
-    private String description;
-    private URI termsOfService;
-    private ContactObject contact;
-    private LicenseObject license;
+    private @Nullable String description;
+    private @Nullable URI termsOfService;
+    private @Nullable ContactObject contact;
+    private @Nullable LicenseObject license;
     private String version = "1.0";
 
     /**
@@ -28,7 +30,7 @@ public class InfoObjectBuilder {
      *                    MAY be used for rich text representation.
      * @return The current builder
      */
-    public InfoObjectBuilder withDescription(String description) {
+    public InfoObjectBuilder withDescription(@Nullable String description) {
         this.description = description;
         return this;
     }
@@ -37,7 +39,7 @@ public class InfoObjectBuilder {
      * @param termsOfService A URL to the Terms of Service for the API.
      * @return The current builder
      */
-    public InfoObjectBuilder withTermsOfService(URI termsOfService) {
+    public InfoObjectBuilder withTermsOfService(@Nullable URI termsOfService) {
         this.termsOfService = termsOfService;
         return this;
     }
@@ -46,7 +48,7 @@ public class InfoObjectBuilder {
      * @param contact The contact information for the exposed API.
      * @return The current builder
      */
-    public InfoObjectBuilder withContact(ContactObject contact) {
+    public InfoObjectBuilder withContact(@Nullable ContactObject contact) {
         this.contact = contact;
         return this;
     }
@@ -55,7 +57,7 @@ public class InfoObjectBuilder {
      * @param license The license information for the exposed API.
      * @return The current builder
      */
-    public InfoObjectBuilder withLicense(LicenseObject license) {
+    public InfoObjectBuilder withLicense(@Nullable LicenseObject license) {
         this.license = license;
         return this;
     }

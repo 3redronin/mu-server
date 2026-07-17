@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.IOException;
 import java.io.Writer;
 import java.util.List;
@@ -11,11 +13,11 @@ import static io.muserver.openapi.Jsonizer.append;
  * @see ServerVariableObjectBuilder
  */
 public class ServerVariableObject implements JsonWriter {
-    private final List<String> enumValues;
+    private final @Nullable List<String> enumValues;
     private final String defaultValue;
-    private final String description;
+    private final @Nullable String description;
 
-    ServerVariableObject(List<String> enumValues, String defaultValue, String description) {
+    ServerVariableObject(@Nullable List<String> enumValues, String defaultValue, @Nullable String description) {
         notNull("defaultValue", defaultValue);
         this.enumValues = enumValues;
         this.defaultValue = defaultValue;
@@ -35,7 +37,7 @@ public class ServerVariableObject implements JsonWriter {
     /**
      * @return the value described by {@link ServerVariableObjectBuilder#withEnumValues}
      */
-    public List<String> enumValues() {
+    public @Nullable List<String> enumValues() {
         return enumValues;
     }
 
@@ -49,7 +51,7 @@ public class ServerVariableObject implements JsonWriter {
     /**
       @return the value described by {@link ServerVariableObjectBuilder#withDescription}
      */
-    public String description() {
+    public @Nullable String description() {
         return description;
     }
 }

@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.List;
 
 import static io.muserver.openapi.OpenApiUtils.immutable;
@@ -8,15 +10,15 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * An object representing a Server Variable for server URL template substitution.
  */
 public class ServerVariableObjectBuilder {
-    private List<String> enumValues;
-    private String defaultValue;
-    private String description;
+    private @Nullable List<String> enumValues;
+    private @Nullable String defaultValue;
+    private @Nullable String description;
 
     /**
      * @param enumValues An enumeration of string values to be used if the substitution options are from a limited set.
      * @return The current builder
      */
-    public ServerVariableObjectBuilder withEnumValues(List<String> enumValues) {
+    public ServerVariableObjectBuilder withEnumValues(@Nullable List<String> enumValues) {
         this.enumValues = enumValues;
         return this;
     }
@@ -35,7 +37,7 @@ public class ServerVariableObjectBuilder {
      * @param description An optional description for the server variable. CommonMark syntax MAY be used for rich text representation.
      * @return The current builder
      */
-    public ServerVariableObjectBuilder withDescription(String description) {
+    public ServerVariableObjectBuilder withDescription(@Nullable String description) {
         this.description = description;
         return this;
     }

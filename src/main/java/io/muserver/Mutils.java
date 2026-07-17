@@ -162,7 +162,7 @@ public class Mutils {
      * @param name  The name of the variable to check
      * @param value The value to check
      */
-    public static void notNull(String name, Object value) {
+    public static void notNull(String name, @Nullable Object value) {
         if (value == null) {
             throw new IllegalArgumentException(name + " cannot be null");
         }

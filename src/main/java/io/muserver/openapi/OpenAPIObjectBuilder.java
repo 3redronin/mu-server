@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.List;
 
 import static io.muserver.openapi.InfoObjectBuilder.infoObject;
@@ -9,13 +11,13 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * This is the root document object of the OpenAPI document.
  */
 public class OpenAPIObjectBuilder {
-    private InfoObject info;
-    private List<ServerObject> servers;
-    private PathsObject paths;
-    private ComponentsObject components;
-    private List<SecurityRequirementObject> security;
-    private List<TagObject> tags;
-    private ExternalDocumentationObject externalDocs;
+    private @Nullable InfoObject info;
+    private @Nullable List<ServerObject> servers;
+    private @Nullable PathsObject paths;
+    private @Nullable ComponentsObject components;
+    private @Nullable List<SecurityRequirementObject> security;
+    private @Nullable List<TagObject> tags;
+    private @Nullable ExternalDocumentationObject externalDocs;
 
     /**
      * @param info <strong>REQUIRED</strong>. Provides metadata about the API. The metadata MAY be used by tooling as required.
@@ -32,7 +34,7 @@ public class OpenAPIObjectBuilder {
      *                <code>url</code> value of <code>/</code>.
      * @return The current builder
      */
-    public OpenAPIObjectBuilder withServers(List<ServerObject> servers) {
+    public OpenAPIObjectBuilder withServers(@Nullable List<ServerObject> servers) {
         this.servers = servers;
         return this;
     }
@@ -50,7 +52,7 @@ public class OpenAPIObjectBuilder {
      * @param components An element to hold various schemas for the specification.
      * @return The current builder
      */
-    public OpenAPIObjectBuilder withComponents(ComponentsObject components) {
+    public OpenAPIObjectBuilder withComponents(@Nullable ComponentsObject components) {
         this.components = components;
         return this;
     }
@@ -61,7 +63,7 @@ public class OpenAPIObjectBuilder {
      *                 objects need to be satisfied to authorize a request. Individual operations can override this definition.
      * @return The current builder
      */
-    public OpenAPIObjectBuilder withSecurity(List<SecurityRequirementObject> security) {
+    public OpenAPIObjectBuilder withSecurity(@Nullable List<SecurityRequirementObject> security) {
         this.security = security;
         return this;
     }
@@ -73,7 +75,7 @@ public class OpenAPIObjectBuilder {
      *             Each tag name in the list MUST be unique.
      * @return The current builder
      */
-    public OpenAPIObjectBuilder withTags(List<TagObject> tags) {
+    public OpenAPIObjectBuilder withTags(@Nullable List<TagObject> tags) {
         this.tags = tags;
         return this;
     }
@@ -82,7 +84,7 @@ public class OpenAPIObjectBuilder {
      * @param externalDocs Additional external documentation.
      * @return The current builder
      */
-    public OpenAPIObjectBuilder withExternalDocs(ExternalDocumentationObject externalDocs) {
+    public OpenAPIObjectBuilder withExternalDocs(@Nullable ExternalDocumentationObject externalDocs) {
         this.externalDocs = externalDocs;
         return this;
     }

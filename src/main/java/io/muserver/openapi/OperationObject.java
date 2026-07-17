@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.IOException;
 import java.io.Writer;
 import java.util.List;
@@ -15,23 +17,23 @@ import static java.util.stream.Collectors.toSet;
  */
 public class OperationObject implements JsonWriter {
 
-    private final List<String> tags;
-    private final String summary;
-    private final String description;
-    private final ExternalDocumentationObject externalDocs;
-    private final String operationId;
-    private final List<ParameterObject> parameters;
-    private final RequestBodyObject requestBody;
+    private final @Nullable List<String> tags;
+    private final @Nullable String summary;
+    private final @Nullable String description;
+    private final @Nullable ExternalDocumentationObject externalDocs;
+    private final @Nullable String operationId;
+    private final @Nullable List<ParameterObject> parameters;
+    private final @Nullable RequestBodyObject requestBody;
     private final ResponsesObject responses;
-    private final Map<String, CallbackObject> callbacks;
-    private final Boolean deprecated;
-    private final List<SecurityRequirementObject> security;
-    private final List<ServerObject> servers;
+    private final @Nullable Map<String, CallbackObject> callbacks;
+    private final @Nullable Boolean deprecated;
+    private final @Nullable List<SecurityRequirementObject> security;
+    private final @Nullable List<ServerObject> servers;
 
-    OperationObject(List<String> tags, String summary, String description, ExternalDocumentationObject externalDocs,
-                           String operationId, List<ParameterObject> parameters, RequestBodyObject requestBody, ResponsesObject responses,
-                           Map<String, CallbackObject> callbacks, Boolean deprecated, List<SecurityRequirementObject> security,
-                           List<ServerObject> servers) {
+    OperationObject(@Nullable List<String> tags, @Nullable String summary, @Nullable String description, @Nullable ExternalDocumentationObject externalDocs,
+                           @Nullable String operationId, @Nullable List<ParameterObject> parameters, @Nullable RequestBodyObject requestBody, ResponsesObject responses,
+                           @Nullable Map<String, CallbackObject> callbacks, @Nullable Boolean deprecated, @Nullable List<SecurityRequirementObject> security,
+                           @Nullable List<ServerObject> servers) {
         notNull("responses", responses);
         if (parameters != null) {
             Set<String> nameIns = parameters.stream().map(p -> p.name() + "\0" + p.in()).collect(toSet());
@@ -82,49 +84,49 @@ public class OperationObject implements JsonWriter {
     /**
      * @return the value described by {@link OperationObjectBuilder#withTags}
      */
-    public List<String> tags() {
+    public @Nullable List<String> tags() {
         return tags;
     }
 
     /**
       @return the value described by {@link OperationObjectBuilder#withSummary}
      */
-    public String summary() {
+    public @Nullable String summary() {
         return summary;
     }
 
     /**
       @return the value described by {@link OperationObjectBuilder#withDescription}
      */
-    public String description() {
+    public @Nullable String description() {
         return description;
     }
 
     /**
       @return the value described by {@link OperationObjectBuilder#withExternalDocs}
      */
-    public ExternalDocumentationObject externalDocs() {
+    public @Nullable ExternalDocumentationObject externalDocs() {
         return externalDocs;
     }
 
     /**
       @return the value described by {@link OperationObjectBuilder#withOperationId}
      */
-    public String operationId() {
+    public @Nullable String operationId() {
         return operationId;
     }
 
     /**
       @return the value described by {@link OperationObjectBuilder#withParameters}
      */
-    public List<ParameterObject> parameters() {
+    public @Nullable List<ParameterObject> parameters() {
         return parameters;
     }
 
     /**
       @return the value described by {@link OperationObjectBuilder#withRequestBody}
      */
-    public RequestBodyObject requestBody() {
+    public @Nullable RequestBodyObject requestBody() {
         return requestBody;
     }
 
@@ -138,28 +140,28 @@ public class OperationObject implements JsonWriter {
     /**
       @return the value described by {@link OperationObjectBuilder#withCallbacks}
      */
-    public Map<String, CallbackObject> callbacks() {
+    public @Nullable Map<String, CallbackObject> callbacks() {
         return callbacks;
     }
 
     /**
       @return the value described by {@link OperationObjectBuilder#withDeprecated}
      */
-    public Boolean deprecated() {
+    public @Nullable Boolean deprecated() {
         return deprecated;
     }
 
     /**
       @return the value described by {@link OperationObjectBuilder#withSecurity}
      */
-    public List<SecurityRequirementObject> security() {
+    public @Nullable List<SecurityRequirementObject> security() {
         return security;
     }
 
     /**
       @return the value described by {@link OperationObjectBuilder#withServers}
      */
-    public List<ServerObject> servers() {
+    public @Nullable List<ServerObject> servers() {
         return servers;
     }
 }

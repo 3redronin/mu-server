@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.IOException;
 import java.io.Writer;
 import java.util.Map;
@@ -13,19 +15,19 @@ import static io.muserver.openapi.ParameterObject.allowedStyles;
  */
 public class HeaderObject implements JsonWriter {
 
-    private final String description;
-    private final Boolean required;
-    private final Boolean deprecated;
-    private final String style;
-    private final Boolean explode;
-    private final SchemaObject schema;
-    private final Object example;
-    private final Map<String, ExampleObject> examples;
-    private final Map<String, MediaTypeObject> content;
+    private final @Nullable String description;
+    private final @Nullable Boolean required;
+    private final @Nullable Boolean deprecated;
+    private final @Nullable String style;
+    private final @Nullable Boolean explode;
+    private final @Nullable SchemaObject schema;
+    private final @Nullable Object example;
+    private final @Nullable Map<String, ExampleObject> examples;
+    private final @Nullable Map<String, MediaTypeObject> content;
 
-    HeaderObject(String description, Boolean required, Boolean deprecated,
-                    String style, Boolean explode, SchemaObject schema, Object example,
-                    Map<String, ExampleObject> examples, Map<String, MediaTypeObject> content) {
+    HeaderObject(@Nullable String description, @Nullable Boolean required, @Nullable Boolean deprecated,
+                    @Nullable String style, @Nullable Boolean explode, @Nullable SchemaObject schema, @Nullable Object example,
+                    @Nullable Map<String, ExampleObject> examples, @Nullable Map<String, MediaTypeObject> content) {
 
         if (style != null && !allowedStyles().contains(style)) {
             throw new IllegalArgumentException("'style' must be one of " + allowedStyles() + " but was " + style);
@@ -66,7 +68,7 @@ public class HeaderObject implements JsonWriter {
     /**
      * @return the value described by {@link HeaderObjectBuilder#withDescription}
      */
-    public String description() {
+    public @Nullable String description() {
         return description;
     }
 
@@ -87,7 +89,7 @@ public class HeaderObject implements JsonWriter {
     /**
      * @return the value described by {@link HeaderObjectBuilder#withStyle}
      */
-    public String style() {
+    public @Nullable String style() {
         return style;
     }
 
@@ -101,28 +103,28 @@ public class HeaderObject implements JsonWriter {
     /**
      * @return the value described by {@link HeaderObjectBuilder#withSchema}
      */
-    public SchemaObject schema() {
+    public @Nullable SchemaObject schema() {
         return schema;
     }
 
     /**
      * @return the value described by {@link HeaderObjectBuilder#withExample}
      */
-    public Object example() {
+    public @Nullable Object example() {
         return example;
     }
 
     /**
      * @return the value described by {@link HeaderObjectBuilder#withExamples}
      */
-    public Map<String, ExampleObject> examples() {
+    public @Nullable Map<String, ExampleObject> examples() {
         return examples;
     }
 
     /**
      * @return the value described by {@link HeaderObjectBuilder#withContent}
      */
-    public Map<String, MediaTypeObject> content() {
+    public @Nullable Map<String, MediaTypeObject> content() {
         return content;
     }
 }

@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.IOException;
 import java.io.Writer;
 import java.net.URI;
@@ -15,10 +17,10 @@ public class OAuthFlowObject implements JsonWriter {
 
     private final URI authorizationUrl;
     private final URI tokenUrl;
-    private final URI refreshUrl;
+    private final @Nullable URI refreshUrl;
     private final Map<String, String> scopes;
 
-    OAuthFlowObject(URI authorizationUrl, URI tokenUrl, URI refreshUrl, Map<String, String> scopes) {
+    OAuthFlowObject(URI authorizationUrl, URI tokenUrl, @Nullable URI refreshUrl, Map<String, String> scopes) {
         notNull("authorizationUrl", authorizationUrl);
         notNull("tokenUrl", tokenUrl);
         notNull("scopes", scopes);
@@ -56,7 +58,7 @@ public class OAuthFlowObject implements JsonWriter {
     /**
       @return the value described by {@link OAuthFlowObjectBuilder#withRefreshUrl}
      */
-    public URI refreshUrl() {
+    public @Nullable URI refreshUrl() {
         return refreshUrl;
     }
 

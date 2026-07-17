@@ -343,7 +343,7 @@ class Http2Headers implements Headers {
     }
 
     @Override
-    public MediaType contentType() {
+    public @Nullable MediaType contentType() {
         return Headtils.getMediaType(this);
     }
 }

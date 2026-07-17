@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.net.URI;
 import java.util.Map;
 
@@ -9,10 +11,10 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * Configuration details for a supported OAuth Flow
  */
 public class OAuthFlowObjectBuilder {
-    private URI authorizationUrl;
-    private URI tokenUrl;
-    private URI refreshUrl;
-    private Map<String, String> scopes;
+    private @Nullable URI authorizationUrl;
+    private @Nullable URI tokenUrl;
+    private @Nullable URI refreshUrl;
+    private @Nullable Map<String, String> scopes;
 
     /**
      * @param authorizationUrl <strong>REQUIRED</strong>. The authorization URL to be used for this flow.
@@ -36,7 +38,7 @@ public class OAuthFlowObjectBuilder {
      * @param refreshUrl The URL to be used for obtaining refresh tokens. This MUST be in the form of a URL.
      * @return The current builder
      */
-    public OAuthFlowObjectBuilder withRefreshUrl(URI refreshUrl) {
+    public OAuthFlowObjectBuilder withRefreshUrl(@Nullable URI refreshUrl) {
         this.refreshUrl = refreshUrl;
         return this;
     }

@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.IOException;
 import java.io.StringWriter;
 import java.io.Writer;
@@ -19,21 +21,21 @@ public class ParameterObject implements JsonWriter {
 
     private final String name;
     private final String in;
-    private final String description;
+    private final @Nullable String description;
     private final boolean required;
-    private final Boolean deprecated;
-    private final Boolean allowEmptyValue;
-    private final String style;
-    private final Boolean explode;
-    private final Boolean allowReserved;
-    private final SchemaObject schema;
-    private final Object example;
-    private final Map<String, ExampleObject> examples;
-    private final Map<String, MediaTypeObject> content;
+    private final @Nullable Boolean deprecated;
+    private final @Nullable Boolean allowEmptyValue;
+    private final @Nullable String style;
+    private final @Nullable Boolean explode;
+    private final @Nullable Boolean allowReserved;
+    private final @Nullable SchemaObject schema;
+    private final @Nullable Object example;
+    private final @Nullable Map<String, ExampleObject> examples;
+    private final @Nullable Map<String, MediaTypeObject> content;
 
-    ParameterObject(String name, String in, String description, Boolean required, Boolean deprecated, Boolean allowEmptyValue,
-                    String style, Boolean explode, Boolean allowReserved, SchemaObject schema, Object example,
-                    Map<String, ExampleObject> examples, Map<String, MediaTypeObject> content) {
+    ParameterObject(String name, String in, @Nullable String description, Boolean required, @Nullable Boolean deprecated, @Nullable Boolean allowEmptyValue,
+                    @Nullable String style, @Nullable Boolean explode, @Nullable Boolean allowReserved, @Nullable SchemaObject schema, @Nullable Object example,
+                    @Nullable Map<String, ExampleObject> examples, @Nullable Map<String, MediaTypeObject> content) {
         notNull("name", name);
         notNull("in", in);
         if (!allowedIns.contains(in)) {
@@ -131,7 +133,7 @@ public class ParameterObject implements JsonWriter {
     /**
       @return the value described by {@link ParameterObjectBuilder#withDescription}
      */
-    public String description() {
+    public @Nullable String description() {
         return description;
     }
 
@@ -159,7 +161,7 @@ public class ParameterObject implements JsonWriter {
     /**
       @return the value described by {@link ParameterObjectBuilder#withStyle}
      */
-    public String style() {
+    public @Nullable String style() {
         return style;
     }
 
@@ -180,32 +182,32 @@ public class ParameterObject implements JsonWriter {
     /**
       @return the value described by {@link ParameterObjectBuilder#withSchema}
      */
-    public SchemaObject schema() {
+    public @Nullable SchemaObject schema() {
         return schema;
     }
 
     /**
       @return the value described by {@link ParameterObjectBuilder#withExample}
      */
-    public Object example() {
+    public @Nullable Object example() {
         return example;
     }
 
     /**
       @return the value described by {@link ParameterObjectBuilder#withExamples}
      */
-    public Map<String, ExampleObject> examples() {
+    public @Nullable Map<String, ExampleObject> examples() {
         return examples;
     }
 
     /**
       @return the value described by {@link ParameterObjectBuilder#withContent}
      */
-    public Map<String, MediaTypeObject> content() {
+    public @Nullable Map<String, MediaTypeObject> content() {
         return content;
     }
 
-    static boolean actualValue(Boolean value, boolean defaultValue) {
+    static boolean actualValue(@Nullable Boolean value, boolean defaultValue) {
         return value == null ? defaultValue : value;
     }
 }

@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.IOException;
 import java.io.Writer;
 import java.net.URI;
@@ -13,9 +15,9 @@ import static io.muserver.openapi.Jsonizer.append;
 public class LicenseObject implements JsonWriter {
 
     private final String name;
-    private final URI url;
+    private final @Nullable URI url;
 
-    LicenseObject(String name, URI url) {
+    LicenseObject(String name, @Nullable URI url) {
         notNull("name", name);
         this.name = name;
         this.url = url;
@@ -40,7 +42,7 @@ public class LicenseObject implements JsonWriter {
     /**
       @return the value described by {@link LicenseObjectBuilder#withUrl}
      */
-    public URI url() {
+    public @Nullable URI url() {
         return url;
     }
 }

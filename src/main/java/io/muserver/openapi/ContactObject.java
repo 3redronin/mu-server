@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.IOException;
 import java.io.Writer;
 import java.net.URI;
@@ -10,11 +12,11 @@ import static io.muserver.openapi.Jsonizer.append;
  * @see ContactObjectBuilder
  */
 public class ContactObject implements JsonWriter {
-    private final String name;
-    private final URI url;
-    private final String email;
+    private final @Nullable String name;
+    private final @Nullable URI url;
+    private final @Nullable String email;
 
-    ContactObject(String name, URI url, String email) {
+    ContactObject(@Nullable String name, @Nullable URI url, @Nullable String email) {
         if (email != null && !email.contains("@")) {
             throw new IllegalArgumentException("'email' must be a valid email address, but was " + email);
         }
@@ -36,21 +38,21 @@ public class ContactObject implements JsonWriter {
     /**
      * @return The value described by {@link ContactObjectBuilder#withName}
      */
-    public String name() {
+    public @Nullable String name() {
         return name;
     }
 
     /**
      * @return The value described by {@link ContactObjectBuilder#withUrl}
      */
-    public URI url() {
+    public @Nullable URI url() {
         return url;
     }
 
     /**
      * @return The value described by {@link ContactObjectBuilder#withEmail}
      */
-    public String email() {
+    public @Nullable String email() {
         return email;
     }
 }

@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.IOException;
 import java.io.Writer;
 import java.util.List;
@@ -24,7 +26,7 @@ public class Jsonizer {
             ;
     }
 
-    static boolean append(Writer writer, String key, Object value, boolean isFirst) throws IOException {
+    static boolean append(Writer writer, String key, @Nullable Object value, boolean isFirst) throws IOException {
         if (value == null) {
             return isFirst;
         }
@@ -64,7 +66,7 @@ public class Jsonizer {
      * @param value The value to write
      * @throws IOException Thrown if the writer throws this while writing
      */
-    public static void writeValue(Writer writer, Object value) throws IOException {
+    public static void writeValue(Writer writer, @Nullable Object value) throws IOException {
         if (value == null) {
             writer.append("null");
         } else if (value instanceof JsonWriter) {
@@ -73,7 +75,7 @@ public class Jsonizer {
             List list = (List) value;
             writer.append('[');
             boolean isFirst = true;
-            for (Object obj : list) {
+            for (@Nullable Object obj : list) {
                 if (!isFirst) {
                     writer.append(',');
                 }

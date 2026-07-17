@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.Map;
 
 import static io.muserver.openapi.OpenApiUtils.immutable;
@@ -10,7 +12,7 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * used to identify the callback object is an expression, evaluated at runtime, that identifies a URL to use for the callback operation.
  */
 public class CallbackObjectBuilder {
-    private Map<String, PathItemObject> callbacks;
+    private @Nullable Map<String, PathItemObject> callbacks;
 
     /**
      * @param callbacks A mapping of runtime expressions to path items.

@@ -1,5 +1,7 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
+
 import javax.net.ssl.TrustManager;
 import java.net.InetSocketAddress;
 import java.security.cert.Certificate;
@@ -28,12 +30,12 @@ public interface HttpConnection {
      * Gets the HTTPS protocol, for example "TLSv1.2" or "TLSv1.3"
      * @return The HTTPS protocol being used, or <code>null</code> if this connection is not over HTTPS.
      */
-    String httpsProtocol();
+    @Nullable String httpsProtocol();
 
     /**
      * @return The HTTPS cipher used on this connection, or <code>null</code> if this connection is not over HTTPS.
      */
-    String cipher();
+    @Nullable String cipher();
 
     /**
      * @return The time that this connection was established.
