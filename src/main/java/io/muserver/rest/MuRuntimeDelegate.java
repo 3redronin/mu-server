@@ -65,12 +65,12 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
 
     /**
      * Writes headers from a JAX-RS response to a MuResponse
-     * @param requestUri The URI of the current request
+     * @param baseUri The base URI of the current JAX-RS application
      * @param from The JAX-RS response containing headers
      * @param to The response to write the headers to
      * @param isHttp1 The response is an HTTP-1 response
      */
-    public static void writeResponseHeaders(URI requestUri, Response from, MuResponse to, boolean isHttp1) {
+    public static void writeResponseHeaders(URI baseUri, Response from, MuResponse to, boolean isHttp1) {
         for (Map.Entry<String, List<String>> entry : from.getStringHeaders().entrySet()) {
             String key = entry.getKey();
             if (isHttp1 || !key.equalsIgnoreCase("connection")) {
@@ -86,7 +86,7 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
                     } catch (IllegalArgumentException e) {
                         throw new ServerErrorException("Invalid redirect location: " + values.get(0) + " - " + e.getMessage(), 500);
                     }
-                    to.headers().add(key, requestUri.resolve(location).toString());
+                    to.headers().add(key, baseUri.resolve(location).toString());
                 } else {
                     to.headers().add(key, values);
                 }
