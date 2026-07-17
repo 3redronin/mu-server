@@ -1,5 +1,7 @@
 package io.muserver.rest;
 
+import org.jspecify.annotations.Nullable;
+
 import jakarta.ws.rs.core.SecurityContext;
 
 import java.security.Principal;
@@ -18,5 +20,5 @@ public interface UserPassAuthenticator {
      * @param password The password
      * @return The user, or <code>null</code> if the credentials are invalid.
      */
-    Principal authenticate(String username, String password);
+    @Nullable Principal authenticate(String username, String password);
 }

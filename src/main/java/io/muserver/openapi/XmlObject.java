@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.IOException;
 import java.io.Writer;
 import java.net.URI;
@@ -11,13 +13,13 @@ import static io.muserver.openapi.Jsonizer.append;
  */
 public class XmlObject implements JsonWriter {
 
-    private final String name;
-    private final URI namespace;
-    private final String prefix;
+    private final @Nullable String name;
+    private final @Nullable URI namespace;
+    private final @Nullable String prefix;
     private final boolean attribute;
     private final boolean wrapped;
 
-    XmlObject(String name, URI namespace, String prefix, boolean attribute, boolean wrapped) {
+    XmlObject(@Nullable String name, @Nullable URI namespace, @Nullable String prefix, boolean attribute, boolean wrapped) {
         this.name = name;
         this.namespace = namespace;
         this.prefix = prefix;
@@ -40,21 +42,21 @@ public class XmlObject implements JsonWriter {
     /**
      * @return the value described by {@link XmlObjectBuilder#withName}
      */
-    public String name() {
+    public @Nullable String name() {
         return name;
     }
 
     /**
       @return the value described by {@link XmlObjectBuilder#withNamespace}
      */
-    public URI namespace() {
+    public @Nullable URI namespace() {
         return namespace;
     }
 
     /**
       @return the value described by {@link XmlObjectBuilder#withPrefix}
      */
-    public String prefix() {
+    public @Nullable String prefix() {
         return prefix;
     }
 

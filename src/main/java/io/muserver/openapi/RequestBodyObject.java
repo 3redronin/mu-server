@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.IOException;
 import java.io.Writer;
 import java.util.Map;
@@ -13,11 +15,11 @@ import static io.muserver.openapi.ParameterObject.actualValue;
  */
 public class RequestBodyObject implements JsonWriter {
 
-    private final String description;
+    private final @Nullable String description;
     private final Map<String, MediaTypeObject> content;
-    private final Boolean required;
+    private final @Nullable Boolean required;
 
-    RequestBodyObject(String description, Map<String, MediaTypeObject> content, Boolean required) {
+    RequestBodyObject(@Nullable String description, Map<String, MediaTypeObject> content, @Nullable Boolean required) {
         notNull("content", content);
         this.description = description;
         this.content = content;
@@ -37,7 +39,7 @@ public class RequestBodyObject implements JsonWriter {
     /**
      * @return the value described by {@link RequestBodyObjectBuilder#withDescription}
      */
-    public String description() {
+    public @Nullable String description() {
         return description;
     }
 

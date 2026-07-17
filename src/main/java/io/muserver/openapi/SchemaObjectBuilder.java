@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import io.muserver.UploadedFile;
 
 import java.io.File;
@@ -25,284 +27,284 @@ import static java.util.Arrays.asList;
  * Unless stated otherwise, the property definitions follow the JSON Schema.</p>
  */
 public class SchemaObjectBuilder {
-    private String title;
-    private Double multipleOf;
-    private Double maximum;
-    private Boolean exclusiveMaximum;
-    private Double minimum;
-    private Boolean exclusiveMinimum;
-    private Integer maxLength;
-    private Integer minLength;
-    private Pattern pattern;
-    private Integer maxItems;
-    private Integer minItems;
-    private Boolean uniqueItems;
-    private Integer maxProperties;
-    private Integer minProperties;
-    private List<String> required;
-    private List<Object> enumValue;
-    private String type;
-    private List<SchemaObject> allOf;
-    private List<SchemaObject> oneOf;
-    private List<SchemaObject> anyOf;
-    private List<SchemaObject> not;
-    private SchemaObject items;
-    private Map<String, SchemaObject> properties;
-    private Object additionalProperties;
-    private String description;
-    private String format;
-    private Object defaultValue;
-    private Boolean nullable;
-    private DiscriminatorObject discriminator;
-    private Boolean readOnly;
-    private Boolean writeOnly;
-    private XmlObject xml;
-    private ExternalDocumentationObject externalDocs;
-    private Object example;
-    private Boolean deprecated;
+    private @Nullable String title;
+    private @Nullable Double multipleOf;
+    private @Nullable Double maximum;
+    private @Nullable Boolean exclusiveMaximum;
+    private @Nullable Double minimum;
+    private @Nullable Boolean exclusiveMinimum;
+    private @Nullable Integer maxLength;
+    private @Nullable Integer minLength;
+    private @Nullable Pattern pattern;
+    private @Nullable Integer maxItems;
+    private @Nullable Integer minItems;
+    private @Nullable Boolean uniqueItems;
+    private @Nullable Integer maxProperties;
+    private @Nullable Integer minProperties;
+    private @Nullable List<String> required;
+    private @Nullable List<Object> enumValue;
+    private @Nullable String type;
+    private @Nullable List<SchemaObject> allOf;
+    private @Nullable List<SchemaObject> oneOf;
+    private @Nullable List<SchemaObject> anyOf;
+    private @Nullable List<SchemaObject> not;
+    private @Nullable SchemaObject items;
+    private @Nullable Map<String, SchemaObject> properties;
+    private @Nullable Object additionalProperties;
+    private @Nullable String description;
+    private @Nullable String format;
+    private @Nullable Object defaultValue;
+    private @Nullable Boolean nullable;
+    private @Nullable DiscriminatorObject discriminator;
+    private @Nullable Boolean readOnly;
+    private @Nullable Boolean writeOnly;
+    private @Nullable XmlObject xml;
+    private @Nullable ExternalDocumentationObject externalDocs;
+    private @Nullable Object example;
+    private @Nullable Boolean deprecated;
 
     /**
      * @return the value set by {@link #withTitle}
      */
-    public String title() {
+    public @Nullable String title() {
         return title;
     }
 
     /**
      * @return the value set by {@link #withMultipleOf}
      */
-    public Double multipleOf() {
+    public @Nullable Double multipleOf() {
         return multipleOf;
     }
 
     /**
      * @return the value set by {@link #withMaximum}
      */
-    public Double maximum() {
+    public @Nullable Double maximum() {
         return maximum;
     }
 
     /**
      * @return the value set by {@link #withExclusiveMaximum}
      */
-    public Boolean exclusiveMaximum() {
+    public @Nullable Boolean exclusiveMaximum() {
         return exclusiveMaximum;
     }
 
     /**
      * @return the value set by {@link #withMinimum}
      */
-    public Double minimum() {
+    public @Nullable Double minimum() {
         return minimum;
     }
 
     /**
      * @return the value set by {@link #withExclusiveMinimum}
      */
-    public Boolean exclusiveMinimum() {
+    public @Nullable Boolean exclusiveMinimum() {
         return exclusiveMinimum;
     }
 
     /**
      * @return the value set by {@link #withMaxLength}
      */
-    public Integer maxLength() {
+    public @Nullable Integer maxLength() {
         return maxLength;
     }
 
     /**
      * @return the value set by {@link #withMinLength}
      */
-    public Integer minLength() {
+    public @Nullable Integer minLength() {
         return minLength;
     }
 
     /**
      * @return the value set by {@link #withPattern}
      */
-    public Pattern pattern() {
+    public @Nullable Pattern pattern() {
         return pattern;
     }
 
     /**
      * @return the value set by {@link #withMaxItems}
      */
-    public Integer maxItems() {
+    public @Nullable Integer maxItems() {
         return maxItems;
     }
 
     /**
      * @return the value set by {@link #withMinItems}
      */
-    public Integer minItems() {
+    public @Nullable Integer minItems() {
         return minItems;
     }
 
     /**
      * @return the value set by {@link #withUniqueItems}
      */
-    public Boolean uniqueItems() {
+    public @Nullable Boolean uniqueItems() {
         return uniqueItems;
     }
 
     /**
      * @return the value set by {@link #withMaxProperties}
      */
-    public Integer maxProperties() {
+    public @Nullable Integer maxProperties() {
         return maxProperties;
     }
 
     /**
      * @return the value set by {@link #withMinProperties}
      */
-    public Integer minProperties() {
+    public @Nullable Integer minProperties() {
         return minProperties;
     }
 
     /**
      * @return the value set by {@link #withRequired}
      */
-    public List<String> required() {
+    public @Nullable List<String> required() {
         return required;
     }
 
     /**
      * @return the value set by {@link #withEnumValue}
      */
-    public List<Object> enumValue() {
+    public @Nullable List<Object> enumValue() {
         return enumValue;
     }
 
     /**
      * @return the value set by {@link #withType}
      */
-    public String type() {
+    public @Nullable String type() {
         return type;
     }
 
     /**
      * @return the value set by {@link #withAllOf}
      */
-    public List<SchemaObject> allOf() {
+    public @Nullable List<SchemaObject> allOf() {
         return allOf;
     }
 
     /**
      * @return the value set by {@link #withOneOf}
      */
-    public List<SchemaObject> oneOf() {
+    public @Nullable List<SchemaObject> oneOf() {
         return oneOf;
     }
 
     /**
      * @return the value set by {@link #withAnyOf}
      */
-    public List<SchemaObject> anyOf() {
+    public @Nullable List<SchemaObject> anyOf() {
         return anyOf;
     }
 
     /**
      * @return the value set by {@link #withNot}
      */
-    public List<SchemaObject> not() {
+    public @Nullable List<SchemaObject> not() {
         return not;
     }
 
     /**
      * @return the value set by {@link #withItems}
      */
-    public SchemaObject items() {
+    public @Nullable SchemaObject items() {
         return items;
     }
 
     /**
      * @return the value set by {@link #withProperties}
      */
-    public Map<String, SchemaObject> properties() {
+    public @Nullable Map<String, SchemaObject> properties() {
         return properties;
     }
 
     /**
      * @return the value set by {@link #withAdditionalProperties}
      */
-    public Object additionalProperties() {
+    public @Nullable Object additionalProperties() {
         return additionalProperties;
     }
 
     /**
      * @return the value set by {@link #withDescription}
      */
-    public String description() {
+    public @Nullable String description() {
         return description;
     }
 
     /**
      * @return the value set by {@link #withFormat}
      */
-    public String format() {
+    public @Nullable String format() {
         return format;
     }
 
     /**
      * @return the value set by {@link #withDefaultValue}
      */
-    public Object defaultValue() {
+    public @Nullable Object defaultValue() {
         return defaultValue;
     }
 
     /**
      * @return the value set by {@link #withNullable}
      */
-    public Boolean nullable() {
+    public @Nullable Boolean nullable() {
         return nullable;
     }
 
     /**
      * @return the value set by {@link #withDiscriminator}
      */
-    public DiscriminatorObject discriminator() {
+    public @Nullable DiscriminatorObject discriminator() {
         return discriminator;
     }
 
     /**
      * @return the value set by {@link #withReadOnly}
      */
-    public Boolean readOnly() {
+    public @Nullable Boolean readOnly() {
         return readOnly;
     }
 
     /**
      * @return the value set by {@link #withWriteOnly}
      */
-    public Boolean writeOnly() {
+    public @Nullable Boolean writeOnly() {
         return writeOnly;
     }
 
     /**
      * @return the value set by {@link #withXml}
      */
-    public XmlObject xml() {
+    public @Nullable XmlObject xml() {
         return xml;
     }
 
     /**
      * @return the value set by {@link #withExternalDocs}
      */
-    public ExternalDocumentationObject externalDocs() {
+    public @Nullable ExternalDocumentationObject externalDocs() {
         return externalDocs;
     }
 
     /**
      * @return the value set by {@link #withExample}
      */
-    public Object example() {
+    public @Nullable Object example() {
         return example;
     }
 
     /**
      * @return the value set by {@link #withDeprecated}
      */
-    public Boolean deprecated() {
+    public @Nullable Boolean deprecated() {
         return deprecated;
     }
 
@@ -310,7 +312,7 @@ public class SchemaObjectBuilder {
      * @param title the name of this object type
      * @return this builder
      */
-    public SchemaObjectBuilder withTitle(String title) {
+    public SchemaObjectBuilder withTitle(@Nullable String title) {
         this.title = title;
         return this;
     }
@@ -320,7 +322,7 @@ public class SchemaObjectBuilder {
      * @param multipleOf the multiple
      * @return this builder
      */
-    public SchemaObjectBuilder withMultipleOf(Double multipleOf) {
+    public SchemaObjectBuilder withMultipleOf(@Nullable Double multipleOf) {
         this.multipleOf = multipleOf;
         return this;
     }
@@ -330,18 +332,18 @@ public class SchemaObjectBuilder {
      * @return this builder
      * @see #withExclusiveMaximum(Boolean)
      */
-    public SchemaObjectBuilder withMaximum(Double maximum) {
+    public SchemaObjectBuilder withMaximum(@Nullable Double maximum) {
         this.maximum = maximum;
         return this;
     }
 
     /**
-     * @param exclusiveMaximum <code>true</code> if the value specified with {@link #withMaximum(Double)} is exclusive;
+      * @param exclusiveMaximum <code>true</code> if the value specified with {@link #withMaximum(Double)} is exclusive;
      *                         otherwise the default <code>false</code> means it is an inclusive number.
      * @return this builder
      * @see #withMaximum(Double)
      */
-    public SchemaObjectBuilder withExclusiveMaximum(Boolean exclusiveMaximum) {
+    public SchemaObjectBuilder withExclusiveMaximum(@Nullable Boolean exclusiveMaximum) {
         this.exclusiveMaximum = exclusiveMaximum;
         return this;
     }
@@ -351,18 +353,18 @@ public class SchemaObjectBuilder {
      * @return this builder
      * @see #withExclusiveMinimum(Boolean)
      */
-    public SchemaObjectBuilder withMinimum(Double minimum) {
+    public SchemaObjectBuilder withMinimum(@Nullable Double minimum) {
         this.minimum = minimum;
         return this;
     }
 
     /**
-     * @param exclusiveMinimum <code>true</code> if the value specified with {@link #withMinimum(Double)} is exclusive;
+      * @param exclusiveMinimum <code>true</code> if the value specified with {@link #withMinimum(Double)} is exclusive;
      *                         otherwise the default <code>false</code> means it is an inclusive number.
      * @return this builder
      * @see #withMinimum(Double)
      */
-    public SchemaObjectBuilder withExclusiveMinimum(Boolean exclusiveMinimum) {
+    public SchemaObjectBuilder withExclusiveMinimum(@Nullable Boolean exclusiveMinimum) {
         this.exclusiveMinimum = exclusiveMinimum;
         return this;
     }
@@ -371,7 +373,7 @@ public class SchemaObjectBuilder {
      * @param maxLength the maximum allowed length of string values
      * @return this builder
      */
-    public SchemaObjectBuilder withMaxLength(Integer maxLength) {
+    public SchemaObjectBuilder withMaxLength(@Nullable Integer maxLength) {
         this.maxLength = maxLength;
         return this;
     }
@@ -380,7 +382,7 @@ public class SchemaObjectBuilder {
      * @param minLength the minimum allowed length of string values
      * @return this builder
      */
-    public SchemaObjectBuilder withMinLength(Integer minLength) {
+    public SchemaObjectBuilder withMinLength(@Nullable Integer minLength) {
         this.minLength = minLength;
         return this;
     }
@@ -389,7 +391,7 @@ public class SchemaObjectBuilder {
      * @param pattern a regular expression that string values must match against
      * @return this builder
      */
-    public SchemaObjectBuilder withPattern(Pattern pattern) {
+    public SchemaObjectBuilder withPattern(@Nullable Pattern pattern) {
         this.pattern = pattern;
         return this;
     }
@@ -398,7 +400,7 @@ public class SchemaObjectBuilder {
      * @param maxItems the maximum number of items allowed in an array value
      * @return this builder
      */
-    public SchemaObjectBuilder withMaxItems(Integer maxItems) {
+    public SchemaObjectBuilder withMaxItems(@Nullable Integer maxItems) {
         this.maxItems = maxItems;
         return this;
     }
@@ -407,7 +409,7 @@ public class SchemaObjectBuilder {
      * @param minItems the minimum number of items allowed in an array value
      * @return this builder
      */
-    public SchemaObjectBuilder withMinItems(Integer minItems) {
+    public SchemaObjectBuilder withMinItems(@Nullable Integer minItems) {
         this.minItems = minItems;
         return this;
     }
@@ -416,7 +418,7 @@ public class SchemaObjectBuilder {
      * @param uniqueItems if true, then all items in an array value must be unique
      * @return this builder
      */
-    public SchemaObjectBuilder withUniqueItems(Boolean uniqueItems) {
+    public SchemaObjectBuilder withUniqueItems(@Nullable Boolean uniqueItems) {
         this.uniqueItems = uniqueItems;
         return this;
     }
@@ -425,7 +427,7 @@ public class SchemaObjectBuilder {
      * @param maxProperties the maximum number of properties allowed for an &quot;object&quot; type.
      * @return this builder
      */
-    public SchemaObjectBuilder withMaxProperties(Integer maxProperties) {
+    public SchemaObjectBuilder withMaxProperties(@Nullable Integer maxProperties) {
         this.maxProperties = maxProperties;
         return this;
     }
@@ -434,7 +436,7 @@ public class SchemaObjectBuilder {
      * @param minProperties the minimum number of properties allowed for an &quot;object&quot; type.
      * @return this builder
      */
-    public SchemaObjectBuilder withMinProperties(Integer minProperties) {
+    public SchemaObjectBuilder withMinProperties(@Nullable Integer minProperties) {
         this.minProperties = minProperties;
         return this;
     }
@@ -443,7 +445,7 @@ public class SchemaObjectBuilder {
      * @param required the list of properties that are required to have a value for an &quot;object&quot; type.
      * @return this builder
      */
-    public SchemaObjectBuilder withRequired(List<String> required) {
+    public SchemaObjectBuilder withRequired(@Nullable List<String> required) {
         this.required = required;
         return this;
     }
@@ -452,7 +454,7 @@ public class SchemaObjectBuilder {
      * @param enumValue the allowed values for an &quot;enum&quot; type
      * @return this builder
      */
-    public SchemaObjectBuilder withEnumValue(List<Object> enumValue) {
+    public SchemaObjectBuilder withEnumValue(@Nullable List<Object> enumValue) {
         this.enumValue = enumValue;
         return this;
     }
@@ -461,7 +463,7 @@ public class SchemaObjectBuilder {
      * @param type the type of this schema object. One of <code>string</code>, <code>number</code>, <code>integer</code>, <code>boolean</code>, <code>array</code> or <code>object</code>
      * @return this builder
      */
-    public SchemaObjectBuilder withType(String type) {
+    public SchemaObjectBuilder withType(@Nullable String type) {
         this.type = type;
         return this;
     }
@@ -470,7 +472,7 @@ public class SchemaObjectBuilder {
      * @param allOf the schemas that the value must match
      * @return this builder
      */
-    public SchemaObjectBuilder withAllOf(List<SchemaObject> allOf) {
+    public SchemaObjectBuilder withAllOf(@Nullable List<SchemaObject> allOf) {
         this.allOf = allOf;
         return this;
     }
@@ -481,7 +483,7 @@ public class SchemaObjectBuilder {
      * @return this builder
      * @see #withAnyOf(List)
      */
-    public SchemaObjectBuilder withOneOf(List<SchemaObject> oneOf) {
+    public SchemaObjectBuilder withOneOf(@Nullable List<SchemaObject> oneOf) {
         this.oneOf = oneOf;
         return this;
     }
@@ -492,7 +494,7 @@ public class SchemaObjectBuilder {
      * @return this builder
      * @see #withOneOf(List)
      */
-    public SchemaObjectBuilder withAnyOf(List<SchemaObject> anyOf) {
+    public SchemaObjectBuilder withAnyOf(@Nullable List<SchemaObject> anyOf) {
         this.anyOf = anyOf;
         return this;
     }
@@ -501,7 +503,7 @@ public class SchemaObjectBuilder {
      * @param not schemas the value must not validate against
      * @return this builder
      */
-    public SchemaObjectBuilder withNot(List<SchemaObject> not) {
+    public SchemaObjectBuilder withNot(@Nullable List<SchemaObject> not) {
         this.not = not;
         return this;
     }
@@ -510,7 +512,7 @@ public class SchemaObjectBuilder {
      * @param items the schema that items in an array object must validate against
      * @return this builder
      */
-    public SchemaObjectBuilder withItems(SchemaObject items) {
+    public SchemaObjectBuilder withItems(@Nullable SchemaObject items) {
         this.items = items;
         return this;
     }
@@ -519,7 +521,7 @@ public class SchemaObjectBuilder {
      * @param properties the schema objects of each property for an <code>object</code> type
      * @return this builder
      */
-    public SchemaObjectBuilder withProperties(Map<String, SchemaObject> properties) {
+    public SchemaObjectBuilder withProperties(@Nullable Map<String, SchemaObject> properties) {
         this.properties = properties;
         return this;
     }
@@ -532,7 +534,7 @@ public class SchemaObjectBuilder {
      *                             against this schema.
      * @return this builder
      */
-    public SchemaObjectBuilder withAdditionalProperties(Object additionalProperties) {
+    public SchemaObjectBuilder withAdditionalProperties(@Nullable Object additionalProperties) {
         this.additionalProperties = additionalProperties;
         return this;
     }
@@ -542,7 +544,7 @@ public class SchemaObjectBuilder {
      * @return this builder
      * @see #withTitle(String)
      */
-    public SchemaObjectBuilder withDescription(String description) {
+    public SchemaObjectBuilder withDescription(@Nullable String description) {
         this.description = description;
         return this;
     }
@@ -650,7 +652,7 @@ public class SchemaObjectBuilder {
      * @param format the format of the type specified by {@link #withType(String)}
      * @return this builder
      */
-    public SchemaObjectBuilder withFormat(String format) {
+    public SchemaObjectBuilder withFormat(@Nullable String format) {
         this.format = format;
         return this;
     }
@@ -659,7 +661,7 @@ public class SchemaObjectBuilder {
      * @param defaultValue The default value to use when none is specified
      * @return this builder
      */
-    public SchemaObjectBuilder withDefaultValue(Object defaultValue) {
+    public SchemaObjectBuilder withDefaultValue(@Nullable Object defaultValue) {
         this.defaultValue = defaultValue;
         return this;
     }
@@ -672,7 +674,7 @@ public class SchemaObjectBuilder {
      *                 <code>type</code> unmodified. The default value is <code>false</code>.
      * @return The current builder
      */
-    public SchemaObjectBuilder withNullable(Boolean nullable) {
+    public SchemaObjectBuilder withNullable(@Nullable Boolean nullable) {
         this.nullable = nullable;
         return this;
     }
@@ -681,7 +683,7 @@ public class SchemaObjectBuilder {
      * @param discriminator Adds support for polymorphism. The discriminator is an object name that is used to differentiate between other schemas which may satisfy the payload description.
      * @return The current builder
      */
-    public SchemaObjectBuilder withDiscriminator(DiscriminatorObject discriminator) {
+    public SchemaObjectBuilder withDiscriminator(@Nullable DiscriminatorObject discriminator) {
         this.discriminator = discriminator;
         return this;
     }
@@ -694,7 +696,7 @@ public class SchemaObjectBuilder {
      *                 as both <code>readOnly</code> and <code>writeOnly</code> being <code>true</code>. Default value is <code>false</code>.
      * @return The current builder
      */
-    public SchemaObjectBuilder withReadOnly(Boolean readOnly) {
+    public SchemaObjectBuilder withReadOnly(@Nullable Boolean readOnly) {
         this.readOnly = readOnly;
         return this;
     }
@@ -708,7 +710,7 @@ public class SchemaObjectBuilder {
      *                  Default value is <code>false</code>.
      * @return The current builder
      */
-    public SchemaObjectBuilder withWriteOnly(Boolean writeOnly) {
+    public SchemaObjectBuilder withWriteOnly(@Nullable Boolean writeOnly) {
         this.writeOnly = writeOnly;
         return this;
     }
@@ -718,7 +720,7 @@ public class SchemaObjectBuilder {
      *            to describe the XML representation of this property.
      * @return The current builder
      */
-    public SchemaObjectBuilder withXml(XmlObject xml) {
+    public SchemaObjectBuilder withXml(@Nullable XmlObject xml) {
         this.xml = xml;
         return this;
     }
@@ -727,7 +729,7 @@ public class SchemaObjectBuilder {
      * @param externalDocs Additional external documentation for this schema.
      * @return The current builder
      */
-    public SchemaObjectBuilder withExternalDocs(ExternalDocumentationObject externalDocs) {
+    public SchemaObjectBuilder withExternalDocs(@Nullable ExternalDocumentationObject externalDocs) {
         this.externalDocs = externalDocs;
         return this;
     }
@@ -738,7 +740,7 @@ public class SchemaObjectBuilder {
      *                example with escaping where necessary.
      * @return The current builder
      */
-    public SchemaObjectBuilder withExample(Object example) {
+    public SchemaObjectBuilder withExample(@Nullable Object example) {
         this.example = example;
         return this;
     }
@@ -747,7 +749,7 @@ public class SchemaObjectBuilder {
      * @param deprecated Specifies that a schema is deprecated and SHOULD be transitioned out of usage. Default value is <code>false</code>.
      * @return The current builder
      */
-    public SchemaObjectBuilder withDeprecated(Boolean deprecated) {
+    public SchemaObjectBuilder withDeprecated(@Nullable Boolean deprecated) {
         this.deprecated = deprecated;
         return this;
     }
@@ -813,7 +815,7 @@ public class SchemaObjectBuilder {
         return schemaObjectBuilder;
     }
 
-    private static Object example(Class<?> clazz) {
+    private static @Nullable Object example(Class<?> clazz) {
         if (clazz.equals(UUID.class)) {
             return UUID.randomUUID();
         } else if (Temporal.class.isAssignableFrom(clazz)) {

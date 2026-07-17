@@ -1,20 +1,22 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.net.URI;
 
 /**
  * Allows referencing an external resource for extended documentation.
  */
 public class ExternalDocumentationObjectBuilder {
-    private String description;
-    private URI url;
+    private @Nullable String description;
+    private @Nullable URI url;
 
     /**
      * @param description A short description of the target documentation. <a href="http://spec.commonmark.org/">CommonMark syntax</a>
      *                    MAY be used for rich text representation.
      * @return The current builder
      */
-    public ExternalDocumentationObjectBuilder withDescription(String description) {
+    public ExternalDocumentationObjectBuilder withDescription(@Nullable String description) {
         this.description = description;
         return this;
     }

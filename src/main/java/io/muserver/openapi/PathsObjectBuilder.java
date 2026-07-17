@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.Map;
 
 import static io.muserver.openapi.OpenApiUtils.immutable;
@@ -10,7 +12,7 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * ACL constraints.</p>
  */
 public class PathsObjectBuilder {
-    private Map<String, PathItemObject> pathItemObjects;
+    private @Nullable Map<String, PathItemObject> pathItemObjects;
 
     /**
      * @param pathItemObjects A relative path to an individual endpoint. The field name MUST begin with a slash.
@@ -22,7 +24,7 @@ public class PathsObjectBuilder {
      *                        In case of ambiguous matching, it's up to the tooling to decide which one to use.
      * @return The current builder
      */
-    public PathsObjectBuilder withPathItemObjects(Map<String, PathItemObject> pathItemObjects) {
+    public PathsObjectBuilder withPathItemObjects(@Nullable Map<String, PathItemObject> pathItemObjects) {
         this.pathItemObjects = pathItemObjects;
         return this;
     }

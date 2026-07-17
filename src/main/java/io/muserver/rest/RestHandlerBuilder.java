@@ -11,6 +11,7 @@ import jakarta.ws.rs.container.ContainerRequestFilter;
 import jakarta.ws.rs.container.ContainerResponseFilter;
 import jakarta.ws.rs.container.PreMatching;
 import jakarta.ws.rs.ext.*;
+import org.jspecify.annotations.Nullable;
 
 import java.io.InputStream;
 import java.lang.annotation.Annotation;
@@ -35,18 +36,18 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     private final List<ReaderInterceptor> readerInterceptors = new ArrayList<>();
     private final List<ParamConverterProvider> customParamConverterProviders = new ArrayList<>();
     private final List<SchemaReference> customSchemas = new ArrayList<>();
-    private String openApiJsonUrl = null;
-    private String openApiYamlUrl = null;
-    private String openApiHtmlUrl = null;
-    private OpenAPIObjectBuilder openAPIObject;
-    private String openApiHtmlCss = null;
+    private @Nullable String openApiJsonUrl = null;
+    private @Nullable String openApiYamlUrl = null;
+    private @Nullable String openApiHtmlUrl = null;
+    private @Nullable OpenAPIObjectBuilder openAPIObject;
+    private @Nullable String openApiHtmlCss = null;
     private final Map<Class<? extends Throwable>, ExceptionMapper<? extends Throwable>> exceptionMappers = new HashMap<>();
     private final List<ContainerRequestFilter> preMatchRequestFilters = new ArrayList<>();
     private final List<ContainerRequestFilter> requestFilters = new ArrayList<>();
     private final List<ContainerResponseFilter> responseFilters = new ArrayList<>();
     private CORSConfig corsConfig = CORSConfigBuilder.disabled().build();
     private final List<SchemaObjectCustomizer> schemaObjectCustomizers = new ArrayList<>();
-    private CollectionParameterStrategy collectionParameterStrategy;
+    private @Nullable CollectionParameterStrategy collectionParameterStrategy;
 
     /**
      * Adds one or more rest resources to this handler
@@ -132,7 +133,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * @see #withOpenApiDocument(OpenAPIObjectBuilder)
      * @see #withOpenApiHtmlUrl(String)
      */
-    public RestHandlerBuilder withOpenApiJsonUrl(String url) {
+    public RestHandlerBuilder withOpenApiJsonUrl(@Nullable String url) {
         this.openApiJsonUrl = url;
         return this;
     }
@@ -147,7 +148,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * @see #withOpenApiHtmlUrl(String)
      * @see #withOpenApiJsonUrl(String)
      */
-    public RestHandlerBuilder withOpenApiYamlUrl(String url) {
+    public RestHandlerBuilder withOpenApiYamlUrl(@Nullable String url) {
         this.openApiYamlUrl = url;
         return this;
     }
@@ -161,7 +162,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * @see #withOpenApiJsonUrl(String)
      * @see #withOpenApiHtmlCss(String)
      */
-    public RestHandlerBuilder withOpenApiHtmlUrl(String url) {
+    public RestHandlerBuilder withOpenApiHtmlUrl(@Nullable String url) {
         this.openApiHtmlUrl = url;
         return this;
     }
@@ -189,7 +190,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * @param css A string containing a style sheet definition.
      * @return The current Rest Handler Builder
      */
-    public RestHandlerBuilder withOpenApiHtmlCss(String css) {
+    public RestHandlerBuilder withOpenApiHtmlCss(@Nullable String css) {
         this.openApiHtmlCss = css;
         return this;
     }
@@ -394,7 +395,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * @param writerInterceptor The interceptor to add. If <code>null</code> then this is a no-op.
      * @return This builder
      */
-    public RestHandlerBuilder addWriterInterceptor(WriterInterceptor writerInterceptor) {
+    public RestHandlerBuilder addWriterInterceptor(@Nullable WriterInterceptor writerInterceptor) {
         if (writerInterceptor != null) {
             this.writerInterceptors.add(writerInterceptor);
         }
@@ -413,7 +414,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * @param readerInterceptor The interceptor to add. If <code>null</code> then this is a no-op.
      * @return This builder
      */
-    public RestHandlerBuilder addReaderInterceptor(ReaderInterceptor readerInterceptor) {
+    public RestHandlerBuilder addReaderInterceptor(@Nullable ReaderInterceptor readerInterceptor) {
         if (readerInterceptor != null) {
             this.readerInterceptors.add(0, readerInterceptor);
         }
@@ -472,35 +473,35 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     /**
      * @return The current value of this property
      */
-    public String openApiJsonUrl() {
+    public @Nullable String openApiJsonUrl() {
         return openApiJsonUrl;
     }
 
     /**
      * @return The current value of this property
      */
-    public String openApiYamlUrl() {
+    public @Nullable String openApiYamlUrl() {
         return openApiYamlUrl;
     }
 
     /**
      * @return The current value of this property
      */
-    public String openApiHtmlUrl() {
+    public @Nullable String openApiHtmlUrl() {
         return openApiHtmlUrl;
     }
 
     /**
      * @return The current value of this property
      */
-    public OpenAPIObjectBuilder openAPIObject() {
+    public @Nullable OpenAPIObjectBuilder openAPIObject() {
         return openAPIObject;
     }
 
     /**
      * @return The current value of this property
      */
-    public String openApiHtmlCss() {
+    public @Nullable String openApiHtmlCss() {
         return openApiHtmlCss;
     }
 
@@ -549,7 +550,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     /**
      * @return The current value of this property
      */
-    public CollectionParameterStrategy collectionParameterStrategy() {
+    public @Nullable CollectionParameterStrategy collectionParameterStrategy() {
         return collectionParameterStrategy;
     }
 

@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.Map;
 
 import static io.muserver.openapi.OpenApiUtils.immutable;
@@ -8,9 +10,9 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * An object representing a Server.
  */
 public class ServerObjectBuilder {
-    private String url;
-    private String description;
-    private Map<String, ServerVariableObject> variables;
+    private @Nullable String url;
+    private @Nullable String description;
+    private @Nullable Map<String, ServerVariableObject> variables;
 
     /**
      * @param url <strong>REQUIRED</strong>. A URL to the target host.  This URL supports Server Variables and MAY be relative, to indicate
@@ -27,7 +29,7 @@ public class ServerObjectBuilder {
      * @param description An optional string describing the host designated by the URL. CommonMark syntax MAY be used for rich text representation.
      * @return The current builder
      */
-    public ServerObjectBuilder withDescription(String description) {
+    public ServerObjectBuilder withDescription(@Nullable String description) {
         this.description = description;
         return this;
     }
@@ -36,7 +38,7 @@ public class ServerObjectBuilder {
      * @param variables A map between a variable name and its value. The value is used for substitution in the server's URL template.
      * @return The current builder
      */
-    public ServerObjectBuilder withVariables(Map<String, ServerVariableObject> variables) {
+    public ServerObjectBuilder withVariables(@Nullable Map<String, ServerVariableObject> variables) {
         this.variables = variables;
         return this;
     }

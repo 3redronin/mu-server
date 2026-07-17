@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.Map;
 
 import static io.muserver.openapi.OpenApiUtils.immutable;
@@ -14,17 +16,17 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * an operation and using them as parameters while invoking the linked operation.</p>
  */
 public class LinkObjectBuilder {
-    private String operationId;
-    private Map<String, Object> parameters;
-    private Object requestBody;
-    private String description;
-    private ServerObject server;
+    private @Nullable String operationId;
+    private @Nullable Map<String, Object> parameters;
+    private @Nullable Object requestBody;
+    private @Nullable String description;
+    private @Nullable ServerObject server;
 
     /**
      * @param operationId The name of an <em>existing</em>, resolvable OAS operation, as defined with a unique <code>operationId</code>.
      * @return The current builder
      */
-    public LinkObjectBuilder withOperationId(String operationId) {
+    public LinkObjectBuilder withOperationId(@Nullable String operationId) {
         this.operationId = operationId;
         return this;
     }
@@ -36,7 +38,7 @@ public class LinkObjectBuilder {
      *                   location <code>[{in}.]{name}</code> for operations that use the same parameter name in different locations (e.g. path.id).
      * @return The current builder
      */
-    public LinkObjectBuilder withParameters(Map<String, Object> parameters) {
+    public LinkObjectBuilder withParameters(@Nullable Map<String, Object> parameters) {
         this.parameters = parameters;
         return this;
     }
@@ -45,7 +47,7 @@ public class LinkObjectBuilder {
      * @param requestBody A literal value or {expression} to use as a request body when calling the target operation.
      * @return The current builder
      */
-    public LinkObjectBuilder withRequestBody(Object requestBody) {
+    public LinkObjectBuilder withRequestBody(@Nullable Object requestBody) {
         this.requestBody = requestBody;
         return this;
     }
@@ -55,7 +57,7 @@ public class LinkObjectBuilder {
      *                    used for rich text representation.
      * @return The current builder
      */
-    public LinkObjectBuilder withDescription(String description) {
+    public LinkObjectBuilder withDescription(@Nullable String description) {
         this.description = description;
         return this;
     }
@@ -64,7 +66,7 @@ public class LinkObjectBuilder {
      * @param server A server object to be used by the target operation.
      * @return The current builder
      */
-    public LinkObjectBuilder withServer(ServerObject server) {
+    public LinkObjectBuilder withServer(@Nullable ServerObject server) {
         this.server = server;
         return this;
     }

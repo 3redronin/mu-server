@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.Map;
 
 import static io.muserver.openapi.OpenApiUtils.immutable;
@@ -8,8 +10,8 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * Describes a single request body.
  */
 public class RequestBodyObjectBuilder {
-    private String description;
-    private Map<String, MediaTypeObject> content;
+    private @Nullable String description;
+    private @Nullable Map<String, MediaTypeObject> content;
     private boolean required;
 
     /**
@@ -17,7 +19,7 @@ public class RequestBodyObjectBuilder {
      *                    <a href="http://spec.commonmark.org/">CommonMark syntax</a> MAY be used for rich text representation.
      * @return The current builder
      */
-    public RequestBodyObjectBuilder withDescription(String description) {
+    public RequestBodyObjectBuilder withDescription(@Nullable String description) {
         this.description = description;
         return this;
     }

@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.IOException;
 import java.io.Writer;
 import java.util.Map;
@@ -12,10 +14,10 @@ import static io.muserver.openapi.Jsonizer.append;
  */
 public class ServerObject implements JsonWriter {
     private final String url;
-    private final String description;
-    private final Map<String, ServerVariableObject> variables;
+    private final @Nullable String description;
+    private final @Nullable Map<String, ServerVariableObject> variables;
 
-    ServerObject(String url, String description, Map<String, ServerVariableObject> variables) {
+    ServerObject(String url, @Nullable String description, @Nullable Map<String, ServerVariableObject> variables) {
         notNull("url", url);
         this.url = url;
         this.description = description;
@@ -42,14 +44,14 @@ public class ServerObject implements JsonWriter {
     /**
       @return the value described by {@link ServerObjectBuilder#withDescription}
      */
-    public String description() {
+    public @Nullable String description() {
         return description;
     }
 
     /**
       @return the value described by {@link ServerObjectBuilder#withVariables}
      */
-    public Map<String, ServerVariableObject> variables() {
+    public @Nullable Map<String, ServerVariableObject> variables() {
         return variables;
     }
 }

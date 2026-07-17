@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.List;
 import java.util.Map;
 
@@ -11,17 +13,17 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * and parameters are available.
  */
 public class PathItemObjectBuilder {
-    private String summary;
-    private String description;
-    private Map<String, OperationObject> operations;
-    private List<ServerObject> servers;
-    private List<ParameterObject> parameters;
+    private @Nullable String summary;
+    private @Nullable String description;
+    private @Nullable Map<String, OperationObject> operations;
+    private @Nullable List<ServerObject> servers;
+    private @Nullable List<ParameterObject> parameters;
 
     /**
      * @param summary An optional, string summary, intended to apply to all operations in this path.
      * @return The current builder
      */
-    public PathItemObjectBuilder withSummary(String summary) {
+    public PathItemObjectBuilder withSummary(@Nullable String summary) {
         this.summary = summary;
         return this;
     }
@@ -31,7 +33,7 @@ public class PathItemObjectBuilder {
      *                    <a href="http://spec.commonmark.org/">CommonMark syntax</a> MAY be used for rich text representation.
      * @return The current builder
      */
-    public PathItemObjectBuilder withDescription(String description) {
+    public PathItemObjectBuilder withDescription(@Nullable String description) {
         this.description = description;
         return this;
     }
@@ -40,7 +42,7 @@ public class PathItemObjectBuilder {
      * @param operations The operations allowed on this path, where the keys to the map are <code>GET</code>, <code>POST</code> etc.
      * @return The current builder
      */
-    public PathItemObjectBuilder withOperations(Map<String, OperationObject> operations) {
+    public PathItemObjectBuilder withOperations(@Nullable Map<String, OperationObject> operations) {
         this.operations = operations;
         return this;
     }
@@ -49,7 +51,7 @@ public class PathItemObjectBuilder {
      * @param servers An alternative server array to service all operations in this path.
      * @return The current builder
      */
-    public PathItemObjectBuilder withServers(List<ServerObject> servers) {
+    public PathItemObjectBuilder withServers(@Nullable List<ServerObject> servers) {
         this.servers = servers;
         return this;
     }
@@ -61,7 +63,7 @@ public class PathItemObjectBuilder {
      *                   of a name and location.
      * @return The current builder
      */
-    public PathItemObjectBuilder withParameters(List<ParameterObject> parameters) {
+    public PathItemObjectBuilder withParameters(@Nullable List<ParameterObject> parameters) {
         this.parameters = parameters;
         return this;
     }
@@ -82,26 +84,26 @@ public class PathItemObjectBuilder {
         return new PathItemObjectBuilder();
     }
 
-    String summary() {
+    @Nullable String summary() {
         return summary;
     }
 
-    String description() {
+    @Nullable String description() {
         return description;
     }
 
     /**
      * @return The value set with {@link #withOperations}
      */
-    public Map<String, OperationObject> operations() {
+    public @Nullable Map<String, OperationObject> operations() {
         return operations;
     }
 
-    List<ServerObject> servers() {
+    @Nullable List<ServerObject> servers() {
         return servers;
     }
 
-    List<ParameterObject> parameters() {
+    @Nullable List<ParameterObject> parameters() {
         return parameters;
     }
 }

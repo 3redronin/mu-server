@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.IOException;
 import java.io.Writer;
 import java.net.URI;
@@ -9,12 +11,12 @@ import java.net.URI;
  */
 public class ExampleObject implements JsonWriter {
 
-    private final String summary;
-    private final String description;
-    private final Object value;
-    private final URI externalValue;
+    private final @Nullable String summary;
+    private final @Nullable String description;
+    private final @Nullable Object value;
+    private final @Nullable URI externalValue;
 
-    ExampleObject(String summary, String description, Object value, URI externalValue) {
+    ExampleObject(@Nullable String summary, @Nullable String description, @Nullable Object value, @Nullable URI externalValue) {
         if (value != null && externalValue != null) {
             throw new IllegalArgumentException("Only one of 'value' or 'externalValue' can have a value");
         }
@@ -38,28 +40,28 @@ public class ExampleObject implements JsonWriter {
     /**
      * @return the value described by {@link ExampleObjectBuilder#withSummary}
      */
-    public String summary() {
+    public @Nullable String summary() {
         return summary;
     }
 
     /**
      * @return the value described by {@link ExampleObjectBuilder#withDescription}
      */
-    public String description() {
+    public @Nullable String description() {
         return description;
     }
 
     /**
      * @return the value described by {@link ExampleObjectBuilder#withValue}
      */
-    public Object value() {
+    public @Nullable Object value() {
         return value;
     }
 
     /**
      * @return the value described by {@link ExampleObjectBuilder#withExternalValue}
      */
-    public URI externalValue() {
+    public @Nullable URI externalValue() {
         return externalValue;
     }
 }

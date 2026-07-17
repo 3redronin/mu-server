@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.IOException;
 import java.io.Writer;
 import java.util.ArrayList;
@@ -12,12 +14,12 @@ class Yamlizer {
     }
 
     static void writeJsonAsYaml(Writer writer, String json) throws IOException {
-        Object parsed = new Parser(json).parse();
+        @Nullable Object parsed = new Parser(json).parse();
         writeValue(writer, parsed, 0);
         writer.append('\n');
     }
 
-    private static void writeValue(Writer writer, Object value, int indent) throws IOException {
+    private static void writeValue(Writer writer, @Nullable Object value, int indent) throws IOException {
         if (value instanceof Map) {
             writeObject(writer, castMap(value), indent);
             return;
@@ -29,25 +31,25 @@ class Yamlizer {
         writeScalar(writer, value);
     }
 
-    private static void writeObject(Writer writer, Map<String, Object> map, int indent) throws IOException {
+    private static void writeObject(Writer writer, Map<String, @Nullable Object> map, int indent) throws IOException {
         if (map.isEmpty()) {
             writer.append("{}");
             return;
         }
         boolean first = true;
-        for (Map.Entry<String, Object> entry : map.entrySet()) {
+        for (Map.Entry<String, @Nullable Object> entry : map.entrySet()) {
             if (!first) {
                 writer.append('\n');
             }
             first = false;
             appendIndent(writer, indent);
             writer.append(quoted(entry.getKey())).append(':');
-            Object value = entry.getValue();
+            @Nullable Object value = entry.getValue();
             writeItem(writer, indent, value);
         }
     }
 
-    private static void writeItem(Writer writer, int indent, Object value) throws IOException {
+    private static void writeItem(Writer writer, int indent, @Nullable Object value) throws IOException {
         if (isContainer(value)) {
             if (isEmptyContainer(value)) {
                 writer.append(' ');
@@ -62,13 +64,13 @@ class Yamlizer {
         }
     }
 
-    private static void writeList(Writer writer, List<Object> list, int indent) throws IOException {
+    private static void writeList(Writer writer, List<@Nullable Object> list, int indent) throws IOException {
         if (list.isEmpty()) {
             writer.append("[]");
             return;
         }
         boolean first = true;
-        for (Object item : list) {
+        for (@Nullable Object item : list) {
             if (!first) {
                 writer.append('\n');
             }
@@ -79,7 +81,7 @@ class Yamlizer {
         }
     }
 
-    private static void writeScalar(Writer writer, Object value) throws IOException {
+    private static void writeScalar(Writer writer, @Nullable Object value) throws IOException {
         if (value == null) {
             writer.append("null");
         } else if (value instanceof Boolean) {
@@ -97,11 +99,11 @@ class Yamlizer {
         }
     }
 
-    private static boolean isContainer(Object value) {
+    private static boolean isContainer(@Nullable Object value) {
         return value instanceof Map || value instanceof List;
     }
 
-    private static boolean isEmptyContainer(Object value) {
+    private static boolean isEmptyContainer(@Nullable Object value) {
         if (value instanceof Map) {
             return ((Map<?, ?>) value).isEmpty();
         }
@@ -151,13 +153,13 @@ class Yamlizer {
     }
 
     @SuppressWarnings("unchecked")
-    private static Map<String, Object> castMap(Object value) {
-        return (Map<String, Object>) value;
+    private static Map<String, @Nullable Object> castMap(Object value) {
+        return (Map<String, @Nullable Object>) value;
     }
 
     @SuppressWarnings("unchecked")
-    private static List<Object> castList(Object value) {
-        return (List<Object>) value;
+    private static List<@Nullable Object> castList(Object value) {
+        return (List<@Nullable Object>) value;
     }
 
     private static class NumberLiteral {
@@ -176,9 +178,9 @@ class Yamlizer {
             this.json = json;
         }
 
-        Object parse() {
+        @Nullable Object parse() {
             skipWhitespace();
-            Object value = parseValue();
+            @Nullable Object value = parseValue();
             skipWhitespace();
             if (index != json.length()) {
                 throw error("Trailing characters after valid JSON");
@@ -186,7 +188,7 @@ class Yamlizer {
             return value;
         }
 
-        private Object parseValue() {
+        private @Nullable Object parseValue() {
             skipWhitespace();
             if (index >= json.length()) {
                 throw error("Unexpected end of JSON");
@@ -216,10 +218,10 @@ class Yamlizer {
             }
         }
 
-        private Map<String, Object> parseObject() {
+        private Map<String, @Nullable Object> parseObject() {
             expect('{');
             skipWhitespace();
-            Map<String, Object> map = new LinkedHashMap<>();
+            Map<String, @Nullable Object> map = new LinkedHashMap<>();
             if (peek('}')) {
                 index++;
                 return map;
@@ -240,10 +242,10 @@ class Yamlizer {
             }
         }
 
-        private List<Object> parseList() {
+        private List<@Nullable Object> parseList() {
             expect('[');
             skipWhitespace();
-            List<Object> list = new ArrayList<>();
+            List<@Nullable Object> list = new ArrayList<>();
             if (peek(']')) {
                 index++;
                 return list;

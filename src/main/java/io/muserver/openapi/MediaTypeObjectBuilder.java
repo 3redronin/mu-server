@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.Map;
 
 import static io.muserver.openapi.OpenApiUtils.immutable;
@@ -8,16 +10,16 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * Each Media Type Object provides schema and examples for the media type identified by its key.
  */
 public class MediaTypeObjectBuilder {
-    private SchemaObject schema;
-    private Object example;
-    private Map<String, ExampleObject> examples;
-    private Map<String, EncodingObject> encoding;
+    private @Nullable SchemaObject schema;
+    private @Nullable Object example;
+    private @Nullable Map<String, ExampleObject> examples;
+    private @Nullable Map<String, EncodingObject> encoding;
 
     /**
      * @param schema The schema defining the type used for the request body.
      * @return The current builder
      */
-    public MediaTypeObjectBuilder withSchema(SchemaObject schema) {
+    public MediaTypeObjectBuilder withSchema(@Nullable SchemaObject schema) {
         this.schema = schema;
         return this;
     }
@@ -27,7 +29,7 @@ public class MediaTypeObjectBuilder {
      *                The <code>example</code> field is mutually exclusive of the <code>examples</code> field.
      * @return The current builder
      */
-    public MediaTypeObjectBuilder withExample(Object example) {
+    public MediaTypeObjectBuilder withExample(@Nullable Object example) {
         this.example = example;
         return this;
     }
@@ -37,7 +39,7 @@ public class MediaTypeObjectBuilder {
      *                 The <code>examples</code> field is mutually exclusive of the <code>example</code> field.
      * @return The current builder
      */
-    public MediaTypeObjectBuilder withExamples(Map<String, ExampleObject> examples) {
+    public MediaTypeObjectBuilder withExamples(@Nullable Map<String, ExampleObject> examples) {
         this.examples = examples;
         return this;
     }
@@ -48,7 +50,7 @@ public class MediaTypeObjectBuilder {
      *                 objects when the media type is <code>multipart</code> or <code>application/x-www-form-urlencoded</code>.
      * @return The current builder
      */
-    public MediaTypeObjectBuilder withEncoding(Map<String, EncodingObject> encoding) {
+    public MediaTypeObjectBuilder withEncoding(@Nullable Map<String, EncodingObject> encoding) {
         this.encoding = encoding;
         return this;
     }

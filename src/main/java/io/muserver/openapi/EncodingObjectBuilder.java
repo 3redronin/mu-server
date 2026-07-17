@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.Map;
 
 import static io.muserver.openapi.OpenApiUtils.immutable;
@@ -8,11 +10,11 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * A single encoding definition applied to a single schema property.
  */
 public class EncodingObjectBuilder {
-    private String contentType;
-    private Map<String, HeaderObject> headers;
-    private String style;
-    private Boolean explode;
-    private Boolean allowReserved;
+    private @Nullable String contentType;
+    private @Nullable Map<String, HeaderObject> headers;
+    private @Nullable String style;
+    private @Nullable Boolean explode;
+    private @Nullable Boolean allowReserved;
 
     /**
      * @param contentType The Content-Type for encoding a specific property. Default value depends on the property type:
@@ -23,7 +25,7 @@ public class EncodingObjectBuilder {
      *                    comma-separated list of the two types.
      * @return The current builder
      */
-    public EncodingObjectBuilder withContentType(String contentType) {
+    public EncodingObjectBuilder withContentType(@Nullable String contentType) {
         this.contentType = contentType;
         return this;
     }
@@ -34,7 +36,7 @@ public class EncodingObjectBuilder {
      *                be ignored if the request body media type is not a <code>multipart</code>.
      * @return The current builder
      */
-    public EncodingObjectBuilder withHeaders(Map<String, HeaderObject> headers) {
+    public EncodingObjectBuilder withHeaders(@Nullable Map<String, HeaderObject> headers) {
         this.headers = headers;
         return this;
     }
@@ -46,7 +48,7 @@ public class EncodingObjectBuilder {
      *              This property SHALL be ignored if the request body media type is not <code>application/x-www-form-urlencoded</code>.
      * @return The current builder
      */
-    public EncodingObjectBuilder withStyle(String style) {
+    public EncodingObjectBuilder withStyle(@Nullable String style) {
         this.style = style;
         return this;
     }
@@ -59,7 +61,7 @@ public class EncodingObjectBuilder {
      *                body media type is not <code>application/x-www-form-urlencoded</code>.
      * @return The current builder
      */
-    public EncodingObjectBuilder withExplode(Boolean explode) {
+    public EncodingObjectBuilder withExplode(@Nullable Boolean explode) {
         this.explode = explode;
         return this;
     }
@@ -71,7 +73,7 @@ public class EncodingObjectBuilder {
      *                      SHALL be ignored if the request body media type is not <code>application/x-www-form-urlencoded</code>.
      * @return The current builder
      */
-    public EncodingObjectBuilder withAllowReserved(Boolean allowReserved) {
+    public EncodingObjectBuilder withAllowReserved(@Nullable Boolean allowReserved) {
         this.allowReserved = allowReserved;
         return this;
     }

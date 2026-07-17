@@ -3,6 +3,7 @@ package io.muserver.rest;
 import io.muserver.*;
 import io.muserver.openapi.*;
 import jakarta.ws.rs.ext.ParamConverterProvider;
+import org.jspecify.annotations.Nullable;
 
 import java.io.BufferedWriter;
 import java.io.OutputStreamWriter;
@@ -23,17 +24,21 @@ import static java.util.Collections.singletonList;
 
 class OpenApiDocumentor implements MuHandler {
     private final List<ResourceClass> roots;
-    private final String openApiJsonUrl;
-    private final String openApiYamlUrl;
+    private final @Nullable String openApiJsonUrl;
+    private final @Nullable String openApiYamlUrl;
     private final OpenAPIObject openAPIObject;
-    private final String openApiHtmlUrl;
+    private final @Nullable String openApiHtmlUrl;
     private final String openApiHtmlCss;
     private final CORSConfig corsConfig;
     private final List<SchemaReference> customSchemas;
     private final SchemaObjectCustomizer schemaObjectCustomizer;
     private final List<ParamConverterProvider> paramConverterProviders;
 
-    OpenApiDocumentor(List<ResourceClass> roots, String openApiJsonUrl, String openApiYamlUrl, String openApiHtmlUrl, OpenAPIObject openAPIObject, String openApiHtmlCss, CORSConfig corsConfig, List<SchemaReference> customSchemas, SchemaObjectCustomizer schemaObjectCustomizer, List<ParamConverterProvider> paramConverterProviders) {
+    OpenApiDocumentor(List<ResourceClass> roots, @Nullable String openApiJsonUrl,
+                      @Nullable String openApiYamlUrl, @Nullable String openApiHtmlUrl,
+                      OpenAPIObject openAPIObject, String openApiHtmlCss, CORSConfig corsConfig,
+                      List<SchemaReference> customSchemas, SchemaObjectCustomizer schemaObjectCustomizer,
+                      List<ParamConverterProvider> paramConverterProviders) {
         this.customSchemas = customSchemas;
         this.schemaObjectCustomizer = schemaObjectCustomizer;
         this.paramConverterProviders = paramConverterProviders;

@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.List;
 import java.util.Map;
 
@@ -18,7 +20,7 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * satisfied to authorize the request.</p>
  */
 public class SecurityRequirementObjectBuilder {
-    private Map<String, List<String>> requirements;
+    private @Nullable Map<String, List<String>> requirements;
 
     /**
      * @param requirements Each name MUST correspond to a security scheme which is declared in the {@link ComponentsObject#securitySchemes}
