@@ -30,6 +30,28 @@ public class VariantTest {
     private MuServer server;
 
     @Test
+    public void nullVariantListsAreRejectedWithIllegalArgumentException() throws Exception {
+        @Path("samples")
+        class Sample {
+            @GET
+            public String get(@Context Request jaxRequest) {
+                try {
+                    jaxRequest.selectVariant(null);
+                    return "no exception";
+                } catch (IllegalArgumentException expected) {
+                    return "expected exception";
+                }
+            }
+        }
+        this.server = httpsServerForTest()
+            .addHandler(restHandler(new Sample())).start();
+        try (Response resp = call(request(server.uri().resolve("/samples")))) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.body().string(), equalTo("expected exception"));
+        }
+    }
+
+    @Test
     public void jaxRSRequestObjectCanBeInjected() throws Exception {
         @Path("samples")
         class Sample {
