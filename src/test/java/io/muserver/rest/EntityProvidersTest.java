@@ -175,6 +175,37 @@ public class EntityProvidersTest {
     }
 
     @Test
+    public void completionStagePreservesDeclaredEntityGenericType() throws Exception {
+        class Dog { }
+        @Path("async-dogs")
+        class Sample {
+            @GET
+            public java.util.concurrent.CompletionStage<List<Dog>> get() {
+                return CompletableFuture.completedFuture(asList(new Dog()));
+            }
+        }
+        class DogListWriter implements MessageBodyWriter<List<Dog>> {
+            @Override
+            public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType) {
+                return genericType instanceof ParameterizedType
+                    && ((ParameterizedType) genericType).getActualTypeArguments()[0].equals(Dog.class);
+            }
+
+            @Override
+            public void writeTo(List<Dog> dogs, Class<?> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException {
+                entityStream.write("dogs".getBytes(StandardCharsets.UTF_8));
+            }
+        }
+
+        this.server = httpsServerForTest().addHandler(
+            restHandler(new Sample()).addCustomWriter(new DogListWriter()).build()).start();
+        try (Response resp = call(request(server.uri().resolve("/async-dogs")))) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.body().string(), equalTo("dogs"));
+        }
+    }
+
+    @Test
     public void customWritersGetTheAnnotationsOfTheResourceMethod() throws Exception {
 
         @Path("dummy")

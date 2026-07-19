@@ -18,6 +18,7 @@ import org.slf4j.LoggerFactory;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Parameter;
+import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.net.URI;
 import java.util.*;
@@ -119,6 +120,7 @@ public class RestHandler implements MuHandler {
             List<MediaType> produces = producesRef = mm.resourceMethod.resourceClass.produces;
             List<MediaType> directlyProduces = directlyProducesRef = mm.resourceMethod.directlyProduces;
             Annotation[] methodAnnotations = mm.resourceMethod.methodAnnotations;
+            Type methodReturnType = mm.resourceMethod.methodHandle.getGenericReturnType();
 
             filterManagerThing.onPostMatch(requestContext);
 
@@ -139,7 +141,8 @@ public class RestHandler implements MuHandler {
                     CompletionStage cs = (CompletionStage) result;
                     cs.thenAccept(o -> {
                         try {
-                            sendResponse(0, requestContext, muResponse, acceptHeaders, produces, directlyProduces, methodAnnotations, o);
+                            sendResponse(0, requestContext, muResponse, acceptHeaders, produces, directlyProduces, methodAnnotations, o,
+                                completionStageResultType(methodReturnType));
                             asyncHandle1.complete();
                         } catch (Exception e) {
                             asyncHandle1.complete(e);
@@ -147,7 +150,7 @@ public class RestHandler implements MuHandler {
                     });
                 } else {
                     sendResponse(0, requestContext, muResponse, acceptHeaders, produces, directlyProduces, methodAnnotations, result,
-                        mm.resourceMethod.methodHandle.getGenericReturnType());
+                        methodReturnType);
                 }
             }
         } catch (NotMatchedException e) {
@@ -161,6 +164,17 @@ public class RestHandler implements MuHandler {
             }
         }
         return true;
+    }
+
+    private static Type completionStageResultType(Type returnType) {
+        if (returnType instanceof ParameterizedType) {
+            ParameterizedType parameterizedType = (ParameterizedType) returnType;
+            Type rawType = parameterizedType.getRawType();
+            if (rawType instanceof Class && CompletionStage.class.isAssignableFrom((Class<?>) rawType)) {
+                return parameterizedType.getActualTypeArguments()[0];
+            }
+        }
+        return null;
     }
 
     static Object invokeResourceMethod(JaxRSRequest requestContext, MuResponse muResponse, RequestMatcher.MatchedMethod mm, Function<ResourceMethod, Object> suspendedParamCallback, EntityProviders entityProviders, CollectionParameterStrategy collectionParameterStrategy) throws Exception {
