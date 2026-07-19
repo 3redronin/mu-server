@@ -87,6 +87,8 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
                         throw new ServerErrorException("Invalid redirect location: " + values.get(0) + " - " + e.getMessage(), 500);
                     }
                     to.headers().add(key, baseUri.resolve(location).toString());
+                } else if (key.equalsIgnoreCase("date")) {
+                    to.headers().set(key, values);
                 } else {
                     to.headers().add(key, values);
                 }
