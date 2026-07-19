@@ -322,7 +322,7 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
 
     @Override
     public Object proceed() throws IOException, WebApplicationException {
-        if (nextReader < readerInterceptors.size()) {
+        while (nextReader < readerInterceptors.size()) {
             nextReader++;
             ReaderInterceptor nextInterceptor = readerInterceptors.get(nextReader - 1);
             List<Class<? extends Annotation>> filterBindings = ResourceClass.getNameBindingAnnotations(nextInterceptor.getClass());
