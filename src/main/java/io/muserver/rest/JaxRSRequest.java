@@ -36,6 +36,8 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
     private final List<ReaderInterceptor> readerInterceptors;
     private final EntityProviders entityProviders;
     private String httpMethod;
+    private Response abortResponse;
+    private boolean responseFilterChainStarted;
 
     JaxRSRequest(MuRequest muRequest, MuResponse muResponse, InputStream inputStream, String relativePath, SecurityContext securityContext, List<ReaderInterceptor> readerInterceptors, EntityProviders entityProviders) {
         this.muRequest = muRequest;
@@ -442,7 +444,18 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
 
     @Override
     public void abortWith(Response response) {
-        throw new FilterAbortedException(response);
+        if (responseFilterChainStarted) {
+            throw new IllegalStateException("abortWith cannot be called from a response filter");
+        }
+        this.abortResponse = Objects.requireNonNull(response, "response");
+    }
+
+    Response getAbortResponse() {
+        return abortResponse;
+    }
+
+    void markResponseFilterChainStarted() {
+        this.responseFilterChainStarted = true;
     }
 
     void setMatchedMethod(RequestMatcher.MatchedMethod matchedMethod) {
@@ -457,16 +470,6 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
 
     String relativePath() {
         return getUriInfo().getPath(false);
-    }
-
-    /**
-     * This special exception doesn't get mapped by an exception mapper, so that the {@link #abortWith(Response)} method
-     * can just return the Response passed to it without mapping it.
-     */
-    static class FilterAbortedException extends WebApplicationException {
-        public FilterAbortedException(Response response) {
-            super(response);
-        }
     }
 
     private static class MuResourceInfo implements ResourceInfo {

@@ -3,6 +3,7 @@ package io.muserver.rest;
 import io.muserver.MuRequest;
 import io.muserver.MuServer;
 import io.muserver.Mutils;
+import jakarta.annotation.Priority;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.container.*;
 import jakarta.ws.rs.core.*;
@@ -23,6 +24,7 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
@@ -95,6 +97,57 @@ public class FilterTest {
             "REQUEST POST " + server.uri().resolve("/something") + " - a-value",
             "RESPONSE OK"
         ));
+    }
+
+    @Test
+    public void filtersAreCalledInPriorityOrder() throws IOException {
+        @Path("priority")
+        class PriorityResource {
+            @GET
+            public String get() {
+                received.add("resource");
+                return "done";
+            }
+        }
+        @Priority(100)
+        class FirstFilter implements ContainerRequestFilter, ContainerResponseFilter {
+            @Override
+            public void filter(ContainerRequestContext requestContext) {
+                received.add("request-100");
+            }
+
+            @Override
+            public void filter(ContainerRequestContext requestContext, ContainerResponseContext responseContext) {
+                received.add("response-100");
+            }
+        }
+        @Priority(500)
+        class SecondFilter implements ContainerRequestFilter, ContainerResponseFilter {
+            @Override
+            public void filter(ContainerRequestContext requestContext) {
+                received.add("request-500");
+            }
+
+            @Override
+            public void filter(ContainerRequestContext requestContext, ContainerResponseContext responseContext) {
+                received.add("response-500");
+            }
+        }
+
+        FirstFilter first = new FirstFilter();
+        SecondFilter second = new SecondFilter();
+        server = httpsServerForTest()
+            .addHandler(restHandler(new PriorityResource())
+                .addRequestFilter(second)
+                .addRequestFilter(first)
+                .addResponseFilter(first)
+                .addResponseFilter(second))
+            .start();
+
+        try (Response resp = call(request(server.uri().resolve("/priority")))) {
+            assertThat(resp.body().string(), is("done"));
+        }
+        assertThat(received, contains("request-100", "request-500", "resource", "response-500", "response-100"));
     }
 
     @Test
@@ -253,10 +306,14 @@ public class FilterTest {
 
     @Test
     public void requestsCanBeAborted() throws IOException {
+        AtomicBoolean continuedAfterAbort = new AtomicBoolean();
+        AtomicBoolean nextFilterCalled = new AtomicBoolean();
+        AtomicBoolean resourceCalled = new AtomicBoolean();
         @Path("something")
         class TheWay {
             @GET
             public String itMoves() {
+                resourceCalled.set(true);
                 return "Not called";
             }
         }
@@ -265,18 +322,30 @@ public class FilterTest {
             @Override
             public void filter(ContainerRequestContext requestContext) throws IOException {
                 requestContext.abortWith(jakarta.ws.rs.core.Response.status(409).entity("Blocked!").build());
+                continuedAfterAbort.set(true);
+            }
+        }
+        @PreMatching
+        class NextFilter implements ContainerRequestFilter {
+            @Override
+            public void filter(ContainerRequestContext requestContext) throws IOException {
+                nextFilterCalled.set(true);
             }
         }
         server = httpsServerForTest()
             .addHandler(
                 restHandler(new TheWay())
                     .addRequestFilter(new MethodChangingFilter())
+                    .addRequestFilter(new NextFilter())
             ).start();
         try (Response resp = call(request().url(server.uri().resolve("/something").toString()))) {
             assertThat(resp.code(), is(409));
             assertThat(resp.body().string(), is("Blocked!"));
             assertThat(resp.header("content-type"), is("text/plain;charset=utf-8"));
         }
+        assertThat(continuedAfterAbort.get(), is(true));
+        assertThat(nextFilterCalled.get(), is(false));
+        assertThat(resourceCalled.get(), is(false));
     }
 
 
@@ -660,7 +729,7 @@ public class FilterTest {
             assertThat(response.body().string(), containsString("500 Internal Server Error"));
         }
 
-        assertThat(responseFilterCalls.get(), equalTo(2));
+        assertThat(responseFilterCalls.get(), equalTo(1));
     }
 
     @Path("/broken")
