@@ -95,7 +95,14 @@ class MuUriInfo implements UriInfo {
 
     @Override
     public URI getAbsolutePath() {
-        return UriBuilder.fromUri(requestUri).replaceQuery(null).fragment(null).build();
+        String uri = requestUri.toString();
+        int queryStart = uri.indexOf('?');
+        int fragmentStart = uri.indexOf('#');
+        int end = queryStart < 0 ? uri.length() : queryStart;
+        if (fragmentStart >= 0) {
+            end = Math.min(end, fragmentStart);
+        }
+        return end == uri.length() ? requestUri : URI.create(uri.substring(0, end));
     }
 
     @Override
