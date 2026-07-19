@@ -88,13 +88,19 @@ class ProviderWrapper<T> implements Comparable<ProviderWrapper<T>> {
         Class o1C = (Class) o1.genericType;
         Class o2C = (Class) o2.genericType;
         Class oC = (Class) genericType;
-        boolean o1Is = oC.isAssignableFrom(o1C);
-        boolean o2Is = oC.isAssignableFrom(o2C);
+        boolean o1Is = o1C.isAssignableFrom(oC);
+        boolean o2Is = o2C.isAssignableFrom(oC);
         int assignCompare = Boolean.compare(o2Is, o1Is);
         if (assignCompare != 0) {
             return assignCompare;
         }
-        return o1C.isAssignableFrom(o2C) ? -1 : 1;
+        if (o1C.isAssignableFrom(o2C)) {
+            return o1Is ? 1 : -1;
+        }
+        if (o2C.isAssignableFrom(o1C)) {
+            return o1Is ? -1 : 1;
+        }
+        return 0;
     }
 
     @Override

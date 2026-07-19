@@ -130,6 +130,51 @@ public class EntityProvidersTest {
     }
 
     @Test
+    public void writerRankingPrefersNearestRuntimeSuperclass() throws Exception {
+        class Animal { }
+        class Dog extends Animal { }
+        @Path("nearest-writer")
+        class Sample {
+            @GET
+            public Animal get() {
+                return new Dog();
+            }
+        }
+        class AnimalWriter implements MessageBodyWriter<Animal> {
+            @Override
+            public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType) {
+                return Animal.class.isAssignableFrom(type);
+            }
+
+            @Override
+            public void writeTo(Animal animal, Class<?> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException {
+                entityStream.write("animal".getBytes(StandardCharsets.UTF_8));
+            }
+        }
+        class ObjectWriter implements MessageBodyWriter<Object> {
+            @Override
+            public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType) {
+                return true;
+            }
+
+            @Override
+            public void writeTo(Object value, Class<?> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException {
+                entityStream.write("object".getBytes(StandardCharsets.UTF_8));
+            }
+        }
+
+        this.server = httpsServerForTest().addHandler(
+            restHandler(new Sample())
+                .addCustomWriter(new AnimalWriter())
+                .addCustomWriter(new ObjectWriter())
+                .build()).start();
+        try (Response resp = call(request(server.uri().resolve("/nearest-writer")))) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.body().string(), equalTo("animal"));
+        }
+    }
+
+    @Test
     public void customWritersGetTheAnnotationsOfTheResourceMethod() throws Exception {
 
         @Path("dummy")
