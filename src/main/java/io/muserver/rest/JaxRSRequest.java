@@ -36,6 +36,8 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
     private final List<ReaderInterceptor> readerInterceptors;
     private final EntityProviders entityProviders;
     private String httpMethod;
+    private MediaType readerMediaType;
+    private boolean readerMediaTypeSet;
 
     JaxRSRequest(MuRequest muRequest, MuResponse muResponse, InputStream inputStream, String relativePath, SecurityContext securityContext, List<ReaderInterceptor> readerInterceptors, EntityProviders entityProviders) {
         this.muRequest = muRequest;
@@ -391,11 +393,13 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
 
     @Override
     public MediaType getMediaType() {
-        return jaxHeaders.getMediaType();
+        return readerMediaTypeSet ? readerMediaType : jaxHeaders.getMediaType();
     }
 
     @Override
     public void setMediaType(MediaType mediaType) {
+        readerMediaType = mediaType;
+        readerMediaTypeSet = true;
         if (mediaType == null) {
             jaxHeaders.getMutableRequestHeaders().remove("content-type");
         } else {
