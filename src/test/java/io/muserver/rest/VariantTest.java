@@ -61,7 +61,7 @@ public class VariantTest {
             assertThat(resp.header("content-type"), equalTo("application/json"));
             assertThat(resp.header("content-encoding"), equalTo("identity"));
             assertThat(resp.header("content-language"), equalTo("es"));
-            assertThat(resp.headers("vary"), hasItems("accept-language", "accept", "accept-encoding"));
+            assertThat(resp.headers("vary"), hasItems("Accept-Language", "Accept", "Accept-Encoding"));
             assertThat(resp.body().string(), equalTo("{}"));
         }
 
@@ -73,7 +73,7 @@ public class VariantTest {
             assertThat(resp.header("content-type"), equalTo("application/json"));
             assertThat(resp.header("content-encoding"), equalTo("identity"));
             assertThat(resp.header("content-language"), oneOf("es", "en"));
-            assertThat(resp.headers("vary"), hasItems("accept-language", "accept", "accept-encoding"));
+            assertThat(resp.headers("vary"), hasItems("Accept-Language", "Accept", "Accept-Encoding"));
             assertThat(resp.body().string(), equalTo("{}"));
         }
 

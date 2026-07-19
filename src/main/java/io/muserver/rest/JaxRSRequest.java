@@ -158,17 +158,17 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
         for (Variant variant : variants) {
             if (variant.getMediaType() != null) {
                 if (!muResponse.headers().contains(HeaderNames.VARY, HeaderNames.ACCEPT, true)) {
-                    muResponse.headers().add(HeaderNames.VARY, HeaderNames.ACCEPT);
+                    muResponse.headers().add(HeaderNames.VARY, "Accept");
                 }
             }
             if (variant.getEncoding() != null) {
                 if (!muResponse.headers().contains(HeaderNames.VARY, HeaderNames.ACCEPT_ENCODING, true)) {
-                    muResponse.headers().add(HeaderNames.VARY, HeaderNames.ACCEPT_ENCODING);
+                    muResponse.headers().add(HeaderNames.VARY, "Accept-Encoding");
                 }
             }
             if (variant.getLanguage() != null) {
                 if (!muResponse.headers().contains(HeaderNames.VARY, HeaderNames.ACCEPT_LANGUAGE, true)) {
-                    muResponse.headers().add(HeaderNames.VARY, HeaderNames.ACCEPT_LANGUAGE);
+                    muResponse.headers().add(HeaderNames.VARY, "Accept-Language");
                 }
             }
         }
