@@ -2,11 +2,11 @@ package io.muserver.rest;
 
 import io.muserver.MuServer;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.HeaderParam;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.QueryParam;
 import okhttp3.Response;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import scaffolding.ServerUtils;
 
@@ -108,24 +108,23 @@ public class CollectionParameterStrategyTest {
     }
 
     @Test
-    public void ifNoStrategySpecifiedButAPIHasCollectionsThenThrowError() throws Exception {
+    public void collectionsDefaultToNoTransformWhenNoStrategyIsSpecified() throws Exception {
         @Path("values")
         class ValuesResource {
             @GET
-            public String getIt(@QueryParam("value") List<String> values) {
-                return values.size() + " values: " + String.join(", ", values);
+            public String getIt(@QueryParam("value") List<String> queryValues,
+                                @HeaderParam("x-value") List<String> headerValues) {
+                return "query=" + String.join("|", queryValues) + "; header=" + String.join("|", headerValues);
             }
         }
-        try {
-            server = ServerUtils.httpsServerForTest()
-                .addHandler(restHandler(new ValuesResource()))
-                .start();
-            Assertions.fail("Exception should have been thrown");
-        } catch (Exception e) {
-            assertThat(e, instanceOf(IllegalStateException.class));
-            assertThat(e.getMessage(), containsString("Please specify a string handling strategy for collections for querystring and header parameters"));
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new ValuesResource()))
+            .start();
+        try (Response resp = call(request(server.uri().resolve("/values?value=one,two&value=three"))
+            .addHeader("x-value", "four,five")
+            .addHeader("x-value", "six"))) {
+            assertThat(resp.body().string(), equalTo("query=one,two|three; header=four,five|six"));
         }
-
     }
 
     @AfterEach
