@@ -155,6 +155,9 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
 
     @Override
     public Variant selectVariant(List<Variant> variants) {
+        if (variants == null) {
+            throw new IllegalArgumentException("variants is null");
+        }
         for (Variant variant : variants) {
             if (variant.getMediaType() != null) {
                 if (!muResponse.headers().contains(HeaderNames.VARY, HeaderNames.ACCEPT, true)) {
