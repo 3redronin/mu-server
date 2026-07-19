@@ -12,6 +12,7 @@ import jakarta.ws.rs.ext.MessageBodyWriter;
 import jakarta.ws.rs.sse.Sse;
 import jakarta.ws.rs.sse.SseBroadcaster;
 import jakarta.ws.rs.sse.SseEventSink;
+import jakarta.ws.rs.sse.OutboundSseEvent;
 import okhttp3.Dispatcher;
 import org.junit.After;
 import org.junit.Before;
@@ -28,6 +29,7 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
@@ -299,6 +301,8 @@ public class SseBroadcasterImplTest {
         SseBroadcasterImpl broadcaster = new SseBroadcasterImpl();
         broadcaster.onError((sink, throwable) -> errors.add(throwable));
         broadcaster.onClose(closedSinks::add);
+        CountDownLatch sendsStarted = new CountDownLatch(2);
+        CountDownLatch releaseSends = new CountDownLatch(1);
 
         SseEventSink sink = new SseEventSink() {
             @Override
@@ -308,6 +312,13 @@ public class SseBroadcasterImplTest {
 
             @Override
             public CompletionStage<?> send(jakarta.ws.rs.sse.OutboundSseEvent event) {
+                sendsStarted.countDown();
+                try {
+                    releaseSends.await(1, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(e);
+                }
                 throw sendFailure;
             }
 
@@ -317,8 +328,12 @@ public class SseBroadcasterImplTest {
         };
         broadcaster.register(sink);
 
-        CompletionStage<?> broadcast = broadcaster.broadcast(MuRuntimeDelegate.createSseFactory().newEvent("Hello"));
-        broadcast.toCompletableFuture().get(1, TimeUnit.SECONDS);
+        OutboundSseEvent event = MuRuntimeDelegate.createSseFactory().newEvent("Hello");
+        CompletableFuture<?> first = CompletableFuture.runAsync(() -> broadcaster.broadcast(event).toCompletableFuture().join());
+        CompletableFuture<?> second = CompletableFuture.runAsync(() -> broadcaster.broadcast(event).toCompletableFuture().join());
+        assertThat(sendsStarted.await(1, TimeUnit.SECONDS), is(true));
+        releaseSends.countDown();
+        CompletableFuture.allOf(first, second).get(1, TimeUnit.SECONDS);
 
         assertThat(errors, empty());
         assertThat(closedSinks, contains(sink));

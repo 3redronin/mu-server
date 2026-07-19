@@ -86,8 +86,9 @@ class SseBroadcasterImpl implements SseBroadcaster {
                         sendComplete(completableFuture, count);
                     });
                 } catch (IllegalStateException e) {
-                    sinks.remove(sink);
-                    sendOnCloseEvent(sink);
+                    if (sinks.remove(sink)) {
+                        sendOnCloseEvent(sink);
+                    }
                     sendComplete(completableFuture, count);
                 }
             }
