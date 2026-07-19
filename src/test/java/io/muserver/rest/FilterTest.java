@@ -483,7 +483,8 @@ public class FilterTest {
         }
 
         server = httpsServerForTest()
-            .addHandler(restHandler(new Resource()))
+            .addHandler(restHandler(new Resource())
+                .addExceptionMapper(Exception.class, exception -> jakarta.ws.rs.core.Response.status(418).entity("Mapped").build()))
             .start();
 
         try (Response resp = call(request(server.uri().resolve("/abort-from-resource")))) {

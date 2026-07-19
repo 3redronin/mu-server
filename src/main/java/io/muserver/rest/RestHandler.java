@@ -203,6 +203,11 @@ public class RestHandler implements MuHandler {
             }
             return;
         }
+        if (ex instanceof JaxRSRequest.FilterAbortedException) {
+            sendResponse(nestingLevel, request, muResponse, acceptHeaders, producesRef, directlyProducesRef,
+                JaxRSResponse.Builder.EMPTY_ANNOTATIONS, ((WebApplicationException) ex).getResponse());
+            return;
+        }
         Response response = customExceptionMapper.toResponse(ex);
         if (response == null && ex instanceof WebApplicationException) {
             dealWithWebApplicationException(nestingLevel, request, muResponse, (WebApplicationException) ex, acceptHeaders, producesRef == null ? emptyList() : producesRef, directlyProducesRef == null ? emptyList() : directlyProducesRef);
