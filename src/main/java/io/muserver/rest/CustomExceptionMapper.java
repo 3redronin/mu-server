@@ -3,6 +3,7 @@ package io.muserver.rest;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.ExceptionMapper;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -21,7 +22,7 @@ class CustomExceptionMapper {
     }
 
     @SuppressWarnings("unchecked")
-    Response toResponse(Throwable ex) {
+    @Nullable Response toResponse(Throwable ex) {
 
         if (ex instanceof InvocationTargetException && ex.getCause() != null) {
             ex = ex.getCause();
@@ -57,7 +58,7 @@ class CustomExceptionMapper {
     }
 
     @SuppressWarnings("unchecked")
-    private ExceptionMapper findBestMatchingExceptionMapper(Class<? extends Throwable> exClass, int maxDepth) {
+    private @Nullable ExceptionMapper findBestMatchingExceptionMapper(Class<? extends Throwable> exClass, int maxDepth) {
         ExceptionMapper exceptionMapper = null;
         for (Map.Entry<Class<? extends Throwable>, ExceptionMapper<? extends Throwable>> entry : mappers.entrySet()) {
             Class mapperClass = entry.getKey();

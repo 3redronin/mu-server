@@ -7,6 +7,7 @@ import jakarta.ws.rs.core.MultivaluedHashMap;
 import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.core.UriBuilder;
 import jakarta.ws.rs.core.UriBuilderException;
+import org.jspecify.annotations.Nullable;
 
 import java.lang.reflect.Method;
 import java.net.URI;
@@ -398,7 +399,7 @@ class MuUriBuilder extends UriBuilder {
         return copy;
     }
 
-    static String resolve(String template, String name, String value) {
+    static @Nullable String resolve(@Nullable String template, String name, String value) {
         if (template == null) {
             return null;
         }

@@ -5,7 +5,6 @@ import org.jspecify.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 
-
 /**
  * Use this to serve a list of handlers from a base path.
  */

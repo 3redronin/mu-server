@@ -3,6 +3,7 @@ package io.muserver.rest;
 import io.muserver.ParameterizedHeaderWithValue;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Variant;
+import org.jspecify.annotations.Nullable;
 
 import java.util.*;
 
@@ -70,7 +71,7 @@ class MuVariantListBuilder extends Variant.VariantListBuilder {
         return this;
     }
 
-    static Variant selectVariant(List<Variant> available, List<Locale.LanguageRange> preferredLanguages, List<MediaType> acceptableMediaTypes, List<ParameterizedHeaderWithValue> acceptableEncodings) {
+    static @Nullable Variant selectVariant(List<Variant> available, List<Locale.LanguageRange> preferredLanguages, List<MediaType> acceptableMediaTypes, List<ParameterizedHeaderWithValue> acceptableEncodings) {
         Locale.LanguageRange wildcardRanger = new Locale.LanguageRange("*");
 
         List<Variant> candidates = new ArrayList<>();
@@ -123,7 +124,7 @@ class MuVariantListBuilder extends Variant.VariantListBuilder {
 
     }
 
-    private static MediaType bestMediaType(List<MediaType> acceptableMediaTypes, Collection<MediaType> candidates) {
+    private static @Nullable MediaType bestMediaType(List<MediaType> acceptableMediaTypes, Collection<MediaType> candidates) {
 
         Map<CombinedMediaType, MediaType> combinedToServerType = new HashMap<>();
         List<CombinedMediaType> m = new ArrayList<>();

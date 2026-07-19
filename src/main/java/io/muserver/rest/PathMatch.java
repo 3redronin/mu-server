@@ -1,6 +1,7 @@
 package io.muserver.rest;
 
 import jakarta.ws.rs.core.PathSegment;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -78,7 +79,7 @@ public class PathMatch {
     /**
      * @return Returns the last captured group value, which may be null
      */
-    String lastGroup() {
+    @Nullable String lastGroup() {
         String group = matcher.group(matcher.groupCount());
         return "/".equals(group) ? null : group;
     }

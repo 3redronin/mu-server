@@ -307,7 +307,7 @@ class ClasspathResourceProvider implements ResourceProvider {
     }
 
     ClasspathResourceProvider newWithInputStream() {
-        InputStream inputStream;
+        @Nullable InputStream inputStream;
         try {
             inputStream = isDir ? null : Files.newInputStream(path, StandardOpenOption.READ);
         } catch (IOException e) {

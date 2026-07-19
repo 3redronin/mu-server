@@ -1,5 +1,7 @@
 package io.muserver.rest;
 
+import org.jspecify.annotations.Nullable;
+
 import java.lang.reflect.Method;
 
 /**
@@ -28,7 +30,7 @@ class JaxMethodLocator {
         return start;
     }
 
-    private static Method getMethodIfGood(Method start, Class<?> clazz) {
+    private static @Nullable Method getMethodIfGood(Method start, Class<?> clazz) {
         try {
             Method cur = clazz.getDeclaredMethod(start.getName(), start.getParameterTypes());
             if (JaxClassLocator.hasAtLeastOneJaxRSAnnotation(cur.getDeclaredAnnotations())) {

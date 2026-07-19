@@ -240,7 +240,7 @@ class SchemaReference {
         this.schema = schema;
     }
 
-    static SchemaReference find(List<SchemaReference> references, Class<?> type, Type genericType) {
+    static @Nullable SchemaReference find(List<SchemaReference> references, Class<?> type, Type genericType) {
         for (SchemaReference reference : references) {
             if (reference.type.equals(type)) {
                 return reference;
