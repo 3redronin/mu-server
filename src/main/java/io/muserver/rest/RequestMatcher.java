@@ -264,7 +264,9 @@ class RequestMatcher {
             return result.get(0);
         }
 
-        List<MediaType> requestBodyTypeAsList = Collections.singletonList(requestBodyMediaType);
+        List<MediaType> requestBodyTypeAsList = requestHasEntity || requestBodyContentType != null
+            ? Collections.singletonList(requestBodyMediaType)
+            : WILDCARD_AS_LIST;
         return result.stream()
             .max(Comparator.comparing((MatchedMethod o) -> bestMediaType(requestBodyTypeAsList, o.resourceMethod.effectiveConsumes))
                 .thenComparing(o -> bestMediaType(clientAccepts, o.resourceMethod.effectiveProduces))).get();
