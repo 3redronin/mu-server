@@ -399,6 +399,28 @@ public class RequestMatcherTest {
         assertThat(findResourceMethod(rm, Method.POST, "pictures", emptyList(), null).resourceMethod.methodHandle.getName(), equalTo("concrete"));
     }
 
+    @Test
+    public void bodylessRequestsUseBestConsumesValueFromEachMethod() throws NotMatchedException {
+        @Path("pictures")
+        class PictureThat {
+
+            @POST
+            @Consumes({"text/plain", "*/*"})
+            public String concreteAndWildcard() {
+                return "concrete and wildcard";
+            }
+
+            @POST
+            @Consumes("text/*")
+            public String typeWildcard() {
+                return "type wildcard";
+            }
+        }
+
+        RequestMatcher rm = new RequestMatcher(singletonList(ResourceClass.fromObject(new PictureThat(), paramConverterProviders, customizer)));
+        assertThat(findResourceMethod(rm, Method.POST, "pictures", emptyList(), null).resourceMethod.methodHandle.getName(), equalTo("concreteAndWildcard"));
+    }
+
     private static String nameOf(RequestMatcher rm, List<MediaType> acceptHeaders, String requestBodyContentType) throws NotMatchedException {
         return findResourceMethod(rm, Method.GET, "pictures", acceptHeaders, requestBodyContentType).resourceMethod.methodHandle.getName();
     }

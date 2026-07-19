@@ -270,9 +270,9 @@ class RequestMatcher {
 
     private static CombinedMediaType bestMediaType(List<MediaType> requestedTypes, List<MediaType> serverProvided) {
         return serverProvided.stream()
-            .map(serverType -> requestedTypes.stream().map(clientType -> CombinedMediaType.s(clientType, serverType))
-                .min(Comparator.naturalOrder()).get())
-            .min(Comparator.naturalOrder()).get();
+            .flatMap(serverType -> requestedTypes.stream().map(clientType -> CombinedMediaType.s(clientType, serverType)))
+            .filter(combined -> combined != CombinedMediaType.NONMATCH)
+            .max(Comparator.naturalOrder()).get();
     }
 
     static class StepOneOutput {
