@@ -295,8 +295,10 @@ public class SseBroadcasterImplTest {
     public void synchronousSendFailureRemovesSinkAndCompletesBroadcast() throws Exception {
         IllegalStateException sendFailure = new IllegalStateException("closed during broadcast");
         List<Throwable> errors = new ArrayList<>();
+        List<SseEventSink> closedSinks = new ArrayList<>();
         SseBroadcasterImpl broadcaster = new SseBroadcasterImpl();
         broadcaster.onError((sink, throwable) -> errors.add(throwable));
+        broadcaster.onClose(closedSinks::add);
 
         SseEventSink sink = new SseEventSink() {
             @Override
@@ -318,7 +320,8 @@ public class SseBroadcasterImplTest {
         CompletionStage<?> broadcast = broadcaster.broadcast(MuRuntimeDelegate.createSseFactory().newEvent("Hello"));
         broadcast.toCompletableFuture().get(1, TimeUnit.SECONDS);
 
-        assertThat(errors, contains(sendFailure));
+        assertThat(errors, empty());
+        assertThat(closedSinks, contains(sink));
         assertThat(broadcaster.connectedSinksCount(), is(0));
     }
 
