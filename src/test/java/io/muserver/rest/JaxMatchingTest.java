@@ -2,6 +2,7 @@ package io.muserver.rest;
 
 import io.muserver.MuServer;
 import jakarta.ws.rs.DELETE;
+import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
@@ -159,6 +160,43 @@ public class JaxMatchingTest {
         try (Response resp = call(request(server.uri().resolve("/customers/123/address/456")))) {
             assertThat(resp.code(), Matchers.is(200));
             assertThat(resp.body().string(), containsString("456"));
+        }
+    }
+
+    @Test
+    public void absentPathParamsUseDefaultValues() throws Exception {
+        @Path("/resource")
+        class Resource {
+            @GET
+            @Path("sbpath/{param}")
+            public String supplied(@PathParam("param") String param) {
+                return param;
+            }
+
+            @GET
+            @Path("sbpath/default")
+            public String defaulted(@DefaultValue("DEFAULT") @PathParam("param") String param) {
+                return param;
+            }
+        }
+        @Path("/locator")
+        class Locator {
+            @Path("sbpath")
+            public Resource locate() {
+                return new Resource();
+            }
+        }
+
+        this.server = httpsServerForTest()
+            .addHandler(restHandler(new Resource(), new Locator()).build())
+            .start();
+        try (Response resp = call(request(server.uri().resolve("/resource/sbpath/default")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), is("DEFAULT"));
+        }
+        try (Response resp = call(request(server.uri().resolve("/locator/sbpath/sbpath/default")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), is("DEFAULT"));
         }
     }
 
