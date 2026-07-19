@@ -200,6 +200,25 @@ public class JaxMatchingTest {
         }
     }
 
+    @Test
+    public void emptyPathParamCaptureDoesNotUseDefaultValue() throws Exception {
+        @Path("/{param:.*}")
+        class Resource {
+            @GET
+            public String get(@DefaultValue("DEFAULT") @PathParam("param") String param) {
+                return param;
+            }
+        }
+
+        this.server = httpsServerForTest()
+            .addHandler(restHandler(new Resource()).build())
+            .start();
+        try (Response resp = call(request(server.uri()))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), is(""));
+        }
+    }
+
 
     @Test
     public void interfacesWithDefaultImplementationSupported() throws IOException {

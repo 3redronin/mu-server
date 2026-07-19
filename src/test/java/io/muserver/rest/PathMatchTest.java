@@ -16,6 +16,14 @@ public class PathMatchTest {
         assertThat(match.params().get("name"), equalTo("orange"));
     }
 
+    @Test
+    public void emptyPathCapturesArePresent() {
+        PathMatch match = UriPattern.uriTemplateToRegex("/{name:.*}").matcher(URI.create("/"));
+        assertThat(match.prefixMatches(), is(true));
+        assertThat(match.params(), hasEntry("name", ""));
+        assertThat(match.segments().get("name").getPath(), is(""));
+    }
+
 
     @Test
     public void theEmptyMatcherMatches() {
