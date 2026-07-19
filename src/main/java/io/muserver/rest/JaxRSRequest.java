@@ -37,6 +37,7 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
     private final EntityProviders entityProviders;
     private String httpMethod;
     private Response abortResponse;
+    private boolean requestFilterChainRunning;
     private boolean responseFilterChainStarted;
 
     JaxRSRequest(MuRequest muRequest, MuResponse muResponse, InputStream inputStream, String relativePath, SecurityContext securityContext, List<ReaderInterceptor> readerInterceptors, EntityProviders entityProviders) {
@@ -447,7 +448,11 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
         if (responseFilterChainStarted) {
             throw new IllegalStateException("abortWith cannot be called from a response filter");
         }
-        this.abortResponse = Objects.requireNonNull(response, "response");
+        response = Objects.requireNonNull(response, "response");
+        if (!requestFilterChainRunning) {
+            throw new FilterAbortedException(response);
+        }
+        this.abortResponse = response;
     }
 
     Response getAbortResponse() {
@@ -456,6 +461,10 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
 
     void markResponseFilterChainStarted() {
         this.responseFilterChainStarted = true;
+    }
+
+    void setRequestFilterChainRunning(boolean requestFilterChainRunning) {
+        this.requestFilterChainRunning = requestFilterChainRunning;
     }
 
     void setMatchedMethod(RequestMatcher.MatchedMethod matchedMethod) {
@@ -470,6 +479,16 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
 
     String relativePath() {
         return getUriInfo().getPath(false);
+    }
+
+    /**
+     * This special exception preserves the immediate abort behavior when the request context is used outside a
+     * request-filter callback.
+     */
+    static class FilterAbortedException extends WebApplicationException {
+        FilterAbortedException(Response response) {
+            super(response);
+        }
     }
 
     private static class MuResourceInfo implements ResourceInfo {

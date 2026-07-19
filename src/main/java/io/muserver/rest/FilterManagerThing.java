@@ -36,23 +36,33 @@ class FilterManagerThing {
     }
 
     void onPreMatch(JaxRSRequest requestContext) throws IOException {
-        for (ContainerRequestFilter preMatchRequestFilter : preMatchRequestFilters) {
-            preMatchRequestFilter.filter(requestContext);
-            if (requestContext.getAbortResponse() != null) {
-                return;
-            }
-        }
-    }
-
-    void onPostMatch(JaxRSRequest requestContext) throws IOException {
-        for (ContainerRequestFilter requestFilter : requestFilters) {
-            List<Class<? extends Annotation>> filterBindings = ResourceClass.getNameBindingAnnotations(requestFilter.getClass());
-            if (requestContext.methodHasAnnotations(filterBindings)) {
-                requestFilter.filter(requestContext);
+        requestContext.setRequestFilterChainRunning(true);
+        try {
+            for (ContainerRequestFilter preMatchRequestFilter : preMatchRequestFilters) {
+                preMatchRequestFilter.filter(requestContext);
                 if (requestContext.getAbortResponse() != null) {
                     return;
                 }
             }
+        } finally {
+            requestContext.setRequestFilterChainRunning(false);
+        }
+    }
+
+    void onPostMatch(JaxRSRequest requestContext) throws IOException {
+        requestContext.setRequestFilterChainRunning(true);
+        try {
+            for (ContainerRequestFilter requestFilter : requestFilters) {
+                List<Class<? extends Annotation>> filterBindings = ResourceClass.getNameBindingAnnotations(requestFilter.getClass());
+                if (requestContext.methodHasAnnotations(filterBindings)) {
+                    requestFilter.filter(requestContext);
+                    if (requestContext.getAbortResponse() != null) {
+                        return;
+                    }
+                }
+            }
+        } finally {
+            requestContext.setRequestFilterChainRunning(false);
         }
     }
 

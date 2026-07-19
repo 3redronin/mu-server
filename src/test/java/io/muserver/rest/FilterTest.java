@@ -472,6 +472,27 @@ public class FilterTest {
     }
 
     @Test
+    public void abortWithFromInjectedRequestContextStillShortCircuits() throws IOException {
+        @Path("abort-from-resource")
+        class Resource {
+            @GET
+            public String get(@Context ContainerRequestContext requestContext) {
+                requestContext.abortWith(jakarta.ws.rs.core.Response.status(409).entity("Blocked!").build());
+                return "Not blocked";
+            }
+        }
+
+        server = httpsServerForTest()
+            .addHandler(restHandler(new Resource()))
+            .start();
+
+        try (Response resp = call(request(server.uri().resolve("/abort-from-resource")))) {
+            assertThat(resp.code(), is(409));
+            assertThat(resp.body().string(), is("Blocked!"));
+        }
+    }
+
+    @Test
     public void resourceInfoAndMuRequestCanBeFoundOnPreMatchingFilters() throws IOException {
 
         @Path("/blah")
