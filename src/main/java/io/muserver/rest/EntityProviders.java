@@ -26,14 +26,23 @@ class EntityProviders {
         this.writers = writers.stream().map(ProviderWrapper::writer).sorted().collect(Collectors.toList());
     }
     public MessageBodyReader<?> selectReader(Class<?> type, Type genericType, Annotation[] annotations, MediaType requestBodyMediaType) {
-        for (ProviderWrapper<MessageBodyReader<?>> reader : readers) {
-            boolean mediaTypeSupported = reader.supports(requestBodyMediaType);
-            boolean typeSupported = !(reader.genericType instanceof Class) || ((Class<?>) reader.genericType).isAssignableFrom(box(type));
-            if (mediaTypeSupported && typeSupported && reader.provider.isReadable(type, genericType, annotations, requestBodyMediaType)) {
-                return reader.provider;
-            }
+        Optional<ProviderWrapper<MessageBodyReader<?>>> best = readers.stream()
+            .filter(reader -> reader.supports(requestBodyMediaType))
+            .filter(reader -> !(reader.genericType instanceof Class) || ((Class<?>) reader.genericType).isAssignableFrom(box(type)))
+            .filter(reader -> reader.provider.isReadable(type, genericType, annotations, requestBodyMediaType))
+            .min(Comparator.comparingInt(reader -> mediaTypeSpecificity(reader, requestBodyMediaType)));
+        if (best.isPresent()) {
+            return best.get().provider;
         }
         throw new NotSupportedException("Could not find a suitable entity provider to read " + type);
+    }
+
+    private static int mediaTypeSpecificity(ProviderWrapper<?> provider, MediaType requestedType) {
+        return provider.mediaTypes.stream()
+            .filter(mediaType -> mediaType.isCompatible(requestedType))
+            .mapToInt(mediaType -> mediaType.isWildcardType() ? 2 : mediaType.isWildcardSubtype() ? 1 : 0)
+            .min()
+            .orElse(2);
     }
 
     private static Class<?> box(Class<?> type) {
