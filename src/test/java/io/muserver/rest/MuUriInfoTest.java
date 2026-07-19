@@ -83,6 +83,18 @@ public class MuUriInfoTest {
         assertThat(sample.getAbsolutePath(), equalTo(URI.create("http://example.org:8182/some%20path/path")));
     }
 
+    @Test
+    public void getAbsolutePathUsesTheRequestUriAuthority() {
+        MuUriInfo sample = new MuUriInfo(
+            URI.create("http://localhost:888/otherbase"),
+            URI.create("http://xx.yy:888/base/resource/sub?query=yo#ha"),
+            "base/resource/sub",
+            null
+        );
+
+        assertThat(sample.getAbsolutePath(), equalTo(URI.create("http://xx.yy:888/base/resource/sub")));
+    }
+
 
     @Test
     public void getPathSegmentsWorks() {

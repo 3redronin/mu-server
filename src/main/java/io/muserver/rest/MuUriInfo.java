@@ -95,7 +95,7 @@ class MuUriInfo implements UriInfo {
 
     @Override
     public URI getAbsolutePath() {
-        return getBaseUri().resolve(getPath(false));
+        return UriBuilder.fromUri(requestUri).replaceQuery(null).fragment(null).build();
     }
 
     @Override
