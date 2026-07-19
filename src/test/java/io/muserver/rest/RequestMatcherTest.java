@@ -334,13 +334,33 @@ public class RequestMatcherTest {
 
         RequestMatcher rm = new RequestMatcher(singletonList(ResourceClass.fromObject(new PictureThat(), paramConverterProviders, customizer)));
         assertThat(nameOf(rm, emptyList(), "text/plain"), equalTo("text"));
-        assertThat(nameOf(rm, emptyList(), null), equalTo("json"));
+        assertThat(nameOf(rm, emptyList(), null, true), equalTo("json"));
 
         assertNotAcceptable(rm, singletonList(MediaType.valueOf("text/plain")), "application/json");
     }
 
+    @Test
+    public void consumesIsNotCheckedWhenThereIsNoRequestEntityOrContentType() throws NotMatchedException {
+        @Path("pictures")
+        class PictureThat {
+
+            @POST
+            @Consumes("text/plain")
+            public String text() {
+                return "hi";
+            }
+        }
+
+        RequestMatcher rm = new RequestMatcher(singletonList(ResourceClass.fromObject(new PictureThat(), paramConverterProviders, customizer)));
+        assertThat(findResourceMethod(rm, Method.POST, "pictures", emptyList(), null).resourceMethod.methodHandle.getName(), equalTo("text"));
+    }
+
     private static String nameOf(RequestMatcher rm, List<MediaType> acceptHeaders, String requestBodyContentType) throws NotMatchedException {
-        return findResourceMethod(rm, Method.GET, "pictures", acceptHeaders, requestBodyContentType).resourceMethod.methodHandle.getName();
+        return nameOf(rm, acceptHeaders, requestBodyContentType, requestBodyContentType != null);
+    }
+
+    private static String nameOf(RequestMatcher rm, List<MediaType> acceptHeaders, String requestBodyContentType, boolean requestHasEntity) throws NotMatchedException {
+        return findResourceMethod(rm, Method.GET, "pictures", acceptHeaders, requestBodyContentType, requestHasEntity).resourceMethod.methodHandle.getName();
     }
 
     private static void assertNotAcceptable(RequestMatcher rm, List<MediaType> acceptHeaders, String requestBodyContentType) {
@@ -355,6 +375,10 @@ public class RequestMatcherTest {
     }
 
     private static RequestMatcher.MatchedMethod findResourceMethod(RequestMatcher rm, Method method, String path, List<MediaType> acceptHeaders, String contentBodyType) throws NotMatchedException {
+        return findResourceMethod(rm, method, path, acceptHeaders, contentBodyType, contentBodyType != null);
+    }
+
+    private static RequestMatcher.MatchedMethod findResourceMethod(RequestMatcher rm, Method method, String path, List<MediaType> acceptHeaders, String contentBodyType, boolean requestHasEntity) throws NotMatchedException {
         NotImplementedMuRequest request = new NotImplementedMuRequest() {
             @Override
             public URI uri() {
@@ -377,6 +401,9 @@ public class RequestMatcherTest {
                 if (contentBodyType != null) {
                     entries.put(HttpHeaderNames.CONTENT_TYPE.toString(), contentBodyType);
                 }
+                if (requestHasEntity) {
+                    entries.put(HttpHeaderNames.CONTENT_LENGTH.toString(), "5");
+                }
                 return HeadersFactory.create(entries);
             }
 
@@ -385,7 +412,7 @@ public class RequestMatcherTest {
                 return emptyList();
             }
         };
-        InputStream inputStream = contentBodyType == null ? null : new ByteArrayInputStream("Hello".getBytes(StandardCharsets.US_ASCII));
+        InputStream inputStream = requestHasEntity ? new ByteArrayInputStream("Hello".getBytes(StandardCharsets.US_ASCII)) : null;
         JaxRSRequest rc = new JaxRSRequest(request, null, inputStream, request.uri().getPath(), null, emptyList(), null);
         return rm.findResourceMethod(rc, method, acceptHeaders, null);
     }

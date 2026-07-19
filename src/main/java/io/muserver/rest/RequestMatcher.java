@@ -43,7 +43,7 @@ class RequestMatcher {
         Set<MatchedMethod> candidateMethods = getMatchedMethodsForPath(path, subResourceLocator);
         MuRequest req = requestContext.muRequest;
         String requestBodyContentType = req.headers().get(HeaderNames.CONTENT_TYPE);
-        return stepThreeIdentifyTheMethodThatWillHandleTheRequest(httpMethod, candidateMethods, requestBodyContentType, acceptHeaders);
+        return stepThreeIdentifyTheMethodThatWillHandleTheRequest(httpMethod, candidateMethods, requestBodyContentType, req.headers().hasBody(), acceptHeaders);
     }
 
     Set<MatchedMethod> getMatchedMethodsForPath(String path, Function<MatchedMethod, ResourceClass> subResourceLocator) throws NotMatchedException {
@@ -231,7 +231,7 @@ class RequestMatcher {
         }
     }
 
-    private MatchedMethod stepThreeIdentifyTheMethodThatWillHandleTheRequest(Method method, Set<MatchedMethod> candidates, String requestBodyContentType, List<MediaType> acceptHeaders) throws NotAllowedException, NotAcceptableException, NotSupportedException {
+    private MatchedMethod stepThreeIdentifyTheMethodThatWillHandleTheRequest(Method method, Set<MatchedMethod> candidates, String requestBodyContentType, boolean requestHasEntity, List<MediaType> acceptHeaders) throws NotAllowedException, NotAcceptableException, NotSupportedException {
         List<MatchedMethod> result = candidates.stream().filter(rm -> rm.resourceMethod.httpMethod == method).collect(toList());
         if (result.isEmpty()) {
             List<String> allowed = candidates.stream().map(c -> c.resourceMethod.httpMethod.name()).distinct().collect(toList());
@@ -241,10 +241,14 @@ class RequestMatcher {
         // The media type of the request entity body (if any) is a supported input data format (see Section3.5).
         // If no methods support the media type of the request entity body an implementation MUST generate a
         // NotSupportedException (415 status) and no entity.
-        MediaType requestBodyMediaType = requestBodyContentType == null ? MediaTypeHeaderDelegate.NONE : MediaType.valueOf(requestBodyContentType);
-        result = result.stream().filter(rm -> rm.resourceMethod.canConsume(requestBodyMediaType)).collect(toList());
-        if (result.isEmpty()) {
-            throw new NotSupportedException();
+        MediaType requestBodyMediaType = requestBodyContentType == null
+            ? (requestHasEntity ? MediaType.APPLICATION_OCTET_STREAM_TYPE : MediaTypeHeaderDelegate.NONE)
+            : MediaType.valueOf(requestBodyContentType);
+        if (requestHasEntity || requestBodyContentType != null) {
+            result = result.stream().filter(rm -> rm.resourceMethod.canConsume(requestBodyMediaType)).collect(toList());
+            if (result.isEmpty()) {
+                throw new NotSupportedException();
+            }
         }
 
         // At least one of the acceptable response entity body media types is a supported output data format (see Section 3.5).
