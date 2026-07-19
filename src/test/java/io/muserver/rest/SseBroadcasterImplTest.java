@@ -27,6 +27,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.TimeUnit;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
@@ -288,6 +289,37 @@ public class SseBroadcasterImplTest {
 
         assertThat(MuRuntimeDelegate.connectedSinksCount(broadcaster), is(0));
 
+    }
+
+    @Test
+    public void synchronousSendFailureRemovesSinkAndCompletesBroadcast() throws Exception {
+        IllegalStateException sendFailure = new IllegalStateException("closed during broadcast");
+        List<Throwable> errors = new ArrayList<>();
+        SseBroadcasterImpl broadcaster = new SseBroadcasterImpl();
+        broadcaster.onError((sink, throwable) -> errors.add(throwable));
+
+        SseEventSink sink = new SseEventSink() {
+            @Override
+            public boolean isClosed() {
+                return false;
+            }
+
+            @Override
+            public CompletionStage<?> send(jakarta.ws.rs.sse.OutboundSseEvent event) {
+                throw sendFailure;
+            }
+
+            @Override
+            public void close() {
+            }
+        };
+        broadcaster.register(sink);
+
+        CompletionStage<?> broadcast = broadcaster.broadcast(MuRuntimeDelegate.createSseFactory().newEvent("Hello"));
+        broadcast.toCompletableFuture().get(1, TimeUnit.SECONDS);
+
+        assertThat(errors, contains(sendFailure));
+        assertThat(broadcaster.connectedSinksCount(), is(0));
     }
 
     @After
