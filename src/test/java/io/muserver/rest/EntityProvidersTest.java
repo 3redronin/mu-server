@@ -206,6 +206,12 @@ public class EntityProvidersTest {
                 GenericEntity<List<Dog>> dogList = new GenericEntity<List<Dog>>(dogs) {};
                 return jakarta.ws.rs.core.Response.ok(dogList).build();
             }
+
+            @GET
+            @Path("direct")
+            public List<Dog> direct() {
+                return asList(new Dog("Little", "Chihuahua"), new Dog("Mangle", "Mongrel"));
+            }
         }
 
         class DogWriter implements MessageBodyWriter<Dog> {
@@ -245,6 +251,10 @@ public class EntityProvidersTest {
         }
 
         try (Response resp = call(request().url(server.uri().resolve("/dogs/all").toString()))) {
+            assertThat(resp.body().string(), equalTo("Little (Chihuahua)" + NEWLINE + "Mangle (Mongrel)" + NEWLINE));
+        }
+
+        try (Response resp = call(request().url(server.uri().resolve("/dogs/direct").toString()))) {
             assertThat(resp.body().string(), equalTo("Little (Chihuahua)" + NEWLINE + "Mangle (Mongrel)" + NEWLINE));
         }
     }

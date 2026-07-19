@@ -146,7 +146,8 @@ public class RestHandler implements MuHandler {
                         }
                     });
                 } else {
-                    sendResponse(0, requestContext, muResponse, acceptHeaders, produces, directlyProduces, methodAnnotations, result);
+                    sendResponse(0, requestContext, muResponse, acceptHeaders, produces, directlyProduces, methodAnnotations, result,
+                        mm.resourceMethod.methodHandle.getGenericReturnType());
                 }
             }
         } catch (NotMatchedException e) {
@@ -206,12 +207,16 @@ public class RestHandler implements MuHandler {
     }
 
     private void sendResponse(int nestingLevel, JaxRSRequest requestContext, MuResponse muResponse, List<MediaType> acceptHeaders, List<MediaType> produces, List<MediaType> directlyProduces, Annotation[] annotations, Object result) throws Exception {
+        sendResponse(nestingLevel, requestContext, muResponse, acceptHeaders, produces, directlyProduces, annotations, result, null);
+    }
+
+    private void sendResponse(int nestingLevel, JaxRSRequest requestContext, MuResponse muResponse, List<MediaType> acceptHeaders, List<MediaType> produces, List<MediaType> directlyProduces, Annotation[] annotations, Object result, Type resourceMethodReturnType) throws Exception {
         try {
             if (requestContext.hasEntity()) {
                 requestContext.getEntityStream().close();
             }
             if (!muResponse.hasStartedSendingData()) {
-                ObjWithType obj = ObjWithType.objType(result);
+                ObjWithType obj = ObjWithType.objType(result, resourceMethodReturnType);
 
                 if (obj.entity instanceof Exception) {
                     throw (Exception) obj.entity;
