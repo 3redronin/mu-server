@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - master
-      - mu3
+      - mu4
   pull_request:
 
 jobs:
