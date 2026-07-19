@@ -334,7 +334,7 @@ public class RequestMatcherTest {
 
         RequestMatcher rm = new RequestMatcher(singletonList(ResourceClass.fromObject(new PictureThat(), paramConverterProviders, customizer)));
         assertThat(nameOf(rm, emptyList(), "text/plain"), equalTo("text"));
-        assertThat(nameOf(rm, emptyList(), null, true), equalTo("json"));
+        assertThat(nameOf(rm, emptyList(), null), equalTo("text"));
 
         assertNotAcceptable(rm, singletonList(MediaType.valueOf("text/plain")), "application/json");
     }
@@ -353,6 +353,23 @@ public class RequestMatcherTest {
 
         RequestMatcher rm = new RequestMatcher(singletonList(ResourceClass.fromObject(new PictureThat(), paramConverterProviders, customizer)));
         assertThat(findResourceMethod(rm, Method.POST, "pictures", emptyList(), null).resourceMethod.methodHandle.getName(), equalTo("text"));
+    }
+
+    @Test
+    public void entityWithoutContentTypeDoesNotPreventConsumesMatch() throws NotMatchedException {
+        @Path("pictures")
+        class PictureThat {
+
+            @POST
+            @Consumes("text/html")
+            public String html() {
+                return "hi";
+            }
+        }
+
+        RequestMatcher rm = new RequestMatcher(singletonList(ResourceClass.fromObject(new PictureThat(), paramConverterProviders, customizer)));
+        RequestMatcher.MatchedMethod match = findResourceMethod(rm, Method.POST, "pictures", emptyList(), null, true);
+        assertThat(match.resourceMethod.methodHandle.getName(), equalTo("html"));
     }
 
     @Test
@@ -383,11 +400,7 @@ public class RequestMatcherTest {
     }
 
     private static String nameOf(RequestMatcher rm, List<MediaType> acceptHeaders, String requestBodyContentType) throws NotMatchedException {
-        return nameOf(rm, acceptHeaders, requestBodyContentType, requestBodyContentType != null);
-    }
-
-    private static String nameOf(RequestMatcher rm, List<MediaType> acceptHeaders, String requestBodyContentType, boolean requestHasEntity) throws NotMatchedException {
-        return findResourceMethod(rm, Method.GET, "pictures", acceptHeaders, requestBodyContentType, requestHasEntity).resourceMethod.methodHandle.getName();
+        return findResourceMethod(rm, Method.GET, "pictures", acceptHeaders, requestBodyContentType).resourceMethod.methodHandle.getName();
     }
 
     private static void assertNotAcceptable(RequestMatcher rm, List<MediaType> acceptHeaders, String requestBodyContentType) {
