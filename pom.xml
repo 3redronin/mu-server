@@ -5,8 +5,8 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>io.muserver</groupId>
-    <artifactId>mu3</artifactId>
-    <version>0.0.3-SNAPSHOT</version>
+    <artifactId>mu-server</artifactId>
+    <version>0.0.4-SNAPSHOT</version>
 
     <name>mu-server</name>
     <description>A simple but powerful web server library</description>
@@ -14,7 +14,7 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <!-- Unused in mu3; retained so Netty version updates merge cleanly from master. -->
+        <!-- Unused in mu4; retained so Netty version updates merge cleanly from master. -->
         <netty.version.4.1>4.1.135.Final</netty.version.4.1>
         <netty.version.4.2>4.2.14.Final</netty.version.4.2>
         <netty.version>${netty.version.4.1}</netty.version>

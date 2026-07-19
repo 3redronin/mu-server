@@ -1,6 +1,6 @@
-# Possible bugs and edge-case issues — mu3 branch
+# Possible bugs and edge-case issues — mu4 branch
 
-Findings from a focused read of the HTTP/1.x and HTTP/2 implementations on the `mu3` branch
+Findings from a focused read of the HTTP/1.x and HTTP/2 implementations on the `mu4` branch
 (`src/main/java/io/muserver/`). Each item lists the file, line(s), the issue, why it matters, and
 a suggested direction. **Severity** is a rough subjective rating — please verify with a test
 before fixing, especially for the latent items.

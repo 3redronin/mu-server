@@ -1,21 +1,21 @@
-# mu-server developer guide (mu3 branch)
+# mu-server developer guide (mu4 branch)
 
-A field guide for developers picking up the `mu3` rewrite of mu-server. This is **not** the user-facing
+A field guide for developers picking up the `mu4` rewrite of mu-server. This is **not** the user-facing
 documentation (see `README.md` and <https://muserver.io/> for that) — this document is about the internals:
 how the code is organised, how requests flow through it, and where to start when you make changes.
 
-> Branch: `mu3`. Maven artifact: `io.muserver:mu3:0.0.3-SNAPSHOT`. The `mu3` rewrite drops the Netty/NIO
+> Branch: `mu4`. Maven artifact: `io.muserver:mu-server:0.0.4-SNAPSHOT`. The `mu4` rewrite drops the Netty/NIO
 > backend used in earlier versions and replaces it with a blocking-IO-on-virtual-threads model.
 
 ---
 
 ## 1. Big picture
 
-mu-server is an embeddable HTTP/1.1, HTTP/2, and WebSocket server. The `mu3` branch is a ground-up rewrite
+mu-server is an embeddable HTTP/1.1, HTTP/2, and WebSocket server. The `mu4` branch is a ground-up rewrite
 that targets **JDK 11+ but is designed for JDK 21+ virtual threads**. The architectural change relative to
 earlier versions:
 
-| Aspect              | mu (legacy)                  | mu3 (this branch)                              |
+| Aspect              | mu (legacy)                  | mu4 (this branch)                              |
 |---------------------|------------------------------|------------------------------------------------|
 | IO model            | Netty NIO event loops        | One blocking thread per connection             |
 | Threading           | Pinned event-loop callbacks  | Virtual threads (one per request, when on 21+) |
@@ -81,7 +81,7 @@ package is `@NullMarked` (jspecify), so any field/parameter that may be null mus
 
 ## 4. Reading the code: suggested order
 
-If you've never touched mu3 before, read in this order:
+If you've never touched mu4 before, read in this order:
 
 1. **`MuHandler.java`** — 26 lines. The whole user contract is `boolean handle(req, resp)`.
 2. **`MuServerBuilder.java` → `start()`** — and follow into `Mu3ServerImpl.start(builder)` which wires
@@ -328,7 +328,7 @@ These are observations from reading the code, not committed work. Verify before 
   skip user-space copies. Watch out for TLS, where zero-copy isn't possible.
 - **HTTP/2 priority (RFC 9113 §5.3.2).** Currently parsed but mostly ignored — implementing PRIORITY
   hints would fix the `[~]` entries in `HTTP2DO.md`.
-- **WebSocket `permessage-deflate`** — listed in `BREAKINGCHANGES.md` as a Mu 3 todo.
+- **WebSocket `permessage-deflate`** — listed in `BREAKINGCHANGES.md` as a Mu 4 todo.
 - **Connection reuse and TLS feature checks (RFC 9113 §9.1.1, §9.2)** — also `[ ]` in the tracker.
 
 ## 14. Useful entry points for spelunking
