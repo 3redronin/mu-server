@@ -27,7 +27,7 @@ class EntityProviders {
     }
     public MessageBodyReader<?> selectReader(Class<?> type, Type genericType, Annotation[] annotations, MediaType requestBodyMediaType) {
         for (ProviderWrapper<MessageBodyReader<?>> reader : readers) {
-            boolean mediaTypeSupported = reader.mediaTypes.stream().anyMatch(mt -> mt.isCompatible(requestBodyMediaType));
+            boolean mediaTypeSupported = reader.supports(requestBodyMediaType);
             boolean typeSupported = !(reader.genericType instanceof Class) || ((Class<?>) reader.genericType).isAssignableFrom(box(type));
             if (mediaTypeSupported && typeSupported && reader.provider.isReadable(type, genericType, annotations, requestBodyMediaType)) {
                 return reader.provider;

@@ -85,6 +85,29 @@ public class EntityProvidersTest {
     }
 
     @Test
+    public void readersWithoutConsumesSupportAllMediaTypes() throws Exception {
+        @Path("samples")
+        class Sample {
+            @POST
+            public String echo(String body) {
+                return body;
+            }
+        }
+
+        this.server = httpsServerForTest().addHandler(
+            restHandler(new Sample())
+                .addCustomReader(new MyStringReaderWriter.WithoutConsumes())
+                .build()).start();
+        try (Response resp = call(request()
+            .post(RequestBody.create("hello world", MediaType.parse("reader/serverside")))
+            .url(server.uri().resolve("/samples").toString())
+        )) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.body().string(), equalTo("read by default reader"));
+        }
+    }
+
+    @Test
     public void customWritersGetTheAnnotationsOfTheResourceMethod() throws Exception {
 
         @Path("dummy")
