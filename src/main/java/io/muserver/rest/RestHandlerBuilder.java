@@ -157,9 +157,6 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * <p>The primary use of this is to allow querystring parameters such as <code>/path?value=one,two,three</code> to be interpreted
      * as a list of three values rather than a single string. This only applies to parameters that are collections.</p>
      * <p>The default is {@link CollectionParameterStrategy#NO_TRANSFORM} which is the JAX-RS standard.</p>
-     * <p><strong>Note:</strong> until MuServer 1.0, if no value is specified but methods with collection parameters are detected
-     * then the handler will fail to start and this value will need to be explicitly set. This is in order to highlight the change
-     * in behaviour introduced in Mu Server 0.70 where it used {@link CollectionParameterStrategy#SPLIT_ON_COMMA} behaviour.</p>
      * @param collectionParameterStrategy The strategy to use
      * @return This builder
      */
@@ -576,21 +573,6 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
 
         CollectionParameterStrategy cps = this.collectionParameterStrategy;
         if (cps == null) {
-            for (ResourceClass root : roots) {
-                for (ResourceMethod rm : root.resourceMethods) {
-                    for (ResourceMethodParam param : rm.params) {
-                        if (Collection.class.isAssignableFrom(param.parameterHandle.getType()) && (param.source == ResourceMethodParam.ValueSource.HEADER_PARAM || param.source == ResourceMethodParam.ValueSource.QUERY_PARAM)) {
-                            throw new IllegalStateException("Please specify a string handling strategy for collections for querystring and header parameters. " +
-                                "Please note that the behaviour of these parameters have changed since Mu Server 0.70.0 to follow the JAX-RS standard. " +
-                                "Previously, a parameter values such as 'one,two,three' when passed to a collection parameter would be interpreted as 3 values, " +
-                                "however the JAX-RS standard is for this to be a single value. To follow the standard, please use " +
-                                "RestHandlerBuilder.withCollectionParameterStrategy(CollectionParameterStrategy.NO_TRANSFORM) or keep early behaviour where the value is split " +
-                                "into multiple values, use RestHandlerBuilder.withCollectionParameterStrategy(CollectionParameterStrategy.SPLIT_ON_COMMA) no your rest handler builder instance.");
-                        }
-                    }
-                }
-            }
-
             cps = CollectionParameterStrategy.NO_TRANSFORM;
         }
 
