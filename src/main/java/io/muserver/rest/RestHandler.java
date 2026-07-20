@@ -16,9 +16,6 @@ import jakarta.ws.rs.sse.SseEventSink;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.FilterOutputStream;
-import java.io.IOException;
-import java.io.OutputStream;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.Type;
@@ -46,35 +43,6 @@ public class RestHandler implements MuHandler {
     private final CORSConfig corsConfig;
     private final List<ParamConverterProvider> paramConverterProviders;
     private final SchemaObjectCustomizer schemaObjectCustomizer;
-
-    private static final class BeforeFirstWriteOutputStream extends FilterOutputStream {
-        private final Runnable beforeFirstWrite;
-        private boolean started;
-
-        private BeforeFirstWriteOutputStream(OutputStream out, Runnable beforeFirstWrite) {
-            super(out);
-            this.beforeFirstWrite = beforeFirstWrite;
-        }
-
-        private void start() {
-            if (!started) {
-                started = true;
-                beforeFirstWrite.run();
-            }
-        }
-
-        @Override
-        public void write(int b) throws IOException {
-            start();
-            out.write(b);
-        }
-
-        @Override
-        public void write(byte[] b, int off, int len) throws IOException {
-            start();
-            out.write(b, off, len);
-        }
-    }
 
     private final List<ReaderInterceptor> readerInterceptors;
     private final List<WriterInterceptor> writerInterceptors;
@@ -255,7 +223,10 @@ public class RestHandler implements MuHandler {
                     jaxRSResponse = new JaxRSResponse(Response.Status.fromStatusCode(obj.status()), new LowercasedMultivaluedHashMap<>(), obj, new NewCookie[0], emptyList(), JaxRSResponse.Builder.EMPTY_ANNOTATIONS);
                 }
 
-                try (LazyAccessOutputStream out = new LazyAccessOutputStream(muResponse)) {
+                JaxRSResponse responseToWrite = jaxRSResponse;
+                boolean isHttp1 = requestContext.muRequest.protocol().equals("HTTP/1.1");
+                try (LazyAccessOutputStream out = new LazyAccessOutputStream(muResponse,
+                    () -> MuRuntimeDelegate.writeResponseHeaders(requestContext.getUriInfo().getBaseUri(), responseToWrite, muResponse, isHttp1))) {
                     jaxRSResponse.setEntityStream(requestContext.getMuMethod() == Method.HEAD ? NullOutputStream.INSTANCE : out);
                     jaxRSResponse.setRequestContext(requestContext);
 
@@ -275,6 +246,7 @@ public class RestHandler implements MuHandler {
                     }
 
                     filterManagerThing.onBeforeSendResponse(requestContext, jaxRSResponse);
+                    muResponse.status(jaxRSResponse.getStatus());
 
                     if (jaxRSResponse.hasEntity()) {
                         jaxRSResponse.executeInterceptors(writerInterceptors); // run the interceptors
@@ -285,9 +257,9 @@ public class RestHandler implements MuHandler {
                     }
 
                     int status = jaxRSResponse.getStatus();
-                    muResponse.status(status);
-
-                    boolean isHttp1 = requestContext.muRequest.protocol().equals("HTTP/1.1");
+                    if (!muResponse.hasStartedSendingData()) {
+                        muResponse.status(status);
+                    }
 
                     if (entity == null) {
                         if (status != 204 && status != 304 && status != 205) {
@@ -316,14 +288,9 @@ public class RestHandler implements MuHandler {
                         jaxRSResponse.getHeaders().putSingle("content-type", contentType);
 
                         try {
-                            JaxRSResponse responseToWrite = jaxRSResponse;
-                            BeforeFirstWriteOutputStream entityStream = new BeforeFirstWriteOutputStream(
-                                jaxRSResponse.getOutputStream(),
-                                () -> MuRuntimeDelegate.writeResponseHeaders(requestContext.getUriInfo().getBaseUri(), responseToWrite, muResponse, isHttp1)
-                            );
                             messageBodyWriter.writeTo(jaxRSResponse.getEntity(), jaxRSResponse.getType(), jaxRSResponse.getGenericType(), writerAnnontations,
-                                jaxRSResponse.getMediaType(), jaxRSResponse.getHeaders(), entityStream);
-                            entityStream.start();
+                                jaxRSResponse.getMediaType(), jaxRSResponse.getHeaders(), jaxRSResponse.getOutputStream());
+                            out.prepare();
                         } catch (Exception e) {
                             // remove the added headers before rewriting
                             if (!muResponse.hasStartedSendingData()) {
