@@ -7,6 +7,7 @@ import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.Context;
+import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Request;
 import jakarta.ws.rs.core.Variant;
@@ -61,7 +62,7 @@ public class VariantTest {
             assertThat(resp.header("content-type"), equalTo("application/json"));
             assertThat(resp.header("content-encoding"), equalTo("identity"));
             assertThat(resp.header("content-language"), equalTo("es"));
-            assertThat(resp.headers("vary"), hasItems("Accept-Language", "Accept", "Accept-Encoding"));
+            assertThat(resp.headers("vary"), hasItems(HttpHeaders.ACCEPT_LANGUAGE, HttpHeaders.ACCEPT, HttpHeaders.ACCEPT_ENCODING));
             assertThat(resp.body().string(), equalTo("{}"));
         }
 
@@ -73,7 +74,7 @@ public class VariantTest {
             assertThat(resp.header("content-type"), equalTo("application/json"));
             assertThat(resp.header("content-encoding"), equalTo("identity"));
             assertThat(resp.header("content-language"), oneOf("es", "en"));
-            assertThat(resp.headers("vary"), hasItems("Accept-Language", "Accept", "Accept-Encoding"));
+            assertThat(resp.headers("vary"), hasItems(HttpHeaders.ACCEPT_LANGUAGE, HttpHeaders.ACCEPT, HttpHeaders.ACCEPT_ENCODING));
             assertThat(resp.body().string(), equalTo("{}"));
         }
 
