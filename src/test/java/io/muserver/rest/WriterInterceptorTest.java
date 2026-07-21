@@ -247,6 +247,51 @@ public class WriterInterceptorTest {
     @Retention(value = RetentionPolicy.RUNTIME)
     public @interface UppercaseBinding { }
 
+    @NameBinding
+    @Target({ ElementType.TYPE, ElementType.METHOD })
+    @Retention(value = RetentionPolicy.RUNTIME)
+    public @interface UnusedBinding { }
+
+    @Test
+    public void nonMatchingNameBoundInterceptorDoesNotStopTheChain() throws IOException {
+        @UnusedBinding
+        class UnusedInterceptor implements WriterInterceptor {
+            @Override
+            public void aroundWriteTo(WriterInterceptorContext context) {
+                throw new AssertionError("This interceptor should not run");
+            }
+        }
+
+        @UppercaseBinding
+        class Uppercaser implements WriterInterceptor {
+            @Override
+            public void aroundWriteTo(WriterInterceptorContext context) throws IOException {
+                context.setEntity(((String) context.getEntity()).toUpperCase());
+                context.proceed();
+            }
+        }
+
+        @Path("something")
+        class Resource {
+            @GET
+            @UppercaseBinding
+            public String get() {
+                return "hello";
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new Resource())
+                .addWriterInterceptor(new UnusedInterceptor())
+                .addWriterInterceptor(new Uppercaser()))
+            .start();
+
+        try (Response resp = call(request(server.uri().resolve("/something")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), is("HELLO"));
+        }
+    }
+
     @Test
     public void nameBindingIsCanBeUsedToTargetSpecificMethods() throws IOException {
 

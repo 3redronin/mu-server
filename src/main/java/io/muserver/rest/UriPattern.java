@@ -75,7 +75,10 @@ public class UriPattern {
         if (matcher.matches()) {
             HashMap<String, PathSegment> params = new HashMap<>();
             for (String namedGroup : namedGroups) {
-                MuPathSegment segment = MuUriInfo.pathStringToSegments(matcher.group(namedGroup), true, true).findFirst().orElse(null);
+                String capturedValue = matcher.group(namedGroup);
+                MuPathSegment segment = capturedValue.isEmpty()
+                    ? new MuPathSegment("", ReadOnlyMultivaluedMap.empty())
+                    : MuUriInfo.pathStringToSegments(capturedValue, true, true).findFirst().orElse(null);
                 if (segment != null) {
                     params.put(namedGroup, segment);
                 }
