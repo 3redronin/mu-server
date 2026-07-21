@@ -2,6 +2,7 @@ package io.muserver.rest;
 
 import io.muserver.MuRequest;
 import io.muserver.MuServer;
+import jakarta.annotation.Priority;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.container.ResourceInfo;
 import jakarta.ws.rs.ext.WriterInterceptor;
@@ -19,6 +20,8 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -30,6 +33,45 @@ import static scaffolding.MuAssert.stopAndCheck;
 public class WriterInterceptorTest {
 
     private MuServer server;
+
+    @Test
+    public void lowerPriorityValueExecutesFirstRegardlessOfRegistrationOrder() throws Exception {
+        List<String> calls = new ArrayList<>();
+        @Priority(100)
+        class First implements WriterInterceptor {
+            @Override
+            public void aroundWriteTo(WriterInterceptorContext context) throws IOException {
+                calls.add("first");
+                context.proceed();
+            }
+        }
+        @Priority(200)
+        class Second implements WriterInterceptor {
+            @Override
+            public void aroundWriteTo(WriterInterceptorContext context) throws IOException {
+                calls.add("second");
+                context.proceed();
+            }
+        }
+        @Path("/priority")
+        class PriorityResource {
+            @GET
+            public String get() {
+                return "hello";
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new PriorityResource())
+                .addWriterInterceptor(new Second())
+                .addWriterInterceptor(new First()))
+            .start();
+
+        try (Response resp = call(request(server.uri().resolve("/priority")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(calls, contains("first", "second"));
+        }
+    }
 
     @Test
     public void interceptorsCanChangeTheResponseEntityAndWrapEachOtherInOrderRegistered() throws Exception {
