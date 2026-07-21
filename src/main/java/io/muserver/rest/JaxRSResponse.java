@@ -427,12 +427,13 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
 
     @Override
     public void proceed() throws IOException, WebApplicationException {
-        if (nextWriter < writerInterceptors.size()) {
+        while (nextWriter < writerInterceptors.size()) {
             nextWriter++;
             WriterInterceptor nextInterceptor = writerInterceptors.get(nextWriter - 1);
             List<Class<? extends Annotation>> filterBindings = ResourceClass.getNameBindingAnnotations(nextInterceptor.getClass());
             if (requestContext.methodHasAnnotations(filterBindings)) {
                 nextInterceptor.aroundWriteTo(this);
+                return;
             }
         }
     }
