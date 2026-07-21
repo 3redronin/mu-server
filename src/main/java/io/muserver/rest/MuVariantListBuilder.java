@@ -81,7 +81,7 @@ class MuVariantListBuilder extends Variant.VariantListBuilder {
             boolean mtOkay = cmt == null || MediaTypeHeaderDelegate.atLeastOneCompatible(singletonList(cmt), acceptableMediaTypes, "charset");
 
             String cenc = candidate.getEncoding();
-            boolean encOkay = cenc == null || acceptableEncodings.stream().anyMatch(ae -> ae.value().equals(cenc));
+            boolean encOkay = cenc == null || encodingScore(acceptableEncodings, cenc) > 0;
 
             Locale clang = candidate.getLanguage();
             boolean langOk = clang == null || (Locale.lookup(preferredLanguages, singleton(clang)) != null) || preferredLanguages.contains(wildcardRanger);
@@ -148,7 +148,23 @@ class MuVariantListBuilder extends Variant.VariantListBuilder {
     }
 
     private static double bestEncodingScore(List<ParameterizedHeaderWithValue> acceptableEncodings, Variant variant) {
-        return acceptableEncodings.stream().filter(enc -> variant.getEncoding().equals(enc.value())).min((o1, o2) -> Double.compare(qScore(o2), qScore(o1))).map(MuVariantListBuilder::qScore).orElse(1.0);
+        return encodingScore(acceptableEncodings, variant.getEncoding());
+    }
+
+    private static double encodingScore(List<ParameterizedHeaderWithValue> acceptableEncodings, String encoding) {
+        double explicitScore = acceptableEncodings.stream()
+            .filter(enc -> encoding.equalsIgnoreCase(enc.value()))
+            .mapToDouble(MuVariantListBuilder::qScore)
+            .max()
+            .orElse(-1);
+        if (explicitScore >= 0) {
+            return explicitScore;
+        }
+        return acceptableEncodings.stream()
+            .filter(enc -> "*".equals(enc.value()))
+            .mapToDouble(MuVariantListBuilder::qScore)
+            .max()
+            .orElse(0);
     }
 
     private static double qScore(ParameterizedHeaderWithValue p) {

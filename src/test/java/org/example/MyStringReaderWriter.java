@@ -39,4 +39,17 @@ public class MyStringReaderWriter implements MessageBodyWriter<String>, MessageB
     public String readFrom(Class<String> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
         return "--" + new String(Mutils.toByteArray(entityStream, 2048), "UTF-8") + "--";
     }
+
+    public static class WithoutConsumes implements MessageBodyReader<String> {
+        @Override
+        public boolean isReadable(Class<?> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType) {
+            return String.class.equals(type);
+        }
+
+        @Override
+        public String readFrom(Class<String> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType,
+                               MultivaluedMap<String, String> httpHeaders, InputStream entityStream) {
+            return "read by default reader";
+        }
+    }
 }

@@ -250,6 +250,50 @@ public class ReaderInterceptorTest {
     @Retention(value = RetentionPolicy.RUNTIME)
     public @interface UppercaseBinding { }
 
+    @NameBinding
+    @Target({ ElementType.TYPE, ElementType.METHOD })
+    @Retention(value = RetentionPolicy.RUNTIME)
+    public @interface UnusedBinding { }
+
+    @Test
+    public void nonMatchingNameBoundInterceptorDoesNotStopTheChain() throws IOException {
+        @UnusedBinding
+        class UnusedInterceptor implements ReaderInterceptor {
+            @Override
+            public Object aroundReadFrom(ReaderInterceptorContext context) {
+                throw new AssertionError("This interceptor should not run");
+            }
+        }
+
+        @UppercaseBinding
+        class Uppercaser implements ReaderInterceptor {
+            @Override
+            public Object aroundReadFrom(ReaderInterceptorContext context) throws IOException {
+                return ((String) context.proceed()).toUpperCase();
+            }
+        }
+
+        @Path("something")
+        class Resource {
+            @POST
+            @UppercaseBinding
+            public String post(String body) {
+                return body;
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new Resource())
+                .addReaderInterceptor(new Uppercaser())
+                .addReaderInterceptor(new UnusedInterceptor()))
+            .start();
+
+        try (Response resp = call(request(server.uri().resolve("/something")).post(requestBody("hello")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), is("HELLO"));
+        }
+    }
+
     @Test
     public void nameBindingIsCanBeUsedToTargetSpecificMethods() throws IOException {
 

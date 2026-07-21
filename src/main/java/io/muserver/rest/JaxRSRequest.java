@@ -36,6 +36,9 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
     private final List<ReaderInterceptor> readerInterceptors;
     private final EntityProviders entityProviders;
     private String httpMethod;
+    private Response abortResponse;
+    private boolean requestFilterChainRunning;
+    private boolean responseFilterChainStarted;
 
     JaxRSRequest(MuRequest muRequest, MuResponse muResponse, InputStream inputStream, String relativePath, SecurityContext securityContext, List<ReaderInterceptor> readerInterceptors, EntityProviders entityProviders) {
         this.muRequest = muRequest;
@@ -161,17 +164,17 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
         for (Variant variant : variants) {
             if (variant.getMediaType() != null) {
                 if (!muResponse.headers().contains(HeaderNames.VARY, HeaderNames.ACCEPT, true)) {
-                    muResponse.headers().add(HeaderNames.VARY, HeaderNames.ACCEPT);
+                    muResponse.headers().add(HeaderNames.VARY, HttpHeaders.ACCEPT);
                 }
             }
             if (variant.getEncoding() != null) {
                 if (!muResponse.headers().contains(HeaderNames.VARY, HeaderNames.ACCEPT_ENCODING, true)) {
-                    muResponse.headers().add(HeaderNames.VARY, HeaderNames.ACCEPT_ENCODING);
+                    muResponse.headers().add(HeaderNames.VARY, HttpHeaders.ACCEPT_ENCODING);
                 }
             }
             if (variant.getLanguage() != null) {
                 if (!muResponse.headers().contains(HeaderNames.VARY, HeaderNames.ACCEPT_LANGUAGE, true)) {
-                    muResponse.headers().add(HeaderNames.VARY, HeaderNames.ACCEPT_LANGUAGE);
+                    muResponse.headers().add(HeaderNames.VARY, HttpHeaders.ACCEPT_LANGUAGE);
                 }
             }
         }
@@ -322,7 +325,7 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
 
     @Override
     public Object proceed() throws IOException, WebApplicationException {
-        if (nextReader < readerInterceptors.size()) {
+        while (nextReader < readerInterceptors.size()) {
             nextReader++;
             ReaderInterceptor nextInterceptor = readerInterceptors.get(nextReader - 1);
             List<Class<? extends Annotation>> filterBindings = ResourceClass.getNameBindingAnnotations(nextInterceptor.getClass());
@@ -445,7 +448,26 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
 
     @Override
     public void abortWith(Response response) {
-        throw new FilterAbortedException(response);
+        if (responseFilterChainStarted) {
+            throw new IllegalStateException("abortWith cannot be called from a response filter");
+        }
+        response = Objects.requireNonNull(response, "response");
+        if (!requestFilterChainRunning) {
+            throw new FilterAbortedException(response);
+        }
+        this.abortResponse = response;
+    }
+
+    Response getAbortResponse() {
+        return abortResponse;
+    }
+
+    void markResponseFilterChainStarted() {
+        this.responseFilterChainStarted = true;
+    }
+
+    void setRequestFilterChainRunning(boolean requestFilterChainRunning) {
+        this.requestFilterChainRunning = requestFilterChainRunning;
     }
 
     void setMatchedMethod(RequestMatcher.MatchedMethod matchedMethod) {
@@ -463,11 +485,11 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
     }
 
     /**
-     * This special exception doesn't get mapped by an exception mapper, so that the {@link #abortWith(Response)} method
-     * can just return the Response passed to it without mapping it.
+     * This special exception preserves the immediate abort behavior when the request context is used outside a
+     * request-filter callback.
      */
     static class FilterAbortedException extends WebApplicationException {
-        public FilterAbortedException(Response response) {
+        FilterAbortedException(Response response) {
             super(response);
         }
     }
