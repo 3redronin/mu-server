@@ -6,6 +6,9 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import org.junit.Test;
 
+import java.util.Collections;
+import java.util.List;
+
 import static java.net.URI.create;
 import static java.util.Collections.emptyList;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -51,6 +54,16 @@ public class ResourceClassTest {
 
     }
 
+    @Test
+    public void genericOverridesDoNotRegisterSyntheticBridgeMethods() {
+        ResourceClass resourceClass = ResourceClass.fromObject(new StringListResource(), ResourceMethodParamTest.BUILT_IN_PARAM_PROVIDERS, customizer);
+
+        assertThat(resourceClass.resourceMethods, hasSize(1));
+        ResourceMethod resourceMethod = resourceClass.resourceMethods.get(0);
+        assertThat(resourceMethod.methodHandle.isBridge(), equalTo(false));
+        assertThat(resourceMethod.genericReturnType.getTypeName(), equalTo("java.util.List<java.lang.String>"));
+    }
+
     @Path("/api/fruits")
     private static class Fruit {
 
@@ -82,6 +95,19 @@ public class ResourceClassTest {
     }
     private static class ConcreteWidget extends BaseWidgetResource {
 
+    }
+
+    private static abstract class GenericResource<T> {
+        @GET
+        public abstract T get();
+    }
+
+    @Path("/api/strings")
+    private static class StringListResource extends GenericResource<List<String>> {
+        @Override
+        public List<String> get() {
+            return Collections.emptyList();
+        }
     }
 
 }

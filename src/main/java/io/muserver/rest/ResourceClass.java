@@ -74,6 +74,9 @@ class ResourceClass {
         List<ResourceMethod> resourceMethods = new ArrayList<>();
         java.lang.reflect.Method[] methods = this.resourceClass.getMethods();
         for (java.lang.reflect.Method restMethod : methods) {
+            if (restMethod.isBridge()) {
+                continue;
+            }
             java.lang.reflect.Method annotationSource = JaxMethodLocator.getMethodThatHasJaxRSAnnotations(restMethod);
             Method httpMethod = ResourceMethod.getMuMethod(annotationSource);
             restMethod.setAccessible(true);
