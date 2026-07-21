@@ -2,6 +2,7 @@ package io.muserver.rest;
 
 import io.muserver.MuRequest;
 import io.muserver.MuServer;
+import jakarta.annotation.Priority;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.container.ResourceInfo;
 import jakarta.ws.rs.ext.ReaderInterceptor;
@@ -23,6 +24,8 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -34,6 +37,45 @@ import static scaffolding.MuAssert.stopAndCheck;
 public class ReaderInterceptorTest {
 
     private MuServer server;
+
+    @Test
+    public void lowerPriorityValueExecutesFirstRegardlessOfRegistrationOrder() throws Exception {
+        List<String> calls = new ArrayList<>();
+        @Priority(100)
+        class First implements ReaderInterceptor {
+            @Override
+            public Object aroundReadFrom(ReaderInterceptorContext context) throws IOException {
+                calls.add("first");
+                return context.proceed();
+            }
+        }
+        @Priority(200)
+        class Second implements ReaderInterceptor {
+            @Override
+            public Object aroundReadFrom(ReaderInterceptorContext context) throws IOException {
+                calls.add("second");
+                return context.proceed();
+            }
+        }
+        @Path("/priority")
+        class PriorityResource {
+            @POST
+            public String post(String body) {
+                return body;
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new PriorityResource())
+                .addReaderInterceptor(new First())
+                .addReaderInterceptor(new Second()))
+            .start();
+
+        try (Response resp = call(request(server.uri().resolve("/priority")).post(requestBody("hello")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(calls, contains("first", "second"));
+        }
+    }
 
     private static class UpperCaserInputStream extends FilterInputStream {
         public UpperCaserInputStream(InputStream in) {
@@ -109,6 +151,34 @@ public class ReaderInterceptorTest {
             assertThat(resp.code(), is(200));
             assertThat(resp.header("content-type"), is("text/plain;charset=utf-8"));
             assertThat(resp.body().string(), equalTo("HELLO"));
+        }
+    }
+
+    @Test
+    public void interceptorsCanChangeTheRequestMediaType() throws Exception {
+        @Path("/greetings")
+        class GreetingResource {
+            @POST
+            public String hello(String body) {
+                return body;
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new GreetingResource())
+                .addReaderInterceptor(context -> {
+                    context.setMediaType(jakarta.ws.rs.core.MediaType.APPLICATION_JSON_TYPE);
+                    assertThat(context.getMediaType(), is(jakarta.ws.rs.core.MediaType.APPLICATION_JSON_TYPE));
+                    return context.proceed();
+                })
+            )
+            .start();
+
+        try (Response resp = call(request(server.uri().resolve("/greetings"))
+            .post(requestBody("hello"))
+        )) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), equalTo("hello"));
         }
     }
 

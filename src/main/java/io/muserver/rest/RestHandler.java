@@ -44,6 +44,7 @@ public class RestHandler implements MuHandler {
     private final CORSConfig corsConfig;
     private final List<ParamConverterProvider> paramConverterProviders;
     private final SchemaObjectCustomizer schemaObjectCustomizer;
+
     private final List<ReaderInterceptor> readerInterceptors;
     private final List<WriterInterceptor> writerInterceptors;
     private final CollectionParameterStrategy collectionParameterStrategy;
@@ -223,7 +224,9 @@ public class RestHandler implements MuHandler {
                 JaxRSResponse.Builder.EMPTY_ANNOTATIONS, ((WebApplicationException) ex).getResponse());
             return;
         }
-        Response response = customExceptionMapper.toResponse(ex);
+        Response response = ex instanceof WebApplicationException && ((WebApplicationException) ex).getResponse().hasEntity()
+            ? null
+            : customExceptionMapper.toResponse(ex);
         if (response == null && ex instanceof WebApplicationException) {
             dealWithWebApplicationException(nestingLevel, request, muResponse, (WebApplicationException) ex, acceptHeaders, producesRef == null ? emptyList() : producesRef, directlyProducesRef == null ? emptyList() : directlyProducesRef);
         } else if (response == null) {
@@ -254,7 +257,13 @@ public class RestHandler implements MuHandler {
                     jaxRSResponse = new JaxRSResponse(Response.Status.fromStatusCode(obj.status()), new LowercasedMultivaluedHashMap<>(), obj, new NewCookie[0], emptyList(), JaxRSResponse.Builder.EMPTY_ANNOTATIONS);
                 }
 
-                try (LazyAccessOutputStream out = new LazyAccessOutputStream(muResponse)) {
+                JaxRSResponse responseToWrite = jaxRSResponse;
+                boolean isHttp1 = requestContext.muRequest.protocol().equals("HTTP/1.1");
+                try (LazyAccessOutputStream out = new LazyAccessOutputStream(muResponse,
+                    () -> {
+                        applyDefaultCharset(responseToWrite);
+                        MuRuntimeDelegate.writeResponseHeaders(requestContext.getUriInfo().getBaseUri(), responseToWrite, muResponse, isHttp1);
+                    })) {
                     jaxRSResponse.setEntityStream(requestContext.getMuMethod() == Method.HEAD ? NullOutputStream.INSTANCE : out);
                     jaxRSResponse.setRequestContext(requestContext);
 
@@ -274,6 +283,7 @@ public class RestHandler implements MuHandler {
                     }
 
                     filterManagerThing.onBeforeSendResponse(requestContext, jaxRSResponse);
+                    muResponse.status(jaxRSResponse.getStatus());
 
                     if (jaxRSResponse.hasEntity()) {
                         jaxRSResponse.executeInterceptors(writerInterceptors); // run the interceptors
@@ -284,9 +294,9 @@ public class RestHandler implements MuHandler {
                     }
 
                     int status = jaxRSResponse.getStatus();
-                    muResponse.status(status);
-
-                    boolean isHttp1 = requestContext.muRequest.protocol().equals("HTTP/1.1");
+                    if (!muResponse.hasStartedSendingData()) {
+                        muResponse.status(status);
+                    }
 
                     if (entity == null) {
                         if (status != 204 && status != 304 && status != 205) {
@@ -308,17 +318,12 @@ public class RestHandler implements MuHandler {
                             }
                         }
 
-                        String contentType = responseMediaType.toString();
-                        if (responseMediaType.getType().equals("text") && !responseMediaType.getParameters().containsKey("charset")) {
-                            contentType += ";charset=utf-8";
-                        }
-                        jaxRSResponse.getHeaders().putSingle("content-type", contentType);
-
-                        MuRuntimeDelegate.writeResponseHeaders(requestContext.getUriInfo().getBaseUri(), jaxRSResponse, muResponse, isHttp1);
+                        applyDefaultCharset(jaxRSResponse);
 
                         try {
                             messageBodyWriter.writeTo(jaxRSResponse.getEntity(), jaxRSResponse.getType(), jaxRSResponse.getGenericType(), writerAnnontations,
                                 jaxRSResponse.getMediaType(), jaxRSResponse.getHeaders(), jaxRSResponse.getOutputStream());
+                            out.prepare();
                         } catch (Exception e) {
                             // remove the added headers before rewriting
                             if (!muResponse.hasStartedSendingData()) {
@@ -333,6 +338,13 @@ public class RestHandler implements MuHandler {
             }
         } catch (Exception ex) {
             dealWithUnhandledException(nestingLevel + 1, requestContext, muResponse, ex, acceptHeaders, produces, directlyProduces);
+        }
+    }
+
+    private static void applyDefaultCharset(JaxRSResponse response) {
+        MediaType mediaType = response.getMediaType();
+        if (mediaType != null && mediaType.getType().equals("text") && !mediaType.getParameters().containsKey(MediaType.CHARSET_PARAMETER)) {
+            response.setMediaType(mediaType.withCharset("utf-8"));
         }
     }
 

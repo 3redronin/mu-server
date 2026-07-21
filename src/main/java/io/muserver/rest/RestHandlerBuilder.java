@@ -7,6 +7,8 @@ import io.muserver.openapi.InfoObject;
 import io.muserver.openapi.OpenAPIObjectBuilder;
 import io.muserver.openapi.SchemaObject;
 import io.muserver.openapi.SchemaObjectBuilder;
+import jakarta.annotation.Priority;
+import jakarta.ws.rs.Priorities;
 import jakarta.ws.rs.container.ContainerRequestFilter;
 import jakarta.ws.rs.container.ContainerResponseFilter;
 import jakarta.ws.rs.container.PreMatching;
@@ -29,6 +31,8 @@ import static java.util.Arrays.asList;
  * @see #restHandler(Object...)
  */
 public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
+
+    private static final Comparator<Object> INTERCEPTOR_PRIORITY = Comparator.comparingInt(RestHandlerBuilder::priority);
 
     private final List<Object> resources = new ArrayList<>();
     private final List<MessageBodyWriter> customWriters = new ArrayList<>();
@@ -367,8 +371,8 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
 
     /**
      * Registers a writer interceptor allowing for inspection and alteration of response bodies.
-     * <p>Interceptors are executed in the order added, and are called before any message body
-     * writers added by {@link #addCustomWriter(MessageBodyWriter)}.</p>
+     * <p>Interceptors are executed in ascending {@link Priority} order, defaulting to {@link Priorities#USER}, and are
+     * called before any message body writers added by {@link #addCustomWriter(MessageBodyWriter)}.</p>
      * <p>To access the {@link jakarta.ws.rs.container.ResourceInfo} or {@link io.muserver.MuRequest} for the current
      * request, the following code can be used:</p>
      * <pre><code>
@@ -380,14 +384,15 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     public RestHandlerBuilder addWriterInterceptor(@Nullable WriterInterceptor writerInterceptor) {
         if (writerInterceptor != null) {
             this.writerInterceptors.add(writerInterceptor);
+            this.writerInterceptors.sort(INTERCEPTOR_PRIORITY);
         }
         return this;
     }
 
     /**
      * Registers a reader interceptor allowing for inspection and alteration of request bodies.
-     * <p>Interceptors are executed in the order added, and are called before any message body
-     * readers added by {@link #addCustomReader(MessageBodyReader)}.</p>
+     * <p>Interceptors are executed in ascending {@link Priority} order, defaulting to {@link Priorities#USER}, and are
+     * called before any message body readers added by {@link #addCustomReader(MessageBodyReader)}.</p>
      * <p>To access the {@link jakarta.ws.rs.container.ResourceInfo} or {@link io.muserver.MuRequest} for the current
      * request, the following code can be used:</p>
      * <pre><code>
@@ -399,8 +404,14 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     public RestHandlerBuilder addReaderInterceptor(@Nullable ReaderInterceptor readerInterceptor) {
         if (readerInterceptor != null) {
             this.readerInterceptors.add(0, readerInterceptor);
+            this.readerInterceptors.sort(INTERCEPTOR_PRIORITY);
         }
         return this;
+    }
+
+    private static int priority(Object interceptor) {
+        Priority priority = interceptor.getClass().getAnnotation(Priority.class);
+        return priority == null ? Priorities.USER : priority.value();
     }
 
     /**
