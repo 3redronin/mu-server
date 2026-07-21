@@ -102,6 +102,34 @@ public class WriterInterceptorTest {
     }
 
     @Test
+    public void interceptorHeadersAreAppliedWhenItWritesBeforeTheMessageBodyWriter() throws Exception {
+        @Path("/greetings")
+        class GreetingResource {
+            @GET
+            @Produces("text/plain")
+            public String hello() {
+                return "hello";
+            }
+        }
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new GreetingResource())
+                .addWriterInterceptor(context -> {
+                    context.getHeaders().putSingle("X-Added-By-Interceptor", "the value");
+                    context.getOutputStream().write("prefix-".getBytes(StandardCharsets.UTF_8));
+                    context.proceed();
+                })
+            )
+            .start();
+
+        try (Response resp = call(request(server.uri().resolve("/greetings")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.header("X-Added-By-Interceptor"), equalTo("the value"));
+            assertThat(resp.body().string(), equalTo("prefix-hello"));
+            assertThat(resp.header("content-type"), is("text/plain;charset=utf-8"));
+        }
+    }
+
+    @Test
     public void resourceInfoAndMuRequestCanBeExtractedFromProperties() throws Exception {
         @Path("/greetings")
         class GreetingResource {

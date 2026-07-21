@@ -187,6 +187,80 @@ public class EntityProvidersTest {
     }
 
     @Test
+    public void customWritersCanAddResponseHeaders() throws Exception {
+        class Thing {}
+
+        @Path("samples")
+        class Sample {
+            @GET
+            @Produces("text/plain")
+            public Thing get() {
+                return new Thing();
+            }
+        }
+
+        this.server = httpsServerForTest().addHandler(
+            restHandler(new Sample())
+                .addCustomWriter(new MessageBodyWriter<Thing>() {
+                    @Override
+                    public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType) {
+                        return type.equals(Thing.class);
+                    }
+
+                    @Override
+                    public void writeTo(Thing thing, Class<?> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType,
+                                        MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException {
+                        httpHeaders.putSingle("X-Added-By-Writer", "the value");
+                    }
+                })
+                .build()).start();
+
+        try (Response resp = call(request(server.uri().resolve("/samples")))) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.header("X-Added-By-Writer"), equalTo("the value"));
+            assertThat(resp.body().string(), equalTo(""));
+        }
+    }
+
+    @Test
+    public void zeroLengthWritesDoNotPreventCustomWritersAddingResponseHeaders() throws Exception {
+        class Thing {}
+
+        @Path("samples")
+        class Sample {
+            @GET
+            @Produces("text/plain")
+            public Thing get() {
+                return new Thing();
+            }
+        }
+
+        this.server = httpsServerForTest().addHandler(
+            restHandler(new Sample())
+                .addCustomWriter(new MessageBodyWriter<Thing>() {
+                    @Override
+                    public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType) {
+                        return type.equals(Thing.class);
+                    }
+
+                    @Override
+                    public void writeTo(Thing thing, Class<?> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType,
+                                        MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException {
+                        entityStream.write(new byte[0]);
+                        httpHeaders.putSingle("X-Added-After-Zero-Length-Write", "the value");
+                        entityStream.write("the body".getBytes(StandardCharsets.UTF_8));
+                    }
+                })
+                .build()).start();
+
+        try (Response resp = call(request(server.uri().resolve("/samples")))) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.header("X-Added-After-Zero-Length-Write"), equalTo("the value"));
+            assertThat(resp.body().string(), equalTo("the body"));
+        }
+    }
+
+    @Test
     public void customReadersGetTheAnnotationsOfTheResourceMethod() throws Exception {
 
         @Path("dummy")
