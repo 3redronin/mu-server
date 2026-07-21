@@ -1,5 +1,6 @@
 package io.muserver.rest;
 
+import java.lang.reflect.Array;
 import java.lang.reflect.GenericArrayType;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
@@ -92,6 +93,9 @@ final class GenericTypeResolver {
         if (type instanceof GenericArrayType) {
             GenericArrayType arrayType = (GenericArrayType) type;
             Type component = resolve(arrayType.getGenericComponentType(), typeArguments);
+            if (component instanceof Class) {
+                return Array.newInstance((Class<?>) component, 0).getClass();
+            }
             return component.equals(arrayType.getGenericComponentType()) ? type : new ResolvedGenericArrayType(component);
         }
         if (type instanceof WildcardType) {
@@ -156,6 +160,40 @@ final class GenericTypeResolver {
         public int hashCode() {
             return Arrays.hashCode(arguments) ^ Objects.hashCode(owner) ^ Objects.hashCode(rawType);
         }
+
+        @Override
+        public String getTypeName() {
+            return toString();
+        }
+
+        @Override
+        public String toString() {
+            StringBuilder name = new StringBuilder();
+            if (owner == null) {
+                name.append(rawType.getTypeName());
+            } else {
+                name.append(owner.getTypeName()).append('$');
+                String rawName = rawType.getTypeName();
+                Type ownerRawType = owner instanceof ParameterizedType
+                    ? ((ParameterizedType) owner).getRawType()
+                    : owner;
+                String ownerRawName = ownerRawType.getTypeName();
+                name.append(rawName.startsWith(ownerRawName + '$')
+                    ? rawName.substring(ownerRawName.length() + 1)
+                    : rawName);
+            }
+            if (arguments.length > 0) {
+                name.append('<');
+                for (int i = 0; i < arguments.length; i++) {
+                    if (i > 0) {
+                        name.append(", ");
+                    }
+                    name.append(arguments[i].getTypeName());
+                }
+                name.append('>');
+            }
+            return name.toString();
+        }
     }
 
     private static final class ResolvedGenericArrayType implements GenericArrayType {
@@ -179,6 +217,16 @@ final class GenericTypeResolver {
         @Override
         public int hashCode() {
             return componentType.hashCode();
+        }
+
+        @Override
+        public String getTypeName() {
+            return componentType.getTypeName() + "[]";
+        }
+
+        @Override
+        public String toString() {
+            return getTypeName();
         }
     }
 
@@ -214,6 +262,33 @@ final class GenericTypeResolver {
         @Override
         public int hashCode() {
             return Arrays.hashCode(upperBounds) ^ Arrays.hashCode(lowerBounds);
+        }
+
+        @Override
+        public String getTypeName() {
+            return toString();
+        }
+
+        @Override
+        public String toString() {
+            if (lowerBounds.length > 0) {
+                return "? super " + boundsTypeName(lowerBounds);
+            }
+            if (upperBounds.length == 0 || upperBounds[0].equals(Object.class)) {
+                return "?";
+            }
+            return "? extends " + boundsTypeName(upperBounds);
+        }
+
+        private static String boundsTypeName(Type[] bounds) {
+            StringBuilder name = new StringBuilder();
+            for (int i = 0; i < bounds.length; i++) {
+                if (i > 0) {
+                    name.append(" & ");
+                }
+                name.append(bounds[i].getTypeName());
+            }
+            return name.toString();
         }
     }
 }

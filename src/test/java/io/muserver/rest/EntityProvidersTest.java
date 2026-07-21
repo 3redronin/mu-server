@@ -188,7 +188,8 @@ public class EntityProvidersTest {
             @Override
             public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType) {
                 return genericType instanceof ParameterizedType
-                    && ((ParameterizedType) genericType).getActualTypeArguments()[0].equals(Dog.class);
+                    && ((ParameterizedType) genericType).getActualTypeArguments()[0].equals(Dog.class)
+                    && genericType.getTypeName().equals("java.util.List<" + Dog.class.getTypeName() + ">");
             }
 
             @Override
@@ -232,6 +233,47 @@ public class EntityProvidersTest {
         this.server = httpsServerForTest().addHandler(
             restHandler(new DogResource()).addCustomWriter(new DogListWriter()).build()).start();
         try (Response resp = call(request(server.uri().resolve("/inherited-dogs")))) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.body().string(), equalTo("dogs"));
+        }
+    }
+
+    @Test
+    public void inheritedGenericArrayReturnTypeIsMaterializedAsArrayClass() throws Exception {
+        class Dog { }
+        abstract class BaseResource<T> {
+            private final T[] values;
+
+            BaseResource(T[] values) {
+                this.values = values;
+            }
+
+            @GET
+            public T[] get() {
+                return values;
+            }
+        }
+        @Path("inherited-dog-array")
+        class DogResource extends BaseResource<Dog> {
+            DogResource() {
+                super(new Dog[0]);
+            }
+        }
+        class DogArrayWriter implements MessageBodyWriter<Dog[]> {
+            @Override
+            public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType) {
+                return genericType.equals(Dog[].class);
+            }
+
+            @Override
+            public void writeTo(Dog[] dogs, Class<?> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException {
+                entityStream.write("dogs".getBytes(StandardCharsets.UTF_8));
+            }
+        }
+
+        this.server = httpsServerForTest().addHandler(
+            restHandler(new DogResource()).addCustomWriter(new DogArrayWriter()).build()).start();
+        try (Response resp = call(request(server.uri().resolve("/inherited-dog-array")))) {
             assertThat(resp.code(), equalTo(200));
             assertThat(resp.body().string(), equalTo("dogs"));
         }
