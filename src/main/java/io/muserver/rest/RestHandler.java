@@ -124,7 +124,7 @@ public class RestHandler implements MuHandler {
             List<MediaType> produces = producesRef = mm.resourceMethod.resourceClass.produces;
             List<MediaType> directlyProduces = directlyProducesRef = mm.resourceMethod.directlyProduces;
             Annotation[] methodAnnotations = mm.resourceMethod.methodAnnotations;
-            Type methodReturnType = mm.resourceMethod.methodHandle.getGenericReturnType();
+            Type methodReturnType = mm.resourceMethod.genericReturnType;
 
             filterManagerThing.onPostMatch(requestContext);
             if (requestContext.getAbortResponse() != null) {

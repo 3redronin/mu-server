@@ -26,7 +26,7 @@ import static java.util.stream.Collectors.toList;
 class ResourceClass {
 
     final UriPattern pathPattern;
-    private final Class<?> resourceClass;
+    final Class<?> resourceClass;
     final Object resourceInstance;
     final List<MediaType> produces;
     final List<MediaType> consumes;

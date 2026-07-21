@@ -206,6 +206,38 @@ public class EntityProvidersTest {
     }
 
     @Test
+    public void inheritedGenericReturnTypeIsResolvedAgainstResourceClass() throws Exception {
+        class Dog { }
+        abstract class BaseResource<T> {
+            @GET
+            public List<T> get() {
+                return new ArrayList<>();
+            }
+        }
+        @Path("inherited-dogs")
+        class DogResource extends BaseResource<Dog> { }
+        class DogListWriter implements MessageBodyWriter<List<Dog>> {
+            @Override
+            public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType) {
+                return genericType instanceof ParameterizedType
+                    && ((ParameterizedType) genericType).getActualTypeArguments()[0].equals(Dog.class);
+            }
+
+            @Override
+            public void writeTo(List<Dog> dogs, Class<?> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException {
+                entityStream.write("dogs".getBytes(StandardCharsets.UTF_8));
+            }
+        }
+
+        this.server = httpsServerForTest().addHandler(
+            restHandler(new DogResource()).addCustomWriter(new DogListWriter()).build()).start();
+        try (Response resp = call(request(server.uri().resolve("/inherited-dogs")))) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.body().string(), equalTo("dogs"));
+        }
+    }
+
+    @Test
     public void readersWithoutConsumesSupportAllMediaTypes() throws Exception {
         @Path("samples")
         class Sample {

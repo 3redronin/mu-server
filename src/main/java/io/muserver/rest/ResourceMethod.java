@@ -28,6 +28,7 @@ class ResourceMethod {
     final ResourceClass resourceClass;
     final UriPattern pathPattern;
     final java.lang.reflect.Method methodHandle;
+    final Type genericReturnType;
     final Method httpMethod;
     final String pathTemplate;
     final List<MediaType> effectiveConsumes;
@@ -45,6 +46,8 @@ class ResourceMethod {
         this.resourceClass = resourceClass;
         this.pathPattern = pathPattern;
         this.methodHandle = methodHandle;
+        this.genericReturnType = GenericTypeResolver.resolve(methodHandle.getGenericReturnType(),
+            resourceClass.resourceClass, methodHandle.getDeclaringClass());
         this.params = params;
         this.httpMethod = httpMethod;
         this.pathTemplate = pathTemplate;
