@@ -81,6 +81,10 @@ public class RestHandler implements MuHandler {
         JaxRSRequest requestContext = new JaxRSRequest(muRequest, muResponse, new LazyAccessInputStream(muRequest), Mutils.trim(muRequest.relativePath(), "/"), securityContext, readerInterceptors, entityProviders);
         try {
             filterManagerThing.onPreMatch(requestContext);
+            if (requestContext.getAbortResponse() != null) {
+                sendResponse(0, requestContext, muResponse, acceptHeaders, emptyList(), emptyList(), JaxRSResponse.Builder.EMPTY_ANNOTATIONS, requestContext.getAbortResponse());
+                return true;
+            }
 
             Function<RequestMatcher.MatchedMethod,ResourceClass> subResourceLocator = matchedMethod -> {
                 Function<ResourceMethod, Object> onSuspended = resourceMethod -> {
@@ -122,6 +126,10 @@ public class RestHandler implements MuHandler {
             Annotation[] methodAnnotations = mm.resourceMethod.methodAnnotations;
 
             filterManagerThing.onPostMatch(requestContext);
+            if (requestContext.getAbortResponse() != null) {
+                sendResponse(0, requestContext, muResponse, acceptHeaders, produces, directlyProduces, JaxRSResponse.Builder.EMPTY_ANNOTATIONS, requestContext.getAbortResponse());
+                return true;
+            }
 
             Function<ResourceMethod, Object> suspendedParamCallback = rm -> {
                 if (muRequest.isAsync()) {
@@ -194,6 +202,11 @@ public class RestHandler implements MuHandler {
                 muResponse.contentType(ContentTypes.TEXT_HTML_UTF8);
                 muResponse.write("<h1>500 Internal Server Error</h1><p>ErrorID=" + errorID + "</p>");
             }
+            return;
+        }
+        if (ex instanceof JaxRSRequest.FilterAbortedException) {
+            sendResponse(nestingLevel, request, muResponse, acceptHeaders, producesRef, directlyProducesRef,
+                JaxRSResponse.Builder.EMPTY_ANNOTATIONS, ((WebApplicationException) ex).getResponse());
             return;
         }
         Response response = customExceptionMapper.toResponse(ex);
