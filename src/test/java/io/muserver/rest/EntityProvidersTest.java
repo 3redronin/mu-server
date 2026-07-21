@@ -188,8 +188,7 @@ public class EntityProvidersTest {
             @Override
             public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType) {
                 return genericType instanceof ParameterizedType
-                    && ((ParameterizedType) genericType).getActualTypeArguments()[0].equals(Dog.class)
-                    && genericType.getTypeName().equals("java.util.List<" + Dog.class.getTypeName() + ">");
+                    && ((ParameterizedType) genericType).getActualTypeArguments()[0].equals(Dog.class);
             }
 
             @Override
@@ -221,7 +220,8 @@ public class EntityProvidersTest {
             @Override
             public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType) {
                 return genericType instanceof ParameterizedType
-                    && ((ParameterizedType) genericType).getActualTypeArguments()[0].equals(Dog.class);
+                    && ((ParameterizedType) genericType).getActualTypeArguments()[0].equals(Dog.class)
+                    && genericType.getTypeName().equals("java.util.List<" + Dog.class.getTypeName() + ">");
             }
 
             @Override
