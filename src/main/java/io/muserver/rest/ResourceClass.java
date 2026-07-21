@@ -96,7 +96,7 @@ class ResourceClass {
             Parameter[] annotationParameters = annotationSource.getParameters();
             Parameter[] methodParameters = restMethod.getParameters();
             for (int i = 0; i < annotationParameters.length; i++) {
-                ResourceMethodParam resourceMethodParam = ResourceMethodParam.fromParameter(i, methodParameters[i], annotationParameters[i], paramConverterProviders, methodPattern);
+                ResourceMethodParam resourceMethodParam = ResourceMethodParam.fromParameter(i, methodParameters[i], annotationParameters[i], resourceClass, paramConverterProviders, methodPattern);
                 params.add(resourceMethodParam);
             }
             DescriptionData descriptionData = DescriptionData.fromAnnotation(restMethod, null);

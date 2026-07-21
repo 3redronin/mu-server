@@ -17,8 +17,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.annotation.Annotation;
-import java.lang.reflect.Parameter;
-import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.net.URI;
 import java.util.*;
@@ -176,14 +174,7 @@ public class RestHandler implements MuHandler {
     }
 
     private static Type completionStageResultType(Type returnType) {
-        if (returnType instanceof ParameterizedType) {
-            ParameterizedType parameterizedType = (ParameterizedType) returnType;
-            Type rawType = parameterizedType.getRawType();
-            if (rawType instanceof Class && CompletionStage.class.isAssignableFrom((Class<?>) rawType)) {
-                return parameterizedType.getActualTypeArguments()[0];
-            }
-        }
-        return null;
+        return GenericTypeResolver.resolveTypeArgument(returnType, CompletionStage.class, 0);
     }
 
     static Object invokeResourceMethod(JaxRSRequest requestContext, MuResponse muResponse, RequestMatcher.MatchedMethod mm, Function<ResourceMethod, Object> suspendedParamCallback, EntityProviders entityProviders, CollectionParameterStrategy collectionParameterStrategy) throws Exception {
@@ -192,7 +183,7 @@ public class RestHandler implements MuHandler {
         for (ResourceMethodParam param : rm.params) {
             Object paramValue;
             if (param.source == ResourceMethodParam.ValueSource.MESSAGE_BODY) {
-                paramValue = readRequestEntity(requestContext, param.parameterHandle);
+                paramValue = readRequestEntity(requestContext, param);
             } else if (param.source == ResourceMethodParam.ValueSource.CONTEXT) {
                 paramValue = getContextParam(requestContext, muResponse, mm, param, entityProviders);
             } else if (param.source == ResourceMethodParam.ValueSource.SUSPENDED) {
@@ -380,7 +371,7 @@ public class RestHandler implements MuHandler {
     private static Object getContextParam(JaxRSRequest requestContext, MuResponse muResponse, RequestMatcher.MatchedMethod mm, ResourceMethodParam param, EntityProviders providers) {
         MuRequest request = requestContext.muRequest;
         Object paramValue;
-        Class<?> type = param.parameterHandle.getType();
+        Class<?> type = param.type;
         if (type.equals(UriInfo.class)) {
             paramValue = createUriInfo(requestContext.relativePath(), mm, request.uri().resolve(request.contextPath() + "/"), request.uri());
         } else if (type.equals(MuResponse.class)) {
@@ -412,10 +403,10 @@ public class RestHandler implements MuHandler {
         return new MuUriInfo(baseUri, requestUri, Mutils.trim(relativePath, "/"), mm);
     }
 
-    private static Object readRequestEntity(JaxRSRequest requestContext, Parameter parameter) throws java.io.IOException {
-        requestContext.setAnnotations(parameter.getDeclaredAnnotations());
-        requestContext.setType(parameter.getType());
-        requestContext.setGenericType(parameter.getParameterizedType());
+    private static Object readRequestEntity(JaxRSRequest requestContext, ResourceMethodParam parameter) throws java.io.IOException {
+        requestContext.setAnnotations(parameter.annotations);
+        requestContext.setType(parameter.type);
+        requestContext.setGenericType(parameter.genericType);
         return requestContext.executeInterceptors();
     }
 

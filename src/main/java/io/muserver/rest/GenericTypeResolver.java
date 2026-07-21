@@ -23,6 +23,16 @@ final class GenericTypeResolver {
         return resolve(type, typeArguments);
     }
 
+    static Type resolveTypeArgument(Type type, Class<?> targetClass, int argumentIndex) {
+        TypeVariable<?> typeVariable = targetClass.getTypeParameters()[argumentIndex];
+        Map<TypeVariable<?>, Type> typeArguments = new HashMap<>();
+        if (!findTypeArguments(type, targetClass, new HashMap<>(), typeArguments)) {
+            return null;
+        }
+        Type resolved = resolve(typeVariable, typeArguments);
+        return resolved.equals(typeVariable) ? null : resolved;
+    }
+
     private static boolean findTypeArguments(Type currentType, Class<?> declaringClass,
                                              Map<TypeVariable<?>, Type> inheritedArguments,
                                              Map<TypeVariable<?>, Type> result) {
@@ -64,7 +74,7 @@ final class GenericTypeResolver {
         return candidateClass != null && declaringClass.isAssignableFrom(candidateClass);
     }
 
-    private static Class<?> rawClass(Type type) {
+    static Class<?> rawClass(Type type) {
         if (type instanceof Class) {
             return (Class<?>) type;
         }

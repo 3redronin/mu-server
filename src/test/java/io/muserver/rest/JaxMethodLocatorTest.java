@@ -1,7 +1,10 @@
 package io.muserver.rest;
 
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
+import jakarta.ws.rs.PathParam;
+import jakarta.ws.rs.QueryParam;
 import org.junit.Test;
 
 import java.lang.reflect.Method;
@@ -19,6 +22,16 @@ public class JaxMethodLocatorTest {
     private interface InterfaceWithAnnotation {
         @Path("qu")
         void go();
+    }
+
+    private interface ParameterAnnotatedBase {
+        @GET
+        void get(@PathParam("id") String id);
+    }
+
+    private static class ParameterAnnotatedImplementation implements ParameterAnnotatedBase {
+        @Override
+        public void get(@QueryParam("id") String id) { }
     }
 
     @Test
@@ -75,6 +88,12 @@ public class JaxMethodLocatorTest {
             public void go() {}
         }
         assertThat(getMethodThatHasJaxRSAnnotations(goMethod(BaseClassImpl.class)), equalTo(goMethod(BaseClass.class)));
+    }
+
+    @Test
+    public void parameterAnnotationsOnImplementationPreventInheritance() throws NoSuchMethodException {
+        Method implementation = ParameterAnnotatedImplementation.class.getDeclaredMethod("get", String.class);
+        assertThat(getMethodThatHasJaxRSAnnotations(implementation), equalTo(implementation));
     }
 
     private static Method goMethod(Class<?> clazz) {

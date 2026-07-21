@@ -153,8 +153,8 @@ class ResourceMethod {
             .filter(p -> p instanceof ResourceMethodParam.MessageBodyParam)
             .map(ResourceMethodParam.MessageBodyParam.class::cast)
             .map(messageBodyParam -> {
-                Class<?> bodyType = messageBodyParam.parameterHandle.getType();
-                Type bodyParameterizedType = messageBodyParam.parameterHandle.getParameterizedType();
+                Class<?> bodyType = messageBodyParam.type;
+                Type bodyParameterizedType = messageBodyParam.genericType;
                 SchemaReference schemaReference = SchemaReference.find(customSchemas, bodyType, bodyParameterizedType);
                 SchemaObjectBuilder builder = schemaReference != null ? schemaReference.schema.toBuilder() :
                     schemaObjectFrom(bodyType, bodyParameterizedType, messageBodyParam.isRequired)
@@ -197,8 +197,8 @@ class ResourceMethod {
                                                     if (n.isRequired) {
                                                         required.add(n.key);
                                                     }
-                                                    Class<?> paramType = n.parameterHandle.getType();
-                                                    Type paramParameterizedType = n.parameterHandle.getParameterizedType();
+                                                    Class<?> paramType = n.type;
+                                                    Type paramParameterizedType = n.genericType;
 
                                                     SchemaReference schemaReference = SchemaReference.find(customSchemas, paramType, paramParameterizedType);
                                                     SchemaObjectBuilder schemaObjectBuilder = schemaReference != null ? schemaReference.schema.toBuilder() : schemaObjectFrom(paramType, paramParameterizedType, n.isRequired);

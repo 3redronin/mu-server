@@ -206,6 +206,80 @@ public class EntityProvidersTest {
     }
 
     @Test
+    public void completionStageSubtypePreservesItsResolvedEntityGenericType() throws Exception {
+        class Dog { }
+        class ResultStage<Metadata, Entity> extends CompletableFuture<Entity> { }
+        @Path("custom-async-dogs")
+        class Sample {
+            @GET
+            public ResultStage<String, List<Dog>> get() {
+                ResultStage<String, List<Dog>> result = new ResultStage<>();
+                result.complete(asList(new Dog()));
+                return result;
+            }
+        }
+        class DogListWriter implements MessageBodyWriter<List<Dog>> {
+            @Override
+            public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType) {
+                return genericType instanceof ParameterizedType
+                    && ((ParameterizedType) genericType).getActualTypeArguments()[0].equals(Dog.class);
+            }
+
+            @Override
+            public void writeTo(List<Dog> dogs, Class<?> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException {
+                entityStream.write("dogs".getBytes(StandardCharsets.UTF_8));
+            }
+        }
+
+        this.server = httpsServerForTest().addHandler(
+            restHandler(new Sample()).addCustomWriter(new DogListWriter()).build()).start();
+        try (Response resp = call(request(server.uri().resolve("/custom-async-dogs")))) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.body().string(), equalTo("dogs"));
+        }
+    }
+
+    @Test
+    public void inheritedMessageBodyParameterAnnotationsReachReaders() throws Exception {
+        class Payload {
+            final String value;
+
+            Payload(String value) {
+                this.value = value;
+            }
+        }
+        class BaseResource<T> {
+            @POST
+            public String post(@Encoded T payload) {
+                return ((Payload) payload).value;
+            }
+        }
+        @Path("inherited-body")
+        class Sample extends BaseResource<Payload> { }
+        class PayloadReader implements MessageBodyReader<Payload> {
+            @Override
+            public boolean isReadable(Class<?> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType) {
+                return type.equals(Payload.class) && Arrays.stream(annotations)
+                    .anyMatch(annotation -> annotation.annotationType().equals(Encoded.class));
+            }
+
+            @Override
+            public Payload readFrom(Class<Payload> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType,
+                                    MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException {
+                return new Payload(new String(entityStream.readAllBytes(), StandardCharsets.UTF_8));
+            }
+        }
+
+        this.server = httpsServerForTest().addHandler(
+            restHandler(new Sample()).addCustomReader(new PayloadReader()).build()).start();
+        try (Response resp = call(request(server.uri().resolve("/inherited-body"))
+            .post(RequestBody.create("hello", MediaType.get("text/plain"))))) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.body().string(), equalTo("hello"));
+        }
+    }
+
+    @Test
     public void inheritedGenericReturnTypeIsResolvedAgainstResourceClass() throws Exception {
         class Dog { }
         abstract class BaseResource<T> {
