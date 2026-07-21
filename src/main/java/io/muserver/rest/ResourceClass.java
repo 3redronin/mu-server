@@ -77,7 +77,7 @@ class ResourceClass {
             if (restMethod.isBridge()) {
                 continue;
             }
-            java.lang.reflect.Method annotationSource = JaxMethodLocator.getMethodThatHasJaxRSAnnotations(restMethod);
+            java.lang.reflect.Method annotationSource = JaxMethodLocator.getMethodThatHasJaxRSAnnotations(restMethod, resourceClass);
             Method httpMethod = ResourceMethod.getMuMethod(annotationSource);
             restMethod.setAccessible(true);
             Path methodPath = annotationSource.getAnnotation(Path.class);
@@ -93,10 +93,10 @@ class ResourceClass {
             List<MediaType> methodProduces = MediaTypeDeterminer.supportedProducesTypes(annotationSource);
             List<MediaType> methodConsumes = MediaTypeDeterminer.supportedConsumesTypes(annotationSource);
             List<ResourceMethodParam> params = new ArrayList<>();
-            Parameter[] parameters = annotationSource.getParameters();
-            for (int i = 0; i < parameters.length; i++) {
-                Parameter p = parameters[i];
-                ResourceMethodParam resourceMethodParam = ResourceMethodParam.fromParameter(i, p, paramConverterProviders, methodPattern);
+            Parameter[] annotationParameters = annotationSource.getParameters();
+            Parameter[] methodParameters = restMethod.getParameters();
+            for (int i = 0; i < annotationParameters.length; i++) {
+                ResourceMethodParam resourceMethodParam = ResourceMethodParam.fromParameter(i, methodParameters[i], annotationParameters[i], paramConverterProviders, methodPattern);
                 params.add(resourceMethodParam);
             }
             DescriptionData descriptionData = DescriptionData.fromAnnotation(restMethod, null);

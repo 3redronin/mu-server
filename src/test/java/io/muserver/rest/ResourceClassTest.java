@@ -64,6 +64,17 @@ public class ResourceClassTest {
         assertThat(resourceMethod.genericReturnType.getTypeName(), equalTo("java.util.List<java.lang.String>"));
     }
 
+    @Test
+    public void genericInterfaceParameterAnnotationsAreInherited() {
+        ResourceClass resourceClass = ResourceClass.fromObject(new StringLookupResource(), ResourceMethodParamTest.BUILT_IN_PARAM_PROVIDERS, customizer);
+
+        assertThat(resourceClass.resourceMethods, hasSize(1));
+        ResourceMethod resourceMethod = resourceClass.resourceMethods.get(0);
+        assertThat(resourceMethod.methodHandle.isBridge(), equalTo(false));
+        assertThat(resourceMethod.methodHandle.getParameterTypes()[0], equalTo(String.class));
+        assertThat(resourceMethod.params.get(0).source, equalTo(ResourceMethodParam.ValueSource.PATH_PARAM));
+    }
+
     @Path("/api/fruits")
     private static class Fruit {
 
@@ -107,6 +118,24 @@ public class ResourceClassTest {
         @Override
         public List<String> get() {
             return Collections.emptyList();
+        }
+    }
+
+    private interface GenericLookupResource<T> {
+        @GET
+        @Path("{id}")
+        String get(@PathParam("id") T id);
+    }
+
+    @Path("/api/lookup")
+    private static class StringLookupResource implements GenericLookupResource<String> {
+        @Override
+        public String get(String id) {
+            return id;
+        }
+
+        public String get(Integer id) {
+            return String.valueOf(id);
         }
     }
 
