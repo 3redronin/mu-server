@@ -209,7 +209,9 @@ public class RestHandler implements MuHandler {
                 JaxRSResponse.Builder.EMPTY_ANNOTATIONS, ((WebApplicationException) ex).getResponse());
             return;
         }
-        Response response = customExceptionMapper.toResponse(ex);
+        Response response = ex instanceof WebApplicationException && ((WebApplicationException) ex).getResponse().hasEntity()
+            ? null
+            : customExceptionMapper.toResponse(ex);
         if (response == null && ex instanceof WebApplicationException) {
             dealWithWebApplicationException(nestingLevel, request, muResponse, (WebApplicationException) ex, acceptHeaders, producesRef == null ? emptyList() : producesRef, directlyProducesRef == null ? emptyList() : directlyProducesRef);
         } else if (response == null) {
