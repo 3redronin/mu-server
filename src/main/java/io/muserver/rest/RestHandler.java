@@ -239,7 +239,10 @@ public class RestHandler implements MuHandler {
                 JaxRSResponse responseToWrite = jaxRSResponse;
                 boolean isHttp1 = requestContext.muRequest.protocol().equals("HTTP/1.1");
                 try (LazyAccessOutputStream out = new LazyAccessOutputStream(muResponse,
-                    () -> MuRuntimeDelegate.writeResponseHeaders(requestContext.getUriInfo().getBaseUri(), responseToWrite, muResponse, isHttp1))) {
+                    () -> {
+                        applyDefaultCharset(responseToWrite);
+                        MuRuntimeDelegate.writeResponseHeaders(requestContext.getUriInfo().getBaseUri(), responseToWrite, muResponse, isHttp1);
+                    })) {
                     jaxRSResponse.setEntityStream(requestContext.getMuMethod() == Method.HEAD ? NullOutputStream.INSTANCE : out);
                     jaxRSResponse.setRequestContext(requestContext);
 
@@ -294,11 +297,7 @@ public class RestHandler implements MuHandler {
                             }
                         }
 
-                        String contentType = responseMediaType.toString();
-                        if (responseMediaType.getType().equals("text") && !responseMediaType.getParameters().containsKey("charset")) {
-                            contentType += ";charset=utf-8";
-                        }
-                        jaxRSResponse.getHeaders().putSingle("content-type", contentType);
+                        applyDefaultCharset(jaxRSResponse);
 
                         try {
                             messageBodyWriter.writeTo(jaxRSResponse.getEntity(), jaxRSResponse.getType(), jaxRSResponse.getGenericType(), writerAnnontations,
@@ -318,6 +317,13 @@ public class RestHandler implements MuHandler {
             }
         } catch (Exception ex) {
             dealWithUnhandledException(nestingLevel + 1, requestContext, muResponse, ex, acceptHeaders, produces, directlyProduces);
+        }
+    }
+
+    private static void applyDefaultCharset(JaxRSResponse response) {
+        MediaType mediaType = response.getMediaType();
+        if (mediaType != null && mediaType.getType().equals("text") && !mediaType.getParameters().containsKey(MediaType.CHARSET_PARAMETER)) {
+            response.setMediaType(mediaType.withCharset("utf-8"));
         }
     }
 

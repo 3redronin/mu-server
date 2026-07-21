@@ -106,7 +106,7 @@ public class WriterInterceptorTest {
         @Path("/greetings")
         class GreetingResource {
             @GET
-            @Produces("text/plain;charset=utf-8")
+            @Produces("text/plain")
             public String hello() {
                 return "hello";
             }
@@ -125,6 +125,7 @@ public class WriterInterceptorTest {
             assertThat(resp.code(), is(200));
             assertThat(resp.header("X-Added-By-Interceptor"), equalTo("the value"));
             assertThat(resp.body().string(), equalTo("prefix-hello"));
+            assertThat(resp.header("content-type"), is("text/plain;charset=utf-8"));
         }
     }
 
