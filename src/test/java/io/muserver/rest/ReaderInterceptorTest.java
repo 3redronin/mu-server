@@ -113,6 +113,34 @@ public class ReaderInterceptorTest {
     }
 
     @Test
+    public void interceptorsCanChangeTheRequestMediaType() throws Exception {
+        @Path("/greetings")
+        class GreetingResource {
+            @POST
+            public String hello(String body) {
+                return body;
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new GreetingResource())
+                .addReaderInterceptor(context -> {
+                    context.setMediaType(jakarta.ws.rs.core.MediaType.APPLICATION_JSON_TYPE);
+                    assertThat(context.getMediaType(), is(jakarta.ws.rs.core.MediaType.APPLICATION_JSON_TYPE));
+                    return context.proceed();
+                })
+            )
+            .start();
+
+        try (Response resp = call(request(server.uri().resolve("/greetings"))
+            .post(requestBody("hello"))
+        )) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), equalTo("hello"));
+        }
+    }
+
+    @Test
     public void resourceInfoAndMuRequestCanBeExtractedFromProperties() throws Exception {
         @Path("/greetings")
         class GreetingResource {
