@@ -83,6 +83,30 @@ public class MuUriInfoTest {
         assertThat(sample.getAbsolutePath(), equalTo(URI.create("http://example.org:8182/some%20path/path")));
     }
 
+    @Test
+    public void getAbsolutePathUsesTheRequestUriAuthority() {
+        MuUriInfo sample = new MuUriInfo(
+            URI.create("http://localhost:888/otherbase"),
+            URI.create("http://xx.yy:888/base/resource/sub?query=yo#ha"),
+            "base/resource/sub",
+            null
+        );
+
+        assertThat(sample.getAbsolutePath(), equalTo(URI.create("http://xx.yy:888/base/resource/sub")));
+    }
+
+    @Test
+    public void getAbsolutePathPreservesEncodedPathDelimiters() {
+        MuUriInfo sample = new MuUriInfo(
+            URI.create("http://example.org:8182/"),
+            URI.create("http://example.org:8182/a%2Fb?query=yo#ha"),
+            "a%2Fb",
+            null
+        );
+
+        assertThat(sample.getAbsolutePath(), equalTo(URI.create("http://example.org:8182/a%2Fb")));
+    }
+
 
     @Test
     public void getPathSegmentsWorks() {

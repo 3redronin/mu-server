@@ -78,12 +78,19 @@ class SseBroadcasterImpl implements SseBroadcaster {
                 sendOnCloseEvent(sink);
                 sendComplete(completableFuture, count);
             } else {
-                sink.send(event).whenComplete((o, throwable) -> {
-                    if (throwable != null) {
-                        onSinkErrored(sink, throwable);
+                try {
+                    sink.send(event).whenComplete((o, throwable) -> {
+                        if (throwable != null) {
+                            onSinkErrored(sink, throwable);
+                        }
+                        sendComplete(completableFuture, count);
+                    });
+                } catch (IllegalStateException e) {
+                    if (sinks.remove(sink)) {
+                        sendOnCloseEvent(sink);
                     }
                     sendComplete(completableFuture, count);
-                });
+                }
             }
         }
 

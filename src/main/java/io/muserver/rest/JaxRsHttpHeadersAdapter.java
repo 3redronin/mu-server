@@ -99,7 +99,9 @@ class JaxRsHttpHeadersAdapter implements HttpHeaders {
 
     @Override
     public @Nullable MediaType getMediaType() {
-        String type = muHeaders.get(HeaderNames.CONTENT_TYPE);
+        String type = copy == null
+            ? muHeaders.get(HeaderNames.CONTENT_TYPE)
+            : copy.getFirst(HeaderNames.CONTENT_TYPE.toString());
         return type == null ? null : MediaType.valueOf(type);
     }
 
