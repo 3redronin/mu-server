@@ -39,6 +39,7 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
     private Response abortResponse;
     private boolean requestFilterChainRunning;
     private boolean responseFilterChainStarted;
+    private boolean exceptionMapperUsed;
 
     JaxRSRequest(MuRequest muRequest, MuResponse muResponse, InputStream inputStream, String relativePath, SecurityContext securityContext, List<ReaderInterceptor> readerInterceptors, EntityProviders entityProviders) {
         this.muRequest = muRequest;
@@ -58,10 +59,24 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
     }
 
     boolean methodHasAnnotations(List<Class<? extends Annotation>> toCheck) {
+        if (toCheck.isEmpty()) {
+            return true;
+        }
         if (matchedMethod == null) {
             return false;
         }
         return matchedMethod.resourceMethod.hasAll(toCheck);
+    }
+
+    Response mapExceptionOnce(CustomExceptionMapper exceptionMapper, Exception exception) {
+        if (exceptionMapperUsed) {
+            return null;
+        }
+        Response response = exceptionMapper.toResponse(exception);
+        if (response != null) {
+            exceptionMapperUsed = true;
+        }
+        return response;
     }
 
     @Override
