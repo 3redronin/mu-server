@@ -26,7 +26,7 @@ import static java.util.stream.Collectors.toList;
 class ResourceClass {
 
     final UriPattern pathPattern;
-    private final Class<?> resourceClass;
+    final Class<?> resourceClass;
     final Object resourceInstance;
     final List<MediaType> produces;
     final List<MediaType> consumes;
@@ -74,7 +74,10 @@ class ResourceClass {
         List<ResourceMethod> resourceMethods = new ArrayList<>();
         java.lang.reflect.Method[] methods = this.resourceClass.getMethods();
         for (java.lang.reflect.Method restMethod : methods) {
-            java.lang.reflect.Method annotationSource = JaxMethodLocator.getMethodThatHasJaxRSAnnotations(restMethod);
+            if (restMethod.isBridge()) {
+                continue;
+            }
+            java.lang.reflect.Method annotationSource = JaxMethodLocator.getMethodThatHasJaxRSAnnotations(restMethod, resourceClass);
             Method httpMethod = ResourceMethod.getMuMethod(annotationSource);
             restMethod.setAccessible(true);
             Path methodPath = annotationSource.getAnnotation(Path.class);
@@ -90,10 +93,10 @@ class ResourceClass {
             List<MediaType> methodProduces = MediaTypeDeterminer.supportedProducesTypes(annotationSource);
             List<MediaType> methodConsumes = MediaTypeDeterminer.supportedConsumesTypes(annotationSource);
             List<ResourceMethodParam> params = new ArrayList<>();
-            Parameter[] parameters = annotationSource.getParameters();
-            for (int i = 0; i < parameters.length; i++) {
-                Parameter p = parameters[i];
-                ResourceMethodParam resourceMethodParam = ResourceMethodParam.fromParameter(i, p, paramConverterProviders, methodPattern);
+            Parameter[] annotationParameters = annotationSource.getParameters();
+            Parameter[] methodParameters = restMethod.getParameters();
+            for (int i = 0; i < annotationParameters.length; i++) {
+                ResourceMethodParam resourceMethodParam = ResourceMethodParam.fromParameter(i, methodParameters[i], annotationParameters[i], resourceClass, paramConverterProviders, methodPattern);
                 params.add(resourceMethodParam);
             }
             DescriptionData descriptionData = DescriptionData.fromAnnotation(restMethod, null);

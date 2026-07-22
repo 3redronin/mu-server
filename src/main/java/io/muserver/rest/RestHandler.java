@@ -17,7 +17,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.annotation.Annotation;
-import java.lang.reflect.Parameter;
 import java.lang.reflect.Type;
 import java.net.URI;
 import java.util.*;
@@ -124,6 +123,7 @@ public class RestHandler implements MuHandler {
             List<MediaType> produces = producesRef = mm.resourceMethod.resourceClass.produces;
             List<MediaType> directlyProduces = directlyProducesRef = mm.resourceMethod.directlyProduces;
             Annotation[] methodAnnotations = mm.resourceMethod.methodAnnotations;
+            Type methodReturnType = mm.resourceMethod.genericReturnType;
 
             filterManagerThing.onPostMatch(requestContext);
             if (requestContext.getAbortResponse() != null) {
@@ -148,14 +148,16 @@ public class RestHandler implements MuHandler {
                     CompletionStage cs = (CompletionStage) result;
                     cs.thenAccept(o -> {
                         try {
-                            sendResponse(0, requestContext, muResponse, acceptHeaders, produces, directlyProduces, methodAnnotations, o);
+                            sendResponse(0, requestContext, muResponse, acceptHeaders, produces, directlyProduces, methodAnnotations, o,
+                                completionStageResultType(methodReturnType));
                             asyncHandle1.complete();
                         } catch (Exception e) {
                             asyncHandle1.complete(e);
                         }
                     });
                 } else {
-                    sendResponse(0, requestContext, muResponse, acceptHeaders, produces, directlyProduces, methodAnnotations, result);
+                    sendResponse(0, requestContext, muResponse, acceptHeaders, produces, directlyProduces, methodAnnotations, result,
+                        methodReturnType);
                 }
             }
         } catch (NotMatchedException e) {
@@ -171,13 +173,17 @@ public class RestHandler implements MuHandler {
         return true;
     }
 
+    private static Type completionStageResultType(Type returnType) {
+        return GenericTypeResolver.resolveTypeArgument(returnType, CompletionStage.class, 0);
+    }
+
     static Object invokeResourceMethod(JaxRSRequest requestContext, MuResponse muResponse, RequestMatcher.MatchedMethod mm, Function<ResourceMethod, Object> suspendedParamCallback, EntityProviders entityProviders, CollectionParameterStrategy collectionParameterStrategy) throws Exception {
         ResourceMethod rm = mm.resourceMethod;
         Object[] params = new Object[rm.methodHandle.getParameterCount()];
         for (ResourceMethodParam param : rm.params) {
             Object paramValue;
             if (param.source == ResourceMethodParam.ValueSource.MESSAGE_BODY) {
-                paramValue = readRequestEntity(requestContext, param.parameterHandle);
+                paramValue = readRequestEntity(requestContext, param);
             } else if (param.source == ResourceMethodParam.ValueSource.CONTEXT) {
                 paramValue = getContextParam(requestContext, muResponse, mm, param, entityProviders);
             } else if (param.source == ResourceMethodParam.ValueSource.SUSPENDED) {
@@ -222,12 +228,16 @@ public class RestHandler implements MuHandler {
     }
 
     private void sendResponse(int nestingLevel, JaxRSRequest requestContext, MuResponse muResponse, List<MediaType> acceptHeaders, List<MediaType> produces, List<MediaType> directlyProduces, Annotation[] annotations, Object result) throws Exception {
+        sendResponse(nestingLevel, requestContext, muResponse, acceptHeaders, produces, directlyProduces, annotations, result, null);
+    }
+
+    private void sendResponse(int nestingLevel, JaxRSRequest requestContext, MuResponse muResponse, List<MediaType> acceptHeaders, List<MediaType> produces, List<MediaType> directlyProduces, Annotation[] annotations, Object result, Type resourceMethodReturnType) throws Exception {
         try {
             if (requestContext.hasEntity()) {
                 requestContext.getEntityStream().close();
             }
             if (!muResponse.hasStartedSendingData()) {
-                ObjWithType obj = ObjWithType.objType(result);
+                ObjWithType obj = ObjWithType.objType(result, resourceMethodReturnType);
 
                 if (obj.entity instanceof Exception) {
                     throw (Exception) obj.entity;
@@ -361,7 +371,7 @@ public class RestHandler implements MuHandler {
     private static Object getContextParam(JaxRSRequest requestContext, MuResponse muResponse, RequestMatcher.MatchedMethod mm, ResourceMethodParam param, EntityProviders providers) {
         MuRequest request = requestContext.muRequest;
         Object paramValue;
-        Class<?> type = param.parameterHandle.getType();
+        Class<?> type = param.type;
         if (type.equals(UriInfo.class)) {
             paramValue = createUriInfo(requestContext.relativePath(), mm, request.uri().resolve(request.contextPath() + "/"), request.uri());
         } else if (type.equals(MuResponse.class)) {
@@ -393,10 +403,10 @@ public class RestHandler implements MuHandler {
         return new MuUriInfo(baseUri, requestUri, Mutils.trim(relativePath, "/"), mm);
     }
 
-    private static Object readRequestEntity(JaxRSRequest requestContext, Parameter parameter) throws java.io.IOException {
-        requestContext.setAnnotations(parameter.getDeclaredAnnotations());
-        requestContext.setType(parameter.getType());
-        requestContext.setGenericType(parameter.getParameterizedType());
+    private static Object readRequestEntity(JaxRSRequest requestContext, ResourceMethodParam parameter) throws java.io.IOException {
+        requestContext.setAnnotations(parameter.annotations);
+        requestContext.setType(parameter.type);
+        requestContext.setGenericType(parameter.genericType);
         return requestContext.executeInterceptors();
     }
 

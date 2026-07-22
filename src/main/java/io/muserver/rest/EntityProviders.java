@@ -68,7 +68,7 @@ class EntityProviders {
                 // 4. Sort the selected MessageBodyWriter providers with a primary key of generic type where providers whose generic
                 // type is the nearest superclass of the object class are sorted first
 
-                int typeCompare = ProviderWrapper.compareTo(o1, o2, genericType);
+                int typeCompare = ProviderWrapper.compareTo(o1, o2, type);
                 if (typeCompare != 0) {
                     return typeCompare;
                 }

@@ -1,7 +1,10 @@
 package io.muserver.rest;
 
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
+import jakarta.ws.rs.PathParam;
+import jakarta.ws.rs.QueryParam;
 import org.junit.Test;
 
 import java.lang.reflect.Method;
@@ -20,6 +23,33 @@ public class JaxMethodLocatorTest {
         @Path("qu")
         void go();
     }
+
+    private interface ParameterAnnotatedBase {
+        @GET
+        void get(@PathParam("id") String id);
+    }
+
+    private static class ParameterAnnotatedImplementation implements ParameterAnnotatedBase {
+        @Override
+        public void get(@QueryParam("id") String id) { }
+    }
+
+    private interface InterfaceInheritedThroughSuperclass {
+        @Path("superclass-interface")
+        void go();
+    }
+
+    private interface DirectInterface {
+        @Path("direct-interface")
+        void go();
+    }
+
+    private static class InterfaceBackedSuperclass implements InterfaceInheritedThroughSuperclass {
+        @Override
+        public void go() { }
+    }
+
+    private static class SubclassWithDirectInterface extends InterfaceBackedSuperclass implements DirectInterface { }
 
     @Test
     public void returnsTheGivenMethodIfNoAnnotations() {
@@ -75,6 +105,21 @@ public class JaxMethodLocatorTest {
             public void go() {}
         }
         assertThat(getMethodThatHasJaxRSAnnotations(goMethod(BaseClassImpl.class)), equalTo(goMethod(BaseClass.class)));
+    }
+
+    @Test
+    public void parameterAnnotationsOnImplementationPreventInheritance() throws NoSuchMethodException {
+        Method implementation = ParameterAnnotatedImplementation.class.getDeclaredMethod("get", String.class);
+        assertThat(getMethodThatHasJaxRSAnnotations(implementation), equalTo(implementation));
+    }
+
+    @Test
+    public void superclassHierarchyIsPreferredOverADirectInterface() throws NoSuchMethodException {
+        Method inheritedMethod = SubclassWithDirectInterface.class.getMethod("go");
+        Method annotationSource = InterfaceInheritedThroughSuperclass.class.getDeclaredMethod("go");
+
+        assertThat(getMethodThatHasJaxRSAnnotations(inheritedMethod, SubclassWithDirectInterface.class),
+            equalTo(annotationSource));
     }
 
     private static Method goMethod(Class<?> clazz) {

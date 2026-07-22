@@ -6,6 +6,9 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import org.junit.Test;
 
+import java.util.Collections;
+import java.util.List;
+
 import static java.net.URI.create;
 import static java.util.Collections.emptyList;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -51,6 +54,46 @@ public class ResourceClassTest {
 
     }
 
+    @Test
+    public void genericOverridesDoNotRegisterSyntheticBridgeMethods() {
+        ResourceClass resourceClass = ResourceClass.fromObject(new StringListResource(), ResourceMethodParamTest.BUILT_IN_PARAM_PROVIDERS, customizer);
+
+        assertThat(resourceClass.resourceMethods, hasSize(1));
+        ResourceMethod resourceMethod = resourceClass.resourceMethods.get(0);
+        assertThat(resourceMethod.methodHandle.isBridge(), equalTo(false));
+        assertThat(resourceMethod.genericReturnType.getTypeName(), equalTo("java.util.List<java.lang.String>"));
+    }
+
+    @Test
+    public void genericInterfaceParameterAnnotationsAreInherited() {
+        ResourceClass resourceClass = ResourceClass.fromObject(new StringLookupResource(), ResourceMethodParamTest.BUILT_IN_PARAM_PROVIDERS, customizer);
+
+        assertThat(resourceClass.resourceMethods, hasSize(1));
+        ResourceMethod resourceMethod = resourceClass.resourceMethods.get(0);
+        assertThat(resourceMethod.methodHandle.isBridge(), equalTo(false));
+        assertThat(resourceMethod.methodHandle.getParameterTypes()[0], equalTo(String.class));
+        assertThat(resourceMethod.params.get(0).source, equalTo(ResourceMethodParam.ValueSource.PATH_PARAM));
+    }
+
+    @Test
+    public void genericParentInterfaceParameterAnnotationsAreInherited() {
+        ResourceClass resourceClass = ResourceClass.fromObject(new ChildStringLookupResource(), ResourceMethodParamTest.BUILT_IN_PARAM_PROVIDERS, customizer);
+
+        assertThat(resourceClass.resourceMethods, hasSize(1));
+        ResourceMethod resourceMethod = resourceClass.resourceMethods.get(0);
+        assertThat(resourceMethod.methodHandle.isBridge(), equalTo(false));
+        assertThat(resourceMethod.methodHandle.getParameterTypes()[0], equalTo(String.class));
+        assertThat(resourceMethod.params.get(0).source, equalTo(ResourceMethodParam.ValueSource.PATH_PARAM));
+    }
+
+    @Test
+    public void interfaceAnnotationsAreFoundWhenTheImplementationComesFromASuperclass() {
+        ResourceClass resourceClass = ResourceClass.fromObject(new InterfaceResourceWithInheritedImplementation(), ResourceMethodParamTest.BUILT_IN_PARAM_PROVIDERS, customizer);
+
+        assertThat(resourceClass.resourceMethods, hasSize(1));
+        assertThat(resourceClass.resourceMethods.get(0).methodHandle.getDeclaringClass(), equalTo(UnannotatedImplementation.class));
+    }
+
     @Path("/api/fruits")
     private static class Fruit {
 
@@ -83,5 +126,60 @@ public class ResourceClassTest {
     private static class ConcreteWidget extends BaseWidgetResource {
 
     }
+
+    private static abstract class GenericResource<T> {
+        @GET
+        public abstract T get();
+    }
+
+    @Path("/api/strings")
+    private static class StringListResource extends GenericResource<List<String>> {
+        @Override
+        public List<String> get() {
+            return Collections.emptyList();
+        }
+    }
+
+    private interface GenericLookupResource<T> {
+        @GET
+        @Path("{id}")
+        String get(@PathParam("id") T id);
+    }
+
+    @Path("/api/lookup")
+    private static class StringLookupResource implements GenericLookupResource<String> {
+        @Override
+        public String get(String id) {
+            return id;
+        }
+
+        public String get(Integer id) {
+            return String.valueOf(id);
+        }
+    }
+
+    private interface ChildGenericLookupResource<T> extends GenericLookupResource<T> { }
+
+    @Path("/api/child-lookup")
+    private static class ChildStringLookupResource implements ChildGenericLookupResource<String> {
+        @Override
+        public String get(String id) {
+            return id;
+        }
+    }
+
+    private interface AnnotatedResourceMethod {
+        @GET
+        String get();
+    }
+
+    private static class UnannotatedImplementation {
+        public String get() {
+            return "hello";
+        }
+    }
+
+    @Path("/api/inherited-implementation")
+    private static class InterfaceResourceWithInheritedImplementation extends UnannotatedImplementation implements AnnotatedResourceMethod { }
 
 }
