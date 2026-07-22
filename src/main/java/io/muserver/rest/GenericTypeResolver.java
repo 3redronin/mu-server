@@ -1,5 +1,7 @@
 package io.muserver.rest;
 
+import org.jspecify.annotations.Nullable;
+
 import java.lang.reflect.Array;
 import java.lang.reflect.GenericArrayType;
 import java.lang.reflect.ParameterizedType;
@@ -23,14 +25,21 @@ final class GenericTypeResolver {
         return resolve(type, typeArguments);
     }
 
-    static Type resolveTypeArgument(Type type, Class<?> targetClass, int argumentIndex) {
+    static @Nullable Type resolveConcrete(Type type, Class<?> concreteClass, Class<?> declaringClass) {
+        return concreteTypeOrNull(resolve(type, concreteClass, declaringClass));
+    }
+
+    static @Nullable Type resolveTypeArgument(Type type, Class<?> targetClass, int argumentIndex) {
         TypeVariable<?> typeVariable = targetClass.getTypeParameters()[argumentIndex];
         Map<TypeVariable<?>, Type> typeArguments = new HashMap<>();
         if (!findTypeArguments(type, targetClass, new HashMap<>(), typeArguments)) {
             return null;
         }
-        Type resolved = resolve(typeVariable, typeArguments);
-        return containsTypeVariable(resolved) ? null : resolved;
+        return concreteTypeOrNull(resolve(typeVariable, typeArguments));
+    }
+
+    private static @Nullable Type concreteTypeOrNull(Type type) {
+        return containsTypeVariable(type) ? null : type;
     }
 
     private static boolean containsTypeVariable(Type type) {

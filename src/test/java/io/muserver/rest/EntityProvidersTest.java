@@ -259,6 +259,27 @@ public class EntityProvidersTest {
     }
 
     @Test
+    public void rawGenericResourceFallsBackToTheRuntimeEntityType() throws Exception {
+        class BaseResource<T> {
+            @GET
+            @SuppressWarnings("unchecked")
+            public T get() {
+                return (T) "entity";
+            }
+        }
+        @Path("raw-direct")
+        @SuppressWarnings("rawtypes")
+        class Sample extends BaseResource { }
+
+        this.server = httpsServerForTest().addHandler(
+            restHandler(new Sample()).addCustomWriter(new RuntimeTypeOnlyStringWriter()).build()).start();
+        try (Response resp = call(request(server.uri().resolve("/raw-direct")))) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.body().string(), equalTo("runtime-type"));
+        }
+    }
+
+    @Test
     public void inheritedMessageBodyParameterAnnotationsReachReaders() throws Exception {
         class Payload {
             final String value;

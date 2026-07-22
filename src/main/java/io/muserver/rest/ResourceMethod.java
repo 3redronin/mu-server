@@ -4,6 +4,7 @@ import io.muserver.Method;
 import io.muserver.openapi.*;
 import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.core.MediaType;
+import org.jspecify.annotations.Nullable;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.InvocationTargetException;
@@ -28,7 +29,7 @@ class ResourceMethod {
     final ResourceClass resourceClass;
     final UriPattern pathPattern;
     final java.lang.reflect.Method methodHandle;
-    final Type genericReturnType;
+    final @Nullable Type genericReturnType;
     final Method httpMethod;
     final String pathTemplate;
     final List<MediaType> effectiveConsumes;
@@ -46,7 +47,7 @@ class ResourceMethod {
         this.resourceClass = resourceClass;
         this.pathPattern = pathPattern;
         this.methodHandle = methodHandle;
-        this.genericReturnType = GenericTypeResolver.resolve(methodHandle.getGenericReturnType(),
+        this.genericReturnType = GenericTypeResolver.resolveConcrete(methodHandle.getGenericReturnType(),
             resourceClass.resourceClass, methodHandle.getDeclaringClass());
         this.params = params;
         this.httpMethod = httpMethod;
