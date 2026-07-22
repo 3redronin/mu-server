@@ -72,7 +72,7 @@ class RequestMatcher {
                 }
                 if (c == 0) {
                     // " and the number of capturing groups with non-default regular expressions (i.e. not ‘([ˆ/]+?)’) as the tertiary key (descending order)"
-                    c = Integer.compare(countNonDefaultGroups(o2.resourceClass.pathTemplate), countNonDefaultGroups(o1.resourceClass.pathTemplate));
+                    c = Integer.compare(o2pp.nonDefaultCapturingGroupCount(), o1pp.nonDefaultCapturingGroupCount());
                 }
                 return c;
             })
@@ -138,7 +138,7 @@ class RequestMatcher {
             }
             if (c == 0) {
                 // " and the number of capturing groups with non-default regular expressions (i.e. not ‘([ˆ/]+?)’) as the tertiary key (descending order)"
-                c = Integer.compare(countNonDefaultGroups(rm2.pathTemplate), countNonDefaultGroups(rm1.pathTemplate));
+                c = Integer.compare(rm2.pathPattern.nonDefaultCapturingGroupCount(), rm1.pathPattern.nonDefaultCapturingGroupCount());
             }
             if (c == 0) {
                 // "and the source of each member as quaternary key sorting those derived from sub-resource methods ahead of those derived from sub-resource locators"
@@ -307,13 +307,4 @@ class RequestMatcher {
 
     }
 
-    private int countNonDefaultGroups(String pathTemplate) {
-        int count = 0;
-        for (String bit : pathTemplate.split("/")) {
-            if (bit.startsWith("{") && bit.endsWith("}") && bit.contains(":")) {
-                count++;
-            }
-        }
-        return count;
-    }
 }

@@ -126,6 +126,31 @@ public class JaxMatchingTest {
     }
 
     @Test
+    public void repeatedNonDefaultCapturesWinPathMatchingTies() throws IOException {
+        @Path("/regex-rank")
+        class RankedResource {
+            @GET
+            @Path("x/{id:\\d+}{id}")
+            public String oneRegex() {
+                return "one regex";
+            }
+
+            @GET
+            @Path("x/{id:\\d+}{id:\\d+}")
+            public String twoRegexes() {
+                return "two regexes";
+            }
+        }
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new RankedResource()).build())
+            .start();
+        try (Response resp = call(request(server.uri().resolve("/regex-rank/x/12")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), is("two regexes"));
+        }
+    }
+
+    @Test
     public void differentMethodsCanHaveDifferentRegexes() throws IOException {
         @Path("/api")
         class Thing {

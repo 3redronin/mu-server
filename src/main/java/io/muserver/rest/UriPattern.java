@@ -22,18 +22,20 @@ public class UriPattern {
     private final List<String> namedGroupRegexes;
     private final List<String> capturedParameterNames;
     private final List<String> captureGroupNames;
+    private final int nonDefaultCapturingGroupCount;
     final int numberOfLiterals;
     final String pathWithoutRegex;
 
     private UriPattern(Pattern pattern, List<String> namedGroups, List<String> namedGroupRegexes,
                        List<String> capturedParameterNames, List<String> captureGroupNames,
-                       int numberOfLiterals, String pathWithoutRegex) {
+                       int numberOfLiterals, int nonDefaultCapturingGroupCount, String pathWithoutRegex) {
         this.pattern = pattern;
         this.namedGroups = Collections.unmodifiableList(namedGroups);
         this.namedGroupRegexes = namedGroupRegexes;
         this.capturedParameterNames = capturedParameterNames;
         this.captureGroupNames = captureGroupNames;
         this.numberOfLiterals = numberOfLiterals;
+        this.nonDefaultCapturingGroupCount = nonDefaultCapturingGroupCount;
         this.pathWithoutRegex = pathWithoutRegex;
     }
 
@@ -59,6 +61,10 @@ public class UriPattern {
 
     int capturingGroupCount() {
         return captureGroupNames.size();
+    }
+
+    int nonDefaultCapturingGroupCount() {
+        return nonDefaultCapturingGroupCount;
     }
 
     /**
@@ -131,6 +137,7 @@ public class UriPattern {
 
         StringBuilder regex = new StringBuilder();
         int numberOfLiterals = 0;
+        int nonDefaultCapturingGroupCount = 0;
         int curIndex = 0;
         int loop = 0;
         while (curIndex < template.length()) {
@@ -174,6 +181,9 @@ public class UriPattern {
                 } else {
                     groupRegex = DEFAULT_CAPTURING_GROUP_PATTERN;
                 }
+                if (!DEFAULT_CAPTURING_GROUP_PATTERN.equals(groupRegex)) {
+                    nonDefaultCapturingGroupCount++;
+                }
                 String captureGroupName = groupName;
                 if (!groupNames.contains(groupName)) {
                     groupNames.add(groupName);
@@ -203,7 +213,8 @@ public class UriPattern {
         // 5. Append '(/.*)?' to the result.
         regex.append("(/.*)?");
         return new UriPattern(Pattern.compile(regex.toString()), groupNames, namedGroupRegexes,
-            capturedParameterNames, captureGroupNames, numberOfLiterals, simplePath.toString());
+            capturedParameterNames, captureGroupNames, numberOfLiterals, nonDefaultCapturingGroupCount,
+            simplePath.toString());
     }
 
     private static Set<String> declaredParameterNames(String template) {
