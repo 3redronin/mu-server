@@ -237,6 +237,36 @@ class RFC9113_8_1_HttpMessageFramingTest {
         }
     }
 
+    @Test
+    void contentLengthMustMatchWhenRequestEndsWithTrailers() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.POST, "/hello", (request, response, pathParams) -> {
+                request.readBodyAsString();
+                response.status(200);
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            var headers = postHelloHeaders(getPort());
+            headers.add("content-length", "5");
+            var trailers = new FieldBlock();
+            trailers.add("checksum", "abc123");
+
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, false, headers))
+                .writeFrame(utf8DataFrame(1, false, "1234"))
+                .writeFrame(new Http2HeadersFrame(1, true, trailers))
+                .flush();
+
+            var reset = readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
+            assertThat(reset.streamId(), equalTo(1));
+            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+        }
+    }
+
     private int getPort() {
         return server.uri().getPort();
     }

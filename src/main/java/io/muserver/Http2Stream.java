@@ -145,10 +145,10 @@ class Http2Stream implements ResponseInfo {
                 throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "invalid trailer field", id);
             }
         }
+        validateRequestBodyLengthAtEnd();
         if (bodyInputStream instanceof Http2BodyInputStream) {
             ((Http2BodyInputStream) bodyInputStream).onTrailers(headersFrame.headers());
         }
-        validateRequestBodyLengthAtEnd();
         switch (state) {
             case OPEN:
                 state = State.HALF_CLOSED_REMOTE;
