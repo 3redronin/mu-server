@@ -13,6 +13,7 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 import okio.BufferedSink;
 import org.example.MyStringReaderWriter;
+import org.example.NumberWriter;
 import org.example.RuntimeTypeOnlyStringWriter;
 import org.hamcrest.Matchers;
 import org.junit.After;
@@ -82,6 +83,26 @@ public class EntityProvidersTest {
             assertThat(resp.code(), equalTo(200));
             assertThat(resp.header("Content-Type"), equalTo("text/plain;charset=utf-8"));
             assertThat(resp.body().string(), equalTo("--HELLO WORLD--"));
+        }
+    }
+
+    @Test
+    public void customWriterOverridesMoreSpecificBuiltInWriter() throws Exception {
+        @Path("numbers")
+        class Sample {
+            @GET
+            public Integer number() {
+                return 1;
+            }
+        }
+
+        this.server = httpsServerForTest().addHandler(
+            restHandler(new Sample())
+                .addCustomWriter(new NumberWriter())
+                .build()).start();
+        try (Response response = call(request(server.uri().resolve("/numbers")))) {
+            assertThat(response.code(), equalTo(200));
+            assertThat(response.body().string(), equalTo("custom-number"));
         }
     }
 

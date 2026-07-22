@@ -65,6 +65,12 @@ class EntityProviders {
         // 3. SelectthesetofMessageBodyWriterprovidersthatsupport(seeSection4.2.3)theobjectandmedia type of the message entity body.
         Optional<ProviderWrapper<MessageBodyWriter<?>>> best = writers.stream().filter(w -> w.supports(responseMediaType))
             .sorted((o1, o2) -> {
+                // Application-provided providers take precedence over built-in providers.
+                int providerCompare = o1.compareTo(o2);
+                if (providerCompare != 0) {
+                    return providerCompare;
+                }
+
                 // 4. Sort the selected MessageBodyWriter providers with a primary key of generic type where providers whose generic
                 // type is the nearest superclass of the object class are sorted first
 
@@ -81,8 +87,7 @@ class EntityProviders {
                     return mtCompare;
                 }
 
-                // Natural order is to prefer user-supplied
-                return o1.compareTo(o2);
+                return 0;
             })
             .filter(w -> w.provider.isWriteable(type, genericType, annotations, responseMediaType))
             .findFirst();
