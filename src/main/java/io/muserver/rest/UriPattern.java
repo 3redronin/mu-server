@@ -57,6 +57,10 @@ public class UriPattern {
         return namedGroups;
     }
 
+    int capturingGroupCount() {
+        return captureGroupNames.size();
+    }
+
     /**
      * Matches the given URI against this pattern.
      * @param input The URI to check against.

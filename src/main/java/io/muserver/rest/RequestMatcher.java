@@ -68,7 +68,7 @@ class RequestMatcher {
                 int c = Integer.compare(o2pp.numberOfLiterals, o1pp.numberOfLiterals);
                 if (c == 0) {
                     // "the number of capturing groups as a secondary key (descending order)"
-                    c = Integer.compare(o2pp.namedGroups().size(), o1pp.namedGroups().size());
+                    c = Integer.compare(o2pp.capturingGroupCount(), o1pp.capturingGroupCount());
                 }
                 if (c == 0) {
                     // " and the number of capturing groups with non-default regular expressions (i.e. not ‘([ˆ/]+?)’) as the tertiary key (descending order)"
@@ -134,7 +134,7 @@ class RequestMatcher {
             int c = Integer.compare(rm2.pathPattern.numberOfLiterals, rm1.pathPattern.numberOfLiterals);
             if (c == 0) {
                 // "the number of capturing groups as a secondary key (descending order)"
-                c = Integer.compare(rm2.pathPattern.namedGroups().size(), rm1.pathPattern.namedGroups().size());
+                c = Integer.compare(rm2.pathPattern.capturingGroupCount(), rm1.pathPattern.capturingGroupCount());
             }
             if (c == 0) {
                 // " and the number of capturing groups with non-default regular expressions (i.e. not ‘([ˆ/]+?)’) as the tertiary key (descending order)"

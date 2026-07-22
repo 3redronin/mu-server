@@ -101,6 +101,31 @@ public class JaxMatchingTest {
     }
 
     @Test
+    public void repeatedCapturesWinPathMatchingTies() throws IOException {
+        @Path("/rank")
+        class RankedResource {
+            @GET
+            @Path("x/{id}")
+            public String oneCapture() {
+                return "one capture";
+            }
+
+            @GET
+            @Path("x/{id}{id}")
+            public String twoCaptures() {
+                return "two captures";
+            }
+        }
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new RankedResource()).build())
+            .start();
+        try (Response resp = call(request(server.uri().resolve("/rank/x/aa")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), is("two captures"));
+        }
+    }
+
+    @Test
     public void differentMethodsCanHaveDifferentRegexes() throws IOException {
         @Path("/api")
         class Thing {
