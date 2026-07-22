@@ -242,8 +242,13 @@ abstract class ResourceMethodParam {
             }
             Collection<Object> collection = createCollection(paramClass);
             if (collection != null && source == ValueSource.PATH_PARAM && isPathSegmentCollection()) {
-                for (PathSegment segment : matchedMethod.getPathSegments(key)) {
-                    collection.add(encodedRequested ? ((MuPathSegment) segment).toEncoded() : segment);
+                List<PathSegment> pathSegments = matchedMethod.getPathSegments(key);
+                if (pathSegments.isEmpty() && hasExplicitDefault()) {
+                    collection.add(defaultValue());
+                } else {
+                    for (PathSegment segment : pathSegments) {
+                        collection.add(encodedRequested ? ((MuPathSegment) segment).toEncoded() : segment);
+                    }
                 }
                 return readOnly(collection);
             }

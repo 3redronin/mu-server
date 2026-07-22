@@ -121,6 +121,25 @@ public class JaxMatchingTest {
     }
 
     @Test
+    public void absentPathSegmentCollectionsUseDefaultValues() throws IOException {
+        @Path("/default-segments")
+        class DefaultPathResource {
+            @GET
+            public String get(@DefaultValue("DEFAULT;color=red") @PathParam("missing") List<PathSegment> segments) {
+                PathSegment segment = segments.get(0);
+                return segment.getPath() + ":" + segment.getMatrixParameters().getFirst("color");
+            }
+        }
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new DefaultPathResource()).build())
+            .start();
+        try (Response resp = call(request(server.uri().resolve("/default-segments")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), is("DEFAULT:red"));
+        }
+    }
+
+    @Test
     public void repeatedCapturesWinPathMatchingTies() throws IOException {
         @Path("/rank")
         class RankedResource {
