@@ -246,11 +246,11 @@ public class FilterTest {
             )
             .start();
         try (Response resp = call(request(server.uri().resolve("/something/class%20param/repeat%20value/and/method%20param/repeat%20value?decode=decode%20it")))) {
-            assertThat(resp.body().string(), is("something/class param/repeat value/and/method param/repeat value class param repeat value method param "));
+            assertThat(resp.body().string(), is("something/class param/repeat value/and/method param/repeat value class param repeat value,repeat value method param "));
         }
 
         try (Response resp = call(request(server.uri().resolve("/something/class%20param/repeat%20value/and/method%20param/repeat%20value?decode=no%20decode")))) {
-            assertThat(resp.body().string(), is("something/class%20param/repeat%20value/and/method%20param/repeat%20value class%20param repeat%20value method%20param "));
+            assertThat(resp.body().string(), is("something/class%20param/repeat%20value/and/method%20param/repeat%20value class%20param repeat%20value,repeat%20value method%20param "));
         }
 
 

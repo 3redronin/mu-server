@@ -20,13 +20,19 @@ public class UriPattern {
     private final Pattern pattern;
     private final List<String> namedGroups;
     private final List<String> namedGroupRegexes;
+    private final List<String> capturedParameterNames;
+    private final List<String> captureGroupNames;
     final int numberOfLiterals;
     final String pathWithoutRegex;
 
-    private UriPattern(Pattern pattern, List<String> namedGroups, List<String> namedGroupRegexes, int numberOfLiterals, String pathWithoutRegex) {
+    private UriPattern(Pattern pattern, List<String> namedGroups, List<String> namedGroupRegexes,
+                       List<String> capturedParameterNames, List<String> captureGroupNames,
+                       int numberOfLiterals, String pathWithoutRegex) {
         this.pattern = pattern;
         this.namedGroups = Collections.unmodifiableList(namedGroups);
         this.namedGroupRegexes = namedGroupRegexes;
+        this.capturedParameterNames = capturedParameterNames;
+        this.captureGroupNames = captureGroupNames;
         this.numberOfLiterals = numberOfLiterals;
         this.pathWithoutRegex = pathWithoutRegex;
     }
@@ -74,18 +80,21 @@ public class UriPattern {
         Matcher matcher = pattern.matcher(rawPath);
         if (matcher.matches()) {
             HashMap<String, PathSegment> params = new HashMap<>();
-            for (String namedGroup : namedGroups) {
-                String capturedValue = matcher.group(namedGroup);
+            Map<String, List<PathSegment>> allParams = new LinkedHashMap<>();
+            for (int i = 0; i < captureGroupNames.size(); i++) {
+                String parameterName = capturedParameterNames.get(i);
+                String capturedValue = matcher.group(captureGroupNames.get(i));
                 MuPathSegment segment = capturedValue.isEmpty()
                     ? new MuPathSegment("", ReadOnlyMultivaluedMap.empty())
                     : MuUriInfo.pathStringToSegments(capturedValue, true, true).findFirst().orElse(null);
                 if (segment != null) {
-                    params.put(namedGroup, segment);
+                    params.put(parameterName, segment);
+                    allParams.computeIfAbsent(parameterName, ignored -> new ArrayList<>()).add(segment);
                 }
             }
-            return new PathMatch(true, params, matcher);
+            return new PathMatch(true, params, allParams, matcher);
         } else {
-            return new PathMatch(false, Collections.emptyMap(), matcher);
+            return new PathMatch(false, Collections.emptyMap(), Collections.emptyMap(), matcher);
         }
     }
 
@@ -110,6 +119,9 @@ public class UriPattern {
         // Numbered comments are direct from the spec
         List<String> groupNames = new ArrayList<>();
         List<String> namedGroupRegexes = new ArrayList<>();
+        List<String> capturedParameterNames = new ArrayList<>();
+        List<String> captureGroupNames = new ArrayList<>();
+        Set<String> declaredParameterNames = declaredParameterNames(template);
 
         StringBuilder simplePath = new StringBuilder("/");
 
@@ -158,13 +170,19 @@ public class UriPattern {
                 } else {
                     groupRegex = DEFAULT_CAPTURING_GROUP_PATTERN;
                 }
+                String captureGroupName = groupName;
                 if (!groupNames.contains(groupName)) {
                     groupNames.add(groupName);
                     namedGroupRegexes.add(groupRegex);
-                    regex.append("(?<").append(groupName).append(">").append(groupRegex).append(MATRIX_PARAMETERS_PATTERN).append(')');
                 } else {
-                    regex.append("\\k<").append(groupName).append('>');
+                    int suffix = captureGroupNames.size();
+                    do {
+                        captureGroupName = "muServerRepeatedPathParam" + suffix++;
+                    } while (declaredParameterNames.contains(captureGroupName) || captureGroupNames.contains(captureGroupName));
                 }
+                capturedParameterNames.add(groupName);
+                captureGroupNames.add(captureGroupName);
+                regex.append("(?<").append(captureGroupName).append(">").append(groupRegex).append(MATRIX_PARAMETERS_PATTERN).append(')');
                 simplePath.append('{').append(groupName).append('}');
                 curIndex = endOfRegex;
             }
@@ -180,7 +198,17 @@ public class UriPattern {
 
         // 5. Append '(/.*)?' to the result.
         regex.append("(/.*)?");
-        return new UriPattern(Pattern.compile(regex.toString()), groupNames, namedGroupRegexes, numberOfLiterals, simplePath.toString());
+        return new UriPattern(Pattern.compile(regex.toString()), groupNames, namedGroupRegexes,
+            capturedParameterNames, captureGroupNames, numberOfLiterals, simplePath.toString());
+    }
+
+    private static Set<String> declaredParameterNames(String template) {
+        Set<String> names = new HashSet<>();
+        Matcher matcher = Pattern.compile("\\{\\s*([^\\s}:]+)").matcher(template);
+        while (matcher.find()) {
+            names.add(matcher.group(1));
+        }
+        return names;
     }
 
     private static String escapeRegex(String literal) {

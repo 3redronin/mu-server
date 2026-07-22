@@ -15,6 +15,7 @@ import scaffolding.ServerUtils;
 
 import java.io.IOException;
 import java.net.URI;
+import java.util.List;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.CoreMatchers.is;
@@ -68,13 +69,34 @@ public class JaxMatchingTest {
             assertThat(resp.code(), is(404));
         }
         try (Response resp = call(request(server.uri().resolve("/tiger/TIGER/TIGER/TIGER")))) {
-            assertThat(resp.code(), is(404));
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), is("TIGER"));
         }
         try (Response resp = call(request(server.uri().resolve("/dog/tiger/tiger/tiger")))) {
-            assertThat(resp.code(), is(404));
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), is("tiger"));
         }
         try (Response resp = call(request(server.uri().resolve("/tiger/tiger/tiger/dog")))) {
-            assertThat(resp.code(), is(404));
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), is("dog"));
+        }
+    }
+
+    @Test
+    public void repeatedPathParamsAreInjectedAsAList() throws IOException {
+        @Path("/repeated/{id}/{id}/{id}")
+        class RepeatedPathResource {
+            @GET
+            public String get(@PathParam("id") List<String> ids) {
+                return String.join(",", ids);
+            }
+        }
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new RepeatedPathResource()).build())
+            .start();
+        try (Response resp = call(request(server.uri().resolve("/repeated/one/two/three")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), is("one,two,three"));
         }
     }
 

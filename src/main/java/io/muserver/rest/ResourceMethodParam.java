@@ -243,7 +243,9 @@ abstract class ResourceMethodParam {
             Collection<Object> collection = createCollection(paramClass);
             String pathParam = source == ValueSource.PATH_PARAM ? matchedMethod.getPathParam(key) : null;
             List<String> specifiedValue =
-                source == ValueSource.PATH_PARAM ? (pathParam == null ? emptyList() : Collections.singletonList(pathParam))
+                source == ValueSource.PATH_PARAM ? (collection == null
+                    ? (pathParam == null ? emptyList() : Collections.singletonList(pathParam))
+                    : matchedMethod.getPathParams(key))
                     : source == ValueSource.QUERY_PARAM ? getParamValues(jaxRequest.getUriInfo().getQueryParameters(), key, cps, collection != null)
                     : source == ValueSource.HEADER_PARAM ? getParamValues(jaxRequest.getHeaders(), key, cps, collection != null)
                     : source == ValueSource.FORM_PARAM ? muRequest.form().getAll(key)

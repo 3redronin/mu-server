@@ -112,7 +112,9 @@ class RequestMatcher {
                         if (matcher.fullyMatches() || (resourceMethod.isSubResourceLocator() && matcher.prefixMatches())) {
                             Map<String, PathSegment> combinedParams = new HashMap<>(candidateClass.pathMatch.segments());
                             combinedParams.putAll(matcher.segments());
-                            candidates.add(new MatchedMethod(candidateClass, resourceMethod, combinedParams, matcher));
+                            Map<String, List<PathSegment>> combinedAllParams = copyPathParams(candidateClass.pathMatch.allSegments());
+                            mergePathParams(combinedAllParams, matcher.allSegments());
+                            candidates.add(new MatchedMethod(candidateClass, resourceMethod, combinedParams, combinedAllParams, matcher));
                         }
                     }
                 }
@@ -167,7 +169,7 @@ class RequestMatcher {
         if (l.size() == 1) {
             MatchedMethod mm = l.stream().findFirst().get();
 
-            MatchedClass mc = new MatchedClass(subResourceLocator.apply(mm), mm.pathMatch);
+            MatchedClass mc = new MatchedClass(subResourceLocator.apply(mm), mm.pathMatch.withParams(mm.pathParams, mm.pathParamValues));
 
             String remainingUrl = mm.pathMatch.lastGroup();
             //Set U to be the value of the final capturing group of R(TL) when matched against U, and set C0 to be the
@@ -186,12 +188,22 @@ class RequestMatcher {
         for (MatchedClass mc : candidateClasses) {
             for (ResourceMethod resourceMethod : mc.resourceClass.resourceMethods) {
                 if (resourceMethod.isSubResource() == isSubResource && !resourceMethod.isSubResourceLocator()) {
-                    MatchedMethod matchedMethod = new MatchedMethod(mc, resourceMethod, mc.pathMatch.segments(), mc.pathMatch);
+                    MatchedMethod matchedMethod = new MatchedMethod(mc, resourceMethod, mc.pathMatch.segments(), mc.pathMatch.allSegments(), mc.pathMatch);
                     candidates.add(matchedMethod);
                 }
             }
         }
         return candidates;
+    }
+
+    private static Map<String, List<PathSegment>> copyPathParams(Map<String, List<PathSegment>> source) {
+        Map<String, List<PathSegment>> copy = new LinkedHashMap<>();
+        mergePathParams(copy, source);
+        return copy;
+    }
+
+    private static void mergePathParams(Map<String, List<PathSegment>> target, Map<String, List<PathSegment>> source) {
+        source.forEach((name, values) -> target.computeIfAbsent(name, ignored -> new ArrayList<>()).addAll(values));
     }
 
     static class MatchedClass {
@@ -208,12 +220,15 @@ class RequestMatcher {
         final MatchedClass matchedClass;
         final ResourceMethod resourceMethod;
         final Map<String, PathSegment> pathParams;
+        final Map<String, List<PathSegment>> pathParamValues;
         final PathMatch pathMatch;
 
-        MatchedMethod(MatchedClass matchedClass, ResourceMethod resourceMethod, Map<String, PathSegment> pathParams, PathMatch pathMatch) {
+        MatchedMethod(MatchedClass matchedClass, ResourceMethod resourceMethod, Map<String, PathSegment> pathParams,
+                      Map<String, List<PathSegment>> pathParamValues, PathMatch pathMatch) {
             this.matchedClass = matchedClass;
             this.resourceMethod = resourceMethod;
             this.pathParams = pathParams;
+            this.pathParamValues = pathParamValues;
             this.pathMatch = pathMatch;
         }
 
@@ -228,6 +243,12 @@ class RequestMatcher {
         public String getPathParam(String key) {
             PathSegment segment = pathParams.get(key);
             return segment == null ? null : segment.getPath();
+        }
+
+        public List<String> getPathParams(String key) {
+            List<PathSegment> segments = pathParamValues.get(key);
+            if (segments == null) return Collections.emptyList();
+            return segments.stream().map(PathSegment::getPath).collect(toList());
         }
     }
 

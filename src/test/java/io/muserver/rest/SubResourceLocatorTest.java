@@ -7,6 +7,8 @@ import org.junit.After;
 import org.junit.Test;
 import scaffolding.MuAssert;
 
+import java.util.List;
+
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
@@ -90,6 +92,31 @@ public class SubResourceLocatorTest {
             assertThat(resp.code(), is(200));
             assertThat(resp.header("content-type"), is("text/strange;charset=utf-8"));
             assertThat(resp.body().string(), is("Widget xxx in cat sheep"));
+        }
+    }
+
+    @Test
+    public void repeatedPathParamsAreInjectedThroughSubResourceLocator() throws Exception {
+        class ChildResource {
+            @GET
+            @Path("{id}/{id}/{id}")
+            public String get(@PathParam("id") List<String> ids) {
+                return String.join(",", ids);
+            }
+        }
+        @Path("root")
+        class RootResource {
+            @Path("child")
+            public ChildResource child() {
+                return new ChildResource();
+            }
+        }
+        server = httpsServerForTest()
+            .addHandler(restHandler(new RootResource()).build())
+            .start();
+        try (Response resp = call(request(server.uri().resolve("/root/child/one/two/three")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), is("one,two,three"));
         }
     }
 

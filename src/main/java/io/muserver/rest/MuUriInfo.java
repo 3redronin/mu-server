@@ -128,17 +128,16 @@ class MuUriInfo implements UriInfo {
     @Override
     public MultivaluedMap<String, String> getPathParameters(boolean decode) {
         if (matchedMethod == null) return ReadOnlyMultivaluedMap.empty();
-        Map<String, PathSegment> pp = matchedMethod.pathParams;
+        Map<String, List<PathSegment>> pp = matchedMethod.pathParamValues;
         if (pp.isEmpty()) return ReadOnlyMultivaluedMap.empty();
         MultivaluedMap<String, String> all = new MultivaluedHashMap<>(pp.size());
-        for (Map.Entry<String, PathSegment> entry : pp.entrySet()) {
+        for (Map.Entry<String, List<PathSegment>> entry : pp.entrySet()) {
             String param = entry.getKey();
-            String path = entry.getValue().getPath();
-            if (!all.containsKey(param)) {
-                all.put(param, new ArrayList<>());
+            for (PathSegment segment : entry.getValue()) {
+                String path = segment.getPath();
+                if (!decode) path = urlEncode(path);
+                all.add(param, path);
             }
-            if (!decode) path = urlEncode(path);
-            all.get(param).add(path);
         }
         return readOnly(all);
     }
