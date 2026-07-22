@@ -34,6 +34,23 @@ public class JaxMethodLocatorTest {
         public void get(@QueryParam("id") String id) { }
     }
 
+    private interface InterfaceInheritedThroughSuperclass {
+        @Path("superclass-interface")
+        void go();
+    }
+
+    private interface DirectInterface {
+        @Path("direct-interface")
+        void go();
+    }
+
+    private static class InterfaceBackedSuperclass implements InterfaceInheritedThroughSuperclass {
+        @Override
+        public void go() { }
+    }
+
+    private static class SubclassWithDirectInterface extends InterfaceBackedSuperclass implements DirectInterface { }
+
     @Test
     public void returnsTheGivenMethodIfNoAnnotations() {
         class SuperClass{
@@ -94,6 +111,15 @@ public class JaxMethodLocatorTest {
     public void parameterAnnotationsOnImplementationPreventInheritance() throws NoSuchMethodException {
         Method implementation = ParameterAnnotatedImplementation.class.getDeclaredMethod("get", String.class);
         assertThat(getMethodThatHasJaxRSAnnotations(implementation), equalTo(implementation));
+    }
+
+    @Test
+    public void superclassHierarchyIsPreferredOverADirectInterface() throws NoSuchMethodException {
+        Method inheritedMethod = SubclassWithDirectInterface.class.getMethod("go");
+        Method annotationSource = InterfaceInheritedThroughSuperclass.class.getDeclaredMethod("go");
+
+        assertThat(getMethodThatHasJaxRSAnnotations(inheritedMethod, SubclassWithDirectInterface.class),
+            equalTo(annotationSource));
     }
 
     private static Method goMethod(Class<?> clazz) {

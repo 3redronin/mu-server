@@ -30,6 +30,9 @@ class JaxMethodLocator {
         if (declared != null) {
             return declared;
         }
+        // Keep the class hierarchy ahead of directly implemented interfaces. If both eventual
+        // annotation sources are interfaces, JAX-RS leaves their precedence implementation-specific;
+        // this ordering also keeps an inherited method's existing annotation source stable.
         Method inherited = findAnnotatedMethod(start, clazz.getSuperclass(), concreteClass);
         if (inherited != null) {
             return inherited;
