@@ -217,7 +217,7 @@ public class RestHandler implements MuHandler {
         }
         Response response = ex instanceof WebApplicationException && ((WebApplicationException) ex).getResponse().hasEntity()
             ? null
-            : customExceptionMapper.toResponse(ex);
+            : request.mapExceptionOnce(customExceptionMapper, ex);
         if (response == null && ex instanceof WebApplicationException) {
             dealWithWebApplicationException(nestingLevel, request, muResponse, (WebApplicationException) ex, acceptHeaders, producesRef == null ? emptyList() : producesRef, directlyProducesRef == null ? emptyList() : directlyProducesRef);
         } else if (response == null) {

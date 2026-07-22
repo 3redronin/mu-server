@@ -755,6 +755,57 @@ public class FilterTest {
         assertThat(responseFilterCalls.get(), equalTo(1));
     }
 
+    @Test
+    public void globalResponseFiltersRunForAnExceptionMappedBeforeMatching() throws IOException {
+        @PreMatching
+        class ThrowingFilter implements ContainerRequestFilter {
+            @Override
+            public void filter(ContainerRequestContext requestContext) {
+                throw new IllegalArgumentException("broken before matching");
+            }
+        }
+
+        server = httpsServerForTest()
+            .addHandler(restHandler(new BrokenResource())
+                .addRequestFilter(new ThrowingFilter())
+                .addExceptionMapper(IllegalArgumentException.class, exception -> jakarta.ws.rs.core.Response.ok("100").build())
+                .addResponseFilter((requestContext, responseContext) ->
+                    responseContext.setEntity(responseContext.getEntity() + " filtered")))
+            .start();
+
+        try (Response response = call(request(server.uri().resolve("/broken")))) {
+            assertThat(response.code(), equalTo(200));
+            assertThat(response.body().string(), is("100 filtered"));
+        }
+    }
+
+    @Test
+    public void exceptionMapperIsNotUsedAgainWhenWritingItsResponseFails() throws IOException {
+        AtomicInteger mapperCalls = new AtomicInteger();
+
+        server = httpsServerForTest()
+            .addHandler(restHandler(new BrokenResource())
+                .addRequestFilter(new ContainerRequestFilter() {
+                    @Override
+                    public void filter(ContainerRequestContext requestContext) {
+                        throw new IllegalArgumentException("first exception");
+                    }
+                })
+                .addExceptionMapper(IllegalArgumentException.class, exception -> {
+                    mapperCalls.incrementAndGet();
+                    return jakarta.ws.rs.core.Response.ok("mapped").build();
+                })
+                .addResponseFilter((requestContext, responseContext) -> {
+                    throw new IllegalArgumentException("second exception");
+                }))
+            .start();
+
+        try (Response response = call(request(server.uri().resolve("/broken")))) {
+            assertThat(response.code(), equalTo(500));
+        }
+        assertThat(mapperCalls.get(), equalTo(1));
+    }
+
     @Path("/broken")
     public static class BrokenResource {
 
