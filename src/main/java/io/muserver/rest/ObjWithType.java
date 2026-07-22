@@ -33,6 +33,10 @@ class ObjWithType {
     }
 
     static ObjWithType objType(Object valueFromMethod) {
+        return objType(valueFromMethod, null);
+    }
+
+    static ObjWithType objType(Object valueFromMethod, Type resourceMethodReturnType) {
         if (valueFromMethod == null) {
             return EMPTY;
         }
@@ -54,7 +58,7 @@ class ObjWithType {
             genericType = ge.getType();
         } else {
             type = entity == null ? null : entity.getClass();
-            genericType = type;
+            genericType = response == null && resourceMethodReturnType != null ? resourceMethodReturnType : type;
         }
         return new ObjWithType(type, genericType, response, entity);
     }

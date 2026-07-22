@@ -31,47 +31,54 @@ abstract class ResourceMethodParam {
 
     final int index;
     final Parameter parameterHandle;
+    final Class<?> type;
+    final Type genericType;
+    final Annotation[] annotations;
     final ValueSource source;
     final DescriptionData descriptionData;
     final boolean isRequired;
 
-    ResourceMethodParam(int index, ValueSource source, Parameter parameterHandle, DescriptionData descriptionData, boolean isRequired) {
+    ResourceMethodParam(int index, ValueSource source, ResolvedParameter parameter, DescriptionData descriptionData, boolean isRequired) {
         this.index = index;
         this.source = source;
-        this.parameterHandle = parameterHandle;
+        this.parameterHandle = parameter.handle;
+        this.type = parameter.type;
+        this.genericType = parameter.genericType;
+        this.annotations = parameter.annotations;
         this.descriptionData = descriptionData;
         this.isRequired = isRequired;
     }
 
     static ResourceMethodParam fromParameter(int index, Parameter parameterHandle, List<ParamConverterProvider> paramConverterProviders, UriPattern methodPattern) {
+        return fromParameter(index, parameterHandle, parameterHandle,
+            parameterHandle.getDeclaringExecutable().getDeclaringClass(), paramConverterProviders, methodPattern);
+    }
 
+    static ResourceMethodParam fromParameter(int index, Parameter parameterHandle, Parameter annotationSource, Class<?> concreteClass,
+                                             List<ParamConverterProvider> paramConverterProviders, UriPattern methodPattern) {
+
+        ResolvedParameter parameter = new ResolvedParameter(parameterHandle, annotationSource, concreteClass);
         Pattern pattern = null;
-        ValueSource source = getSource(parameterHandle);
-        boolean isRequired = source == ValueSource.PATH_PARAM || hasDeclared(parameterHandle, Required.class);
+        ValueSource source = getSource(annotationSource);
+        boolean isRequired = source == ValueSource.PATH_PARAM || hasDeclared(annotationSource, Required.class);
         if (source == ValueSource.MESSAGE_BODY) {
-            DescriptionData descriptionData = DescriptionData.fromAnnotation(parameterHandle, null);
-            return new MessageBodyParam(index, source, parameterHandle, descriptionData, isRequired);
+            DescriptionData descriptionData = DescriptionData.fromAnnotation(annotationSource, null);
+            return new MessageBodyParam(index, source, parameter, descriptionData, isRequired);
         } else if (source == ValueSource.CONTEXT) {
-            return new ContextParam(index, source, parameterHandle);
+            return new ContextParam(index, source, parameter);
         } else if (source == ValueSource.SUSPENDED) {
-            return new SuspendedParam(index, source, parameterHandle);
+            return new SuspendedParam(index, source, parameter);
         } else {
-            boolean encodedRequested = hasDeclared(parameterHandle, Encoded.class);
-            boolean isDeprecated = hasDeclared(parameterHandle, Deprecated.class);
-            ParamConverter<?> converter = getParamConverter(parameterHandle, paramConverterProviders);
+            boolean encodedRequested = hasDeclared(annotationSource, Encoded.class);
+            boolean isDeprecated = hasDeclared(annotationSource, Deprecated.class);
+            String key = parameterName(source, annotationSource);
+            ParamConverter<?> converter = getParamConverter(parameter, paramConverterProviders);
             boolean lazyDefaultValue = converter.getClass().getDeclaredAnnotation(ParamConverter.Lazy.class) != null;
-            boolean explicitDefault = hasDeclared(parameterHandle, DefaultValue.class);
-            Object defaultValue = getDefaultValue(parameterHandle, converter, lazyDefaultValue, source);
+            boolean explicitDefault = hasDeclared(annotationSource, DefaultValue.class);
+            Object defaultValue = getDefaultValue(parameter, annotationSource, converter, lazyDefaultValue, source, key);
 
-            isRequired |= (!explicitDefault && parameterHandle.getType().isPrimitive());
+            isRequired |= (!explicitDefault && parameter.type.isPrimitive());
 
-            String key = source == ValueSource.COOKIE_PARAM ? parameterHandle.getDeclaredAnnotation(CookieParam.class).value()
-                : source == ValueSource.HEADER_PARAM ? parameterHandle.getDeclaredAnnotation(HeaderParam.class).value()
-                : source == ValueSource.MATRIX_PARAM ? parameterHandle.getDeclaredAnnotation(MatrixParam.class).value()
-                : source == ValueSource.FORM_PARAM ? parameterHandle.getDeclaredAnnotation(FormParam.class).value()
-                : source == ValueSource.PATH_PARAM ? parameterHandle.getDeclaredAnnotation(PathParam.class).value()
-                : source == ValueSource.QUERY_PARAM ? parameterHandle.getDeclaredAnnotation(QueryParam.class).value()
-                : "";
             if (key.length() == 0) {
                 throw new WebApplicationException("No parameter specified for the " + source + " in " + parameterHandle);
             }
@@ -82,9 +89,46 @@ abstract class ResourceMethodParam {
                 }
             }
 
-            DescriptionData descriptionData = DescriptionData.fromAnnotation(parameterHandle, key);
-            return new RequestBasedParam(index, source, parameterHandle, defaultValue, encodedRequested, lazyDefaultValue, converter, descriptionData, key, isDeprecated, isRequired, pattern, explicitDefault);
+            DescriptionData descriptionData = DescriptionData.fromAnnotation(annotationSource, key);
+            return new RequestBasedParam(index, source, parameter, defaultValue, encodedRequested, lazyDefaultValue, converter, descriptionData, key, isDeprecated, isRequired, pattern, explicitDefault);
         }
+    }
+
+    private static final class ResolvedParameter {
+        private final Parameter handle;
+        private final Class<?> type;
+        private final Type genericType;
+        private final Annotation[] annotations;
+
+        private ResolvedParameter(Parameter handle, Parameter annotationSource, Class<?> concreteClass) {
+            this.handle = handle;
+            this.genericType = GenericTypeResolver.resolve(handle.getParameterizedType(), concreteClass,
+                handle.getDeclaringExecutable().getDeclaringClass());
+            Class<?> resolvedClass = GenericTypeResolver.rawClass(genericType);
+            this.type = resolvedClass == null ? handle.getType() : resolvedClass;
+            this.annotations = combinedAnnotations(handle, annotationSource);
+        }
+
+        private static Annotation[] combinedAnnotations(Parameter handle, Parameter annotationSource) {
+            Map<Class<? extends Annotation>, Annotation> combined = new LinkedHashMap<>();
+            for (Annotation annotation : handle.getDeclaredAnnotations()) {
+                combined.put(annotation.annotationType(), annotation);
+            }
+            for (Annotation annotation : annotationSource.getDeclaredAnnotations()) {
+                combined.putIfAbsent(annotation.annotationType(), annotation);
+            }
+            return combined.values().toArray(new Annotation[0]);
+        }
+    }
+
+    private static String parameterName(ValueSource source, Parameter annotationSource) {
+        return source == ValueSource.COOKIE_PARAM ? annotationSource.getDeclaredAnnotation(CookieParam.class).value()
+            : source == ValueSource.HEADER_PARAM ? annotationSource.getDeclaredAnnotation(HeaderParam.class).value()
+            : source == ValueSource.MATRIX_PARAM ? annotationSource.getDeclaredAnnotation(MatrixParam.class).value()
+            : source == ValueSource.FORM_PARAM ? annotationSource.getDeclaredAnnotation(FormParam.class).value()
+            : source == ValueSource.PATH_PARAM ? annotationSource.getDeclaredAnnotation(PathParam.class).value()
+            : source == ValueSource.QUERY_PARAM ? annotationSource.getDeclaredAnnotation(QueryParam.class).value()
+            : "";
     }
 
     static class RequestBasedParam extends ResourceMethodParam {
@@ -114,7 +158,7 @@ abstract class ResourceMethodParam {
             }
             Pattern patternIfNotDefault = this.pattern == null || UriPattern.DEFAULT_CAPTURING_GROUP_PATTERN.equals(this.pattern.pattern()) ? null : this.pattern;
             return builder.withSchema(
-                schemaObjectFrom(parameterHandle.getType(), parameterHandle.getParameterizedType(), isRequired)
+                schemaObjectFrom(type, genericType, isRequired)
                     .withDefaultValue(source == ValueSource.PATH_PARAM || !hasExplicitDefault() ? null : defaultValue())
                     .withExternalDocs(externalDoc)
                     .withPattern(patternIfNotDefault)
@@ -122,8 +166,8 @@ abstract class ResourceMethodParam {
             );
         }
 
-        RequestBasedParam(int index, ValueSource source, Parameter parameterHandle, Object defaultValue, boolean encodedRequested, boolean lazyDefaultValue, ParamConverter paramConverter, DescriptionData descriptionData, String key, boolean isDeprecated, boolean isRequired, Pattern pattern, boolean explicitDefault) {
-            super(index, source, parameterHandle, descriptionData, isRequired);
+        RequestBasedParam(int index, ValueSource source, ResolvedParameter parameter, Object defaultValue, boolean encodedRequested, boolean lazyDefaultValue, ParamConverter paramConverter, DescriptionData descriptionData, String key, boolean isDeprecated, boolean isRequired, Pattern pattern, boolean explicitDefault) {
+            super(index, source, parameter, descriptionData, isRequired);
             this.defaultValue = defaultValue;
             this.encodedRequested = encodedRequested;
             this.lazyDefaultValue = lazyDefaultValue;
@@ -145,19 +189,19 @@ abstract class ResourceMethodParam {
 
         public Object defaultValue() {
             boolean skipConverter = defaultValue != null && !lazyDefaultValue;
-            return convertValue(parameterHandle, paramConverter, skipConverter, defaultValue, source);
+            return convertValue(parameterHandle, type, paramConverter, skipConverter, defaultValue, source, key);
         }
 
         public Object getValue(JaxRSRequest jaxRequest, RequestMatcher.MatchedMethod matchedMethod, CollectionParameterStrategy cps) throws IOException {
             MuRequest muRequest = jaxRequest.muRequest;
-            Class<?> paramClass = parameterHandle.getType();
+            Class<?> paramClass = type;
             if (UploadedFile.class.isAssignableFrom(paramClass)) {
                 return muRequest.uploadedFile(key);
             } else if (File.class.isAssignableFrom(paramClass)) {
                 UploadedFile uf = muRequest.uploadedFile(key);
                 return uf == null ? null : uf.asFile();
             } else if (Collection.class.isAssignableFrom(paramClass)) {
-                Type t = parameterHandle.getParameterizedType();
+                Type t = genericType;
                 if (t instanceof ParameterizedType) {
                     Type[] actualTypeArguments = ((ParameterizedType) t).getActualTypeArguments();
                     if (actualTypeArguments.length == 1) {
@@ -197,8 +241,9 @@ abstract class ResourceMethodParam {
                 return cookieValues.isEmpty() ? null : new CookieBuilder().withName(key).withValue(cookieValues.get(0)).build();
             }
             Collection<Object> collection = createCollection(paramClass);
+            String pathParam = source == ValueSource.PATH_PARAM ? matchedMethod.getPathParam(key) : null;
             List<String> specifiedValue =
-                source == ValueSource.PATH_PARAM ? Collections.singletonList(matchedMethod.getPathParam(key))
+                source == ValueSource.PATH_PARAM ? (pathParam == null ? emptyList() : Collections.singletonList(pathParam))
                     : source == ValueSource.QUERY_PARAM ? getParamValues(jaxRequest.getUriInfo().getQueryParameters(), key, cps, collection != null)
                     : source == ValueSource.HEADER_PARAM ? getParamValues(jaxRequest.getHeaders(), key, cps, collection != null)
                     : source == ValueSource.FORM_PARAM ? muRequest.form().getAll(key)
@@ -214,7 +259,7 @@ abstract class ResourceMethodParam {
             if (collection != null) {
                 if (isSpecified) {
                     for (String stringValue : specifiedValue) {
-                        collection.add(ResourceMethodParam.convertValue(parameterHandle, paramConverter, false, stringValue, source));
+                        collection.add(ResourceMethodParam.convertValue(parameterHandle, type, paramConverter, false, stringValue, source, key));
                     }
                 } else if (hasExplicitDefault()) {
                     collection.add(defaultValue());
@@ -224,7 +269,7 @@ abstract class ResourceMethodParam {
                     : (collection instanceof Set) ? Collections.unmodifiableSet((Set) collection)
                     : Collections.unmodifiableCollection(collection);
             } else {
-                return isSpecified ? ResourceMethodParam.convertValue(parameterHandle, paramConverter, false, specifiedValue.get(0), source) : defaultValue();
+                return isSpecified ? ResourceMethodParam.convertValue(parameterHandle, type, paramConverter, false, specifiedValue.get(0), source, key) : defaultValue();
             }
         }
 
@@ -275,20 +320,20 @@ abstract class ResourceMethodParam {
     }
 
     static class MessageBodyParam extends ResourceMethodParam {
-        MessageBodyParam(int index, ValueSource source, Parameter parameterHandle, DescriptionData descriptionData, boolean isRequired) {
-            super(index, source, parameterHandle, descriptionData, isRequired);
+        MessageBodyParam(int index, ValueSource source, ResolvedParameter parameter, DescriptionData descriptionData, boolean isRequired) {
+            super(index, source, parameter, descriptionData, isRequired);
         }
     }
 
     static class ContextParam extends ResourceMethodParam {
-        ContextParam(int index, ValueSource source, Parameter parameterHandle) {
-            super(index, source, parameterHandle, null, true);
+        ContextParam(int index, ValueSource source, ResolvedParameter parameter) {
+            super(index, source, parameter, null, true);
         }
     }
 
     static class SuspendedParam extends ResourceMethodParam {
-        SuspendedParam(int index, ValueSource source, Parameter parameterHandle) {
-            super(index, source, parameterHandle, null, true);
+        SuspendedParam(int index, ValueSource source, ResolvedParameter parameter) {
+            super(index, source, parameter, null, true);
         }
     }
 
@@ -309,9 +354,9 @@ abstract class ResourceMethodParam {
         return parameterHandle.getDeclaredAnnotation(annotationClass) != null;
     }
 
-    private static ParamConverter<?> getParamConverter(Parameter parameterHandle, List<ParamConverterProvider> paramConverterProviders) {
-        Class<?> paramType = parameterHandle.getType();
-        Type parameterizedType = parameterHandle.getParameterizedType();
+    private static ParamConverter<?> getParamConverter(ResolvedParameter parameter, List<ParamConverterProvider> paramConverterProviders) {
+        Class<?> paramType = parameter.type;
+        Type parameterizedType = parameter.genericType;
         if (Collection.class.isAssignableFrom(paramType) && parameterizedType instanceof ParameterizedType) {
             Type possiblyWildcardType = ((ParameterizedType) parameterizedType).getActualTypeArguments()[0];
             Type type = (possiblyWildcardType instanceof WildcardType) ? ((WildcardType) possiblyWildcardType).getUpperBounds()[0] : possiblyWildcardType;
@@ -319,9 +364,8 @@ abstract class ResourceMethodParam {
                 paramType = (Class<?>) type;
             }
         }
-        Annotation[] declaredAnnotations = parameterHandle.getDeclaredAnnotations();
         for (ParamConverterProvider paramConverterProvider : paramConverterProviders) {
-            ParamConverter<?> converter = paramConverterProvider.getConverter(paramType, parameterizedType, declaredAnnotations);
+            ParamConverter<?> converter = paramConverterProvider.getConverter(paramType, parameterizedType, parameter.annotations);
             if (converter == null && RequestBasedParam.createCollection(paramType) != null && parameterizedType instanceof ParameterizedType) {
                 // Things like List<A> can be converted with just an 'A' param converter, so let's see if we have that
                 ParameterizedType pt = (ParameterizedType) parameterizedType;
@@ -330,24 +374,24 @@ abstract class ResourceMethodParam {
                     ParameterizedType type = (ParameterizedType) ata[0];
                     Type rawType = type.getRawType();
                     if (rawType instanceof Class) {
-                        converter = paramConverterProvider.getConverter((Class) rawType, type, declaredAnnotations);
+                        converter = paramConverterProvider.getConverter((Class) rawType, type, parameter.annotations);
                     }
                 }
             }
             if (converter != null) return converter;
         }
-        throw new MuException("Could not find a suitable ParamConverter for " + parameterizedType + " at " + parameterHandle.getDeclaringExecutable());
+        throw new MuException("Could not find a suitable ParamConverter for " + parameterizedType + " at " + parameter.handle.getDeclaringExecutable());
     }
 
-    private static Object getDefaultValue(Parameter parameterHandle, ParamConverter<?> converter, boolean lazyDefaultValue, ValueSource source) {
-        DefaultValue annotation = parameterHandle.getDeclaredAnnotation(DefaultValue.class);
+    private static Object getDefaultValue(ResolvedParameter parameter, Parameter annotationSource, ParamConverter<?> converter, boolean lazyDefaultValue, ValueSource source, String parameterName) {
+        DefaultValue annotation = annotationSource.getDeclaredAnnotation(DefaultValue.class);
         if (annotation == null) {
             return converter instanceof HasDefaultValue ? ((HasDefaultValue) converter).getDefault() : null;
         }
-        return convertValue(parameterHandle, converter, lazyDefaultValue, annotation.value(), source);
+        return convertValue(parameter.handle, parameter.type, converter, lazyDefaultValue, annotation.value(), source, parameterName);
     }
 
-    private static Object convertValue(Parameter parameterHandle, ParamConverter<?> converter, boolean skipConverter, Object value, ValueSource source) {
+    private static Object convertValue(Parameter parameterHandle, Class<?> parameterType, ParamConverter<?> converter, boolean skipConverter, Object value, ValueSource source, String parameterName) {
         if (converter == null || skipConverter) {
             return value;
         } else {
@@ -364,19 +408,12 @@ abstract class ResourceMethodParam {
                 throw e;
             } catch (Exception e) {
                 if (source == ValueSource.MATRIX_PARAM || source == ValueSource.QUERY_PARAM || source == ValueSource.PATH_PARAM) {
-                    throw new UriParameterConversionException(uriParameterName(parameterHandle, source), (String) value, parameterHandle.getType(), e);
+                    throw new UriParameterConversionException(parameterName, (String) value, parameterType, e);
                 }
-                String message = "Could not convert String value \"" + value + "\" to a " + parameterHandle.getType() + " using " + converter + " on parameter " + parameterHandle;
+                String message = "Could not convert String value \"" + value + "\" to a " + parameterType + " using " + converter + " on parameter " + parameterHandle;
                 throw new BadRequestException(message, e);
             }
         }
-    }
-
-    private static String uriParameterName(Parameter parameter, ValueSource source) {
-        if (source == ValueSource.MATRIX_PARAM) return parameter.getDeclaredAnnotation(MatrixParam.class).value();
-        if (source == ValueSource.QUERY_PARAM) return parameter.getDeclaredAnnotation(QueryParam.class).value();
-        if (source == ValueSource.PATH_PARAM) return parameter.getDeclaredAnnotation(PathParam.class).value();
-        throw new IllegalArgumentException("Not a URI parameter source: " + source);
     }
 
     enum ValueSource {

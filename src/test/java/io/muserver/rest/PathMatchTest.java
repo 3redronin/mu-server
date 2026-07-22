@@ -6,6 +6,7 @@ import java.net.URI;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.hasEntry;
 import static org.hamcrest.Matchers.is;
 
 public class PathMatchTest {
@@ -15,6 +16,14 @@ public class PathMatchTest {
         PathMatch match = UriPattern.uriTemplateToRegex("/fruit/{name}").matcher(URI.create("fruit/orange"));
         assertThat(match.prefixMatches(), is(true));
         assertThat(match.params().get("name"), equalTo("orange"));
+    }
+
+    @Test
+    public void emptyPathCapturesArePresent() {
+        PathMatch match = UriPattern.uriTemplateToRegex("/{name:.*}").matcher(URI.create("/"));
+        assertThat(match.prefixMatches(), is(true));
+        assertThat(match.params(), hasEntry("name", ""));
+        assertThat(match.segments().get("name").getPath(), is(""));
     }
 
 

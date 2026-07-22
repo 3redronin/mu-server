@@ -109,6 +109,32 @@ public class ExceptionMappingProviderTest {
         }
     }
 
+    @Test
+    public void webApplicationExceptionsWithResponseEntitiesAreNotMapped() throws IOException {
+        @Path("samples")
+        class Sample {
+            @GET
+            public String get() {
+                throw new WebApplicationException(jakarta.ws.rs.core.Response.ok("Original response")
+                    .type(MediaType.TEXT_PLAIN_TYPE)
+                    .build());
+            }
+        }
+        this.server = ServerUtils.httpsServerForTest()
+            .addHandler(
+                restHandler(new Sample())
+                    .addExceptionMapper(Throwable.class, exception -> jakarta.ws.rs.core.Response.status(555)
+                        .entity("Mapped response")
+                        .type(MediaType.TEXT_PLAIN_TYPE)
+                        .build())
+            ).start();
+        try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.headers("content-type"), contains("text/plain;charset=utf-8"));
+            assertThat(resp.body().string(), is("Original response"));
+        }
+    }
+
 
     @Test
     public void customWritersCanBeUsedInExceptions() throws Exception {

@@ -89,6 +89,12 @@ class SseBroadcasterImpl implements SseBroadcaster {
         CompletionStage<?> sendStage;
         try {
             sendStage = sink.send(event);
+        } catch (IllegalStateException closed) {
+            if (sinks.remove(sink)) {
+                sendOnCloseEvent(sink);
+            }
+            sendComplete(broadcastFuture, count);
+            return;
         } catch (Throwable throwable) {
             completeSinkSend(sink, throwable, broadcastFuture, count);
             return;

@@ -4,6 +4,7 @@ import io.muserver.Method;
 import io.muserver.openapi.*;
 import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.core.MediaType;
+import org.jspecify.annotations.Nullable;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.InvocationTargetException;
@@ -28,6 +29,7 @@ class ResourceMethod {
     final ResourceClass resourceClass;
     final UriPattern pathPattern;
     final java.lang.reflect.Method methodHandle;
+    final @Nullable Type genericReturnType;
     final Method httpMethod;
     final String pathTemplate;
     final List<MediaType> effectiveConsumes;
@@ -45,6 +47,8 @@ class ResourceMethod {
         this.resourceClass = resourceClass;
         this.pathPattern = pathPattern;
         this.methodHandle = methodHandle;
+        this.genericReturnType = GenericTypeResolver.resolveConcrete(methodHandle.getGenericReturnType(),
+            resourceClass.resourceClass, methodHandle.getDeclaringClass());
         this.params = params;
         this.httpMethod = httpMethod;
         this.pathTemplate = pathTemplate;
@@ -150,8 +154,8 @@ class ResourceMethod {
             .filter(p -> p instanceof ResourceMethodParam.MessageBodyParam)
             .map(ResourceMethodParam.MessageBodyParam.class::cast)
             .map(messageBodyParam -> {
-                Class<?> bodyType = messageBodyParam.parameterHandle.getType();
-                Type bodyParameterizedType = messageBodyParam.parameterHandle.getParameterizedType();
+                Class<?> bodyType = messageBodyParam.type;
+                Type bodyParameterizedType = messageBodyParam.genericType;
                 SchemaReference schemaReference = SchemaReference.find(customSchemas, bodyType, bodyParameterizedType);
                 SchemaObjectBuilder builder = schemaReference != null ? schemaReference.schema.toBuilder() :
                     schemaObjectFrom(bodyType, bodyParameterizedType, messageBodyParam.isRequired)
@@ -194,8 +198,8 @@ class ResourceMethod {
                                                     if (n.isRequired) {
                                                         required.add(n.key);
                                                     }
-                                                    Class<?> paramType = n.parameterHandle.getType();
-                                                    Type paramParameterizedType = n.parameterHandle.getParameterizedType();
+                                                    Class<?> paramType = n.type;
+                                                    Type paramParameterizedType = n.genericType;
 
                                                     SchemaReference schemaReference = SchemaReference.find(customSchemas, paramType, paramParameterizedType);
                                                     SchemaObjectBuilder schemaObjectBuilder = schemaReference != null ? schemaReference.schema.toBuilder() : schemaObjectFrom(paramType, paramParameterizedType, n.isRequired);

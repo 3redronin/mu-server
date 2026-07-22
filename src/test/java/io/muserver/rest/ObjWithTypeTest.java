@@ -1,9 +1,11 @@
 package io.muserver.rest;
 
 import jakarta.ws.rs.core.GenericEntity;
+import jakarta.ws.rs.core.Response;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -34,6 +36,47 @@ public class ObjWithTypeTest {
         ParameterizedType pt = (ParameterizedType) hello.genericType;
         assertThat(pt.getActualTypeArguments()[0], equalTo(Dog.class));
         assertThat(pt.getRawType(), equalTo(List.class));
+    }
+
+    @Test
+    public void declaredGenericTypeIsUsedForDirectEntities() throws NoSuchMethodException {
+        Type declaredType = Sample.class.getDeclaredMethod("direct").getGenericReturnType();
+
+        ObjWithType result = ObjWithType.objType(new ArrayList<String>(), declaredType);
+
+        assertThat(result.type, equalTo(ArrayList.class));
+        assertThat(result.genericType, equalTo(declaredType));
+    }
+
+    @Test
+    public void responseEntityMetadataDoesNotComeFromTheResourceMethod() throws NoSuchMethodException {
+        Type declaredType = Sample.class.getDeclaredMethod("response").getGenericReturnType();
+
+        ObjWithType result = ObjWithType.objType(new JaxRSResponse.Builder().entity(new ArrayList<String>()).build(), declaredType);
+
+        assertThat(result.type, equalTo(ArrayList.class));
+        assertThat(result.genericType, equalTo(ArrayList.class));
+    }
+
+    @Test
+    public void genericEntityMetadataTakesPrecedenceOverTheResourceMethod() throws NoSuchMethodException {
+        Type declaredType = Sample.class.getDeclaredMethod("direct").getGenericReturnType();
+        GenericEntity<List<Integer>> entity = new GenericEntity<List<Integer>>(new ArrayList<>()) { };
+
+        ObjWithType result = ObjWithType.objType(entity, declaredType);
+
+        assertThat(result.type, equalTo(ArrayList.class));
+        assertThat(result.genericType, equalTo(entity.getType()));
+    }
+
+    private static class Sample {
+        List<String> direct() {
+            return null;
+        }
+
+        Response response() {
+            return null;
+        }
     }
 
 }

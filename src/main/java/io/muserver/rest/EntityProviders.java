@@ -26,14 +26,23 @@ class EntityProviders {
         this.writers = writers.stream().map(ProviderWrapper::writer).sorted().collect(Collectors.toList());
     }
     public MessageBodyReader<?> selectReader(Class<?> type, Type genericType, Annotation[] annotations, MediaType requestBodyMediaType) {
-        for (ProviderWrapper<MessageBodyReader<?>> reader : readers) {
-            boolean mediaTypeSupported = reader.mediaTypes.stream().anyMatch(mt -> mt.isCompatible(requestBodyMediaType));
-            boolean typeSupported = !(reader.genericType instanceof Class) || ((Class<?>) reader.genericType).isAssignableFrom(box(type));
-            if (mediaTypeSupported && typeSupported && reader.provider.isReadable(type, genericType, annotations, requestBodyMediaType)) {
-                return reader.provider;
-            }
+        Optional<ProviderWrapper<MessageBodyReader<?>>> best = readers.stream()
+            .filter(reader -> reader.supports(requestBodyMediaType))
+            .filter(reader -> !(reader.genericType instanceof Class) || ((Class<?>) reader.genericType).isAssignableFrom(box(type)))
+            .filter(reader -> reader.provider.isReadable(type, genericType, annotations, requestBodyMediaType))
+            .min(Comparator.comparingInt(reader -> mediaTypeSpecificity(reader, requestBodyMediaType)));
+        if (best.isPresent()) {
+            return best.get().provider;
         }
         throw new NotSupportedException("Could not find a suitable entity provider to read " + type);
+    }
+
+    private static int mediaTypeSpecificity(ProviderWrapper<?> provider, MediaType requestedType) {
+        return provider.mediaTypes.stream()
+            .filter(mediaType -> mediaType.isCompatible(requestedType))
+            .mapToInt(mediaType -> mediaType.isWildcardType() ? 2 : mediaType.isWildcardSubtype() ? 1 : 0)
+            .min()
+            .orElse(2);
     }
 
     private static Class<?> box(Class<?> type) {
@@ -56,10 +65,16 @@ class EntityProviders {
         // 3. SelectthesetofMessageBodyWriterprovidersthatsupport(seeSection4.2.3)theobjectandmedia type of the message entity body.
         Optional<ProviderWrapper<MessageBodyWriter<?>>> best = writers.stream().filter(w -> w.supports(responseMediaType))
             .sorted((o1, o2) -> {
+                // Application-provided providers take precedence over built-in providers.
+                int providerCompare = o1.compareTo(o2);
+                if (providerCompare != 0) {
+                    return providerCompare;
+                }
+
                 // 4. Sort the selected MessageBodyWriter providers with a primary key of generic type where providers whose generic
                 // type is the nearest superclass of the object class are sorted first
 
-                int typeCompare = ProviderWrapper.compareTo(o1, o2, genericType);
+                int typeCompare = ProviderWrapper.compareTo(o1, o2, type);
                 if (typeCompare != 0) {
                     return typeCompare;
                 }
@@ -72,8 +87,7 @@ class EntityProviders {
                     return mtCompare;
                 }
 
-                // Natural order is to prefer user-supplied
-                return o1.compareTo(o2);
+                return 0;
             })
             .filter(w -> w.provider.isWriteable(type, genericType, annotations, responseMediaType))
             .findFirst();

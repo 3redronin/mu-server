@@ -410,6 +410,46 @@ public class ResourceMethodParamTest {
     }
 
     @Test
+    public void inheritedGenericUriParameterConversionFailuresStayNotFound() throws IOException {
+        class BaseResource<T> {
+            @GET
+            @Path("{breed}")
+            public String get(@PathParam("breed") T breed) {
+                return breed.toString();
+            }
+        }
+        @Path("inherited-breeds")
+        class Sample extends BaseResource<Breed> { }
+        server = httpsServerForTest().addHandler(restHandler(new Sample())).start();
+
+        try (Response resp = call(request(server.uri().resolve("/inherited-breeds/CHIHUAHUA")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), is("chihuahua"));
+        }
+        try (Response resp = call(request(server.uri().resolve("/inherited-breeds/BAD_DOG")))) {
+            assertThat(resp.code(), is(404));
+        }
+    }
+
+    @Test
+    public void inheritedInterfaceParameterNamesReachConversionExceptionMappers() throws IOException {
+        server = httpsServerForTest()
+            .addHandler(restHandler(new IntegerLookupResource())
+                .addExceptionMapper(UriParameterConversionException.class, exception ->
+                    jakarta.ws.rs.core.Response.status(400)
+                        .type(jakarta.ws.rs.core.MediaType.TEXT_PLAIN_TYPE)
+                        .entity(exception.getParameterName() + "|" + exception.getParameterValue() + "|"
+                            + exception.getTargetType().getName())
+                        .build()))
+            .start();
+
+        try (Response resp = call(request(server.uri().resolve("/integer-lookup/not-an-int")))) {
+            assertThat(resp.code(), is(400));
+            assertThat(resp.body().string(), is("id|not-an-int|java.lang.Integer"));
+        }
+    }
+
+    @Test
     public void wildcardEnumsCanBeUsed() throws IOException {
         @Path("samples")
         @Produces("text/plain")
@@ -432,6 +472,20 @@ public class ResourceMethodParamTest {
             assertThat(items.opt("nullable"), is(nullValue()));
             assertThat(items.getString("type"), is("string"));
             assertThat(items.getJSONArray("enum"), containsInAnyOrder(Stream.of(Breed.values()).map(Breed::name).toArray()));
+        }
+    }
+
+    private interface GenericLookupResource<T> {
+        @GET
+        @Path("{id}")
+        String get(@PathParam("id") T id);
+    }
+
+    @Path("integer-lookup")
+    private static class IntegerLookupResource implements GenericLookupResource<Integer> {
+        @Override
+        public String get(Integer id) {
+            return id.toString();
         }
     }
 

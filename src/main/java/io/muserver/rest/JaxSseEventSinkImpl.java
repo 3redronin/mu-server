@@ -45,6 +45,9 @@ class JaxSseEventSinkImpl implements SseEventSink {
 
     @Override
     public CompletionStage<?> send(OutboundSseEvent event) {
+        if (isClosed()) {
+            throw new IllegalStateException("The SSE stream was already closed");
+        }
 
         CompletionStage<?> stage = null;
 

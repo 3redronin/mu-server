@@ -158,7 +158,7 @@ public class SseBroadcasterImplTest {
 
     @Test
     public void synchronousSinkFailuresDoNotStopBroadcasting() throws Exception {
-        RuntimeException sendFailure = new IllegalStateException("Sink closed before send");
+        RuntimeException sendFailure = new RuntimeException("Sink failed before send");
         AtomicReference<Throwable> reportedFailure = new AtomicReference<>();
         AtomicReference<OutboundSseEvent> receivedEvent = new AtomicReference<>();
 
@@ -370,6 +370,53 @@ public class SseBroadcasterImplTest {
         awakener.join();
         assertThat(commentException.get(), nullValue());
 
+    }
+
+    @Test
+    public void synchronousSendFailureRemovesSinkAndCompletesBroadcast() throws Exception {
+        IllegalStateException sendFailure = new IllegalStateException("closed during broadcast");
+        List<Throwable> errors = new ArrayList<>();
+        List<SseEventSink> closedSinks = new ArrayList<>();
+        SseBroadcasterImpl broadcaster = new SseBroadcasterImpl();
+        broadcaster.onError((sink, throwable) -> errors.add(throwable));
+        broadcaster.onClose(closedSinks::add);
+        CountDownLatch sendsStarted = new CountDownLatch(2);
+        CountDownLatch releaseSends = new CountDownLatch(1);
+
+        SseEventSink sink = new SseEventSink() {
+            @Override
+            public boolean isClosed() {
+                return false;
+            }
+
+            @Override
+            public CompletionStage<?> send(jakarta.ws.rs.sse.OutboundSseEvent event) {
+                sendsStarted.countDown();
+                try {
+                    releaseSends.await(1, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(e);
+                }
+                throw sendFailure;
+            }
+
+            @Override
+            public void close() {
+            }
+        };
+        broadcaster.register(sink);
+
+        OutboundSseEvent event = MuRuntimeDelegate.createSseFactory().newEvent("Hello");
+        CompletableFuture<?> first = CompletableFuture.runAsync(() -> broadcaster.broadcast(event).toCompletableFuture().join());
+        CompletableFuture<?> second = CompletableFuture.runAsync(() -> broadcaster.broadcast(event).toCompletableFuture().join());
+        assertThat(sendsStarted.await(1, TimeUnit.SECONDS), is(true));
+        releaseSends.countDown();
+        CompletableFuture.allOf(first, second).get(1, TimeUnit.SECONDS);
+
+        assertThat(errors, empty());
+        assertThat(closedSinks, contains(sink));
+        assertThat(broadcaster.connectedSinksCount(), is(0));
     }
 
     @AfterEach

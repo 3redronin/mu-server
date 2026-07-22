@@ -65,6 +65,25 @@ public class JaxRSResponseTest {
     }
 
     @Test
+    public void applicationDateReplacesTheDefaultResponseDate() {
+        Date date = Mutils.fromHttpDate("Mon, 1 Jan 2018 02:23:20 GMT");
+        @Path("/date")
+        class DateResource {
+            @GET
+            public Response get() {
+                return Response.ok().header(HttpHeaders.DATE, date).build();
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new DateResource()))
+            .start();
+        try (okhttp3.Response response = call(request(server.uri().resolve("/date")))) {
+            assertThat(response.headers(HttpHeaders.DATE), contains("Mon, 1 Jan 2018 02:23:20 GMT"));
+        }
+    }
+
+    @Test
     public void headersCanBeGottenFromIt() {
         Response.ResponseBuilder builder = new JaxRSResponse.Builder()
             .allow("GET", "HEAD")

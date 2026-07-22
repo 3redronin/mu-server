@@ -151,6 +151,8 @@ public class MuVariantListBuilderTest {
         assertThat(MuVariantListBuilder.selectVariant(availableVariants, acceptLang("*"), emptyList(), ParameterizedHeaderWithValue.fromString("pkunzip, compress")), equalTo(pkunzip));
         assertThat(MuVariantListBuilder.selectVariant(availableVariants, acceptLang("*"), emptyList(), ParameterizedHeaderWithValue.fromString("pkunzip;q=0.5, compress, gzip")), equalTo(gzip));
         assertThat(MuVariantListBuilder.selectVariant(availableVariants, acceptLang("*"), emptyList(), ParameterizedHeaderWithValue.fromString("pkunzip;q=0.8,gzip;q=0.5")), equalTo(pkunzip));
+        assertThat(MuVariantListBuilder.selectVariant(availableVariants, acceptLang("*"), emptyList(), ParameterizedHeaderWithValue.fromString("*")), oneOf(gzip, pkunzip));
+        assertThat(MuVariantListBuilder.selectVariant(availableVariants, acceptLang("*"), emptyList(), ParameterizedHeaderWithValue.fromString("gzip;q=0, *")), equalTo(pkunzip));
         assertThat(MuVariantListBuilder.selectVariant(availableVariants, acceptLang("*"), emptyList(), ParameterizedHeaderWithValue.fromString("compress")), nullValue());
     }
 

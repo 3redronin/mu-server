@@ -40,6 +40,35 @@ public class SseEventSinkTest {
     private TestSseClient listener = new TestSseClient();
 
     @Test
+    public void sendingAfterCloseThrowsImmediatelyAndRepeatedCloseIsIgnored() throws InterruptedException {
+        AtomicReference<IllegalStateException> sendFailure = new AtomicReference<>();
+
+        @Path("/streamer")
+        class Streamer {
+            @GET
+            @Produces(MediaType.SERVER_SENT_EVENTS)
+            public void eventStream(@Context SseEventSink eventSink, @Context Sse sse) {
+                eventSink.send(sse.newEvent("hello"));
+                eventSink.close();
+                eventSink.close();
+                try {
+                    eventSink.send(sse.newEvent("too late"));
+                } catch (IllegalStateException e) {
+                    sendFailure.set(e);
+                }
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Streamer())).start();
+
+        try (SseClient.ServerSentEvent ignored = sseClient.newServerSentEvent(
+            request().url(server.uri().resolve("/streamer").toString()).build(), listener)) {
+            listener.assertListenerIsClosed();
+        }
+        assertThat(sendFailure.get(), instanceOf(IllegalStateException.class));
+    }
+
+    @Test
     public void canPublishMessagesAndCustomDataWritersAreUsed() throws InterruptedException {
         AtomicReference<Throwable> sendFailure = new AtomicReference<>();
         AtomicReference<Object> customWriterHeader = new AtomicReference<>();
@@ -193,20 +222,25 @@ public class SseEventSinkTest {
         class Streamer {
 
             private void sendStuff(SseEventSink sink, Sse sse) {
-                sink.send(sse.newEvent("Hello"))
-                    .whenCompleteAsync((o, throwable) -> {
-                        if (throwable == null) {
-                            oneSentLatch.countDown();
-                            try {
-                                Thread.sleep(10);
-                            } catch (InterruptedException e) {
-                                throw new RuntimeException(e);
+                try {
+                    sink.send(sse.newEvent("Hello"))
+                        .whenCompleteAsync((o, throwable) -> {
+                            if (throwable == null) {
+                                oneSentLatch.countDown();
+                                try {
+                                    Thread.sleep(10);
+                                } catch (InterruptedException e) {
+                                    Thread.currentThread().interrupt();
+                                    throw new RuntimeException(e);
+                                }
+                                sendStuff(sink, sse);
+                            } else {
+                                failureLatch.countDown();
                             }
-                            sendStuff(sink, sse);
-                        } else {
-                            failureLatch.countDown();
-                        }
-                    });
+                        });
+                } catch (IllegalStateException e) {
+                    failureLatch.countDown();
+                }
             }
 
             @GET

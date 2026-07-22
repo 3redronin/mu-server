@@ -241,7 +241,7 @@ class RequestMatcher {
         // The media type of the request entity body (if any) is a supported input data format (see Section3.5).
         // If no methods support the media type of the request entity body an implementation MUST generate a
         // NotSupportedException (415 status) and no entity.
-        MediaType requestBodyMediaType = requestBodyContentType == null ? MediaTypeHeaderDelegate.NONE : MediaType.valueOf(requestBodyContentType);
+        MediaType requestBodyMediaType = requestBodyContentType == null ? MediaType.WILDCARD_TYPE : MediaType.valueOf(requestBodyContentType);
         result = result.stream().filter(rm -> rm.resourceMethod.canConsume(requestBodyMediaType)).collect(toList());
         if (result.isEmpty()) {
             throw new NotSupportedException();
@@ -270,9 +270,9 @@ class RequestMatcher {
 
     private static CombinedMediaType bestMediaType(List<MediaType> requestedTypes, List<MediaType> serverProvided) {
         return serverProvided.stream()
-            .map(serverType -> requestedTypes.stream().map(clientType -> CombinedMediaType.s(clientType, serverType))
-                .min(Comparator.naturalOrder()).get())
-            .min(Comparator.naturalOrder()).get();
+            .flatMap(serverType -> requestedTypes.stream().map(clientType -> CombinedMediaType.s(clientType, serverType)))
+            .filter(combined -> combined != CombinedMediaType.NONMATCH)
+            .max(Comparator.naturalOrder()).get();
     }
 
     static class StepOneOutput {

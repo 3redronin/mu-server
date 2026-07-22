@@ -2,6 +2,7 @@ package io.muserver.rest;
 
 import io.muserver.MuRequest;
 import io.muserver.MuServer;
+import jakarta.annotation.Priority;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.container.ResourceInfo;
 import jakarta.ws.rs.ext.WriterInterceptor;
@@ -19,6 +20,8 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -30,6 +33,45 @@ import static scaffolding.MuAssert.stopAndCheck;
 public class WriterInterceptorTest {
 
     private MuServer server;
+
+    @Test
+    public void lowerPriorityValueExecutesFirstRegardlessOfRegistrationOrder() throws Exception {
+        List<String> calls = new ArrayList<>();
+        @Priority(100)
+        class First implements WriterInterceptor {
+            @Override
+            public void aroundWriteTo(WriterInterceptorContext context) throws IOException {
+                calls.add("first");
+                context.proceed();
+            }
+        }
+        @Priority(200)
+        class Second implements WriterInterceptor {
+            @Override
+            public void aroundWriteTo(WriterInterceptorContext context) throws IOException {
+                calls.add("second");
+                context.proceed();
+            }
+        }
+        @Path("/priority")
+        class PriorityResource {
+            @GET
+            public String get() {
+                return "hello";
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new PriorityResource())
+                .addWriterInterceptor(new Second())
+                .addWriterInterceptor(new First()))
+            .start();
+
+        try (Response resp = call(request(server.uri().resolve("/priority")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(calls, contains("first", "second"));
+        }
+    }
 
     @Test
     public void interceptorsCanChangeTheResponseEntityAndWrapEachOtherInOrderRegistered() throws Exception {
@@ -98,6 +140,34 @@ public class WriterInterceptorTest {
             assertThat(resp.code(), is(200));
             assertThat(resp.header("content-type"), is("text/plain;charset=utf-8"));
             assertThat(resp.body().string(), equalTo("HELLO"));
+        }
+    }
+
+    @Test
+    public void interceptorHeadersAreAppliedWhenItWritesBeforeTheMessageBodyWriter() throws Exception {
+        @Path("/greetings")
+        class GreetingResource {
+            @GET
+            @Produces("text/plain")
+            public String hello() {
+                return "hello";
+            }
+        }
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new GreetingResource())
+                .addWriterInterceptor(context -> {
+                    context.getHeaders().putSingle("X-Added-By-Interceptor", "the value");
+                    context.getOutputStream().write("prefix-".getBytes(StandardCharsets.UTF_8));
+                    context.proceed();
+                })
+            )
+            .start();
+
+        try (Response resp = call(request(server.uri().resolve("/greetings")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.header("X-Added-By-Interceptor"), equalTo("the value"));
+            assertThat(resp.body().string(), equalTo("prefix-hello"));
+            assertThat(resp.header("content-type"), is("text/plain;charset=utf-8"));
         }
     }
 
@@ -218,6 +288,51 @@ public class WriterInterceptorTest {
     @Target({ ElementType.TYPE, ElementType.METHOD })
     @Retention(value = RetentionPolicy.RUNTIME)
     public @interface UppercaseBinding { }
+
+    @NameBinding
+    @Target({ ElementType.TYPE, ElementType.METHOD })
+    @Retention(value = RetentionPolicy.RUNTIME)
+    public @interface UnusedBinding { }
+
+    @Test
+    public void nonMatchingNameBoundInterceptorDoesNotStopTheChain() throws IOException {
+        @UnusedBinding
+        class UnusedInterceptor implements WriterInterceptor {
+            @Override
+            public void aroundWriteTo(WriterInterceptorContext context) {
+                throw new AssertionError("This interceptor should not run");
+            }
+        }
+
+        @UppercaseBinding
+        class Uppercaser implements WriterInterceptor {
+            @Override
+            public void aroundWriteTo(WriterInterceptorContext context) throws IOException {
+                context.setEntity(((String) context.getEntity()).toUpperCase());
+                context.proceed();
+            }
+        }
+
+        @Path("something")
+        class Resource {
+            @GET
+            @UppercaseBinding
+            public String get() {
+                return "hello";
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new Resource())
+                .addWriterInterceptor(new UnusedInterceptor())
+                .addWriterInterceptor(new Uppercaser()))
+            .start();
+
+        try (Response resp = call(request(server.uri().resolve("/something")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), is("HELLO"));
+        }
+    }
 
     @Test
     public void nameBindingIsCanBeUsedToTargetSpecificMethods() throws IOException {
