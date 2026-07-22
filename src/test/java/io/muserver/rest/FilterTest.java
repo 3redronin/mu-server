@@ -756,14 +756,17 @@ public class FilterTest {
 
     @Test
     public void globalResponseFiltersRunForAnExceptionMappedBeforeMatching() throws IOException {
+        @PreMatching
+        class ThrowingFilter implements ContainerRequestFilter {
+            @Override
+            public void filter(ContainerRequestContext requestContext) {
+                throw new IllegalArgumentException("broken before matching");
+            }
+        }
+
         server = httpsServerForTest()
             .addHandler(restHandler(new BrokenResource())
-                .addRequestFilter(new ContainerRequestFilter() {
-                    @Override
-                    public void filter(ContainerRequestContext requestContext) {
-                        throw new IllegalArgumentException("broken before matching");
-                    }
-                })
+                .addRequestFilter(new ThrowingFilter())
                 .addExceptionMapper(IllegalArgumentException.class, exception -> jakarta.ws.rs.core.Response.ok("100").build())
                 .addResponseFilter((requestContext, responseContext) ->
                     responseContext.setEntity(responseContext.getEntity() + " filtered")))
