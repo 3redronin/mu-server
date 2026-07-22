@@ -13,6 +13,7 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 import okio.BufferedSink;
 import org.example.MyStringReaderWriter;
+import org.example.RuntimeTypeOnlyStringWriter;
 import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Test;
@@ -236,6 +237,24 @@ public class EntityProvidersTest {
         try (Response resp = call(request(server.uri().resolve("/custom-async-dogs")))) {
             assertThat(resp.code(), equalTo(200));
             assertThat(resp.body().string(), equalTo("dogs"));
+        }
+    }
+
+    @Test
+    public void rawCompletionStageFallsBackToTheRuntimeEntityType() throws Exception {
+        @Path("raw-async")
+        class Sample {
+            @GET
+            @SuppressWarnings("rawtypes")
+            public CompletableFuture get() {
+                return CompletableFuture.completedFuture("entity");
+            }
+        }
+        this.server = httpsServerForTest().addHandler(
+            restHandler(new Sample()).addCustomWriter(new RuntimeTypeOnlyStringWriter()).build()).start();
+        try (Response resp = call(request(server.uri().resolve("/raw-async")))) {
+            assertThat(resp.code(), equalTo(200));
+            assertThat(resp.body().string(), equalTo("runtime-type"));
         }
     }
 

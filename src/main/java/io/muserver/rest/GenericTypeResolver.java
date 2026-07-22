@@ -30,7 +30,30 @@ final class GenericTypeResolver {
             return null;
         }
         Type resolved = resolve(typeVariable, typeArguments);
-        return resolved.equals(typeVariable) ? null : resolved;
+        return containsTypeVariable(resolved) ? null : resolved;
+    }
+
+    private static boolean containsTypeVariable(Type type) {
+        if (type instanceof TypeVariable) {
+            return true;
+        }
+        if (type instanceof ParameterizedType) {
+            ParameterizedType parameterizedType = (ParameterizedType) type;
+            if (parameterizedType.getOwnerType() != null && containsTypeVariable(parameterizedType.getOwnerType())) {
+                return true;
+            }
+            return Arrays.stream(parameterizedType.getActualTypeArguments())
+                .anyMatch(GenericTypeResolver::containsTypeVariable);
+        }
+        if (type instanceof GenericArrayType) {
+            return containsTypeVariable(((GenericArrayType) type).getGenericComponentType());
+        }
+        if (type instanceof WildcardType) {
+            WildcardType wildcardType = (WildcardType) type;
+            return Arrays.stream(wildcardType.getUpperBounds()).anyMatch(GenericTypeResolver::containsTypeVariable)
+                || Arrays.stream(wildcardType.getLowerBounds()).anyMatch(GenericTypeResolver::containsTypeVariable);
+        }
+        return false;
     }
 
     private static boolean findTypeArguments(Type currentType, Class<?> declaringClass,
