@@ -7,6 +7,7 @@ import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.core.PathSegment;
+import jakarta.ws.rs.ext.ParamConverter;
 import okhttp3.Response;
 import org.hamcrest.Matchers;
 import org.junit.After;
@@ -136,6 +137,52 @@ public class JaxMatchingTest {
         try (Response resp = call(request(server.uri().resolve("/default-segments")))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.body().string(), is("DEFAULT:red"));
+        }
+    }
+
+    @Test
+    public void pathSegmentSubtypeCollectionsUseCustomConverters() throws IOException {
+        class CustomSegment implements PathSegment {
+            private final String path;
+
+            CustomSegment(String path) {
+                this.path = path;
+            }
+
+            @Override
+            public String getPath() {
+                return path;
+            }
+
+            @Override
+            public jakarta.ws.rs.core.MultivaluedMap<String, String> getMatrixParameters() {
+                return ReadOnlyMultivaluedMap.empty();
+            }
+        }
+        @Path("/custom-segments/{id}/{id}")
+        class CustomPathResource {
+            @GET
+            public String get(@PathParam("id") List<CustomSegment> segments) {
+                return segments.get(0).getPath() + "," + segments.get(1).getPath();
+            }
+        }
+        ParamConverter<CustomSegment> converter = new ParamConverter<CustomSegment>() {
+            @Override
+            public CustomSegment fromString(String value) {
+                return new CustomSegment("converted-" + value);
+            }
+
+            @Override
+            public String toString(CustomSegment value) {
+                return value.getPath();
+            }
+        };
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new CustomPathResource()).addCustomParamConverter(CustomSegment.class, converter).build())
+            .start();
+        try (Response resp = call(request(server.uri().resolve("/custom-segments/a/b")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), is("converted-a,converted-b"));
         }
     }
 

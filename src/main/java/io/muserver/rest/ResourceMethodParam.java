@@ -290,7 +290,7 @@ abstract class ResourceMethodParam {
                 Type[] upperBounds = ((WildcardType) elementType).getUpperBounds();
                 elementType = upperBounds.length == 0 ? elementType : upperBounds[0];
             }
-            return elementType instanceof Class && PathSegment.class.isAssignableFrom((Class<?>) elementType);
+            return PathSegment.class.equals(elementType);
         }
 
         private static Collection<?> readOnly(Collection<?> collection) {
