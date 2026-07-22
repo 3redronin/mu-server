@@ -6,6 +6,7 @@ import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
+import jakarta.ws.rs.core.PathSegment;
 import okhttp3.Response;
 import org.hamcrest.Matchers;
 import org.junit.After;
@@ -97,6 +98,25 @@ public class JaxMatchingTest {
         try (Response resp = call(request(server.uri().resolve("/repeated/one/two/three")))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.body().string(), is("one,two,three"));
+        }
+    }
+
+    @Test
+    public void repeatedPathSegmentsRetainMatrixParameters() throws IOException {
+        @Path("/segments/{id}/{id}")
+        class RepeatedPathResource {
+            @GET
+            public String get(@PathParam("id") List<PathSegment> ids) {
+                return ids.get(0).getPath() + ":" + ids.get(0).getMatrixParameters().getFirst("color") + ","
+                    + ids.get(1).getPath() + ":" + ids.get(1).getMatrixParameters().getFirst("color");
+            }
+        }
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new RepeatedPathResource()).build())
+            .start();
+        try (Response resp = call(request(server.uri().resolve("/segments/a;color=red/b;color=blue")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), is("a:red,b:blue"));
         }
     }
 

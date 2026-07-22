@@ -246,9 +246,11 @@ class RequestMatcher {
         }
 
         public List<String> getPathParams(String key) {
-            List<PathSegment> segments = pathParamValues.get(key);
-            if (segments == null) return Collections.emptyList();
-            return segments.stream().map(PathSegment::getPath).collect(toList());
+            return getPathSegments(key).stream().map(PathSegment::getPath).collect(toList());
+        }
+
+        public List<PathSegment> getPathSegments(String key) {
+            return pathParamValues.getOrDefault(key, Collections.emptyList());
         }
     }
 

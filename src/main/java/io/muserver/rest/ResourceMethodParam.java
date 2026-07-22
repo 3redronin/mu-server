@@ -241,6 +241,12 @@ abstract class ResourceMethodParam {
                 return cookieValues.isEmpty() ? null : new CookieBuilder().withName(key).withValue(cookieValues.get(0)).build();
             }
             Collection<Object> collection = createCollection(paramClass);
+            if (collection != null && source == ValueSource.PATH_PARAM && isPathSegmentCollection()) {
+                for (PathSegment segment : matchedMethod.getPathSegments(key)) {
+                    collection.add(encodedRequested ? ((MuPathSegment) segment).toEncoded() : segment);
+                }
+                return readOnly(collection);
+            }
             String pathParam = source == ValueSource.PATH_PARAM ? matchedMethod.getPathParam(key) : null;
             List<String> specifiedValue =
                 source == ValueSource.PATH_PARAM ? (collection == null
@@ -266,13 +272,27 @@ abstract class ResourceMethodParam {
                 } else if (hasExplicitDefault()) {
                     collection.add(defaultValue());
                 }
-                return (collection instanceof List) ? Collections.unmodifiableList((List) collection)
-                    : (collection instanceof SortedSet) ? Collections.unmodifiableSortedSet((SortedSet) collection)
-                    : (collection instanceof Set) ? Collections.unmodifiableSet((Set) collection)
-                    : Collections.unmodifiableCollection(collection);
+                return readOnly(collection);
             } else {
                 return isSpecified ? ResourceMethodParam.convertValue(parameterHandle, type, paramConverter, false, specifiedValue.get(0), source, key) : defaultValue();
             }
+        }
+
+        private boolean isPathSegmentCollection() {
+            if (!(genericType instanceof ParameterizedType)) return false;
+            Type elementType = ((ParameterizedType) genericType).getActualTypeArguments()[0];
+            if (elementType instanceof WildcardType) {
+                Type[] upperBounds = ((WildcardType) elementType).getUpperBounds();
+                elementType = upperBounds.length == 0 ? elementType : upperBounds[0];
+            }
+            return elementType instanceof Class && PathSegment.class.isAssignableFrom((Class<?>) elementType);
+        }
+
+        private static Collection<?> readOnly(Collection<?> collection) {
+            return (collection instanceof List) ? Collections.unmodifiableList((List) collection)
+                : (collection instanceof SortedSet) ? Collections.unmodifiableSortedSet((SortedSet) collection)
+                : (collection instanceof Set) ? Collections.unmodifiableSet((Set) collection)
+                : Collections.unmodifiableCollection(collection);
         }
 
         private List<String> getParamValues(MultivaluedMap<String, String> queryParameters, String key, CollectionParameterStrategy cps, boolean isCollectionType) {
