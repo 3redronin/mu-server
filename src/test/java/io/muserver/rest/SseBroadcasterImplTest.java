@@ -1,6 +1,11 @@
 package io.muserver.rest;
 
+import io.muserver.MuRequest;
+import io.muserver.MuResponse;
 import io.muserver.MuServer;
+import io.muserver.ResponseCompleteListener;
+import io.muserver.ResponseInfo;
+import io.muserver.ResponseState;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
@@ -24,6 +29,7 @@ import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Modifier;
+import java.lang.reflect.Proxy;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
@@ -578,6 +584,78 @@ public class SseBroadcasterImplTest {
         assertThat(errorNotifications.get(), is(1));
         releaseClose.countDown();
         close.get(1, TimeUnit.SECONDS);
+    }
+
+    @Test
+    public void nonCascadingCloseIgnoresLaterResponseCompletionErrors() {
+        SseBroadcasterImpl broadcaster = new SseBroadcasterImpl();
+        AtomicInteger closeCalls = new AtomicInteger();
+        AtomicInteger errorNotifications = new AtomicInteger();
+        class CapturingSink extends JaxSseEventSinkImpl {
+            private ResponseCompleteListener responseCompleteListener;
+
+            private CapturingSink() {
+                super(null, null, null);
+            }
+
+            @Override
+            void setResponseCompleteHandler(ResponseCompleteListener listener) {
+                responseCompleteListener = listener;
+            }
+
+            @Override
+            public boolean isClosed() {
+                return false;
+            }
+
+            @Override
+            public CompletionStage<?> send(OutboundSseEvent event) {
+                return CompletableFuture.completedFuture(null);
+            }
+
+            @Override
+            public void close() {
+                closeCalls.incrementAndGet();
+            }
+        }
+        CapturingSink sink = new CapturingSink();
+        broadcaster.onError((failedSink, error) -> errorNotifications.incrementAndGet());
+        broadcaster.register(sink);
+        broadcaster.close(false);
+
+        MuResponse response = (MuResponse) Proxy.newProxyInstance(
+            MuResponse.class.getClassLoader(),
+            new Class<?>[]{MuResponse.class},
+            (proxy, method, args) -> {
+                if (method.getName().equals("responseState")) {
+                    return ResponseState.CLIENT_DISCONNECTED;
+                }
+                throw new UnsupportedOperationException(method.getName());
+            });
+        sink.responseCompleteListener.onComplete(new ResponseInfo() {
+            @Override
+            public long duration() {
+                return 0;
+            }
+
+            @Override
+            public boolean completedSuccessfully() {
+                return false;
+            }
+
+            @Override
+            public MuRequest request() {
+                return null;
+            }
+
+            @Override
+            public MuResponse response() {
+                return response;
+            }
+        });
+
+        assertThat(errorNotifications.get(), is(0));
+        assertThat(closeCalls.get(), is(0));
     }
 
     private static SseEventSink sink(AtomicBoolean closed) {

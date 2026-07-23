@@ -59,7 +59,7 @@ class SseBroadcasterImpl implements SseBroadcaster {
                         case ERRORED:
                             ex = new MuException("Generic error");
                     }
-                    onSinkErrored(registration, ex);
+                    onSinkErrored(registration, ex, true);
                 }
             });
         }
@@ -91,7 +91,7 @@ class SseBroadcasterImpl implements SseBroadcaster {
                 try {
                     sink.send(event).whenComplete((o, throwable) -> {
                         if (throwable != null) {
-                            onSinkErrored(registration, throwable);
+                            onSinkErrored(registration, throwable, false);
                         }
                         sendComplete(completableFuture, count);
                     });
@@ -106,9 +106,10 @@ class SseBroadcasterImpl implements SseBroadcaster {
         return completableFuture;
     }
 
-    private void onSinkErrored(SinkRegistration registration, Throwable throwable) {
-        sinks.remove(registration);
-        if (registration.errorNotified.compareAndSet(false, true)) {
+    private void onSinkErrored(SinkRegistration registration, Throwable throwable, boolean requireCurrentRegistration) {
+        boolean wasRegistered = sinks.remove(registration);
+        if ((!requireCurrentRegistration || wasRegistered)
+            && registration.errorNotified.compareAndSet(false, true)) {
             try {
                 registration.sink.close();
             } catch (Exception ignored) {
