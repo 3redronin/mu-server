@@ -368,6 +368,37 @@ public class SseBroadcasterImplTest {
     }
 
     @Test
+    public void closeDoesNotInvokeApplicationCallbacksWhileHoldingBroadcasterLock() {
+        SseBroadcasterImpl broadcaster = new SseBroadcasterImpl();
+        AtomicBoolean sinkCloseHeldLock = new AtomicBoolean();
+        AtomicBoolean closeListenerHeldLock = new AtomicBoolean();
+        SseEventSink sink = new SseEventSink() {
+            @Override
+            public boolean isClosed() {
+                return false;
+            }
+
+            @Override
+            public CompletionStage<?> send(OutboundSseEvent event) {
+                return CompletableFuture.completedFuture(null);
+            }
+
+            @Override
+            public void close() {
+                sinkCloseHeldLock.set(Thread.holdsLock(broadcaster));
+            }
+        };
+        broadcaster.onClose(closedSink ->
+            closeListenerHeldLock.set(Thread.holdsLock(broadcaster)));
+        broadcaster.register(sink);
+
+        broadcaster.close();
+
+        assertThat(sinkCloseHeldLock.get(), is(false));
+        assertThat(closeListenerHeldLock.get(), is(false));
+    }
+
+    @Test
     public void nonCascadingCloseLeavesSinksOpen() {
         SseBroadcasterImpl broadcaster = new SseBroadcasterImpl();
         AtomicBoolean sinkClosed = new AtomicBoolean();
