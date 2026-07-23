@@ -317,8 +317,12 @@ public class RestHandler implements MuHandler {
                         applyDefaultCharset(jaxRSResponse);
 
                         try {
+                            OutputStream responseEntityStream = jaxRSResponse.getOutputStream();
                             messageBodyWriter.writeTo(jaxRSResponse.getEntity(), jaxRSResponse.getType(), jaxRSResponse.getGenericType(), writerAnnontations,
-                                jaxRSResponse.getMediaType(), jaxRSResponse.getHeaders(), jaxRSResponse.getOutputStream());
+                                jaxRSResponse.getMediaType(), jaxRSResponse.getHeaders(), responseEntityStream);
+                            if (entityStreamReplaced) {
+                                responseEntityStream.close();
+                            }
                             out.prepare();
                         } catch (Exception e) {
                             // remove the added headers before rewriting

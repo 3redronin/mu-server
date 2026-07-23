@@ -15,6 +15,7 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.io.BufferedOutputStream;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -459,13 +460,13 @@ public class FilterTest {
                 .addResponseFilter((requestContext, responseContext) -> {
                     OutputStream original = responseContext.getEntityStream();
                     assertThat(original, is(notNullValue()));
-                    responseContext.setEntityStream(new FilterOutputStream(original) {
+                    responseContext.setEntityStream(new BufferedOutputStream(new FilterOutputStream(original) {
                         @Override
                         public void write(byte[] bytes, int offset, int length) throws IOException {
                             out.write("prefix-".getBytes(java.nio.charset.StandardCharsets.UTF_8));
                             out.write(bytes, offset, length);
                         }
-                    });
+                    }));
                 }))
             .start();
 
