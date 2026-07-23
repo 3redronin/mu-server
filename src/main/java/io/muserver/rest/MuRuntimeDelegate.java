@@ -39,7 +39,7 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
 
     private final Map<Class<?>, HeaderDelegate> headerDelegates = new HashMap<>();
 
-    private MuRuntimeDelegate() {
+    public MuRuntimeDelegate() {
         headerDelegates.put(MediaType.class, new MediaTypeHeaderDelegate());
         headerDelegates.put(CacheControl.class, new CacheControlHeaderDelegate());
         headerDelegates.put(NewCookie.class, new NewCookieHeaderDelegate());
@@ -139,17 +139,17 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
 
     @Override
     public SeBootstrap.Configuration.Builder createConfigurationBuilder() {
-        throw new NotImplementedException("MuServer does not support configuration");
+        return new MuSeBootstrap.ConfigurationBuilder();
     }
 
     @Override
     public CompletionStage<SeBootstrap.Instance> bootstrap(Application application, SeBootstrap.Configuration configuration) {
-        throw new NotImplementedException("MuServer does not support bootstraping");
+        return MuSeBootstrap.start(application, configuration);
     }
 
     @Override
     public CompletionStage<SeBootstrap.Instance> bootstrap(Class<? extends Application> clazz, SeBootstrap.Configuration configuration) {
-        throw new NotImplementedException("MuServer does not support bootstraping");
+        return MuSeBootstrap.start(clazz, configuration);
     }
 
     @Override
