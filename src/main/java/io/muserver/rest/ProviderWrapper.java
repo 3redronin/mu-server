@@ -78,7 +78,7 @@ class ProviderWrapper<T> implements Comparable<ProviderWrapper<T>> {
     }
 
     @SuppressWarnings("unchecked")
-    public static int compareTo(ProviderWrapper<?> o1, ProviderWrapper<?> o2, Type genericType) {
+    public static int compareTo(ProviderWrapper<MessageBodyWriter<?>> o1, ProviderWrapper<MessageBodyWriter<?>> o2, Type genericType) {
         if (o1.genericType.equals(o2.genericType)) {
             return 0;
         }

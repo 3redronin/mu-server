@@ -14,6 +14,7 @@ import okhttp3.Response;
 import okio.BufferedSink;
 import org.example.MyStringReaderWriter;
 import org.example.NumberWriter;
+import org.example.ObjectReader;
 import org.example.RuntimeTypeOnlyStringWriter;
 import org.hamcrest.Matchers;
 import org.junit.After;
@@ -85,6 +86,20 @@ public class EntityProvidersTest {
             assertThat(resp.header("Content-Type"), equalTo("text/plain;charset=utf-8"));
             assertThat(resp.body().string(), equalTo("--HELLO WORLD--"));
         }
+    }
+
+    @Test
+    public void broadApplicationReaderOverridesMoreSpecificBuiltInReader() {
+        ObjectReader applicationReader = new ObjectReader();
+        EntityProviders providers = new EntityProviders(
+            asList(applicationReader, StringEntityProviders.stringEntityReaders.get(0)),
+            Collections.emptyList());
+
+        assertThat(providers.selectReader(
+            String.class,
+            String.class,
+            new Annotation[0],
+            jakarta.ws.rs.core.MediaType.TEXT_PLAIN_TYPE), Matchers.sameInstance(applicationReader));
     }
 
     @Test
