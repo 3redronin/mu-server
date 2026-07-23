@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.annotation.Annotation;
+import java.lang.ref.Cleaner;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
@@ -296,11 +297,12 @@ final class MultipartEntityProvider implements MessageBodyReader<List<EntityPart
     }
 
     private static final class DeletingFileInputStream extends FileInputStream {
-        private final File file;
+        private static final Cleaner CLEANER = Cleaner.create();
+        private final Cleaner.Cleanable cleanable;
 
         private DeletingFileInputStream(File file) throws IOException {
             super(file);
-            this.file = file;
+            this.cleanable = CLEANER.register(this, file::delete);
         }
 
         @Override
@@ -308,7 +310,7 @@ final class MultipartEntityProvider implements MessageBodyReader<List<EntityPart
             try {
                 super.close();
             } finally {
-                file.delete();
+                cleanable.clean();
             }
         }
     }
