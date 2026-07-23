@@ -6,6 +6,8 @@ import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
+import jakarta.ws.rs.core.PathSegment;
+import jakarta.ws.rs.ext.ParamConverter;
 import okhttp3.Response;
 import org.hamcrest.Matchers;
 import org.junit.After;
@@ -15,6 +17,7 @@ import scaffolding.ServerUtils;
 
 import java.io.IOException;
 import java.net.URI;
+import java.util.List;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.CoreMatchers.is;
@@ -68,13 +71,168 @@ public class JaxMatchingTest {
             assertThat(resp.code(), is(404));
         }
         try (Response resp = call(request(server.uri().resolve("/tiger/TIGER/TIGER/TIGER")))) {
-            assertThat(resp.code(), is(404));
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), is("TIGER"));
         }
         try (Response resp = call(request(server.uri().resolve("/dog/tiger/tiger/tiger")))) {
-            assertThat(resp.code(), is(404));
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), is("tiger"));
         }
         try (Response resp = call(request(server.uri().resolve("/tiger/tiger/tiger/dog")))) {
-            assertThat(resp.code(), is(404));
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), is("dog"));
+        }
+    }
+
+    @Test
+    public void repeatedPathParamsAreInjectedAsAList() throws IOException {
+        @Path("/repeated/{id}/{id}/{id}")
+        class RepeatedPathResource {
+            @GET
+            public String get(@PathParam("id") List<String> ids) {
+                return String.join(",", ids);
+            }
+        }
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new RepeatedPathResource()).build())
+            .start();
+        try (Response resp = call(request(server.uri().resolve("/repeated/one/two/three")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), is("one,two,three"));
+        }
+    }
+
+    @Test
+    public void repeatedPathSegmentsRetainMatrixParameters() throws IOException {
+        @Path("/segments/{id}/{id}")
+        class RepeatedPathResource {
+            @GET
+            public String get(@PathParam("id") List<PathSegment> ids) {
+                return ids.get(0).getPath() + ":" + ids.get(0).getMatrixParameters().getFirst("color") + ","
+                    + ids.get(1).getPath() + ":" + ids.get(1).getMatrixParameters().getFirst("color");
+            }
+        }
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new RepeatedPathResource()).build())
+            .start();
+        try (Response resp = call(request(server.uri().resolve("/segments/a;color=red/b;color=blue")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), is("a:red,b:blue"));
+        }
+    }
+
+    @Test
+    public void absentPathSegmentCollectionsUseDefaultValues() throws IOException {
+        @Path("/default-segments")
+        class DefaultPathResource {
+            @GET
+            public String get(@DefaultValue("DEFAULT;color=red") @PathParam("missing") List<PathSegment> segments) {
+                PathSegment segment = segments.get(0);
+                return segment.getPath() + ":" + segment.getMatrixParameters().getFirst("color");
+            }
+        }
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new DefaultPathResource()).build())
+            .start();
+        try (Response resp = call(request(server.uri().resolve("/default-segments")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), is("DEFAULT:red"));
+        }
+    }
+
+    @Test
+    public void pathSegmentSubtypeCollectionsUseCustomConverters() throws IOException {
+        class CustomSegment implements PathSegment {
+            private final String path;
+
+            CustomSegment(String path) {
+                this.path = path;
+            }
+
+            @Override
+            public String getPath() {
+                return path;
+            }
+
+            @Override
+            public jakarta.ws.rs.core.MultivaluedMap<String, String> getMatrixParameters() {
+                return ReadOnlyMultivaluedMap.empty();
+            }
+        }
+        @Path("/custom-segments/{id}/{id}")
+        class CustomPathResource {
+            @GET
+            public String get(@PathParam("id") List<CustomSegment> segments) {
+                return segments.get(0).getPath() + "," + segments.get(1).getPath();
+            }
+        }
+        ParamConverter<CustomSegment> converter = new ParamConverter<CustomSegment>() {
+            @Override
+            public CustomSegment fromString(String value) {
+                return new CustomSegment("converted-" + value);
+            }
+
+            @Override
+            public String toString(CustomSegment value) {
+                return value.getPath();
+            }
+        };
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new CustomPathResource()).addCustomParamConverter(CustomSegment.class, converter).build())
+            .start();
+        try (Response resp = call(request(server.uri().resolve("/custom-segments/a/b")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), is("converted-a,converted-b"));
+        }
+    }
+
+    @Test
+    public void repeatedCapturesWinPathMatchingTies() throws IOException {
+        @Path("/rank")
+        class RankedResource {
+            @GET
+            @Path("x/{id}")
+            public String oneCapture() {
+                return "one capture";
+            }
+
+            @GET
+            @Path("x/{id}{id}")
+            public String twoCaptures() {
+                return "two captures";
+            }
+        }
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new RankedResource()).build())
+            .start();
+        try (Response resp = call(request(server.uri().resolve("/rank/x/aa")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), is("two captures"));
+        }
+    }
+
+    @Test
+    public void repeatedNonDefaultCapturesWinPathMatchingTies() throws IOException {
+        @Path("/regex-rank")
+        class RankedResource {
+            @GET
+            @Path("x/{id:\\d+}{id}")
+            public String oneRegex() {
+                return "one regex";
+            }
+
+            @GET
+            @Path("x/{id:\\d+}{id:\\d+}")
+            public String twoRegexes() {
+                return "two regexes";
+            }
+        }
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new RankedResource()).build())
+            .start();
+        try (Response resp = call(request(server.uri().resolve("/regex-rank/x/12")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), is("two regexes"));
         }
     }
 

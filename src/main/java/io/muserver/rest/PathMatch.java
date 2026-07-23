@@ -4,6 +4,7 @@ import jakarta.ws.rs.core.PathSegment;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -19,15 +20,17 @@ public class PathMatch {
     /**
      * An empty match
      */
-    public static final PathMatch EMPTY_MATCH = new PathMatch(true, Collections.emptyMap(), Pattern.compile("").matcher(""));
+    public static final PathMatch EMPTY_MATCH = new PathMatch(true, Collections.emptyMap(), Collections.emptyMap(), Pattern.compile("").matcher(""));
 
     private final boolean matches;
     private final Map<String, PathSegment> params;
+    private final Map<String, List<PathSegment>> allParams;
     private final Matcher matcher;
 
-    PathMatch(boolean matches, Map<String, PathSegment> params, Matcher matcher) {
+    PathMatch(boolean matches, Map<String, PathSegment> params, Map<String, List<PathSegment>> allParams, Matcher matcher) {
         this.matches = matches;
         this.params = params;
+        this.allParams = allParams;
         this.matcher = matcher;
     }
 
@@ -68,6 +71,14 @@ public class PathMatch {
      */
     public Map<String, PathSegment> segments() {
         return params;
+    }
+
+    Map<String, List<PathSegment>> allSegments() {
+        return allParams;
+    }
+
+    PathMatch withParams(Map<String, PathSegment> combinedParams, Map<String, List<PathSegment>> combinedAllParams) {
+        return new PathMatch(matches, combinedParams, combinedAllParams, matcher);
     }
 
     /**
