@@ -40,6 +40,34 @@ public class NewCookieHeaderDelegateTest {
     }
 
     @Test
+    public void allSameSiteValuesRoundTrip() {
+        for (NewCookie.SameSite sameSite : NewCookie.SameSite.values()) {
+            NewCookie cookie = new NewCookie.Builder("session")
+                .value("abc")
+                .sameSite(sameSite)
+                .build();
+
+            String serialized = delegate.toString(cookie);
+            NewCookie parsed = delegate.fromString(serialized);
+
+            assertThat(serialized, containsString("SameSite="));
+            assertThat(parsed.getSameSite(), is(sameSite));
+        }
+    }
+
+    @Test
+    public void sameSiteParsingIsCaseInsensitive() {
+        assertThat(delegate.fromString("session=abc; SameSite=sTrIcT").getSameSite(),
+            is(NewCookie.SameSite.STRICT));
+    }
+
+    @Test
+    public void invalidSameSiteValuesAreRejected() {
+        assertThrows(IllegalArgumentException.class,
+            () -> delegate.fromString("session=abc; SameSite=somewhere"));
+    }
+
+    @Test
     public void sessionCookieOmitsExpiryAttributes() {
         NewCookie cookie = new NewCookie.Builder("session")
             .value("abc")
