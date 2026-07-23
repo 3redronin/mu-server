@@ -16,8 +16,10 @@ import java.io.*;
 import java.lang.annotation.Annotation;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
@@ -269,6 +271,139 @@ public class JaxRSResponseTest {
         assertThat(resp.getHeaderString("set-cookie"), is(MuRuntimeDelegate.getInstance().createHeaderDelegate(NewCookie.class).toString(newCookie)));
         assertThat(resp.getHeaderString("set-cookie"), containsStringIgnoringCase("max-age=32;"));
         assertThat(resp.getHeaderString("some-date"), is("Sun, 9 Oct 2022 14:43:10 GMT"));
+    }
+
+    @Test
+    public void getHeaderStringJoinsEveryHeaderValue() {
+        Response response = JaxRSResponse.ok()
+            .header("X-Multiple", "first")
+            .header("X-Multiple", new StringBuilder("second"))
+            .build();
+
+        assertThat(response.getHeaderString("X-Multiple"), is("first,second"));
+    }
+
+    @Test
+    public void containerResponseContextExposesEntityMetadataAndStreams() {
+        @Deprecated
+        class AnnotatedEntity { }
+        Annotation[] annotations = AnnotatedEntity.class.getAnnotations();
+        ByteArrayOutputStream originalStream = new ByteArrayOutputStream();
+        JaxRSResponse response = (JaxRSResponse) new JaxRSResponse.Builder()
+            .entity("original", annotations)
+            .type(MediaType.TEXT_PLAIN_TYPE)
+            .build();
+        response.setEntityStream(originalStream);
+
+        assertThat(response.hasEntity(), is(true));
+        assertThat(response.getEntity(), is("original"));
+        assertThat(response.getEntityClass(), is(String.class));
+        assertThat(response.getEntityType(), is(String.class));
+        assertThat(response.getEntityAnnotations(), arrayContaining(annotations));
+        assertThat(response.getEntityStream(), sameInstance(originalStream));
+
+        ByteArrayOutputStream replacementStream = new ByteArrayOutputStream();
+        byte[] replacementEntity = {1, 2};
+        response.setEntityStream(replacementStream);
+        response.setEntity(replacementEntity, annotations, MediaType.APPLICATION_OCTET_STREAM_TYPE);
+
+        assertThat(response.getEntity(), sameInstance(replacementEntity));
+        assertThat(response.getEntityClass(), is(byte[].class));
+        assertThat(response.getEntityType(), is(byte[].class));
+        assertThat(response.getEntityAnnotations(), arrayContaining(annotations));
+        assertThat(response.getMediaType(), is(MediaType.APPLICATION_OCTET_STREAM_TYPE));
+        assertThat(response.getEntityStream(), sameInstance(replacementStream));
+    }
+
+    @Test
+    public void containerResponseContextMetadataViewsMatchTheTckContract() {
+        Date date = new Date(1519484802000L);
+        Date lastModified = new Date(1519484702000L);
+        NewCookie cookie = new NewCookie("session", "value");
+        Link link = Link.fromUri("https://example.org/related").rel("related").build();
+        JaxRSResponse response = (JaxRSResponse) new JaxRSResponse.Builder()
+            .allow("OPTIONS", "TRACE")
+            .cookie(cookie)
+            .header(HttpHeaders.DATE, date)
+            .header(HttpHeaders.CONTENT_LENGTH, 8)
+            .language(Locale.CANADA_FRENCH)
+            .lastModified(lastModified)
+            .tag(new EntityTag("tag"))
+            .location(URI.create("https://example.org/location"))
+            .links(link)
+            .status(Response.Status.ACCEPTED)
+            .build();
+
+        assertThat(response.getAllowedMethods(), containsInAnyOrder("OPTIONS", "TRACE"));
+        assertThat(response.getCookies(), hasEntry("session", cookie));
+        assertThat(response.getDate(), is(date));
+        assertThat(response.getEntityTag(), is(new EntityTag("tag")));
+        assertThat(response.getLanguage(), is(Locale.CANADA_FRENCH));
+        assertThat(response.getLastModified(), is(lastModified));
+        assertThat(response.getLength(), is(8));
+        assertThat(response.getLocation(), is(URI.create("https://example.org/location")));
+        assertThat(response.getMediaType(), is(nullValue()));
+        assertThat(response.getStatus(), is(Response.Status.ACCEPTED.getStatusCode()));
+        assertThat(response.getStatusInfo().getStatusCode(), is(Response.Status.ACCEPTED.getStatusCode()));
+        assertThat(response.getStatusInfo().getFamily(), is(Response.Status.Family.SUCCESSFUL));
+        assertThat(response.hasLink("related"), is(true));
+        assertThat(response.hasLink("missing"), is(false));
+        assertThat(response.getLink("related"), is(link));
+        assertThat(response.getLink("missing"), is(nullValue()));
+        assertThat(response.getLinkBuilder("related").build(), is(link));
+        assertThat(response.getLinkBuilder("missing"), is(nullValue()));
+        assertThat(response.getLinks(), contains(link));
+
+        Map<String, NewCookie> cookies = response.getCookies();
+        cookies.put("added", new NewCookie("added", "value"));
+        assertThat(response.getCookies(), not(hasKey("added")));
+        response.getHeaders().add("X-Mutable", "one");
+        response.getHeaders().add("X-Mutable", new StringBuilder("two"));
+        assertThat(response.getHeaderString("X-Mutable"), is("one,two"));
+        assertThat(response.getStringHeaders().get("X-Mutable"), contains("one", "two"));
+    }
+
+    @Test
+    public void containerResponseContextNullAndMutationSemanticsMatchTheTckContract() {
+        JaxRSResponse response = (JaxRSResponse) new JaxRSResponse.Builder().build();
+
+        assertThat(response.hasEntity(), is(false));
+        assertThat(response.getEntity(), is(nullValue()));
+        assertThat(response.getDate(), is(nullValue()));
+        assertThat(response.getEntityTag(), is(nullValue()));
+        assertThat(response.getLanguage(), is(nullValue()));
+        assertThat(response.getLastModified(), is(nullValue()));
+        assertThat(response.getLength(), is(-1));
+        assertThat(response.getLocation(), is(nullValue()));
+        assertThat(response.getMediaType(), is(nullValue()));
+        assertThat(response.getHeaderString("missing"), is(nullValue()));
+        assertThat(response.getStringHeaders().get("missing"), is(nullValue()));
+        assertThat(response.getLinks(), is(empty()));
+
+        for (Response.Status status : Response.Status.values()) {
+            response.setStatus(status.getStatusCode());
+            assertThat(response.getStatus(), is(status.getStatusCode()));
+            assertThat(response.getStatusInfo(), is(status));
+        }
+        Response.StatusType custom = new Response.StatusType() {
+            @Override
+            public int getStatusCode() {
+                return 299;
+            }
+
+            @Override
+            public Response.Status.Family getFamily() {
+                return Response.Status.Family.SUCCESSFUL;
+            }
+
+            @Override
+            public String getReasonPhrase() {
+                return "Custom";
+            }
+        };
+        response.setStatusInfo(custom);
+        assertThat(response.getStatus(), is(299));
+        assertThat(response.getStatusInfo(), sameInstance(custom));
     }
 
     @Test
