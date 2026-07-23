@@ -178,23 +178,28 @@ public class RestHandler implements MuHandler {
     }
 
     static Object invokeResourceMethod(JaxRSRequest requestContext, MuResponse muResponse, RequestMatcher.MatchedMethod mm, Function<ResourceMethod, Object> suspendedParamCallback, EntityProviders entityProviders, CollectionParameterStrategy collectionParameterStrategy) throws Exception {
-        ResourceMethod rm = mm.resourceMethod;
-        Object[] params = new Object[rm.methodHandle.getParameterCount()];
-        for (ResourceMethodParam param : rm.params) {
-            Object paramValue;
-            if (param.source == ResourceMethodParam.ValueSource.MESSAGE_BODY) {
-                paramValue = readRequestEntity(requestContext, param);
-            } else if (param.source == ResourceMethodParam.ValueSource.CONTEXT) {
-                paramValue = getContextParam(requestContext, muResponse, mm, param, entityProviders);
-            } else if (param.source == ResourceMethodParam.ValueSource.SUSPENDED) {
-                paramValue = suspendedParamCallback.apply(rm);
-            } else {
-                ResourceMethodParam.RequestBasedParam rbp = (ResourceMethodParam.RequestBasedParam) param;
-                paramValue = rbp.getValue(requestContext, mm, collectionParameterStrategy);
+        EntityProviders previous = MuRuntimeDelegate.setCurrentEntityProviders(entityProviders);
+        try {
+            ResourceMethod rm = mm.resourceMethod;
+            Object[] params = new Object[rm.methodHandle.getParameterCount()];
+            for (ResourceMethodParam param : rm.params) {
+                Object paramValue;
+                if (param.source == ResourceMethodParam.ValueSource.MESSAGE_BODY) {
+                    paramValue = readRequestEntity(requestContext, param);
+                } else if (param.source == ResourceMethodParam.ValueSource.CONTEXT) {
+                    paramValue = getContextParam(requestContext, muResponse, mm, param, entityProviders);
+                } else if (param.source == ResourceMethodParam.ValueSource.SUSPENDED) {
+                    paramValue = suspendedParamCallback.apply(rm);
+                } else {
+                    ResourceMethodParam.RequestBasedParam rbp = (ResourceMethodParam.RequestBasedParam) param;
+                    paramValue = rbp.getValue(requestContext, mm, collectionParameterStrategy);
+                }
+                params[param.index] = paramValue;
             }
-            params[param.index] = paramValue;
+            return rm.invoke(params);
+        } finally {
+            MuRuntimeDelegate.restoreCurrentEntityProviders(previous);
         }
-        return rm.invoke(params);
     }
 
     private void dealWithUnhandledException(int nestingLevel, JaxRSRequest request, MuResponse muResponse, Exception ex, List<MediaType> acceptHeaders, List<MediaType> producesRef, List<MediaType> directlyProducesRef) throws Exception {

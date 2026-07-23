@@ -162,6 +162,7 @@ No plan to implement as it would add another dependency.
 - [ ] `javax.xml.transform.Source` XML types (text/xml, application/xml and media types of the form application/*+xml)
 - [ ] `javax.xml.bind.JAXBElement` and application-supplied JAXB classes XML types (text/xml and application/xml and media types of the form application/*+xml)
 - [x] `MultivaluedMap<String,String>` Form content (application/x-www-form-urlencoded)
+- [x] `List<EntityPart>` Multipart content (multipart/*), including `@FormParam EntityPart`
 - [x] `StreamingOutput` All media types (*/*), MessageBodyWriter only
 - [x] `java.lang.Boolean`, `java.lang.Character`, `java.lang.Number` Only for text/plain
 - [x] Corresponding primitive types supported via boxing/unboxing conversion.
@@ -385,3 +386,4 @@ The following are not described by the spec but are interfaces defined in the ja
 - [x] `Link`
 - [x] `VariantListBuilder`
 - [x] `ResourceInfo` (this is available in a filter by calling `ResourceInfo resourceInfo = (ResourceInfo) requestContext.getProperty(MuRuntimeDelegate.RESOURCE_INFO_PROPERTY);`)
+- [x] `EntityPart` and `EntityPart.Builder`

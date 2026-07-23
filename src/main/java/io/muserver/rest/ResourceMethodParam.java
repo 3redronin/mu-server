@@ -7,6 +7,10 @@ import jakarta.ws.rs.*;
 import jakarta.ws.rs.container.Suspended;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.Cookie;
+import jakarta.ws.rs.core.EntityPart;
+import jakarta.ws.rs.core.HttpHeaders;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.MultivaluedHashMap;
 import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.core.PathSegment;
 import jakarta.ws.rs.ext.ParamConverter;
@@ -196,7 +200,26 @@ abstract class ResourceMethodParam {
         public @Nullable Object getValue(JaxRSRequest jaxRequest, RequestMatcher.MatchedMethod matchedMethod, CollectionParameterStrategy cps) throws IOException {
             MuRequest muRequest = jaxRequest.muRequest;
             Class<?> paramClass = type;
-            if (UploadedFile.class.isAssignableFrom(paramClass)) {
+            if (EntityPart.class.isAssignableFrom(paramClass)) {
+                UploadedFile uploadedFile = muRequest.uploadedFile(key);
+                MultivaluedHashMap<String, String> headers = new MultivaluedHashMap<>();
+                if (uploadedFile != null) {
+                    headers.putSingle(HttpHeaders.CONTENT_TYPE,
+                        Mutils.nullOrEmpty(uploadedFile.contentType()) ? MediaType.APPLICATION_OCTET_STREAM : uploadedFile.contentType());
+                    headers.putSingle(HttpHeaders.CONTENT_DISPOSITION,
+                        MultipartEntityProvider.contentDisposition(key, uploadedFile.filename()));
+                    return new MuEntityPart(key, uploadedFile.filename(), headers, uploadedFile.asStream(), jaxRequest.entityProviders());
+                }
+                String value = muRequest.form().get(key);
+                if (value == null) {
+                    return null;
+                }
+                headers.putSingle(HttpHeaders.CONTENT_TYPE, MediaType.TEXT_PLAIN);
+                headers.putSingle(HttpHeaders.CONTENT_DISPOSITION, MultipartEntityProvider.contentDisposition(key, null));
+                return new MuEntityPart(key, null, headers,
+                    new java.io.ByteArrayInputStream(value.getBytes(java.nio.charset.StandardCharsets.UTF_8)),
+                    jaxRequest.entityProviders());
+            } else if (UploadedFile.class.isAssignableFrom(paramClass)) {
                 return muRequest.uploadedFile(key);
             } else if (File.class.isAssignableFrom(paramClass)) {
                 UploadedFile uf = muRequest.uploadedFile(key);

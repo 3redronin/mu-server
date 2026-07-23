@@ -22,8 +22,15 @@ class EntityProviders {
     final List<ProviderWrapper<MessageBodyWriter<?>>> writers;
 
     public EntityProviders(List<MessageBodyReader> readers, List<MessageBodyWriter> writers) {
-        this.readers = readers.stream().map(ProviderWrapper::reader).sorted().collect(Collectors.toList());
-        this.writers = writers.stream().map(ProviderWrapper::writer).sorted().collect(Collectors.toList());
+        List<ProviderWrapper<MessageBodyReader<?>>> wrappedReaders =
+            readers.stream().map(ProviderWrapper::reader).collect(Collectors.toList());
+        List<ProviderWrapper<MessageBodyWriter<?>>> wrappedWriters =
+            writers.stream().map(ProviderWrapper::writer).collect(Collectors.toList());
+        MultipartEntityProvider multipartProvider = new MultipartEntityProvider(this);
+        wrappedReaders.add(ProviderWrapper.reader(multipartProvider));
+        wrappedWriters.add(ProviderWrapper.writer(multipartProvider));
+        this.readers = wrappedReaders.stream().sorted().collect(Collectors.toList());
+        this.writers = wrappedWriters.stream().sorted().collect(Collectors.toList());
     }
     public MessageBodyReader<?> selectReader(Class<?> type, Type genericType, Annotation[] annotations, MediaType requestBodyMediaType) {
         Optional<ProviderWrapper<MessageBodyReader<?>>> best = readers.stream()

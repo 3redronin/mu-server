@@ -510,6 +510,10 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
         return getUriInfo().getPath(false);
     }
 
+    EntityProviders entityProviders() {
+        return entityProviders;
+    }
+
     /**
      * This special exception preserves the immediate abort behavior when the request context is used outside a
      * request-filter callback.

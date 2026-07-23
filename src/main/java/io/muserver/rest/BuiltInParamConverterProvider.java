@@ -3,6 +3,7 @@ package io.muserver.rest;
 import io.muserver.Cookie;
 import io.muserver.Mutils;
 import io.muserver.UploadedFile;
+import jakarta.ws.rs.core.EntityPart;
 import jakarta.ws.rs.core.PathSegment;
 import jakarta.ws.rs.ext.ParamConverter;
 import jakarta.ws.rs.ext.ParamConverterProvider;
@@ -71,6 +72,9 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
         if (UploadedFile.class.isAssignableFrom(rawType)) {
             return new UploadedFileConverter();
         }
+        if (EntityPart.class.isAssignableFrom(rawType)) {
+            return new EntityPartConverter();
+        }
         if (PathSegment.class.isAssignableFrom(rawType)) {
             return new PathSegmentConverter();
         }
@@ -98,6 +102,18 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
         @Override
         public String toString(UploadedFile value) {
             return value.filename();
+        }
+    }
+
+    private static class EntityPartConverter implements ParamConverter<EntityPart> {
+        @Override
+        public EntityPart fromString(String value) {
+            return null;
+        }
+
+        @Override
+        public String toString(EntityPart value) {
+            return value.getName();
         }
     }
 

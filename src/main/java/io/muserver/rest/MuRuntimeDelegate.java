@@ -23,6 +23,10 @@ import java.util.concurrent.CompletionStage;
  */
 public class MuRuntimeDelegate extends RuntimeDelegate {
 
+    private static final EntityProviders ENTITY_PART_PROVIDERS =
+        new EntityProviders(EntityProviders.builtInReaders(), EntityProviders.builtInWriters());
+    private static final ThreadLocal<EntityProviders> currentEntityProviders = new ThreadLocal<>();
+
     private static MuRuntimeDelegate singleton;
 
     /**
@@ -154,7 +158,22 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
 
     @Override
     public EntityPart.Builder createEntityPartBuilder(String partName) throws IllegalArgumentException {
-        throw new NotImplementedException("MuServer does not support entity parts");
+        EntityProviders entityProviders = currentEntityProviders.get();
+        return new MuEntityPart.Builder(partName, entityProviders == null ? ENTITY_PART_PROVIDERS : entityProviders);
+    }
+
+    static EntityProviders setCurrentEntityProviders(EntityProviders entityProviders) {
+        EntityProviders previous = currentEntityProviders.get();
+        currentEntityProviders.set(entityProviders);
+        return previous;
+    }
+
+    static void restoreCurrentEntityProviders(EntityProviders previous) {
+        if (previous == null) {
+            currentEntityProviders.remove();
+        } else {
+            currentEntityProviders.set(previous);
+        }
     }
 
     /**

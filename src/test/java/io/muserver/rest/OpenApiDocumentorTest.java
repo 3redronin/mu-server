@@ -7,6 +7,7 @@ import io.muserver.openapi.InfoObjectBuilder;
 import io.muserver.openapi.LicenseObjectBuilder;
 import io.muserver.openapi.OpenAPIObjectBuilder;
 import jakarta.ws.rs.*;
+import jakarta.ws.rs.core.EntityPart;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.example.petstore.resource.PetResource;
@@ -182,6 +183,7 @@ public class OpenApiDocumentorTest {
                                @Description("The list of images")
                                @FormParam("images") List<UploadedFile> images,
                                @FormParam("oneThing") UploadedFile oneThing,
+                               @FormParam("entityPart") EntityPart entityPart,
                                @FormParam("requiredThing") @Required UploadedFile requiredThing) {
             }
         }
@@ -219,6 +221,10 @@ public class OpenApiDocumentorTest {
             assertThat(oneThing.getString("type"), is("string"));
             assertThat(oneThing.getString("format"), is("binary"));
             assertThat(oneThing.has("description"), is(false));
+
+            JSONObject entityPart = params.getJSONObject("entityPart");
+            assertThat(entityPart.getString("type"), is("string"));
+            assertThat(entityPart.getString("format"), is("binary"));
 
             JSONObject images = params.getJSONObject("images");
             assertThat(images.getString("type"), is("array"));

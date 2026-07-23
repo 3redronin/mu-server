@@ -1,6 +1,7 @@
 package io.muserver.openapi;
 
 import io.muserver.UploadedFile;
+import jakarta.ws.rs.core.EntityPart;
 
 import java.io.File;
 import java.io.InputStream;
@@ -897,7 +898,7 @@ public class SchemaObjectBuilder {
     }
 
     private static boolean isBinaryClass(Class<?> type) {
-        return UploadedFile.class.isAssignableFrom(type) || File.class.isAssignableFrom(type)
+        return UploadedFile.class.isAssignableFrom(type) || EntityPart.class.isAssignableFrom(type) || File.class.isAssignableFrom(type)
             || InputStream.class.isAssignableFrom(type) || (type.isArray() && type.getComponentType().equals(byte.class));
     }
 

@@ -5,9 +5,13 @@ import jakarta.ws.rs.core.MultivaluedMap;
 
 import java.io.Serializable;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.AbstractMap.SimpleImmutableEntry;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * A read only version of the multi-valued map
@@ -33,20 +37,20 @@ class ReadOnlyMultivaluedMap<K, V> implements MultivaluedMap<K, V>, Serializable
 
 
     public void putSingle(K key, V value) {
-        throw new NotImplementedException("Invalid access for readonly map");
+        throw new UnsupportedOperationException("This map is read only");
     }
 
     public void add(K key, V value) {
-        throw new NotImplementedException("Invalid access for readonly map");
+        throw new UnsupportedOperationException("This map is read only");
     }
 
     @SafeVarargs
     public final void addAll(K key, V... newValues) {
-        throw new NotImplementedException("Invalid access for readonly map");
+        throw new UnsupportedOperationException("This map is read only");
     }
 
     public void addAll(K key, List<V> valueList) {
-        throw new NotImplementedException("Invalid access for readonly map");
+        throw new UnsupportedOperationException("This map is read only");
     }
 
     public V getFirst(K key) {
@@ -54,7 +58,7 @@ class ReadOnlyMultivaluedMap<K, V> implements MultivaluedMap<K, V>, Serializable
     }
 
     public void addFirst(K key, V value) {
-        actual.addFirst(key, value);
+        throw new UnsupportedOperationException("This map is read only");
     }
 
     public String toString() {
@@ -70,7 +74,9 @@ class ReadOnlyMultivaluedMap<K, V> implements MultivaluedMap<K, V>, Serializable
     }
 
     public Collection<List<V>> values() {
-        return actual.values();
+        return Collections.unmodifiableList(actual.values().stream()
+            .map(Collections::unmodifiableList)
+            .collect(Collectors.toList()));
     }
 
     public int size() {
@@ -78,19 +84,19 @@ class ReadOnlyMultivaluedMap<K, V> implements MultivaluedMap<K, V>, Serializable
     }
 
     public List<V> remove(Object key) {
-        throw new NotImplementedException("Invalid access for readonly map");
+        throw new UnsupportedOperationException("This map is read only");
     }
 
     public void putAll(Map<? extends K, ? extends List<V>> m) {
-        throw new NotImplementedException("Invalid access for readonly map");
+        throw new UnsupportedOperationException("This map is read only");
     }
 
     public List<V> put(K key, List<V> value) {
-        throw new NotImplementedException("Invalid access for readonly map");
+        throw new UnsupportedOperationException("This map is read only");
     }
 
     public Set<K> keySet() {
-        return actual.keySet();
+        return Collections.unmodifiableSet(actual.keySet());
     }
 
     public boolean isEmpty() {
@@ -98,11 +104,15 @@ class ReadOnlyMultivaluedMap<K, V> implements MultivaluedMap<K, V>, Serializable
     }
 
     public List<V> get(Object key) {
-        return actual.get(key);
+        List<V> values = actual.get(key);
+        return values == null ? null : Collections.unmodifiableList(values);
     }
 
     public Set<Entry<K, List<V>>> entrySet() {
-        return actual.entrySet();
+        Set<Entry<K, List<V>>> entries = actual.entrySet().stream()
+            .map(entry -> new SimpleImmutableEntry<>(entry.getKey(), Collections.unmodifiableList(entry.getValue())))
+            .collect(Collectors.toCollection(LinkedHashSet::new));
+        return Collections.unmodifiableSet(entries);
     }
 
     public boolean containsValue(Object value) {
@@ -114,7 +124,7 @@ class ReadOnlyMultivaluedMap<K, V> implements MultivaluedMap<K, V>, Serializable
     }
 
     public void clear() {
-        throw new NotImplementedException("Invalid access for readonly map");
+        throw new UnsupportedOperationException("This map is read only");
     }
 
     public boolean equalsIgnoreValueOrder(MultivaluedMap<K, V> omap) {
