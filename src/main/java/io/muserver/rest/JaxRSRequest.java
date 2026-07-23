@@ -448,6 +448,7 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
 
     @Override
     public void setEntityStream(InputStream input) {
+        ensureNotInResponseFilter("setEntityStream");
         this.inputStream = input;
     }
 
@@ -458,19 +459,24 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
 
     @Override
     public void setSecurityContext(SecurityContext context) {
+        ensureNotInResponseFilter("setSecurityContext");
         this.securityContext = context;
     }
 
     @Override
     public void abortWith(Response response) {
-        if (responseFilterChainStarted) {
-            throw new IllegalStateException("abortWith cannot be called from a response filter");
-        }
+        ensureNotInResponseFilter("abortWith");
         response = Objects.requireNonNull(response, "response");
         if (!requestFilterChainRunning) {
             throw new FilterAbortedException(response);
         }
         this.abortResponse = response;
+    }
+
+    private void ensureNotInResponseFilter(String operation) {
+        if (responseFilterChainStarted) {
+            throw new IllegalStateException(operation + " cannot be called from a response filter");
+        }
     }
 
     Response getAbortResponse() {

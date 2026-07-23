@@ -755,6 +755,41 @@ public class FilterTest {
     }
 
     @Test
+    public void requestContextCannotBeMutatedFromResponseFilter() throws IOException {
+        AtomicReference<Throwable> abortFailure = new AtomicReference<>();
+        AtomicReference<Throwable> entityStreamFailure = new AtomicReference<>();
+        AtomicReference<Throwable> securityContextFailure = new AtomicReference<>();
+
+        server = httpsServerForTest()
+            .addHandler(restHandler(new BrokenResource())
+                .addResponseFilter((requestContext, responseContext) -> {
+                    try {
+                        requestContext.abortWith(jakarta.ws.rs.core.Response.ok().build());
+                    } catch (Throwable failure) {
+                        abortFailure.set(failure);
+                    }
+                    try {
+                        requestContext.setEntityStream(new ByteArrayInputStream(new byte[0]));
+                    } catch (Throwable failure) {
+                        entityStreamFailure.set(failure);
+                    }
+                    try {
+                        requestContext.setSecurityContext(requestContext.getSecurityContext());
+                    } catch (Throwable failure) {
+                        securityContextFailure.set(failure);
+                    }
+                }))
+            .start();
+
+        try (Response response = call(request(server.uri().resolve("/broken")))) {
+            assertThat(response.code(), equalTo(200));
+        }
+        assertThat(abortFailure.get(), instanceOf(IllegalStateException.class));
+        assertThat(entityStreamFailure.get(), instanceOf(IllegalStateException.class));
+        assertThat(securityContextFailure.get(), instanceOf(IllegalStateException.class));
+    }
+
+    @Test
     public void globalResponseFiltersRunForAnExceptionMappedBeforeMatching() throws IOException {
         @PreMatching
         class ThrowingFilter implements ContainerRequestFilter {
