@@ -68,6 +68,16 @@ public class NewCookieHeaderDelegateTest {
     }
 
     @Test
+    public void cookieNamedSameSiteIsNotMistakenForAnAttribute() {
+        NewCookie parsed = delegate.fromString("SameSite=abc; Path=/");
+
+        assertThat(parsed.getName(), is("SameSite"));
+        assertThat(parsed.getValue(), is("abc"));
+        assertThat(parsed.getPath(), is("/"));
+        assertThat(parsed.getSameSite(), is(nullValue()));
+    }
+
+    @Test
     public void sessionCookieOmitsExpiryAttributes() {
         NewCookie cookie = new NewCookie.Builder("session")
             .value("abc")

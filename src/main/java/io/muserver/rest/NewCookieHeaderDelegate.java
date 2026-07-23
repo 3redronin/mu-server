@@ -12,7 +12,7 @@ import java.util.regex.Pattern;
 
 class NewCookieHeaderDelegate implements RuntimeDelegate.HeaderDelegate<NewCookie> {
     private static final Pattern SAME_SITE_ATTRIBUTE =
-        Pattern.compile("(?:^|;)\\s*SameSite\\s*=\\s*([^;]*)", Pattern.CASE_INSENSITIVE);
+        Pattern.compile(";\\s*SameSite\\s*=\\s*([^;]*)", Pattern.CASE_INSENSITIVE);
 
     static {
         MuRuntimeDelegate.ensureSet();
