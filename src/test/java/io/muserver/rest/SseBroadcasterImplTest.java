@@ -490,6 +490,51 @@ public class SseBroadcasterImplTest {
         assertThat(notifications.get(), is(1));
     }
 
+    @Test
+    public void nonCascadingCloseDoesNotSuppressInFlightClosedSinkNotification() throws Exception {
+        SseBroadcasterImpl broadcaster = new SseBroadcasterImpl();
+        AtomicBoolean closed = new AtomicBoolean();
+        AtomicInteger notifications = new AtomicInteger();
+        CountDownLatch checkingClosed = new CountDownLatch(1);
+        CountDownLatch releaseClosedCheck = new CountDownLatch(1);
+        SseEventSink sink = new SseEventSink() {
+            @Override
+            public boolean isClosed() {
+                checkingClosed.countDown();
+                try {
+                    assertThat(releaseClosedCheck.await(1, TimeUnit.SECONDS), is(true));
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(e);
+                }
+                return closed.get();
+            }
+
+            @Override
+            public CompletionStage<?> send(OutboundSseEvent event) {
+                return CompletableFuture.completedFuture(null);
+            }
+
+            @Override
+            public void close() {
+                closed.set(true);
+            }
+        };
+        broadcaster.onClose(closedSink -> notifications.incrementAndGet());
+        broadcaster.register(sink);
+
+        CompletableFuture<?> broadcast = CompletableFuture.runAsync(() ->
+            broadcaster.broadcast(new JaxOutboundSseEventBuilder().data("event").build())
+                .toCompletableFuture().join());
+        assertThat(checkingClosed.await(1, TimeUnit.SECONDS), is(true));
+        broadcaster.close(false);
+        closed.set(true);
+        releaseClosedCheck.countDown();
+        broadcast.get(1, TimeUnit.SECONDS);
+
+        assertThat(notifications.get(), is(1));
+    }
+
     private static SseEventSink sink(AtomicBoolean closed) {
         return new SseEventSink() {
             @Override

@@ -8,8 +8,10 @@ import jakarta.ws.rs.sse.SseBroadcaster;
 import jakarta.ws.rs.sse.SseEventSink;
 
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -22,6 +24,7 @@ class SseBroadcasterImpl implements SseBroadcaster {
     private final List<BiConsumer<SseEventSink, Throwable>> errorListeners = new CopyOnWriteArrayList<>();
     private final List<Consumer<SseEventSink>> closeListeners = new CopyOnWriteArrayList<>();
     private final List<SseEventSink> sinks = new CopyOnWriteArrayList<>();
+    private final Set<SseEventSink> closeNotifications = ConcurrentHashMap.newKeySet();
 
     @Override
     public synchronized void onError(BiConsumer<SseEventSink, Throwable> onError) {
@@ -81,9 +84,8 @@ class SseBroadcasterImpl implements SseBroadcaster {
         }
         for (SseEventSink sink : currentSinks) {
             if (sink.isClosed()) {
-                if (sinks.remove(sink)) {
-                    sendOnCloseEvent(sink);
-                }
+                sinks.remove(sink);
+                sendOnCloseEvent(sink);
                 sendComplete(completableFuture, count);
             } else {
                 try {
@@ -94,9 +96,8 @@ class SseBroadcasterImpl implements SseBroadcaster {
                         sendComplete(completableFuture, count);
                     });
                 } catch (IllegalStateException e) {
-                    if (sinks.remove(sink)) {
-                        sendOnCloseEvent(sink);
-                    }
+                    sinks.remove(sink);
+                    sendOnCloseEvent(sink);
                     sendComplete(completableFuture, count);
                 }
             }
@@ -152,8 +153,10 @@ class SseBroadcasterImpl implements SseBroadcaster {
     }
 
     private void sendOnCloseEvent(SseEventSink sink) {
-        for (Consumer<SseEventSink> closeListener : closeListeners) {
-            closeListener.accept(sink);
+        if (closeNotifications.add(sink)) {
+            for (Consumer<SseEventSink> closeListener : closeListeners) {
+                closeListener.accept(sink);
+            }
         }
     }
 
