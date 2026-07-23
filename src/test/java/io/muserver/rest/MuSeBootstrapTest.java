@@ -8,6 +8,7 @@ import jakarta.ws.rs.SeBootstrap;
 import jakarta.ws.rs.core.Application;
 import okhttp3.Response;
 import org.junit.Test;
+import org.junit.BeforeClass;
 
 import java.io.IOException;
 import java.util.Optional;
@@ -22,6 +23,11 @@ import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 
 public class MuSeBootstrapTest {
+
+    @BeforeClass
+    public static void registerRuntimeDelegate() {
+        MuRuntimeDelegate.ensureSet();
+    }
 
     @Test
     public void bootsApplicationAtConfiguredRootAndApplicationPaths() throws Exception {

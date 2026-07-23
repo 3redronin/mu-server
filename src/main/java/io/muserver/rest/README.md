@@ -380,6 +380,9 @@ Will not implement. Configuration should be handled by the user.
 - [x] Java SE bootstrap with HTTP, HTTPS, root-path mounting, external configuration, dynamic ports, and shutdown.
 - [ ] TLS client authentication through `SeBootstrap` is not supported.
 
+Mu Server does not advertise its `RuntimeDelegate` globally merely by being present on an application's classpath.
+Call `MuRuntimeDelegate.ensureSet()` once before the first `SeBootstrap` call to select Mu explicitly.
+
 ## 12 Runtime Delegate
 
 - [x] Implemented, including Java SE configuration and bootstrap. `createEndpoint` is not supported.
