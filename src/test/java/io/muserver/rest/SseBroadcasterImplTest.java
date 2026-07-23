@@ -31,6 +31,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -338,6 +339,63 @@ public class SseBroadcasterImplTest {
         assertThat(errors, empty());
         assertThat(closedSinks, contains(sink));
         assertThat(broadcaster.connectedSinksCount(), is(0));
+    }
+
+    @Test
+    public void closeMarksTheBroadcasterClosedBeforeClosingSinks() {
+        SseBroadcasterImpl broadcaster = new SseBroadcasterImpl();
+        AtomicBoolean sinkClosed = new AtomicBoolean();
+        AtomicBoolean reentrantRegistrationRejected = new AtomicBoolean();
+        SseEventSink sink = sink(sinkClosed);
+
+        broadcaster.onClose(closedSink -> {
+            try {
+                broadcaster.register(sink(new AtomicBoolean()));
+            } catch (IllegalStateException expected) {
+                reentrantRegistrationRejected.set(true);
+            }
+        });
+        broadcaster.register(sink);
+
+        broadcaster.close();
+
+        assertThat(sinkClosed.get(), is(true));
+        assertThat(reentrantRegistrationRejected.get(), is(true));
+        assertThat(broadcaster.connectedSinksCount(), is(0));
+    }
+
+    @Test
+    public void nonCascadingCloseLeavesSinksOpen() {
+        SseBroadcasterImpl broadcaster = new SseBroadcasterImpl();
+        AtomicBoolean sinkClosed = new AtomicBoolean();
+        AtomicBoolean closeListenerCalled = new AtomicBoolean();
+        broadcaster.onClose(closedSink -> closeListenerCalled.set(true));
+        broadcaster.register(sink(sinkClosed));
+
+        broadcaster.close(false);
+
+        assertThat(sinkClosed.get(), is(false));
+        assertThat(closeListenerCalled.get(), is(false));
+        assertThat(broadcaster.connectedSinksCount(), is(0));
+    }
+
+    private static SseEventSink sink(AtomicBoolean closed) {
+        return new SseEventSink() {
+            @Override
+            public boolean isClosed() {
+                return closed.get();
+            }
+
+            @Override
+            public CompletionStage<?> send(OutboundSseEvent event) {
+                return CompletableFuture.completedFuture(null);
+            }
+
+            @Override
+            public void close() {
+                closed.set(true);
+            }
+        };
     }
 
     @After

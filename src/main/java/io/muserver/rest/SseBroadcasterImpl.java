@@ -123,8 +123,9 @@ class SseBroadcasterImpl implements SseBroadcaster {
     }
 
     @Override
-    public void close(boolean cascading) {
+    public synchronized void close(boolean cascading) {
         if (!isClosed) {
+            isClosed = true;
             if (cascading) {
                 for (SseEventSink sink : sinks) {
                     try {
@@ -136,7 +137,6 @@ class SseBroadcasterImpl implements SseBroadcaster {
                 }
             }
             sinks.clear();
-            isClosed = true;
         }
     }
 
