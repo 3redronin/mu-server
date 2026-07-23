@@ -107,8 +107,8 @@ class SseBroadcasterImpl implements SseBroadcaster {
     }
 
     private void onSinkErrored(SinkRegistration registration, Throwable throwable) {
-        boolean wasInList = sinks.remove(registration);
-        if (wasInList) {
+        sinks.remove(registration);
+        if (registration.errorNotified.compareAndSet(false, true)) {
             try {
                 registration.sink.close();
             } catch (Exception ignored) {
@@ -173,6 +173,7 @@ class SseBroadcasterImpl implements SseBroadcaster {
     private static class SinkRegistration {
         private final SseEventSink sink;
         private final AtomicBoolean closeNotified = new AtomicBoolean();
+        private final AtomicBoolean errorNotified = new AtomicBoolean();
 
         private SinkRegistration(SseEventSink sink) {
             this.sink = sink;

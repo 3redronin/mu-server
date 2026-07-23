@@ -535,6 +535,51 @@ public class SseBroadcasterImplTest {
         assertThat(notifications.get(), is(1));
     }
 
+    @Test
+    public void cascadingCloseDoesNotSuppressInFlightSendError() throws Exception {
+        SseBroadcasterImpl broadcaster = new SseBroadcasterImpl();
+        CompletableFuture<Void> sendResult = new CompletableFuture<>();
+        CountDownLatch closeStarted = new CountDownLatch(1);
+        CountDownLatch releaseClose = new CountDownLatch(1);
+        AtomicInteger closeCalls = new AtomicInteger();
+        AtomicInteger errorNotifications = new AtomicInteger();
+        SseEventSink sink = new SseEventSink() {
+            @Override
+            public boolean isClosed() {
+                return false;
+            }
+
+            @Override
+            public CompletionStage<?> send(OutboundSseEvent event) {
+                return sendResult;
+            }
+
+            @Override
+            public void close() {
+                if (closeCalls.incrementAndGet() == 1) {
+                    closeStarted.countDown();
+                    try {
+                        assertThat(releaseClose.await(1, TimeUnit.SECONDS), is(true));
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new IllegalStateException(e);
+                    }
+                }
+            }
+        };
+        broadcaster.onError((failedSink, error) -> errorNotifications.incrementAndGet());
+        broadcaster.register(sink);
+        broadcaster.broadcast(new JaxOutboundSseEventBuilder().data("event").build());
+
+        CompletableFuture<?> close = CompletableFuture.runAsync(broadcaster::close);
+        assertThat(closeStarted.await(1, TimeUnit.SECONDS), is(true));
+        sendResult.completeExceptionally(new IOException("send failed"));
+
+        assertThat(errorNotifications.get(), is(1));
+        releaseClose.countDown();
+        close.get(1, TimeUnit.SECONDS);
+    }
+
     private static SseEventSink sink(AtomicBoolean closed) {
         return new SseEventSink() {
             @Override
