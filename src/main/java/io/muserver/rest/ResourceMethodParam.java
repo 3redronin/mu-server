@@ -11,6 +11,7 @@ import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.core.PathSegment;
 import jakarta.ws.rs.ext.ParamConverter;
 import jakarta.ws.rs.ext.ParamConverterProvider;
+import org.jspecify.annotations.Nullable;
 
 import java.io.File;
 import java.io.IOException;
@@ -166,7 +167,7 @@ abstract class ResourceMethodParam {
             );
         }
 
-        RequestBasedParam(int index, ValueSource source, ResolvedParameter parameter, Object defaultValue, boolean encodedRequested, boolean lazyDefaultValue, ParamConverter paramConverter, DescriptionData descriptionData, String key, boolean isDeprecated, boolean isRequired, Pattern pattern, boolean explicitDefault) {
+        RequestBasedParam(int index, ValueSource source, ResolvedParameter parameter, @Nullable Object defaultValue, boolean encodedRequested, boolean lazyDefaultValue, ParamConverter paramConverter, DescriptionData descriptionData, String key, boolean isDeprecated, boolean isRequired, Pattern pattern, boolean explicitDefault) {
             super(index, source, parameter, descriptionData, isRequired);
             this.defaultValue = defaultValue;
             this.encodedRequested = encodedRequested;
@@ -192,7 +193,7 @@ abstract class ResourceMethodParam {
             return convertValue(parameterHandle, type, paramConverter, skipConverter, defaultValue, source, key);
         }
 
-        public Object getValue(JaxRSRequest jaxRequest, RequestMatcher.MatchedMethod matchedMethod, CollectionParameterStrategy cps) throws IOException {
+        public @Nullable Object getValue(JaxRSRequest jaxRequest, RequestMatcher.MatchedMethod matchedMethod, CollectionParameterStrategy cps) throws IOException {
             MuRequest muRequest = jaxRequest.muRequest;
             Class<?> paramClass = type;
             if (UploadedFile.class.isAssignableFrom(paramClass)) {

@@ -4,6 +4,7 @@ import io.muserver.HeaderNames;
 import io.muserver.MuException;
 import io.muserver.MuResponse;
 import io.muserver.Mutils;
+import jakarta.ws.rs.SeBootstrap;
 import jakarta.ws.rs.ServerErrorException;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.core.*;
@@ -12,10 +13,8 @@ import jakarta.ws.rs.sse.Sse;
 import jakarta.ws.rs.sse.SseBroadcaster;
 
 import java.net.URI;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.concurrent.CompletionStage;
 
 /**
  * <p>The JAX-RS runtime delegate for mu-server.</p>
@@ -94,8 +93,12 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
                 }
             }
         }
-        for (NewCookie cookie : from.getCookies().values()) {
-            to.headers().add(HeaderNames.SET_COOKIE, cookie.toString());
+        Collection<NewCookie> newCookies = from.getCookies().values();
+        if (!newCookies.isEmpty()) {
+            var headerDelegate = singleton.createHeaderDelegate(NewCookie.class);
+            for (NewCookie cookie : newCookies) {
+                to.headers().add(HeaderNames.SET_COOKIE, headerDelegate.toString(cookie));
+            }
         }
     }
 
@@ -132,6 +135,26 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
     @Override
     public Link.Builder createLinkBuilder() {
         return new LinkHeaderDelegate.MuLinkBuilder();
+    }
+
+    @Override
+    public SeBootstrap.Configuration.Builder createConfigurationBuilder() {
+        throw new NotImplementedException("MuServer does not support configuration");
+    }
+
+    @Override
+    public CompletionStage<SeBootstrap.Instance> bootstrap(Application application, SeBootstrap.Configuration configuration) {
+        throw new NotImplementedException("MuServer does not support bootstraping");
+    }
+
+    @Override
+    public CompletionStage<SeBootstrap.Instance> bootstrap(Class<? extends Application> clazz, SeBootstrap.Configuration configuration) {
+        throw new NotImplementedException("MuServer does not support bootstraping");
+    }
+
+    @Override
+    public EntityPart.Builder createEntityPartBuilder(String partName) throws IllegalArgumentException {
+        throw new NotImplementedException("MuServer does not support entity parts");
     }
 
     /**

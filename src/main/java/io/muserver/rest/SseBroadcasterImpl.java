@@ -119,13 +119,20 @@ class SseBroadcasterImpl implements SseBroadcaster {
 
     @Override
     public void close() {
+        close(true);
+    }
+
+    @Override
+    public void close(boolean cascading) {
         if (!isClosed) {
-            for (SseEventSink sink : sinks) {
-                try {
-                    sink.close();
-                    sendOnCloseEvent(sink);
-                } catch (Exception e) {
-                    // ignore
+            if (cascading) {
+                for (SseEventSink sink : sinks) {
+                    try {
+                        sink.close();
+                        sendOnCloseEvent(sink);
+                    } catch (Exception e) {
+                        // ignore
+                    }
                 }
             }
             sinks.clear();

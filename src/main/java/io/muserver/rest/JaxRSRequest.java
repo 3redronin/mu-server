@@ -6,8 +6,8 @@ import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.container.ResourceInfo;
-import jakarta.ws.rs.core.Cookie;
 import jakarta.ws.rs.core.*;
+import jakarta.ws.rs.core.Cookie;
 import jakarta.ws.rs.ext.MessageBodyReader;
 import jakarta.ws.rs.ext.ReaderInterceptor;
 import jakarta.ws.rs.ext.ReaderInterceptorContext;
@@ -89,6 +89,11 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
             return new MuResourceInfo(resourceInstanceClass, resourceInstanceMethod);
         }
         return muRequest.attribute(name);
+    }
+
+    @Override
+    public boolean hasProperty(String name) {
+        return muRequest.attributes().containsKey(name) || MuRuntimeDelegate.MU_REQUEST_PROPERTY.equals(name) || MuRuntimeDelegate.RESOURCE_INFO_PROPERTY.equals(name);
     }
 
     @Override

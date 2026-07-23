@@ -13,10 +13,19 @@ public class NewCookieHeaderDelegateTest {
 
     @Test
     public void canRoundTrip() {
-        NewCookie newCookie = new NewCookie("Blah", "ha%20ha", "/what", "example.org", "Comments are ignored", 1234567, true, true);
+        NewCookie newCookie = new NewCookie.Builder("Blah")
+            .value("ha%20ha")
+            .path("/what")
+            .domain("example.org")
+            .comment("Comments are ignored")
+            .maxAge(1234567)
+            .secure(true)
+            .httpOnly(true)
+            .sameSite(NewCookie.SameSite.STRICT)
+            .build();
         String headerValue = delegate.toString(newCookie);
         assertThat(headerValue, startsWith("Blah=ha%20ha; Max-Age=1234567; Expires="));
-        assertThat(headerValue, endsWith("; Path=/what; Domain=example.org; Secure; HTTPOnly"));
+        assertThat(headerValue, endsWith("; Path=/what; Domain=example.org; Secure; HTTPOnly; SameSite=Strict"));
         NewCookie recreated = delegate.fromString(headerValue);
         assertThat(recreated.getName(), equalTo("Blah"));
         assertThat(recreated.getValue(), equalTo("ha%20ha"));
@@ -27,11 +36,14 @@ public class NewCookieHeaderDelegateTest {
         assertThat(recreated.isSecure(), is(true));
         assertThat(recreated.getComment(), is(nullValue()));
         assertThat(recreated.getVersion(), is(1));
+        assertThat(recreated.getSameSite(), is(NewCookie.SameSite.STRICT));
     }
 
     @Test
     public void sessionCookieOmitsExpiryAttributes() {
-        NewCookie cookie = new NewCookie("session", "abc");
+        NewCookie cookie = new NewCookie.Builder("session")
+            .value("abc")
+            .build();
 
         String headerValue = delegate.toString(cookie);
 
@@ -42,15 +54,11 @@ public class NewCookieHeaderDelegateTest {
 
     @Test
     public void explicitSessionCookieOmitsExpiryAttributes() {
-        NewCookie cookie = new NewCookie(
-            "session",
-            "abc",
-            null,
-            null,
-            null,
-            NewCookie.DEFAULT_MAX_AGE,
-            false
-        );
+        NewCookie cookie = new NewCookie.Builder("session")
+            .value("abc")
+            .maxAge(NewCookie.DEFAULT_MAX_AGE)
+            .secure(false)
+            .build();
 
         String headerValue = delegate.toString(cookie);
 
@@ -61,15 +69,11 @@ public class NewCookieHeaderDelegateTest {
 
     @Test
     public void zeroMaxAgeSerializesAsDeletionCookie() {
-        NewCookie cookie = new NewCookie(
-            "session",
-            "",
-            null,
-            null,
-            null,
-            0,
-            false
-        );
+        NewCookie cookie = new NewCookie.Builder("session")
+            .value("")
+            .maxAge(0)
+            .secure(false)
+            .build();
 
         String headerValue = delegate.toString(cookie);
 
@@ -79,15 +83,11 @@ public class NewCookieHeaderDelegateTest {
 
     @Test
     public void positiveMaxAgeSerializesMaxAgeAndExpiry() {
-        NewCookie cookie = new NewCookie(
-            "persistent",
-            "abc",
-            null,
-            null,
-            null,
-            60,
-            false
-        );
+        NewCookie cookie = new NewCookie.Builder("persistent")
+            .value("abc")
+            .maxAge(60)
+            .secure(false)
+            .build();
 
         String headerValue = delegate.toString(cookie);
 
@@ -96,32 +96,33 @@ public class NewCookieHeaderDelegateTest {
 
     @Test
     public void nullPathAndDomainAreOmitted() {
-        NewCookie cookie = new NewCookie(
-            "name",
-            "value",
-            null,
-            null,
-            null,
-            NewCookie.DEFAULT_MAX_AGE,
-            false
-        );
+        NewCookie cookie = new NewCookie.Builder("name")
+            .value("value")
+            .maxAge(NewCookie.DEFAULT_MAX_AGE)
+            .secure(false)
+            .build();
 
         String headerValue = delegate.toString(cookie);
 
-        assertThat(headerValue, not(containsString("Path=")));
-        assertThat(headerValue, not(containsString("Domain=")));
+        assertThat(headerValue, not(containsStringIgnoringCase("Path=")));
+        assertThat(headerValue, not(containsStringIgnoringCase("Domain=")));
+        assertThat(headerValue, not(containsStringIgnoringCase("SameSite=")));
     }
 
     @Test
     public void secureAndHttpOnlyAreIndependent() {
-        NewCookie secureOnly = new NewCookie(
-            "name", "value", null, null, null,
-            NewCookie.DEFAULT_MAX_AGE, true, false
-        );
-        NewCookie httpOnlyOnly = new NewCookie(
-            "name", "value", null, null, null,
-            NewCookie.DEFAULT_MAX_AGE, false, true
-        );
+        NewCookie secureOnly = new NewCookie.Builder("name")
+            .value("value")
+            .maxAge(NewCookie.DEFAULT_MAX_AGE)
+            .secure(true)
+            .httpOnly(false)
+            .build();
+        NewCookie httpOnlyOnly = new NewCookie.Builder("name")
+            .value("value")
+            .maxAge(NewCookie.DEFAULT_MAX_AGE)
+            .secure(false)
+            .httpOnly(true)
+            .build();
 
         assertThat(delegate.toString(secureOnly), equalTo("name=value; Secure"));
         assertThat(delegate.toString(httpOnlyOnly), equalTo("name=value; HTTPOnly"));

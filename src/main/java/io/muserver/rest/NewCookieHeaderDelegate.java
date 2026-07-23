@@ -1,12 +1,10 @@
 package io.muserver.rest;
 
-import io.netty.handler.codec.http.cookie.ClientCookieDecoder;
-import io.netty.handler.codec.http.cookie.Cookie;
-import io.netty.handler.codec.http.cookie.DefaultCookie;
-import io.netty.handler.codec.http.cookie.ServerCookieEncoder;
 import io.muserver.Mutils;
+import io.netty.handler.codec.http.cookie.*;
 import jakarta.ws.rs.core.NewCookie;
 import jakarta.ws.rs.ext.RuntimeDelegate;
+import org.jspecify.annotations.Nullable;
 
 class NewCookieHeaderDelegate implements RuntimeDelegate.HeaderDelegate<NewCookie> {
     static {
@@ -22,8 +20,34 @@ class NewCookieHeaderDelegate implements RuntimeDelegate.HeaderDelegate<NewCooki
         if (cookie == null) {
             throw new IllegalArgumentException("Could not parse cookie header value: " + value);
         }
+        var sameSite = cookie instanceof DefaultCookie ? fromNetty(((DefaultCookie) cookie).sameSite()) : null;
+
         int maxAge = cookie.maxAge() == DefaultCookie.UNDEFINED_MAX_AGE ? NewCookie.DEFAULT_MAX_AGE : (int) cookie.maxAge();
-        return new NewCookie(cookie.name(), cookie.value(), cookie.path(), cookie.domain(), null, maxAge, cookie.isSecure(), cookie.isHttpOnly());
+        return new NewCookie.Builder(cookie.name())
+            .value(cookie.value())
+            .path(cookie.path())
+            .domain(cookie.domain())
+            .maxAge(maxAge)
+            .secure(cookie.isSecure())
+            .httpOnly(cookie.isHttpOnly())
+            .sameSite(sameSite)
+            .build();
+    }
+
+    private static NewCookie.@Nullable SameSite fromNetty(CookieHeaderNames.@Nullable SameSite nettySameSite) {
+        if (nettySameSite == null) {
+            return null;
+        }
+        switch (nettySameSite) {
+            case Strict:
+                return NewCookie.SameSite.STRICT;
+            case Lax:
+                return NewCookie.SameSite.LAX;
+            case None:
+                return NewCookie.SameSite.NONE;
+            default:
+                throw new IllegalArgumentException("Unknown SameSite value: " + nettySameSite);
+        }
     }
 
     @Override
@@ -41,6 +65,24 @@ class NewCookieHeaderDelegate implements RuntimeDelegate.HeaderDelegate<NewCooki
             nettyCookie.setPath(cookie.getPath());
         }
         nettyCookie.setSecure(cookie.isSecure());
+        var ss = cookie.getSameSite();
+        if (ss != null) {
+            nettyCookie.setSameSite(toNetty(ss));
+        }
         return encoder.encode(nettyCookie);
     }
+
+    private CookieHeaderNames.SameSite toNetty(NewCookie.SameSite ss) {
+        switch (ss) {
+            case STRICT:
+                return CookieHeaderNames.SameSite.Strict;
+            case LAX:
+                return CookieHeaderNames.SameSite.Lax;
+            case NONE:
+                return CookieHeaderNames.SameSite.None;
+            default:
+                throw new IllegalArgumentException("Unknown SameSite value: " + ss);
+        }
+    }
+
 }
