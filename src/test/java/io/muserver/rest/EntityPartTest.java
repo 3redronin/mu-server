@@ -23,6 +23,7 @@ import scaffolding.ServerUtils;
 
 import java.io.ByteArrayInputStream;
 import java.io.FilterInputStream;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.InputStream;
@@ -137,6 +138,33 @@ public class EntityPartTest {
         try (Response response = call(request(server.uri().resolve("/parts")).post(body))) {
             assertThat(response.code(), is(200));
             assertThat(response.body().string(), is("description=hello; attachment=hello.txt:file contents"));
+        }
+    }
+
+    @Test
+    public void multipartEntityPartContentIsSpooledOutOfHeap() throws Exception {
+        @Path("/parts")
+        class PartsResource {
+            @POST
+            @Consumes(MediaType.MULTIPART_FORM_DATA)
+            public boolean post(List<EntityPart> parts) throws Exception {
+                try (InputStream content = parts.get(0).getContent()) {
+                    return content instanceof FileInputStream && content.read() == 'h';
+                }
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new PartsResource()))
+            .start();
+
+        MultipartBody body = new MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart("description", "hello")
+            .build();
+        try (Response response = call(request(server.uri().resolve("/parts")).post(body))) {
+            assertThat(response.code(), is(200));
+            assertThat(response.body().string(), is("true"));
         }
     }
 

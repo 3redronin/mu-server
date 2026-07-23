@@ -14,7 +14,11 @@ import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.ext.MessageBodyReader;
 import jakarta.ws.rs.ext.MessageBodyWriter;
 
-import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.BufferedInputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -53,66 +57,148 @@ final class MultipartEntityProvider implements MessageBodyReader<List<EntityPart
         if (boundary == null || boundary.isEmpty()) {
             throw new BadRequestException("A multipart request must include a boundary parameter");
         }
-        byte[] bytes = Mutils.toByteArray(entityStream, 8192);
-        String body = new String(bytes, StandardCharsets.ISO_8859_1);
+        InputStream input = new BufferedInputStream(entityStream, 8192);
         String delimiter = "--" + boundary;
-        int position = findBoundary(body, delimiter, 0);
-        if (position < 0) {
+        String firstBoundary;
+        do {
+            firstBoundary = readLine(input);
+        } while (firstBoundary != null
+            && !delimiter.equals(firstBoundary)
+            && !(delimiter + "--").equals(firstBoundary));
+        if (firstBoundary == null) {
             throw new BadRequestException("The multipart boundary was not found in the request body");
+        }
+        if ((delimiter + "--").equals(firstBoundary)) {
+            return new ArrayList<>();
         }
 
         List<EntityPart> parts = new ArrayList<>();
-        while (position >= 0) {
-            int afterDelimiter = position + delimiter.length();
-            if (body.startsWith("--", afterDelimiter)) {
-                break;
-            }
-            if (!body.startsWith(CRLF, afterDelimiter)) {
-                throw new BadRequestException("Invalid multipart boundary delimiter");
-            }
-            int headersStart = afterDelimiter + CRLF.length();
-            int headersEnd = body.indexOf(CRLF + CRLF, headersStart);
-            if (headersEnd < 0) {
-                throw new BadRequestException("Invalid multipart part headers");
-            }
-            MultivaluedMap<String, String> partHeaders = parseHeaders(body.substring(headersStart, headersEnd));
-            int contentStart = headersEnd + (CRLF + CRLF).length();
-            int nextBoundary = findBoundary(body, CRLF + delimiter, contentStart);
-            if (nextBoundary < 0) {
-                throw new BadRequestException("The closing multipart boundary was not found");
-            }
+        List<DeletingFileInputStream> openedStreams = new ArrayList<>();
+        try {
+            boolean finished = false;
+            while (!finished) {
+                MultivaluedMap<String, String> partHeaders = readHeaders(input);
+                File spoolFile = File.createTempFile("mu-entity-part-", ".tmp");
+                spoolFile.deleteOnExit();
+                BoundaryResult boundaryResult;
+                try (OutputStream spool = new FileOutputStream(spoolFile)) {
+                    boundaryResult = copyUntilBoundary(input,
+                        (CRLF + delimiter).getBytes(StandardCharsets.ISO_8859_1), spool);
+                } catch (IOException | RuntimeException | Error failure) {
+                    spoolFile.delete();
+                    throw failure;
+                }
 
-            String dispositionValue = partHeaders.getFirst(HttpHeaders.CONTENT_DISPOSITION);
-            List<ParameterizedHeaderWithValue> dispositions = ParameterizedHeaderWithValue.fromString(dispositionValue);
-            if (dispositions.isEmpty() || !"form-data".equalsIgnoreCase(dispositions.get(0).value())) {
-                throw new BadRequestException("Each entity part must have a form-data Content-Disposition header");
+                String dispositionValue = partHeaders.getFirst(HttpHeaders.CONTENT_DISPOSITION);
+                List<ParameterizedHeaderWithValue> dispositions =
+                    ParameterizedHeaderWithValue.fromString(dispositionValue);
+                if (dispositions.isEmpty() || !"form-data".equalsIgnoreCase(dispositions.get(0).value())) {
+                    spoolFile.delete();
+                    throw new BadRequestException(
+                        "Each entity part must have a form-data Content-Disposition header");
+                }
+                String name = dispositions.get(0).parameter("name");
+                if (name == null) {
+                    spoolFile.delete();
+                    throw new BadRequestException("Each entity part must have a name");
+                }
+                String fileName = dispositions.get(0).parameter("filename");
+                if (!partHeaders.containsKey(HttpHeaders.CONTENT_TYPE)) {
+                    partHeaders.putSingle(HttpHeaders.CONTENT_TYPE,
+                        fileName == null ? MediaType.TEXT_PLAIN : MediaType.APPLICATION_OCTET_STREAM);
+                }
+                DeletingFileInputStream content = new DeletingFileInputStream(spoolFile);
+                openedStreams.add(content);
+                parts.add(new MuEntityPart(name, fileName, partHeaders, content, entityProviders));
+                finished = boundaryResult == BoundaryResult.CLOSING;
             }
-            String name = dispositions.get(0).parameter("name");
-            if (name == null) {
-                throw new BadRequestException("Each entity part must have a name");
+            return parts;
+        } catch (IOException | RuntimeException | Error failure) {
+            for (DeletingFileInputStream stream : openedStreams) {
+                try {
+                    stream.close();
+                } catch (IOException ignored) {
+                }
             }
-            String fileName = dispositions.get(0).parameter("filename");
-            if (!partHeaders.containsKey(HttpHeaders.CONTENT_TYPE)) {
-                partHeaders.putSingle(HttpHeaders.CONTENT_TYPE,
-                    fileName == null ? MediaType.TEXT_PLAIN : MediaType.APPLICATION_OCTET_STREAM);
-            }
-            byte[] content = body.substring(contentStart, nextBoundary).getBytes(StandardCharsets.ISO_8859_1);
-            parts.add(new MuEntityPart(name, fileName, partHeaders, new ByteArrayInputStream(content), entityProviders));
-            position = nextBoundary + CRLF.length();
+            throw failure;
         }
-        return parts;
     }
 
-    private static int findBoundary(String body, String marker, int fromIndex) {
-        int candidate = body.indexOf(marker, fromIndex);
-        while (candidate >= 0) {
-            int afterMarker = candidate + marker.length();
-            if (body.startsWith("--", afterMarker) || body.startsWith(CRLF, afterMarker)) {
-                return candidate;
+    private static MultivaluedMap<String, String> readHeaders(InputStream input) throws IOException {
+        StringBuilder block = new StringBuilder();
+        while (true) {
+            String line = readLine(input);
+            if (line == null) {
+                throw new BadRequestException("Invalid multipart part headers");
             }
-            candidate = body.indexOf(marker, candidate + 1);
+            if (line.isEmpty()) {
+                return parseHeaders(block.toString());
+            }
+            if (block.length() > 0) {
+                block.append(CRLF);
+            }
+            block.append(line);
         }
-        return -1;
+    }
+
+    private static String readLine(InputStream input) throws IOException {
+        ByteArrayOutputStream line = new ByteArrayOutputStream();
+        int previous = -1;
+        int current;
+        while ((current = input.read()) >= 0) {
+            if (previous == '\r' && current == '\n') {
+                byte[] bytes = line.toByteArray();
+                return new String(bytes, 0, bytes.length - 1, StandardCharsets.ISO_8859_1);
+            }
+            line.write(current);
+            previous = current;
+            if (line.size() > 64 * 1024) {
+                throw new BadRequestException("Multipart header line is too long");
+            }
+        }
+        return line.size() == 0 ? null : new String(line.toByteArray(), StandardCharsets.ISO_8859_1);
+    }
+
+    private static BoundaryResult copyUntilBoundary(InputStream input, byte[] marker, OutputStream output)
+        throws IOException {
+        int matched = 0;
+        int current;
+        while ((current = input.read()) >= 0) {
+            if (current == (marker[matched] & 0xff)) {
+                matched++;
+                if (matched == marker.length) {
+                    int suffixOne = input.read();
+                    int suffixTwo = input.read();
+                    if (suffixOne == '-' && suffixTwo == '-') {
+                        return BoundaryResult.CLOSING;
+                    }
+                    if (suffixOne == '\r' && suffixTwo == '\n') {
+                        return BoundaryResult.NEXT;
+                    }
+                    output.write(marker);
+                    if (suffixOne >= 0) {
+                        output.write(suffixOne);
+                    }
+                    if (suffixTwo >= 0) {
+                        output.write(suffixTwo);
+                    }
+                    matched = 0;
+                }
+            } else {
+                if (matched > 0) {
+                    output.write(marker, 0, matched);
+                    matched = 0;
+                    if (current == (marker[0] & 0xff)) {
+                        matched = 1;
+                    } else {
+                        output.write(current);
+                    }
+                } else {
+                    output.write(current);
+                }
+            }
+        }
+        throw new BadRequestException("The closing multipart boundary was not found");
     }
 
     private static MultivaluedMap<String, String> parseHeaders(String headerBlock) {
@@ -202,5 +288,28 @@ final class MultipartEntityProvider implements MessageBodyReader<List<EntityPart
         }
         Type[] arguments = ((ParameterizedType) genericType).getActualTypeArguments();
         return arguments.length == 1 && arguments[0] == EntityPart.class;
+    }
+
+    private enum BoundaryResult {
+        NEXT,
+        CLOSING
+    }
+
+    private static final class DeletingFileInputStream extends FileInputStream {
+        private final File file;
+
+        private DeletingFileInputStream(File file) throws IOException {
+            super(file);
+            this.file = file;
+        }
+
+        @Override
+        public void close() throws IOException {
+            try {
+                super.close();
+            } finally {
+                file.delete();
+            }
+        }
     }
 }
