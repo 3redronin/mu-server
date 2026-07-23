@@ -759,6 +759,6 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
 
     @Override
     public boolean isClosed() {
-        return super.isClosed();
+        return isClosed;
     }
 }
