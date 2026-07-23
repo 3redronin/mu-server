@@ -8,12 +8,11 @@ import jakarta.ws.rs.sse.SseBroadcaster;
 import jakarta.ws.rs.sse.SseEventSink;
 
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -23,8 +22,7 @@ class SseBroadcasterImpl implements SseBroadcaster {
     private volatile boolean isClosed = false;
     private final List<BiConsumer<SseEventSink, Throwable>> errorListeners = new CopyOnWriteArrayList<>();
     private final List<Consumer<SseEventSink>> closeListeners = new CopyOnWriteArrayList<>();
-    private final List<SseEventSink> sinks = new CopyOnWriteArrayList<>();
-    private final Set<SseEventSink> closeNotifications = ConcurrentHashMap.newKeySet();
+    private final List<SinkRegistration> sinks = new CopyOnWriteArrayList<>();
 
     @Override
     public synchronized void onError(BiConsumer<SseEventSink, Throwable> onError) {
@@ -44,7 +42,8 @@ class SseBroadcasterImpl implements SseBroadcaster {
     public synchronized void register(SseEventSink sseEventSink) {
         Mutils.notNull("sseEventSink", sseEventSink);
         throwIfClosed();
-        this.sinks.add(sseEventSink);
+        SinkRegistration registration = new SinkRegistration(sseEventSink);
+        this.sinks.add(registration);
         if (sseEventSink instanceof JaxSseEventSinkImpl) {
             ((JaxSseEventSinkImpl) sseEventSink).setResponseCompleteHandler(info -> {
                 if (!info.completedSuccessfully()) {
@@ -60,7 +59,7 @@ class SseBroadcasterImpl implements SseBroadcaster {
                         case ERRORED:
                             ex = new MuException("Generic error");
                     }
-                    onSinkErrored(sseEventSink, ex);
+                    onSinkErrored(registration, ex);
                 }
             });
         }
@@ -69,7 +68,7 @@ class SseBroadcasterImpl implements SseBroadcaster {
     @Override
     public CompletionStage<?> broadcast(OutboundSseEvent event) {
         Mutils.notNull("event", event);
-        List<SseEventSink> currentSinks;
+        List<SinkRegistration> currentSinks;
         synchronized (this) {
             throwIfClosed();
             currentSinks = List.copyOf(sinks);
@@ -82,22 +81,23 @@ class SseBroadcasterImpl implements SseBroadcaster {
             completableFuture.complete(null);
             return completableFuture;
         }
-        for (SseEventSink sink : currentSinks) {
+        for (SinkRegistration registration : currentSinks) {
+            SseEventSink sink = registration.sink;
             if (sink.isClosed()) {
-                sinks.remove(sink);
-                sendOnCloseEvent(sink);
+                sinks.remove(registration);
+                sendOnCloseEvent(registration);
                 sendComplete(completableFuture, count);
             } else {
                 try {
                     sink.send(event).whenComplete((o, throwable) -> {
                         if (throwable != null) {
-                            onSinkErrored(sink, throwable);
+                            onSinkErrored(registration, throwable);
                         }
                         sendComplete(completableFuture, count);
                     });
                 } catch (IllegalStateException e) {
-                    sinks.remove(sink);
-                    sendOnCloseEvent(sink);
+                    sinks.remove(registration);
+                    sendOnCloseEvent(registration);
                     sendComplete(completableFuture, count);
                 }
             }
@@ -106,15 +106,15 @@ class SseBroadcasterImpl implements SseBroadcaster {
         return completableFuture;
     }
 
-    private void onSinkErrored(SseEventSink sink, Throwable throwable) {
-        boolean wasInList = sinks.remove(sink);
+    private void onSinkErrored(SinkRegistration registration, Throwable throwable) {
+        boolean wasInList = sinks.remove(registration);
         if (wasInList) {
             try {
-                sink.close();
+                registration.sink.close();
             } catch (Exception ignored) {
             }
             for (BiConsumer<SseEventSink, Throwable> errorListener : errorListeners) {
-                errorListener.accept(sink, throwable);
+                errorListener.accept(registration.sink, throwable);
             }
         }
     }
@@ -133,7 +133,7 @@ class SseBroadcasterImpl implements SseBroadcaster {
 
     @Override
     public void close(boolean cascading) {
-        List<SseEventSink> sinksToClose;
+        List<SinkRegistration> sinksToClose;
         synchronized (this) {
             if (isClosed) {
                 return;
@@ -142,20 +142,20 @@ class SseBroadcasterImpl implements SseBroadcaster {
             sinksToClose = cascading ? List.copyOf(sinks) : List.of();
             sinks.clear();
         }
-        for (SseEventSink sink : sinksToClose) {
+        for (SinkRegistration registration : sinksToClose) {
             try {
-                sink.close();
-                sendOnCloseEvent(sink);
+                registration.sink.close();
+                sendOnCloseEvent(registration);
             } catch (Exception e) {
                 // ignore
             }
         }
     }
 
-    private void sendOnCloseEvent(SseEventSink sink) {
-        if (closeNotifications.add(sink)) {
+    private void sendOnCloseEvent(SinkRegistration registration) {
+        if (registration.closeNotified.compareAndSet(false, true)) {
             for (Consumer<SseEventSink> closeListener : closeListeners) {
-                closeListener.accept(sink);
+                closeListener.accept(registration.sink);
             }
         }
     }
@@ -168,5 +168,14 @@ class SseBroadcasterImpl implements SseBroadcaster {
 
     public int connectedSinksCount() {
         return sinks.size();
+    }
+
+    private static class SinkRegistration {
+        private final SseEventSink sink;
+        private final AtomicBoolean closeNotified = new AtomicBoolean();
+
+        private SinkRegistration(SseEventSink sink) {
+            this.sink = sink;
+        }
     }
 }
