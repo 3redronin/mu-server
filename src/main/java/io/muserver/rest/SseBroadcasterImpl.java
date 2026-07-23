@@ -24,21 +24,21 @@ class SseBroadcasterImpl implements SseBroadcaster {
     private final List<SseEventSink> sinks = new CopyOnWriteArrayList<>();
 
     @Override
-    public void onError(BiConsumer<SseEventSink, Throwable> onError) {
+    public synchronized void onError(BiConsumer<SseEventSink, Throwable> onError) {
         Mutils.notNull("onError", onError);
         throwIfClosed();
         this.errorListeners.add(onError);
     }
 
     @Override
-    public void onClose(Consumer<SseEventSink> onClose) {
+    public synchronized void onClose(Consumer<SseEventSink> onClose) {
         Mutils.notNull("onClose", onClose);
         throwIfClosed();
         this.closeListeners.add(onClose);
     }
 
     @Override
-    public void register(SseEventSink sseEventSink) {
+    public synchronized void register(SseEventSink sseEventSink) {
         Mutils.notNull("sseEventSink", sseEventSink);
         throwIfClosed();
         this.sinks.add(sseEventSink);
@@ -66,13 +66,20 @@ class SseBroadcasterImpl implements SseBroadcaster {
     @Override
     public CompletionStage<?> broadcast(OutboundSseEvent event) {
         Mutils.notNull("event", event);
-        throwIfClosed();
-
+        List<SseEventSink> currentSinks;
+        synchronized (this) {
+            throwIfClosed();
+            currentSinks = List.copyOf(sinks);
+        }
 
         CompletableFuture<?> completableFuture = new CompletableFuture<>();
 
-        AtomicInteger count = new AtomicInteger(sinks.size());
-        for (SseEventSink sink : sinks) {
+        AtomicInteger count = new AtomicInteger(currentSinks.size());
+        if (currentSinks.isEmpty()) {
+            completableFuture.complete(null);
+            return completableFuture;
+        }
+        for (SseEventSink sink : currentSinks) {
             if (sink.isClosed()) {
                 sinks.remove(sink);
                 sendOnCloseEvent(sink);

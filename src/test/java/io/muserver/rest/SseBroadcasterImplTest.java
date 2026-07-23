@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.lang.annotation.Annotation;
+import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
@@ -36,6 +37,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
+import static org.junit.Assert.assertThrows;
 import static scaffolding.ClientUtils.request;
 import static scaffolding.MuAssert.assertEventually;
 
@@ -377,6 +379,39 @@ public class SseBroadcasterImplTest {
         assertThat(sinkClosed.get(), is(false));
         assertThat(closeListenerCalled.get(), is(false));
         assertThat(broadcaster.connectedSinksCount(), is(0));
+    }
+
+    @Test
+    public void stateChangingOperationsAreSerializedWithClose() throws Exception {
+        assertThat(Modifier.isSynchronized(SseBroadcasterImpl.class
+            .getMethod("register", SseEventSink.class).getModifiers()), is(true));
+        assertThat(Modifier.isSynchronized(SseBroadcasterImpl.class
+            .getMethod("onClose", java.util.function.Consumer.class).getModifiers()), is(true));
+        assertThat(Modifier.isSynchronized(SseBroadcasterImpl.class
+            .getMethod("onError", java.util.function.BiConsumer.class).getModifiers()), is(true));
+    }
+
+    @Test
+    public void everyOperationOtherThanCloseIsRejectedAfterClose() {
+        SseBroadcasterImpl broadcaster = new SseBroadcasterImpl();
+        broadcaster.close(false);
+
+        assertThrows(IllegalStateException.class,
+            () -> broadcaster.register(sink(new AtomicBoolean())));
+        assertThrows(IllegalStateException.class,
+            () -> broadcaster.broadcast(new JaxOutboundSseEventBuilder().data("event").build()));
+        assertThrows(IllegalStateException.class,
+            () -> broadcaster.onClose(closedSink -> { }));
+        assertThrows(IllegalStateException.class,
+            () -> broadcaster.onError((closedSink, error) -> { }));
+    }
+
+    @Test
+    public void broadcastingWithNoSinksCompletesImmediately() throws Exception {
+        SseBroadcasterImpl broadcaster = new SseBroadcasterImpl();
+
+        broadcaster.broadcast(new JaxOutboundSseEventBuilder().data("event").build())
+            .toCompletableFuture().get(1, TimeUnit.SECONDS);
     }
 
     private static SseEventSink sink(AtomicBoolean closed) {
