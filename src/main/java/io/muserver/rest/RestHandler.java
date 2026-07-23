@@ -279,7 +279,8 @@ public class RestHandler implements MuHandler {
                     if (jaxRSResponse.hasEntity()) {
                         jaxRSResponse.executeInterceptors(writerInterceptors); // run the interceptors
                     }
-                    boolean entityStreamReplaced = jaxRSResponse.getOutputStream() != out;
+                    boolean entityStreamReplaced = requestContext.getMuMethod() != Method.HEAD
+                        && jaxRSResponse.getOutputStream() != out;
                     Object entity = jaxRSResponse.getEntity();
                     if (entity instanceof Exception) {
                         throw (Exception) entity;
