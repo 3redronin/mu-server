@@ -31,7 +31,7 @@ import java.util.UUID;
 
 @Consumes("multipart/*")
 @Produces("multipart/*")
-final class MultipartEntityProvider implements MessageBodyReader<List<EntityPart>>, MessageBodyWriter<List<EntityPart>> {
+final class MultipartEntityProvider implements MessageBodyReader<List<EntityPart>>, MessageBodyWriter<Collection<EntityPart>> {
 
     private static final String CRLF = "\r\n";
     private final EntityProviders entityProviders;
@@ -136,7 +136,7 @@ final class MultipartEntityProvider implements MessageBodyReader<List<EntityPart
     }
 
     @Override
-    public void writeTo(List<EntityPart> parts, Class<?> type, Type genericType, Annotation[] annotations,
+    public void writeTo(Collection<EntityPart> parts, Class<?> type, Type genericType, Annotation[] annotations,
                         MediaType mediaType, MultivaluedMap<String, Object> httpHeaders,
                         OutputStream entityStream) throws IOException, WebApplicationException {
         String boundary = "mu-" + UUID.randomUUID().toString().replace("-", "");

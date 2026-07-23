@@ -29,6 +29,8 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.List;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
@@ -169,6 +171,31 @@ public class EntityPartTest {
             assertThat(body, containsString("hello"));
             assertThat(body, containsString("Content-Disposition: form-data; name=\"hello.txt\"; filename=\"hello.txt\""));
             assertThat(body, containsString("file contents"));
+        }
+    }
+
+    @Test
+    public void writesAnyEntityPartCollectionAsMultipartBodies() throws Exception {
+        @Path("/parts")
+        class PartsResource {
+            @GET
+            @Produces(MediaType.MULTIPART_FORM_DATA)
+            public GenericEntity<Collection<EntityPart>> get() throws Exception {
+                Collection<EntityPart> parts = new LinkedHashSet<>();
+                parts.add(EntityPart.withName("description").content("hello").build());
+                return new GenericEntity<Collection<EntityPart>>(parts) {
+                };
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new PartsResource()))
+            .start();
+
+        try (Response response = call(request(server.uri().resolve("/parts")))) {
+            assertThat(response.code(), is(200));
+            assertThat(response.header("content-type"), startsWith("multipart/form-data;boundary="));
+            assertThat(response.body().string(), containsString("hello"));
         }
     }
 
