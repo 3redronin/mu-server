@@ -402,7 +402,7 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
     @Override
     public String getHeaderString(String name) {
         List<Object> values = headers.get(name);
-        return values == null ? null : values.stream()
+        return values == null || values.isEmpty() ? null : values.stream()
             .map(JaxRSResponse::headerValueToString)
             .collect(Collectors.joining(","));
     }

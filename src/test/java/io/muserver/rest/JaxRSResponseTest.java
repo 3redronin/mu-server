@@ -284,6 +284,14 @@ public class JaxRSResponseTest {
     }
 
     @Test
+    public void getHeaderStringTreatsAnEmptyValueListAsAbsent() {
+        Response response = JaxRSResponse.ok().build();
+        response.getHeaders().put("X-Empty", new java.util.ArrayList<>());
+
+        assertThat(response.getHeaderString("X-Empty"), is(nullValue()));
+    }
+
+    @Test
     public void containerResponseContextExposesEntityMetadataAndStreams() {
         @Deprecated
         class AnnotatedEntity { }
