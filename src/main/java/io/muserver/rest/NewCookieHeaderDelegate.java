@@ -46,15 +46,16 @@ class NewCookieHeaderDelegate implements RuntimeDelegate.HeaderDelegate<NewCooki
 
     private static NewCookie.@Nullable SameSite sameSiteFromHeader(String value) {
         Matcher matcher = SAME_SITE_ATTRIBUTE.matcher(value);
-        if (!matcher.find()) {
-            return null;
+        NewCookie.SameSite result = null;
+        while (matcher.find()) {
+            String sameSite = matcher.group(1).trim();
+            try {
+                result = NewCookie.SameSite.valueOf(sameSite.toUpperCase(Locale.ROOT));
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("Invalid SameSite value: " + sameSite, e);
+            }
         }
-        String sameSite = matcher.group(1).trim();
-        try {
-            return NewCookie.SameSite.valueOf(sameSite.toUpperCase(Locale.ROOT));
-        } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("Invalid SameSite value: " + sameSite, e);
-        }
+        return result;
     }
 
     private static NewCookie.@Nullable SameSite fromNetty(CookieHeaderNames.@Nullable SameSite nettySameSite) {

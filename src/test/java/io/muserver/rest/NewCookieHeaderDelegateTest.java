@@ -62,6 +62,14 @@ public class NewCookieHeaderDelegateTest {
     }
 
     @Test
+    public void lastDuplicateSameSiteAttributeWins() {
+        NewCookie parsed = delegate.fromString(
+            "session=abc; SameSite=Lax; SameSite=None");
+
+        assertThat(parsed.getSameSite(), is(NewCookie.SameSite.NONE));
+    }
+
+    @Test
     public void invalidSameSiteValuesAreRejected() {
         assertThrows(IllegalArgumentException.class,
             () -> delegate.fromString("session=abc; SameSite=somewhere"));
