@@ -145,10 +145,10 @@ class Http2Stream implements ResponseInfo {
                 throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "invalid trailer field", id);
             }
         }
+        validateRequestBodyLengthAtEnd();
         if (bodyInputStream instanceof Http2BodyInputStream) {
             ((Http2BodyInputStream) bodyInputStream).onTrailers(headersFrame.headers());
         }
-        validateRequestBodyLengthAtEnd();
         switch (state) {
             case OPEN:
                 state = State.HALF_CLOSED_REMOTE;
@@ -177,9 +177,13 @@ class Http2Stream implements ResponseInfo {
             if (declaredRequestBodyLength != null && receivedRequestBodyLength > declaredRequestBodyLength) {
                 throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "content-length does not match received DATA", id);
             }
+            if (dataFrame.endStream()) {
+                // Validate before making the terminal frame visible to the handler. Otherwise the
+                // handler can observe EOF and send a response before this stream error is raised.
+                validateRequestBodyLengthAtEnd();
+            }
             ((Http2BodyInputStream)bodyInputStream).onData(dataFrame, flowControlSize);
             if (dataFrame.endStream()) {
-                validateRequestBodyLengthAtEnd();
                 switch (state) {
                     case OPEN:
                         state = State.HALF_CLOSED_REMOTE;
