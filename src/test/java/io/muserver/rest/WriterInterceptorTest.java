@@ -5,6 +5,9 @@ import io.muserver.MuServer;
 import jakarta.annotation.Priority;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.container.ResourceInfo;
+import jakarta.ws.rs.core.GenericEntity;
+import jakarta.ws.rs.core.MultivaluedMap;
+import jakarta.ws.rs.ext.MessageBodyWriter;
 import jakarta.ws.rs.ext.WriterInterceptor;
 import jakarta.ws.rs.ext.WriterInterceptorContext;
 import okhttp3.Response;
@@ -12,16 +15,26 @@ import org.junit.After;
 import org.junit.Test;
 import scaffolding.ServerUtils;
 
+import java.io.ByteArrayInputStream;
+import java.io.File;
 import java.io.FilterOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.Reader;
+import java.io.StringReader;
+import java.lang.annotation.Annotation;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
+import java.lang.reflect.Type;
+import java.nio.file.Files;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -140,6 +153,123 @@ public class WriterInterceptorTest {
             assertThat(resp.code(), is(200));
             assertThat(resp.header("content-type"), is("text/plain;charset=utf-8"));
             assertThat(resp.body().string(), equalTo("HELLO"));
+        }
+    }
+
+    @Test
+    public void interceptorsRunForEverySupportedBlockedTckWriterType() throws Exception {
+        AtomicInteger interceptorCalls = new AtomicInteger();
+        File file = File.createTempFile("mu-writer-interceptor", ".txt");
+        Files.writeString(file.toPath(), "file");
+        @Path("/writer-types")
+        class Resource {
+            @GET
+            @Path("bytes")
+            public byte[] bytes() {
+                return "bytes".getBytes(StandardCharsets.UTF_8);
+            }
+
+            @GET
+            @Path("file")
+            public File file() {
+                return file;
+            }
+
+            @GET
+            @Path("stream")
+            public InputStream stream() {
+                return new ByteArrayInputStream("stream".getBytes(StandardCharsets.UTF_8));
+            }
+
+            @GET
+            @Path("reader")
+            public Reader reader() {
+                return new StringReader("reader");
+            }
+        }
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new Resource())
+                .addWriterInterceptor(context -> {
+                    interceptorCalls.incrementAndGet();
+                    context.proceed();
+                }))
+            .start();
+
+        for (String path : List.of("bytes", "file", "stream", "reader")) {
+            try (Response response = call(request(server.uri().resolve("/writer-types/" + path)))) {
+                assertThat(response.body().string(), is(path));
+            }
+        }
+        assertThat(interceptorCalls.get(), is(4));
+    }
+
+    @Test
+    public void lastWriterInterceptorValuesControlProviderSelectionAndWriting() throws Exception {
+        @Priority(200)
+        class ExpectedValuesWriter implements MessageBodyWriter<ArrayList<String>> {
+            @Override
+            public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations,
+                                       jakarta.ws.rs.core.MediaType mediaType) {
+                return type == ArrayList.class
+                    && genericType == String.class
+                    && mediaType.equals(jakarta.ws.rs.core.MediaType.TEXT_PLAIN_TYPE)
+                    && annotations.length == 1
+                    && annotations[0] instanceof Priority
+                    && ((Priority) annotations[0]).value() == 200;
+            }
+
+            @Override
+            public void writeTo(ArrayList<String> value, Class<?> type, Type genericType,
+                                Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType,
+                                MultivaluedMap<String, Object> httpHeaders,
+                                OutputStream entityStream) throws IOException {
+                entityStream.write(value.get(0).getBytes(StandardCharsets.UTF_8));
+            }
+        }
+        @Path("/last-writer-values")
+        class Resource {
+            @GET
+            public jakarta.ws.rs.core.Response get() {
+                ArrayList<String> original = new ArrayList<>(List.of("original"));
+                return jakarta.ws.rs.core.Response.ok(
+                    new GenericEntity<ArrayList<String>>(original) { }).build();
+            }
+        }
+        @Priority(100)
+        class First implements WriterInterceptor {
+            @Override
+            public void aroundWriteTo(WriterInterceptorContext context) throws IOException {
+                context.setEntity(new LinkedList<>(List.of("first")));
+                context.setType(LinkedList.class);
+                context.setGenericType(LinkedList.class);
+                context.setMediaType(jakarta.ws.rs.core.MediaType.TEXT_HTML_TYPE);
+                context.setAnnotations(getClass().getAnnotations());
+                context.proceed();
+            }
+        }
+        @Priority(200)
+        class Second implements WriterInterceptor {
+            @Override
+            public void aroundWriteTo(WriterInterceptorContext context) throws IOException {
+                context.setEntity(new ArrayList<>(List.of("second")));
+                context.setType(ArrayList.class);
+                context.setGenericType(String.class);
+                context.setMediaType(jakarta.ws.rs.core.MediaType.TEXT_PLAIN_TYPE);
+                context.setAnnotations(getClass().getAnnotations());
+                context.proceed();
+            }
+        }
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new Resource())
+                .addCustomWriter(new ExpectedValuesWriter())
+                .addWriterInterceptor(new Second())
+                .addWriterInterceptor(new First()))
+            .start();
+
+        try (Response response = call(request(server.uri().resolve("/last-writer-values")))) {
+            assertThat(response.code(), is(200));
+            assertThat(response.body().string(), is("second"));
+            assertThat(response.header("content-type"), is("text/plain;charset=utf-8"));
         }
     }
 
