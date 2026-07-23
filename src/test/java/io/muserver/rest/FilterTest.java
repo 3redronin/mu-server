@@ -472,6 +472,9 @@ public class FilterTest {
         try (Response response = call(request(server.uri().resolve("/stream-filter")))) {
             assertThat(response.body().string(), is("prefix-body"));
         }
+        try (Response response = call(request(server.uri().resolve("/stream-filter")).head())) {
+            assertThat(response.header("content-length"), is(nullValue()));
+        }
     }
 
     @Test
