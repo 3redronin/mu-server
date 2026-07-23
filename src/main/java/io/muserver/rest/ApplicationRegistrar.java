@@ -1,6 +1,7 @@
 package io.muserver.rest;
 
 import jakarta.ws.rs.ConstrainedTo;
+import jakarta.ws.rs.ApplicationPath;
 import jakarta.ws.rs.NameBinding;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.RuntimeType;
@@ -39,7 +40,17 @@ final class ApplicationRegistrar {
 
     @SuppressWarnings("deprecation") // Jakarta REST 3.1 deprecates registration, but still requires it to be honored.
     static RestHandlerBuilder from(Application application) {
+        return from(application, false);
+    }
+
+    @SuppressWarnings("deprecation") // Jakarta REST 3.1 deprecates registration, but still requires it to be honored.
+    static RestHandlerBuilder from(Application application, boolean applicationPathHandledExternally) {
         Objects.requireNonNull(application, "application");
+        if (!applicationPathHandledExternally
+            && application.getClass().isAnnotationPresent(ApplicationPath.class)) {
+            throw new UnsupportedOperationException("@ApplicationPath cannot be applied by a RestHandlerBuilder. "
+                + "Mount the handler with ContextHandlerBuilder or start the application with SeBootstrap.");
+        }
         rejectProperties(application.getProperties());
 
         Set<Object> singletons = copyOf(application.getSingletons());

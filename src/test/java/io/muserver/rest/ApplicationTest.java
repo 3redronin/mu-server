@@ -2,6 +2,7 @@ package io.muserver.rest;
 
 import io.muserver.MuServer;
 import jakarta.annotation.Priority;
+import jakarta.ws.rs.ApplicationPath;
 import jakarta.ws.rs.ConstrainedTo;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
@@ -145,6 +146,15 @@ public class ApplicationTest {
     }
 
     @Test
+    public void applicationPathIsRejectedBecauseAHandlerBuilderCannotMountItself() {
+        UnsupportedOperationException error = assertThrows(UnsupportedOperationException.class,
+            () -> RestHandlerBuilder.fromApplication(new PathAnnotatedApplication()));
+
+        assertThat(error.getMessage(), containsString("@ApplicationPath"));
+        assertThat(error.getMessage(), containsString("ContextHandlerBuilder"));
+    }
+
+    @Test
     public void unsupportedComponentsAndPropertiesAreRejected() {
         Application unsupportedComponent = singletonApplication(new Object());
         IllegalArgumentException componentError = assertThrows(IllegalArgumentException.class,
@@ -270,6 +280,10 @@ public class ApplicationTest {
                 return result;
             }
         };
+    }
+
+    @ApplicationPath("api")
+    private static class PathAnnotatedApplication extends Application {
     }
 
     @NameBinding
