@@ -40,6 +40,7 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
     private boolean requestFilterChainRunning;
     private boolean responseFilterChainStarted;
     private boolean exceptionMapperUsed;
+    private List<EntityPart> multipartEntityParts;
 
     JaxRSRequest(MuRequest muRequest, MuResponse muResponse, InputStream inputStream, String relativePath, SecurityContext securityContext, List<ReaderInterceptor> readerInterceptors, EntityProviders entityProviders) {
         this.muRequest = muRequest;
@@ -512,6 +513,44 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
 
     EntityProviders entityProviders() {
         return entityProviders;
+    }
+
+    void prepareMultipartEntityParts() throws IOException {
+        if (multipartEntityParts != null) {
+            return;
+        }
+        MediaType mediaType = getMediaType();
+        if (mediaType == null || !"multipart".equalsIgnoreCase(mediaType.getType())) {
+            multipartEntityParts = Collections.emptyList();
+            return;
+        }
+        multipartEntityParts = new MultipartEntityProvider(entityProviders).readFrom(
+            null, null, JaxRSResponse.Builder.EMPTY_ANNOTATIONS, mediaType, getHeaders(), getInputStream());
+    }
+
+    EntityPart multipartEntityPart(String name) {
+        if (multipartEntityParts == null) {
+            throw new IllegalStateException("Multipart entity parts have not been prepared");
+        }
+        for (EntityPart part : multipartEntityParts) {
+            if (part.getName().equals(name)) {
+                return part;
+            }
+        }
+        return null;
+    }
+
+    List<String> formValues(String name) throws IOException {
+        if (multipartEntityParts == null) {
+            return muRequest.form().getAll(name);
+        }
+        List<String> values = new ArrayList<>();
+        for (EntityPart part : multipartEntityParts) {
+            if (part.getName().equals(name)) {
+                values.add(part.getContent(String.class));
+            }
+        }
+        return values;
     }
 
     /**

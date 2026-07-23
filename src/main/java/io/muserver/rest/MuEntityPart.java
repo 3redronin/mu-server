@@ -78,6 +78,9 @@ final class MuEntityPart implements EntityPart {
     private synchronized <T> T readContent(Class<?> rawType, Type genericType) throws IOException, WebApplicationException {
         Objects.requireNonNull(rawType, "type");
         claimContent();
+        if (rawType == InputStream.class) {
+            return (T) content;
+        }
         MediaType mediaType = getMediaType();
         try {
             MessageBodyReader<T> reader = (MessageBodyReader<T>) entityProviders.selectReader(

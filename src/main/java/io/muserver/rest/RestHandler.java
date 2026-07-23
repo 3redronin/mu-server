@@ -181,6 +181,11 @@ public class RestHandler implements MuHandler {
         EntityProviders previous = MuRuntimeDelegate.setCurrentEntityProviders(entityProviders);
         try {
             ResourceMethod rm = mm.resourceMethod;
+            if (rm.params.stream().anyMatch(param ->
+                param.source == ResourceMethodParam.ValueSource.FORM_PARAM
+                    && EntityPart.class.isAssignableFrom(param.type))) {
+                requestContext.prepareMultipartEntityParts();
+            }
             Object[] params = new Object[rm.methodHandle.getParameterCount()];
             for (ResourceMethodParam param : rm.params) {
                 Object paramValue;

@@ -201,24 +201,7 @@ abstract class ResourceMethodParam {
             MuRequest muRequest = jaxRequest.muRequest;
             Class<?> paramClass = type;
             if (EntityPart.class.isAssignableFrom(paramClass)) {
-                UploadedFile uploadedFile = muRequest.uploadedFile(key);
-                MultivaluedHashMap<String, String> headers = new MultivaluedHashMap<>();
-                if (uploadedFile != null) {
-                    headers.putSingle(HttpHeaders.CONTENT_TYPE,
-                        Mutils.nullOrEmpty(uploadedFile.contentType()) ? MediaType.APPLICATION_OCTET_STREAM : uploadedFile.contentType());
-                    headers.putSingle(HttpHeaders.CONTENT_DISPOSITION,
-                        MultipartEntityProvider.contentDisposition(key, uploadedFile.filename()));
-                    return new MuEntityPart(key, uploadedFile.filename(), headers, uploadedFile.asStream(), jaxRequest.entityProviders());
-                }
-                String value = muRequest.form().get(key);
-                if (value == null) {
-                    return null;
-                }
-                headers.putSingle(HttpHeaders.CONTENT_TYPE, MediaType.TEXT_PLAIN);
-                headers.putSingle(HttpHeaders.CONTENT_DISPOSITION, MultipartEntityProvider.contentDisposition(key, null));
-                return new MuEntityPart(key, null, headers,
-                    new java.io.ByteArrayInputStream(value.getBytes(java.nio.charset.StandardCharsets.UTF_8)),
-                    jaxRequest.entityProviders());
+                return jaxRequest.multipartEntityPart(key);
             } else if (UploadedFile.class.isAssignableFrom(paramClass)) {
                 return muRequest.uploadedFile(key);
             } else if (File.class.isAssignableFrom(paramClass)) {
@@ -283,7 +266,7 @@ abstract class ResourceMethodParam {
                     : matchedMethod.getPathParams(key))
                     : source == ValueSource.QUERY_PARAM ? getParamValues(jaxRequest.getUriInfo().getQueryParameters(), key, cps, collection != null)
                     : source == ValueSource.HEADER_PARAM ? getParamValues(jaxRequest.getHeaders(), key, cps, collection != null)
-                    : source == ValueSource.FORM_PARAM ? muRequest.form().getAll(key)
+                    : source == ValueSource.FORM_PARAM ? jaxRequest.formValues(key)
                     : source == ValueSource.COOKIE_PARAM ? cookieValue(muRequest, key)
                     : source == ValueSource.MATRIX_PARAM ? matrixParamValue(key, jaxRequest.relativePath())
                     : emptyList();

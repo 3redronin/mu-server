@@ -22,6 +22,7 @@ import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 
 import java.io.ByteArrayInputStream;
+import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.InputStream;
@@ -67,6 +68,35 @@ public class EntityPartTest {
             () -> part.getHeaders().put("Other", Arrays.asList("value")));
         assertThrows(UnsupportedOperationException.class,
             () -> part.getHeaders().get("X-Test").add("three"));
+    }
+
+    @Test
+    public void typedInputStreamContentRemainsOpenForTheCaller() throws Exception {
+        InputStream source = new FilterInputStream(
+            new ByteArrayInputStream("hello".getBytes(StandardCharsets.UTF_8))) {
+            private boolean closed;
+
+            @Override
+            public int read(byte[] bytes, int offset, int length) throws IOException {
+                if (closed) {
+                    throw new IOException("closed");
+                }
+                return super.read(bytes, offset, length);
+            }
+
+            @Override
+            public void close() throws IOException {
+                closed = true;
+                super.close();
+            }
+        };
+        EntityPart part = EntityPart.withName("content")
+            .content(source)
+            .build();
+
+        InputStream content = part.getContent(InputStream.class);
+
+        assertThat(new String(content.readAllBytes(), StandardCharsets.UTF_8), is("hello"));
     }
 
     @Test
@@ -137,6 +167,34 @@ public class EntityPartTest {
         try (Response response = call(request(server.uri().resolve("/parts")).post(body))) {
             assertThat(response.code(), is(200));
             assertThat(response.body().string(), is("hello; hello.txt:file contents"));
+        }
+    }
+
+    @Test
+    public void entityPartFormParamsCanBeMixedWithStringFormParams() throws Exception {
+        @Path("/parts")
+        class PartsResource {
+            @POST
+            @Consumes(MediaType.MULTIPART_FORM_DATA)
+            public String post(@FormParam("description") String description,
+                               @FormParam("attachment") EntityPart attachment) throws Exception {
+                return description + ":" + attachment.getContent(String.class);
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new PartsResource()))
+            .start();
+
+        MultipartBody body = new MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart("description", "hello")
+            .addFormDataPart("attachment", null,
+                RequestBody.create("contents", okhttp3.MediaType.parse("text/plain")))
+            .build();
+        try (Response response = call(request(server.uri().resolve("/parts")).post(body))) {
+            assertThat(response.code(), is(200));
+            assertThat(response.body().string(), is("hello:contents"));
         }
     }
 
@@ -288,6 +346,52 @@ public class EntityPartTest {
         try (Response response = call(request(server.uri().resolve("/parts")).post(body))) {
             assertThat(response.code(), is(200));
             assertThat(response.body().string(), is("custom:hello"));
+        }
+    }
+
+    @Test
+    public void formParamEntityPartsPreserveTheirMediaType() throws Exception {
+        class Greeting {
+            final String value;
+
+            Greeting(String value) {
+                this.value = value;
+            }
+        }
+        MessageBodyReader<Greeting> reader = new MessageBodyReader<Greeting>() {
+            @Override
+            public boolean isReadable(Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
+                return type == Greeting.class && mediaType.isCompatible(new MediaType("application", "x-greeting"));
+            }
+
+            @Override
+            public Greeting readFrom(Class<Greeting> type, Type genericType, Annotation[] annotations,
+                                     MediaType mediaType, MultivaluedMap<String, String> httpHeaders,
+                                     InputStream entityStream) throws IOException {
+                return new Greeting(new String(entityStream.readAllBytes(), StandardCharsets.UTF_8));
+            }
+        };
+        @Path("/parts")
+        class PartsResource {
+            @POST
+            @Consumes(MediaType.MULTIPART_FORM_DATA)
+            public String post(@FormParam("greeting") EntityPart greeting) throws Exception {
+                return greeting.getMediaType() + ":" + greeting.getContent(Greeting.class).value;
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new PartsResource()).addCustomReader(reader))
+            .start();
+
+        MultipartBody body = new MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart("greeting", null,
+                RequestBody.create("hello", okhttp3.MediaType.parse("application/x-greeting")))
+            .build();
+        try (Response response = call(request(server.uri().resolve("/parts")).post(body))) {
+            assertThat(response.code(), is(200));
+            assertThat(response.body().string(), is("application/x-greeting;charset=utf-8:hello"));
         }
     }
 
