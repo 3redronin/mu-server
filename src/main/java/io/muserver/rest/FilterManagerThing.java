@@ -1,7 +1,5 @@
 package io.muserver.rest;
 
-import jakarta.annotation.Priority;
-import jakarta.ws.rs.Priorities;
 import jakarta.ws.rs.container.ContainerRequestFilter;
 import jakarta.ws.rs.container.ContainerResponseContext;
 import jakarta.ws.rs.container.ContainerResponseFilter;
@@ -31,8 +29,7 @@ class FilterManagerThing {
     }
 
     private static int priority(Object filter) {
-        Priority priority = filter.getClass().getAnnotation(Priority.class);
-        return priority == null ? Priorities.USER : priority.value();
+        return PrioritizedComponent.priorityOf(filter);
     }
 
     void onPreMatch(JaxRSRequest requestContext) throws IOException {
