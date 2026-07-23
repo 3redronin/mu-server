@@ -88,7 +88,10 @@ public class UriPatternTest {
         assertThat(matcher.prefixMatches(), is(true));
         assertThat(matcher.params().get("user"), is("dan"));
         matcher = uriPattern.matcher(URI.create("/user/dan/umm/notdan"));
-        assertThat(matcher.prefixMatches(), is(false));
+        assertThat(matcher.prefixMatches(), is(true));
+        assertThat(matcher.params().get("user"), is("notdan"));
+        assertThat(matcher.allSegments().get("user").get(0).getPath(), is("dan"));
+        assertThat(matcher.allSegments().get("user").get(1).getPath(), is("notdan"));
     }
 
     @Test

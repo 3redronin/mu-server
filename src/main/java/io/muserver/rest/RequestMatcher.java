@@ -68,11 +68,11 @@ class RequestMatcher {
                 int c = Integer.compare(o2pp.numberOfLiterals, o1pp.numberOfLiterals);
                 if (c == 0) {
                     // "the number of capturing groups as a secondary key (descending order)"
-                    c = Integer.compare(o2pp.namedGroups().size(), o1pp.namedGroups().size());
+                    c = Integer.compare(o2pp.capturingGroupCount(), o1pp.capturingGroupCount());
                 }
                 if (c == 0) {
                     // " and the number of capturing groups with non-default regular expressions (i.e. not ‘([ˆ/]+?)’) as the tertiary key (descending order)"
-                    c = Integer.compare(countNonDefaultGroups(o2.resourceClass.pathTemplate), countNonDefaultGroups(o1.resourceClass.pathTemplate));
+                    c = Integer.compare(o2pp.nonDefaultCapturingGroupCount(), o1pp.nonDefaultCapturingGroupCount());
                 }
                 return c;
             })
@@ -112,7 +112,9 @@ class RequestMatcher {
                         if (matcher.fullyMatches() || (resourceMethod.isSubResourceLocator() && matcher.prefixMatches())) {
                             Map<String, PathSegment> combinedParams = new HashMap<>(candidateClass.pathMatch.segments());
                             combinedParams.putAll(matcher.segments());
-                            candidates.add(new MatchedMethod(candidateClass, resourceMethod, combinedParams, matcher));
+                            Map<String, List<PathSegment>> combinedAllParams = copyPathParams(candidateClass.pathMatch.allSegments());
+                            mergePathParams(combinedAllParams, matcher.allSegments());
+                            candidates.add(new MatchedMethod(candidateClass, resourceMethod, combinedParams, combinedAllParams, matcher));
                         }
                     }
                 }
@@ -132,11 +134,11 @@ class RequestMatcher {
             int c = Integer.compare(rm2.pathPattern.numberOfLiterals, rm1.pathPattern.numberOfLiterals);
             if (c == 0) {
                 // "the number of capturing groups as a secondary key (descending order)"
-                c = Integer.compare(rm2.pathPattern.namedGroups().size(), rm1.pathPattern.namedGroups().size());
+                c = Integer.compare(rm2.pathPattern.capturingGroupCount(), rm1.pathPattern.capturingGroupCount());
             }
             if (c == 0) {
                 // " and the number of capturing groups with non-default regular expressions (i.e. not ‘([ˆ/]+?)’) as the tertiary key (descending order)"
-                c = Integer.compare(countNonDefaultGroups(rm2.pathTemplate), countNonDefaultGroups(rm1.pathTemplate));
+                c = Integer.compare(rm2.pathPattern.nonDefaultCapturingGroupCount(), rm1.pathPattern.nonDefaultCapturingGroupCount());
             }
             if (c == 0) {
                 // "and the source of each member as quaternary key sorting those derived from sub-resource methods ahead of those derived from sub-resource locators"
@@ -167,7 +169,7 @@ class RequestMatcher {
         if (l.size() == 1) {
             MatchedMethod mm = l.stream().findFirst().get();
 
-            MatchedClass mc = new MatchedClass(subResourceLocator.apply(mm), mm.pathMatch);
+            MatchedClass mc = new MatchedClass(subResourceLocator.apply(mm), mm.pathMatch.withParams(mm.pathParams, mm.pathParamValues));
 
             String remainingUrl = mm.pathMatch.lastGroup();
             //Set U to be the value of the final capturing group of R(TL) when matched against U, and set C0 to be the
@@ -186,12 +188,22 @@ class RequestMatcher {
         for (MatchedClass mc : candidateClasses) {
             for (ResourceMethod resourceMethod : mc.resourceClass.resourceMethods) {
                 if (resourceMethod.isSubResource() == isSubResource && !resourceMethod.isSubResourceLocator()) {
-                    MatchedMethod matchedMethod = new MatchedMethod(mc, resourceMethod, mc.pathMatch.segments(), mc.pathMatch);
+                    MatchedMethod matchedMethod = new MatchedMethod(mc, resourceMethod, mc.pathMatch.segments(), mc.pathMatch.allSegments(), mc.pathMatch);
                     candidates.add(matchedMethod);
                 }
             }
         }
         return candidates;
+    }
+
+    private static Map<String, List<PathSegment>> copyPathParams(Map<String, List<PathSegment>> source) {
+        Map<String, List<PathSegment>> copy = new LinkedHashMap<>();
+        mergePathParams(copy, source);
+        return copy;
+    }
+
+    private static void mergePathParams(Map<String, List<PathSegment>> target, Map<String, List<PathSegment>> source) {
+        source.forEach((name, values) -> target.computeIfAbsent(name, ignored -> new ArrayList<>()).addAll(values));
     }
 
     static class MatchedClass {
@@ -208,12 +220,15 @@ class RequestMatcher {
         final MatchedClass matchedClass;
         final ResourceMethod resourceMethod;
         final Map<String, PathSegment> pathParams;
+        final Map<String, List<PathSegment>> pathParamValues;
         final PathMatch pathMatch;
 
-        MatchedMethod(MatchedClass matchedClass, ResourceMethod resourceMethod, Map<String, PathSegment> pathParams, PathMatch pathMatch) {
+        MatchedMethod(MatchedClass matchedClass, ResourceMethod resourceMethod, Map<String, PathSegment> pathParams,
+                      Map<String, List<PathSegment>> pathParamValues, PathMatch pathMatch) {
             this.matchedClass = matchedClass;
             this.resourceMethod = resourceMethod;
             this.pathParams = pathParams;
+            this.pathParamValues = pathParamValues;
             this.pathMatch = pathMatch;
         }
 
@@ -228,6 +243,14 @@ class RequestMatcher {
         public String getPathParam(String key) {
             PathSegment segment = pathParams.get(key);
             return segment == null ? null : segment.getPath();
+        }
+
+        public List<String> getPathParams(String key) {
+            return getPathSegments(key).stream().map(PathSegment::getPath).collect(toList());
+        }
+
+        public List<PathSegment> getPathSegments(String key) {
+            return pathParamValues.getOrDefault(key, Collections.emptyList());
         }
     }
 
@@ -286,13 +309,4 @@ class RequestMatcher {
 
     }
 
-    private int countNonDefaultGroups(String pathTemplate) {
-        int count = 0;
-        for (String bit : pathTemplate.split("/")) {
-            if (bit.startsWith("{") && bit.endsWith("}") && bit.contains(":")) {
-                count++;
-            }
-        }
-        return count;
-    }
 }

@@ -247,11 +247,11 @@ public class FilterTest {
             )
             .start();
         try (Response resp = call(request(server.uri().resolve("/something/class%20param/repeat%20value/and/method%20param/repeat%20value?decode=decode%20it")))) {
-            assertThat(resp.body().string(), is("something/class param/repeat value/and/method param/repeat value class param repeat value method param "));
+            assertThat(resp.body().string(), is("something/class param/repeat value/and/method param/repeat value class param repeat value,repeat value method param "));
         }
 
         try (Response resp = call(request(server.uri().resolve("/something/class%20param/repeat%20value/and/method%20param/repeat%20value?decode=no%20decode")))) {
-            assertThat(resp.body().string(), is("something/class%20param/repeat%20value/and/method%20param/repeat%20value class%20param repeat%20value method%20param "));
+            assertThat(resp.body().string(), is("something/class%20param/repeat%20value/and/method%20param/repeat%20value class%20param repeat%20value,repeat%20value method%20param "));
         }
 
 
@@ -753,6 +753,41 @@ public class FilterTest {
         }
 
         assertThat(responseFilterCalls.get(), equalTo(1));
+    }
+
+    @Test
+    public void requestContextCannotBeMutatedFromResponseFilter() throws IOException {
+        AtomicReference<Throwable> abortFailure = new AtomicReference<>();
+        AtomicReference<Throwable> entityStreamFailure = new AtomicReference<>();
+        AtomicReference<Throwable> securityContextFailure = new AtomicReference<>();
+
+        server = httpsServerForTest()
+            .addHandler(restHandler(new BrokenResource())
+                .addResponseFilter((requestContext, responseContext) -> {
+                    try {
+                        requestContext.abortWith(jakarta.ws.rs.core.Response.ok().build());
+                    } catch (Throwable failure) {
+                        abortFailure.set(failure);
+                    }
+                    try {
+                        requestContext.setEntityStream(new ByteArrayInputStream(new byte[0]));
+                    } catch (Throwable failure) {
+                        entityStreamFailure.set(failure);
+                    }
+                    try {
+                        requestContext.setSecurityContext(requestContext.getSecurityContext());
+                    } catch (Throwable failure) {
+                        securityContextFailure.set(failure);
+                    }
+                }))
+            .start();
+
+        try (Response response = call(request(server.uri().resolve("/broken")))) {
+            assertThat(response.code(), equalTo(200));
+        }
+        assertThat(abortFailure.get(), instanceOf(IllegalStateException.class));
+        assertThat(entityStreamFailure.get(), instanceOf(IllegalStateException.class));
+        assertThat(securityContextFailure.get(), instanceOf(IllegalStateException.class));
     }
 
     @Test
