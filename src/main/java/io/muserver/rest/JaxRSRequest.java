@@ -106,12 +106,16 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
 
     @Override
     public void setProperty(String name, Object object) {
-        muRequest.attribute(name, object);
+        if (object == null) {
+            removeProperty(name);
+        } else {
+            muRequest.attribute(name, object);
+        }
     }
 
     @Override
     public void removeProperty(String name) {
-        muRequest.attribute(name, null);
+        muRequest.attributes().remove(name);
     }
 
     @Override
