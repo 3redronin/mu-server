@@ -232,6 +232,20 @@ public class ApplicationTest {
     }
 
     @Test
+    public void nameBindingIsInheritedFromGenericParentInterface() throws IOException {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(RestHandlerBuilder.fromApplication(singletonApplication(
+                new GenericBindingResource(), new GenericBindingResponseFilter())))
+            .start();
+
+        try (Response response = call(request(server.uri().resolve("/generic-binding/value?value=hello")))) {
+            assertThat(response.code(), is(200));
+            assertThat(response.body().string(), is("hello"));
+            assertThat(response.header("X-Generic-Binding"), is("applied"));
+        }
+    }
+
+    @Test
     public void applicationComponentPriorityIsRetainedWhenBuilderIsCustomized() throws IOException {
         List<String> calls = new ArrayList<>();
         server = ServerUtils.httpsServerForTest()
@@ -292,6 +306,38 @@ public class ApplicationTest {
         @Override
         public void filter(ContainerRequestContext requestContext, ContainerResponseContext responseContext) {
             responseContext.getHeaders().putSingle("X-Application-Binding", "applied");
+        }
+    }
+
+    @NameBinding
+    @Target({ElementType.TYPE, ElementType.METHOD})
+    @Retention(RetentionPolicy.RUNTIME)
+    private @interface GenericBinding {
+    }
+
+    private interface GenericBindingParent<T> {
+        @GET
+        @Path("value")
+        @GenericBinding
+        String value(@QueryParam("value") T value);
+    }
+
+    private interface GenericBindingChild<T> extends GenericBindingParent<T> {
+    }
+
+    @Path("generic-binding")
+    public static class GenericBindingResource implements GenericBindingChild<String> {
+        @Override
+        public String value(String value) {
+            return value;
+        }
+    }
+
+    @GenericBinding
+    private static class GenericBindingResponseFilter implements ContainerResponseFilter {
+        @Override
+        public void filter(ContainerRequestContext requestContext, ContainerResponseContext responseContext) {
+            responseContext.getHeaders().putSingle("X-Generic-Binding", "applied");
         }
     }
 

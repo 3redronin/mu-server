@@ -218,43 +218,14 @@ final class ApplicationRegistrar {
         Class<?> concreteClass = resourceInfo.getResourceClass();
         for (Class<? extends Annotation> binding : requiredBindings) {
             if (!concreteMethod.isAnnotationPresent(binding)
-                && !methodAnnotationSource(concreteMethod).isAnnotationPresent(binding)
+                && !JaxMethodLocator.getMethodThatHasJaxRSAnnotations(concreteMethod, concreteClass)
+                    .isAnnotationPresent(binding)
                 && !concreteClass.isAnnotationPresent(binding)
                 && !classAnnotationSource(concreteClass).isAnnotationPresent(binding)) {
                 return false;
             }
         }
         return true;
-    }
-
-    private static Method methodAnnotationSource(Method start) {
-        Class<?> type = start.getDeclaringClass();
-        while (type != null && type != Object.class) {
-            Method candidate = declaredMethod(start, type);
-            if (candidate != null && JaxClassLocator.hasAtLeastOneJaxRSAnnotation(candidate.getDeclaredAnnotations())) {
-                return candidate;
-            }
-            type = type.getSuperclass();
-        }
-        type = start.getDeclaringClass();
-        while (type != null && type != Object.class) {
-            for (Class<?> interfaceType : type.getInterfaces()) {
-                Method candidate = declaredMethod(start, interfaceType);
-                if (candidate != null && JaxClassLocator.hasAtLeastOneJaxRSAnnotation(candidate.getDeclaredAnnotations())) {
-                    return candidate;
-                }
-            }
-            type = type.getSuperclass();
-        }
-        return start;
-    }
-
-    private static Method declaredMethod(Method start, Class<?> type) {
-        try {
-            return type.getDeclaredMethod(start.getName(), start.getParameterTypes());
-        } catch (NoSuchMethodException ignored) {
-            return null;
-        }
     }
 
     private static Class<?> classAnnotationSource(Class<?> start) {
