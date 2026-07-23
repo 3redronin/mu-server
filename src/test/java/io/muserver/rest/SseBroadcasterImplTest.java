@@ -33,6 +33,7 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -412,6 +413,50 @@ public class SseBroadcasterImplTest {
 
         broadcaster.broadcast(new JaxOutboundSseEventBuilder().data("event").build())
             .toCompletableFuture().get(1, TimeUnit.SECONDS);
+    }
+
+    @Test
+    public void concurrentCloseAndBroadcastNotifySinkCloseOnlyOnce() throws Exception {
+        SseBroadcasterImpl broadcaster = new SseBroadcasterImpl();
+        AtomicBoolean closed = new AtomicBoolean();
+        AtomicInteger notifications = new AtomicInteger();
+        CountDownLatch checkingClosed = new CountDownLatch(1);
+        CountDownLatch releaseClosedCheck = new CountDownLatch(1);
+        SseEventSink sink = new SseEventSink() {
+            @Override
+            public boolean isClosed() {
+                checkingClosed.countDown();
+                try {
+                    assertThat(releaseClosedCheck.await(1, TimeUnit.SECONDS), is(true));
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(e);
+                }
+                return closed.get();
+            }
+
+            @Override
+            public CompletionStage<?> send(OutboundSseEvent event) {
+                return CompletableFuture.completedFuture(null);
+            }
+
+            @Override
+            public void close() {
+                closed.set(true);
+            }
+        };
+        broadcaster.onClose(closedSink -> notifications.incrementAndGet());
+        broadcaster.register(sink);
+
+        CompletableFuture<?> broadcast = CompletableFuture.runAsync(() ->
+            broadcaster.broadcast(new JaxOutboundSseEventBuilder().data("event").build())
+                .toCompletableFuture().join());
+        assertThat(checkingClosed.await(1, TimeUnit.SECONDS), is(true));
+        broadcaster.close();
+        releaseClosedCheck.countDown();
+        broadcast.get(1, TimeUnit.SECONDS);
+
+        assertThat(notifications.get(), is(1));
     }
 
     private static SseEventSink sink(AtomicBoolean closed) {

@@ -81,8 +81,9 @@ class SseBroadcasterImpl implements SseBroadcaster {
         }
         for (SseEventSink sink : currentSinks) {
             if (sink.isClosed()) {
-                sinks.remove(sink);
-                sendOnCloseEvent(sink);
+                if (sinks.remove(sink)) {
+                    sendOnCloseEvent(sink);
+                }
                 sendComplete(completableFuture, count);
             } else {
                 try {
