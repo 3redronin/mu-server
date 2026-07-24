@@ -5,6 +5,8 @@ import io.muserver.MuServer;
 import jakarta.annotation.Priority;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.container.ResourceInfo;
+import jakarta.ws.rs.core.MultivaluedMap;
+import jakarta.ws.rs.ext.MessageBodyReader;
 import jakarta.ws.rs.ext.ReaderInterceptor;
 import jakarta.ws.rs.ext.ReaderInterceptorContext;
 import okhttp3.MediaType;
@@ -15,17 +17,23 @@ import org.junit.Test;
 import scaffolding.ServerUtils;
 
 import java.io.ByteArrayInputStream;
+import java.io.File;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.Reader;
+import java.lang.annotation.Annotation;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
+import java.lang.reflect.Type;
 import java.nio.ByteBuffer;
+import java.nio.file.Files;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -179,6 +187,126 @@ public class ReaderInterceptorTest {
         )) {
             assertThat(resp.code(), is(200));
             assertThat(resp.body().string(), equalTo("hello"));
+        }
+    }
+
+    @Test
+    public void interceptorsRunForEverySupportedBlockedTckReaderType() throws Exception {
+        AtomicInteger interceptorCalls = new AtomicInteger();
+        @Path("/reader-types")
+        class Resource {
+            @POST
+            @Path("bytes")
+            public String bytes(byte[] body) {
+                return new String(body, StandardCharsets.UTF_8);
+            }
+
+            @POST
+            @Path("file")
+            public String file(File body) throws IOException {
+                return Files.readString(body.toPath());
+            }
+
+            @POST
+            @Path("stream")
+            public String stream(InputStream body) throws IOException {
+                return new String(body.readAllBytes(), StandardCharsets.UTF_8);
+            }
+
+            @POST
+            @Path("reader")
+            public String reader(Reader body) throws IOException {
+                StringBuilder value = new StringBuilder();
+                char[] buffer = new char[32];
+                int read;
+                while ((read = body.read(buffer)) >= 0) {
+                    value.append(buffer, 0, read);
+                }
+                return value.toString();
+            }
+        }
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new Resource())
+                .addReaderInterceptor(context -> {
+                    interceptorCalls.incrementAndGet();
+                    return context.proceed();
+                }))
+            .start();
+
+        for (String path : List.of("bytes", "file", "stream", "reader")) {
+            try (Response response = call(request(server.uri().resolve("/reader-types/" + path))
+                .post(requestBody(path)))) {
+                assertThat(response.body().string(), is(path));
+            }
+        }
+        assertThat(interceptorCalls.get(), is(4));
+    }
+
+    @Test
+    public void lastReaderInterceptorValuesControlProviderSelection() throws Exception {
+        @Priority(200)
+        class ExpectedValuesReader implements MessageBodyReader<ArrayList<String>> {
+            @Override
+            public boolean isReadable(Class<?> type, Type genericType, Annotation[] annotations,
+                                      jakarta.ws.rs.core.MediaType mediaType) {
+                return type == ArrayList.class
+                    && genericType.getTypeName().equals("java.util.List<java.lang.String>")
+                    && mediaType.equals(jakarta.ws.rs.core.MediaType.TEXT_PLAIN_TYPE)
+                    && annotations.length == 1
+                    && annotations[0] instanceof Priority
+                    && ((Priority) annotations[0]).value() == 200;
+            }
+
+            @Override
+            public ArrayList<String> readFrom(Class<ArrayList<String>> type, Type genericType,
+                                              Annotation[] annotations,
+                                              jakarta.ws.rs.core.MediaType mediaType,
+                                              MultivaluedMap<String, String> httpHeaders,
+                                              InputStream entityStream) throws IOException {
+                return new ArrayList<>(List.of(
+                    new String(entityStream.readAllBytes(), StandardCharsets.UTF_8)));
+            }
+        }
+        @Path("/last-reader-values")
+        class Resource {
+            @POST
+            public String post(List<String> value) {
+                return value.get(0);
+            }
+        }
+        @Priority(100)
+        class First implements ReaderInterceptor {
+            @Override
+            public Object aroundReadFrom(ReaderInterceptorContext context) throws IOException {
+                context.setType(java.util.LinkedList.class);
+                context.setMediaType(jakarta.ws.rs.core.MediaType.TEXT_HTML_TYPE);
+                context.setAnnotations(getClass().getAnnotations());
+                context.setInputStream(new ByteArrayInputStream("first".getBytes(StandardCharsets.UTF_8)));
+                return context.proceed();
+            }
+        }
+        @Priority(200)
+        class Second implements ReaderInterceptor {
+            @Override
+            public Object aroundReadFrom(ReaderInterceptorContext context) throws IOException {
+                context.setType(ArrayList.class);
+                context.setMediaType(jakarta.ws.rs.core.MediaType.TEXT_PLAIN_TYPE);
+                context.setAnnotations(getClass().getAnnotations());
+                context.setInputStream(new ByteArrayInputStream("second".getBytes(StandardCharsets.UTF_8)));
+                return context.proceed();
+            }
+        }
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new Resource())
+                .addCustomReader(new ExpectedValuesReader())
+                .addReaderInterceptor(new Second())
+                .addReaderInterceptor(new First()))
+            .start();
+
+        try (Response response = call(request(server.uri().resolve("/last-reader-values"))
+            .post(requestBody("original")))) {
+            assertThat(response.code(), is(200));
+            assertThat(response.body().string(), is("second"));
         }
     }
 
