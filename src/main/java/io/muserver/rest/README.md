@@ -3,8 +3,7 @@
 
 This section goes into detail about which parts of the spec are implemented, which parts may be implemented
 later, and which parts will never be implemented. The numbers and headers are taken directly from the
-[jaxrs-2.1 final spec](https://jcp.org/aboutJava/communityprocess/final/jsr370/index.html)
-provided by Oracle.
+[Jakarta REST 3.1 specification](https://jakarta.ee/specifications/restful-ws/3.1/).
 
 
 ## 2 Applications
@@ -15,9 +14,10 @@ returned by `Application.getClasses()` are instantiated once with a public no-ar
 components must be safe to use concurrently.
 
 Resource classes returned by `Application.getClasses()` are rejected because their default lifecycle is per-request,
-which Mu Server does not support. Application properties, features, dynamic features, context resolvers, classpath
-scanning, and `@ApplicationPath` mounting are also not supported. All supported components can alternatively be
-registered programmatically using `RestHandlerBuilder`.
+which Mu Server does not support. Application properties, features, dynamic features, context resolvers, and classpath
+scanning are also not supported. `@ApplicationPath` is honored when starting an application with `SeBootstrap`; a
+handler created directly with `RestHandlerBuilder.fromApplication` can instead be mounted in a Mu context. All
+supported components can alternatively be registered programmatically using `RestHandlerBuilder`.
 
 ## 3 Resources
 
@@ -377,11 +377,15 @@ Will not implement. Configuration should be handled by the user.
 
 ## 11 Environment
 
-None of this section is applicable to MuServer as it does not manage your server's lifecycle.
+- [x] Java SE bootstrap with HTTP, HTTPS, root-path mounting, external configuration, dynamic ports, and shutdown.
+- [ ] TLS client authentication through `SeBootstrap` is not supported.
+
+Mu Server does not advertise its `RuntimeDelegate` globally merely by being present on an application's classpath.
+Call `MuRuntimeDelegate.ensureSet()` once before the first `SeBootstrap` call to select Mu explicitly.
 
 ## 12 Runtime Delegate
 
-- [x] Implemented, although note that `createEndpoint` will never be supported.
+- [x] Implemented, including Java SE configuration and bootstrap. `createEndpoint` is not supported.
 
 ## Interface implementations
 
