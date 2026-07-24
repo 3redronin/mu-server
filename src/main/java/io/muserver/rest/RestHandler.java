@@ -16,6 +16,7 @@ import jakarta.ws.rs.sse.SseEventSink;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.OutputStream;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
 import java.net.URI;
@@ -256,6 +257,7 @@ public class RestHandler implements MuHandler {
                         MuRuntimeDelegate.writeResponseHeaders(requestContext.getUriInfo().getBaseUri(), responseToWrite, muResponse, isHttp1);
                     })) {
                     jaxRSResponse.setEntityStream(requestContext.getMuMethod() == Method.HEAD ? NullOutputStream.INSTANCE : out);
+                    OutputStream originalEntityStream = jaxRSResponse.getOutputStream();
                     jaxRSResponse.setRequestContext(requestContext);
 
                     Annotation[] writerAnnontations = annotations;
@@ -279,6 +281,7 @@ public class RestHandler implements MuHandler {
                     if (jaxRSResponse.hasEntity()) {
                         jaxRSResponse.executeInterceptors(writerInterceptors); // run the interceptors
                     }
+                    boolean entityStreamReplaced = jaxRSResponse.getOutputStream() != originalEntityStream;
                     Object entity = jaxRSResponse.getEntity();
                     if (entity instanceof Exception) {
                         throw (Exception) entity;
@@ -302,7 +305,9 @@ public class RestHandler implements MuHandler {
                         Type entityGenericType = jaxRSResponse.getEntityType();
                         MessageBodyWriter messageBodyWriter = entityProviders.selectWriter(entityType, entityGenericType, writerAnnontations, responseMediaType);
 
-                        if (entityProviders.isBuiltInWriter(messageBodyWriter)) {
+                        if (entityStreamReplaced) {
+                            jaxRSResponse.getHeaders().remove(HttpHeaders.CONTENT_LENGTH);
+                        } else if (entityProviders.isBuiltInWriter(messageBodyWriter)) {
                             long size = messageBodyWriter.getSize(jaxRSResponse.getEntity(), jaxRSResponse.getType(), jaxRSResponse.getGenericType(), writerAnnontations, responseMediaType);
                             if (size >= 0) {
                                 jaxRSResponse.getHeaders().putSingle("content-length", Long.toString(size));
@@ -312,8 +317,12 @@ public class RestHandler implements MuHandler {
                         applyDefaultCharset(jaxRSResponse);
 
                         try {
+                            OutputStream responseEntityStream = jaxRSResponse.getOutputStream();
                             messageBodyWriter.writeTo(jaxRSResponse.getEntity(), jaxRSResponse.getType(), jaxRSResponse.getGenericType(), writerAnnontations,
-                                jaxRSResponse.getMediaType(), jaxRSResponse.getHeaders(), jaxRSResponse.getOutputStream());
+                                jaxRSResponse.getMediaType(), jaxRSResponse.getHeaders(), responseEntityStream);
+                            if (entityStreamReplaced) {
+                                responseEntityStream.close();
+                            }
                             out.prepare();
                         } catch (Exception e) {
                             // remove the added headers before rewriting

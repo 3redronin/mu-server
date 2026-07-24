@@ -15,10 +15,13 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.io.BufferedOutputStream;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.FilterOutputStream;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.lang.annotation.Annotation;
 import java.net.URI;
 import java.util.ArrayList;
@@ -439,6 +442,39 @@ public class FilterTest {
             assertThat(resp.code(), is(400));
             assertThat(resp.header("Content-Type"), is("text/plain;charset=utf-8"));
             assertThat(resp.body().string(), is("12"));
+        }
+    }
+
+    @Test
+    public void responseFiltersCanReplaceTheEntityOutputStream() throws IOException {
+        @Path("stream-filter")
+        class Resource {
+            @GET
+            public String get() {
+                return "body";
+            }
+        }
+
+        server = httpsServerForTest()
+            .addHandler(restHandler(new Resource())
+                .addResponseFilter((requestContext, responseContext) -> {
+                    OutputStream original = responseContext.getEntityStream();
+                    assertThat(original, is(notNullValue()));
+                    responseContext.setEntityStream(new BufferedOutputStream(new FilterOutputStream(original) {
+                        @Override
+                        public void write(byte[] bytes, int offset, int length) throws IOException {
+                            out.write("prefix-".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                            out.write(bytes, offset, length);
+                        }
+                    }));
+                }))
+            .start();
+
+        try (Response response = call(request(server.uri().resolve("/stream-filter")))) {
+            assertThat(response.body().string(), is("prefix-body"));
+        }
+        try (Response response = call(request(server.uri().resolve("/stream-filter")).head())) {
+            assertThat(response.header("content-length"), is(nullValue()));
         }
     }
 
