@@ -185,8 +185,15 @@ public class FilterTest {
                                 // expected
                             }
                             assertThat(requestContext.getPropertyNames(), containsInAnyOrder("murequest", "hello", "hello2", MU_REQUEST_PROPERTY, RESOURCE_INFO_PROPERTY));
+                            assertThat(requestContext.hasProperty("hello"), is(true));
+                            assertThat(requestContext.hasProperty("missing"), is(false));
+                            assertThat(requestContext.hasProperty(MU_REQUEST_PROPERTY), is(true));
+                            assertThat(requestContext.hasProperty(RESOURCE_INFO_PROPERTY), is(true));
                             requestContext.removeProperty("hello");
                             requestContext.setProperty("hello2", null);
+                            assertThat(requestContext.hasProperty("hello"), is(false));
+                            assertThat(requestContext.hasProperty("hello2"), is(false));
+                            assertThat(requestContext.getPropertyNames(), containsInAnyOrder("murequest", MU_REQUEST_PROPERTY, RESOURCE_INFO_PROPERTY));
                             requestContext.setProperty("hello3", "temp");
                             requestContext.setProperty("hello3", "hello3");
                         } catch (Throwable e) {
