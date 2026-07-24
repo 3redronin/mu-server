@@ -29,8 +29,17 @@ class EntityProviders {
         Optional<ProviderWrapper<MessageBodyReader<?>>> best = readers.stream()
             .filter(reader -> reader.supports(requestBodyMediaType))
             .filter(reader -> !(reader.genericType instanceof Class) || ((Class<?>) reader.genericType).isAssignableFrom(box(type)))
+            .sorted((first, second) -> {
+                int mediaTypeCompare = Integer.compare(
+                    mediaTypeSpecificity(first, requestBodyMediaType),
+                    mediaTypeSpecificity(second, requestBodyMediaType));
+                if (mediaTypeCompare != 0) {
+                    return mediaTypeCompare;
+                }
+                return first.compareTo(second);
+            })
             .filter(reader -> reader.provider.isReadable(type, genericType, annotations, requestBodyMediaType))
-            .min(Comparator.comparingInt(reader -> mediaTypeSpecificity(reader, requestBodyMediaType)));
+            .findFirst();
         if (best.isPresent()) {
             return best.get().provider;
         }

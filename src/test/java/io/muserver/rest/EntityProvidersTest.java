@@ -14,6 +14,7 @@ import okhttp3.Response;
 import okio.BufferedSink;
 import org.example.MyStringReaderWriter;
 import org.example.NumberWriter;
+import org.example.ObjectReader;
 import org.example.RuntimeTypeOnlyStringWriter;
 import org.hamcrest.Matchers;
 import org.junit.After;
@@ -27,6 +28,7 @@ import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -84,6 +86,20 @@ public class EntityProvidersTest {
             assertThat(resp.header("Content-Type"), equalTo("text/plain;charset=utf-8"));
             assertThat(resp.body().string(), equalTo("--HELLO WORLD--"));
         }
+    }
+
+    @Test
+    public void broadApplicationReaderOverridesMoreSpecificBuiltInReader() {
+        ObjectReader applicationReader = new ObjectReader();
+        EntityProviders providers = new EntityProviders(
+            asList(applicationReader, StringEntityProviders.stringEntityReaders.get(0)),
+            Collections.emptyList());
+
+        assertThat(providers.selectReader(
+            String.class,
+            String.class,
+            new Annotation[0],
+            jakarta.ws.rs.core.MediaType.TEXT_PLAIN_TYPE), Matchers.sameInstance(applicationReader));
     }
 
     @Test
@@ -435,6 +451,121 @@ public class EntityProvidersTest {
             assertThat(resp.code(), equalTo(200));
             assertThat(resp.body().string(), equalTo("read by default reader"));
         }
+    }
+
+    @Test
+    public void readersReceiveTheRequestContentTypeOrOctetStreamByDefault() throws Exception {
+        class Payload {
+            private final String value;
+
+            private Payload(String value) {
+                this.value = value;
+            }
+        }
+        @Consumes("*/*")
+        class PayloadReader implements MessageBodyReader<Payload> {
+            @Override
+            public boolean isReadable(Class<?> type, Type genericType, Annotation[] annotations,
+                                      jakarta.ws.rs.core.MediaType mediaType) {
+                return type == Payload.class;
+            }
+
+            @Override
+            public Payload readFrom(Class<Payload> type, Type genericType, Annotation[] annotations,
+                                    jakarta.ws.rs.core.MediaType mediaType,
+                                    MultivaluedMap<String, String> httpHeaders,
+                                    InputStream entityStream) throws IOException {
+                return new Payload(mediaType + ":" + new String(entityStream.readAllBytes(), StandardCharsets.UTF_8));
+            }
+        }
+        @Path("reader-media-type")
+        class Resource {
+            @POST
+            public String post(Payload payload) {
+                return payload.value;
+            }
+        }
+        server = httpsServerForTest()
+            .addHandler(restHandler(new Resource()).addCustomReader(new PayloadReader()))
+            .start();
+
+        try (Response response = call(request(server.uri().resolve("/reader-media-type"))
+            .post(RequestBody.create("explicit", MediaType.get("text/html"))))) {
+            assertThat(response.body().string(), equalTo("text/html;charset=utf-8:explicit"));
+        }
+        try (Response response = call(request(server.uri().resolve("/reader-media-type"))
+            .post(new RequestBody() {
+                @Override
+                public MediaType contentType() {
+                    return null;
+                }
+
+                @Override
+                public void writeTo(BufferedSink sink) throws IOException {
+                    sink.writeUtf8("default");
+                }
+            }))) {
+            assertThat(response.body().string(), equalTo("application/octet-stream:default"));
+        }
+    }
+
+    @Test
+    public void readerSelectionStopsAtTheFirstReadableSortedCandidate() {
+        List<String> calls = new ArrayList<>();
+        @Consumes("application/java")
+        class ExactReader implements MessageBodyReader<String> {
+            private final boolean readable;
+
+            private ExactReader(boolean readable) {
+                this.readable = readable;
+            }
+
+            @Override
+            public boolean isReadable(Class<?> type, Type genericType, Annotation[] annotations,
+                                      jakarta.ws.rs.core.MediaType mediaType) {
+                calls.add("exact");
+                return readable;
+            }
+
+            @Override
+            public String readFrom(Class<String> type, Type genericType, Annotation[] annotations,
+                                   jakarta.ws.rs.core.MediaType mediaType,
+                                   MultivaluedMap<String, String> httpHeaders,
+                                   InputStream entityStream) {
+                return "exact";
+            }
+        }
+        @Consumes("*/*")
+        class WildcardReader implements MessageBodyReader<String> {
+            @Override
+            public boolean isReadable(Class<?> type, Type genericType, Annotation[] annotations,
+                                      jakarta.ws.rs.core.MediaType mediaType) {
+                calls.add("wildcard");
+                return true;
+            }
+
+            @Override
+            public String readFrom(Class<String> type, Type genericType, Annotation[] annotations,
+                                   jakarta.ws.rs.core.MediaType mediaType,
+                                   MultivaluedMap<String, String> httpHeaders,
+                                   InputStream entityStream) {
+                return "wildcard";
+            }
+        }
+        jakarta.ws.rs.core.MediaType mediaType = new jakarta.ws.rs.core.MediaType("application", "java");
+
+        EntityProviders firstReadable = new EntityProviders(
+            asList(new WildcardReader(), new ExactReader(true)), Collections.emptyList());
+        assertThat(firstReadable.selectReader(String.class, String.class, new Annotation[0], mediaType),
+            Matchers.instanceOf(ExactReader.class));
+        assertThat(calls, Matchers.contains("exact"));
+
+        calls.clear();
+        EntityProviders fallback = new EntityProviders(
+            asList(new WildcardReader(), new ExactReader(false)), Collections.emptyList());
+        assertThat(fallback.selectReader(String.class, String.class, new Annotation[0], mediaType),
+            Matchers.instanceOf(WildcardReader.class));
+        assertThat(calls, Matchers.contains("exact", "wildcard"));
     }
 
     @Test
