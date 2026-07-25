@@ -30,6 +30,7 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
     }
 
     private final MultivaluedMap<String, Object> headers;
+    private final MultivaluedMap<String, String> stringHeaders;
     private StatusType status;
     private ObjWithType objWithType;
     private final NewCookie[] cookies;
@@ -48,6 +49,7 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
     JaxRSResponse(StatusType status, MultivaluedMap<String, Object> headers, ObjWithType entity, NewCookie[] cookies, List<Link> links, Annotation[] annotations) {
         this.status = status;
         this.headers = headers;
+        this.stringHeaders = new StringHeadersMap(headers, JaxRSResponse::headerValueToString);
         this.objWithType = entity;
         this.cookies = cookies;
         this.links = links;
@@ -380,15 +382,7 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
 
     @Override
     public MultivaluedMap<String, String> getStringHeaders() {
-        MultivaluedMap<String, String> map = new LowercasedMultivaluedHashMap<>();
-        for (Map.Entry<String, List<Object>> entry : headers.entrySet()) {
-            map.put(entry.getKey(), entry.getValue()
-                .stream()
-                .map(JaxRSResponse::headerValueToString)
-                .collect(Collectors.toList())
-            );
-        }
-        return map;
+        return stringHeaders;
     }
 
     static MultivaluedMap<String, Object> muHeadersToJaxObj(Headers headers) {
@@ -401,7 +395,11 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
 
     @Override
     public String getHeaderString(String name) {
-        return headerValueToString(headers.getFirst(name));
+        List<Object> values = headers.get(name);
+        return values == null ? null : values.stream()
+            .map(JaxRSResponse::headerValueToString)
+            .map(value -> value == null ? "" : value)
+            .collect(Collectors.joining(","));
     }
 
     private static String headerValueToString(Object value) {
