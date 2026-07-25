@@ -43,7 +43,7 @@ class Mu3AsyncHandleImpl implements AsyncHandle {
     @Override
     public void setReadListener(RequestBodyListener readListener) {
         var requestFuture = CompletableFuture.runAsync(() -> {
-            var requestException = new AtomicReference<@Nullable Throwable>();
+            AtomicReference<@Nullable Throwable> requestException = new AtomicReference<>();
             try (var clientIn = request.body()) {
                 var buffer = new byte[8192];
                 int read;
@@ -127,24 +127,24 @@ class Mu3AsyncHandleImpl implements AsyncHandle {
                     complete(e);
                     throw e instanceof RuntimeException ? (RuntimeException) e : new RuntimeException("Error while writing body", e);
                 }
-            });
+            }).thenApply(ignored -> null);
         } finally {
             lock.unlock();
         }
     }
 
     @Override
-    public Future<Void> write(ByteBuffer data) {
+    public Future<@Nullable Void> write(ByteBuffer data) {
         try {
             lock.lock();
-            var writeFuture = responseFuture.thenRunAsync(() -> {
+            CompletableFuture<@Nullable Void> writeFuture = responseFuture.thenRunAsync(() -> {
                 try {
                     copyBufferToResponseOutput(data);
                 } catch (Throwable e) {
                     complete(e);
                     throw e instanceof RuntimeException ? (RuntimeException) e : new RuntimeException("Error while writing body", e);
                 }
-            });
+            }).thenApply(ignored -> null);
             responseFuture = writeFuture;
             return writeFuture;
         } finally {

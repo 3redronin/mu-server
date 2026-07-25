@@ -41,7 +41,7 @@ class Http1BodyStream extends InputStream implements RequestTrailersAccessor {
     }
 
     State state() {
-        return status.get();
+        return java.util.Objects.requireNonNull(status.get());
     }
 
     @Override
@@ -49,12 +49,12 @@ class Http1BodyStream extends InputStream implements RequestTrailersAccessor {
         blockUntilData();
         int state = stateOrThrow();
         if (state == -1) return -1;
-        return bb.get();
+        return java.util.Objects.requireNonNull(bb).get() & 0xff;
     }
 
     private int stateOrThrow() throws IOException {
         if (tooBig()) throw new HttpException(HttpStatus.CONTENT_TOO_LARGE_413);
-        switch (status.get()) {
+        switch (state()) {
             case READING:
                 return 0;
             case EOF:
@@ -64,7 +64,7 @@ class Http1BodyStream extends InputStream implements RequestTrailersAccessor {
             case TIMED_OUT:
                 throw HttpException.requestTimeout();
         }
-        throw new IllegalStateException(status.get().toString());
+        throw new IllegalStateException(state().toString());
     }
 
     @Override
@@ -75,7 +75,7 @@ class Http1BodyStream extends InputStream implements RequestTrailersAccessor {
         if (len > b.length - off) throw new IndexOutOfBoundsException("Length too long");
         blockUntilData();
         if (stateOrThrow() == -1) return -1;
-        var bit = bb;
+        var bit = java.util.Objects.requireNonNull(bb);
         var toWrite = Math.min(len, bit.remaining());
         if (toWrite > 0) {
             bit.get(b, off, toWrite);
@@ -197,7 +197,7 @@ class Http1BodyStream extends InputStream implements RequestTrailersAccessor {
                 }
             }
         }
-        return status.get();
+        return state();
     }
 
     @Override

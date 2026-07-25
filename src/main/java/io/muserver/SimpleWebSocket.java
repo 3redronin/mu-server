@@ -80,7 +80,7 @@ public abstract class SimpleWebSocket implements MuWebSocket {
     public void onTextFragment(ByteBuffer textFragment, boolean isLast) throws Exception {
         bufferIt(textFragment);
         if (isLast) {
-            onText(fragmentBuffer.decodeUTF8());
+            onText(java.util.Objects.requireNonNull(fragmentBuffer).decodeUTF8());
             fragmentBuffer = null;
         }
     }
@@ -96,7 +96,7 @@ public abstract class SimpleWebSocket implements MuWebSocket {
         bufferIt(buffer);
 
         if (isLast) {
-            var full = fragmentBuffer.toByteBuffer();
+            var full = java.util.Objects.requireNonNull(fragmentBuffer).toByteBuffer();
             fragmentBuffer = null;
             onBinary(full);
         }

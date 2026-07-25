@@ -84,7 +84,7 @@ class Mu3ServerImpl implements MuServer {
     @Override
     public URI uri() {
         var s = httpsUri();
-        return s != null ? s : httpUri();
+        return s != null ? s : Objects.requireNonNull(httpUri(), "The server has no configured URI");
     }
 
 

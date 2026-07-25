@@ -88,7 +88,7 @@ class Http2Stream implements ResponseInfo {
 
     @Override
     public boolean completedSuccessfully() {
-        return request.completedSuccessfully() && response.responseState().completedSuccessfully();
+        return request.completedSuccessfully() && requiredResponse().responseState().completedSuccessfully();
     }
 
     void onWindowUpdate(Http2WindowUpdate windowUpdate) throws Http2Exception {
@@ -102,8 +102,9 @@ class Http2Stream implements ResponseInfo {
     void onReset(Http2ResetStreamFrame rstStream) {
         state = State.CLOSED;
         outgoingFlowControl.terminate();
-        if (!response.responseState().endState()) {
-            response.setState(ResponseState.CLIENT_CANCELLED);
+        Http2Response currentResponse = requiredResponse();
+        if (!currentResponse.responseState().endState()) {
+            currentResponse.setState(ResponseState.CLIENT_CANCELLED);
         }
         request.onClientCancelled();
         if (bodyInputStream instanceof Http2BodyInputStream) {
@@ -212,7 +213,7 @@ class Http2Stream implements ResponseInfo {
     }
 
     public BaseResponse response() {
-        return response;
+        return requiredResponse();
     }
 
     static Http2Stream start(Http2Connection connection, Http2HeadersFrame headerFrame, Http2Settings serverSettings, Http2Settings clientSettings) throws Http2Exception {
@@ -367,10 +368,14 @@ class Http2Stream implements ResponseInfo {
     void cleanup() throws IOException, InterruptedException {
         try {
             request.cleanup();
-            response.cleanup();
+            requiredResponse().cleanup();
         } finally {
             endTime = System.currentTimeMillis();
         }
+    }
+
+    private Http2Response requiredResponse() {
+        return java.util.Objects.requireNonNull(response, "The HTTP/2 response has not been initialized");
     }
 
     void blockingWriteData(byte[] payload, int offset, int length) throws IOException, InterruptedException {

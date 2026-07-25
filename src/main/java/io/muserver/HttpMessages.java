@@ -128,11 +128,11 @@ class HttpRequestTemp implements HttpMessageTemp {
     }
 
     void writeTo(OutputStream out) throws IOException {
-        out.write(method.headerBytes());
+        out.write(java.util.Objects.requireNonNull(method).headerBytes());
         out.write(' ');
         out.write(url.getBytes(StandardCharsets.US_ASCII));
         out.write(' ');
-        out.write(httpVersion.headerBytes());
+        out.write(java.util.Objects.requireNonNull(httpVersion).headerBytes());
         out.write(CRLF);
         headers.writeAsHttp1(out);
         out.write(CRLF);
@@ -149,7 +149,7 @@ class HttpResponseTemp implements HttpMessageTemp {
     private @Nullable HttpRequestTemp request;
     private @Nullable HttpVersion httpVersion;
     private int statusCode;
-    private String reason;
+    private @Nullable String reason;
     private @Nullable BodySize bodySize;
     private final FieldBlock headers = new FieldBlock();
 
@@ -188,10 +188,11 @@ class HttpResponseTemp implements HttpMessageTemp {
         if (isInformational() || statusCode == 204 || statusCode == 304) return BodySize.NONE;
         var req = request;
         if (req == null) throw new IllegalStateException("Cannot tell the size without the request");
-        if (req.getMethod().isHead()) return BodySize.NONE;
+        Method requestMethod = java.util.Objects.requireNonNull(req.getMethod());
+        if (requestMethod.isHead()) return BodySize.NONE;
 
         // 6.3.2
-        if (req.getMethod() == Method.CONNECT) return BodySize.UNSPECIFIED;
+        if (requestMethod == Method.CONNECT) return BodySize.UNSPECIFIED;
 
         // 6.3.3
         var cl = headers.getAll(HeaderNames.CONTENT_LENGTH);
@@ -208,11 +209,11 @@ class HttpResponseTemp implements HttpMessageTemp {
     }
 
     void writeTo(OutputStream out) throws IOException {
-        out.write(httpVersion.headerBytes());
+        out.write(java.util.Objects.requireNonNull(httpVersion).headerBytes());
         out.write(' ');
         out.write(String.valueOf(statusCode).getBytes(StandardCharsets.US_ASCII));
         out.write(' ');
-        out.write(reason.getBytes(StandardCharsets.US_ASCII));
+        out.write(java.util.Objects.requireNonNull(reason).getBytes(StandardCharsets.US_ASCII));
         out.write(CRLF);
         headers.writeAsHttp1(out);
         out.write(CRLF);
@@ -242,7 +243,7 @@ class HttpResponseTemp implements HttpMessageTemp {
         this.reason = reason;
     }
 
-    public String getReason() {
+    public @Nullable String getReason() {
         return reason;
     }
 }

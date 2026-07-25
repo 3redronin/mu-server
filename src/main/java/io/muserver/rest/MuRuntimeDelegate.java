@@ -43,7 +43,7 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
             RuntimeDelegate.setInstance(singleton);
             registeredByEnsureSet = true;
         }
-        return singleton;
+        return Objects.requireNonNull(singleton);
     }
 
     private final Map<Class<?>, HeaderDelegate> headerDelegates = new HashMap<>();

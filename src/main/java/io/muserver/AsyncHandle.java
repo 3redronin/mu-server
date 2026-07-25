@@ -49,7 +49,7 @@ public interface AsyncHandle {
      * @param data The data to write
      * @return A future that is resolved when the write succeeds or fails.
      */
-    Future<Void> write(ByteBuffer data);
+    Future<@Nullable Void> write(ByteBuffer data);
 
     /**
      * Add a listener for when request processing is complete. One use of this is to detect early client disconnects

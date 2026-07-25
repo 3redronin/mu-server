@@ -118,7 +118,7 @@ class HpackTable {
 
     FieldLine getValue(int code) throws Http2Exception {
         if (code <= 0) throw new Http2Exception(Http2ErrorCode.COMPRESSION_ERROR, "Invalid code");
-        if (code < staticMap.length) return staticMap[code];
+        if (code < staticMap.length) return java.util.Objects.requireNonNull(staticMap[code]);
         int dIndex = code - staticMap.length;
         if (dIndex >= dynamicQueue.size()) {
             throw new Http2Exception(Http2ErrorCode.COMPRESSION_ERROR, "Invalid dynamic code");
@@ -128,7 +128,7 @@ class HpackTable {
 
     int codeFor(FieldLine line) {
         for (int i = 1; i < staticMap.length; i++) {
-            var staticLine = staticMap[i];
+            var staticLine = java.util.Objects.requireNonNull(staticMap[i]);
             if (staticLine.equals(line)) return i;
         }
         int i = 0;
@@ -141,7 +141,7 @@ class HpackTable {
 
     int codeFor(HeaderString name) {
         for (int i = 1; i < staticMap.length; i++) {
-            var staticLine = staticMap[i];
+            var staticLine = java.util.Objects.requireNonNull(staticMap[i]);
             if (staticLine.name().equals(name)) return i;
         }
         int i = 0;

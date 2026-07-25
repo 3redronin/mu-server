@@ -49,7 +49,7 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
     JaxRSResponse(StatusType status, MultivaluedMap<String, Object> headers, ObjWithType entity, NewCookie[] cookies, List<Link> links, Annotation[] annotations) {
         this.status = status;
         this.headers = headers;
-        this.stringHeaders = new StringHeadersMap(headers, JaxRSResponse::headerValueToString);
+        this.stringHeaders = new StringHeadersMap(headers, JaxRSResponse::headerValueToNonNullString);
         this.objWithType = entity;
         this.cookies = cookies;
         this.links = links;
@@ -423,6 +423,11 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
         } catch (MuException e) {
             return value.toString();
         }
+    }
+
+    private static String headerValueToNonNullString(Object value) {
+        String result = headerValueToString(value);
+        return result == null ? "" : result;
     }
 
 

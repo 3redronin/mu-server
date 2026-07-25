@@ -68,12 +68,12 @@ class WebsocketConnection implements MuWebSocketSession {
             writeLock.lock();
             try {
                 if (state == WebsocketSessionState.OPEN) {
-                    assert pingBuffer != null;
-                    pingBuffer.position(8)
+                    ByteBuffer ping = java.util.Objects.requireNonNull(pingBuffer);
+                    ping.position(8)
                         .limit(16)
                         .putLong(System.currentTimeMillis())
                         .flip();
-                    sendPing(pingBuffer);
+                    sendPing(ping);
                 }
                 if (state == WebsocketSessionState.OPEN) {
                     startPinging();
@@ -264,21 +264,21 @@ class WebsocketConnection implements MuWebSocketSession {
     }
 
     private ByteBuffer readAndUnmaskPayload(int len, byte[] maskingKey) throws IOException {
-        assert buffer != null;
-        if (len <= buffer.capacity()) {
+        ByteBuffer readBuffer = java.util.Objects.requireNonNull(buffer);
+        if (len <= readBuffer.capacity()) {
             readAtLeast(len);
-            unmask(buffer, maskingKey, len);
-            var tempLimit = buffer.limit();
-            buffer.limit(buffer.position() + len);
-            var slice = buffer.slice();
-            buffer.position(buffer.limit());
-            buffer.limit(tempLimit);
+            unmask(readBuffer, maskingKey, len);
+            var tempLimit = readBuffer.limit();
+            readBuffer.limit(readBuffer.position() + len);
+            var slice = readBuffer.slice();
+            readBuffer.position(readBuffer.limit());
+            readBuffer.limit(tempLimit);
             return slice;
         } else {
             var full = ByteBuffer.allocate(len);
             var toRead = len;
             while (toRead > 0) {
-                int nextLen = Math.min(toRead, buffer.capacity());
+                int nextLen = Math.min(toRead, readBuffer.capacity());
                 var slice = readAndUnmaskPayload(nextLen, maskingKey);
                 full.put(slice);
                 toRead = toRead - nextLen;
@@ -288,20 +288,21 @@ class WebsocketConnection implements MuWebSocketSession {
     }
 
     private void readAtLeast(int minBytes) throws IOException {
-        assert buffer != null;
-        assert inputStream != null;
-        if (minBytes > buffer.capacity()) throw new IllegalArgumentException("This buffer is not big enough");
-        while (buffer.remaining() < minBytes) {
-            if (buffer.capacity() - buffer.limit() < minBytes) {
-                buffer.compact().flip();
+        ByteBuffer readBuffer = java.util.Objects.requireNonNull(buffer);
+        InputStream input = java.util.Objects.requireNonNull(inputStream);
+        if (minBytes > readBuffer.capacity()) throw new IllegalArgumentException("This buffer is not big enough");
+        while (readBuffer.remaining() < minBytes) {
+            if (readBuffer.capacity() - readBuffer.limit() < minBytes) {
+                readBuffer.compact().flip();
             }
-            int read = inputStream.read(buffer.array(), buffer.arrayOffset() + buffer.position(), buffer.capacity() - buffer.limit());
+            int read = input.read(readBuffer.array(), readBuffer.arrayOffset() + readBuffer.position(),
+                readBuffer.capacity() - readBuffer.limit());
             if (read == -1) {
                 throw new ClientDisconnectedException();
             } else {
                 httpConnection.onBytesRead(read);
             }
-            buffer.limit(buffer.limit() + read);
+            readBuffer.limit(readBuffer.limit() + read);
         }
     }
 
@@ -475,7 +476,7 @@ class WebsocketConnection implements MuWebSocketSession {
 
     private void writeFragment(byte firstByte, byte@Nullable[] payload, int payloadOffset, int payloadLen, @Nullable MessageWritingState expectedState, @Nullable MessageWritingState endState) throws IOException {
         var header = header(firstByte, payloadLen);
-        assert outputStream != null;
+        OutputStream output = java.util.Objects.requireNonNull(outputStream);
         writeLock.lock();
         try {
             throwStoredWriteFailure();
@@ -486,11 +487,11 @@ class WebsocketConnection implements MuWebSocketSession {
                 throw new IllegalStateException("Cannot write websocket messages after close frame sent");
             }
             try {
-                outputStream.write(header, 0, header.length);
+                output.write(header, 0, header.length);
                 if (payloadLen > 0) {
-                    outputStream.write(payload, payloadOffset, payloadLen);
+                    output.write(java.util.Objects.requireNonNull(payload), payloadOffset, payloadLen);
                 }
-                outputStream.flush();
+                output.flush();
                 if (endState != null) {
                     messageWritingState = endState;
                 }

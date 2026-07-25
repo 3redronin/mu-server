@@ -514,7 +514,7 @@ public class SseBroadcasterImplTest {
         CountDownLatch allowRegistrationToComplete = new CountDownLatch(1);
         class BlockingSink extends JaxSseEventSinkImpl {
             private BlockingSink() {
-                super(null, null, null);
+                super(unusedPublisher(), unusedResponse(), unusedEntityProviders());
             }
 
             @Override
@@ -873,7 +873,7 @@ public class SseBroadcasterImplTest {
                 }
                 throw new UnsupportedOperationException(method.getName());
             });
-        JaxSseEventSinkImpl sink = new JaxSseEventSinkImpl(publisher, null, null);
+        JaxSseEventSinkImpl sink = new JaxSseEventSinkImpl(publisher, unusedResponse(), unusedEntityProviders());
         AtomicInteger handlerCalls = new AtomicInteger();
         Runnable removeHandler = sink.addResponseCompleteHandler(info -> handlerCalls.incrementAndGet());
 
@@ -895,7 +895,7 @@ public class SseBroadcasterImplTest {
             private ResponseCompleteListener responseCompleteListener;
 
             private CapturingSink() {
-                super(null, null, null);
+                super(unusedPublisher(), unusedResponse(), unusedEntityProviders());
             }
 
             @Override
@@ -977,6 +977,26 @@ public class SseBroadcasterImplTest {
                 closed.set(true);
             }
         };
+    }
+
+    private static AsyncSsePublisher unusedPublisher() {
+        return (AsyncSsePublisher) Proxy.newProxyInstance(
+            AsyncSsePublisher.class.getClassLoader(),
+            new Class<?>[]{AsyncSsePublisher.class},
+            (proxy, method, args) -> null);
+    }
+
+    private static MuResponse unusedResponse() {
+        return (MuResponse) Proxy.newProxyInstance(
+            MuResponse.class.getClassLoader(),
+            new Class<?>[]{MuResponse.class},
+            (proxy, method, args) -> {
+                throw new UnsupportedOperationException(method.getName());
+            });
+    }
+
+    private static EntityProviders unusedEntityProviders() {
+        return new EntityProviders(List.of(), List.of());
     }
 
     @AfterEach
