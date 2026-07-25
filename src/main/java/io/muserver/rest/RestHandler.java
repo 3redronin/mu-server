@@ -304,12 +304,14 @@ public class RestHandler implements MuHandler {
                         MediaType responseMediaType = Objects.requireNonNull(jaxRSResponse.getMediaType(),
                             "A response entity must have a media type");
 
-                        Class entityType = jaxRSResponse.getEntityClass();
-                        Type entityGenericType = jaxRSResponse.getEntityType();
+                        Class entityType = Objects.requireNonNull(jaxRSResponse.getEntityClass(),
+                            "A response entity must have a raw type");
+                        Type entityGenericType = Objects.requireNonNull(jaxRSResponse.getEntityType(),
+                            "A response entity must have a generic type");
                         MessageBodyWriter messageBodyWriter = entityProviders.selectWriter(entityType, entityGenericType, writerAnnontations, responseMediaType);
 
                         if (entityProviders.isBuiltInWriter(messageBodyWriter)) {
-                            long size = messageBodyWriter.getSize(jaxRSResponse.getEntity(), jaxRSResponse.getType(), jaxRSResponse.getGenericType(), writerAnnontations, responseMediaType);
+                            long size = messageBodyWriter.getSize(jaxRSResponse.getEntity(), entityType, entityGenericType, writerAnnontations, responseMediaType);
                             if (size >= 0) {
                                 jaxRSResponse.getHeaders().putSingle("content-length", Long.toString(size));
                             }
@@ -318,7 +320,7 @@ public class RestHandler implements MuHandler {
                         applyDefaultCharset(jaxRSResponse);
 
                         try {
-                            messageBodyWriter.writeTo(jaxRSResponse.getEntity(), jaxRSResponse.getType(), jaxRSResponse.getGenericType(), writerAnnontations,
+                            messageBodyWriter.writeTo(jaxRSResponse.getEntity(), entityType, entityGenericType, writerAnnontations,
                                 jaxRSResponse.getMediaType(), jaxRSResponse.getHeaders(), jaxRSResponse.getOutputStream());
                             out.prepare();
                         } catch (Exception e) {
@@ -374,7 +376,7 @@ public class RestHandler implements MuHandler {
         }
     }
 
-    private static Object getContextParam(JaxRSRequest requestContext, MuResponse muResponse, RequestMatcher.MatchedMethod mm, ResourceMethodParam param, EntityProviders providers) {
+    private static @Nullable Object getContextParam(JaxRSRequest requestContext, MuResponse muResponse, RequestMatcher.MatchedMethod mm, ResourceMethodParam param, EntityProviders providers) {
         MuRequest request = requestContext.muRequest;
         Object paramValue;
         Class<?> type = param.type;

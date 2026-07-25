@@ -69,7 +69,7 @@ class AsyncResponseAdapter implements AsyncResponse, ResponseCompleteListener {
 
     @Override
     public boolean resume(Throwable response) {
-        return resume((Object) response);
+        return resume((Object) Objects.requireNonNull(response, "response"));
     }
 
     @Override
@@ -84,7 +84,7 @@ class AsyncResponseAdapter implements AsyncResponse, ResponseCompleteListener {
 
     @Override
     public boolean cancel(Date retryAfter) {
-        return doCancel(Mutils.toHttpDate(retryAfter));
+        return doCancel(Mutils.toHttpDate(Objects.requireNonNull(retryAfter, "retryAfter")));
     }
 
     private boolean doCancel(@Nullable Object retryAfterValue) {
@@ -112,6 +112,7 @@ class AsyncResponseAdapter implements AsyncResponse, ResponseCompleteListener {
 
     @Override
     public boolean setTimeout(long time, TimeUnit unit) {
+        Objects.requireNonNull(unit, "unit");
         if (!isSuspended) {
             return false;
         }
@@ -138,16 +139,23 @@ class AsyncResponseAdapter implements AsyncResponse, ResponseCompleteListener {
 
     @Override
     public Collection<Class<?>> register(Class<?> callback) {
+        Objects.requireNonNull(callback, "callback");
         throw new NotImplementedException("Mu-Server does not instantiate classes for you. Please use register(Object) with an instantiated callback instead.");
     }
 
     @Override
     public Map<Class<?>, Collection<Class<?>>> register(Class<?> callback, Class<?>... callbacks) {
+        Objects.requireNonNull(callback, "callback");
+        Objects.requireNonNull(callbacks, "callbacks");
+        for (Class<?> additionalCallback : callbacks) {
+            Objects.requireNonNull(additionalCallback, "callbacks element");
+        }
         throw new NotImplementedException("Mu-Server does not instantiate classes for you. Please use register(Object, Object...) with instantiated callbacks instead.");
     }
 
     @Override
     public Collection<Class<?>> register(Object callback) {
+        Objects.requireNonNull(callback, "callback");
         Collection<Class<?>> added = new HashSet<>();
         if (callback instanceof ConnectionCallback) {
             added.add(ConnectionCallback.class);
@@ -162,12 +170,13 @@ class AsyncResponseAdapter implements AsyncResponse, ResponseCompleteListener {
 
     @Override
     public Map<Class<?>, Collection<Class<?>>> register(Object callback, Object... callbacks) {
+        Objects.requireNonNull(callback, "callback");
+        Objects.requireNonNull(callbacks, "callbacks");
         Map<Class<?>, Collection<Class<?>>> added = new HashMap<>();
         if (callback == null) throw new NullPointerException("callback");
         register(callback, added);
         for (Object cb : callbacks) {
-            if (cb == null) throw new NullPointerException("callback");
-            register(cb, added);
+            register(Objects.requireNonNull(cb, "callbacks element"), added);
         }
         return added;
     }

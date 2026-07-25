@@ -14,6 +14,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayOutputStream;
+import java.lang.reflect.Type;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.TimeUnit;
@@ -46,6 +48,7 @@ class JaxSseEventSinkImpl implements SseEventSink {
 
     @Override
     public CompletionStage<?> send(OutboundSseEvent event) {
+        Objects.requireNonNull(event, "event");
         if (isClosed()) {
             throw new IllegalStateException("The SSE stream was already closed");
         }
@@ -62,14 +65,19 @@ class JaxSseEventSinkImpl implements SseEventSink {
             }
             Object data = event.getData();
             if (data != null) {
-                MessageBodyWriter messageBodyWriter = entityProviders.selectWriter(event.getType(), event.getGenericType(),
+                Class<?> dataType = Objects.requireNonNull(event.getType(), "An SSE event with data must have a raw type");
+                Type genericDataType = event.getGenericType();
+                if (genericDataType == null) {
+                    genericDataType = dataType;
+                }
+                MessageBodyWriter messageBodyWriter = entityProviders.selectWriter(dataType, genericDataType,
                     JaxRSResponse.Builder.EMPTY_ANNOTATIONS, event.getMediaType());
                 String dataString;
                 if (data instanceof String && messageBodyWriter instanceof StringEntityProviders.StringMessageReaderWriter) {
                     dataString = (String) data;
                 } else {
                     try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-                        messageBodyWriter.writeTo(data, event.getType(), event.getGenericType(), JaxRSResponse.Builder.EMPTY_ANNOTATIONS,
+                        messageBodyWriter.writeTo(data, dataType, genericDataType, JaxRSResponse.Builder.EMPTY_ANNOTATIONS,
                             event.getMediaType(), new MultivaluedHashMap<>(writerHeaders), out);
                         dataString = out.toString(UTF_8);
                     }

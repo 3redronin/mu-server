@@ -50,7 +50,7 @@ class ReadOnlyMultivaluedMap<K, V> implements MultivaluedMap<K, V>, Serializable
         throw new NotImplementedException("Invalid access for readonly map");
     }
 
-    public V getFirst(K key) {
+    public @Nullable V getFirst(K key) {
         return actual.getFirst(key);
     }
 
@@ -66,7 +66,7 @@ class ReadOnlyMultivaluedMap<K, V> implements MultivaluedMap<K, V>, Serializable
         return actual.hashCode();
     }
 
-    public boolean equals(Object o) {
+    public boolean equals(@Nullable Object o) {
         return actual.equals(o);
     }
 
@@ -78,7 +78,7 @@ class ReadOnlyMultivaluedMap<K, V> implements MultivaluedMap<K, V>, Serializable
         return actual.size();
     }
 
-    public List<V> remove(Object key) {
+    public List<V> remove(@Nullable Object key) {
         throw new NotImplementedException("Invalid access for readonly map");
     }
 
@@ -98,7 +98,7 @@ class ReadOnlyMultivaluedMap<K, V> implements MultivaluedMap<K, V>, Serializable
         return actual.isEmpty();
     }
 
-    public @Nullable List<V> get(Object key) {
+    public @Nullable List<V> get(@Nullable Object key) {
         return actual.get(key);
     }
 
@@ -106,11 +106,11 @@ class ReadOnlyMultivaluedMap<K, V> implements MultivaluedMap<K, V>, Serializable
         return actual.entrySet();
     }
 
-    public boolean containsValue(Object value) {
+    public boolean containsValue(@Nullable Object value) {
         return actual.containsValue(value);
     }
 
-    public boolean containsKey(Object key) {
+    public boolean containsKey(@Nullable Object key) {
         return actual.containsKey(key);
     }
 

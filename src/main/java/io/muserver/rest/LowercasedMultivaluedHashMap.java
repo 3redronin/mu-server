@@ -24,12 +24,12 @@ class LowercasedMultivaluedHashMap<V> extends AbstractMultivaluedMap<String, V> 
      */
     private static class LowercasedHashMap<V> extends HashMap<String, V> {
         @Override
-        public @Nullable V get(Object key) {
+        public @Nullable V get(@Nullable Object key) {
             return super.get(toLower(key));
         }
 
         @Override
-        public boolean containsKey(Object key) {
+        public boolean containsKey(@Nullable Object key) {
             return super.containsKey(toLower(key));
         }
 
@@ -46,12 +46,12 @@ class LowercasedMultivaluedHashMap<V> extends AbstractMultivaluedMap<String, V> 
         }
 
         @Override
-        public @Nullable V remove(Object key) {
+        public @Nullable V remove(@Nullable Object key) {
             return super.remove(toLower(key));
         }
 
         @Override
-        public V getOrDefault(Object key, V defaultValue) {
+        public @Nullable V getOrDefault(@Nullable Object key, @Nullable V defaultValue) {
             return super.getOrDefault(toLower(key), defaultValue);
         }
 
@@ -61,7 +61,7 @@ class LowercasedMultivaluedHashMap<V> extends AbstractMultivaluedMap<String, V> 
         }
 
         @Override
-        public boolean remove(Object key, Object value) {
+        public boolean remove(@Nullable Object key, @Nullable Object value) {
             return super.remove(toLower(key), value);
         }
 
@@ -95,7 +95,7 @@ class LowercasedMultivaluedHashMap<V> extends AbstractMultivaluedMap<String, V> 
             return super.merge(key.toLowerCase(), value, remappingFunction);
         }
 
-        private static Object toLower(Object val) {
+        private static @Nullable Object toLower(@Nullable Object val) {
             if (val instanceof String) {
                 return ((String) val).toLowerCase();
             }

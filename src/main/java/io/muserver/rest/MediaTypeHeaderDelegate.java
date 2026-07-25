@@ -1,6 +1,7 @@
 package io.muserver.rest;
 
 import io.muserver.MediaTypeParser;
+import io.muserver.Mutils;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.ext.RuntimeDelegate;
 import org.jspecify.annotations.Nullable;
@@ -19,11 +20,13 @@ class MediaTypeHeaderDelegate implements RuntimeDelegate.HeaderDelegate<MediaTyp
 
     @Override
     public MediaType fromString(String value) {
+        Mutils.notNull("value", value);
         return MediaTypeParser.fromString(value);
     }
 
     @Override
     public String toString(MediaType mediaType) {
+        Mutils.notNull("mediaType", mediaType);
         return MediaTypeParser.toString(mediaType);
     }
 

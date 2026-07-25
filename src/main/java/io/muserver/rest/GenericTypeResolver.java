@@ -191,7 +191,7 @@ final class GenericTypeResolver {
         }
 
         @Override
-        public boolean equals(Object other) {
+        public boolean equals(@Nullable Object other) {
             if (!(other instanceof ParameterizedType)) {
                 return false;
             }
@@ -254,7 +254,7 @@ final class GenericTypeResolver {
         }
 
         @Override
-        public boolean equals(Object other) {
+        public boolean equals(@Nullable Object other) {
             return other instanceof GenericArrayType
                 && componentType.equals(((GenericArrayType) other).getGenericComponentType());
         }
@@ -295,7 +295,7 @@ final class GenericTypeResolver {
         }
 
         @Override
-        public boolean equals(Object other) {
+        public boolean equals(@Nullable Object other) {
             if (!(other instanceof WildcardType)) {
                 return false;
             }

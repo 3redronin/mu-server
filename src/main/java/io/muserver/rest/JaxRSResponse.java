@@ -86,22 +86,22 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
     }
 
     @Override
-    public Class<?> getType() {
-        return Objects.requireNonNull(objWithType.type, "The response entity type has not been set");
+    public @Nullable Class<?> getType() {
+        return objWithType.type;
     }
 
     @Override
-    public void setType(Class<?> type) {
+    public void setType(@Nullable Class<?> type) {
         objWithType = new ObjWithType(type, objWithType.genericType, objWithType.response, objWithType.entity);
     }
 
     @Override
-    public Type getGenericType() {
-        return Objects.requireNonNull(objWithType.genericType, "The response entity generic type has not been set");
+    public @Nullable Type getGenericType() {
+        return objWithType.genericType;
     }
 
     @Override
-    public void setGenericType(Type genericType) {
+    public void setGenericType(@Nullable Type genericType) {
         objWithType = new ObjWithType(objWithType.type, genericType, objWithType.response, objWithType.entity);
     }
 
@@ -112,7 +112,13 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
 
     @Override
     public void setStatus(int code) {
-        this.status = Status.fromStatusCode(code);
+        if (code < 100 || code > 599) {
+            throw new IllegalArgumentException("Status must be between 100 and 599, but was " + code);
+        }
+        Status standardStatus = Status.fromStatusCode(code);
+        this.status = standardStatus == null
+            ? new CustomStatus(Status.Family.familyOf(code), code, "")
+            : standardStatus;
     }
 
     @Override
@@ -122,7 +128,7 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
 
     @Override
     public void setStatusInfo(StatusType statusInfo) {
-        this.status = statusInfo;
+        this.status = Objects.requireNonNull(statusInfo, "statusInfo");
     }
 
     @Override
@@ -131,12 +137,12 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
     }
 
     @Override
-    public Class<?> getEntityClass() {
+    public @Nullable Class<?> getEntityClass() {
         return getType();
     }
 
     @Override
-    public Type getEntityType() {
+    public @Nullable Type getEntityType() {
         return getGenericType();
     }
 
@@ -324,7 +330,7 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
     }
 
     @Override
-    public EntityTag getEntityTag() {
+    public @Nullable EntityTag getEntityTag() {
         Object first = headers.getFirst(HeaderNames.ETAG.toString());
         if (first == null || first instanceof  EntityTag) return (EntityTag)first;
         return MuRuntimeDelegate.entityTagDelegate.fromString(first.toString());
@@ -455,7 +461,7 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
     }
 
     @Override
-    public void setProperty(String name, Object object) {
+    public void setProperty(String name, @Nullable Object object) {
         requiredRequestContext().setProperty(name, object);
     }
 
@@ -541,12 +547,12 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
         @Override
         public ResponseBuilder entity(@Nullable Object entity, Annotation[] annotations) {
             this.entity = entity;
-            this.annotations = annotations;
+            this.annotations = Objects.requireNonNull(annotations, "annotations");
             return this;
         }
 
         @Override
-        public ResponseBuilder allow(String... methods) {
+        public ResponseBuilder allow(String @Nullable ... methods) {
             if (methods == null || (methods.length == 1 && methods[0] == null)) {
                 return allow((Set<String>) null);
             } else {
@@ -576,8 +582,9 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
 
 
         @Override
-        public ResponseBuilder cacheControl(CacheControl cacheControl) {
-            return setHeader(HeaderNames.CACHE_CONTROL, MuRuntimeDelegate.cacheControlHeaderDelegate.toString(cacheControl), false);
+        public ResponseBuilder cacheControl(@Nullable CacheControl cacheControl) {
+            return setHeader(HeaderNames.CACHE_CONTROL,
+                cacheControl == null ? null : MuRuntimeDelegate.cacheControlHeaderDelegate.toString(cacheControl), false);
         }
 
         @Override
@@ -603,12 +610,12 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
         }
 
         @Override
-        public ResponseBuilder header(String name, Object value) {
+        public ResponseBuilder header(String name, @Nullable Object value) {
             return setHeader(name, value, true); // TODO should this actually be false?
         }
 
         @Override
-        public ResponseBuilder replaceAll(MultivaluedMap<String, Object> headers) {
+        public ResponseBuilder replaceAll(@Nullable MultivaluedMap<String, Object> headers) {
             this.headers.clear();
             if (headers != null) {
                 for (Map.Entry<String, List<Object>> entry : headers.entrySet()) {
@@ -652,13 +659,13 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
         }
 
         @Override
-        public ResponseBuilder contentLocation(URI location) {
+        public ResponseBuilder contentLocation(@Nullable URI location) {
             return setHeader(HeaderNames.CONTENT_LOCATION, location, false);
         }
 
         @Override
-        public ResponseBuilder cookie(NewCookie... cookies) {
-            this.cookies = cookies;
+        public ResponseBuilder cookie(NewCookie @Nullable ... cookies) {
+            this.cookies = cookies == null ? new NewCookie[0] : cookies;
             if (cookies == null) {
                 headers.remove(HeaderNames.SET_COOKIE.toString());
             }
@@ -666,37 +673,41 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
         }
 
         @Override
-        public ResponseBuilder expires(Date expires) {
+        public ResponseBuilder expires(@Nullable Date expires) {
             return setHeader(HeaderNames.EXPIRES, expires, false);
         }
 
         @Override
-        public ResponseBuilder lastModified(Date lastModified) {
+        public ResponseBuilder lastModified(@Nullable Date lastModified) {
             return setHeader(HeaderNames.LAST_MODIFIED, lastModified, false);
         }
 
         @Override
-        public ResponseBuilder location(URI location) {
+        public ResponseBuilder location(@Nullable URI location) {
             return setHeader(HeaderNames.LOCATION, location, false);
         }
 
         @Override
-        public ResponseBuilder tag(EntityTag tag) {
+        public ResponseBuilder tag(@Nullable EntityTag tag) {
             return setHeader(HeaderNames.ETAG, tag, false);
         }
 
         @Override
-        public ResponseBuilder tag(String tag) {
-            return tag(new EntityTag(tag));
+        public ResponseBuilder tag(@Nullable String tag) {
+            return tag == null ? tag((EntityTag) null) : tag(new EntityTag(tag));
         }
 
         @Override
-        public ResponseBuilder variants(Variant... variants) {
-            return variants(asList(variants));
+        public ResponseBuilder variants(Variant @Nullable ... variants) {
+            return variants(variants == null ? null : asList(variants));
         }
 
         @Override
-        public ResponseBuilder variants(List<Variant> variants) {
+        public ResponseBuilder variants(@Nullable List<Variant> variants) {
+            if (variants == null) {
+                this.headers.remove("vary");
+                return this;
+            }
             for (Variant variant : variants) {
                 if (variant == null) {
                     this.headers.remove("vary");
@@ -720,7 +731,7 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
         }
 
         @Override
-        public ResponseBuilder links(Link... links) {
+        public ResponseBuilder links(Link @Nullable ... links) {
             if (links == null) {
                 linkHeaders.clear();
             } else {

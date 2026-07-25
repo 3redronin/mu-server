@@ -10,6 +10,7 @@ class DateHeaderDelegate implements RuntimeDelegate.HeaderDelegate<Date> {
 
     @Override
     public Date fromString(String value) {
+        Mutils.notNull("value", value);
         try {
             return Mutils.fromHttpDate(value);
         } catch (DateTimeParseException e) {
@@ -19,6 +20,7 @@ class DateHeaderDelegate implements RuntimeDelegate.HeaderDelegate<Date> {
 
     @Override
     public String toString(Date value) {
+        Mutils.notNull("value", value);
         return Mutils.toHttpDate(value);
     }
 }
