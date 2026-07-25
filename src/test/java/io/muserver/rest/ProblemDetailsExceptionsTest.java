@@ -4,6 +4,7 @@ import io.muserver.MuServer;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.WebApplicationException;
 import okhttp3.Response;
 import org.json.JSONException;
@@ -28,6 +29,38 @@ import static scaffolding.ClientUtils.request;
 
 public class ProblemDetailsExceptionsTest {
     private MuServer server;
+
+    @Test
+    public void uriParameterConversionFailuresBecomeBadRequestProblems() throws Exception {
+        @Path("samples")
+        class Sample {
+            @GET
+            public String get(@QueryParam("breed") Breed breed) {
+                return breed.name();
+            }
+        }
+
+        this.server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new Sample())
+                .addExceptionMapper(Throwable.class, problemDetailsExceptionMapper()
+                    .withLog4xxProblemDetailsInstanceIds(false)
+                    .build()))
+            .start();
+
+        try (Response resp = call(request().url(server.uri().resolve("/samples?breed=BAD_DOG").toString()))) {
+            JSONObject json = new JSONObject(resp.body().string());
+            assertThat(resp.code(), is(400));
+            assertThat(resp.header("content-type"), is("application/problem+json"));
+            assertThat(json.getString("title"), is("Bad Request"));
+            assertThat(json.getInt("status"), is(400));
+            assertThat(json.getString("detail"), containsString("Could not convert URI parameter \"breed\""));
+            assertThat(json.getString("instance"), startsWith("urn:uuid:"));
+        }
+    }
+
+    private enum Breed {
+        CHIHUAHUA
+    }
 
     @Test
     public void problemDetailsExceptionsBecomeJson() throws Exception {

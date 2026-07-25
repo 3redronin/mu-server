@@ -29,6 +29,7 @@ import java.util.UUID;
  * </p>
  * <ul>
  *     <li>{@link ProblemDetailsException}: values are taken from the exception.</li>
+ *     <li>{@link UriParameterConversionException}: a 400 Bad Request problem-details body is created.</li>
  *     <li>{@link WebApplicationException} with no response entity and a 4xx/5xx status: a problem-details body is created.</li>
  *     <li>Any other exception: a generic 500 problem-details response is created.</li>
  * </ul>
@@ -72,20 +73,23 @@ public class ProblemDetailsExceptionMapper <E extends Throwable> implements Exce
             if (response.getEntity() != null) {
                 return response;
             }
-            Response.Status.Family family = Response.Status.Family.familyOf(response.getStatus());
+            int status = exception instanceof UriParameterConversionException
+                ? Response.Status.BAD_REQUEST.getStatusCode()
+                : response.getStatus();
+            Response.Status.Family family = Response.Status.Family.familyOf(status);
             if (family != Response.Status.Family.CLIENT_ERROR && family != Response.Status.Family.SERVER_ERROR) {
                 return response;
             }
 
             URI instance = newInstance();
-            if (shouldLogInstance(response.getStatus())) {
+            if (shouldLogInstance(status)) {
                 log.error("Sending a problem details response with instance={}", instance, exception);
             }
             String detail = exception.getMessage();
             if (Mutils.nullOrEmpty(detail)) {
-                detail = defaultTitle(response.getStatus());
+                detail = defaultTitle(status);
             }
-            return toResponse(response.getStatus(), defaultTitle(response.getStatus()), detail, null, instance, null);
+            return toResponse(status, defaultTitle(status), detail, null, instance, null);
         }
 
         return serverError(exception);
