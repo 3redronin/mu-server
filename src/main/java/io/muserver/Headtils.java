@@ -108,7 +108,7 @@ class Headtils {
         @Override
         public Map.Entry<String, String> next() {
             Map.Entry<String, String> next = iterator.next();
-            if (toSuppress.contains(next.getKey().toLowerCase())) {
+            if (toSuppress.contains(next.getKey().toLowerCase(Locale.ROOT))) {
                 return new AbstractMap.SimpleImmutableEntry<>(next.getKey(), "(hidden)");
             }
             return next;

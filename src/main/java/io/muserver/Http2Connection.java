@@ -231,7 +231,7 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
         lastStreamId = streamId;
 
         try {
-            HttpMethod nettyMeth = HttpMethod.valueOf(headers.method().toString().toUpperCase());
+            HttpMethod nettyMeth = HttpMethod.valueOf(headers.method().toString().toUpperCase(Locale.ROOT));
             Method muMethod = HttpExchange.getMethod(nettyMeth);
 
             String uri = HttpExchange.getRelativeUrl(headers.path().toString());

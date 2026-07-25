@@ -47,6 +47,7 @@ import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.fail;
 import static scaffolding.ClientUtils.request;
 import static scaffolding.MuAssert.assertEventually;
 
@@ -302,6 +303,7 @@ public class SseBroadcasterImplTest {
         MuAssert.assertNotTimedOut("exceptionThrownLatch", exceptionThrownLatch);
 
         assertThat(MuRuntimeDelegate.connectedSinksCount(broadcaster), is(0));
+        assertThat(errors, hasSize(1));
 
     }
 
@@ -362,6 +364,7 @@ public class SseBroadcasterImplTest {
         broadcaster.onClose(closedSink -> {
             try {
                 broadcaster.register(sink(new AtomicBoolean()));
+                fail("Expected reentrant registration to be rejected");
             } catch (IllegalStateException expected) {
                 reentrantRegistrationRejected.set(true);
             }

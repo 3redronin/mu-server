@@ -121,10 +121,18 @@ class StringEntityProviders {
         @Override
         public void writeTo(char[] chars, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException, WebApplicationException {
             ByteBuffer bb = EntityProviders.charsetFor(mediaType).encode(CharBuffer.wrap(chars));
+            int byteStart = bb.position();
+            int byteEnd = bb.limit();
             byte[] bytes = new byte[bb.remaining()];
             bb.get(bytes);
-            entityStream.write(bytes);
-            Arrays.fill(bb.array(), (byte) 0); // if returning char[] arrays, it might be because it's a password etc, so blank it out
+            try {
+                entityStream.write(bytes);
+            } finally {
+                Arrays.fill(bytes, (byte) 0);
+                if (bb.hasArray()) {
+                    Arrays.fill(bb.array(), bb.arrayOffset() + byteStart, bb.arrayOffset() + byteEnd, (byte) 0);
+                }
+            }
         }
     }
 

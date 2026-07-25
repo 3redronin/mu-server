@@ -3,6 +3,7 @@ package io.muserver;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
@@ -91,7 +92,7 @@ class NettyRequestParameters implements RequestParameters {
 
     @Override
     public boolean getBoolean(String name) {
-        String val = Objects.requireNonNull(get(name, "")).toLowerCase();
+        String val = Objects.requireNonNull(get(name, "")).toLowerCase(Locale.ROOT);
         return isTruthy(val);
     }
 

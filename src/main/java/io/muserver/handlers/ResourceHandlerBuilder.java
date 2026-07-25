@@ -192,8 +192,7 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
 
         @Nullable DateTimeFormatter formatterToUse = this.directoryListingDateFormatter;
         if (directoryListingEnabled && formatterToUse == null) {
-            formatterToUse = DateTimeFormatter.ofPattern("yyyy/MM/dd hh:mm:ss")
-                .withLocale(Locale.US)
+            formatterToUse = DateTimeFormatter.ofPattern("yyyy/MM/dd hh:mm:ss", Locale.US)
                 .withZone(ZoneId.systemDefault());
         }
 

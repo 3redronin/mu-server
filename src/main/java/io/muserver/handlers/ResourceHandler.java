@@ -14,6 +14,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -149,7 +150,7 @@ public class ResourceHandler implements MuHandler {
         if (ind == -1) {
             type = ResourceType.DEFAULT;
         } else {
-            String extension = fileName.substring(ind + 1).toLowerCase();
+            String extension = fileName.substring(ind + 1).toLowerCase(Locale.ROOT);
             type = extensionToResourceType.getOrDefault(extension, ResourceType.DEFAULT);
         }
         response.contentType(type.mimeType());

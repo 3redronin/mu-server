@@ -29,7 +29,7 @@ class Http2Headers implements Headers {
     private static CharSequence toLower(CharSequence name) {
         Mutils.notNull("name", name);
         if (name instanceof String) {
-            return ((String) name).toLowerCase();
+            return ((String) name).toLowerCase(Locale.ROOT);
         }
         return name;
     }
@@ -97,7 +97,7 @@ class Http2Headers implements Headers {
 
     @Override
     public boolean getBoolean(String name) {
-        String val = Objects.requireNonNull(get(name, "")).toLowerCase();
+        String val = Objects.requireNonNull(get(name, "")).toLowerCase(Locale.ROOT);
         return isTruthy(val);
     }
 

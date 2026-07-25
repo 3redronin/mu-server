@@ -84,7 +84,7 @@ class Http1Headers implements Headers {
 
     @Override
     public boolean getBoolean(String name) {
-        String val = Objects.requireNonNull(get(name, "")).toLowerCase();
+        String val = Objects.requireNonNull(get(name, "")).toLowerCase(Locale.ROOT);
         return isTruthy(val);
     }
 

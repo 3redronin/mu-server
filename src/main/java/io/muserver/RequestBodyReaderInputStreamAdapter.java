@@ -202,8 +202,10 @@ class RequestBodyReaderInputStreamAdapter extends RequestBodyReader {
             return;
         }
         try {
-            lock.wait();
-            throwIfErrored();
+            while (currentBuf == null) {
+                lock.wait();
+                throwIfErrored();
+            }
         } catch (InterruptedException e) {
             DoneCallback cb = this.currentCallback;
             if (cb != null) {
