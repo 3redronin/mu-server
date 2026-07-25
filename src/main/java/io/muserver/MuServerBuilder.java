@@ -683,7 +683,7 @@ public class MuServerBuilder {
                 workerGroup.shutdownGracefully(0, 0, TimeUnit.MILLISECONDS).sync();
                 finalHandlerExecutor.shutdown();
 
-                return hasInFlightRequests;
+                return !hasInFlightRequests;
 
             } catch (Exception e) {
                 log.info("Error while shutting down. Will ignore. Error was: {}", e.getMessage());
