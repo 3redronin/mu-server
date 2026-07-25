@@ -347,6 +347,7 @@ class WebsocketConnection implements MuWebSocketSession {
     public void sendTextFragment(ByteBuffer fragment, boolean isLastFragment) throws IOException {
         writeLock.lock();
         try {
+            throwStoredWriteFailure();
             var payload = arrayBuffer(fragment);
             int off = payload.arrayOffset() + payload.position();
             int len = payload.remaining();
@@ -380,6 +381,7 @@ class WebsocketConnection implements MuWebSocketSession {
     public void sendBinaryFragment(ByteBuffer message, boolean isLastFragment) throws IOException {
         writeLock.lock();
         try {
+            throwStoredWriteFailure();
             if (isLastFragment && messageWritingState == MessageWritingState.NONE) {
                 // this is just a non-fragmented full message, so use the plain send
                 sendBinary(message);
@@ -476,9 +478,7 @@ class WebsocketConnection implements MuWebSocketSession {
         assert outputStream != null;
         writeLock.lock();
         try {
-            if (writeFailure != null) {
-                throw new IOException("Cannot write websocket messages after a previous write failed", writeFailure);
-            }
+            throwStoredWriteFailure();
             if (expectedState != null && messageWritingState != expectedState) {
                 throw new IllegalStateException("Expected state " + expectedState + " but was " + messageWritingState);
             }
@@ -507,6 +507,12 @@ class WebsocketConnection implements MuWebSocketSession {
             }
         } finally {
             writeLock.unlock();
+        }
+    }
+
+    private void throwStoredWriteFailure() throws IOException {
+        if (writeFailure != null) {
+            throw new IOException("Cannot write websocket messages after a previous write failed", writeFailure);
         }
     }
 

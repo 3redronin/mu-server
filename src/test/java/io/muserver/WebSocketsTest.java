@@ -40,6 +40,7 @@ import static io.muserver.WebSocketHandlerBuilder.webSocketHandler;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static scaffolding.ClientUtils.*;
 import static scaffolding.MuAssert.assertEventually;
@@ -919,6 +920,14 @@ public class WebSocketsTest {
         assertThrows(IOException.class, () -> serverSession.sendText("This shouldn't work"));
         IOException repeatedFailure = assertThrows(IOException.class, () -> serverSession.sendText("Neither should this"));
         assertThat(repeatedFailure.getCause(), instanceOf(IOException.class));
+        assertAll(
+            () -> assertThat(assertThrows(IOException.class,
+                () -> serverSession.sendTextFragment(Mutils.toByteBuffer("Text fragment"), false)).getCause(),
+                sameInstance(repeatedFailure.getCause())),
+            () -> assertThat(assertThrows(IOException.class,
+                () -> serverSession.sendBinaryFragment(Mutils.toByteBuffer("Binary fragment"), false)).getCause(),
+                sameInstance(repeatedFailure.getCause()))
+        );
     }
 
     @Test
