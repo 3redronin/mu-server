@@ -322,6 +322,23 @@ public class JaxRSResponseTest {
     }
 
     @Test
+    public void stringHeaderEntriesObeyTheMapEqualityAndHashCodeContracts() {
+        Response response = JaxRSResponse.ok().header("X-Value", new StringBuilder("value")).build();
+        MultivaluedMap<String, String> stringHeaders = response.getStringHeaders();
+        Map<String, java.util.List<String>> expected = new java.util.HashMap<>();
+        expected.put("x-value", java.util.Collections.singletonList("value"));
+
+        assertThat(stringHeaders, is(expected));
+        assertThat(stringHeaders.hashCode(), is(expected.hashCode()));
+
+        Map.Entry<String, java.util.List<String>> actualEntry = stringHeaders.entrySet().iterator().next();
+        Map.Entry<String, java.util.List<String>> expectedEntry = expected.entrySet().iterator().next();
+        assertThat(actualEntry.equals(expectedEntry), is(true));
+        assertThat(expectedEntry.equals(actualEntry), is(true));
+        assertThat(actualEntry.hashCode(), is(expectedEntry.hashCode()));
+    }
+
+    @Test
     public void containerResponseContextExposesEntityMetadataAndStreams() {
         @Deprecated
         class AnnotatedEntity { }

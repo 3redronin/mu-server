@@ -7,6 +7,7 @@ import jakarta.annotation.Priority;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.container.*;
 import jakarta.ws.rs.core.*;
+import jakarta.ws.rs.ext.MessageBodyWriter;
 import okhttp3.MediaType;
 import okhttp3.RequestBody;
 import okhttp3.Response;
@@ -23,6 +24,7 @@ import java.io.FilterOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.annotation.Annotation;
+import java.lang.reflect.Type;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -495,6 +497,54 @@ public class FilterTest {
         try (Response response = call(request(server.uri().resolve("/stream-filter?known-length")).head())) {
             assertThat(response.header("content-length"), is("11"));
         }
+    }
+
+    @Test
+    public void responseFiltersCloseReplacementEntityStreamsWhenWritingFails() throws IOException {
+        class Thing {}
+        @Path("failing-stream-filter")
+        class Resource {
+            @GET
+            @Produces("text/plain")
+            public Thing get() {
+                return new Thing();
+            }
+        }
+
+        AtomicBoolean replacementClosed = new AtomicBoolean();
+        server = httpsServerForTest()
+            .addHandler(restHandler(new Resource())
+                .addCustomWriter(new MessageBodyWriter<Thing>() {
+                    @Override
+                    public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations,
+                                               jakarta.ws.rs.core.MediaType mediaType) {
+                        return type == Thing.class;
+                    }
+
+                    @Override
+                    public void writeTo(Thing thing, Class<?> type, Type genericType, Annotation[] annotations,
+                                        jakarta.ws.rs.core.MediaType mediaType, MultivaluedMap<String, Object> httpHeaders,
+                                        OutputStream entityStream) throws IOException {
+                        throw new IOException("Deliberate writer failure");
+                    }
+                })
+                .addResponseFilter((requestContext, responseContext) -> {
+                    if (responseContext.getEntity() instanceof Thing) {
+                        responseContext.setEntityStream(new FilterOutputStream(responseContext.getEntityStream()) {
+                            @Override
+                            public void close() throws IOException {
+                                replacementClosed.set(true);
+                                super.close();
+                            }
+                        });
+                    }
+                }))
+            .start();
+
+        try (Response response = call(request(server.uri().resolve("/failing-stream-filter")))) {
+            assertThat(response.code(), is(500));
+        }
+        assertThat(replacementClosed.get(), is(true));
     }
 
     @Test

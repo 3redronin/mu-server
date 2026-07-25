@@ -318,12 +318,11 @@ public class RestHandler implements MuHandler {
 
                         try {
                             OutputStream responseEntityStream = jaxRSResponse.getOutputStream();
-                            messageBodyWriter.writeTo(jaxRSResponse.getEntity(), jaxRSResponse.getType(), jaxRSResponse.getGenericType(), writerAnnontations,
-                                jaxRSResponse.getMediaType(), jaxRSResponse.getHeaders(), responseEntityStream);
-                            if (entityStreamReplaced) {
-                                responseEntityStream.close();
+                            try (OutputStream replacementStream = entityStreamReplaced ? responseEntityStream : null) {
+                                messageBodyWriter.writeTo(jaxRSResponse.getEntity(), jaxRSResponse.getType(), jaxRSResponse.getGenericType(), writerAnnontations,
+                                    jaxRSResponse.getMediaType(), jaxRSResponse.getHeaders(), responseEntityStream);
+                                out.prepare();
                             }
-                            out.prepare();
                         } catch (Exception e) {
                             // remove the added headers before rewriting
                             if (!muResponse.hasStartedSendingData()) {
