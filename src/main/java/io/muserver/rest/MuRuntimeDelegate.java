@@ -11,6 +11,7 @@ import jakarta.ws.rs.core.*;
 import jakarta.ws.rs.ext.RuntimeDelegate;
 import jakarta.ws.rs.sse.Sse;
 import jakarta.ws.rs.sse.SseBroadcaster;
+import org.jspecify.annotations.Nullable;
 
 import java.net.URI;
 import java.util.*;
@@ -23,7 +24,7 @@ import java.util.concurrent.CompletionStage;
  */
 public class MuRuntimeDelegate extends RuntimeDelegate {
 
-    private static MuRuntimeDelegate singleton;
+    private static @Nullable MuRuntimeDelegate singleton;
 
     /**
      * Registers the mu RuntimeDelegate with jax-rs, if it was not already.
@@ -39,7 +40,7 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
 
     private final Map<Class<?>, HeaderDelegate> headerDelegates = new HashMap<>();
 
-    public MuRuntimeDelegate() {
+    private MuRuntimeDelegate() {
         headerDelegates.put(MediaType.class, new MediaTypeHeaderDelegate());
         headerDelegates.put(CacheControl.class, new CacheControlHeaderDelegate());
         headerDelegates.put(NewCookie.class, new NewCookieHeaderDelegate());
