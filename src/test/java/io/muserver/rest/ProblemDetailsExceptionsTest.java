@@ -14,7 +14,9 @@ import org.junit.Test;
 import scaffolding.ServerUtils;
 
 import java.net.URI;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -38,6 +40,18 @@ public class ProblemDetailsExceptionsTest {
             public String get(@QueryParam("breed") Breed breed) {
                 return breed.name();
             }
+
+            @GET
+            @Path("multiple")
+            public String getMultiple(@QueryParam("breed") List<Breed> breeds) {
+                return breeds.toString();
+            }
+
+            @GET
+            @Path("custom")
+            public String getCustom(@QueryParam("breed") CustomBreed breed) {
+                return breed.name();
+            }
         }
 
         this.server = ServerUtils.httpsServerForTest()
@@ -53,13 +67,42 @@ public class ProblemDetailsExceptionsTest {
             assertThat(resp.header("content-type"), is("application/problem+json"));
             assertThat(json.getString("title"), is("Bad Request"));
             assertThat(json.getInt("status"), is(400));
-            assertThat(json.getString("detail"), containsString("Could not convert URI parameter \"breed\""));
+            assertThat(json.getString("detail"), is("Invalid value for URI parameter \"breed\"."));
+            assertThat(json.getString("parameter"), is("breed"));
+            assertThat(json.getString("suppliedValue"), is("BAD_DOG"));
+            assertThat(json.getJSONArray("allowedValues").toList(), is(Arrays.asList("CHIHUAHUA", "YELPER")));
             assertThat(json.getString("instance"), startsWith("urn:uuid:"));
+        }
+
+        try (Response resp = call(request().url(server.uri().resolve("/samples/multiple?breed=BAD_DOG").toString()))) {
+            JSONObject json = new JSONObject(resp.body().string());
+            assertThat(resp.code(), is(400));
+            assertThat(json.getJSONArray("allowedValues").toList(), is(Arrays.asList("CHIHUAHUA", "YELPER")));
+        }
+
+        try (Response resp = call(request().url(server.uri().resolve("/samples/custom?breed=BAD_DOG").toString()))) {
+            JSONObject json = new JSONObject(resp.body().string());
+            assertThat(resp.code(), is(400));
+            assertThat(json.getString("parameter"), is("breed"));
+            assertThat(json.getString("suppliedValue"), is("BAD_DOG"));
+            assertThat(json.has("allowedValues"), is(false));
         }
     }
 
     private enum Breed {
-        CHIHUAHUA
+        CHIHUAHUA,
+        YELPER
+    }
+
+    private enum CustomBreed {
+        CHIHUAHUA;
+
+        public static CustomBreed fromString(String value) {
+            if ("small".equals(value)) {
+                return CHIHUAHUA;
+            }
+            throw new IllegalArgumentException("Invalid custom breed");
+        }
     }
 
     @Test

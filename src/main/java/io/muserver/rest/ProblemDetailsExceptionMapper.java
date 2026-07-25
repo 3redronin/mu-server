@@ -29,7 +29,7 @@ import java.util.UUID;
  * </p>
  * <ul>
  *     <li>{@link ProblemDetailsException}: values are taken from the exception.</li>
- *     <li>{@link UriParameterConversionException}: a 400 Bad Request problem-details body is created.</li>
+ *     <li>{@link UriParameterConversionException}: a 400 Bad Request problem-details body with parameter metadata is created.</li>
  *     <li>{@link WebApplicationException} with no response entity and a 4xx/5xx status: a problem-details body is created.</li>
  *     <li>Any other exception: a generic 500 problem-details response is created.</li>
  * </ul>
@@ -64,6 +64,10 @@ public class ProblemDetailsExceptionMapper <E extends Throwable> implements Exce
             return toResponse(problem.getStatus(), problem.getTitle(), problem.getDetail(), problem.getType(), problem.getInstance(), problem.getExtensionMembers());
         }
 
+        if (exception instanceof UriParameterConversionException) {
+            return uriParameterConversionError((UriParameterConversionException) exception);
+        }
+
         if (exception instanceof WebApplicationException) {
             WebApplicationException webApplicationException = (WebApplicationException) exception;
             Response response = webApplicationException.getResponse();
@@ -73,26 +77,41 @@ public class ProblemDetailsExceptionMapper <E extends Throwable> implements Exce
             if (response.getEntity() != null) {
                 return response;
             }
-            int status = exception instanceof UriParameterConversionException
-                ? Response.Status.BAD_REQUEST.getStatusCode()
-                : response.getStatus();
-            Response.Status.Family family = Response.Status.Family.familyOf(status);
+            Response.Status.Family family = Response.Status.Family.familyOf(response.getStatus());
             if (family != Response.Status.Family.CLIENT_ERROR && family != Response.Status.Family.SERVER_ERROR) {
                 return response;
             }
 
             URI instance = newInstance();
-            if (shouldLogInstance(status)) {
+            if (shouldLogInstance(response.getStatus())) {
                 log.error("Sending a problem details response with instance={}", instance, exception);
             }
             String detail = exception.getMessage();
             if (Mutils.nullOrEmpty(detail)) {
-                detail = defaultTitle(status);
+                detail = defaultTitle(response.getStatus());
             }
-            return toResponse(status, defaultTitle(status), detail, null, instance, null);
+            return toResponse(response.getStatus(), defaultTitle(response.getStatus()), detail, null, instance, null);
         }
 
         return serverError(exception);
+    }
+
+    private Response uriParameterConversionError(UriParameterConversionException exception) {
+        int status = Response.Status.BAD_REQUEST.getStatusCode();
+        URI instance = newInstance();
+        if (shouldLogInstance(status)) {
+            log.error("Sending a problem details response with instance={}", instance, exception);
+        }
+        Map<String, Object> extensionMembers = new LinkedHashMap<>();
+        extensionMembers.put("parameter", exception.getParameterName());
+        if (exception.getParameterValue() != null) {
+            extensionMembers.put("suppliedValue", exception.getParameterValue());
+        }
+        if (!exception.getAllowedValues().isEmpty()) {
+            extensionMembers.put("allowedValues", exception.getAllowedValues());
+        }
+        String detail = "Invalid value for URI parameter \"" + exception.getParameterName() + "\".";
+        return toResponse(status, defaultTitle(status), detail, null, instance, extensionMembers);
     }
 
     private Response serverError(Throwable exception) {
