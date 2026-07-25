@@ -9,9 +9,15 @@ provided by Oracle.
 
 ## 2 Applications
 
-The Mu Jax-RS implementation does not support classpath scanning or definition of Resource classes, and as
-such the `jakarta.ws.rs.core.Application` class is not supported. All resources and optional providers are 
-registered programmatically using the `io.muserver.rest.RestHandlerBuilder` class.
+Applications can be registered with `RestHandlerBuilder.fromApplication(application)`. Resource and provider
+instances returned by `Application.getSingletons()` are registered as application singletons. Provider classes
+returned by `Application.getClasses()` are instantiated once with a public no-argument constructor. Singleton
+components must be safe to use concurrently.
+
+Resource classes returned by `Application.getClasses()` are rejected because their default lifecycle is per-request,
+which Mu Server does not support. Application properties, features, dynamic features, context resolvers, classpath
+scanning, and `@ApplicationPath` mounting are also not supported. All supported components can alternatively be
+registered programmatically using `RestHandlerBuilder`.
 
 ## 3 Resources
 

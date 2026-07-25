@@ -33,6 +33,15 @@ public class JaxRSResponseTest {
     private MuServer server;
 
     @Test
+    public void reportsWhetherItIsClosed() {
+        Response response = JaxRSResponse.ok("hello").build();
+
+        assertThat(response.isClosed(), is(false));
+        response.close();
+        assertThat(response.isClosed(), is(true));
+    }
+
+    @Test
     public void relativeLocationsAreResolvedAgainstTheApplicationBaseUri() {
         @Path("/resource")
         class ResourceWithRelativeLocation {

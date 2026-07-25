@@ -4,8 +4,8 @@ import io.muserver.*;
 import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.container.ContainerResponseContext;
-import jakarta.ws.rs.core.Cookie;
 import jakarta.ws.rs.core.*;
+import jakarta.ws.rs.core.Cookie;
 import jakarta.ws.rs.ext.MessageBodyReader;
 import jakarta.ws.rs.ext.RuntimeDelegate;
 import jakarta.ws.rs.ext.WriterInterceptor;
@@ -754,5 +754,10 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
         public String getReasonPhrase() {
             return reason;
         }
+    }
+
+    @Override
+    public boolean isClosed() {
+        return isClosed;
     }
 }

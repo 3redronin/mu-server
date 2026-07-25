@@ -6,8 +6,8 @@ import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.container.ResourceInfo;
-import jakarta.ws.rs.core.Cookie;
 import jakarta.ws.rs.core.*;
+import jakarta.ws.rs.core.Cookie;
 import jakarta.ws.rs.ext.MessageBodyReader;
 import jakarta.ws.rs.ext.ReaderInterceptor;
 import jakarta.ws.rs.ext.ReaderInterceptorContext;
@@ -92,6 +92,11 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
     }
 
     @Override
+    public boolean hasProperty(String name) {
+        return muRequest.attributes().containsKey(name) || MuRuntimeDelegate.MU_REQUEST_PROPERTY.equals(name) || MuRuntimeDelegate.RESOURCE_INFO_PROPERTY.equals(name);
+    }
+
+    @Override
     public Collection<String> getPropertyNames() {
         Set<String> copy = new HashSet<>(muRequest.attributes().keySet());
         copy.add(MuRuntimeDelegate.MU_REQUEST_PROPERTY);
@@ -101,12 +106,16 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
 
     @Override
     public void setProperty(String name, Object object) {
-        muRequest.attribute(name, object);
+        if (object == null) {
+            removeProperty(name);
+        } else {
+            muRequest.attribute(name, object);
+        }
     }
 
     @Override
     public void removeProperty(String name) {
-        muRequest.attribute(name, null);
+        muRequest.attributes().remove(name);
     }
 
     @Override
