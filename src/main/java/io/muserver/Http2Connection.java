@@ -643,7 +643,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
             FieldBlock errorHeaders = new FieldBlock();
             errorHeaders.add(HeaderNames.PSEUDO_STATUS, e.status());
             errorHeaders.add(e.responseHeaders());
-            byte[] message = e.getMessage().getBytes(StandardCharsets.UTF_8);
+            byte[] message = rejectReason.getBytes(StandardCharsets.UTF_8);
             if (outgoingFlowControl.credit() >= message.length) {
                 errorHeaders.set(HeaderNames.CONTENT_TYPE, "text/plain;charset=utf-8");
                 errorHeaders.set(HeaderNames.CONTENT_LENGTH, message.length);
@@ -803,4 +803,3 @@ interface Http2Peer {
     int maxFrameSize();
     FieldBlockEncoder fieldBlockEncoder();
 }
-

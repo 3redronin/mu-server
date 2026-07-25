@@ -16,10 +16,10 @@ public class ExternalDocumentationObject implements JsonWriter {
     private final @Nullable String description;
     private final URI url;
 
-    ExternalDocumentationObject(@Nullable String description, URI url) {
-        notNull("url", url);
+    ExternalDocumentationObject(@Nullable String description, @Nullable URI url) {
         this.description = description;
-        this.url = url;
+        notNull("url", url);
+        this.url = java.util.Objects.requireNonNull(url);
     }
 
     @Override

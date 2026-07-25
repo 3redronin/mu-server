@@ -4,6 +4,7 @@ import io.muserver.Mutils;
 import jakarta.ws.rs.core.MultivaluedHashMap;
 import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.core.PathSegment;
+import org.jspecify.annotations.Nullable;
 
 import java.util.*;
 import java.util.function.Function;
@@ -58,7 +59,7 @@ class MuPathSegment implements PathSegment {
     }
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equals(@Nullable Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         MuPathSegment that = (MuPathSegment) o;
@@ -95,7 +96,7 @@ class MuPathSegment implements PathSegment {
     }
 
     public List<MuPathSegment> resolve(String name, String value, boolean encodeSlashInPath) {
-        String newPath = MuUriBuilder.resolve(path, name, value);
+        String newPath = Objects.requireNonNull(MuUriBuilder.resolve(path, name, value));
         MultivaluedMap<String, String> newParams = new MultivaluedHashMap<>();
         for (Map.Entry<String, List<String>> matrixParam : params.entrySet()) {
             newParams.put(MuUriBuilder.resolve(matrixParam.getKey(), name, value), matrixParam.getValue().stream()

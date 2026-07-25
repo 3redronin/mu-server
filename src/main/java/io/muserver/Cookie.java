@@ -1,6 +1,5 @@
 package io.muserver;
 
-
 import org.jspecify.annotations.Nullable;
 
 import java.util.Objects;
@@ -94,7 +93,7 @@ public class Cookie {
     }
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equals(@Nullable Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         Cookie cookie = (Cookie) o;

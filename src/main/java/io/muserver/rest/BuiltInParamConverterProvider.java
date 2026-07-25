@@ -6,6 +6,7 @@ import io.muserver.UploadedFile;
 import jakarta.ws.rs.core.PathSegment;
 import jakarta.ws.rs.ext.ParamConverter;
 import jakarta.ws.rs.ext.ParamConverterProvider;
+import org.jspecify.annotations.Nullable;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Constructor;
@@ -53,7 +54,7 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
 
 
     @Override
-    public <T> ParamConverter getConverter(Class<T> rawType, Type genericType, Annotation[] annotations) {
+    public <T> @Nullable ParamConverter getConverter(Class<T> rawType, Type genericType, Annotation[] annotations) {
 
         if (String.class.isAssignableFrom(rawType)) {
             return stringParamConverter;
@@ -92,7 +93,7 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
 
     private static class UploadedFileConverter implements ParamConverter<UploadedFile> {
         @Override
-        public UploadedFile fromString(String value) {
+        public @Nullable UploadedFile fromString(@Nullable String value) {
             return null;
         }
         @Override
@@ -104,7 +105,7 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
     // Not actually used because it is handled specially in ResourceMethodParam but needs to exist during parameter setup
     private static class DummyCookieConverter implements ParamConverter<Cookie> {
         @Override
-        public Cookie fromString(String value) {
+        public @Nullable Cookie fromString(@Nullable String value) {
             return null;
         }
         @Override
@@ -135,9 +136,9 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
             this.boxedClass = boxedClass;
             this.stringToValue = stringToValue;
         }
-        public T fromString(String value) {
+        public @Nullable T fromString(@Nullable String value) {
             if (Mutils.nullOrEmpty(value)) return null;
-            return stringToValue.apply(value);
+            return stringToValue.apply(java.util.Objects.requireNonNull(value));
         }
         public String toString(T value) {
             return String.valueOf(value);
@@ -157,7 +158,7 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
             this.primitiveClass = primitiveClass;
             this.stringToValue = stringToValue;
         }
-        public T fromString(String value) {
+        public T fromString(@Nullable String value) {
             if (value == null || value.isEmpty()) {
                 return defaultValue;
             }
@@ -174,21 +175,33 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
         }
     }
 
-    private static class EnumConverter<E extends Enum<E>>  implements ParamConverter<E> {
+    private static class EnumConverter<E extends Enum<E>> implements ParamConverter<E>, ResourceMethodParam.HasAllowedValues {
         private final Class<E> enumClass;
-        private final StaticMethodConverter<E> fromStringConverter;
+        private final @Nullable StaticMethodConverter<E> fromStringConverter;
+        private final List<String> allowedValues;
+
         private EnumConverter(Class<E> enumClass) {
             this.enumClass = enumClass;
             this.fromStringConverter = StaticMethodConverter.tryToCreateFromString(enumClass);
+            this.allowedValues = fromStringConverter == null
+                ? Stream.of(enumClass.getEnumConstants()).map(Enum::name).collect(Collectors.toList())
+                : java.util.Collections.emptyList();
         }
-        public E fromString(String value) {
+        public @Nullable E fromString(@Nullable String value) {
             if (Mutils.nullOrEmpty(value)) return null;
             if (fromStringConverter != null) return fromStringConverter.fromString(value);
             return Enum.valueOf(enumClass, value);
         }
+
         public String toString(E value) {
             return value.name();
         }
+
+        @Override
+        public List<String> allowedValues() {
+            return allowedValues;
+        }
+
         public String toString() {
             String validValues = Stream.of(enumClass.getEnumConstants()).map(Enum::name).collect(Collectors.joining(", "));
             return enumClass.getSimpleName() + " converter (valid values: " + validValues + ")";
@@ -200,7 +213,7 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
         private ConstructorConverter(Constructor<T> constructor) {
             this.constructor = constructor;
         }
-        public T fromString(String value) {
+        public @Nullable T fromString(@Nullable String value) {
             if (Mutils.nullOrEmpty(value)) return null;
             try {
                 return constructor.newInstance(value);
@@ -214,7 +227,7 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
         public String toString() {
             return "ConstructorConverter{" + constructor + '}';
         }
-        static <T> ConstructorConverter<T> tryToCreate(Class<T> clazz) {
+        static <T> @Nullable ConstructorConverter<T> tryToCreate(Class<T> clazz) {
             try {
                 Constructor constructor = clazz.getConstructor(String.class);
                 int modifiers = constructor.getModifiers();
@@ -234,7 +247,7 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
         private StaticMethodConverter(Method staticMethod) {
             this.staticMethod = staticMethod;
         }
-        public T fromString(String value) {
+        public @Nullable T fromString(@Nullable String value) {
             if (Mutils.nullOrEmpty(value)) return null;
             try {
                 return (T) staticMethod.invoke(null, value);
@@ -249,7 +262,7 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
             return staticMethod.toString();
         }
 
-        static <T> StaticMethodConverter<T> tryToCreate(Class clazz) {
+        static <T> @Nullable StaticMethodConverter<T> tryToCreate(Class clazz) {
             Method[] declaredMethods = clazz.getDeclaredMethods();
             Method staticMethod = getSingleParamPublicStaticMethodNamed(clazz, declaredMethods, "valueOf");
             if (staticMethod == null) {
@@ -265,7 +278,7 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
             return new StaticMethodConverter<>(staticMethod);
         }
 
-        static <T> StaticMethodConverter<T> tryToCreateFromString(Class clazz) {
+        static <T> @Nullable StaticMethodConverter<T> tryToCreateFromString(Class clazz) {
             Method[] declaredMethods = clazz.getDeclaredMethods();
             Method staticMethod = getSingleParamPublicStaticMethodNamed(clazz, declaredMethods, "fromString");
             if (staticMethod == null) return null;
@@ -273,8 +286,8 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
             return new StaticMethodConverter<>(staticMethod);
         }
 
-        private static Method getSingleParamPublicStaticMethodNamed(Class clazz, Method[] declaredMethods, String name) {
-            Method staticMethod = null;
+        private static @Nullable Method getSingleParamPublicStaticMethodNamed(Class clazz, Method[] declaredMethods, String name) {
+            @Nullable Method staticMethod = null;
             for (Method method : declaredMethods) {
                 int modifiers = method.getModifiers();
                 if (Modifier.isStatic(modifiers) && Modifier.isPublic(modifiers) && method.getReturnType().equals(clazz)) {

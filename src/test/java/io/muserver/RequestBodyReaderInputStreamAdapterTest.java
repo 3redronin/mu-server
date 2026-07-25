@@ -408,7 +408,7 @@ public class RequestBodyReaderInputStreamAdapterTest {
                 bufferedSink.flush();
             }
         }))) {
-            assertThat(resp.body().string(), equalTo("The first letter is " + ((char)chunkPayload[0])));
+            assertThat(resp.body().string(), equalTo("The first letter is " + ((char)(chunkPayload[0] & 0xff))));
             assertThat(resp.code(), equalTo(200)); // server error or closed connection is fine
         }
     }

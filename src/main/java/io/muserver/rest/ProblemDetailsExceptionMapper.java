@@ -6,6 +6,7 @@ import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.ExceptionMapper;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -29,6 +30,7 @@ import java.util.UUID;
  * </p>
  * <ul>
  *     <li>{@link ProblemDetailsException}: values are taken from the exception.</li>
+ *     <li>{@link UriParameterConversionException}: a 400 Bad Request problem-details body with parameter metadata is created.</li>
  *     <li>{@link WebApplicationException} with no response entity and a 4xx/5xx status: a problem-details body is created.</li>
  *     <li>Any other exception: a generic 500 problem-details response is created.</li>
  * </ul>
@@ -63,6 +65,10 @@ public class ProblemDetailsExceptionMapper <E extends Throwable> implements Exce
             return toResponse(problem.getStatus(), problem.getTitle(), problem.getDetail(), problem.getType(), problem.getInstance(), problem.getExtensionMembers());
         }
 
+        if (exception instanceof UriParameterConversionException) {
+            return uriParameterConversionError((UriParameterConversionException) exception);
+        }
+
         if (exception instanceof WebApplicationException) {
             WebApplicationException webApplicationException = (WebApplicationException) exception;
             Response response = webApplicationException.getResponse();
@@ -89,6 +95,24 @@ public class ProblemDetailsExceptionMapper <E extends Throwable> implements Exce
         }
 
         return serverError(exception);
+    }
+
+    private Response uriParameterConversionError(UriParameterConversionException exception) {
+        int status = Response.Status.BAD_REQUEST.getStatusCode();
+        URI instance = newInstance();
+        if (shouldLogInstance(status)) {
+            log.error("Sending a problem details response with instance={}", instance, exception);
+        }
+        Map<String, @Nullable Object> extensionMembers = new LinkedHashMap<>();
+        extensionMembers.put("parameter", exception.getParameterName());
+        if (exception.getParameterValue() != null) {
+            extensionMembers.put("suppliedValue", exception.getParameterValue());
+        }
+        if (!exception.getAllowedValues().isEmpty()) {
+            extensionMembers.put("allowedValues", exception.getAllowedValues());
+        }
+        String detail = "Invalid value for URI parameter \"" + exception.getParameterName() + "\".";
+        return toResponse(status, defaultTitle(status), detail, null, instance, extensionMembers);
     }
 
     private Response serverError(Throwable exception) {
@@ -129,8 +153,8 @@ public class ProblemDetailsExceptionMapper <E extends Throwable> implements Exce
         }
     }
 
-    private static Response toResponse(int status, String title, String detail, URI type, URI instance, Map<String, Object> extensionMembers) {
-        Map<String, Object> values = new LinkedHashMap<>();
+    private static Response toResponse(int status, String title, @Nullable String detail, @Nullable URI type, @Nullable URI instance, @Nullable Map<String, @Nullable Object> extensionMembers) {
+        Map<String, @Nullable Object> values = new LinkedHashMap<>();
         if (type != null) {
             values.put("type", type);
         }

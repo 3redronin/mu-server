@@ -24,34 +24,60 @@ import java.util.concurrent.CompletionStage;
  */
 public class MuRuntimeDelegate extends RuntimeDelegate {
 
-    private static final Map<Class<?>, HeaderDelegate<?>> headerDelegates = new HashMap<>();
-    final static NewCookieHeaderDelegate newCookieHeaderDelegate = new NewCookieHeaderDelegate();
-    final static EntityTagDelegate entityTagDelegate = new EntityTagDelegate();
-    static final CacheControlHeaderDelegate cacheControlHeaderDelegate = new CacheControlHeaderDelegate();
-    static final LinkHeaderDelegate linkHeaderDelegate = new LinkHeaderDelegate();
-
-    static {
-        headerDelegates.put(MediaType.class, new MediaTypeHeaderDelegate());
-        headerDelegates.put(CacheControl.class, cacheControlHeaderDelegate);
-        headerDelegates.put(NewCookie.class, newCookieHeaderDelegate);
-        headerDelegates.put(Cookie.class, new CookieHeaderDelegate());
-        headerDelegates.put(EntityTag.class, entityTagDelegate);
-        headerDelegates.put(Link.class, linkHeaderDelegate);
-        headerDelegates.put(Date.class, new DateHeaderDelegate());
-    }
-
     private static @Nullable MuRuntimeDelegate singleton;
+    private static @Nullable MuRuntimeDelegate initializing;
+    private static boolean registeredByEnsureSet;
 
     /**
      * Registers the mu RuntimeDelegate with jax-rs, if it was not already.
      * @return Returns the runtime delegate.
      */
     public static synchronized RuntimeDelegate ensureSet() {
+        if (initializing != null) {
+            return initializing;
+        }
         if (singleton == null) {
             singleton = new MuRuntimeDelegate();
+        }
+        if (!registeredByEnsureSet) {
             RuntimeDelegate.setInstance(singleton);
+            registeredByEnsureSet = true;
         }
         return singleton;
+    }
+
+    private final Map<Class<?>, HeaderDelegate> headerDelegates = new HashMap<>();
+
+    /**
+     * Creates a runtime delegate.
+     * <p>This constructor is public so that Jakarta REST can instantiate this class when
+     * {@value RuntimeDelegate#JAXRS_RUNTIME_DELEGATE_PROPERTY} is set to
+     * {@code io.muserver.rest.MuRuntimeDelegate}. Applications should normally use
+     * {@link #ensureSet()} instead.</p>
+     */
+    public MuRuntimeDelegate() {
+        synchronized (MuRuntimeDelegate.class) {
+            boolean first = singleton == null && initializing == null;
+            if (first) {
+                initializing = this;
+            }
+            try {
+                headerDelegates.put(MediaType.class, new MediaTypeHeaderDelegate());
+                headerDelegates.put(CacheControl.class, new CacheControlHeaderDelegate());
+                headerDelegates.put(NewCookie.class, new NewCookieHeaderDelegate());
+                headerDelegates.put(Cookie.class, new CookieHeaderDelegate());
+                headerDelegates.put(EntityTag.class, new EntityTagDelegate());
+                headerDelegates.put(Link.class, new LinkHeaderDelegate());
+                headerDelegates.put(Date.class, new DateHeaderDelegate());
+                if (first) {
+                    singleton = this;
+                }
+            } finally {
+                if (first) {
+                    initializing = null;
+                }
+            }
+        }
     }
 
     /**
@@ -98,10 +124,11 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
                 }
             }
         }
-        Map<String, NewCookie> cookieMap = from.getCookies();
-        if (!cookieMap.isEmpty()) {
-            for (NewCookie cookie : cookieMap.values()) {
-                to.headers().add(HeaderNames.SET_COOKIE, newCookieHeaderDelegate.toString(cookie));
+        Collection<NewCookie> newCookies = from.getCookies().values();
+        if (!newCookies.isEmpty()) {
+            var headerDelegate = getInstance().createHeaderDelegate(NewCookie.class);
+            for (NewCookie cookie : newCookies) {
+                to.headers().add(HeaderNames.SET_COOKIE, headerDelegate.toString(cookie));
             }
         }
     }
@@ -129,9 +156,10 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
     @Override
     @SuppressWarnings("unchecked")
     public <T> HeaderDelegate<T> createHeaderDelegate(Class<T> type) throws IllegalArgumentException {
-        HeaderDelegate<T> headerDelegate = (HeaderDelegate<T>)headerDelegates.get(type);
+        Mutils.notNull("type", type);
+        HeaderDelegate<T> headerDelegate = headerDelegates.get(type);
         if (headerDelegate != null) {
-            return headerDelegate;
+            return (HeaderDelegate<T>) headerDelegate;
         }
         throw new MuException("MuServer does not support converting " + type.getName());
     }

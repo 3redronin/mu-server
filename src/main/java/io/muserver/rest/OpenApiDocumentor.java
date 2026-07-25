@@ -149,13 +149,14 @@ class OpenApiDocumentor implements MuHandler {
 
             String path = getPathWithoutRegex(root, method, parentResourcePath);
 
-            Map<String, OperationObject> operations;
+            PathItemObjectBuilder pathItem;
+            @Nullable Map<String, OperationObject> operations;
             if (pathItems.containsKey(path)) {
-                operations = pathItems.get(path).operations();
+                pathItem = Objects.requireNonNull(pathItems.get(path));
+                operations = pathItem.operations();
             } else {
                 operations = new LinkedHashMap<>();
-                PathItemObjectBuilder pathItem = pathItemObject()
-                    .withOperations(operations);
+                pathItem = pathItemObject().withOperations(operations);
                 pathItems.put(path, pathItem);
             }
             List<ParameterObject> parameters = method.paramsIncludingLocators().stream()
@@ -173,17 +174,23 @@ class OpenApiDocumentor implements MuHandler {
 
             String opIdPath = getPathWithoutRegex(root, method, parentResourcePath).replace("{", "_").replace("}", "_");
             String opPath = Mutils.trim(opIdPath, "/").replace("/", "_");
-            String opKey = method.httpMethod.name().toLowerCase();
-            OperationObject existing = operations.get(opKey);
+            String opKey = method.requiredHttpMethod().name().toLowerCase();
+            Map<String, OperationObject> configuredOperations = operations;
+            if (configuredOperations == null) {
+                configuredOperations = new LinkedHashMap<>();
+                pathItem.withOperations(configuredOperations);
+            }
+            OperationObject existing = configuredOperations.get(opKey);
             if (existing == null) {
                 existing = method.createOperationBuilder(customSchemas)
-                    .withOperationId(method.httpMethod.name() + "_" + opPath)
+                    .withOperationId(method.requiredHttpMethod().name() + "_" + opPath)
                     .withTags(singletonList(root.tag.name()))
                     .withParameters(parameters)
                     .build();
             } else {
                 OperationObject curOO = method.createOperationBuilder(customSchemas).build();
-                List<ParameterObject> combinedParams = new ArrayList<>(existing.parameters());
+                List<ParameterObject> combinedParams = new ArrayList<>(
+                    existing.parameters() == null ? Collections.emptyList() : existing.parameters());
                 for (ParameterObject po : parameters) {
                     // add to combinedParams if none with same name and in
                     if (combinedParams.stream().noneMatch(p -> p.name().equals(po.name()) &&
@@ -215,7 +222,7 @@ class OpenApiDocumentor implements MuHandler {
                 }
                 existing = operationObjectBuilder.build();
             }
-            operations.put(opKey, existing);
+            configuredOperations.put(opKey, existing);
         }
     }
 
@@ -230,17 +237,17 @@ class OpenApiDocumentor implements MuHandler {
 class SchemaReference {
     final String id;
     final Class<?> type;
-    final Type genericType;
+    final @Nullable Type genericType;
     final SchemaObject schema;
 
-    SchemaReference(String id, Class<?> type, Type genericType, SchemaObject schema) {
+    SchemaReference(String id, Class<?> type, @Nullable Type genericType, SchemaObject schema) {
         this.id = id;
         this.type = type;
         this.genericType = genericType;
         this.schema = schema;
     }
 
-    static @Nullable SchemaReference find(List<SchemaReference> references, Class<?> type, Type genericType) {
+    static @Nullable SchemaReference find(List<SchemaReference> references, Class<?> type, @Nullable Type genericType) {
         for (SchemaReference reference : references) {
             if (reference.type.equals(type)) {
                 return reference;

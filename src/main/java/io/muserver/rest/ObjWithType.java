@@ -2,18 +2,19 @@ package io.muserver.rest;
 
 import jakarta.ws.rs.core.GenericEntity;
 import jakarta.ws.rs.core.Response;
+import org.jspecify.annotations.Nullable;
 
 import java.lang.reflect.Type;
 
 class ObjWithType {
     private static final ObjWithType EMPTY = new ObjWithType(null, null, null, null);
 
-    final Class type;
-    final Type genericType;
-    final JaxRSResponse response;
-    final Object entity;
+    final @Nullable Class type;
+    final @Nullable Type genericType;
+    final @Nullable JaxRSResponse response;
+    final @Nullable Object entity;
 
-    ObjWithType(Class type, Type genericType, JaxRSResponse response, Object entity) {
+    ObjWithType(@Nullable Class type, @Nullable Type genericType, @Nullable JaxRSResponse response, @Nullable Object entity) {
         this.type = type;
         this.genericType = genericType;
         this.response = response;
@@ -32,16 +33,16 @@ class ObjWithType {
         }
     }
 
-    static ObjWithType objType(Object valueFromMethod) {
+    static ObjWithType objType(@Nullable Object valueFromMethod) {
         return objType(valueFromMethod, null);
     }
 
-    static ObjWithType objType(Object valueFromMethod, Type resourceMethodReturnType) {
+    static ObjWithType objType(@Nullable Object valueFromMethod, @Nullable Type resourceMethodReturnType) {
         if (valueFromMethod == null) {
             return EMPTY;
         }
-        Object entity;
-        JaxRSResponse response;
+        @Nullable Object entity;
+        @Nullable JaxRSResponse response;
         if (valueFromMethod instanceof Response) {
             response = JaxRSResponse.from((Response) valueFromMethod);
             entity = response.getEntity();
@@ -49,8 +50,8 @@ class ObjWithType {
             response = null;
             entity = valueFromMethod;
         }
-        Class type;
-        Type genericType;
+        @Nullable Class type;
+        @Nullable Type genericType;
         if (entity instanceof GenericEntity) {
             GenericEntity ge = (GenericEntity) entity;
             entity = ge.getEntity();

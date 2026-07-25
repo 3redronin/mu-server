@@ -17,9 +17,9 @@ public class LicenseObject implements JsonWriter {
     private final String name;
     private final @Nullable URI url;
 
-    LicenseObject(String name, @Nullable URI url) {
+    LicenseObject(@Nullable String name, @Nullable URI url) {
         notNull("name", name);
-        this.name = name;
+        this.name = java.util.Objects.requireNonNull(name);
         this.url = url;
     }
 

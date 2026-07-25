@@ -29,7 +29,10 @@ final class GenericTypeResolver {
         return concreteTypeOrNull(resolve(type, concreteClass, declaringClass));
     }
 
-    static @Nullable Type resolveTypeArgument(Type type, Class<?> targetClass, int argumentIndex) {
+    static @Nullable Type resolveTypeArgument(@Nullable Type type, Class<?> targetClass, int argumentIndex) {
+        if (type == null) {
+            return null;
+        }
         TypeVariable<?> typeVariable = targetClass.getTypeParameters()[argumentIndex];
         Map<TypeVariable<?>, Type> typeArguments = new HashMap<>();
         if (!findTypeArguments(type, targetClass, new HashMap<>(), typeArguments)) {
@@ -106,7 +109,7 @@ final class GenericTypeResolver {
         return candidateClass != null && declaringClass.isAssignableFrom(candidateClass);
     }
 
-    static Class<?> rawClass(Type type) {
+    static @Nullable Class<?> rawClass(@Nullable Type type) {
         if (type instanceof Class) {
             return (Class<?>) type;
         }
@@ -162,11 +165,11 @@ final class GenericTypeResolver {
     }
 
     private static final class ResolvedParameterizedType implements ParameterizedType {
-        private final Type owner;
+        private final @Nullable Type owner;
         private final Type rawType;
         private final Type[] arguments;
 
-        private ResolvedParameterizedType(Type owner, Type rawType, Type[] arguments) {
+        private ResolvedParameterizedType(@Nullable Type owner, Type rawType, Type[] arguments) {
             this.owner = owner;
             this.rawType = rawType;
             this.arguments = arguments.clone();
@@ -183,12 +186,12 @@ final class GenericTypeResolver {
         }
 
         @Override
-        public Type getOwnerType() {
+        public @Nullable Type getOwnerType() {
             return owner;
         }
 
         @Override
-        public boolean equals(Object other) {
+        public boolean equals(@Nullable Object other) {
             if (!(other instanceof ParameterizedType)) {
                 return false;
             }
@@ -251,7 +254,7 @@ final class GenericTypeResolver {
         }
 
         @Override
-        public boolean equals(Object other) {
+        public boolean equals(@Nullable Object other) {
             return other instanceof GenericArrayType
                 && componentType.equals(((GenericArrayType) other).getGenericComponentType());
         }
@@ -292,7 +295,7 @@ final class GenericTypeResolver {
         }
 
         @Override
-        public boolean equals(Object other) {
+        public boolean equals(@Nullable Object other) {
             if (!(other instanceof WildcardType)) {
                 return false;
             }

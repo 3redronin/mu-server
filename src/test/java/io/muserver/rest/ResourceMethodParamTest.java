@@ -399,13 +399,15 @@ public class ResourceMethodParamTest {
                     jakarta.ws.rs.core.Response.status(400)
                         .type(jakarta.ws.rs.core.MediaType.TEXT_PLAIN_TYPE)
                         .entity(exception.getParameterName() + "|" + exception.getParameterValue() + "|"
-                            + exception.getTargetType().getName() + "|" + (exception.getCause() != null))
+                            + exception.getTargetType().getName() + "|" + exception.getAllowedValues() + "|"
+                            + (exception.getCause() != null))
                         .build()))
             .start();
 
         try (Response resp = call(request(server.uri().resolve("/samples?breed=BAD_DOG")))) {
             assertThat(resp.code(), is(400));
-            assertThat(resp.body().string(), is("breed|BAD_DOG|" + Breed.class.getName() + "|true"));
+            assertThat(resp.body().string(), is("breed|BAD_DOG|" + Breed.class.getName()
+                + "|[CHIHUAHUA, BIG_HAIRY, YELPER]|true"));
         }
     }
 

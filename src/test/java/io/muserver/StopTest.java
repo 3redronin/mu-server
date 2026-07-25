@@ -11,10 +11,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.UncheckedIOException;
+import java.net.ConnectException;
+import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.WebSocketHandlerBuilder.webSocketHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -38,7 +42,7 @@ public class StopTest {
         }
     }
 
-    private static MuServer startLongDelayServer(CountDownLatch serverReceivedLatch, long delayTime) {
+    private static MuServer startBlockedServer(CountDownLatch serverReceivedLatch, CountDownLatch sendResponseLatch) {
         return MuServerBuilder
             .httpServer()
             .addHandler((request, response) -> {
@@ -48,7 +52,7 @@ public class StopTest {
                 AsyncHandle asyncHandle = request.handleAsync();
                 asyncHandle.addResponseCompleteHandler(info -> log.info("request completed {}", info));
 
-                Thread.sleep(delayTime);
+                sendResponseLatch.await();
                 response.status(200);
                 asyncHandle.write(Mutils.toByteBuffer("Hello"));
                 asyncHandle.complete();
@@ -58,64 +62,81 @@ public class StopTest {
             .start();
     }
 
-    @Test
-    public void gracefulShutdown_withinGracefulPeriod() throws InterruptedException {
-
-        CountDownLatch serverReceivedLatch = new CountDownLatch(1);
-        CountDownLatch clientReceivedLatch = new CountDownLatch(1);
-        AtomicInteger clientReceivedStatus = new AtomicInteger();
-
-        server = startLongDelayServer(serverReceivedLatch, 500L);
-
-        new Thread(() -> {
-            try (Response resp = call(request().url(server.uri().toString()))) {
-                clientReceivedStatus.set(resp.code());
-                clientReceivedLatch.countDown();
+    private static void awaitServerStopsAcceptingConnections(MuServer server) throws Exception {
+        InetSocketAddress address = new InetSocketAddress(server.uri().getHost(), server.uri().getPort());
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (System.nanoTime() < deadline) {
+            try (Socket socket = new Socket()) {
+                socket.connect(address, 200);
+            } catch (ConnectException expected) {
+                return;
             }
-        }).start();
-
-        assertThat(serverReceivedLatch.await(2, TimeUnit.SECONDS), is(true));
-
-        new Thread(() -> server.stop(2, TimeUnit.SECONDS)).start();
-
-        // new request should fail
-        Thread.sleep(200L);
-        UncheckedIOException exception = assertThrows(UncheckedIOException.class, () -> {
-            try (Response ignored = call(request().url(server.uri().toString())) ) {}
-        });
-        Throwable rootCause = exception.getCause().getCause();
-        assertThat(rootCause, is(instanceOf(java.net.ConnectException.class)));
-        assertThat(rootCause.getMessage(), containsString("Connection refused"));
-
-        // the previous in flight request should complete
-        assertThat(clientReceivedLatch.await(2, TimeUnit.SECONDS), is(true));
-        assertThat(clientReceivedStatus.get(), is(200));
+            Thread.sleep(10);
+        }
+        throw new AssertionError("Server continued accepting connections for 5 seconds after shutdown started");
     }
 
     @Test
-    public void gracefulShutdown_inFlightRequestAbortedWhenGracefulPeriodExceed() throws InterruptedException {
-
+    public void gracefulShutdown_withinGracefulPeriod() throws Exception {
         CountDownLatch serverReceivedLatch = new CountDownLatch(1);
-        CountDownLatch clientReceivedLatch = new CountDownLatch(1);
-        AtomicReference<Exception> clientException = new AtomicReference<>();
+        CountDownLatch sendResponseLatch = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
 
-        server = startLongDelayServer(serverReceivedLatch, 2000L);
+        try {
+            server = startBlockedServer(serverReceivedLatch, sendResponseLatch);
+            String serverUri = server.uri().toString();
 
-        new Thread(() -> {
-            UncheckedIOException exception = assertThrows(UncheckedIOException.class, () ->{
-                try (Response ignore = call(request().url(server.uri().toString())) ) {}
+            Future<Integer> clientResponse = executor.submit(() -> {
+                try (Response response = call(request().url(serverUri))) {
+                    return response.code();
+                }
             });
-            clientException.set(exception);
-            clientReceivedLatch.countDown();
-        }).start();
 
-        assertThat(serverReceivedLatch.await(2, TimeUnit.SECONDS), is(true));
+            assertThat(serverReceivedLatch.await(5, TimeUnit.SECONDS), is(true));
 
-        new Thread(() -> server.stop(500, TimeUnit.MILLISECONDS)).start();
+            Future<Boolean> stopResult = executor.submit(() -> server.stop(10, TimeUnit.SECONDS));
+            awaitServerStopsAcceptingConnections(server);
 
-        // the previous in flight request should be aborted
-        assertThat(clientReceivedLatch.await(2, TimeUnit.SECONDS), is(true));
-        assertThat(clientException.get().getCause().getCause(), is(instanceOf(java.io.EOFException.class)));
+            sendResponseLatch.countDown();
+
+            assertThat(clientResponse.get(5, TimeUnit.SECONDS), is(200));
+            assertThat(stopResult.get(5, TimeUnit.SECONDS), is(true));
+            server = null;
+        } finally {
+            sendResponseLatch.countDown();
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    public void gracefulShutdown_inFlightRequestAbortedWhenGracefulPeriodExceed() throws Exception {
+        CountDownLatch serverReceivedLatch = new CountDownLatch(1);
+        CountDownLatch sendResponseLatch = new CountDownLatch(1);
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+
+        try {
+            server = startBlockedServer(serverReceivedLatch, sendResponseLatch);
+            String serverUri = server.uri().toString();
+
+            Future<UncheckedIOException> clientResult = executor.submit(() ->
+                assertThrows(UncheckedIOException.class, () -> {
+                    try (Response ignored = call(request().url(serverUri))) {
+                    }
+                })
+            );
+
+            assertThat(serverReceivedLatch.await(5, TimeUnit.SECONDS), is(true));
+
+            boolean stopResult = server.stop(500, TimeUnit.MILLISECONDS);
+            server = null;
+
+            assertThat(stopResult, is(false));
+            UncheckedIOException clientException = clientResult.get(5, TimeUnit.SECONDS);
+            assertThat(clientException.getCause().getCause(), is(instanceOf(java.io.EOFException.class)));
+        } finally {
+            sendResponseLatch.countDown();
+            executor.shutdownNow();
+        }
     }
 
     @Test

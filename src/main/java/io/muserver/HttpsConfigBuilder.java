@@ -388,7 +388,11 @@ public class HttpsConfigBuilder {
     private String[] getHttpsProtocolsArray(SSLContext sslContext) {
         List<String> supportedProtocols = asList(sslContext.getSupportedSSLParameters().getProtocols());
         List<String> protocolsToUse = new ArrayList<>();
-        for (String protocol : Mutils.coalesce(this.protocols, new String[]{"TLSv1.2", "TLSv1.3"})) {
+        String[] requestedProtocols = this.protocols;
+        if (requestedProtocols == null) {
+            requestedProtocols = new String[]{"TLSv1.2", "TLSv1.3"};
+        }
+        for (String protocol : requestedProtocols) {
             if (supportedProtocols.contains(protocol)) {
                 protocolsToUse.add(protocol);
             } else {

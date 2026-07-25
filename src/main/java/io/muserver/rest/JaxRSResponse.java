@@ -10,6 +10,7 @@ import jakarta.ws.rs.ext.MessageBodyReader;
 import jakarta.ws.rs.ext.RuntimeDelegate;
 import jakarta.ws.rs.ext.WriterInterceptor;
 import jakarta.ws.rs.ext.WriterInterceptorContext;
+import org.jspecify.annotations.Nullable;
 
 import java.io.*;
 import java.lang.annotation.Annotation;
@@ -29,24 +30,26 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
     }
 
     private final MultivaluedMap<String, Object> headers;
+    private final MultivaluedMap<String, String> stringHeaders;
     private StatusType status;
     private ObjWithType objWithType;
     private final NewCookie[] cookies;
     private final List<Link> links;
     private Annotation[] annotations;
-    private OutputStream outputStream;
+    private @Nullable OutputStream outputStream;
 
-    private JaxRSRequest requestContext;
-    private List<WriterInterceptor> writerInterceptors;
+    private @Nullable JaxRSRequest requestContext;
+    private @Nullable List<WriterInterceptor> writerInterceptors;
     private int nextWriter = 0;
 
     private boolean isClosed = false;
 
-    private ByteArrayInputStream inputStreamBuffer;
+    private @Nullable ByteArrayInputStream inputStreamBuffer;
 
     JaxRSResponse(StatusType status, MultivaluedMap<String, Object> headers, ObjWithType entity, NewCookie[] cookies, List<Link> links, Annotation[] annotations) {
         this.status = status;
         this.headers = headers;
+        this.stringHeaders = new StringHeadersMap(headers, JaxRSResponse::headerValueToString);
         this.objWithType = entity;
         this.cookies = cookies;
         this.links = links;
@@ -85,22 +88,22 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
     }
 
     @Override
-    public Class<?> getType() {
+    public @Nullable Class<?> getType() {
         return objWithType.type;
     }
 
     @Override
-    public void setType(Class<?> type) {
+    public void setType(@Nullable Class<?> type) {
         objWithType = new ObjWithType(type, objWithType.genericType, objWithType.response, objWithType.entity);
     }
 
     @Override
-    public Type getGenericType() {
+    public @Nullable Type getGenericType() {
         return objWithType.genericType;
     }
 
     @Override
-    public void setGenericType(Type genericType) {
+    public void setGenericType(@Nullable Type genericType) {
         objWithType = new ObjWithType(objWithType.type, genericType, objWithType.response, objWithType.entity);
     }
 
@@ -111,7 +114,13 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
 
     @Override
     public void setStatus(int code) {
-        this.status = Status.fromStatusCode(code);
+        if (code < 100 || code > 599) {
+            throw new IllegalArgumentException("Status must be between 100 and 599, but was " + code);
+        }
+        Status standardStatus = Status.fromStatusCode(code);
+        this.status = standardStatus == null
+            ? new CustomStatus(Status.Family.familyOf(code), code, "")
+            : standardStatus;
     }
 
     @Override
@@ -121,26 +130,26 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
 
     @Override
     public void setStatusInfo(StatusType statusInfo) {
-        this.status = statusInfo;
+        this.status = Objects.requireNonNull(statusInfo, "statusInfo");
     }
 
     @Override
-    public Object getEntity() {
+    public @Nullable Object getEntity() {
         return objWithType.entity;
     }
 
     @Override
-    public Class<?> getEntityClass() {
+    public @Nullable Class<?> getEntityClass() {
         return getType();
     }
 
     @Override
-    public Type getEntityType() {
+    public @Nullable Type getEntityType() {
         return getGenericType();
     }
 
     @Override
-    public void setEntity(Object entity) {
+    public void setEntity(@Nullable Object entity) {
         objWithType = ObjWithType.objType(entity);
         if (entity instanceof Response) {
             Response resp = (Response) entity;
@@ -150,7 +159,7 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
 
     @Override
     public OutputStream getOutputStream() {
-        return outputStream;
+        return requiredOutputStream();
     }
 
     @Override
@@ -159,7 +168,7 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
     }
 
     @Override
-    public void setEntity(Object entity, Annotation[] annotations, MediaType mediaType) {
+    public void setEntity(@Nullable Object entity, Annotation @Nullable [] annotations, @Nullable MediaType mediaType) {
         setEntity(entity);
         setAnnotations(annotations == null ? Builder.EMPTY_ANNOTATIONS : annotations);
         setMediaType(mediaType);
@@ -172,7 +181,7 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
 
     @Override
     public OutputStream getEntityStream() {
-        return outputStream;
+        return requiredOutputStream();
     }
 
     @Override
@@ -185,19 +194,22 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
         return readEntity0(entityType, null, new Annotation[0]);
     }
 
-    private <T> T readEntity0(Class<T> entityType, Type genericType, Annotation[] annotations) {
-        if (inputStreamBuffer == null && !(InputStream.class.isAssignableFrom(getEntity().getClass()))) {
-            throw new IllegalStateException("The entity is not an input stream, it is " + getEntity().getClass());
+    private <T> T readEntity0(Class<T> entityType, @Nullable Type genericType, Annotation[] annotations) {
+        Object entity = Objects.requireNonNull(getEntity(), "The response has no entity");
+        if (inputStreamBuffer == null && !(entity instanceof InputStream)) {
+            throw new IllegalStateException("The entity is not an input stream, it is " + entity.getClass());
         }
         if (isClosed) throw new IllegalStateException("Cannot read entity; the response is closed");
-        InputStream toRead = inputStreamBuffer != null ? inputStreamBuffer : (InputStream) getEntity();
+        InputStream toRead = inputStreamBuffer != null ? inputStreamBuffer : (InputStream) entity;
+        Type typeToRead = genericType == null ? entityType : genericType;
+        MediaType mediaType = getMediaType() == null ? MediaType.APPLICATION_OCTET_STREAM_TYPE : getMediaType();
         EntityProviders ep = new EntityProviders(EntityProviders.builtInReaders(), emptyList());
-        MessageBodyReader<T> reader = (MessageBodyReader<T>) ep.selectReader(entityType, genericType, annotations, getMediaType());
+        MessageBodyReader<T> reader = (MessageBodyReader<T>) ep.selectReader(entityType, typeToRead, annotations, mediaType);
         if (reader == null) {
             throw new ProcessingException("Cannot read this entity type");
         }
         try {
-            T result = reader.readFrom(entityType, genericType, annotations, getMediaType(), getStringHeaders(), toRead);
+            T result = reader.readFrom(entityType, typeToRead, annotations, mediaType, getStringHeaders(), toRead);
             if (inputStreamBuffer != null) {
                 inputStreamBuffer.reset();
             } else {
@@ -276,13 +288,13 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
     }
 
     @Override
-    public MediaType getMediaType() {
+    public @Nullable MediaType getMediaType() {
         String h = getHeaderString("content-type");
         return h == null ? null : MediaTypeParser.fromString(h);
     }
 
     @Override
-    public void setMediaType(MediaType mediaType) {
+    public void setMediaType(@Nullable MediaType mediaType) {
         if (mediaType == null) {
             headers.remove("content-type");
         } else {
@@ -291,7 +303,7 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
     }
 
     @Override
-    public Locale getLanguage() {
+    public @Nullable Locale getLanguage() {
         String h = getHeaderString(HeaderNames.CONTENT_LANGUAGE.toString());
         if (h == null) return null;
         return Locale.forLanguageTag(h);
@@ -320,30 +332,30 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
     }
 
     @Override
-    public EntityTag getEntityTag() {
+    public @Nullable EntityTag getEntityTag() {
         Object first = headers.getFirst(HeaderNames.ETAG.toString());
         if (first == null || first instanceof  EntityTag) return (EntityTag)first;
-        return MuRuntimeDelegate.entityTagDelegate.fromString(first.toString());
+        return EntityTag.valueOf(first.toString());
     }
 
     @Override
-    public Date getDate() {
+    public @Nullable Date getDate() {
         return dateFromHeader("date");
     }
 
-    private Date dateFromHeader(String name) {
+    private @Nullable Date dateFromHeader(String name) {
         Object date = headers.getFirst(name);
         if (date == null || date.getClass().isAssignableFrom(Date.class)) return (Date)date;
         return Mutils.fromHttpDate(date.toString());
     }
 
     @Override
-    public Date getLastModified() {
+    public @Nullable Date getLastModified() {
         return dateFromHeader("last-modified");
     }
 
     @Override
-    public URI getLocation() {
+    public @Nullable URI getLocation() {
         String s = getHeaderString("location");
         return s == null ? null : URI.create(s);
     }
@@ -359,12 +371,12 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
     }
 
     @Override
-    public Link getLink(String relation) {
+    public @Nullable Link getLink(String relation) {
         return links.stream().filter(link -> link.getRels().contains(relation)).findFirst().orElse(null);
     }
 
     @Override
-    public Link.Builder getLinkBuilder(String relation) {
+    public Link.@Nullable Builder getLinkBuilder(String relation) {
         Link link = getLink(relation);
         if (link == null) {
             return null;
@@ -379,15 +391,7 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
 
     @Override
     public MultivaluedMap<String, String> getStringHeaders() {
-        MultivaluedMap<String, String> map = new LowercasedMultivaluedHashMap<>();
-        for (Map.Entry<String, List<Object>> entry : headers.entrySet()) {
-            map.put(entry.getKey(), entry.getValue()
-                .stream()
-                .map(JaxRSResponse::headerValueToString)
-                .collect(Collectors.toList())
-            );
-        }
-        return map;
+        return stringHeaders;
     }
 
     static MultivaluedMap<String, Object> muHeadersToJaxObj(Headers headers) {
@@ -401,11 +405,15 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
     }
 
     @Override
-    public String getHeaderString(String name) {
-        return headerValueToString(headers.getFirst(name));
+    public @Nullable String getHeaderString(String name) {
+        List<Object> values = headers.get(name);
+        return values == null ? null : values.stream()
+            .map(JaxRSResponse::headerValueToString)
+            .map(value -> value == null ? "" : value)
+            .collect(Collectors.joining(","));
     }
 
-    private static String headerValueToString(Object value) {
+    private static @Nullable String headerValueToString(@Nullable Object value) {
         if (value == null || value instanceof String) {
             return (String)value;
         }
@@ -428,11 +436,12 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
 
     @Override
     public void proceed() throws IOException, WebApplicationException {
-        while (nextWriter < writerInterceptors.size()) {
+        List<WriterInterceptor> interceptors = Objects.requireNonNull(writerInterceptors, "Writer interceptors have not been initialized");
+        while (nextWriter < interceptors.size()) {
             nextWriter++;
-            WriterInterceptor nextInterceptor = writerInterceptors.get(nextWriter - 1);
+            WriterInterceptor nextInterceptor = interceptors.get(nextWriter - 1);
             List<Class<? extends Annotation>> filterBindings = ResourceClass.getNameBindingAnnotations(nextInterceptor.getClass());
-            if (requestContext.methodHasAnnotations(filterBindings)) {
+            if (requiredRequestContext().methodHasAnnotations(filterBindings)) {
                 nextInterceptor.aroundWriteTo(this);
                 return;
             }
@@ -440,27 +449,35 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
     }
 
     @Override
-    public Object getProperty(String name) {
-        return requestContext.getProperty(name);
+    public @Nullable Object getProperty(String name) {
+        return requiredRequestContext().getProperty(name);
     }
 
     @Override
     public Collection<String> getPropertyNames() {
-        return requestContext.getPropertyNames();
+        return requiredRequestContext().getPropertyNames();
     }
 
     @Override
-    public void setProperty(String name, Object object) {
-        requestContext.setProperty(name, object);
+    public void setProperty(String name, @Nullable Object object) {
+        requiredRequestContext().setProperty(name, object);
     }
 
     @Override
     public void removeProperty(String name) {
-        requestContext.removeProperty(name);
+        requiredRequestContext().removeProperty(name);
     }
 
     public void setRequestContext(JaxRSRequest requestContext) {
         this.requestContext = requestContext;
+    }
+
+    private OutputStream requiredOutputStream() {
+        return Objects.requireNonNull(outputStream, "The response entity stream has not been set");
+    }
+
+    private JaxRSRequest requiredRequestContext() {
+        return Objects.requireNonNull(requestContext, "The response request context has not been set");
     }
 
     // End interceptor specific things
@@ -478,11 +495,11 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
 
         private final MultivaluedMap<String, Object> headers = new LowercasedMultivaluedHashMap<>();
         private final List<Link> linkHeaders = new ArrayList<>();
-        private StatusType status;
-        private Object entity;
+        private @Nullable StatusType status;
+        private @Nullable Object entity;
         private Annotation[] annotations = EMPTY_ANNOTATIONS;
         private NewCookie[] cookies = new NewCookie[0];
-        private MediaType type;
+        private @Nullable MediaType type;
 
         @Override
         public Response build() {
@@ -495,7 +512,7 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
             if (this.type != null) {
                 headers.putSingle(HeaderNames.CONTENT_TYPE.toString(), this.type.toString());
             }
-            return new JaxRSResponse(status, headers, ObjWithType.objType(entity), cookies, linkHeaders, annotations);
+            return new JaxRSResponse(Objects.requireNonNull(status), headers, ObjWithType.objType(entity), cookies, linkHeaders, annotations);
         }
 
         @Override
@@ -509,31 +526,31 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
         }
 
         @Override
-        public ResponseBuilder status(int code, String reasonPhrase) {
+        public ResponseBuilder status(int code, @Nullable String reasonPhrase) {
             if (code < 100 || code > 599) {
                 throw new IllegalArgumentException("Status must be between 100 and 599, but was " + code);
             }
             this.status = Status.fromStatusCode(code);
             if (this.status == null || reasonPhrase != null) {
-                this.status = new CustomStatus(Status.Family.familyOf(code), code, reasonPhrase);
+                this.status = new CustomStatus(Status.Family.familyOf(code), code, reasonPhrase == null ? "" : reasonPhrase);
             }
             return this;
         }
 
         @Override
-        public ResponseBuilder entity(Object entity) {
+        public ResponseBuilder entity(@Nullable Object entity) {
             return entity(entity, EMPTY_ANNOTATIONS);
         }
 
         @Override
-        public ResponseBuilder entity(Object entity, Annotation[] annotations) {
+        public ResponseBuilder entity(@Nullable Object entity, Annotation[] annotations) {
             this.entity = entity;
-            this.annotations = annotations;
+            this.annotations = Objects.requireNonNull(annotations, "annotations");
             return this;
         }
 
         @Override
-        public ResponseBuilder allow(String... methods) {
+        public ResponseBuilder allow(String @Nullable ... methods) {
             if (methods == null || (methods.length == 1 && methods[0] == null)) {
                 return allow((Set<String>) null);
             } else {
@@ -542,7 +559,7 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
         }
 
         @Override
-        public ResponseBuilder allow(Set<String> methods) {
+        public ResponseBuilder allow(@Nullable Set<String> methods) {
             if (methods == null) {
                 return setHeader(HeaderNames.ALLOW, null, true);
             }
@@ -563,16 +580,16 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
 
 
         @Override
-        public ResponseBuilder cacheControl(CacheControl cacheControl) {
-            return setHeader(HeaderNames.CACHE_CONTROL, MuRuntimeDelegate.cacheControlHeaderDelegate.toString(cacheControl), false);
+        public ResponseBuilder cacheControl(@Nullable CacheControl cacheControl) {
+            return setHeader(HeaderNames.CACHE_CONTROL, cacheControl == null ? null : cacheControl.toString(), false);
         }
 
         @Override
-        public ResponseBuilder encoding(String encoding) {
+        public ResponseBuilder encoding(@Nullable String encoding) {
             return setHeader(HeaderNames.CONTENT_ENCODING, encoding, false);
         }
 
-        private ResponseBuilder setHeader(CharSequence name, Object value, boolean append) {
+        private ResponseBuilder setHeader(CharSequence name, @Nullable Object value, boolean append) {
             if (value instanceof Iterable) {
                 ((Iterable) value).forEach(v -> setHeader(name, v, append));
             } else {
@@ -590,12 +607,12 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
         }
 
         @Override
-        public ResponseBuilder header(String name, Object value) {
+        public ResponseBuilder header(String name, @Nullable Object value) {
             return setHeader(name, value, true); // TODO should this actually be false?
         }
 
         @Override
-        public ResponseBuilder replaceAll(MultivaluedMap<String, Object> headers) {
+        public ResponseBuilder replaceAll(@Nullable MultivaluedMap<String, Object> headers) {
             this.headers.clear();
             if (headers != null) {
                 for (Map.Entry<String, List<Object>> entry : headers.entrySet()) {
@@ -606,23 +623,23 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
         }
 
         @Override
-        public ResponseBuilder language(String language) {
+        public ResponseBuilder language(@Nullable String language) {
             return setHeader(HeaderNames.CONTENT_LANGUAGE, language, false);
         }
 
         @Override
-        public ResponseBuilder language(Locale language) {
+        public ResponseBuilder language(@Nullable Locale language) {
             return language(language == null ? null : language.toLanguageTag());
         }
 
         @Override
-        public ResponseBuilder type(MediaType type) {
+        public ResponseBuilder type(@Nullable MediaType type) {
             this.type = type;
             return this;
         }
 
         @Override
-        public ResponseBuilder type(String type) {
+        public ResponseBuilder type(@Nullable String type) {
             if (type == null) {
                 this.type = null;
                 return this;
@@ -631,7 +648,7 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
         }
 
         @Override
-        public ResponseBuilder variant(Variant variant) {
+        public ResponseBuilder variant(@Nullable Variant variant) {
             language(variant == null ? null : variant.getLanguage());
             type(variant == null ? null : variant.getMediaType());
             encoding(variant == null ? null : variant.getEncoding());
@@ -639,13 +656,13 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
         }
 
         @Override
-        public ResponseBuilder contentLocation(URI location) {
+        public ResponseBuilder contentLocation(@Nullable URI location) {
             return setHeader(HeaderNames.CONTENT_LOCATION, location, false);
         }
 
         @Override
-        public ResponseBuilder cookie(NewCookie... cookies) {
-            this.cookies = cookies;
+        public ResponseBuilder cookie(NewCookie @Nullable ... cookies) {
+            this.cookies = cookies == null ? new NewCookie[0] : cookies;
             if (cookies == null) {
                 headers.remove(HeaderNames.SET_COOKIE.toString());
             }
@@ -653,37 +670,41 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
         }
 
         @Override
-        public ResponseBuilder expires(Date expires) {
+        public ResponseBuilder expires(@Nullable Date expires) {
             return setHeader(HeaderNames.EXPIRES, expires, false);
         }
 
         @Override
-        public ResponseBuilder lastModified(Date lastModified) {
+        public ResponseBuilder lastModified(@Nullable Date lastModified) {
             return setHeader(HeaderNames.LAST_MODIFIED, lastModified, false);
         }
 
         @Override
-        public ResponseBuilder location(URI location) {
+        public ResponseBuilder location(@Nullable URI location) {
             return setHeader(HeaderNames.LOCATION, location, false);
         }
 
         @Override
-        public ResponseBuilder tag(EntityTag tag) {
+        public ResponseBuilder tag(@Nullable EntityTag tag) {
             return setHeader(HeaderNames.ETAG, tag, false);
         }
 
         @Override
-        public ResponseBuilder tag(String tag) {
-            return tag(new EntityTag(tag));
+        public ResponseBuilder tag(@Nullable String tag) {
+            return tag == null ? tag((EntityTag) null) : tag(new EntityTag(tag));
         }
 
         @Override
-        public ResponseBuilder variants(Variant... variants) {
-            return variants(asList(variants));
+        public ResponseBuilder variants(Variant @Nullable ... variants) {
+            return variants(variants == null ? null : asList(variants));
         }
 
         @Override
-        public ResponseBuilder variants(List<Variant> variants) {
+        public ResponseBuilder variants(@Nullable List<Variant> variants) {
+            if (variants == null) {
+                this.headers.remove("vary");
+                return this;
+            }
             for (Variant variant : variants) {
                 if (variant == null) {
                     this.headers.remove("vary");
@@ -707,7 +728,7 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
         }
 
         @Override
-        public ResponseBuilder links(Link... links) {
+        public ResponseBuilder links(Link @Nullable ... links) {
             if (links == null) {
                 linkHeaders.clear();
             } else {

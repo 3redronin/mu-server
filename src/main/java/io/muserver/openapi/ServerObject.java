@@ -17,9 +17,9 @@ public class ServerObject implements JsonWriter {
     private final @Nullable String description;
     private final @Nullable Map<String, ServerVariableObject> variables;
 
-    ServerObject(String url, @Nullable String description, @Nullable Map<String, ServerVariableObject> variables) {
+    ServerObject(@Nullable String url, @Nullable String description, @Nullable Map<String, ServerVariableObject> variables) {
         notNull("url", url);
-        this.url = url;
+        this.url = java.util.Objects.requireNonNull(url);
         this.description = description;
         this.variables = variables;
     }

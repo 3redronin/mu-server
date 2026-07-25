@@ -9,6 +9,7 @@ import jakarta.ws.rs.NotSupportedException;
 import jakarta.ws.rs.ServerErrorException;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.PathSegment;
+import org.jspecify.annotations.Nullable;
 
 import java.net.URI;
 import java.util.*;
@@ -42,13 +43,13 @@ class RequestMatcher {
         String path = requestContext.relativePath();
         Set<MatchedMethod> candidateMethods = getMatchedMethodsForPath(path, subResourceLocator);
         MuRequest req = requestContext.muRequest;
-        String requestBodyContentType = req.headers().get(HeaderNames.CONTENT_TYPE);
+        @Nullable String requestBodyContentType = req.headers().get(HeaderNames.CONTENT_TYPE);
         return stepThreeIdentifyTheMethodThatWillHandleTheRequest(httpMethod, candidateMethods, requestBodyContentType, acceptHeaders);
     }
 
     Set<MatchedMethod> getMatchedMethodsForPath(String path, Function<MatchedMethod, ResourceClass> subResourceLocator) throws NotMatchedException {
         StepOneOutput stepOneOutput = stepOneIdentifyASetOfCandidateRootResourceClassesMatchingTheRequest(path);
-        URI methodURI = stepOneOutput.unmatchedGroup == null ? null : URI.create(UriPattern.trimSlashes(stepOneOutput.unmatchedGroup));
+        @Nullable URI methodURI = stepOneOutput.unmatchedGroup == null ? null : URI.create(UriPattern.trimSlashes(stepOneOutput.unmatchedGroup));
         return stepTwoObtainASetOfCandidateResourceMethodsForTheRequest(methodURI, stepOneOutput.candidates, subResourceLocator);
     }
 
@@ -82,7 +83,7 @@ class RequestMatcher {
         }
         // Set Rmatch to be the first member of E and set U to be the value of the final capturing group of Rmatch when matched against U
         UriPattern rMatch = candidates.get(0).resourceClass.pathPattern;
-        String u = rMatch.matcher(uri).lastGroup();
+        @Nullable String u = rMatch.matcher(uri).lastGroup();
 
         // Let C0 be the set of classes Z such that R(TZ) = Rmatch. By definition, all root resource classes in C0 must be annotated with the same URI path template modulo variable names
 
@@ -92,7 +93,7 @@ class RequestMatcher {
         return new StepOneOutput(u, c0);
     }
 
-    private Set<MatchedMethod> stepTwoObtainASetOfCandidateResourceMethodsForTheRequest(URI relativeUri, List<MatchedClass> candidateClasses, Function<MatchedMethod, ResourceClass> subResourceLocator) throws NotMatchedException {
+    private Set<MatchedMethod> stepTwoObtainASetOfCandidateResourceMethodsForTheRequest(@Nullable URI relativeUri, List<MatchedClass> candidateClasses, Function<MatchedMethod, ResourceClass> subResourceLocator) throws NotMatchedException {
         if (relativeUri == null) {
             // handle section 3.7.2 - 2(a)
             Set<MatchedMethod> candidates = getNonLocatorMethods(candidateClasses, false);
@@ -107,7 +108,7 @@ class RequestMatcher {
             for (ResourceMethod resourceMethod : candidateClass.resourceClass.resourceMethods) {
                 if (resourceMethod.isSubResource() || resourceMethod.isSubResourceLocator()) {
                     if (relativeUri != null) {
-                        PathMatch matcher = resourceMethod.pathPattern.matcher(relativeUri);
+                        PathMatch matcher = resourceMethod.requiredPathPattern().matcher(relativeUri);
                         // 2(c) add and 2(d) filter out
                         if (matcher.fullyMatches() || (resourceMethod.isSubResourceLocator() && matcher.prefixMatches())) {
                             Map<String, PathSegment> combinedParams = new HashMap<>(candidateClass.pathMatch.segments());
@@ -131,14 +132,14 @@ class RequestMatcher {
             ResourceMethod rm1 = o1.resourceMethod;
             ResourceMethod rm2 = o2.resourceMethod;
             // "Sort E using the number of literal characters4 in each member as the primary key (descending order)"
-            int c = Integer.compare(rm2.pathPattern.numberOfLiterals, rm1.pathPattern.numberOfLiterals);
+                int c = Integer.compare(rm2.requiredPathPattern().numberOfLiterals, rm1.requiredPathPattern().numberOfLiterals);
             if (c == 0) {
                 // "the number of capturing groups as a secondary key (descending order)"
-                c = Integer.compare(rm2.pathPattern.capturingGroupCount(), rm1.pathPattern.capturingGroupCount());
+                c = Integer.compare(rm2.requiredPathPattern().capturingGroupCount(), rm1.requiredPathPattern().capturingGroupCount());
             }
             if (c == 0) {
                 // " and the number of capturing groups with non-default regular expressions (i.e. not ‘([ˆ/]+?)’) as the tertiary key (descending order)"
-                c = Integer.compare(rm2.pathPattern.nonDefaultCapturingGroupCount(), rm1.pathPattern.nonDefaultCapturingGroupCount());
+                c = Integer.compare(rm2.requiredPathPattern().nonDefaultCapturingGroupCount(), rm1.requiredPathPattern().nonDefaultCapturingGroupCount());
             }
             if (c == 0) {
                 // "and the source of each member as quaternary key sorting those derived from sub-resource methods ahead of those derived from sub-resource locators"
@@ -149,11 +150,11 @@ class RequestMatcher {
         });
 
         // 2(g) Set Rmatch to be the first member of E
-        UriPattern matcher = candidates.get(0).resourceMethod.pathPattern;
+        UriPattern matcher = candidates.get(0).resourceMethod.requiredPathPattern();
 
         // 2(h) M = { subresource methods of all classes in C′ where R(T_method) = R_match (excluding sub-resource locators) }
         Set<MatchedMethod> m = candidates.stream()
-            .filter(rm -> !rm.resourceMethod.isSubResourceLocator() && rm.resourceMethod.pathPattern.equals(matcher))
+            .filter(rm -> !rm.resourceMethod.isSubResourceLocator() && rm.resourceMethod.requiredPathPattern().equals(matcher))
             .collect(toSet());
         if (!m.isEmpty()) {
             return m;
@@ -161,7 +162,7 @@ class RequestMatcher {
 
         // 2(i) Let L be a sub-resource locator such that Rmatch = R(TL)
         Set<MatchedMethod> l = candidates.stream()
-            .filter(rm -> rm.resourceMethod.isSubResourceLocator() && rm.resourceMethod.pathPattern.equals(matcher))
+            .filter(rm -> rm.resourceMethod.isSubResourceLocator() && rm.resourceMethod.requiredPathPattern().equals(matcher))
             .collect(toSet());
         if (l.isEmpty()) {
             throw new NotMatchedException();
@@ -240,7 +241,7 @@ class RequestMatcher {
                 '}';
         }
 
-        public String getPathParam(String key) {
+        public @Nullable String getPathParam(String key) {
             PathSegment segment = pathParams.get(key);
             return segment == null ? null : segment.getPath();
         }
@@ -254,10 +255,10 @@ class RequestMatcher {
         }
     }
 
-    private MatchedMethod stepThreeIdentifyTheMethodThatWillHandleTheRequest(Method method, Set<MatchedMethod> candidates, String requestBodyContentType, List<MediaType> acceptHeaders) throws NotAllowedException, NotAcceptableException, NotSupportedException {
+    private MatchedMethod stepThreeIdentifyTheMethodThatWillHandleTheRequest(Method method, Set<MatchedMethod> candidates, @Nullable String requestBodyContentType, List<MediaType> acceptHeaders) throws NotAllowedException, NotAcceptableException, NotSupportedException {
         List<MatchedMethod> result = candidates.stream().filter(rm -> rm.resourceMethod.httpMethod == method).collect(toList());
         if (result.isEmpty()) {
-            List<String> allowed = candidates.stream().map(c -> c.resourceMethod.httpMethod.name()).distinct().collect(toList());
+            List<String> allowed = candidates.stream().map(c -> c.resourceMethod.requiredHttpMethod().name()).distinct().collect(toList());
             throw new NotAllowedException(allowed.get(0), allowed.subList(1, allowed.size()).toArray(new String[0]));
         }
 
@@ -299,10 +300,10 @@ class RequestMatcher {
     }
 
     static class StepOneOutput {
-        final String unmatchedGroup;
+        final @Nullable String unmatchedGroup;
         final List<RequestMatcher.MatchedClass> candidates;
 
-        StepOneOutput(String unmatchedGroup, List<RequestMatcher.MatchedClass> candidates) {
+        StepOneOutput(@Nullable String unmatchedGroup, List<RequestMatcher.MatchedClass> candidates) {
             this.unmatchedGroup = unmatchedGroup;
             this.candidates = candidates;
         }

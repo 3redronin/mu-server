@@ -136,9 +136,9 @@ public class ResourceHandler implements MuHandler {
         try (OutputStreamWriter osw = new OutputStreamWriter(response.outputStream(), StandardCharsets.UTF_8);
              BufferedWriter writer = new BufferedWriter(osw, 8192)) {
             writer.write("<!DOCTYPE html>\n");
-            assert directoryListingCss != null; // because directory listing enabled
-            assert dateFormatter != null;
-            new DirectoryLister(writer, provider, request.contextPath(), request.relativePath(), directoryListingCss, dateFormatter).render();
+            new DirectoryLister(writer, provider, request.contextPath(), request.relativePath(),
+                java.util.Objects.requireNonNull(directoryListingCss, "Directory listing CSS was not initialized"),
+                java.util.Objects.requireNonNull(dateFormatter, "Directory listing date formatter was not initialized")).render();
         }
     }
 

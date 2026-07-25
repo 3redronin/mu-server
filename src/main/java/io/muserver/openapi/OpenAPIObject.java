@@ -15,7 +15,7 @@ import static io.muserver.openapi.Jsonizer.append;
  */
 public class OpenAPIObject implements JsonWriter {
 
-    private final @Nullable String openapi = "3.0.1";
+    private final String openapi = "3.0.1";
     private final InfoObject info;
     private final @Nullable List<ServerObject> servers;
     private final PathsObject paths;
@@ -24,15 +24,15 @@ public class OpenAPIObject implements JsonWriter {
     private final @Nullable List<TagObject> tags;
     private final @Nullable ExternalDocumentationObject externalDocs;
 
-    OpenAPIObject(InfoObject info, @Nullable List<ServerObject> servers, PathsObject paths, @Nullable ComponentsObject components, @Nullable List<SecurityRequirementObject> security, @Nullable List<TagObject> tags, @Nullable ExternalDocumentationObject externalDocs) {
-        notNull("info", info);
-        notNull("paths", paths);
+    OpenAPIObject(@Nullable InfoObject info, @Nullable List<ServerObject> servers, @Nullable PathsObject paths, @Nullable ComponentsObject components, @Nullable List<SecurityRequirementObject> security, @Nullable List<TagObject> tags, @Nullable ExternalDocumentationObject externalDocs) {
         if (tags != null && tags.size() != tags.stream().map(t -> t.name()).collect(Collectors.toSet()).size()) {
             throw new IllegalArgumentException("Tags must have unique names");
         }
-        this.info = info;
+        notNull("info", info);
+        this.info = java.util.Objects.requireNonNull(info);
         this.servers = servers;
-        this.paths = paths;
+        notNull("paths", paths);
+        this.paths = java.util.Objects.requireNonNull(paths);
         this.components = components;
         this.security = security;
         this.tags = tags;

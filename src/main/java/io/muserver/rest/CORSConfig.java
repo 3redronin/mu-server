@@ -51,7 +51,8 @@ public class CORSConfig {
         return written;
     }
 
-    boolean writeHeadersInternal(MuRequest request, MuResponse response, Set<RequestMatcher.MatchedMethod> matchedMethodsForPath) {
+    boolean writeHeadersInternal(MuRequest request, MuResponse response,
+                                 @Nullable Set<RequestMatcher.MatchedMethod> matchedMethodsForPath) {
 
         Headers respHeaders = response.headers();
         if (!respHeaders.containsValue(HeaderNames.VARY, HeaderNames.ORIGIN, true)) {
@@ -59,7 +60,7 @@ public class CORSConfig {
         }
 
         String origin = request.headers().get(HeaderNames.ORIGIN);
-        if (Mutils.nullOrEmpty(origin)) {
+        if (origin == null || origin.isEmpty()) {
             return false;
         }
 
@@ -158,7 +159,7 @@ public class CORSConfig {
     }
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equals(@Nullable Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         CORSConfig that = (CORSConfig) o;

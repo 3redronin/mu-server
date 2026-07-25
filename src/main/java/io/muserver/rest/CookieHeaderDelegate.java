@@ -22,6 +22,7 @@ class CookieHeaderDelegate implements RuntimeDelegate.HeaderDelegate<Cookie> {
 
     @Override
     public String toString(Cookie cookie) {
+        if (cookie == null) throw new IllegalArgumentException("Cookie was null");
         io.muserver.Cookie muc = CookieBuilder.newCookie()
             .withName(cookie.getName())
             .withValue(cookie.getValue())

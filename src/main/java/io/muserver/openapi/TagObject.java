@@ -18,9 +18,9 @@ public class TagObject implements JsonWriter {
     private final @Nullable String description;
     private final @Nullable ExternalDocumentationObject externalDocs;
 
-    TagObject(String name, @Nullable String description, @Nullable ExternalDocumentationObject externalDocs) {
+    TagObject(@Nullable String name, @Nullable String description, @Nullable ExternalDocumentationObject externalDocs) {
         notNull("name", name);
-        this.name = name;
+        this.name = java.util.Objects.requireNonNull(name);
         this.description = description;
         this.externalDocs = externalDocs;
     }
