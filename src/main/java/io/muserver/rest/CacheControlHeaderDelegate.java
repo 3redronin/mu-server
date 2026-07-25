@@ -46,6 +46,7 @@ package io.muserver.rest;
 import io.muserver.ParameterizedHeader;
 import jakarta.ws.rs.core.CacheControl;
 import jakarta.ws.rs.ext.RuntimeDelegate;
+import org.jspecify.annotations.Nullable;
 
 import java.util.HashMap;
 import java.util.List;
@@ -154,7 +155,7 @@ class CacheControlHeaderDelegate implements RuntimeDelegate.HeaderDelegate<Cache
         b.append(value);
     }
 
-    static void appendWithSeparator(StringBuilder b, String field, String value) {
+    static void appendWithSeparator(StringBuilder b, String field, @Nullable String value) {
         appendWithSeparator(b, field);
         if (value != null && !value.isEmpty()) {
             b.append("=");
@@ -162,7 +163,7 @@ class CacheControlHeaderDelegate implements RuntimeDelegate.HeaderDelegate<Cache
         }
     }
 
-    static String quoteIfWhitespace(String value) {
+    static @Nullable String quoteIfWhitespace(@Nullable String value) {
         if (value == null) {
             return null;
         }

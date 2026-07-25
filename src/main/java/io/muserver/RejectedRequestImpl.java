@@ -1,5 +1,7 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
+
 import java.net.URI;
 import java.util.Optional;
 
@@ -7,11 +9,11 @@ class RejectedRequestImpl implements RejectedRequest {
 
     private final int status;
     private final String reason;
-    private final String method;
-    private final URI uri;
+    private final @Nullable String method;
+    private final @Nullable URI uri;
     private final HttpConnection connection;
 
-    RejectedRequestImpl(int status, String reason, String method, String uri, HttpConnection connection) {
+    RejectedRequestImpl(int status, String reason, @Nullable String method, @Nullable String uri, HttpConnection connection) {
         this.status = status;
         this.reason = reason;
         this.method = method;
@@ -19,7 +21,7 @@ class RejectedRequestImpl implements RejectedRequest {
         this.connection = connection;
     }
 
-    private static URI parseUriOrNull(String rawTarget) {
+    private static @Nullable URI parseUriOrNull(@Nullable String rawTarget) {
         if (rawTarget == null || rawTarget.isEmpty()) {
             return null;
         }

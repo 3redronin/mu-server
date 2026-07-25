@@ -11,6 +11,7 @@ import jakarta.ws.rs.core.*;
 import jakarta.ws.rs.ext.RuntimeDelegate;
 import jakarta.ws.rs.sse.Sse;
 import jakarta.ws.rs.sse.SseBroadcaster;
+import org.jspecify.annotations.Nullable;
 
 import java.net.URI;
 import java.util.*;
@@ -40,7 +41,7 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
         headerDelegates.put(Date.class, new DateHeaderDelegate());
     }
 
-    private static MuRuntimeDelegate singleton;
+    private static @Nullable MuRuntimeDelegate singleton;
 
     /**
      * Registers the mu RuntimeDelegate with jax-rs, if it was not already.
@@ -51,7 +52,7 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
             singleton = new MuRuntimeDelegate();
             RuntimeDelegate.setInstance(singleton);
         }
-        return singleton;
+        return Objects.requireNonNull(singleton);
     }
 
     /**

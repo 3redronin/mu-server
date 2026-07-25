@@ -1,5 +1,6 @@
 package io.muserver.rest;
 
+import org.jspecify.annotations.Nullable;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
@@ -57,7 +58,7 @@ class Jaxutils {
         return decoded.toString();
     }
 
-    private static IllegalArgumentException invalid(String value, Exception cause) {
+    private static IllegalArgumentException invalid(String value, @Nullable Exception cause) {
         return new IllegalArgumentException("Invalid UTF-8 percent encoding in " + value, cause);
     }
 

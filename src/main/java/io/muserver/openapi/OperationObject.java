@@ -31,7 +31,7 @@ public class OperationObject implements JsonWriter {
     private final @Nullable List<ServerObject> servers;
 
     OperationObject(@Nullable List<String> tags, @Nullable String summary, @Nullable String description, @Nullable ExternalDocumentationObject externalDocs,
-                           @Nullable String operationId, @Nullable List<ParameterObject> parameters, @Nullable RequestBodyObject requestBody, ResponsesObject responses,
+                           @Nullable String operationId, @Nullable List<ParameterObject> parameters, @Nullable RequestBodyObject requestBody, @Nullable ResponsesObject responses,
                            @Nullable Map<String, CallbackObject> callbacks, @Nullable Boolean deprecated, @Nullable List<SecurityRequirementObject> security,
                            @Nullable List<ServerObject> servers) {
         notNull("responses", responses);
@@ -48,7 +48,8 @@ public class OperationObject implements JsonWriter {
         this.operationId = operationId;
         this.parameters = parameters;
         this.requestBody = requestBody;
-        this.responses = responses;
+        notNull("responses", responses);
+        this.responses = java.util.Objects.requireNonNull(responses);
         this.callbacks = callbacks;
         this.deprecated = deprecated;
         this.security = security;

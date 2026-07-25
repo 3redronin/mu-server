@@ -147,7 +147,7 @@ public class ForwardedHeader {
                         } else {
                             if (c == ';') {
                                 String val = buffer.toString();
-                                switch (paramName.toLowerCase()) {
+                                switch (Objects.requireNonNull(paramName).toLowerCase()) {
                                     case "by":
                                         by = val;
                                         break;
@@ -188,7 +188,7 @@ public class ForwardedHeader {
             switch (state) {
                 case PARAM_VALUE:
                     String val = buffer.toString();
-                    switch (paramName.toLowerCase()) {
+                    switch (Objects.requireNonNull(paramName).toLowerCase()) {
                         case "by":
                             by = val;
                             break;

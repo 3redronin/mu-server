@@ -21,7 +21,7 @@ import static java.util.Arrays.asList;
 public class CORSConfigBuilder {
 
     private boolean allowCredentials = false;
-    private Collection<String> allowedOrigins = Collections.emptySet();
+    private @Nullable Collection<String> allowedOrigins = Collections.emptySet();
     private List<Pattern> allowedOriginRegex = new ArrayList<>();
     private Collection<String> exposedHeaders = Collections.emptySet();
     private Collection<String> allowedHeaders = Collections.emptySet();

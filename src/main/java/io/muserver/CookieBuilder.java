@@ -205,9 +205,11 @@ public class CookieBuilder {
      * @return Returns a newly created cookie.
      */
     public Cookie build() {
-        if (Mutils.nullOrEmpty(name)) throw new IllegalStateException("A cookie name must be specified");
-        if (value == null) throw new IllegalStateException("A cookie value cannot be null");
-        return new Cookie(name, value, domain, path, maxAge, sameSite, secure, httpOnly);
+        String cookieName = name;
+        String cookieValue = value;
+        if (cookieName == null || cookieName.isEmpty()) throw new IllegalStateException("A cookie name must be specified");
+        if (cookieValue == null) throw new IllegalStateException("A cookie value cannot be null");
+        return new Cookie(cookieName, cookieValue, domain, path, maxAge, sameSite, secure, httpOnly);
     }
 
     /**
@@ -301,8 +303,8 @@ public class CookieBuilder {
             }
 
             CookieBuilder builder = CookieBuilder.newCookie()
-                .withName(name)
-                .withValue(value);
+                .withName(Objects.requireNonNull(name))
+                .withValue(Objects.requireNonNull(value));
             results.add(builder);
         }
         return results;
@@ -434,7 +436,7 @@ public class CookieBuilder {
                                 if (parameters == null) {
                                     parameters = new LinkedHashMap<>(); // keeps insertion order
                                 }
-                                parameters.put(paramName.toLowerCase(), buffer.toString());
+                                parameters.put(Objects.requireNonNull(paramName).toLowerCase(), buffer.toString());
                                 buffer.setLength(0);
                                 paramName = null;
                                 state = State.PARAM_NAME;
@@ -469,7 +471,7 @@ public class CookieBuilder {
                     if (parameters == null) {
                         parameters = new LinkedHashMap<>(); // keeps insertion order
                     }
-                    parameters.put(paramName.toLowerCase(), buffer.toString());
+                    parameters.put(Objects.requireNonNull(paramName).toLowerCase(), buffer.toString());
                     buffer.setLength(0);
                     break;
                 default:
@@ -479,8 +481,8 @@ public class CookieBuilder {
             }
 
             builder = CookieBuilder.newCookie()
-                .withName(name)
-                .withValue(value);
+                .withName(Objects.requireNonNull(name))
+                .withValue(Objects.requireNonNull(value));
             if (parameters != null) {
                 if (parameters.containsKey("domain")) builder.withDomain(parameters.get("domain"));
                 if (parameters.containsKey("httponly")) builder.httpOnly(true);

@@ -91,7 +91,7 @@ class Http2Response extends BaseResponse {
             } catch (IOException e) {
                 throw new UncheckedIOException("Error while setting up output stream", e);
             }
-            return wrappedOut;
+            return java.util.Objects.requireNonNull(wrappedOut);
         } else {
             throw new IllegalStateException("Cannot specify buffer size for response output stream when it has already been created");
         }

@@ -76,7 +76,7 @@ abstract class BaseHttpConnection implements HttpConnection {
             if (!handled) throw new HttpException(HttpStatus.NOT_FOUND_404, "This page is not available. Sorry about that.");
 
             if (muRequest.isAsync()) {
-                var asyncHandle = muRequest.getAsyncHandle();
+                var asyncHandle = java.util.Objects.requireNonNull(muRequest.getAsyncHandle());
                     // TODO set proper timeout
                 asyncHandle.waitForCompletion(Long.MAX_VALUE);
             }

@@ -248,7 +248,7 @@ class Http1MessageParser implements Http1MessageReader {
                             if (isOkay) {
                                 var value = consumeAscii(buffer).trim();
                                 if (!value.isEmpty()) {
-                                    exchange.headers().add(headerName, value);
+                                    exchange.headers().add(Objects.requireNonNull(headerName), value);
                                 }
                             }
                             state = ParseState.HEADER_START;
@@ -263,7 +263,7 @@ class Http1MessageParser implements Http1MessageReader {
                             exc.setBodySize(body);
                             switch (body.type()) {
                                 case FIXED_SIZE: {
-                                    long len = body.size();
+                                    long len = Objects.requireNonNull(body.size());
                                     state = ParseState.FIXED_SIZE_BODY;
                                     remainingBytesToProxy = len;
                                     break;
@@ -550,4 +550,3 @@ class Http1MessageParser implements Http1MessageReader {
         throw new HttpException(HttpStatus.HTTP_VERSION_NOT_SUPPORTED_505);
     }
 }
-

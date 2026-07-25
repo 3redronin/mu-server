@@ -20,14 +20,14 @@ public class OAuthFlowObject implements JsonWriter {
     private final @Nullable URI refreshUrl;
     private final Map<String, String> scopes;
 
-    OAuthFlowObject(URI authorizationUrl, URI tokenUrl, @Nullable URI refreshUrl, Map<String, String> scopes) {
+    OAuthFlowObject(@Nullable URI authorizationUrl, @Nullable URI tokenUrl, @Nullable URI refreshUrl, @Nullable Map<String, String> scopes) {
         notNull("authorizationUrl", authorizationUrl);
+        this.authorizationUrl = java.util.Objects.requireNonNull(authorizationUrl);
         notNull("tokenUrl", tokenUrl);
-        notNull("scopes", scopes);
-        this.authorizationUrl = authorizationUrl;
-        this.tokenUrl = tokenUrl;
+        this.tokenUrl = java.util.Objects.requireNonNull(tokenUrl);
         this.refreshUrl = refreshUrl;
-        this.scopes = scopes;
+        notNull("scopes", scopes);
+        this.scopes = java.util.Objects.requireNonNull(scopes);
     }
 
     @Override

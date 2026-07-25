@@ -9,6 +9,7 @@ import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.ext.MessageBodyWriter;
 import jakarta.ws.rs.sse.OutboundSseEvent;
 import jakarta.ws.rs.sse.SseEventSink;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,7 +27,7 @@ class JaxSseEventSinkImpl implements SseEventSink {
     private final AsyncSsePublisher ssePublisher;
     private final MuResponse response;
     private final EntityProviders entityProviders;
-    private volatile MultivaluedMap<String, Object> writerHeadersSnapshot;
+    private volatile @Nullable MultivaluedMap<String, Object> writerHeadersSnapshot;
 
     public JaxSseEventSinkImpl(AsyncSsePublisher ssePublisher, MuResponse response, EntityProviders entityProviders) {
         this.ssePublisher = ssePublisher;

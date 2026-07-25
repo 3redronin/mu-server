@@ -98,12 +98,9 @@ class Http1Connection extends BaseHttpConnection {
 
                 URI serverUri = creator.uri().resolve(relativeUrl);
                 URI requestUri = Headtils.getUri(log, request.headers(), relativeUrl, serverUri);
-                Method method = request.getMethod();
-                HttpVersion httpVersion = request.getHttpVersion();
-                BodySize bodySize = request.getBodySize();
-                assert method != null;
-                assert httpVersion != null;
-                assert bodySize != null;
+                Method method = java.util.Objects.requireNonNull(request.getMethod(), "No HTTP method was parsed");
+                HttpVersion httpVersion = java.util.Objects.requireNonNull(request.getHttpVersion(), "No HTTP version was parsed");
+                BodySize bodySize = java.util.Objects.requireNonNull(request.getBodySize(), "No body size was parsed");
                 InputStream requestBody = (bodySize == BodySize.NONE) ? EmptyInputStream.INSTANCE : new Http1BodyStream(requestParser, server.maxRequestBodySize());
                 var muRequest = new Mu3Request(this, method, requestUri, serverUri, httpVersion, request.headers(), bodySize, requestBody);
                 clientSocket.setSoTimeout(requestTimeout);

@@ -237,7 +237,7 @@ class AsyncFileProvider implements ResourceProvider, CompletionHandler<Integer, 
             handle = request.handleAsync();
             channel = AsynchronousFileChannel.open(localPath, StandardOpenOption.READ);
             buf = ByteBuffer.allocate(8192);
-            channel.read(buf, curPos, handle, this);
+            requiredChannel().read(requiredBuffer(), curPos, requiredHandle(), this);
         }
     }
 
@@ -248,27 +248,29 @@ class AsyncFileProvider implements ResourceProvider, CompletionHandler<Integer, 
 
     @Override
     public void completed(Integer bytesRead, Object a) {
-        buf.flip();
+        ByteBuffer buffer = requiredBuffer();
+        AsyncHandle asyncHandle = requiredHandle();
+        buffer.flip();
         if (bytesRead == -1) {
-            handle.complete();
+            asyncHandle.complete();
             closeChannelQuietly();
         } else {
 
             // for range requests, more bytes may be read than should be written, so the write is limited
             long remaining = Math.max(0, maxLen - bytesSent);
-            if (remaining < buf.limit()) {
-                buf.limit((int) remaining);
+            if (remaining < buffer.limit()) {
+                buffer.limit((int) remaining);
             }
 
-            handle.write(buf, error -> {
+            asyncHandle.write(buffer, error -> {
                 if (error == null) {
-                    buf.clear();
+                    buffer.clear();
                     curPos += bytesRead;
                     bytesSent += bytesRead;
-                    channel.read(buf, curPos, null, AsyncFileProvider.this);
+                    requiredChannel().read(buffer, curPos, null, AsyncFileProvider.this);
                 } else {
                     closeChannelQuietly();
-                    handle.complete(error);
+                    asyncHandle.complete(error);
                 }
             });
         }
@@ -276,7 +278,7 @@ class AsyncFileProvider implements ResourceProvider, CompletionHandler<Integer, 
 
     private void closeChannelQuietly() {
         try {
-            channel.close();
+            requiredChannel().close();
         } catch (IOException e) {
             log.debug("Error while closing file channel " + localPath, e);
         }
@@ -285,7 +287,19 @@ class AsyncFileProvider implements ResourceProvider, CompletionHandler<Integer, 
     @Override
     public void failed(Throwable exc, Object a) {
         log.info("File read failure for " + localPath, exc);
-        handle.complete(exc);
+        requiredHandle().complete(exc);
+    }
+
+    private AsynchronousFileChannel requiredChannel() {
+        return Objects.requireNonNull(channel, "File transfer has not been initialized");
+    }
+
+    private ByteBuffer requiredBuffer() {
+        return Objects.requireNonNull(buf, "File transfer has not been initialized");
+    }
+
+    private AsyncHandle requiredHandle() {
+        return Objects.requireNonNull(handle, "File transfer has not been initialized");
     }
 }
 
@@ -343,7 +357,7 @@ class ClasspathResourceProvider implements ResourceProvider {
             while (totalSkipped < bytes) {
                 long skipped;
                 try {
-                    skipped = inputStream.skip(bytes);
+                    skipped = requiredInputStream().skip(bytes);
                 } catch (IOException e) {
                     return false;
                 }
@@ -365,7 +379,7 @@ class ClasspathResourceProvider implements ResourceProvider {
                     byte[] buffer = new byte[8192];
                     long soFar = 0;
                     int read;
-                    while (soFar < maxLen && (read = inputStream.read(buffer)) > -1) {
+                    while (soFar < maxLen && (read = requiredInputStream().read(buffer)) > -1) {
                         soFar += read;
                         if (soFar > maxLen) {
                             read -= (soFar - maxLen);
@@ -377,7 +391,7 @@ class ClasspathResourceProvider implements ResourceProvider {
                 }
             }
         } finally {
-            inputStream.close();
+            requiredInputStream().close();
         }
     }
 
@@ -386,4 +400,7 @@ class ClasspathResourceProvider implements ResourceProvider {
         return Files.list(path);
     }
 
+    private InputStream requiredInputStream() {
+        return Objects.requireNonNull(inputStream, "This resource has no input stream");
+    }
 }

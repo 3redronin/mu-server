@@ -183,7 +183,9 @@ public class ParameterizedHeaderWithValue {
                     }
             }
 
-            results.add(new ParameterizedHeaderWithValue(value, parameters == null ? Collections.emptyMap() : parameters));
+            results.add(new ParameterizedHeaderWithValue(
+                Objects.requireNonNull(value, "A header value is required"),
+                parameters == null ? Collections.emptyMap() : parameters));
         }
 
         return results;

@@ -188,7 +188,7 @@ class Mu3Request implements MuRequest {
                     int bufferSize = (int) min(8192, declaredSize != null ? declaredSize : 8192);
                     try (InputStream b = body) {
                         MultipartFormParser formParser = new MultipartFormParser(server().tempDir(),
-                            boundary, b, bufferSize, charset);
+                            Objects.requireNonNull(boundary), b, bufferSize, charset);
                         this.form = formParser.parseFully();
                     }
                 } else {
@@ -253,8 +253,8 @@ class Mu3Request implements MuRequest {
     @Override
     public synchronized AsyncHandle handleAsync() {
         if (asyncHandle == null) {
-            assert response != null;
-            asyncHandle = new Mu3AsyncHandleImpl(this, response);
+            asyncHandle = new Mu3AsyncHandleImpl(this,
+                Objects.requireNonNull(response, "The response has not been initialized"));
         }
         if (clientCancelled) {
             asyncHandle.complete();
@@ -315,8 +315,8 @@ class Mu3Request implements MuRequest {
         try {
             if (body instanceof Http1BodyStream) {
                 var http1Body = (Http1BodyStream) body;
-                assert response != null;
-                boolean throwIfTooBig = response.status() != HttpStatus.CONTENT_TOO_LARGE_413;
+                boolean throwIfTooBig = Objects.requireNonNull(response, "The response has not been initialized").status()
+                    != HttpStatus.CONTENT_TOO_LARGE_413;
                 var bodyState = http1Body.discardRemaining(throwIfTooBig);
                 return bodyState == Http1BodyStream.State.EOF && !http1Body.tooBig();
             } else {

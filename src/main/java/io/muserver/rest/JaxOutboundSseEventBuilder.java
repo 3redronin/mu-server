@@ -4,16 +4,17 @@ import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.sse.OutboundSseEvent;
 import jakarta.ws.rs.sse.SseEvent;
+import org.jspecify.annotations.Nullable;
 
 class JaxOutboundSseEventBuilder implements OutboundSseEvent.Builder {
-    private String id;
-    private String name;
+    private @Nullable String id;
+    private @Nullable String name;
     private long milliseconds = SseEvent.RECONNECT_NOT_SET;
     private MediaType mediaType = MediaType.TEXT_PLAIN_TYPE;
-    private String comment;
-    private Class type;
-    private Object data;
-    private GenericType genericType;
+    private @Nullable String comment;
+    private @Nullable Class type;
+    private @Nullable Object data;
+    private @Nullable GenericType genericType;
 
     @Override
     public OutboundSseEvent.Builder id(String id) {

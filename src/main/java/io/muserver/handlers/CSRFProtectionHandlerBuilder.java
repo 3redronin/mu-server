@@ -3,6 +3,7 @@ package io.muserver.handlers;
 import io.muserver.MuHandler;
 import io.muserver.MuHandlerBuilder;
 import jakarta.ws.rs.BadRequestException;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Collections;
 import java.util.HashSet;
@@ -17,7 +18,7 @@ public class CSRFProtectionHandlerBuilder implements MuHandlerBuilder<CSRFProtec
 
     private final Set<String> trustedOrigins = new HashSet<>();
     private final Set<String> bypassPaths = new HashSet<>();
-    private MuHandler rejectionHandler;
+    private @Nullable MuHandler rejectionHandler;
 
     /**
      * Adds a trusted origin. Requests with an <code>Origin</code> header exactly matching this value are allowed.

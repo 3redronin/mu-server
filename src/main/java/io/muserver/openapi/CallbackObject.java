@@ -1,5 +1,6 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
 import java.io.IOException;
 import java.io.Writer;
 import java.util.Map;
@@ -13,9 +14,9 @@ public class CallbackObject implements JsonWriter {
 
     private final Map<String, PathItemObject> callbacks;
 
-    CallbackObject(Map<String, PathItemObject> callbacks) {
+    CallbackObject(@Nullable Map<String, PathItemObject> callbacks) {
         notNull("callbacks", callbacks);
-        this.callbacks = callbacks;
+        this.callbacks = java.util.Objects.requireNonNull(callbacks);
     }
 
     @Override

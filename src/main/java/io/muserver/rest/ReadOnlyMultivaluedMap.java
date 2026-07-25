@@ -2,6 +2,7 @@ package io.muserver.rest;
 
 import jakarta.ws.rs.core.MultivaluedHashMap;
 import jakarta.ws.rs.core.MultivaluedMap;
+import org.jspecify.annotations.Nullable;
 
 import java.io.Serializable;
 import java.util.Collection;
@@ -97,7 +98,7 @@ class ReadOnlyMultivaluedMap<K, V> implements MultivaluedMap<K, V>, Serializable
         return actual.isEmpty();
     }
 
-    public List<V> get(Object key) {
+    public @Nullable List<V> get(Object key) {
         return actual.get(key);
     }
 

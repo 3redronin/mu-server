@@ -8,6 +8,7 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.jspecify.annotations.Nullable;
 
 /**
  * A pattern representing a URI template, such as <code>/fruit</code> or <code>/fruit/{name}</code> etc.
@@ -39,7 +40,7 @@ public class UriPattern {
         this.pathWithoutRegex = pathWithoutRegex;
     }
 
-    String regexFor(String name) {
+    @Nullable String regexFor(String name) {
         int i = namedGroups.indexOf(name);
         if (i == -1) return null;
         return namedGroupRegexes.get(i);

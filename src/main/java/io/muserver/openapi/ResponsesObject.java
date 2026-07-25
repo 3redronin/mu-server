@@ -17,8 +17,9 @@ public class ResponsesObject implements JsonWriter {
     private final @Nullable ResponseObject defaultValue;
     private final Map<String, ResponseObject> httpStatusCodes;
 
-    ResponsesObject(@Nullable ResponseObject defaultValue, Map<String, ResponseObject> httpStatusCodes) {
+    ResponsesObject(@Nullable ResponseObject defaultValue, @Nullable Map<String, ResponseObject> httpStatusCodes) {
         notNull("httpStatusCodes", httpStatusCodes);
+        httpStatusCodes = java.util.Objects.requireNonNull(httpStatusCodes);
         if (httpStatusCodes.isEmpty()) {
             throw new IllegalArgumentException("'httpStatusCodes' must contain at least one value");
         }

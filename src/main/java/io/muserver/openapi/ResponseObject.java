@@ -19,9 +19,9 @@ public class ResponseObject implements JsonWriter {
     private final @Nullable Map<String, MediaTypeObject> content;
     private final @Nullable Map<String, LinkObject> links;
 
-    ResponseObject(String description, @Nullable Map<String, HeaderObject> headers, @Nullable Map<String, MediaTypeObject> content, @Nullable Map<String, LinkObject> links) {
+    ResponseObject(@Nullable String description, @Nullable Map<String, HeaderObject> headers, @Nullable Map<String, MediaTypeObject> content, @Nullable Map<String, LinkObject> links) {
         notNull("description", description);
-        this.description = description;
+        this.description = java.util.Objects.requireNonNull(description);
         this.headers = headers;
         this.content = content;
         this.links = links;

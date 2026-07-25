@@ -40,7 +40,7 @@ public class WebSocketHandlerBuilder implements MuHandlerBuilder<WebSocketHandle
     public WebSocketHandlerBuilder withPath(@Nullable String path) {
         if (Mutils.nullOrEmpty(path)) {
             this.path = null;
-        } else if (path.startsWith("/")) {
+        } else if (java.util.Objects.requireNonNull(path).startsWith("/")) {
             this.path = path;
         } else {
             this.path = "/" + path;
@@ -201,4 +201,3 @@ public class WebSocketHandlerBuilder implements MuHandlerBuilder<WebSocketHandle
         }
     }
 }
-

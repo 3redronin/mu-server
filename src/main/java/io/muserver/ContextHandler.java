@@ -25,7 +25,7 @@ public class ContextHandler implements MuHandler {
      * @param muHandlers The handlers
      */
     ContextHandler(@Nullable String contextPath, List<MuHandler> muHandlers) {
-        String slashTrimmed = Mutils.trim(Mutils.coalesce(contextPath, "").trim(), "/");
+        String slashTrimmed = Mutils.trim(java.util.Objects.requireNonNull(Mutils.coalesce(contextPath, "")).trim(), "/");
         this.hasContext = !slashTrimmed.isEmpty();
         this.contextPath = Stream.of(slashTrimmed.split("/"))
             .map(Mutils::urlEncode)

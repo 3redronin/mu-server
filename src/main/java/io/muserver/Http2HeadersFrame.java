@@ -131,7 +131,7 @@ class Http2HeadersFrame implements LogicalHttp2Frame {
             throw invalidRequestException;
         }
 
-        return new Http2HeadersFrame(frameHeader.streamId(), endStream, headers);
+        return new Http2HeadersFrame(frameHeader.streamId(), endStream, java.util.Objects.requireNonNull(headers));
     }
 
     @Override

@@ -1,5 +1,6 @@
 package io.muserver.rest;
 
+import org.jspecify.annotations.Nullable;
 import java.lang.annotation.Annotation;
 
 /**
@@ -7,16 +8,16 @@ import java.lang.annotation.Annotation;
  * As per the spec, the class and its super classes are checked before interfaces.
  */
 class JaxClassLocator {
-    static Class<?> getClassWithJaxRSAnnotations(Class<?> start) {
-        Class<?> clazz = start;
-        while (clazz != Object.class) {
+    static @Nullable Class<?> getClassWithJaxRSAnnotations(Class<?> start) {
+        @Nullable Class<?> clazz = start;
+        while (clazz != null && clazz != Object.class) {
             if (hasAtLeastOneJaxRSAnnotation(clazz.getDeclaredAnnotations())) {
                 return clazz;
             }
             clazz = clazz.getSuperclass();
         }
         clazz = start;
-        while (clazz != Object.class) {
+        while (clazz != null && clazz != Object.class) {
             for (Class<?> interfaceClass : clazz.getInterfaces()) {
                 if (hasAtLeastOneJaxRSAnnotation(interfaceClass.getDeclaredAnnotations())) {
                     return interfaceClass;

@@ -26,21 +26,21 @@ class MuUriBuilder extends UriBuilder {
         MuRuntimeDelegate.ensureSet();
     }
 
-    private String scheme;
-    private String userInfo;
-    private String host;
+    private @Nullable String scheme;
+    private @Nullable String userInfo;
+    private @Nullable String host;
     private int port = -1;
     private List<MuPathSegment> pathSegments = new ArrayList<>();
     private MultivaluedMap<String, String> query = new MultivaluedHashMap<>();
-    private String fragment;
+    private @Nullable String fragment;
     private boolean hasPrecedingSlash = false;
     private boolean hasTrailingSlash = false;
 
     MuUriBuilder() {
     }
 
-    private MuUriBuilder(String scheme, String userInfo, String host, int port, List<MuPathSegment> pathSegments,
-                         boolean hasPrecedingSlash, boolean hasTrailingSlash, MultivaluedMap<String, String> query, String fragment) {
+    private MuUriBuilder(@Nullable String scheme, @Nullable String userInfo, @Nullable String host, int port, List<MuPathSegment> pathSegments,
+                         boolean hasPrecedingSlash, boolean hasTrailingSlash, MultivaluedMap<String, String> query, @Nullable String fragment) {
         this.scheme = scheme;
         this.userInfo = userInfo;
         this.host = host;
@@ -127,7 +127,7 @@ class MuUriBuilder extends UriBuilder {
     public UriBuilder path(String path) {
         Mutils.notNull("path", path);
         setSlashes(path);
-        this.pathSegments.addAll(MuUriInfo.pathStringToSegments(decode(path), false).collect(toList()));
+        this.pathSegments.addAll(MuUriInfo.pathStringToSegments(Objects.requireNonNull(decode(path)), false).collect(toList()));
         return this;
     }
 
@@ -184,7 +184,7 @@ class MuUriBuilder extends UriBuilder {
         Mutils.notNull("segments", segments);
         for (String segment : segments) {
             Mutils.notNull("segment", segment);
-            this.pathSegments.addAll(MuUriInfo.pathStringToSegments(decode(segment), true).collect(toList()));
+            this.pathSegments.addAll(MuUriInfo.pathStringToSegments(Objects.requireNonNull(decode(segment)), true).collect(toList()));
         }
         this.hasTrailingSlash = false;
         return this;
@@ -494,7 +494,7 @@ class MuUriBuilder extends UriBuilder {
         return map;
     }
 
-    private static void addTemplateNames(List<String> sorted, String value) {
+    private static void addTemplateNames(List<String> sorted, @Nullable String value) {
         if (value != null) {
             List<String> toAdd = UriPattern.uriTemplateToRegex(value).namedGroups();
             for (String s : toAdd) {
@@ -505,7 +505,7 @@ class MuUriBuilder extends UriBuilder {
         }
     }
 
-    private static String decode(Object value) {
+    private static @Nullable String decode(@Nullable Object value) {
         return value == null ? null : Jaxutils.leniantUrlDecode(value.toString());
     }
 

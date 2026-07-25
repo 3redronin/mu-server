@@ -84,7 +84,7 @@ class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
         } else {
             throw new IllegalStateException("Cannot specify buffer size for response output stream when it has already been created");
         }
-        return wrappedOut;
+        return java.util.Objects.requireNonNull(wrappedOut);
     }
 
     @Override

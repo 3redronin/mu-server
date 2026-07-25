@@ -2,6 +2,7 @@ package io.muserver.rest;
 
 import jakarta.ws.rs.MatrixParam;
 import jakarta.ws.rs.NotFoundException;
+import org.jspecify.annotations.Nullable;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.ext.ExceptionMapper;
@@ -26,10 +27,10 @@ import java.util.Objects;
  */
 public final class UriParameterConversionException extends NotFoundException {
     private final String parameterName;
-    private final String parameterValue;
+    private final @Nullable String parameterValue;
     private final Class<?> targetType;
 
-    UriParameterConversionException(String parameterName, String parameterValue, Class<?> targetType, Throwable cause) {
+    UriParameterConversionException(String parameterName, @Nullable String parameterValue, Class<?> targetType, Throwable cause) {
         super("Could not convert URI parameter \"" + parameterName + "\" with value \"" + parameterValue + "\" to " + targetType.getTypeName(), cause);
         this.parameterName = Objects.requireNonNull(parameterName, "parameterName");
         this.parameterValue = parameterValue;
@@ -46,7 +47,7 @@ public final class UriParameterConversionException extends NotFoundException {
     /**
      * @return the supplied parameter value, or {@code null} if no value was supplied
      */
-    public String getParameterValue() {
+    public @Nullable String getParameterValue() {
         return parameterValue;
     }
 

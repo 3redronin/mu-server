@@ -120,7 +120,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     public <P> RestHandlerBuilder addCustomParamConverter(Class<P> paramClass, ParamConverter<P> converter) {
         return addCustomParamConverterProvider(new ParamConverterProvider() {
             @Override
-            public <T> ParamConverter<T> getConverter(Class<T> rawType, Type genericType, Annotation[] annotations) {
+            public <T> @Nullable ParamConverter<T> getConverter(Class<T> rawType, Type genericType, Annotation[] annotations) {
                 if (!rawType.equals(paramClass)) {
                     return null;
                 }

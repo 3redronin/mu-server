@@ -70,7 +70,7 @@ public abstract class BaseWebSocket implements MuWebSocket {
         // Adapter code for old-style implementations that rely on non-blocking behaviour.
         // This calls the old-style methods in a new thread and blocks until the done callback is invoked.
         // Overriders of this base class should just override this method and block until the data is finished with.
-        var result = new CompletableFuture<@Nullable Void>();
+        CompletableFuture<@Nullable Void> result = new CompletableFuture<>();
         CompletableFuture.runAsync(() -> {
             try {
                 onText(message, true, error -> {
@@ -97,7 +97,7 @@ public abstract class BaseWebSocket implements MuWebSocket {
     public void onTextFragment(ByteBuffer textFragment, boolean isLast) throws Exception {
         bufferIt(textFragment);
         if (isLast) {
-            onText(fragmentBuffer.decodeUTF8());
+            onText(java.util.Objects.requireNonNull(fragmentBuffer).decodeUTF8());
             fragmentBuffer = null;
         }
     }
@@ -113,7 +113,7 @@ public abstract class BaseWebSocket implements MuWebSocket {
         bufferIt(buffer);
 
         if (isLast) {
-            var full = fragmentBuffer.toByteBuffer();
+            var full = java.util.Objects.requireNonNull(fragmentBuffer).toByteBuffer();
             fragmentBuffer = null;
             onBinary(full);
         }
@@ -158,7 +158,7 @@ public abstract class BaseWebSocket implements MuWebSocket {
         // Adapter code for old-style implementations that rely on non-blocking behaviour.
         // This calls the old-style methods in a new thread and blocks until the done callback is invoked.
         // Overriders of this base class should just override this method and block until the data is finished with.
-        var result = new CompletableFuture<@Nullable Void>();
+        CompletableFuture<@Nullable Void> result = new CompletableFuture<>();
         CompletableFuture.runAsync(() -> {
             try {
                 onBinary(buffer, true, error -> {
@@ -175,7 +175,7 @@ public abstract class BaseWebSocket implements MuWebSocket {
         blockUntilDone(result);
     }
 
-    private static void blockUntilDone(CompletableFuture<Void> result) throws Exception {
+    private static void blockUntilDone(CompletableFuture<@Nullable Void> result) throws Exception {
         try {
             result.get();
         } catch (ExecutionException e) {

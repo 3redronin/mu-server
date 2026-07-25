@@ -11,6 +11,7 @@ import jakarta.ws.rs.core.MultivaluedHashMap;
 import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.ext.MessageBodyReader;
 import jakarta.ws.rs.ext.MessageBodyWriter;
+import org.jspecify.annotations.Nullable;
 
 import java.io.*;
 import java.lang.annotation.Annotation;
@@ -155,7 +156,7 @@ class StringEntityProviders {
         }
 
         @Override
-        public T readFrom(Class<T> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
+        public @Nullable T readFrom(Class<T> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
             String s = new String(Mutils.toByteArray(entityStream, 512), EntityProviders.charsetFor(mediaType));
             if (Mutils.nullOrEmpty(s)) {
                 return null;

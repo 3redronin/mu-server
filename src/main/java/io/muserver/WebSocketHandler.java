@@ -28,7 +28,8 @@ public class WebSocketHandler implements MuHandler {
         if (request.method() != Method.GET) {
             return false;
         }
-        if (Mutils.hasValue(path) && !path.equals(request.relativePath())) {
+        String configuredPath = path;
+        if (configuredPath != null && !configuredPath.isEmpty() && !configuredPath.equals(request.relativePath())) {
             return false;
         }
         if (!request.headers().contains(HeaderNames.UPGRADE, HeaderValues.WEBSOCKET, true)) {

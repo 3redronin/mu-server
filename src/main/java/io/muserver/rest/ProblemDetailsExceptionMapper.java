@@ -6,6 +6,7 @@ import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.ExceptionMapper;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -129,8 +130,8 @@ public class ProblemDetailsExceptionMapper <E extends Throwable> implements Exce
         }
     }
 
-    private static Response toResponse(int status, String title, String detail, URI type, URI instance, Map<String, Object> extensionMembers) {
-        Map<String, Object> values = new LinkedHashMap<>();
+    private static Response toResponse(int status, String title, @Nullable String detail, @Nullable URI type, @Nullable URI instance, @Nullable Map<String, @Nullable Object> extensionMembers) {
+        Map<String, @Nullable Object> values = new LinkedHashMap<>();
         if (type != null) {
             values.put("type", type);
         }

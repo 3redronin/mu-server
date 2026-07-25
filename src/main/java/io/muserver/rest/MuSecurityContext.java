@@ -1,17 +1,18 @@
 package io.muserver.rest;
 
 import jakarta.ws.rs.core.SecurityContext;
+import org.jspecify.annotations.Nullable;
 
 import java.security.Principal;
 
 class MuSecurityContext implements SecurityContext {
 
-    private final Principal principal;
+    private final @Nullable Principal principal;
     private final Authorizer authorizer;
     private final boolean isHttps;
-    private final String authenticationScheme;
+    private final @Nullable String authenticationScheme;
 
-    MuSecurityContext(Principal principal, Authorizer authorizer, boolean isHttps, String authenticationScheme) {
+    MuSecurityContext(@Nullable Principal principal, Authorizer authorizer, boolean isHttps, @Nullable String authenticationScheme) {
         this.principal = principal;
         this.authorizer = authorizer;
         this.isHttps = isHttps;
@@ -19,13 +20,13 @@ class MuSecurityContext implements SecurityContext {
     }
 
     @Override
-    public Principal getUserPrincipal() {
+    public @Nullable Principal getUserPrincipal() {
         return principal;
     }
 
     @Override
     public boolean isUserInRole(String role) {
-        return authorizer.isInRole(principal, role);
+        return principal != null && authorizer.isInRole(principal, role);
     }
 
     @Override
@@ -34,7 +35,7 @@ class MuSecurityContext implements SecurityContext {
     }
 
     @Override
-    public String getAuthenticationScheme() {
+    public @Nullable String getAuthenticationScheme() {
         return authenticationScheme;
     }
 
