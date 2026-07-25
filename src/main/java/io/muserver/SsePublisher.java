@@ -153,6 +153,10 @@ class SsePublisherImpl implements SsePublisher {
         try {
             ByteBuffer buf = Mutils.toByteBuffer(text);
             asyncHandle.write(buf).get();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            close();
+            throw new IOException("Error while publishing SSE message", e);
         } catch (Throwable e) {
             close();
             throw new IOException("Error while publishing SSE message", e);

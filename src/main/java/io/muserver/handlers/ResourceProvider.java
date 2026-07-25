@@ -382,7 +382,7 @@ class ClasspathResourceProvider implements ResourceProvider {
                     while (soFar < maxLen && (read = requiredInputStream().read(buffer)) > -1) {
                         soFar += read;
                         if (soFar > maxLen) {
-                            read -= soFar - maxLen;
+                            read -= (int) (soFar - maxLen);
                         }
                         if (read > 0) {
                             out.write(buffer, 0, read);

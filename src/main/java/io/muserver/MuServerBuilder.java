@@ -28,6 +28,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.*;
@@ -526,10 +527,7 @@ public class MuServerBuilder {
      * @return The current value of this property
      */
     public @Nullable HttpsConfigBuilder httpsConfigBuilder() {
-        if (sslContextBuilder != null && !(sslContextBuilder instanceof HttpsConfigBuilder)) {
-            throw new IllegalStateException("Please switch to using HttpsConfigBuilder to set HTTPS config");
-        }
-        return (HttpsConfigBuilder) sslContextBuilder;
+        return sslContextBuilder;
     }
 
     /**
@@ -693,6 +691,10 @@ public class MuServerBuilder {
 
                 return !hasInFlightRequests;
 
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                log.info("Error while shutting down. Will ignore. Error was: {}", e.getMessage());
+                return false;
             } catch (Exception e) {
                 log.info("Error while shutting down. Will ignore. Error was: {}", e.getMessage());
                 return false;
@@ -736,25 +738,35 @@ public class MuServerBuilder {
             }
             return server;
 
+        } catch (InterruptedException ex) {
+            shutDownAfterStartupFailure(shutdown);
+            Thread.currentThread().interrupt();
+            throw new MuException("Error while starting server", ex);
         } catch (Exception ex) {
-            shutdown.apply(Duration.ofMillis(0));
+            shutDownAfterStartupFailure(shutdown);
             throw new MuException("Error while starting server", ex);
         }
 
     }
 
-private  boolean gracefulWait(Duration gracefulDuration, MuStatsImpl stats) throws InterruptedException {
-    long endTime = System.currentTimeMillis() + gracefulDuration.toMillis();
-    while (!stats.activeRequests().isEmpty() && System.currentTimeMillis() < endTime) {
-        Thread.sleep(100);
+    @SuppressWarnings("ReturnValueIgnored")
+    private static void shutDownAfterStartupFailure(Function<Duration, Boolean> shutdown) {
+        // There is no caller to observe the clean-shutdown result because server startup has already failed.
+        shutdown.apply(Duration.ofMillis(0));
     }
-    return !stats.activeRequests().isEmpty();
-}
+
+    private boolean gracefulWait(Duration gracefulDuration, MuStatsImpl stats) throws InterruptedException {
+        long endTime = System.currentTimeMillis() + gracefulDuration.toMillis();
+        while (!stats.activeRequests().isEmpty() && System.currentTimeMillis() < endTime) {
+            Thread.sleep(100);
+        }
+        return !stats.activeRequests().isEmpty();
+    }
 
     private static URI getUriFromChannel(Channel httpChannel, String protocol, @Nullable String host) {
         host = host == null ? "localhost" : host;
         InetSocketAddress a = (InetSocketAddress) httpChannel.localAddress();
-        return URI.create(protocol + "://" + host.toLowerCase() + ":" + a.getPort());
+        return URI.create(protocol + "://" + host.toLowerCase(Locale.ROOT) + ":" + a.getPort());
     }
 
     private static Channel createChannel(NioEventLoopGroup bossGroup, NioEventLoopGroup workerGroup,

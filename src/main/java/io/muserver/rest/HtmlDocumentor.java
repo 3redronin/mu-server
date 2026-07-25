@@ -11,6 +11,7 @@ import java.net.URI;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import static io.muserver.Mutils.urlEncode;
@@ -108,7 +109,7 @@ class HtmlDocumentor {
                     if (operationTags(operation).contains(tag.name())) {
 
                         El subNavLi = new El("li").open();
-                        new El("a").open(singletonMap("href", "#" + Mutils.htmlEncode(operation.operationId()))).content(method.toUpperCase() + " " + url).close();
+                        new El("a").open(singletonMap("href", "#" + Mutils.htmlEncode(operation.operationId()))).content(method.toUpperCase(Locale.ROOT) + " " + url).close();
                         subNavLi.close();
 
                     }
@@ -144,7 +145,7 @@ class HtmlDocumentor {
                         operationAttributes.put("class", "operation");
                         El operationDiv = new El("div").open(operationAttributes);
 
-                        El h3 = new El("h3").open().content(method.toUpperCase() + " ");
+                        El h3 = new El("h3").open().content(method.toUpperCase(Locale.ROOT) + " ");
                         String urlWithContext = baseUri + url;
                         new El("a").open(Collections.singletonMap("href", urlWithContext)).content(url).close();
                         h3.close();
@@ -335,7 +336,7 @@ class HtmlDocumentor {
                         render("h4", "Curl");
                         String sampleUrl = urlWithContext.replace("{", "(").replace("}", ")")
                             + queryString;
-                        render("code", "curl -is -X " + method.toUpperCase() + curlHeaders + curlAccept +
+                        render("code", "curl -is -X " + method.toUpperCase(Locale.ROOT) + curlHeaders + curlAccept +
                             curlBody + " '" + requestUri.resolve(sampleUrl) + "'");
 
 

@@ -21,6 +21,7 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import org.jspecify.annotations.Nullable;
@@ -139,7 +140,7 @@ abstract class NettyResponseAdaptor implements MuResponse {
         if (curValue == null || curValue.isEmpty()) {
             return HeaderNames.ACCEPT_ENCODING;
         } else {
-            if (!curValue.toLowerCase().contains(HeaderNames.ACCEPT_ENCODING)) {
+            if (!curValue.toLowerCase(Locale.ROOT).contains(HeaderNames.ACCEPT_ENCODING)) {
                 return curValue + ", " + HeaderNames.ACCEPT_ENCODING;
             } else {
                 return curValue;

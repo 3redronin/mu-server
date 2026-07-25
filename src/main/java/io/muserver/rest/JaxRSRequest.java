@@ -339,7 +339,7 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
             throw new IllegalStateException("This method is only valid for @PreMatching filters");
         }
         Mutils.notNull("method", method);
-        String upper = method.toUpperCase();
+        String upper = method.toUpperCase(Locale.ROOT);
         this.httpMethod = Method.valueOf(upper).name();
     }
 
