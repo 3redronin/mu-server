@@ -26,6 +26,7 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
 
     private static @Nullable MuRuntimeDelegate singleton;
     private static @Nullable MuRuntimeDelegate initializing;
+    private static boolean registeredByEnsureSet;
 
     /**
      * Registers the mu RuntimeDelegate with jax-rs, if it was not already.
@@ -37,7 +38,10 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
         }
         if (singleton == null) {
             singleton = new MuRuntimeDelegate();
+        }
+        if (!registeredByEnsureSet) {
             RuntimeDelegate.setInstance(singleton);
+            registeredByEnsureSet = true;
         }
         return singleton;
     }
