@@ -12,7 +12,6 @@ import org.eclipse.jetty.websocket.api.Session;
 import org.eclipse.jetty.websocket.api.WebSocketAdapter;
 import org.eclipse.jetty.websocket.client.WebSocketClient;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.slf4j.Logger;
@@ -29,6 +28,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.*;
+import java.util.function.Consumer;
 
 import static io.muserver.MuServerBuilder.httpServer;
 import static io.muserver.WebSocketHandlerBuilder.webSocketHandler;
@@ -331,22 +331,27 @@ public class WebSocketsDeprecatedTest {
         MuWebSocketSession serverSession = sessionFuture.get(10, TimeUnit.SECONDS);
         clientSocket.cancel();
 
-        for (int i = 0; i < 100; i++) {
-            CompletableFuture<String> result = new CompletableFuture<>();
-            serverSession.sendText("This shouldn't work", error -> {
-                if (error == null) {
-                    result.complete("Success");
-                } else {
-                    result.completeExceptionally(error);
-                }
-            });
-            try {
-                result.get(10, TimeUnit.SECONDS);
-            } catch (ExecutionException e) {
-                return; // as expected
-            }
-        }
-        Assertions.fail("This should have failed");
+        assertEventually(() -> server.activeConnections(), empty());
+
+        asyncWriteFailure(done -> serverSession.sendText("This shouldn't work", done));
+        IOException repeatedFailure = asyncWriteFailure(done -> serverSession.sendText("Neither should this", done));
+        assertThat(repeatedFailure.getCause(), instanceOf(IOException.class));
+
+        IOException textFragmentFailure = asyncWriteFailure(
+            done -> serverSession.sendText("Text fragment", false, done));
+        assertThat(textFragmentFailure.getCause(), sameInstance(repeatedFailure.getCause()));
+
+        IOException binaryFragmentFailure = asyncWriteFailure(
+            done -> serverSession.sendBinary(Mutils.toByteBuffer("Binary fragment"), false, done));
+        assertThat(binaryFragmentFailure.getCause(), sameInstance(repeatedFailure.getCause()));
+    }
+
+    private static IOException asyncWriteFailure(Consumer<DoneCallback> send) throws Exception {
+        CompletableFuture<Throwable> result = new CompletableFuture<>();
+        send.accept(result::complete);
+        Throwable failure = result.get(10, TimeUnit.SECONDS);
+        assertThat(failure, instanceOf(IOException.class));
+        return (IOException) failure;
     }
 
     @Test
