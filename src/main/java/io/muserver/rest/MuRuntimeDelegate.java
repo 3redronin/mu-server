@@ -11,6 +11,7 @@ import jakarta.ws.rs.core.*;
 import jakarta.ws.rs.ext.RuntimeDelegate;
 import jakarta.ws.rs.sse.Sse;
 import jakarta.ws.rs.sse.SseBroadcaster;
+import org.jspecify.annotations.Nullable;
 
 import java.net.URI;
 import java.util.*;
@@ -23,7 +24,7 @@ import java.util.concurrent.CompletionStage;
  */
 public class MuRuntimeDelegate extends RuntimeDelegate {
 
-    private static MuRuntimeDelegate singleton;
+    private static @Nullable MuRuntimeDelegate singleton;
 
     /**
      * Registers the mu RuntimeDelegate with jax-rs, if it was not already.
@@ -139,17 +140,17 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
 
     @Override
     public SeBootstrap.Configuration.Builder createConfigurationBuilder() {
-        throw new NotImplementedException("MuServer does not support configuration");
+        return new MuSeBootstrap.ConfigurationBuilder();
     }
 
     @Override
     public CompletionStage<SeBootstrap.Instance> bootstrap(Application application, SeBootstrap.Configuration configuration) {
-        throw new NotImplementedException("MuServer does not support bootstraping");
+        return MuSeBootstrap.start(application, configuration);
     }
 
     @Override
     public CompletionStage<SeBootstrap.Instance> bootstrap(Class<? extends Application> clazz, SeBootstrap.Configuration configuration) {
-        throw new NotImplementedException("MuServer does not support bootstraping");
+        return MuSeBootstrap.start(clazz, configuration);
     }
 
     @Override

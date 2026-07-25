@@ -40,6 +40,52 @@ public class NewCookieHeaderDelegateTest {
     }
 
     @Test
+    public void allSameSiteValuesRoundTrip() {
+        for (NewCookie.SameSite sameSite : NewCookie.SameSite.values()) {
+            NewCookie cookie = new NewCookie.Builder("session")
+                .value("abc")
+                .sameSite(sameSite)
+                .build();
+
+            String serialized = delegate.toString(cookie);
+            NewCookie parsed = delegate.fromString(serialized);
+
+            assertThat(serialized, containsString("SameSite="));
+            assertThat(parsed.getSameSite(), is(sameSite));
+        }
+    }
+
+    @Test
+    public void sameSiteParsingIsCaseInsensitive() {
+        assertThat(delegate.fromString("session=abc; SameSite=sTrIcT").getSameSite(),
+            is(NewCookie.SameSite.STRICT));
+    }
+
+    @Test
+    public void lastDuplicateSameSiteAttributeWins() {
+        NewCookie parsed = delegate.fromString(
+            "session=abc; SameSite=Lax; SameSite=None");
+
+        assertThat(parsed.getSameSite(), is(NewCookie.SameSite.NONE));
+    }
+
+    @Test
+    public void invalidSameSiteValuesAreRejected() {
+        assertThrows(IllegalArgumentException.class,
+            () -> delegate.fromString("session=abc; SameSite=somewhere"));
+    }
+
+    @Test
+    public void cookieNamedSameSiteIsNotMistakenForAnAttribute() {
+        NewCookie parsed = delegate.fromString("SameSite=abc; Path=/");
+
+        assertThat(parsed.getName(), is("SameSite"));
+        assertThat(parsed.getValue(), is("abc"));
+        assertThat(parsed.getPath(), is("/"));
+        assertThat(parsed.getSameSite(), is(nullValue()));
+    }
+
+    @Test
     public void sessionCookieOmitsExpiryAttributes() {
         NewCookie cookie = new NewCookie.Builder("session")
             .value("abc")

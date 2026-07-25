@@ -12,6 +12,7 @@ import jakarta.ws.rs.Priorities;
 import jakarta.ws.rs.container.ContainerRequestFilter;
 import jakarta.ws.rs.container.ContainerResponseFilter;
 import jakarta.ws.rs.container.PreMatching;
+import jakarta.ws.rs.core.Application;
 import jakarta.ws.rs.ext.*;
 
 import java.io.InputStream;
@@ -263,6 +264,22 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     }
 
     /**
+     * Creates a handler builder from the singleton resources and supported server-side providers declared by a
+     * JAX-RS {@link Application}.
+     * <p>Mu Server supports resource instances returned by {@link Application#getSingletons()}, but not resource
+     * classes returned by {@link Application#getClasses()} because those have a per-request lifecycle by default.
+     * Singleton resources must therefore be safe to use concurrently. Provider classes are instantiated once using a
+     * public no-argument constructor. Application properties, features, dynamic features, context resolvers, automatic
+     * discovery, and {@link jakarta.ws.rs.ApplicationPath} mounting are not supported.</p>
+     *
+     * @param application The application configuration to adapt.
+     * @return A builder containing the application's supported singleton components.
+     */
+    public static RestHandlerBuilder fromApplication(Application application) {
+        return ApplicationRegistrar.from(application);
+    }
+
+    /**
      * <p>Specifies the CORS config for the REST services. Defaults to {@link CORSConfigBuilder#disabled()}</p>
      * <p>Note: an alternative to adding CORS config to the Rest Handler Builder is to add a handler with
      * {@link CORSHandlerBuilder#corsHandler()} which can apply the headers to all handlers (not just JAX-RS endpoints).</p>
@@ -410,8 +427,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     }
 
     private static int priority(Object interceptor) {
-        Priority priority = interceptor.getClass().getAnnotation(Priority.class);
-        return priority == null ? Priorities.USER : priority.value();
+        return PrioritizedComponent.priorityOf(interceptor);
     }
 
     /**

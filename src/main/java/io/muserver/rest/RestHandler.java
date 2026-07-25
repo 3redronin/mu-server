@@ -269,6 +269,7 @@ public class RestHandler implements MuHandler {
                             System.arraycopy(jaxRSResponse.getAnnotations(), 0, writerAnnontations, annotations.length, jaxRSResponse.getAnnotations().length);
                         }
                     }
+                    jaxRSResponse.setAnnotations(writerAnnontations);
 
                     if (obj.entity != null) {
                         MediaType responseMediaType = MediaTypeDeterminer.determine(obj, produces, directlyProduces, entityProviders.writers, acceptHeaders, writerAnnontations);
@@ -282,6 +283,7 @@ public class RestHandler implements MuHandler {
                         jaxRSResponse.executeInterceptors(writerInterceptors); // run the interceptors
                     }
                     boolean entityStreamReplaced = jaxRSResponse.getOutputStream() != originalEntityStream;
+                    writerAnnontations = jaxRSResponse.getAnnotations();
                     Object entity = jaxRSResponse.getEntity();
                     if (entity instanceof Exception) {
                         throw (Exception) entity;
