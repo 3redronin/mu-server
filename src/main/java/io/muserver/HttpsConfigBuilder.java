@@ -93,7 +93,7 @@ public class HttpsConfigBuilder {
      * @param sslContext an SSL context
      * @return This builder
      */
-    HttpsConfigBuilder withSSLContext(SSLContext sslContext) {
+    public HttpsConfigBuilder withSSLContext(SSLContext sslContext) {
         keyManagerFactory = null;
         this.sslContext = sslContext;
         return this;
