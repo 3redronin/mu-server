@@ -15,12 +15,7 @@ import static java.util.Collections.emptyList;
 import static java.util.Collections.emptyMap;
 
 class LinkHeaderDelegate implements RuntimeDelegate.HeaderDelegate<Link> {
-    private static final RuntimeDelegate.HeaderDelegate<Link> HEADER_DELEGATE;
-    static {
-        MuRuntimeDelegate.ensureSet();
-        HEADER_DELEGATE =
-            RuntimeDelegate.getInstance().createHeaderDelegate(Link.class);
-    }
+    private static final RuntimeDelegate.HeaderDelegate<Link> HEADER_DELEGATE = new LinkHeaderDelegate();
 
     @Override
     public Link fromString(String value) {

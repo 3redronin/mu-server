@@ -381,7 +381,9 @@ Will not implement. Configuration should be handled by the user.
 - [ ] TLS client authentication through `SeBootstrap` is not supported.
 
 Mu Server does not advertise its `RuntimeDelegate` globally merely by being present on an application's classpath.
-Call `MuRuntimeDelegate.ensureSet()` once before the first `SeBootstrap` call to select Mu explicitly.
+Call `MuRuntimeDelegate.ensureSet()` once before the first `SeBootstrap` call to select Mu explicitly. When no
+`RuntimeDelegate` service provider takes precedence, the JVM system property can instead be used:
+`-Djakarta.ws.rs.ext.RuntimeDelegate=io.muserver.rest.MuRuntimeDelegate`.
 
 ## 12 Runtime Delegate
 
