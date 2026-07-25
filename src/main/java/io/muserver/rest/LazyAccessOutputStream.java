@@ -42,6 +42,12 @@ class LazyAccessOutputStream extends OutputStream {
         writesReleased = true;
     }
 
+    void deferUncommittedWrites() {
+        if (!liveOutputAccessed) {
+            writesReleased = false;
+        }
+    }
+
     void discardUncommittedWrites() {
         if (!liveOutputAccessed) {
             deferredBytes.reset();
@@ -110,9 +116,6 @@ class LazyAccessOutputStream extends OutputStream {
 
     @Override
     public void close() throws IOException {
-        if (writesReleased && hasDeferredBytes()) {
-            liveOutputStream();
-        }
         if (os != null) {
             os.close();
             os = null;

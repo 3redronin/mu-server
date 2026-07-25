@@ -301,7 +301,13 @@ public class RestHandler implements MuHandler {
                     if (entity == null) {
                         OutputStream responseEntityStream = jaxRSResponse.getOutputStream();
                         if (entityStreamReplaced) {
-                            responseEntityStream.close();
+                            out.deferUncommittedWrites();
+                            try {
+                                responseEntityStream.close();
+                            } catch (Exception closeFailure) {
+                                out.discardUncommittedWrites();
+                                throw closeFailure;
+                            }
                         }
                         if (out.hasWrittenBytes()) {
                             out.finish();
@@ -340,13 +346,18 @@ public class RestHandler implements MuHandler {
                                 out.discardUncommittedWrites();
                             }
                             if (entityStreamReplaced) {
+                                out.deferUncommittedWrites();
                                 try {
                                     responseEntityStream.close();
                                 } catch (Exception closeFailure) {
                                     if (writeFailure == null) {
+                                        out.discardUncommittedWrites();
                                         throw closeFailure;
                                     }
                                     writeFailure.addSuppressed(closeFailure);
+                                }
+                                if (writeFailure == null) {
+                                    out.finish();
                                 }
                             }
                             if (writeFailure != null) {

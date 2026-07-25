@@ -640,6 +640,71 @@ public class FilterTest {
     }
 
     @Test
+    public void responseFiltersDiscardBufferedEntityOutputWhenReplacementCloseFails() throws IOException {
+        @Path("failing-replacement-close")
+        class Resource {
+            @GET
+            @Produces("text/plain")
+            public String get() {
+                return "This response must not be committed";
+            }
+        }
+
+        AtomicBoolean firstResponse = new AtomicBoolean(true);
+        server = httpsServerForTest()
+            .addHandler(restHandler(new Resource())
+                .addResponseFilter((requestContext, responseContext) -> {
+                    if (firstResponse.getAndSet(false)) {
+                        responseContext.setEntityStream(new BufferedOutputStream(responseContext.getEntityStream()) {
+                            @Override
+                            public void close() throws IOException {
+                                flush();
+                                throw new IOException("Deliberate replacement close failure");
+                            }
+                        });
+                    }
+                }))
+            .start();
+
+        try (Response response = call(request(server.uri().resolve("/failing-replacement-close")))) {
+            assertThat(response.code(), is(500));
+        }
+    }
+
+    @Test
+    public void responseFiltersDiscardBufferedEntitylessOutputWhenReplacementCloseFails() throws IOException {
+        @Path("failing-entityless-replacement-close")
+        class Resource {
+            @GET
+            public jakarta.ws.rs.core.Response get() {
+                return jakarta.ws.rs.core.Response.ok().build();
+            }
+        }
+
+        AtomicBoolean firstResponse = new AtomicBoolean(true);
+        server = httpsServerForTest()
+            .addHandler(restHandler(new Resource())
+                .addResponseFilter((requestContext, responseContext) -> {
+                    if (firstResponse.getAndSet(false)) {
+                        BufferedOutputStream replacement = new BufferedOutputStream(responseContext.getEntityStream()) {
+                            @Override
+                            public void close() throws IOException {
+                                flush();
+                                throw new IOException("Deliberate replacement close failure");
+                            }
+                        };
+                        responseContext.setEntityStream(replacement);
+                        replacement.write("This response must not be committed".getBytes("UTF-8"));
+                    }
+                }))
+            .start();
+
+        try (Response response = call(request(server.uri().resolve("/failing-entityless-replacement-close")))) {
+            assertThat(response.code(), is(500));
+        }
+    }
+
+    @Test
     public void responseFiltersCanWriteLargeBodiesWithoutAnEntity() throws IOException {
         byte[] filterBody = new byte[LazyAccessOutputStream.MAX_DEFERRED_BYTES * 2 + 1];
         java.util.Arrays.fill(filterBody, (byte) 'x');

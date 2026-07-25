@@ -42,6 +42,23 @@ public class LazyAccessOutputStreamTest {
         assertThat(actual.size(), is(0));
     }
 
+    @Test
+    public void closingDoesNotCommitDeferredBytesBeforeFinish() throws Exception {
+        ByteArrayOutputStream actual = new ByteArrayOutputStream();
+        AtomicInteger outputStreamAccesses = new AtomicInteger();
+        LazyAccessOutputStream stream = new LazyAccessOutputStream(response(actual, outputStreamAccesses), () -> { });
+
+        stream.releaseWrites();
+        stream.deferUncommittedWrites();
+        stream.write(new byte[10]);
+        stream.close();
+
+        assertThat(outputStreamAccesses.get(), is(0));
+        stream.finish();
+        assertThat(outputStreamAccesses.get(), is(1));
+        assertThat(actual.size(), is(10));
+    }
+
     private static MuResponse response(ByteArrayOutputStream output, AtomicInteger outputStreamAccesses) {
         return (MuResponse) Proxy.newProxyInstance(
             MuResponse.class.getClassLoader(),
