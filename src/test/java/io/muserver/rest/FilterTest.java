@@ -7,6 +7,7 @@ import jakarta.annotation.Priority;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.container.*;
 import jakarta.ws.rs.core.*;
+import jakarta.ws.rs.ext.MessageBodyWriter;
 import okhttp3.MediaType;
 import okhttp3.RequestBody;
 import okhttp3.Response;
@@ -15,11 +16,15 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.io.BufferedOutputStream;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.FilterOutputStream;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.lang.annotation.Annotation;
+import java.lang.reflect.Type;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -28,6 +33,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
+import java.util.zip.GZIPInputStream;
+import java.util.zip.GZIPOutputStream;
 
 import static io.muserver.ContextHandlerBuilder.context;
 import static io.muserver.rest.MuRuntimeDelegate.MU_REQUEST_PROPERTY;
@@ -310,6 +317,55 @@ public class FilterTest {
         }
     }
 
+    @Test
+    public void requestFiltersCanGunzipTheEntityStreamAndRemoveStaleRepresentationHeaders() throws IOException {
+        String originalText = String.join("", Collections.nCopies(20, "A request body that compresses well. "));
+        byte[] originalBytes = originalText.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        ByteArrayOutputStream compressedBytes = new ByteArrayOutputStream();
+        try (GZIPOutputStream gzip = new GZIPOutputStream(compressedBytes)) {
+            gzip.write(originalBytes);
+        }
+        byte[] compressed = compressedBytes.toByteArray();
+        assertThat(compressed.length, is(lessThan(originalBytes.length)));
+
+        @Path("/gunzip")
+        class Resource {
+            @POST
+            @Produces("text/plain")
+            public String echo(String body) {
+                return body;
+            }
+        }
+
+        AtomicReference<String> encodedLength = new AtomicReference<>();
+        AtomicReference<String> contentEncodingAfterDecoding = new AtomicReference<>();
+        AtomicReference<String> contentLengthAfterDecoding = new AtomicReference<>();
+        AtomicReference<String> contentTypeAfterDecoding = new AtomicReference<>();
+        server = httpsServerForTest()
+            .addHandler(restHandler(new Resource())
+                .addRequestFilter(requestContext -> {
+                    encodedLength.set(requestContext.getHeaderString(HttpHeaders.CONTENT_LENGTH));
+                    requestContext.setEntityStream(new GZIPInputStream(requestContext.getEntityStream()));
+                    requestContext.getHeaders().remove(HttpHeaders.CONTENT_ENCODING);
+                    requestContext.getHeaders().remove(HttpHeaders.CONTENT_LENGTH);
+                    contentEncodingAfterDecoding.set(requestContext.getHeaderString(HttpHeaders.CONTENT_ENCODING));
+                    contentLengthAfterDecoding.set(requestContext.getHeaderString(HttpHeaders.CONTENT_LENGTH));
+                    contentTypeAfterDecoding.set(requestContext.getHeaderString(HttpHeaders.CONTENT_TYPE));
+                }))
+            .start();
+
+        try (Response response = call(request(server.uri().resolve("/gunzip"))
+            .header(HttpHeaders.CONTENT_ENCODING, "gzip")
+            .post(RequestBody.create(compressed, MediaType.parse("text/plain;charset=utf-8"))))) {
+            assertThat(response.code(), is(200));
+            assertThat(response.body().string(), is(originalText));
+        }
+        assertThat(encodedLength.get(), is(Integer.toString(compressed.length)));
+        assertThat(contentEncodingAfterDecoding.get(), is(nullValue()));
+        assertThat(contentLengthAfterDecoding.get(), is(nullValue()));
+        assertThat(contentTypeAfterDecoding.get(), is("text/plain;charset=utf-8"));
+    }
+
 
     @Test
     public void requestsCanBeAborted() throws IOException {
@@ -444,8 +500,170 @@ public class FilterTest {
             ).start();
         try (Response resp = call(request().url(server.uri().resolve("/something").toString()))) {
             assertThat(resp.code(), is(400));
+            assertThat(resp.header("My-Header"), is("WAS-LOWERCASE"));
             assertThat(resp.header("Content-Type"), is("text/plain;charset=utf-8"));
             assertThat(resp.body().string(), is("12"));
+        }
+    }
+
+    @Test
+    public void responseFiltersCanReplaceTheEntityOutputStream() throws IOException {
+        @Path("stream-filter")
+        class Resource {
+            @GET
+            public String get() {
+                return "body";
+            }
+        }
+
+        server = httpsServerForTest()
+            .addHandler(restHandler(new Resource())
+                .addResponseFilter((requestContext, responseContext) -> {
+                    OutputStream original = responseContext.getEntityStream();
+                    assertThat(original, is(notNullValue()));
+                    responseContext.setEntityStream(new BufferedOutputStream(new FilterOutputStream(original) {
+                        @Override
+                        public void write(byte[] bytes, int offset, int length) throws IOException {
+                            out.write("prefix-".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                            out.write(bytes, offset, length);
+                        }
+                    }));
+                    if (requestContext.getUriInfo().getQueryParameters().containsKey("known-length")) {
+                        responseContext.getHeaders().putSingle(HttpHeaders.CONTENT_LENGTH, "11");
+                    }
+                }))
+            .start();
+
+        try (Response response = call(request(server.uri().resolve("/stream-filter")))) {
+            assertThat(response.body().string(), is("prefix-body"));
+            assertThat(response.header("content-length"), is(nullValue()));
+        }
+        try (Response response = call(request(server.uri().resolve("/stream-filter?known-length")))) {
+            assertThat(response.body().string(), is("prefix-body"));
+            assertThat(response.header("content-length"), is("11"));
+        }
+        try (Response response = call(request(server.uri().resolve("/stream-filter")).head())) {
+            assertThat(response.header("content-length"), is(nullValue()));
+        }
+        try (Response response = call(request(server.uri().resolve("/stream-filter?known-length")).head())) {
+            assertThat(response.header("content-length"), is("11"));
+        }
+    }
+
+    @Test
+    public void responseFiltersCanGzipTheEntityStreamWhenServerCompressionIsDisabled() throws IOException {
+        @Path("manual-gzip")
+        class Resource {
+            @GET
+            @Produces("text/plain")
+            public String get() {
+                return "compressed by a response filter";
+            }
+        }
+
+        server = httpsServerForTest()
+            .withGzipEnabled(false)
+            .addHandler(restHandler(new Resource())
+                .addResponseFilter((requestContext, responseContext) -> {
+                    responseContext.setStatus(201);
+                    responseContext.getHeaders().putSingle(HttpHeaders.CONTENT_ENCODING, "gzip");
+                    responseContext.getHeaders().add(HttpHeaders.VARY, HttpHeaders.ACCEPT_ENCODING);
+                    responseContext.setEntityStream(new GZIPOutputStream(responseContext.getEntityStream()));
+                }))
+            .start();
+
+        assertThat(server.gzipEnabled(), is(false));
+        try (Response response = call(request(server.uri().resolve("/manual-gzip"))
+            .header(HttpHeaders.ACCEPT_ENCODING, "gzip"))) {
+            assertThat(response.code(), is(201));
+            assertThat(response.header(HttpHeaders.CONTENT_ENCODING), is("gzip"));
+            assertThat(response.header(HttpHeaders.CONTENT_LENGTH), is(nullValue()));
+            assertThat(response.header(HttpHeaders.VARY), is(HttpHeaders.ACCEPT_ENCODING));
+
+            byte[] compressed = response.body().bytes();
+            assertThat(compressed[0] & 0xff, is(0x1f));
+            assertThat(compressed[1] & 0xff, is(0x8b));
+
+            try (GZIPInputStream gzip = new GZIPInputStream(new ByteArrayInputStream(compressed));
+                 ByteArrayOutputStream uncompressed = new ByteArrayOutputStream()) {
+                Mutils.copy(gzip, uncompressed, 8192);
+                assertThat(uncompressed.toString("UTF-8"), is("compressed by a response filter"));
+            }
+        }
+    }
+
+    @Test
+    public void responseFiltersCloseReplacementEntityStreamsWhenWritingFails() throws IOException {
+        class Thing {}
+        @Path("failing-stream-filter")
+        class Resource {
+            @GET
+            @Produces("text/plain")
+            public Thing get() {
+                return new Thing();
+            }
+        }
+
+        AtomicBoolean replacementClosed = new AtomicBoolean();
+        server = httpsServerForTest()
+            .addHandler(restHandler(new Resource())
+                .addCustomWriter(new MessageBodyWriter<Thing>() {
+                    @Override
+                    public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations,
+                                               jakarta.ws.rs.core.MediaType mediaType) {
+                        return type == Thing.class;
+                    }
+
+                    @Override
+                    public void writeTo(Thing thing, Class<?> type, Type genericType, Annotation[] annotations,
+                                        jakarta.ws.rs.core.MediaType mediaType, MultivaluedMap<String, Object> httpHeaders,
+                                        OutputStream entityStream) throws IOException {
+                        throw new IOException("Deliberate writer failure");
+                    }
+                })
+                .addResponseFilter((requestContext, responseContext) -> {
+                    if (responseContext.getEntity() instanceof Thing) {
+                        responseContext.setEntityStream(new FilterOutputStream(responseContext.getEntityStream()) {
+                            @Override
+                            public void close() throws IOException {
+                                replacementClosed.set(true);
+                                super.close();
+                            }
+                        });
+                    }
+                }))
+            .start();
+
+        try (Response response = call(request(server.uri().resolve("/failing-stream-filter")))) {
+            assertThat(response.code(), is(500));
+        }
+        assertThat(replacementClosed.get(), is(true));
+    }
+
+    @Test
+    public void responseFiltersCanWriteLargeBodiesWithoutAnEntity() throws IOException {
+        byte[] filterBody = new byte[16385];
+        java.util.Arrays.fill(filterBody, (byte) 'x');
+        @Path("filter-body")
+        class Resource {
+            @GET
+            public jakarta.ws.rs.core.Response get() {
+                return jakarta.ws.rs.core.Response.ok().build();
+            }
+        }
+
+        server = httpsServerForTest()
+            .addHandler(restHandler(new Resource())
+                .addResponseFilter((requestContext, responseContext) -> {
+                    responseContext.setStatus(201);
+                    responseContext.getHeaders().putSingle(HttpHeaders.CONTENT_TYPE, "application/octet-stream");
+                    responseContext.getEntityStream().write(filterBody);
+                }))
+            .start();
+
+        try (Response response = call(request(server.uri().resolve("/filter-body")))) {
+            assertThat(response.code(), is(201));
+            assertThat(response.body().bytes(), is(filterBody));
         }
     }
 
