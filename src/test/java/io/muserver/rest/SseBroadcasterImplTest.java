@@ -1,6 +1,12 @@
 package io.muserver.rest;
 
+import io.muserver.AsyncSsePublisher;
+import io.muserver.MuRequest;
+import io.muserver.MuResponse;
 import io.muserver.MuServer;
+import io.muserver.ResponseCompleteListener;
+import io.muserver.ResponseInfo;
+import io.muserver.ResponseState;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
@@ -23,6 +29,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.lang.annotation.Annotation;
+import java.lang.reflect.Proxy;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
@@ -31,10 +38,15 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
+import static org.junit.Assert.assertThrows;
 import static scaffolding.ClientUtils.request;
 import static scaffolding.MuAssert.assertEventually;
 
@@ -338,6 +350,555 @@ public class SseBroadcasterImplTest {
         assertThat(errors, empty());
         assertThat(closedSinks, contains(sink));
         assertThat(broadcaster.connectedSinksCount(), is(0));
+    }
+
+    @Test
+    public void closeMarksTheBroadcasterClosedBeforeClosingSinks() {
+        SseBroadcasterImpl broadcaster = new SseBroadcasterImpl();
+        AtomicBoolean sinkClosed = new AtomicBoolean();
+        AtomicBoolean reentrantRegistrationRejected = new AtomicBoolean();
+        SseEventSink sink = sink(sinkClosed);
+
+        broadcaster.onClose(closedSink -> {
+            try {
+                broadcaster.register(sink(new AtomicBoolean()));
+            } catch (IllegalStateException expected) {
+                reentrantRegistrationRejected.set(true);
+            }
+        });
+        broadcaster.register(sink);
+
+        broadcaster.close();
+
+        assertThat(sinkClosed.get(), is(true));
+        assertThat(reentrantRegistrationRejected.get(), is(true));
+        assertThat(broadcaster.connectedSinksCount(), is(0));
+    }
+
+    @Test
+    public void closeDoesNotInvokeApplicationCallbacksWhileHoldingBroadcasterLock() {
+        SseBroadcasterImpl broadcaster = new SseBroadcasterImpl();
+        AtomicInteger crossThreadProbes = new AtomicInteger();
+        Runnable probeBroadcasterFromAnotherThread = () -> {
+            CompletableFuture<?> probe = CompletableFuture.runAsync(() ->
+                assertThrows(IllegalStateException.class,
+                    () -> broadcaster.register(sink(new AtomicBoolean()))));
+            try {
+                probe.get(1, TimeUnit.SECONDS);
+                crossThreadProbes.incrementAndGet();
+            } catch (Exception e) {
+                throw new AssertionError("Broadcaster lock was held while invoking a callback", e);
+            }
+        };
+        SseEventSink sink = new SseEventSink() {
+            @Override
+            public boolean isClosed() {
+                return false;
+            }
+
+            @Override
+            public CompletionStage<?> send(OutboundSseEvent event) {
+                return CompletableFuture.completedFuture(null);
+            }
+
+            @Override
+            public void close() {
+                probeBroadcasterFromAnotherThread.run();
+            }
+        };
+        broadcaster.onClose(closedSink -> probeBroadcasterFromAnotherThread.run());
+        broadcaster.register(sink);
+
+        broadcaster.close();
+
+        assertThat(crossThreadProbes.get(), is(2));
+    }
+
+    @Test
+    public void nonCascadingCloseLeavesSinksOpen() {
+        SseBroadcasterImpl broadcaster = new SseBroadcasterImpl();
+        AtomicBoolean sinkClosed = new AtomicBoolean();
+        AtomicBoolean closeListenerCalled = new AtomicBoolean();
+        broadcaster.onClose(closedSink -> closeListenerCalled.set(true));
+        broadcaster.register(sink(sinkClosed));
+
+        broadcaster.close(false);
+
+        assertThat(sinkClosed.get(), is(false));
+        assertThat(closeListenerCalled.get(), is(false));
+        assertThat(broadcaster.connectedSinksCount(), is(0));
+    }
+
+    @Test
+    public void registerAndCloseAreSerialized() throws Exception {
+        SseBroadcasterImpl broadcaster = new SseBroadcasterImpl();
+        CountDownLatch registrationStarted = new CountDownLatch(1);
+        CountDownLatch allowRegistrationToComplete = new CountDownLatch(1);
+        class BlockingSink extends JaxSseEventSinkImpl {
+            private BlockingSink() {
+                super(null, null, null);
+            }
+
+            @Override
+            Runnable addResponseCompleteHandler(ResponseCompleteListener listener) {
+                registrationStarted.countDown();
+                try {
+                    assertThat(allowRegistrationToComplete.await(1, TimeUnit.SECONDS), is(true));
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(e);
+                }
+                return () -> { };
+            }
+        }
+
+        CompletableFuture<?> registration = CompletableFuture.runAsync(() ->
+            broadcaster.register(new BlockingSink()));
+        assertThat(registrationStarted.await(1, TimeUnit.SECONDS), is(true));
+
+        CountDownLatch closeStarted = new CountDownLatch(1);
+        CompletableFuture<?> close = CompletableFuture.runAsync(() -> {
+            closeStarted.countDown();
+            broadcaster.close(false);
+        });
+        assertThat(closeStarted.await(1, TimeUnit.SECONDS), is(true));
+
+        try {
+            assertThrows(TimeoutException.class, () -> close.get(100, TimeUnit.MILLISECONDS));
+        } finally {
+            allowRegistrationToComplete.countDown();
+        }
+        registration.get(1, TimeUnit.SECONDS);
+        close.get(1, TimeUnit.SECONDS);
+
+        assertThat(broadcaster.connectedSinksCount(), is(0));
+        assertThrows(IllegalStateException.class,
+            () -> broadcaster.register(sink(new AtomicBoolean())));
+    }
+
+    @Test
+    public void everyOperationOtherThanCloseIsRejectedAfterClose() {
+        SseBroadcasterImpl broadcaster = new SseBroadcasterImpl();
+        broadcaster.close(false);
+
+        assertThrows(IllegalStateException.class,
+            () -> broadcaster.register(sink(new AtomicBoolean())));
+        assertThrows(IllegalStateException.class,
+            () -> broadcaster.broadcast(new JaxOutboundSseEventBuilder().data("event").build()));
+        assertThrows(IllegalStateException.class,
+            () -> broadcaster.onClose(closedSink -> { }));
+        assertThrows(IllegalStateException.class,
+            () -> broadcaster.onError((closedSink, error) -> { }));
+    }
+
+    @Test
+    public void broadcastingWithNoSinksCompletesImmediately() throws Exception {
+        SseBroadcasterImpl broadcaster = new SseBroadcasterImpl();
+
+        broadcaster.broadcast(new JaxOutboundSseEventBuilder().data("event").build())
+            .toCompletableFuture().get(1, TimeUnit.SECONDS);
+    }
+
+    @Test
+    public void concurrentCloseAndBroadcastNotifySinkCloseOnlyOnce() throws Exception {
+        SseBroadcasterImpl broadcaster = new SseBroadcasterImpl();
+        AtomicBoolean closed = new AtomicBoolean();
+        AtomicInteger notifications = new AtomicInteger();
+        CountDownLatch checkingClosed = new CountDownLatch(1);
+        CountDownLatch releaseClosedCheck = new CountDownLatch(1);
+        SseEventSink sink = new SseEventSink() {
+            @Override
+            public boolean isClosed() {
+                checkingClosed.countDown();
+                try {
+                    assertThat(releaseClosedCheck.await(1, TimeUnit.SECONDS), is(true));
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(e);
+                }
+                return closed.get();
+            }
+
+            @Override
+            public CompletionStage<?> send(OutboundSseEvent event) {
+                return CompletableFuture.completedFuture(null);
+            }
+
+            @Override
+            public void close() {
+                closed.set(true);
+            }
+        };
+        broadcaster.onClose(closedSink -> notifications.incrementAndGet());
+        broadcaster.register(sink);
+
+        CompletableFuture<?> broadcast = CompletableFuture.runAsync(() ->
+            broadcaster.broadcast(new JaxOutboundSseEventBuilder().data("event").build())
+                .toCompletableFuture().join());
+        assertThat(checkingClosed.await(1, TimeUnit.SECONDS), is(true));
+        broadcaster.close();
+        releaseClosedCheck.countDown();
+        broadcast.get(1, TimeUnit.SECONDS);
+
+        assertThat(notifications.get(), is(1));
+    }
+
+    @Test
+    public void nonCascadingCloseDoesNotSuppressInFlightClosedSinkNotification() throws Exception {
+        SseBroadcasterImpl broadcaster = new SseBroadcasterImpl();
+        AtomicBoolean closed = new AtomicBoolean();
+        AtomicInteger notifications = new AtomicInteger();
+        CountDownLatch checkingClosed = new CountDownLatch(1);
+        CountDownLatch releaseClosedCheck = new CountDownLatch(1);
+        SseEventSink sink = new SseEventSink() {
+            @Override
+            public boolean isClosed() {
+                checkingClosed.countDown();
+                try {
+                    assertThat(releaseClosedCheck.await(1, TimeUnit.SECONDS), is(true));
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(e);
+                }
+                return closed.get();
+            }
+
+            @Override
+            public CompletionStage<?> send(OutboundSseEvent event) {
+                return CompletableFuture.completedFuture(null);
+            }
+
+            @Override
+            public void close() {
+                closed.set(true);
+            }
+        };
+        broadcaster.onClose(closedSink -> notifications.incrementAndGet());
+        broadcaster.register(sink);
+
+        CompletableFuture<?> broadcast = CompletableFuture.runAsync(() ->
+            broadcaster.broadcast(new JaxOutboundSseEventBuilder().data("event").build())
+                .toCompletableFuture().join());
+        assertThat(checkingClosed.await(1, TimeUnit.SECONDS), is(true));
+        broadcaster.close(false);
+        closed.set(true);
+        releaseClosedCheck.countDown();
+        broadcast.get(1, TimeUnit.SECONDS);
+
+        assertThat(notifications.get(), is(1));
+    }
+
+    @Test
+    public void cascadingCloseDoesNotSuppressInFlightSendError() throws Exception {
+        SseBroadcasterImpl broadcaster = new SseBroadcasterImpl();
+        CompletableFuture<Void> sendResult = new CompletableFuture<>();
+        CountDownLatch closeStarted = new CountDownLatch(1);
+        CountDownLatch releaseClose = new CountDownLatch(1);
+        AtomicInteger closeCalls = new AtomicInteger();
+        AtomicInteger errorNotifications = new AtomicInteger();
+        SseEventSink sink = new SseEventSink() {
+            @Override
+            public boolean isClosed() {
+                return false;
+            }
+
+            @Override
+            public CompletionStage<?> send(OutboundSseEvent event) {
+                return sendResult;
+            }
+
+            @Override
+            public void close() {
+                if (closeCalls.incrementAndGet() == 1) {
+                    closeStarted.countDown();
+                    try {
+                        assertThat(releaseClose.await(1, TimeUnit.SECONDS), is(true));
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new IllegalStateException(e);
+                    }
+                }
+            }
+        };
+        broadcaster.onError((failedSink, error) -> errorNotifications.incrementAndGet());
+        broadcaster.register(sink);
+        broadcaster.broadcast(new JaxOutboundSseEventBuilder().data("event").build());
+
+        CompletableFuture<?> close = CompletableFuture.runAsync(broadcaster::close);
+        assertThat(closeStarted.await(1, TimeUnit.SECONDS), is(true));
+        sendResult.completeExceptionally(new IOException("send failed"));
+
+        assertThat(errorNotifications.get(), is(1));
+        releaseClose.countDown();
+        close.get(1, TimeUnit.SECONDS);
+    }
+
+    @Test
+    public void nonCascadingCloseSuppressesInFlightSendError() {
+        SseBroadcasterImpl broadcaster = new SseBroadcasterImpl();
+        CompletableFuture<Void> sendResult = new CompletableFuture<>();
+        AtomicInteger closeCalls = new AtomicInteger();
+        AtomicInteger errorNotifications = new AtomicInteger();
+        SseEventSink sink = new SseEventSink() {
+            @Override
+            public boolean isClosed() {
+                return false;
+            }
+
+            @Override
+            public CompletionStage<?> send(OutboundSseEvent event) {
+                return sendResult;
+            }
+
+            @Override
+            public void close() {
+                closeCalls.incrementAndGet();
+            }
+        };
+        broadcaster.onError((failedSink, error) -> errorNotifications.incrementAndGet());
+        broadcaster.register(sink);
+        broadcaster.broadcast(new JaxOutboundSseEventBuilder().data("event").build());
+
+        broadcaster.close(false);
+        sendResult.completeExceptionally(new IOException("send failed"));
+
+        assertThat(errorNotifications.get(), is(0));
+        assertThat(closeCalls.get(), is(0));
+    }
+
+    @Test
+    public void nonCascadingCloseSuppressesFailureFromAlreadyRemovedRegistration() throws Exception {
+        SseBroadcasterImpl broadcaster = new SseBroadcasterImpl();
+        CompletableFuture<Void> firstSend = new CompletableFuture<>();
+        AtomicInteger closedChecks = new AtomicInteger();
+        AtomicInteger closeCalls = new AtomicInteger();
+        AtomicInteger errorNotifications = new AtomicInteger();
+        SseEventSink sink = new SseEventSink() {
+            @Override
+            public boolean isClosed() {
+                return closedChecks.incrementAndGet() > 1;
+            }
+
+            @Override
+            public CompletionStage<?> send(OutboundSseEvent event) {
+                return firstSend;
+            }
+
+            @Override
+            public void close() {
+                closeCalls.incrementAndGet();
+            }
+        };
+        broadcaster.onError((failedSink, error) -> errorNotifications.incrementAndGet());
+        broadcaster.register(sink);
+
+        CompletionStage<?> pendingBroadcast =
+            broadcaster.broadcast(new JaxOutboundSseEventBuilder().data("first").build());
+        broadcaster.broadcast(new JaxOutboundSseEventBuilder().data("second").build())
+            .toCompletableFuture().get(1, TimeUnit.SECONDS);
+        broadcaster.close(false);
+        firstSend.completeExceptionally(new IOException("send failed"));
+        pendingBroadcast.toCompletableFuture().get(1, TimeUnit.SECONDS);
+
+        assertThat(errorNotifications.get(), is(0));
+        assertThat(closeCalls.get(), is(0));
+    }
+
+    @Test
+    public void throwingErrorListenerDoesNotStrandBroadcastOrSkipLaterListeners() throws Exception {
+        SseBroadcasterImpl broadcaster = new SseBroadcasterImpl();
+        CompletableFuture<Void> sendResult = new CompletableFuture<>();
+        AtomicInteger laterListenerCalls = new AtomicInteger();
+        broadcaster.onError((failedSink, error) -> {
+            throw new IllegalStateException("listener failed");
+        });
+        broadcaster.onError((failedSink, error) -> laterListenerCalls.incrementAndGet());
+        broadcaster.register(new SseEventSink() {
+            @Override
+            public boolean isClosed() {
+                return false;
+            }
+
+            @Override
+            public CompletionStage<?> send(OutboundSseEvent event) {
+                return sendResult;
+            }
+
+            @Override
+            public void close() {
+            }
+        });
+
+        CompletionStage<?> broadcast =
+            broadcaster.broadcast(new JaxOutboundSseEventBuilder().data("event").build());
+        sendResult.completeExceptionally(new IOException("send failed"));
+
+        broadcast.toCompletableFuture().get(1, TimeUnit.SECONDS);
+        assertThat(laterListenerCalls.get(), is(1));
+    }
+
+    @Test
+    public void throwingCloseListenerDoesNotStrandBroadcastOrSkipLaterListeners() throws Exception {
+        SseBroadcasterImpl broadcaster = new SseBroadcasterImpl();
+        AtomicBoolean closed = new AtomicBoolean(true);
+        AtomicInteger laterListenerCalls = new AtomicInteger();
+        broadcaster.onClose(closedSink -> {
+            throw new IllegalStateException("listener failed");
+        });
+        broadcaster.onClose(closedSink -> laterListenerCalls.incrementAndGet());
+        broadcaster.register(sink(closed));
+
+        broadcaster.broadcast(new JaxOutboundSseEventBuilder().data("event").build())
+            .toCompletableFuture().get(1, TimeUnit.SECONDS);
+
+        assertThat(laterListenerCalls.get(), is(1));
+    }
+
+    @Test
+    public void cascadingCloseReportsSinkCloseFailure() {
+        SseBroadcasterImpl broadcaster = new SseBroadcasterImpl();
+        IllegalStateException closeFailure = new IllegalStateException("close failed");
+        List<Throwable> errors = new CopyOnWriteArrayList<>();
+        broadcaster.onError((failedSink, error) -> errors.add(error));
+        broadcaster.register(new SseEventSink() {
+            @Override
+            public boolean isClosed() {
+                return false;
+            }
+
+            @Override
+            public CompletionStage<?> send(OutboundSseEvent event) {
+                return CompletableFuture.completedFuture(null);
+            }
+
+            @Override
+            public void close() {
+                throw closeFailure;
+            }
+        });
+
+        broadcaster.close();
+
+        assertThat(errors, contains(closeFailure));
+    }
+
+    @Test
+    public void responseCompleteHandlersCanBeRemovedFromJaxSink() {
+        AtomicReference<ResponseCompleteListener> upstreamHandler = new AtomicReference<>();
+        AsyncSsePublisher publisher = (AsyncSsePublisher) Proxy.newProxyInstance(
+            AsyncSsePublisher.class.getClassLoader(),
+            new Class<?>[]{AsyncSsePublisher.class},
+            (proxy, method, args) -> {
+                if (method.getName().equals("setResponseCompleteHandler")) {
+                    upstreamHandler.set((ResponseCompleteListener) args[0]);
+                    return null;
+                }
+                throw new UnsupportedOperationException(method.getName());
+            });
+        JaxSseEventSinkImpl sink = new JaxSseEventSinkImpl(publisher, null, null);
+        AtomicInteger handlerCalls = new AtomicInteger();
+        Runnable removeHandler = sink.addResponseCompleteHandler(info -> handlerCalls.incrementAndGet());
+
+        upstreamHandler.get().onComplete(null);
+        removeHandler.run();
+        removeHandler.run();
+        upstreamHandler.get().onComplete(null);
+
+        assertThat(handlerCalls.get(), is(1));
+    }
+
+    @Test
+    public void nonCascadingCloseRemovesResponseHandlerAndIgnoresRacingCompletion() {
+        SseBroadcasterImpl broadcaster = new SseBroadcasterImpl();
+        AtomicInteger closeCalls = new AtomicInteger();
+        AtomicInteger errorNotifications = new AtomicInteger();
+        AtomicBoolean responseCompleteHandlerRemoved = new AtomicBoolean();
+        class CapturingSink extends JaxSseEventSinkImpl {
+            private ResponseCompleteListener responseCompleteListener;
+
+            private CapturingSink() {
+                super(null, null, null);
+            }
+
+            @Override
+            Runnable addResponseCompleteHandler(ResponseCompleteListener listener) {
+                responseCompleteListener = listener;
+                return () -> responseCompleteHandlerRemoved.set(true);
+            }
+
+            @Override
+            public boolean isClosed() {
+                return false;
+            }
+
+            @Override
+            public CompletionStage<?> send(OutboundSseEvent event) {
+                return CompletableFuture.completedFuture(null);
+            }
+
+            @Override
+            public void close() {
+                closeCalls.incrementAndGet();
+            }
+        }
+        CapturingSink sink = new CapturingSink();
+        broadcaster.onError((failedSink, error) -> errorNotifications.incrementAndGet());
+        broadcaster.register(sink);
+        broadcaster.close(false);
+        assertThat(responseCompleteHandlerRemoved.get(), is(true));
+
+        MuResponse response = (MuResponse) Proxy.newProxyInstance(
+            MuResponse.class.getClassLoader(),
+            new Class<?>[]{MuResponse.class},
+            (proxy, method, args) -> {
+                if (method.getName().equals("responseState")) {
+                    return ResponseState.CLIENT_DISCONNECTED;
+                }
+                throw new UnsupportedOperationException(method.getName());
+            });
+        sink.responseCompleteListener.onComplete(new ResponseInfo() {
+            @Override
+            public long duration() {
+                return 0;
+            }
+
+            @Override
+            public boolean completedSuccessfully() {
+                return false;
+            }
+
+            @Override
+            public MuRequest request() {
+                return null;
+            }
+
+            @Override
+            public MuResponse response() {
+                return response;
+            }
+        });
+
+        assertThat(errorNotifications.get(), is(0));
+        assertThat(closeCalls.get(), is(0));
+    }
+
+    private static SseEventSink sink(AtomicBoolean closed) {
+        return new SseEventSink() {
+            @Override
+            public boolean isClosed() {
+                return closed.get();
+            }
+
+            @Override
+            public CompletionStage<?> send(OutboundSseEvent event) {
+                return CompletableFuture.completedFuture(null);
+            }
+
+            @Override
+            public void close() {
+                closed.set(true);
+            }
+        };
     }
 
     @After
