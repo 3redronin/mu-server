@@ -29,6 +29,7 @@ public class HttpsConfigBuilder {
     private char[] keystorePassword = new char[0];
     private char[] keyPassword = new char[0];
     private byte@Nullable[] keystoreBytes;
+    private @Nullable SSLContext sslContext;
     private @Nullable SSLCipherFilter sslCipherFilter;
     private @Nullable KeyManagerFactory keyManagerFactory;
     private @Nullable String defaultAlias;
@@ -88,11 +89,23 @@ public class HttpsConfigBuilder {
     }
 
     /**
+     * The pre-built SSL Context to use.
+     * @param sslContext an SSL context
+     * @return This builder
+     */
+    public HttpsConfigBuilder withSSLContext(SSLContext sslContext) {
+        keyManagerFactory = null;
+        this.sslContext = sslContext;
+        return this;
+    }
+
+    /**
      * Sets the keystore to use
      * @param is The input stream of the keystore
      * @param closeAfter Whether or not this method should close the stream
      */
     protected void setKeystoreBytes(InputStream is, boolean closeAfter) {
+        sslContext = null;
         keyManagerFactory = null;
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         try {
@@ -186,6 +199,7 @@ public class HttpsConfigBuilder {
      */
     public HttpsConfigBuilder withKeyManagerFactory(@Nullable KeyManagerFactory keyManagerFactory) {
         this.keystoreBytes = null;
+        this.sslContext = null;
         this.keyManagerFactory = keyManagerFactory;
         return this;
     }
@@ -239,6 +253,10 @@ public class HttpsConfigBuilder {
      */
     @Deprecated
     SSLContext build() {
+        SSLContext suppliedContext = this.sslContext;
+        if (suppliedContext != null) {
+            return suppliedContext;
+        }
         byte[] keystoreBytes = this.keystoreBytes;
         String keystoreTypeToUse = keystoreType;
         char[] keystorePasswordToUse = keystorePassword;

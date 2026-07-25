@@ -24,7 +24,6 @@ import java.util.concurrent.CompletionStage;
  */
 public class MuRuntimeDelegate extends RuntimeDelegate {
 
-
     private static final Map<Class<?>, HeaderDelegate<?>> headerDelegates = new HashMap<>();
     final static NewCookieHeaderDelegate newCookieHeaderDelegate = new NewCookieHeaderDelegate();
     final static EntityTagDelegate entityTagDelegate = new EntityTagDelegate();
@@ -144,17 +143,17 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
 
     @Override
     public SeBootstrap.Configuration.Builder createConfigurationBuilder() {
-        throw new NotImplementedException("MuServer does not support configuration");
+        return new MuSeBootstrap.ConfigurationBuilder();
     }
 
     @Override
     public CompletionStage<SeBootstrap.Instance> bootstrap(Application application, SeBootstrap.Configuration configuration) {
-        throw new NotImplementedException("MuServer does not support bootstraping");
+        return MuSeBootstrap.start(application, configuration);
     }
 
     @Override
     public CompletionStage<SeBootstrap.Instance> bootstrap(Class<? extends Application> clazz, SeBootstrap.Configuration configuration) {
-        throw new NotImplementedException("MuServer does not support bootstraping");
+        return MuSeBootstrap.start(clazz, configuration);
     }
 
     @Override

@@ -121,6 +121,42 @@ public class SubResourceLocatorTest {
     }
 
     @Test
+    public void annotatedFieldsAndPropertiesOnCreatorSuppliedSubResourcesAreNotInjected() throws Exception {
+        class ChildResource {
+            @MatrixParam("child-field")
+            private String childField;
+            private String childProperty = "creator-property";
+
+            @MatrixParam("child-property")
+            public void setChildProperty(String childProperty) {
+                this.childProperty = childProperty;
+            }
+
+            @POST
+            public String post() {
+                return String.valueOf(childField) + "," + childProperty;
+            }
+        }
+        @Path("root")
+        class RootResource {
+            @Path("child")
+            public ChildResource child() {
+                return new ChildResource();
+            }
+        }
+        server = httpsServerForTest()
+            .addHandler(restHandler(new RootResource()).build())
+            .start();
+
+        try (Response resp = call(request(server.uri().resolve(
+            "/root/child;child-field=request-field;child-property=request-property")).post(
+                okhttp3.RequestBody.create(new byte[0])))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), is("null,creator-property"));
+        }
+    }
+
+    @Test
     public void nestedSubResourcesWork() throws Exception {
         class WidgetResource {
             private final String id;
