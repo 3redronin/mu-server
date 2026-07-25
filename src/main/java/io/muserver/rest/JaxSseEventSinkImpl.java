@@ -1,6 +1,7 @@
 package io.muserver.rest;
 
 import io.muserver.AsyncSsePublisher;
+import io.muserver.Mutils;
 import io.muserver.MuResponse;
 import io.muserver.ResponseCompleteListener;
 import jakarta.ws.rs.ServerErrorException;
@@ -11,8 +12,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayOutputStream;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 
 import static io.muserver.rest.JaxRSResponse.muHeadersToJaxObj;
@@ -24,15 +27,29 @@ class JaxSseEventSinkImpl implements SseEventSink {
     private final AsyncSsePublisher ssePublisher;
     private final MuResponse response;
     private final EntityProviders entityProviders;
+    private final List<ResponseCompleteListener> responseCompleteListeners = new CopyOnWriteArrayList<>();
 
     public JaxSseEventSinkImpl(AsyncSsePublisher ssePublisher, MuResponse response, EntityProviders entityProviders) {
         this.ssePublisher = ssePublisher;
         this.response = response;
         this.entityProviders = entityProviders;
+        if (ssePublisher != null) {
+            ssePublisher.setResponseCompleteHandler(info -> {
+                for (ResponseCompleteListener listener : responseCompleteListeners) {
+                    try {
+                        listener.onComplete(info);
+                    } catch (Throwable e) {
+                        log.warn("Unhandled exception from SSE response completion listener", e);
+                    }
+                }
+            });
+        }
     }
 
-    void setResponseCompleteHandler(ResponseCompleteListener listener) {
-        ssePublisher.setResponseCompleteHandler(listener);
+    Runnable addResponseCompleteHandler(ResponseCompleteListener listener) {
+        Mutils.notNull("listener", listener);
+        responseCompleteListeners.add(listener);
+        return () -> responseCompleteListeners.remove(listener);
     }
 
     @Override
