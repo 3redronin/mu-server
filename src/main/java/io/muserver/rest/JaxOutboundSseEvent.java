@@ -36,7 +36,7 @@ class JaxOutboundSseEvent implements OutboundSseEvent {
 
     @Override
     public @Nullable Type getGenericType() {
-        return genericType == null ? null : genericType.getType();
+        return genericType == null ? type : genericType.getType();
     }
 
     @Override

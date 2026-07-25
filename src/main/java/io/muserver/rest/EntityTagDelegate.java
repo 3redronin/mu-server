@@ -1,5 +1,6 @@
 package io.muserver.rest;
 
+import io.muserver.Mutils;
 import jakarta.ws.rs.core.EntityTag;
 import jakarta.ws.rs.ext.RuntimeDelegate;
 
@@ -22,6 +23,7 @@ class EntityTagDelegate implements RuntimeDelegate.HeaderDelegate<EntityTag> {
 
     @Override
     public String toString(EntityTag value) {
+        Mutils.notNull("value", value);
         String quotedValue = quoted(value.getValue());
         return value.isWeak() ? "W/" + quotedValue : quotedValue;
     }

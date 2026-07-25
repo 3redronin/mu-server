@@ -264,7 +264,7 @@ class Http1Headers implements Headers {
     }
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equals(@Nullable Object o) {
         return entries.equals(o);
     }
 

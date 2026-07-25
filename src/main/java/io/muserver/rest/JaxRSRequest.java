@@ -29,7 +29,7 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
     private final JaxRsHttpHeadersAdapter jaxHeaders;
     private UriInfo uriInfo;
     private RequestMatcher.@Nullable MatchedMethod matchedMethod;
-    private SecurityContext securityContext;
+    private @Nullable SecurityContext securityContext;
     private Annotation[] annotations = JaxRSResponse.Builder.EMPTY_ANNOTATIONS;
     private @Nullable Class<?> type;
     private @Nullable Type genericType;
@@ -106,7 +106,7 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
     }
 
     @Override
-    public void setProperty(String name, Object object) {
+    public void setProperty(String name, @Nullable Object object) {
         if (object == null) {
             removeProperty(name);
         } else {
@@ -133,22 +133,22 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
     }
 
     @Override
-    public Class<?> getType() {
-        return Objects.requireNonNull(type, "The request entity type has not been set");
+    public @Nullable Class<?> getType() {
+        return type;
     }
 
     @Override
-    public void setType(Class<?> type) {
+    public void setType(@Nullable Class<?> type) {
         this.type = type;
     }
 
     @Override
-    public Type getGenericType() {
-        return Objects.requireNonNull(genericType, "The request entity generic type has not been set");
+    public @Nullable Type getGenericType() {
+        return genericType;
     }
 
     @Override
-    public void setGenericType(Type genericType) {
+    public void setGenericType(@Nullable Type genericType) {
         this.genericType = genericType;
     }
 
@@ -369,8 +369,8 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
         }
 
         // 2. Identify the Java type of the parameter whose value will be mapped from the entity body.
-        Class<?> type = getType();
-        Type genericType = getGenericType();
+        Class<?> type = Objects.requireNonNull(getType(), "The request entity type has not been set");
+        Type genericType = Objects.requireNonNull(getGenericType(), "The request entity generic type has not been set");
         Annotation[] annotations = getAnnotations();
 
         // 3 & 4: Select a reader that supports the media type of the request and isReadable
@@ -389,7 +389,7 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
 
     @Override
     public void setInputStream(InputStream is) {
-        setEntityStream(is);
+        setEntityStream(Objects.requireNonNull(is, "is"));
     }
 
     @Override
@@ -423,7 +423,7 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
     }
 
     @Override
-    public void setMediaType(MediaType mediaType) {
+    public void setMediaType(@Nullable MediaType mediaType) {
         if (mediaType == null) {
             jaxHeaders.getMutableRequestHeaders().remove("content-type");
         } else {
@@ -459,16 +459,16 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
     @Override
     public void setEntityStream(InputStream input) {
         ensureNotInResponseFilter("setEntityStream");
-        this.inputStream = input;
+        this.inputStream = Objects.requireNonNull(input, "input");
     }
 
     @Override
-    public SecurityContext getSecurityContext() {
+    public @Nullable SecurityContext getSecurityContext() {
         return securityContext;
     }
 
     @Override
-    public void setSecurityContext(SecurityContext context) {
+    public void setSecurityContext(@Nullable SecurityContext context) {
         ensureNotInResponseFilter("setSecurityContext");
         this.securityContext = context;
     }

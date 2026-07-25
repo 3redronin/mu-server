@@ -1,5 +1,6 @@
 package io.muserver.rest;
 
+import io.muserver.Mutils;
 import io.netty.handler.codec.http.cookie.ClientCookieEncoder;
 import io.netty.handler.codec.http.cookie.DefaultCookie;
 import io.netty.handler.codec.http.cookie.ServerCookieDecoder;
@@ -18,6 +19,7 @@ class CookieHeaderDelegate implements RuntimeDelegate.HeaderDelegate<Cookie> {
 
     @Override
     public Cookie fromString(String value) {
+        Mutils.notNull("value", value);
         Set<io.netty.handler.codec.http.cookie.Cookie> decoded = decoder.decode(value);
         io.netty.handler.codec.http.cookie.Cookie nv = decoded.iterator().next();
         return new Cookie(nv.name(), nv.value());
@@ -25,6 +27,7 @@ class CookieHeaderDelegate implements RuntimeDelegate.HeaderDelegate<Cookie> {
 
     @Override
     public String toString(Cookie cookie) {
+        Mutils.notNull("cookie", cookie);
         DefaultCookie nettyCookie = new DefaultCookie(cookie.getName(), cookie.getValue());
         nettyCookie.setPath(cookie.getPath());
         nettyCookie.setDomain(cookie.getDomain());

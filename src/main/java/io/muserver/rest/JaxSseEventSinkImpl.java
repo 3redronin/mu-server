@@ -11,6 +11,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayOutputStream;
+import java.lang.reflect.Type;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.TimeUnit;
@@ -42,6 +44,7 @@ class JaxSseEventSinkImpl implements SseEventSink {
 
     @Override
     public CompletionStage<?> send(OutboundSseEvent event) {
+        Objects.requireNonNull(event, "event");
         if (isClosed()) {
             throw new IllegalStateException("The SSE stream was already closed");
         }
@@ -55,11 +58,17 @@ class JaxSseEventSinkImpl implements SseEventSink {
             if (event.getComment() != null) {
                 stage = ssePublisher.sendComment(event.getComment());
             }
-            if (event.getData() != null) {
-                MessageBodyWriter messageBodyWriter = entityProviders.selectWriter(event.getType(), event.getGenericType(),
+            Object dataObject = event.getData();
+            if (dataObject != null) {
+                Class<?> dataType = Objects.requireNonNull(event.getType(), "An SSE event with data must have a raw type");
+                Type genericDataType = event.getGenericType();
+                if (genericDataType == null) {
+                    genericDataType = dataType;
+                }
+                MessageBodyWriter messageBodyWriter = entityProviders.selectWriter(dataType, genericDataType,
                     JaxRSResponse.Builder.EMPTY_ANNOTATIONS, event.getMediaType());
                 try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-                    messageBodyWriter.writeTo(event.getData(), event.getType(), event.getGenericType(), JaxRSResponse.Builder.EMPTY_ANNOTATIONS,
+                    messageBodyWriter.writeTo(dataObject, dataType, genericDataType, JaxRSResponse.Builder.EMPTY_ANNOTATIONS,
                         event.getMediaType(), muHeadersToJaxObj(response.headers()), out);
                     String data = new String(out.toByteArray(), UTF_8);
                     stage = ssePublisher.send(data, event.getName(), event.getId());

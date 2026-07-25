@@ -126,6 +126,7 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
     @Override
     @SuppressWarnings("unchecked")
     public <T> HeaderDelegate<T> createHeaderDelegate(Class<T> type) throws IllegalArgumentException {
+        Mutils.notNull("type", type);
         HeaderDelegate<T> headerDelegate = headerDelegates.get(type);
         if (headerDelegate != null) {
             return (HeaderDelegate<T>) headerDelegate;

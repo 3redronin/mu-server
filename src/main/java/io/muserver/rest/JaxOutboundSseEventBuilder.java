@@ -17,13 +17,13 @@ class JaxOutboundSseEventBuilder implements OutboundSseEvent.Builder {
     private @Nullable GenericType genericType;
 
     @Override
-    public OutboundSseEvent.Builder id(String id) {
+    public OutboundSseEvent.Builder id(@Nullable String id) {
         this.id = id;
         return this;
     }
 
     @Override
-    public OutboundSseEvent.Builder name(String name) {
+    public OutboundSseEvent.Builder name(@Nullable String name) {
         this.name = name;
         return this;
     }
@@ -42,7 +42,7 @@ class JaxOutboundSseEventBuilder implements OutboundSseEvent.Builder {
     }
 
     @Override
-    public OutboundSseEvent.Builder comment(String comment) {
+    public OutboundSseEvent.Builder comment(@Nullable String comment) {
         this.comment = comment;
         return this;
     }
@@ -52,6 +52,7 @@ class JaxOutboundSseEventBuilder implements OutboundSseEvent.Builder {
         if (type == null) throw new NullPointerException("type");
         if (data == null) throw new NullPointerException("data");
         this.type = type;
+        this.genericType = null;
         this.data = data;
         return this;
     }
@@ -60,6 +61,7 @@ class JaxOutboundSseEventBuilder implements OutboundSseEvent.Builder {
     public OutboundSseEvent.Builder data(GenericType type, Object data) {
         if (type == null) throw new NullPointerException("type");
         if (data == null) throw new NullPointerException("data");
+        this.type = type.getRawType();
         this.genericType = type;
         this.data = data;
         return this;
@@ -70,6 +72,7 @@ class JaxOutboundSseEventBuilder implements OutboundSseEvent.Builder {
         if (data == null) throw new NullPointerException("data");
         this.data = data;
         this.type = data.getClass();
+        this.genericType = null;
         return this;
     }
 

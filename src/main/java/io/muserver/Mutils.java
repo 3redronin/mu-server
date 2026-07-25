@@ -108,7 +108,7 @@ public class Mutils {
      * @param val The value to check
      * @return True if the string is 1 or more characters.
      */
-    public static boolean hasValue(String val) {
+    public static boolean hasValue(@Nullable String val) {
         return !nullOrEmpty(val);
     }
 

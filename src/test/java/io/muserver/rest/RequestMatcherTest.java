@@ -474,7 +474,8 @@ public class RequestMatcherTest {
                 return emptyList();
             }
         };
-        InputStream inputStream = requestHasEntity ? new ByteArrayInputStream("Hello".getBytes(StandardCharsets.US_ASCII)) : null;
+        InputStream inputStream = new ByteArrayInputStream(
+            requestHasEntity ? "Hello".getBytes(StandardCharsets.US_ASCII) : new byte[0]);
         JaxRSRequest rc = new JaxRSRequest(request, null, inputStream, request.uri().getPath(), null, emptyList(), null);
         return rm.findResourceMethod(rc, method, acceptHeaders, null);
     }

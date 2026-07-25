@@ -294,6 +294,53 @@ public class JaxRSResponseTest {
     }
 
     @Test
+    public void nullableBuilderArgumentsRemovePreviouslyConfiguredMetadata() {
+        Response response = new JaxRSResponse.Builder()
+            .cacheControl(cacheControl())
+            .cacheControl(null)
+            .contentLocation(URI.create("/content"))
+            .contentLocation(null)
+            .cookie(new NewCookie("name", "value"))
+            .cookie((NewCookie[]) null)
+            .expires(new Date())
+            .expires(null)
+            .header("custom", "value")
+            .header("custom", null)
+            .lastModified(new Date())
+            .lastModified(null)
+            .location(URI.create("/location"))
+            .location(null)
+            .tag("tag")
+            .tag((String) null)
+            .variants(new Variant(MediaType.TEXT_PLAIN_TYPE, (Locale) null, null))
+            .variants((java.util.List<Variant>) null)
+            .links(Link.fromUri("/link").rel("related").build())
+            .links((Link[]) null)
+            .build();
+
+        assertThat(response.getHeaders(), anEmptyMap());
+        assertThat(response.getCookies(), anEmptyMap());
+        assertThat(response.getLinks(), empty());
+    }
+
+    @Test
+    public void customStatusCodesStillHaveNonNullStatusInfo() {
+        JaxRSResponse response = (JaxRSResponse) Response.ok().build();
+        response.setStatus(299);
+
+        assertThat(response.getStatus(), is(299));
+        assertThat(response.getStatusInfo(), notNullValue());
+    }
+
+    @Test
+    public void responseWithoutEntityHasNoEntityTypeInformation() {
+        JaxRSResponse response = (JaxRSResponse) Response.noContent().build();
+
+        assertThat(response.getEntityClass(), nullValue());
+        assertThat(response.getEntityType(), nullValue());
+    }
+
+    @Test
     public void canBufferInputStreams() throws IOException {
         AtomicInteger closeCount = new AtomicInteger(0);
         try (InputStream inputStream = new ByteArrayInputStream("Hello world".getBytes(StandardCharsets.UTF_8)) {

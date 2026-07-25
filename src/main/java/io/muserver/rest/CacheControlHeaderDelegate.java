@@ -43,6 +43,7 @@ https://github.com/jersey/jersey/blob/12e5d8bdf22bcd2676a1032ed69473cf2bbc48c7/c
  */
 package io.muserver.rest;
 
+import io.muserver.Mutils;
 import io.muserver.ParameterizedHeader;
 import jakarta.ws.rs.core.CacheControl;
 import jakarta.ws.rs.ext.RuntimeDelegate;
@@ -58,6 +59,7 @@ class CacheControlHeaderDelegate implements RuntimeDelegate.HeaderDelegate<Cache
     private static final Pattern WHITESPACE = Pattern.compile("\\s");
     @Override
     public CacheControl fromString(String value) {
+        Mutils.notNull("value", value);
         ParameterizedHeader dir = ParameterizedHeader.fromString(value);
         CacheControl cc = new CacheControl();
         Map<String, String> pams = new HashMap<>(dir.parameters());
@@ -91,6 +93,7 @@ class CacheControlHeaderDelegate implements RuntimeDelegate.HeaderDelegate<Cache
 
     @Override
     public String toString(CacheControl value) {
+        Mutils.notNull("value", value);
         StringBuilder sb = new StringBuilder();
         if (value.isPrivate()) {
             appendQuotedWithSeparator(sb, "private", buildListValue(value.getPrivateFields()));

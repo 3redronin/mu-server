@@ -204,6 +204,20 @@ public class MuUriBuilderTest {
     }
 
     @Test
+    public void nullableUriComponentsAreRemoved() {
+        URI uri = MuUriBuilder.fromUri(u("https://user@example.org/path;matrix=value?query=value#fragment"))
+            .scheme(null)
+            .userInfo(null)
+            .host(null)
+            .replacePath(null)
+            .replaceQuery(null)
+            .fragment(null)
+            .build();
+
+        assertThat(uri.toString(), equalTo(""));
+    }
+
+    @Test
     public void pathsAreAppended() {
         URI uri = MuUriBuilder.fromUri(u("http://example.org/blah"))
             .path("ha/har")
@@ -321,6 +335,16 @@ public class MuUriBuilderTest {
         uriBuilder.matrixParam("color", "black", "solid", "1px");
         uriBuilder.replaceMatrixParam("color", "orange", "bright");
         assertThat(uriBuilder.build().toString(), equalTo("/hello;color=red/blah;color=orange;color=bright"));
+    }
+
+    @Test
+    public void replacingMatrixParamWithNullRemovesIt() {
+        URI uri = UriBuilder.fromPath("/hello")
+            .matrixParam("color", "red")
+            .replaceMatrixParam("color", (Object[]) null)
+            .build();
+
+        assertThat(uri.toString(), equalTo("/hello"));
     }
 
     @Test

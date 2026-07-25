@@ -133,7 +133,7 @@ final class MuSeBootstrap {
         }
 
         @Override
-        public SeBootstrap.Configuration.Builder property(String name, Object value) {
+        public SeBootstrap.Configuration.Builder property(String name, @Nullable Object value) {
             Objects.requireNonNull(name, "name");
             if (PROPERTY_TYPES.containsKey(name)) {
                 if (value == null) {
