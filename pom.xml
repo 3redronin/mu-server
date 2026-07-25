@@ -14,13 +14,13 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <error-prone.version>2.31.0</error-prone.version>
+        <error-prone.version>2.50.0</error-prone.version>
         <!-- Unused in mu4; retained so Netty version updates merge cleanly from master. -->
         <netty.version.4.1>4.1.135.Final</netty.version.4.1>
         <netty.version.4.2>4.2.14.Final</netty.version.4.2>
         <netty.version>${netty.version.4.1}</netty.version>
         <netty.codec.artifactId>netty-codec</netty.codec.artifactId>
-        <nullaway.version>0.12.10</nullaway.version>
+        <nullaway.version>0.13.8</nullaway.version>
         <slf4j.version>2.0.16</slf4j.version>
         <jetty.version>9.4.57.v20241219</jetty.version>
         <jdk.version>11</jdk.version>
@@ -318,7 +318,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.13.0</version>
+                <version>3.15.0</version>
                 <executions>
                     <execution>
                         <id>default-compile</id>
@@ -346,6 +346,7 @@
                 <configuration>
                     <source>${jdk.version}</source>
                     <target>${jdk.version}</target>
+                    <release>${jdk.version}</release>
                     <failOnWarning>true</failOnWarning>
                     <showWarnings>true</showWarnings>
                     <compilerArgs>
