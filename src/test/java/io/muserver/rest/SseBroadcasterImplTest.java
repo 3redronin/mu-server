@@ -376,8 +376,18 @@ public class SseBroadcasterImplTest {
     @Test
     public void closeDoesNotInvokeApplicationCallbacksWhileHoldingBroadcasterLock() {
         SseBroadcasterImpl broadcaster = new SseBroadcasterImpl();
-        AtomicBoolean sinkCloseHeldLock = new AtomicBoolean();
-        AtomicBoolean closeListenerHeldLock = new AtomicBoolean();
+        AtomicInteger crossThreadProbes = new AtomicInteger();
+        Runnable probeBroadcasterFromAnotherThread = () -> {
+            CompletableFuture<?> probe = CompletableFuture.runAsync(() ->
+                assertThrows(IllegalStateException.class,
+                    () -> broadcaster.register(sink(new AtomicBoolean()))));
+            try {
+                probe.get(1, TimeUnit.SECONDS);
+                crossThreadProbes.incrementAndGet();
+            } catch (Exception e) {
+                throw new AssertionError("Broadcaster lock was held while invoking a callback", e);
+            }
+        };
         SseEventSink sink = new SseEventSink() {
             @Override
             public boolean isClosed() {
@@ -391,17 +401,15 @@ public class SseBroadcasterImplTest {
 
             @Override
             public void close() {
-                sinkCloseHeldLock.set(Thread.holdsLock(broadcaster));
+                probeBroadcasterFromAnotherThread.run();
             }
         };
-        broadcaster.onClose(closedSink ->
-            closeListenerHeldLock.set(Thread.holdsLock(broadcaster)));
+        broadcaster.onClose(closedSink -> probeBroadcasterFromAnotherThread.run());
         broadcaster.register(sink);
 
         broadcaster.close();
 
-        assertThat(sinkCloseHeldLock.get(), is(false));
-        assertThat(closeListenerHeldLock.get(), is(false));
+        assertThat(crossThreadProbes.get(), is(2));
     }
 
     @Test
@@ -620,6 +628,39 @@ public class SseBroadcasterImplTest {
         assertThat(errorNotifications.get(), is(1));
         releaseClose.countDown();
         close.get(1, TimeUnit.SECONDS);
+    }
+
+    @Test
+    public void nonCascadingCloseSuppressesInFlightSendError() {
+        SseBroadcasterImpl broadcaster = new SseBroadcasterImpl();
+        CompletableFuture<Void> sendResult = new CompletableFuture<>();
+        AtomicInteger closeCalls = new AtomicInteger();
+        AtomicInteger errorNotifications = new AtomicInteger();
+        SseEventSink sink = new SseEventSink() {
+            @Override
+            public boolean isClosed() {
+                return false;
+            }
+
+            @Override
+            public CompletionStage<?> send(OutboundSseEvent event) {
+                return sendResult;
+            }
+
+            @Override
+            public void close() {
+                closeCalls.incrementAndGet();
+            }
+        };
+        broadcaster.onError((failedSink, error) -> errorNotifications.incrementAndGet());
+        broadcaster.register(sink);
+        broadcaster.broadcast(new JaxOutboundSseEventBuilder().data("event").build());
+
+        broadcaster.close(false);
+        sendResult.completeExceptionally(new IOException("send failed"));
+
+        assertThat(errorNotifications.get(), is(0));
+        assertThat(closeCalls.get(), is(0));
     }
 
     @Test

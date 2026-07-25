@@ -127,16 +127,25 @@ class SseBroadcasterImpl implements SseBroadcaster {
     }
 
     private void onSinkErrored(SinkRegistration registration, Throwable throwable, boolean requireCurrentRegistration) {
-        boolean wasRegistered = sinks.remove(registration);
-        if ((!requireCurrentRegistration || wasRegistered)
-            && registration.errorNotified.compareAndSet(false, true)) {
-            try {
-                registration.sink.close();
-            } catch (Exception ignored) {
-            }
-            for (BiConsumer<SseEventSink, Throwable> errorListener : errorListeners) {
-                errorListener.accept(registration.sink, throwable);
-            }
+        boolean notify;
+        stateLock.lock();
+        try {
+            boolean wasRegistered = sinks.remove(registration);
+            notify = (wasRegistered
+                || (!requireCurrentRegistration && registration.acceptInFlightErrors))
+                && registration.errorNotified.compareAndSet(false, true);
+        } finally {
+            stateLock.unlock();
+        }
+        if (!notify) {
+            return;
+        }
+        try {
+            registration.sink.close();
+        } catch (Exception ignored) {
+        }
+        for (BiConsumer<SseEventSink, Throwable> errorListener : errorListeners) {
+            errorListener.accept(registration.sink, throwable);
         }
     }
 
@@ -161,6 +170,11 @@ class SseBroadcasterImpl implements SseBroadcaster {
                 return;
             }
             isClosed = true;
+            if (!cascading) {
+                for (SinkRegistration registration : sinks) {
+                    registration.acceptInFlightErrors = false;
+                }
+            }
             sinksToClose = cascading ? List.copyOf(sinks) : List.of();
             sinks.clear();
         } finally {
@@ -198,6 +212,7 @@ class SseBroadcasterImpl implements SseBroadcaster {
         private final SseEventSink sink;
         private final AtomicBoolean closeNotified = new AtomicBoolean();
         private final AtomicBoolean errorNotified = new AtomicBoolean();
+        private boolean acceptInFlightErrors = true;
 
         private SinkRegistration(SseEventSink sink) {
             this.sink = sink;
