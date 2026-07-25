@@ -2,6 +2,7 @@ package io.muserver;
 
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.RedirectionException;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -14,10 +15,12 @@ class NettyHandlerAdapter {
     private static final Logger log = LoggerFactory.getLogger(NettyHandlerAdapter.class);
     private final List<MuHandler> muHandlers;
     private final ExecutorService executor;
-    private final List<ResponseCompleteListener> completeListeners;
-    private final List<RequestRejectListener> rejectListeners;
+    private final @Nullable List<ResponseCompleteListener> completeListeners;
+    private final @Nullable List<RequestRejectListener> rejectListeners;
 
-    NettyHandlerAdapter(ExecutorService executor, List<MuHandler> muHandlers, List<ResponseCompleteListener> completeListeners, List<RequestRejectListener> rejectListeners) {
+    NettyHandlerAdapter(ExecutorService executor, List<MuHandler> muHandlers,
+                        @Nullable List<ResponseCompleteListener> completeListeners,
+                        @Nullable List<RequestRejectListener> rejectListeners) {
         this.executor = executor;
         this.muHandlers = muHandlers;
         this.completeListeners = completeListeners;

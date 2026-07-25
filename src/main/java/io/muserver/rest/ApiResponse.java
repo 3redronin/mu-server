@@ -3,6 +3,7 @@ package io.muserver.rest;
 import java.lang.annotation.*;
 import java.lang.reflect.Method;
 import java.lang.reflect.Type;
+import org.jspecify.annotations.Nullable;
 
 /**
  * <p>Describes a response code and description for an API method, for documentation purposes.</p>
@@ -60,10 +61,10 @@ class ApiResponseObj {
     final String message;
     final ResponseHeader[] responseHeaders;
     final Class<?> response;
-    final Type genericReturnType;
+    final @Nullable Type genericReturnType;
     final String[] contentType;
-    final String example;
-    public ApiResponseObj(String code, String message, ResponseHeader[] responseHeaders, Class<?> response, Type genericReturnType, String[] contentType, String example) {
+    final @Nullable String example;
+    public ApiResponseObj(String code, String message, ResponseHeader[] responseHeaders, Class<?> response, @Nullable Type genericReturnType, String[] contentType, @Nullable String example) {
         this.code = code;
         this.message = message;
         this.responseHeaders = responseHeaders;

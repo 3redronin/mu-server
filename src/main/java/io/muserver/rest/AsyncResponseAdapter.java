@@ -11,6 +11,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.jspecify.annotations.Nullable;
 
 import java.util.*;
 import java.util.concurrent.Executors;
@@ -28,11 +29,11 @@ class AsyncResponseAdapter implements AsyncResponse, ResponseCompleteListener {
     private volatile boolean isSuspended;
     private volatile boolean isCancelled;
     private volatile boolean isDone;
-    private volatile ScheduledFuture<?> cancelEvent;
-    private volatile TimeoutHandler timeoutHandler;
+    private volatile @Nullable ScheduledFuture<?> cancelEvent;
+    private volatile @Nullable TimeoutHandler timeoutHandler;
     private final List<ConnectionCallback> connectionCallbacks = new ArrayList<>();
     private final List<CompletionCallback> completionCallbacks = new ArrayList<>();
-    private Throwable exceptionWhileWriting = null;
+    private @Nullable Throwable exceptionWhileWriting;
 
     AsyncResponseAdapter(AsyncHandle asyncHandle, Consumer resultConsumer) {
         this.asyncHandle = asyncHandle;
@@ -44,9 +45,10 @@ class AsyncResponseAdapter implements AsyncResponse, ResponseCompleteListener {
     }
 
     @Override
-    public boolean resume(Object response) {
-        if (cancelEvent != null) {
-            isCancelled = isCancelled || cancelEvent.cancel(false);
+    public boolean resume(@Nullable Object response) {
+        ScheduledFuture<?> event = cancelEvent;
+        if (event != null) {
+            isCancelled = isCancelled || event.cancel(false);
             cancelEvent = null;
         }
         if (isSuspended) {
@@ -86,7 +88,7 @@ class AsyncResponseAdapter implements AsyncResponse, ResponseCompleteListener {
         return doCancel(Mutils.toHttpDate(retryAfter));
     }
 
-    private boolean doCancel(Object retryAfterValue) {
+    private boolean doCancel(@Nullable Object retryAfterValue) {
         Response.ResponseBuilder resp = Response.status(503);
         if (retryAfterValue != null) {
             resp.header(HeaderNames.RETRY_AFTER.toString(), retryAfterValue);
@@ -132,7 +134,7 @@ class AsyncResponseAdapter implements AsyncResponse, ResponseCompleteListener {
 
     @Override
     public void setTimeoutHandler(TimeoutHandler handler) {
-        this.timeoutHandler = handler;
+        this.timeoutHandler = Objects.requireNonNull(handler, "handler");
     }
 
     @Override
@@ -199,6 +201,6 @@ class AsyncResponseAdapter implements AsyncResponse, ResponseCompleteListener {
     }
 
     interface Consumer {
-        void accept(Object response) throws Exception;
+        void accept(@Nullable Object response) throws Exception;
     }
 }

@@ -1,5 +1,7 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
@@ -78,7 +80,7 @@ public interface MuWebSocketSession {
      * @param reason An optional reason for closing.
      * @throws IOException Thrown if there is an error writing to the client, for example if the user has closed their browser.
      */
-    void close(int statusCode, String reason) throws IOException;
+    void close(int statusCode, @Nullable String reason) throws IOException;
 
     /**
      * @return The client's address

@@ -95,7 +95,7 @@ class MuPathSegment implements PathSegment {
     }
 
     public List<MuPathSegment> resolve(String name, String value, boolean encodeSlashInPath) {
-        String newPath = MuUriBuilder.resolve(path, name, value);
+        String newPath = Objects.requireNonNull(MuUriBuilder.resolve(path, name, value));
         MultivaluedMap<String, String> newParams = new MultivaluedHashMap<>();
         for (Map.Entry<String, List<String>> matrixParam : params.entrySet()) {
             newParams.put(MuUriBuilder.resolve(matrixParam.getKey(), name, value), matrixParam.getValue().stream()

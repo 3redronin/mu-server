@@ -1,6 +1,7 @@
 package io.muserver;
 
 import io.netty.handler.traffic.TrafficCounter;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -9,8 +10,10 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static java.util.Objects.requireNonNull;
+
 class MuStatsImpl implements MuStats {
-    private final TrafficCounter trafficCounter;
+    private final @Nullable TrafficCounter trafficCounter;
     private final AtomicLong activeConnections = new AtomicLong(0);
     private final AtomicLong totalConnections = new AtomicLong(0);
     private final AtomicLong completedRequests = new AtomicLong(0);
@@ -19,7 +22,7 @@ class MuStatsImpl implements MuStats {
     private final AtomicLong failedToConnect = new AtomicLong(0);
     private final Set<MuRequest> activeRequests = ConcurrentHashMap.newKeySet();
 
-    MuStatsImpl(TrafficCounter trafficCounter) {
+    MuStatsImpl(@Nullable TrafficCounter trafficCounter) {
         this.trafficCounter = trafficCounter;
     }
 
@@ -45,12 +48,12 @@ class MuStatsImpl implements MuStats {
 
     @Override
     public long bytesSent() {
-        return trafficCounter.cumulativeWrittenBytes();
+        return requireNonNull(trafficCounter, "Traffic statistics are not available for this counter").cumulativeWrittenBytes();
     }
 
     @Override
     public long bytesRead() {
-        return trafficCounter.cumulativeReadBytes();
+        return requireNonNull(trafficCounter, "Traffic statistics are not available for this counter").cumulativeReadBytes();
     }
 
     @Override

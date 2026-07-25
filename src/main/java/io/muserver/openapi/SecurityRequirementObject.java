@@ -1,5 +1,6 @@
 package io.muserver.openapi;
 
+import org.jspecify.annotations.Nullable;
 import java.io.IOException;
 import java.io.Writer;
 import java.util.List;
@@ -15,9 +16,9 @@ public class SecurityRequirementObject implements JsonWriter {
 
     private final Map<String, List<String>> requirements;
 
-    SecurityRequirementObject(Map<String, List<String>> requirements) {
+    SecurityRequirementObject(@Nullable Map<String, List<String>> requirements) {
         notNull("requirements", requirements);
-        this.requirements = requirements;
+        this.requirements = java.util.Objects.requireNonNull(requirements);
     }
 
     @Override

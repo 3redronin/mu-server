@@ -12,6 +12,7 @@ import io.netty.handler.codec.http2.Http2Exception;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,6 +29,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Collections.emptyList;
+import static java.util.Objects.requireNonNull;
 
 interface FormRequestBodyReader {
     RequestParameters params();
@@ -37,7 +39,7 @@ interface FormRequestBodyReader {
 
 abstract class RequestBodyReader {
 
-    private final CompletableFuture<Throwable> future = new CompletableFuture<>();
+    private final CompletableFuture<@Nullable Throwable> future = new CompletableFuture<>();
     private final AtomicLong bytes = new AtomicLong();
     final long maxSize;
 
@@ -53,7 +55,7 @@ abstract class RequestBodyReader {
         return future.isDone();
     }
 
-    protected Throwable currentError() {
+    protected @Nullable Throwable currentError() {
         return future.getNow(null);
     }
 
@@ -191,7 +193,7 @@ abstract class RequestBodyReader {
 
     static class UrlEncodedBodyReader extends RequestBodyReader implements FormRequestBodyReader {
         private final StringRequestBodyReader stringReader;
-        private RequestParameters form;
+        private @Nullable RequestParameters form;
 
         public UrlEncodedBodyReader(StringRequestBodyReader stringReader) {
             super(stringReader.maxSize);
@@ -205,7 +207,7 @@ abstract class RequestBodyReader {
 
         @Override
         public RequestParameters params() {
-            return form;
+            return requireNonNull(form, "Form data has not been fully read");
         }
 
 
@@ -226,12 +228,12 @@ abstract class RequestBodyReader {
     static class MultipartFormReader extends RequestBodyReader implements FormRequestBodyReader {
         private static final Logger log = LoggerFactory.getLogger(MultipartFormReader.class);
         private final HttpPostMultipartRequestDecoder multipartRequestDecoder;
-        private RequestParameters form;
+        private @Nullable RequestParameters form;
         private final HashMap<String, List<UploadedFile>> uploads = new HashMap<>();
 
         @Override
         public RequestParameters params() {
-            return form;
+            return requireNonNull(form, "Form data has not been fully read");
         }
 
         public MultipartFormReader(long maxSize, HttpRequest nettyRequest, Charset charset) {
@@ -303,7 +305,7 @@ abstract class RequestBodyReader {
     static class StringRequestBodyReader extends RequestBodyReader {
         private final Charset bodyCharset;
         private final CompositeByteBuf list = Unpooled.compositeBuffer();
-        private volatile String result;
+        private volatile @Nullable String result;
 
         public StringRequestBodyReader(long maxSize, Charset bodyCharset) {
             super(maxSize);

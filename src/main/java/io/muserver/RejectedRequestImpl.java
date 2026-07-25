@@ -9,7 +9,7 @@ class RejectedRequestImpl implements RejectedRequest {
 
     private final int status;
     private final String reason;
-    private final String method;
+    private final @Nullable String method;
     private final @Nullable URI uri;
     private final HttpConnection connection;
 

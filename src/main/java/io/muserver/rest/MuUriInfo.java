@@ -3,6 +3,7 @@ package io.muserver.rest;
 import io.muserver.Mutils;
 import io.netty.handler.codec.http.QueryStringDecoder;
 import jakarta.ws.rs.core.*;
+import org.jspecify.annotations.Nullable;
 
 import java.net.URI;
 import java.util.ArrayList;
@@ -24,9 +25,9 @@ class MuUriInfo implements UriInfo {
     private final URI baseUri;
     private final URI requestUri;
     private final String encodedRelativePath;
-    private final RequestMatcher.MatchedMethod matchedMethod;
+    private final RequestMatcher.@Nullable MatchedMethod matchedMethod;
 
-    MuUriInfo(URI baseUri, URI requestUri, String encodedRelativePath, RequestMatcher.MatchedMethod matchedMethod) {
+    MuUriInfo(URI baseUri, URI requestUri, String encodedRelativePath, RequestMatcher.@Nullable MatchedMethod matchedMethod) {
         this.baseUri = baseUri;
         this.requestUri = requestUri;
         this.encodedRelativePath = encodedRelativePath;
@@ -168,7 +169,7 @@ class MuUriInfo implements UriInfo {
 
     @Override
     public List<String> getMatchedURIs(boolean decode) {
-        RequestMatcher.MatchedMethod mm = matchedMethod;
+        RequestMatcher.@Nullable MatchedMethod mm = matchedMethod;
         if (mm == null) {
             return Collections.emptyList();
         }
@@ -183,7 +184,8 @@ class MuUriInfo implements UriInfo {
 
     @Override
     public List<Object> getMatchedResources() {
-        return matchedMethod == null ? Collections.emptyList() : Collections.singletonList(matchedMethod.matchedClass.resourceClass.resourceInstance);
+        return matchedMethod == null ? Collections.emptyList()
+            : Collections.singletonList(matchedMethod.matchedClass.resourceClass.requiredResourceInstance());
     }
 
     @Override

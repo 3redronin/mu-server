@@ -11,6 +11,7 @@ import jakarta.ws.rs.core.Cookie;
 import jakarta.ws.rs.ext.MessageBodyReader;
 import jakarta.ws.rs.ext.ReaderInterceptor;
 import jakarta.ws.rs.ext.ReaderInterceptorContext;
+import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -27,16 +28,16 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
     private final String relativePath;
     private final JaxRsHttpHeadersAdapter jaxHeaders;
     private UriInfo uriInfo;
-    private RequestMatcher.MatchedMethod matchedMethod;
+    private RequestMatcher.@Nullable MatchedMethod matchedMethod;
     private SecurityContext securityContext;
     private Annotation[] annotations = JaxRSResponse.Builder.EMPTY_ANNOTATIONS;
-    private Class<?> type;
-    private Type genericType;
+    private @Nullable Class<?> type;
+    private @Nullable Type genericType;
     private int nextReader;
     private final List<ReaderInterceptor> readerInterceptors;
     private final EntityProviders entityProviders;
     private String httpMethod;
-    private Response abortResponse;
+    private @Nullable Response abortResponse;
     private boolean requestFilterChainRunning;
     private boolean responseFilterChainStarted;
     private boolean exceptionMapperUsed;
@@ -68,7 +69,7 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
         return matchedMethod.resourceMethod.hasAll(toCheck);
     }
 
-    Response mapExceptionOnce(CustomExceptionMapper exceptionMapper, Exception exception) {
+    @Nullable Response mapExceptionOnce(CustomExceptionMapper exceptionMapper, Exception exception) {
         if (exceptionMapperUsed) {
             return null;
         }
@@ -80,12 +81,12 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
     }
 
     @Override
-    public Object getProperty(String name) {
+    public @Nullable Object getProperty(String name) {
         if (MuRuntimeDelegate.MU_REQUEST_PROPERTY.equals(name)) {
             return muRequest;
         } else if (MuRuntimeDelegate.RESOURCE_INFO_PROPERTY.equals(name)) {
-            Class<?> resourceInstanceClass = (matchedMethod == null) ? null : matchedMethod.matchedClass.resourceClass.resourceInstance.getClass();
-            java.lang.reflect.Method resourceInstanceMethod = (matchedMethod == null) ? null : matchedMethod.resourceMethod.methodHandle;
+            @Nullable Class<?> resourceInstanceClass = (matchedMethod == null) ? null : matchedMethod.matchedClass.resourceClass.requiredResourceInstance().getClass();
+            java.lang.reflect.@Nullable Method resourceInstanceMethod = (matchedMethod == null) ? null : matchedMethod.resourceMethod.methodHandle;
             return new MuResourceInfo(resourceInstanceClass, resourceInstanceMethod);
         }
         return muRequest.attribute(name);
@@ -133,7 +134,7 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
 
     @Override
     public Class<?> getType() {
-        return type;
+        return Objects.requireNonNull(type, "The request entity type has not been set");
     }
 
     @Override
@@ -143,7 +144,7 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
 
     @Override
     public Type getGenericType() {
-        return genericType;
+        return Objects.requireNonNull(genericType, "The request entity generic type has not been set");
     }
 
     @Override
@@ -181,7 +182,7 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
     }
 
     @Override
-    public Variant selectVariant(List<Variant> variants) {
+    public @Nullable Variant selectVariant(List<Variant> variants) {
         if (variants == null) {
             throw new IllegalArgumentException("variants is null");
         }
@@ -208,7 +209,7 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
     }
 
     @Override
-    public Response.ResponseBuilder evaluatePreconditions(EntityTag eTag) {
+    public Response.@Nullable ResponseBuilder evaluatePreconditions(EntityTag eTag) {
         if (eTag == null) {
             throw new IllegalArgumentException("eTag is null");
         }
@@ -216,7 +217,7 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
         return ifMatchBuilder != null ? ifMatchBuilder : evaluateIfNoneMatch(eTag);
     }
 
-    private Response.ResponseBuilder evaluateIfMatch(EntityTag eTag) {
+    private Response.@Nullable ResponseBuilder evaluateIfMatch(EntityTag eTag) {
         boolean anyMatch = false;
         List<String> ifMatches = muRequest.headers().getAll(HeaderNames.IF_MATCH);
         if (ifMatches.isEmpty()) {
@@ -239,7 +240,7 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
     }
 
 
-    private Response.ResponseBuilder evaluateIfNoneMatch(EntityTag eTag) {
+    private Response.@Nullable ResponseBuilder evaluateIfNoneMatch(EntityTag eTag) {
         List<String> ifNoneMatchTags = muRequest.headers().getAll(HeaderNames.IF_NONE_MATCH);
         boolean getOrHead = isGetOrHead();
         if (!getOrHead && eTag.isWeak()) {
@@ -265,7 +266,7 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
     }
 
     @Override
-    public Response.ResponseBuilder evaluatePreconditions(Date lastModified) {
+    public Response.@Nullable ResponseBuilder evaluatePreconditions(Date lastModified) {
         if (lastModified == null) {
             throw new IllegalArgumentException("lastModified is null");
         }
@@ -273,7 +274,7 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
         return ifUnmodifiedSince != null ? ifUnmodifiedSince : evaluateIfModifiedSince(lastModified);
     }
 
-    private Response.ResponseBuilder evaluateIfModifiedSince(Date lastModified) {
+    private Response.@Nullable ResponseBuilder evaluateIfModifiedSince(Date lastModified) {
         long lastModifiedSeconds = lastModified.getTime() / 1000;
         Long ifModifiedMillis = muRequest.headers().getTimeMillis(HeaderNames.IF_MODIFIED_SINCE);
         if (ifModifiedMillis == null || lastModifiedSeconds > (ifModifiedMillis / 1000)) {
@@ -282,7 +283,7 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
             return isGetOrHead() ? Response.notModified() : null;
         }
     }
-    private Response.ResponseBuilder evaluateIfUnmodifiedSince(Date lastModified) {
+    private Response.@Nullable ResponseBuilder evaluateIfUnmodifiedSince(Date lastModified) {
         long lastModifiedSeconds = lastModified.getTime() / 1000;
         Long ifUnmodifiedSince = muRequest.headers().getTimeMillis(HeaderNames.IF_UNMODIFIED_SINCE);
         if (ifUnmodifiedSince == null || lastModifiedSeconds <= (ifUnmodifiedSince / 1000)) {
@@ -295,7 +296,7 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
 
 
     @Override
-    public Response.ResponseBuilder evaluatePreconditions(Date lastModified, EntityTag eTag) {
+    public Response.@Nullable ResponseBuilder evaluatePreconditions(Date lastModified, EntityTag eTag) {
         if (lastModified == null) {
             throw new IllegalArgumentException("lastModified is null");
         }
@@ -323,7 +324,7 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
     }
 
     @Override
-    public Response.ResponseBuilder evaluatePreconditions() {
+    public Response.@Nullable ResponseBuilder evaluatePreconditions() {
         return muRequest.headers().get(HeaderNames.IF_MATCH) == null ? null
             : Response.status(Response.Status.PRECONDITION_FAILED).entity(new ClientErrorException("Precondition failed: if-match", 412));
     }
@@ -397,17 +398,17 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
     }
 
     @Override
-    public String getHeaderString(String name) {
+    public @Nullable String getHeaderString(String name) {
         return jaxHeaders.getHeaderString(name);
     }
 
     @Override
-    public Date getDate() {
+    public @Nullable Date getDate() {
         return jaxHeaders.getDate();
     }
 
     @Override
-    public Locale getLanguage() {
+    public @Nullable Locale getLanguage() {
         return jaxHeaders.getLanguage();
     }
 
@@ -417,7 +418,7 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
     }
 
     @Override
-    public MediaType getMediaType() {
+    public @Nullable MediaType getMediaType() {
         return jaxHeaders.getMediaType();
     }
 
@@ -488,7 +489,7 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
         }
     }
 
-    Response getAbortResponse() {
+    @Nullable Response getAbortResponse() {
         return abortResponse;
     }
 
@@ -526,21 +527,21 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
 
     private static class MuResourceInfo implements ResourceInfo {
 
-        private final Class<?> clazz;
-        private final java.lang.reflect.Method method;
+        private final @Nullable Class<?> clazz;
+        private final java.lang.reflect.@Nullable Method method;
 
-        private MuResourceInfo(Class<?> clazz, java.lang.reflect.Method method) {
+        private MuResourceInfo(@Nullable Class<?> clazz, java.lang.reflect.@Nullable Method method) {
             this.clazz = clazz;
             this.method = method;
         }
 
         @Override
-        public java.lang.reflect.Method getResourceMethod() {
+        public java.lang.reflect.@Nullable Method getResourceMethod() {
             return method;
         }
 
         @Override
-        public Class<?> getResourceClass() {
+        public @Nullable Class<?> getResourceClass() {
             return clazz;
         }
     }

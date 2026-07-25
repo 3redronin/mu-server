@@ -1,5 +1,7 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
+
 import javax.net.ssl.*;
 import java.net.Socket;
 import java.security.Principal;
@@ -11,10 +13,10 @@ class SniKeyManager extends X509ExtendedKeyManager {
     // with thanks to https://github.com/grahamedgecombe/netty-sni-example
 
     private final X509ExtendedKeyManager keyManager;
-    private final String defaultAlias;
+    private final @Nullable String defaultAlias;
     private final Map<String, String> sanToAliasMap;
 
-    public SniKeyManager(X509ExtendedKeyManager keyManager, String defaultAlias, Map<String, String> sanToAliasMap) {
+    public SniKeyManager(X509ExtendedKeyManager keyManager, @Nullable String defaultAlias, Map<String, String> sanToAliasMap) {
         this.keyManager = keyManager;
         this.defaultAlias = defaultAlias;
         this.sanToAliasMap = sanToAliasMap;
@@ -46,11 +48,11 @@ class SniKeyManager extends X509ExtendedKeyManager {
     }
 
     @Override
-    public String chooseEngineServerAlias(String keyType, Principal[] issuers, SSLEngine engine) {
+    public @Nullable String chooseEngineServerAlias(String keyType, Principal[] issuers, SSLEngine engine) {
         ExtendedSSLSession session = (ExtendedSSLSession) engine.getHandshakeSession();
 
         // Pick first SNIHostName in the list of SNI names.
-        String sniHostname = null;
+        @Nullable String sniHostname = null;
         for (SNIServerName name : session.getRequestedServerNames()) {
             if (name.getType() == StandardConstants.SNI_HOST_NAME) {
                 sniHostname = ((SNIHostName) name).getAsciiName();
@@ -58,7 +60,7 @@ class SniKeyManager extends X509ExtendedKeyManager {
             }
         }
 
-        String hostname = sanToAliasMap.getOrDefault(sniHostname, sniHostname);
+        @Nullable String hostname = sanToAliasMap.getOrDefault(sniHostname, sniHostname);
 
         // If we got given a hostname over SNI, check if we have a cert and key for that hostname. If so, we use it.
         // Otherwise, we fall back to the default certificate.

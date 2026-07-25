@@ -20,6 +20,7 @@ import jakarta.ws.rs.ext.ReaderInterceptor;
 import jakarta.ws.rs.ext.ReaderInterceptorContext;
 import jakarta.ws.rs.ext.WriterInterceptor;
 import jakarta.ws.rs.ext.WriterInterceptorContext;
+import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.lang.annotation.Annotation;
@@ -214,11 +215,11 @@ final class ApplicationRegistrar {
         return result;
     }
 
-    private static ResourceInfo resourceInfo(Object value) {
+    private static @Nullable ResourceInfo resourceInfo(Object value) {
         return value instanceof ResourceInfo ? (ResourceInfo) value : null;
     }
 
-    private static boolean hasBindings(ResourceInfo resourceInfo, Set<Class<? extends Annotation>> requiredBindings) {
+    private static boolean hasBindings(@Nullable ResourceInfo resourceInfo, Set<Class<? extends Annotation>> requiredBindings) {
         if (requiredBindings.isEmpty()) {
             return true;
         }

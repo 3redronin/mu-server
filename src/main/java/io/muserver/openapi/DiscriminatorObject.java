@@ -16,9 +16,9 @@ public class DiscriminatorObject implements JsonWriter {
     private final String propertyName;
     private final @Nullable Map<String, String> mapping;
 
-    DiscriminatorObject(String propertyName, @Nullable Map<String, String> mapping) {
+    DiscriminatorObject(@Nullable String propertyName, @Nullable Map<String, String> mapping) {
         notNull("propertyName", propertyName);
-        this.propertyName = propertyName;
+        this.propertyName = java.util.Objects.requireNonNull(propertyName);
         this.mapping = mapping;
     }
 

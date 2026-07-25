@@ -33,11 +33,13 @@ public class ParameterObject implements JsonWriter {
     private final @Nullable Map<String, ExampleObject> examples;
     private final @Nullable Map<String, MediaTypeObject> content;
 
-    ParameterObject(String name, String in, @Nullable String description, Boolean required, @Nullable Boolean deprecated, @Nullable Boolean allowEmptyValue,
+    ParameterObject(@Nullable String name, @Nullable String in, @Nullable String description, Boolean required, @Nullable Boolean deprecated, @Nullable Boolean allowEmptyValue,
                     @Nullable String style, @Nullable Boolean explode, @Nullable Boolean allowReserved, @Nullable SchemaObject schema, @Nullable Object example,
                     @Nullable Map<String, ExampleObject> examples, @Nullable Map<String, MediaTypeObject> content) {
         notNull("name", name);
+        name = java.util.Objects.requireNonNull(name);
         notNull("in", in);
+        in = java.util.Objects.requireNonNull(in);
         if (!allowedIns.contains(in)) {
             throw new IllegalArgumentException("'in' must be one of " + allowedIns + " but was " + in);
         }

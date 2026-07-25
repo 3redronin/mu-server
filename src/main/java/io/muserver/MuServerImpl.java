@@ -1,6 +1,7 @@
 package io.muserver;
 
 import io.netty.handler.ssl.SslContext;
+import org.jspecify.annotations.Nullable;
 
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -13,20 +14,23 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static java.util.Objects.requireNonNull;
+
 class MuServerImpl implements MuServer {
 
-    private URI httpUri;
-    private URI httpsUri;
-    private Function<Duration, Boolean> shutdown;
+    private @Nullable URI httpUri;
+    private @Nullable URI httpsUri;
+    private @Nullable Function<Duration, Boolean> shutdown;
     final MuStatsImpl stats;
-    private InetSocketAddress address;
-    private SslContextProvider sslContextProvider;
+    private @Nullable InetSocketAddress address;
+    private @Nullable SslContextProvider sslContextProvider;
     private final Http2Config http2Config;
     private final ServerSettings settings;
     private final Set<HttpConnection> connections = ConcurrentHashMap.newKeySet();
-    final UnhandledExceptionHandler unhandledExceptionHandler;
+    final @Nullable UnhandledExceptionHandler unhandledExceptionHandler;
 
-    void onStarted(URI httpUri, URI httpsUri, Function<Duration, Boolean> shutdown, InetSocketAddress address, SslContextProvider sslContextProvider) {
+    void onStarted(@Nullable URI httpUri, @Nullable URI httpsUri, Function<Duration, Boolean> shutdown,
+                   InetSocketAddress address, @Nullable SslContextProvider sslContextProvider) {
         this.address = address;
         this.sslContextProvider = sslContextProvider;
         if (httpUri == null && httpsUri == null) {
@@ -37,7 +41,8 @@ class MuServerImpl implements MuServer {
         this.shutdown = shutdown;
     }
 
-    MuServerImpl(MuStatsImpl stats, Http2Config http2Config, ServerSettings settings, UnhandledExceptionHandler unhandledExceptionHandler) {
+    MuServerImpl(MuStatsImpl stats, @Nullable Http2Config http2Config, ServerSettings settings,
+                 @Nullable UnhandledExceptionHandler unhandledExceptionHandler) {
         this.stats = stats;
         this.http2Config = http2Config == null ? Http2ConfigBuilder.http2Config().build() : http2Config;
         this.settings = settings;
@@ -51,21 +56,21 @@ class MuServerImpl implements MuServer {
 
     @Override
     public boolean stop(long duration, TimeUnit unit) {
-        return shutdown.apply(Duration.ofMillis(unit.toMillis(duration)));
+        return requireNonNull(shutdown, "Server has not started").apply(Duration.ofMillis(unit.toMillis(duration)));
     }
 
     @Override
     public URI uri() {
-        return httpsUri != null ? httpsUri : httpUri;
+        return requireNonNull(httpsUri != null ? httpsUri : httpUri, "Server has not started");
     }
 
     @Override
-    public URI httpUri() {
+    public @Nullable URI httpUri() {
         return httpUri;
     }
 
     @Override
-    public URI httpsUri() {
+    public @Nullable URI httpsUri() {
         return httpsUri;
     }
 
@@ -81,7 +86,7 @@ class MuServerImpl implements MuServer {
 
     @Override
     public InetSocketAddress address() {
-        return address;
+        return requireNonNull(address, "Server has not started");
     }
 
     @Override
@@ -125,15 +130,16 @@ class MuServerImpl implements MuServer {
         Mutils.notNull("newSSLContext", newHttpsConfig);
         try {
             SslContext nettySslContext = newHttpsConfig.toNettySslContext(http2Config.enabled);
-            sslContextProvider.set(nettySslContext);
-            ((SSLInfoImpl) sslContextProvider.sslInfo()).setHttpsUri(httpsUri);
+            SslContextProvider provider = requireNonNull(sslContextProvider, "Server does not have an HTTPS connector");
+            provider.set(nettySslContext);
+            ((SSLInfoImpl) provider.sslInfo()).setHttpsUri(httpsUri);
         } catch (Exception e) {
             throw new MuException("Error while changing SSL Certificate. The old one will still be used.", e);
         }
     }
 
     @Override
-    public SSLInfo sslInfo() {
+    public @Nullable SSLInfo sslInfo() {
         return sslContextProvider == null ? null : sslContextProvider.sslInfo();
     }
 

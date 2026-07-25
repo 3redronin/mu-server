@@ -8,6 +8,7 @@ import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.websocketx.*;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -105,7 +106,7 @@ class MuWebSocketSessionImpl implements MuWebSocketSession, Exchange {
     }
 
     @Override
-    public void close(int statusCode, String reason) {
+    public void close(int statusCode, @Nullable String reason) {
         if (state.endState()) {
             throw new IllegalArgumentException("Cannot close a websocket when the state is " + state);
         }
@@ -310,4 +311,3 @@ class MuWebSocketSessionImpl implements MuWebSocketSession, Exchange {
         }
     }
 }
-

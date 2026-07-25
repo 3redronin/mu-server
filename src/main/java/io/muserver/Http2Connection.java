@@ -23,6 +23,7 @@ import org.jspecify.annotations.Nullable;
 import static io.netty.buffer.Unpooled.EMPTY_BUFFER;
 import static io.netty.buffer.Unpooled.copiedBuffer;
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.Objects.requireNonNull;
 
 abstract class Http2ConnectionFlowControl extends Http2ConnectionHandler implements Http2FrameListener {
 
@@ -313,8 +314,9 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
             }
             String method = headers.method() == null ? null : headers.method().toString();
             String uri = headers.path() == null ? null : headers.path().toString();
-            nettyHandlerAdapter.onRequestRejected(new RejectedRequestImpl(ihr.code, ihr.getMessage(), method, uri, this));
-            sendSimpleResponse(ctx, streamId, ihr.getMessage(), ihr.code);
+            String message = String.valueOf(ihr.getMessage());
+            nettyHandlerAdapter.onRequestRejected(new RejectedRequestImpl(ihr.code, message, method, uri, this));
+            sendSimpleResponse(ctx, streamId, message, ihr.code);
         } catch (RedirectException e) {
             sendRedirect(ctx, streamId, e.location);
         }
@@ -404,7 +406,7 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
         }
     }
 
-    static CharSequence compressionToUse(Headers requestHeaders) {
+    static @Nullable CharSequence compressionToUse(Headers requestHeaders) {
         for (ParameterizedHeaderWithValue encVal : requestHeaders.acceptEncoding()) {
             String enc = encVal.value();
             if (HttpHeaderValues.GZIP.contentEqualsIgnoreCase(enc)) {
@@ -517,12 +519,12 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
 
     @Override
     public @Nullable String httpsProtocol() {
-        return Http1Connection.getSslSession(nettyContext).getProtocol();
+        return Http1Connection.getSslSession(context()).getProtocol();
     }
 
     @Override
     public @Nullable String cipher() {
-        return Http1Connection.getSslSession(nettyContext).getCipherSuite();
+        return Http1Connection.getSslSession(context()).getCipherSuite();
     }
 
     @Override
@@ -532,7 +534,7 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
 
     @Override
     public InetSocketAddress remoteAddress() {
-        return remoteAddress;
+        return requireNonNull(remoteAddress, "The connection has not been initialized");
     }
 
     @Override
@@ -567,17 +569,20 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
 
     @Override
     public Optional<Certificate> clientCertificate() {
-        return Http1Connection.fromContext(nettyContext);
+        return Http1Connection.fromContext(context());
     }
 
     @Override
     public Optional<ProxiedConnectionInfo> proxyInfo() {
-        return Optional.ofNullable(this.nettyContext.channel().attr(HAProxyMessageHandler.HA_PROXY_INFO).get());
+        return Optional.ofNullable(context().channel().attr(HAProxyMessageHandler.HA_PROXY_INFO).get());
     }
 
     @Override
     public Optional<String> sniHostName() {
-        return Optional.ofNullable(this.nettyContext.channel().attr(MuSniHandler.SNI_HOSTNAME).get());
+        return Optional.ofNullable(context().channel().attr(MuSniHandler.SNI_HOSTNAME).get());
     }
 
+    private ChannelHandlerContext context() {
+        return requireNonNull(nettyContext, "The connection has not been initialized");
+    }
 }

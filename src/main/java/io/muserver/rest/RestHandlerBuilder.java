@@ -42,17 +42,17 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     private final List<ReaderInterceptor> readerInterceptors = new ArrayList<>();
     private final List<ParamConverterProvider> customParamConverterProviders = new ArrayList<>();
     private final List<SchemaReference> customSchemas = new ArrayList<>();
-    private String openApiJsonUrl = null;
-    private String openApiHtmlUrl = null;
-    private OpenAPIObjectBuilder openAPIObject;
-    private String openApiHtmlCss = null;
+    private @Nullable String openApiJsonUrl;
+    private @Nullable String openApiHtmlUrl;
+    private @Nullable OpenAPIObjectBuilder openAPIObject;
+    private @Nullable String openApiHtmlCss;
     private final Map<Class<? extends Throwable>, ExceptionMapper<? extends Throwable>> exceptionMappers = new HashMap<>();
     private final List<ContainerRequestFilter> preMatchRequestFilters = new ArrayList<>();
     private final List<ContainerRequestFilter> requestFilters = new ArrayList<>();
     private final List<ContainerResponseFilter> responseFilters = new ArrayList<>();
     private CORSConfig corsConfig = CORSConfigBuilder.disabled().build();
     private final List<SchemaObjectCustomizer> schemaObjectCustomizers = new ArrayList<>();
-    private CollectionParameterStrategy collectionParameterStrategy;
+    private @Nullable CollectionParameterStrategy collectionParameterStrategy;
 
     /**
      * Adds one or more rest resources to this handler
@@ -120,7 +120,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     public <P> RestHandlerBuilder addCustomParamConverter(Class<P> paramClass, ParamConverter<P> converter) {
         return addCustomParamConverterProvider(new ParamConverterProvider() {
             @Override
-            public <T> ParamConverter<T> getConverter(Class<T> rawType, Type genericType, Annotation[] annotations) {
+            public <T> @Nullable ParamConverter<T> getConverter(Class<T> rawType, Type genericType, Annotation[] annotations) {
                 if (!rawType.equals(paramClass)) {
                     return null;
                 }
@@ -482,28 +482,28 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     /**
      * @return The current value of this property
      */
-    public String openApiJsonUrl() {
+    public @Nullable String openApiJsonUrl() {
         return openApiJsonUrl;
     }
 
     /**
      * @return The current value of this property
      */
-    public String openApiHtmlUrl() {
+    public @Nullable String openApiHtmlUrl() {
         return openApiHtmlUrl;
     }
 
     /**
      * @return The current value of this property
      */
-    public OpenAPIObjectBuilder openAPIObject() {
+    public @Nullable OpenAPIObjectBuilder openAPIObject() {
         return openAPIObject;
     }
 
     /**
      * @return The current value of this property
      */
-    public String openApiHtmlCss() {
+    public @Nullable String openApiHtmlCss() {
         return openApiHtmlCss;
     }
 
@@ -553,7 +553,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * @return The current value of this property
      */
     public CollectionParameterStrategy collectionParameterStrategy() {
-        return collectionParameterStrategy;
+        return collectionParameterStrategy == null ? CollectionParameterStrategy.NO_TRANSFORM : collectionParameterStrategy;
     }
 
     /**
@@ -580,10 +580,12 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
         }
         List<ResourceClass> roots = Collections.unmodifiableList(list);
 
-        OpenApiDocumentor documentor = null;
+        @Nullable OpenApiDocumentor documentor = null;
         if (openApiHtmlUrl != null || openApiJsonUrl != null) {
             if (openApiHtmlCss == null) {
-                InputStream cssStream = RestHandlerBuilder.class.getResourceAsStream("/io/muserver/resources/api.css");
+                InputStream cssStream = Objects.requireNonNull(
+                    RestHandlerBuilder.class.getResourceAsStream("/io/muserver/resources/api.css"),
+                    "Bundled OpenAPI CSS was not found");
                 Scanner scanner = new Scanner(cssStream, "UTF-8").useDelimiter("\\A");
                 openApiHtmlCss = scanner.next();
                 scanner.close();

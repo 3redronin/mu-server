@@ -9,8 +9,8 @@ import org.jspecify.annotations.Nullable;
  */
 public class WebSocketHandlerBuilder implements MuHandlerBuilder<WebSocketHandler> {
 
-    private MuWebSocketFactory factory;
-    private String path;
+    private @Nullable MuWebSocketFactory factory;
+    private @Nullable String path;
     private long idleReadTimeoutMills = TimeUnit.MINUTES.toMillis(5);
     private long pingAfterWriteMillis = TimeUnit.SECONDS.toMillis(30);
     private int maxFramePayloadLength = 65536;

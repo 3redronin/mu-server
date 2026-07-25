@@ -1,6 +1,7 @@
 package io.muserver.rest;
 
 import jakarta.ws.rs.core.AbstractMultivaluedMap;
+import org.jspecify.annotations.Nullable;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -23,7 +24,7 @@ class LowercasedMultivaluedHashMap<V> extends AbstractMultivaluedMap<String, V> 
      */
     private static class LowercasedHashMap<V> extends HashMap<String, V> {
         @Override
-        public V get(Object key) {
+        public @Nullable V get(Object key) {
             return super.get(toLower(key));
         }
 
@@ -33,7 +34,7 @@ class LowercasedMultivaluedHashMap<V> extends AbstractMultivaluedMap<String, V> 
         }
 
         @Override
-        public V put(String key, V value) {
+        public @Nullable V put(String key, V value) {
             return super.put(key.toLowerCase(), value);
         }
 
@@ -45,7 +46,7 @@ class LowercasedMultivaluedHashMap<V> extends AbstractMultivaluedMap<String, V> 
         }
 
         @Override
-        public V remove(Object key) {
+        public @Nullable V remove(Object key) {
             return super.remove(toLower(key));
         }
 
@@ -55,7 +56,7 @@ class LowercasedMultivaluedHashMap<V> extends AbstractMultivaluedMap<String, V> 
         }
 
         @Override
-        public V putIfAbsent(String key, V value) {
+        public @Nullable V putIfAbsent(String key, V value) {
             return super.putIfAbsent(key.toLowerCase(), value);
         }
 
@@ -70,27 +71,27 @@ class LowercasedMultivaluedHashMap<V> extends AbstractMultivaluedMap<String, V> 
         }
 
         @Override
-        public V replace(String key, V value) {
+        public @Nullable V replace(String key, V value) {
             return super.replace(key.toLowerCase(), value);
         }
 
         @Override
-        public V computeIfAbsent(String key, Function<? super String, ? extends V> mappingFunction) {
+        public @Nullable V computeIfAbsent(String key, Function<? super String, ? extends V> mappingFunction) {
             return super.computeIfAbsent(key.toLowerCase(), mappingFunction);
         }
 
         @Override
-        public V computeIfPresent(String key, BiFunction<? super String, ? super V, ? extends V> remappingFunction) {
+        public @Nullable V computeIfPresent(String key, BiFunction<? super String, ? super V, ? extends V> remappingFunction) {
             return super.computeIfPresent(key.toLowerCase(), remappingFunction);
         }
 
         @Override
-        public V compute(String key, BiFunction<? super String, ? super V, ? extends V> remappingFunction) {
+        public @Nullable V compute(String key, BiFunction<? super String, ? super V, ? extends V> remappingFunction) {
             return super.compute(key.toLowerCase(), remappingFunction);
         }
 
         @Override
-        public V merge(String key, V value, BiFunction<? super V, ? super V, ? extends V> remappingFunction) {
+        public @Nullable V merge(String key, V value, BiFunction<? super V, ? super V, ? extends V> remappingFunction) {
             return super.merge(key.toLowerCase(), value, remappingFunction);
         }
 

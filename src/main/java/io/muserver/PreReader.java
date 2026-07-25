@@ -3,6 +3,7 @@ package io.muserver;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.util.ReferenceCountUtil;
+import org.jspecify.annotations.Nullable;
 
 /**
  * This pre-emptively reads a message from the channel before the HTTP handler has actually asked for it.
@@ -11,7 +12,7 @@ import io.netty.util.ReferenceCountUtil;
  */
 class PreReader extends ChannelDuplexHandler {
 
-    private Object pendingMsg;
+    private @Nullable Object pendingMsg;
     private boolean wantsToRead = false;
 
     @Override

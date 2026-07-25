@@ -98,7 +98,7 @@ public class Mutils {
      * @param val The value to check
      * @return True if the value is null or a zero-length string.
      */
-    public static boolean nullOrEmpty(String val) {
+    public static boolean nullOrEmpty(@Nullable String val) {
         return val == null || val.length() == 0;
     }
 
@@ -124,7 +124,7 @@ public class Mutils {
      * @param two The suffix
      * @return The joined strings
      */
-    public static String join(String one, String sep, String two) {
+    public static String join(@Nullable String one, String sep, @Nullable String two) {
         one = one == null ? "" : one;
         two = two == null ? "" : two;
         boolean oneEnds = one.endsWith(sep);
@@ -247,7 +247,7 @@ public class Mutils {
         return Stream.of(values).filter(Objects::nonNull).findFirst().orElse(null);
     }
 
-    static void closeSilently(Closeable closeable) {
+    static void closeSilently(@Nullable Closeable closeable) {
         if (closeable != null) {
             try {
                 closeable.close();

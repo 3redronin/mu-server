@@ -3,6 +3,7 @@ package io.muserver.rest;
 import io.muserver.Mutils;
 import io.muserver.openapi.*;
 import jakarta.ws.rs.core.MediaType;
+import org.jspecify.annotations.Nullable;
 
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -70,8 +71,12 @@ class HtmlDocumentor {
         LicenseObject license = api.info().license();
         if (license != null) {
             metaData.content(" | License: ");
-            String name = license.name() == null ? license.url().toString() : license.name();
-            new El("a").open(Collections.singletonMap("href", "mailto:" + license.url())).content(name).close();
+            URI licenseUrl = license.url();
+            if (licenseUrl == null) {
+                metaData.content(license.name());
+            } else {
+                new El("a").open(Collections.singletonMap("href", licenseUrl.toString())).content(license.name()).close();
+            }
         }
 
         if (api.info().termsOfService() != null) {
@@ -88,18 +93,19 @@ class HtmlDocumentor {
 
 
         El nav = new El("ul").open(singletonMap("class", "nav operation"));
-        for (TagObject tag : api.tags()) {
+        List<TagObject> tags = api.tags() == null ? Collections.emptyList() : api.tags();
+        for (TagObject tag : tags) {
             El li = new El("li").open();
             new El("a").open(singletonMap("href", "#" + Mutils.htmlEncode(tag.name()))).content(tag.name()).close();
 
             El subNav = new El("ul").open(singletonMap("class", "subNav"));
-            for (Map.Entry<String, PathItemObject> entry : api.paths().pathItemObjects().entrySet()) {
+            for (Map.Entry<String, PathItemObject> entry : pathItems().entrySet()) {
                 String url = entry.getKey();
                 PathItemObject item = entry.getValue();
-                for (Map.Entry<String, OperationObject> operationObjectEntry : item.operations().entrySet()) {
+                for (Map.Entry<String, OperationObject> operationObjectEntry : operations(item).entrySet()) {
                     String method = operationObjectEntry.getKey();
                     OperationObject operation = operationObjectEntry.getValue();
-                    if (operation.tags().contains(tag.name())) {
+                    if (operationTags(operation).contains(tag.name())) {
 
                         El subNavLi = new El("li").open();
                         new El("a").open(singletonMap("href", "#" + Mutils.htmlEncode(operation.operationId()))).content(method.toUpperCase() + " " + url).close();
@@ -118,20 +124,20 @@ class HtmlDocumentor {
         nav.close();
 
 
-        for (TagObject tag : api.tags()) {
+        for (TagObject tag : tags) {
             El tagContainer = new El("div").open(singletonMap("class", "tagContainer"));
             new El("h2").open(singletonMap("id", Mutils.htmlEncode(tag.name()))).content(tag.name()).close();
             renderIfValue("p", tag.description());
             renderExternalLinksParagraph(tag.externalDocs());
 
-            for (Map.Entry<String, PathItemObject> entry : api.paths().pathItemObjects().entrySet()) {
+            for (Map.Entry<String, PathItemObject> entry : pathItems().entrySet()) {
                 String url = entry.getKey();
                 PathItemObject item = entry.getValue();
-                for (Map.Entry<String, OperationObject> operationObjectEntry : item.operations().entrySet()) {
+                for (Map.Entry<String, OperationObject> operationObjectEntry : operations(item).entrySet()) {
                     String method = operationObjectEntry.getKey();
                     OperationObject operation = operationObjectEntry.getValue();
 
-                    if (operation.tags().contains(tag.name())) {
+                    if (operationTags(operation).contains(tag.name())) {
 
                         Map<String, String> operationAttributes = new HashMap<>();
                         operationAttributes.put("id", Mutils.htmlEncode(operation.operationId()));
@@ -154,7 +160,8 @@ class HtmlDocumentor {
                         StringBuilder curlHeaders = new StringBuilder();
 
                         RequestBodyObject requestBody = operation.requestBody();
-                        if (!operation.parameters().isEmpty()) {
+                        List<ParameterObject> parameters = operation.parameters() == null ? Collections.emptyList() : operation.parameters();
+                        if (!parameters.isEmpty()) {
                             render("h4", "Parameters");
                             El table = new El("table").open(singletonMap("class", "parameterTable"));
 
@@ -169,7 +176,7 @@ class HtmlDocumentor {
                             El tbody = new El("tbody").open();
 
 
-                            for (ParameterObject parameter : operation.parameters()) {
+                            for (ParameterObject parameter : parameters) {
                                 El row = new El("tr").open();
                                 render("td", parameter.name());
                                 String type = parameter.in();
@@ -184,8 +191,8 @@ class HtmlDocumentor {
                                 }
 
                                 SchemaObject schema = parameter.schema();
-                                Object defaultVal = null;
-                                ExternalDocumentationObject externalDocs = null;
+                                @Nullable Object defaultVal = null;
+                                @Nullable ExternalDocumentationObject externalDocs = null;
                                 if (schema != null) {
                                     type += " - " + schema.type();
                                     if (schema.format() != null) {
@@ -257,7 +264,7 @@ class HtmlDocumentor {
                                     El row = new El("tr").open();
                                     render("td", formName);
 
-                                    String type = schema.type();
+                                    @Nullable String type = schema.type();
                                     if (schema.format() != null) {
                                         type += " (" + schema.format() + ")";
                                     }
@@ -343,11 +350,26 @@ class HtmlDocumentor {
         html.close();
     }
 
-    private static String bashValue(Object value) {
+    private Map<String, PathItemObject> pathItems() {
+        Map<String, PathItemObject> paths = api.paths().pathItemObjects();
+        return paths == null ? Collections.emptyMap() : paths;
+    }
+
+    private static Map<String, OperationObject> operations(PathItemObject item) {
+        Map<String, OperationObject> operations = item.operations();
+        return operations == null ? Collections.emptyMap() : operations;
+    }
+
+    private static List<String> operationTags(OperationObject operation) {
+        List<String> tags = operation.tags();
+        return tags == null ? Collections.emptyList() : tags;
+    }
+
+    private static String bashValue(@Nullable Object value) {
         return value == null || "".equals(value) ? "" : value.toString().replace("'", "'\\''");
     }
 
-    private void renderExternalLinksParagraph(ExternalDocumentationObject externalDocs) throws IOException {
+    private void renderExternalLinksParagraph(@Nullable ExternalDocumentationObject externalDocs) throws IOException {
         if (externalDocs != null) {
             String url = externalDocs.url().toString();
             String desc = externalDocs.description() == null ? url : externalDocs.description();
@@ -357,7 +379,7 @@ class HtmlDocumentor {
         }
     }
 
-    private void renderExamples(Object example, Map<String, ExampleObject> examples, Object defaultVal) throws IOException {
+    private void renderExamples(@Nullable Object example, @Nullable Map<String, ExampleObject> examples, @Nullable Object defaultVal) throws IOException {
         if (example != null) {
             El div = new El("div").open().content("Example: ");
             render("code", example.toString());
@@ -381,13 +403,13 @@ class HtmlDocumentor {
         }
     }
 
-    private void renderIfValue(String tag, String value) throws IOException {
+    private void renderIfValue(String tag, @Nullable String value) throws IOException {
         if (value != null) {
             new El(tag).open().content(value).close();
         }
     }
 
-    private void render(String tag, String value) throws IOException {
+    private void render(String tag, @Nullable String value) throws IOException {
         new El(tag).open().content(value).close();
     }
 
@@ -403,7 +425,7 @@ class HtmlDocumentor {
             return open(null);
         }
 
-        El open(Map<String, String> attributes) throws IOException {
+        El open(@Nullable Map<String, String> attributes) throws IOException {
             writer.write("<" + tag);
             if (attributes != null) {
                 for (Map.Entry<String, String> entry : attributes.entrySet()) {
@@ -419,7 +441,7 @@ class HtmlDocumentor {
             return this;
         }
 
-        El content(Object... vals) throws IOException {
+        El content(@Nullable Object... vals) throws IOException {
             if (vals != null) {
                 for (Object val : vals) {
                     if (val != null) {

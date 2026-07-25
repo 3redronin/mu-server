@@ -1,6 +1,7 @@
 package io.muserver.handlers;
 
 import io.muserver.Mutils;
+import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.io.Writer;
@@ -155,7 +156,7 @@ class DirectoryLister {
             return open(null);
         }
 
-        El open(Map<String, String> attributes) throws IOException {
+        El open(@Nullable Map<String, String> attributes) throws IOException {
             writer.write("<" + tag);
             if (attributes != null) {
                 for (Map.Entry<String, String> entry : attributes.entrySet()) {

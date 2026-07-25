@@ -2,16 +2,19 @@ package io.muserver;
 
 import io.netty.buffer.ByteBuf;
 import jakarta.ws.rs.WebApplicationException;
+import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InterruptedIOException;
 
+import static java.util.Objects.requireNonNull;
+
 class RequestBodyReaderInputStreamAdapter extends RequestBodyReader {
     private boolean receivedLast = false;
     private boolean finished = false;
-    private ByteBuf currentBuf;
-    private DoneCallback currentCallback;
+    private @Nullable ByteBuf currentBuf;
+    private @Nullable DoneCallback currentCallback;
     private boolean userClosed = false;
     private final Object lock = new Object();
 
@@ -76,8 +79,9 @@ class RequestBodyReaderInputStreamAdapter extends RequestBodyReader {
         public long skip(long n) throws IOException {
             synchronized (lock) {
                 waitForData();
-                int toSkip = Math.min((int) n, currentBuf.readableBytes());
-                currentBuf.skipBytes(toSkip);
+                ByteBuf buffer = requireNonNull(currentBuf);
+                int toSkip = Math.min((int) n, buffer.readableBytes());
+                buffer.skipBytes(toSkip);
                 afterConsumed();
                 return toSkip;
             }
@@ -175,10 +179,11 @@ class RequestBodyReaderInputStreamAdapter extends RequestBodyReader {
 
 
     private void afterConsumed() throws IOException {
-        if (currentBuf.readableBytes() == 0) {
+        ByteBuf buffer = requireNonNull(currentBuf);
+        if (buffer.readableBytes() == 0) {
             currentBuf = null;
             try {
-                currentCallback.onComplete(null);
+                requireNonNull(currentCallback).onComplete(null);
                 currentCallback = null;
             } catch (Exception e) {
                 throw new IOException("Error completing done callback", e);

@@ -96,7 +96,7 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
         }
         Collection<NewCookie> newCookies = from.getCookies().values();
         if (!newCookies.isEmpty()) {
-            var headerDelegate = singleton.createHeaderDelegate(NewCookie.class);
+            var headerDelegate = getInstance().createHeaderDelegate(NewCookie.class);
             for (NewCookie cookie : newCookies) {
                 to.headers().add(HeaderNames.SET_COOKIE, headerDelegate.toString(cookie));
             }

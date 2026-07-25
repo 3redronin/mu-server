@@ -1,6 +1,7 @@
 package io.muserver.rest;
 
 import jakarta.ws.rs.core.MediaType;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Objects;
 
@@ -11,16 +12,16 @@ class CombinedMediaType implements Comparable<CombinedMediaType> {
 
     public static CombinedMediaType NONMATCH = new CombinedMediaType(null, null, 1.0, 1.0, 0, null);
 
-    public final String type;
-    public final String subType;
+    public final @Nullable String type;
+    public final @Nullable String subType;
     public final double q;
     public final double qs;
     public final int d;
     public final boolean isWildcardType;
     public final boolean isWildcardSubtype;
-    public final String charset;
+    public final @Nullable String charset;
 
-    CombinedMediaType(String type, String subType, double q, double qs, int d, String charset) {
+    CombinedMediaType(@Nullable String type, @Nullable String subType, double q, double qs, int d, @Nullable String charset) {
         this.type = type;
         this.subType = subType;
         this.q = q;

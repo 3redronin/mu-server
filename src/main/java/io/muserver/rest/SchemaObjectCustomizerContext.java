@@ -2,6 +2,7 @@ package io.muserver.rest;
 
 import io.muserver.openapi.SchemaObject;
 import jakarta.ws.rs.core.MediaType;
+import org.jspecify.annotations.Nullable;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Type;
@@ -16,13 +17,13 @@ public class SchemaObjectCustomizerContext {
 
     private final SchemaObjectCustomizerTarget target;
     private final Class<?> type;
-    private final Type parameterizedType;
-    private final Object resource;
+    private final @Nullable Type parameterizedType;
+    private final @Nullable Object resource;
     private final Method method;
-    private final String parameter;
+    private final @Nullable String parameter;
     private final MediaType mediaType;
 
-    SchemaObjectCustomizerContext(SchemaObjectCustomizerTarget target, Class<?> type, Type parameterizedType, Object resource, Method method, String parameter, MediaType mediaType) {
+    SchemaObjectCustomizerContext(SchemaObjectCustomizerTarget target, Class<?> type, @Nullable Type parameterizedType, @Nullable Object resource, Method method, @Nullable String parameter, MediaType mediaType) {
         this.target = requireNonNull(target, "target");
         this.type = requireNonNull(type, "type");
         this.parameterizedType = parameterizedType;
@@ -44,7 +45,7 @@ public class SchemaObjectCustomizerContext {
      * returned by a sub-resource-locator, this will be null.
      * @return The rest resource that creates or consumes the object being described
      */
-    public Object resource() {
+    public @Nullable Object resource() {
         return resource;
     }
 

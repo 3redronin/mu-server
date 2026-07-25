@@ -27,11 +27,11 @@ import static java.util.stream.Collectors.toMap;
 
 class ResourceMethod {
     final ResourceClass resourceClass;
-    final UriPattern pathPattern;
+    final @Nullable UriPattern pathPattern;
     final java.lang.reflect.Method methodHandle;
     final @Nullable Type genericReturnType;
-    final Method httpMethod;
-    final String pathTemplate;
+    final @Nullable Method httpMethod;
+    final @Nullable String pathTemplate;
     final List<MediaType> effectiveConsumes;
     final List<MediaType> directlyConsumes;
     final List<MediaType> directlyProduces;
@@ -43,7 +43,7 @@ class ResourceMethod {
     private final List<Class<? extends Annotation>> nameBindingAnnotations;
     final Annotation[] methodAnnotations; // the annotations defined on the method to be passed to the message body writers
 
-    ResourceMethod(ResourceClass resourceClass, UriPattern pathPattern, java.lang.reflect.Method methodHandle, List<ResourceMethodParam> params, Method httpMethod, String pathTemplate, List<MediaType> produces, List<MediaType> consumes, SchemaObjectCustomizer schemaObjectCustomizer, DescriptionData descriptionData, boolean isDeprecated, List<Class<? extends Annotation>> nameBindingAnnotations, Annotation[] methodAnnotations) {
+    ResourceMethod(ResourceClass resourceClass, @Nullable UriPattern pathPattern, java.lang.reflect.Method methodHandle, List<ResourceMethodParam> params, @Nullable Method httpMethod, @Nullable String pathTemplate, List<MediaType> produces, List<MediaType> consumes, SchemaObjectCustomizer schemaObjectCustomizer, DescriptionData descriptionData, boolean isDeprecated, List<Class<? extends Annotation>> nameBindingAnnotations, Annotation[] methodAnnotations) {
         this.resourceClass = resourceClass;
         this.pathPattern = pathPattern;
         this.methodHandle = methodHandle;
@@ -89,11 +89,19 @@ class ResourceMethod {
         return httpMethod == null;
     }
 
-    Object invoke(Object... params) throws Exception {
+    UriPattern requiredPathPattern() {
+        return Objects.requireNonNull(pathPattern, "Resource method has no path pattern");
+    }
+
+    Method requiredHttpMethod() {
+        return Objects.requireNonNull(httpMethod, "Sub-resource locator has no HTTP method");
+    }
+
+    @Nullable Object invoke(@Nullable Object... params) throws Exception {
         try {
-            return methodHandle.invoke(resourceClass.resourceInstance, params);
+            return methodHandle.invoke(resourceClass.requiredResourceInstance(), params);
         } catch (InvocationTargetException e) {
-            Throwable cause = e.getCause();
+            @Nullable Throwable cause = e.getCause();
             if (cause instanceof Exception) {
                 throw (Exception) cause;
             }
@@ -109,14 +117,14 @@ class ResourceMethod {
         for (ApiResponseObj apiResponse : apiResponseList) {
             Class<?> responseClass = apiResponse.response;
 
-            Stream<MediaType> responseTypesStream = apiResponse.contentType.length != 0 ?
+            @Nullable Stream<MediaType> responseTypesStream = apiResponse.contentType.length != 0 ?
                 Stream.of(apiResponse.contentType).map(MediaType::valueOf)
                 : "204".equals(apiResponse.code) ? null : effectiveProduces.stream();
 
-            Map<String, MediaTypeObject> content = responseTypesStream == null ? null : responseTypesStream.collect(toMap(MediaType::toString,
+            @Nullable Map<String, MediaTypeObject> content = responseTypesStream == null ? null : responseTypesStream.collect(toMap(MediaType::toString,
                 mt -> {
-                    SchemaObject responseSchema;
-                    Object example = nullOrEmpty(apiResponse.example) ? null : apiResponse.example;
+                    @Nullable SchemaObject responseSchema;
+                    @Nullable Object example = nullOrEmpty(apiResponse.example) ? null : apiResponse.example;
 
                     if (void.class.isAssignableFrom(responseClass)) {
                         responseSchema = null;
@@ -150,7 +158,7 @@ class ResourceMethod {
 
         MediaType requestBodyMediaType = effectiveConsumes.get(0);
         String requestBodyMimeType = requestBodyMediaType.toString();
-        RequestBodyObject requestBody = params.stream()
+        @Nullable RequestBodyObject requestBody = params.stream()
             .filter(p -> p instanceof ResourceMethodParam.MessageBodyParam)
             .map(ResourceMethodParam.MessageBodyParam.class::cast)
             .map(messageBodyParam -> {
@@ -159,7 +167,7 @@ class ResourceMethod {
                 SchemaReference schemaReference = SchemaReference.find(customSchemas, bodyType, bodyParameterizedType);
                 SchemaObjectBuilder builder = schemaReference != null ? schemaReference.schema.toBuilder() :
                     schemaObjectFrom(bodyType, bodyParameterizedType, messageBodyParam.isRequired)
-                        .withTitle(messageBodyParam.descriptionData.summary)
+                        .withTitle(Objects.requireNonNull(messageBodyParam.descriptionData).summary)
                         .withDescription(messageBodyParam.descriptionData.description);
                 return requestBodyObject()
                     .withContent(singletonMap(requestBodyMimeType,
@@ -168,7 +176,7 @@ class ResourceMethod {
                                 schemaObjectCustomizer.customize(builder,
                                     schemaContext(SchemaObjectCustomizerTarget.REQUEST_BODY, null, bodyType, bodyParameterizedType, requestBodyMediaType))
                                     .build())
-                            .withExample(messageBodyParam.descriptionData.example)
+                            .withExample(Objects.requireNonNull(messageBodyParam.descriptionData).example)
                             .build()))
                     .withDescription(messageBodyParam.descriptionData.summaryAndDescription())
                     .withRequired(messageBodyParam.isRequired)
@@ -238,7 +246,7 @@ class ResourceMethod {
             ;
     }
 
-    private SchemaObjectCustomizerContext schemaContext(SchemaObjectCustomizerTarget target, String parameter, Class<?> type, Type parameterizedType, MediaType mediaType) {
+    private SchemaObjectCustomizerContext schemaContext(SchemaObjectCustomizerTarget target, @Nullable String parameter, Class<?> type, @Nullable Type parameterizedType, MediaType mediaType) {
         return new SchemaObjectCustomizerContext(target, type, parameterizedType, resourceClass.resourceInstance, methodHandle, parameter, mediaType);
     }
 
@@ -263,9 +271,9 @@ class ResourceMethod {
         return result;
     }
 
-    static Method getMuMethod(java.lang.reflect.Method restMethod) {
+    static @Nullable Method getMuMethod(java.lang.reflect.Method restMethod) {
         Annotation[] annotations = restMethod.getAnnotations();
-        Method value = null;
+        @Nullable Method value = null;
         for (Annotation annotation : annotations) {
             Class<? extends Annotation> anno = annotation.annotationType();
             HttpMethod httpMethodAnno = anno.getAnnotation(HttpMethod.class);

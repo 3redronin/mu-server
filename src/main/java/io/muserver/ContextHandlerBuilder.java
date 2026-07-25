@@ -9,7 +9,7 @@ import org.jspecify.annotations.Nullable;
  * Use this to serve a list of handlers from a base path.
  */
 public class ContextHandlerBuilder implements MuHandlerBuilder<ContextHandler> {
-    private String path;
+    private @Nullable String path;
     private List<MuHandler> handlers = new ArrayList<>();
 
     /**

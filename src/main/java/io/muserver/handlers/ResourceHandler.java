@@ -1,6 +1,7 @@
 package io.muserver.handlers;
 
 import io.muserver.*;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,15 +24,15 @@ public class ResourceHandler implements MuHandler {
     private static final Logger log = LoggerFactory.getLogger(ResourceHandler.class);
 
     private final Map<String, ResourceType> extensionToResourceType;
-    private final String defaultFile;
+    private final @Nullable String defaultFile;
     private final boolean directoryListingEnabled;
     private final ResourceProviderFactory resourceProviderFactory;
-    private final String directoryListingCss;
-    private final DateTimeFormatter dateFormatter;
-    private final ResourceCustomizer resourceCustomizer;
+    private final @Nullable String directoryListingCss;
+    private final @Nullable DateTimeFormatter dateFormatter;
+    private final @Nullable ResourceCustomizer resourceCustomizer;
     private final BareDirectoryRequestAction bareDirectoryRequestAction;
 
-    ResourceHandler(ResourceProviderFactory resourceProviderFactory, String defaultFile, Map<String, ResourceType> extensionToResourceType, boolean directoryListingEnabled, String directoryListingCss, DateTimeFormatter dateFormatter, ResourceCustomizer resourceCustomizer, BareDirectoryRequestAction bareDirectoryRequestAction) {
+    ResourceHandler(ResourceProviderFactory resourceProviderFactory, @Nullable String defaultFile, Map<String, ResourceType> extensionToResourceType, boolean directoryListingEnabled, @Nullable String directoryListingCss, @Nullable DateTimeFormatter dateFormatter, @Nullable ResourceCustomizer resourceCustomizer, BareDirectoryRequestAction bareDirectoryRequestAction) {
         this.resourceProviderFactory = resourceProviderFactory;
         this.extensionToResourceType = extensionToResourceType;
         this.defaultFile = defaultFile;
@@ -80,13 +81,13 @@ public class ResourceHandler implements MuHandler {
             }
         } else {
             String filename = requestPath.substring(requestPath.lastIndexOf('/'));
-            Date lastModified = provider.lastModified();
-            Long totalSize = provider.fileSize();
+            @Nullable Date lastModified = provider.lastModified();
+            @Nullable Long totalSize = provider.fileSize();
             addHeaders(response, filename, totalSize, lastModified, request);
             boolean sendBody = request.method() != Method.HEAD;
 
             String ims = request.headers().get(HeaderNames.IF_MODIFIED_SINCE);
-            if (ims != null) {
+            if (ims != null && lastModified != null) {
                 try {
                     long lastModTime = lastModified.getTime() / 1000;
                     long lastAccessed = Mutils.fromHttpDate(ims).getTime() / 1000;
@@ -135,12 +136,14 @@ public class ResourceHandler implements MuHandler {
         try (OutputStreamWriter osw = new OutputStreamWriter(response.outputStream(), StandardCharsets.UTF_8);
              BufferedWriter writer = new BufferedWriter(osw, 8192)) {
             writer.write("<!DOCTYPE html>\n");
-            new DirectoryLister(writer, provider, request.contextPath(), request.relativePath(), directoryListingCss, dateFormatter).render();
+            new DirectoryLister(writer, provider, request.contextPath(), request.relativePath(),
+                java.util.Objects.requireNonNull(directoryListingCss, "Directory listing CSS was not initialized"),
+                java.util.Objects.requireNonNull(dateFormatter, "Directory listing date formatter was not initialized")).render();
         }
     }
 
 
-    private void addHeaders(MuResponse response, String fileName, Long fileSize, Date lastModified, MuRequest request) {
+    private void addHeaders(MuResponse response, String fileName, @Nullable Long fileSize, @Nullable Date lastModified, MuRequest request) {
         int ind = fileName.lastIndexOf('.');
         ResourceType type;
         if (ind == -1) {

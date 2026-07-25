@@ -2,6 +2,7 @@ package io.muserver;
 
 import io.netty.handler.codec.http.DefaultHttpHeaders;
 import io.netty.handler.codec.http.HttpHeaders;
+import org.jspecify.annotations.Nullable;
 
 /**
  * A handler that can establish a web socket based on web socket upgrade requests.
@@ -10,12 +11,13 @@ import io.netty.handler.codec.http.HttpHeaders;
 public class WebSocketHandler implements MuHandler {
 
     private final MuWebSocketFactory factory;
-    private final String path;
+    private final @Nullable String path;
     private final long idleReadTimeoutMills;
     private final long pingAfterWriteMillis;
     private final int maxFramePayloadLength;
 
-    WebSocketHandler(MuWebSocketFactory factory, String path, long idleReadTimeoutMills, long pingAfterWriteMillis, int maxFramePayloadLength) {
+    WebSocketHandler(MuWebSocketFactory factory, @Nullable String path, long idleReadTimeoutMills,
+                     long pingAfterWriteMillis, int maxFramePayloadLength) {
         this.factory = factory;
         this.path = path;
         this.idleReadTimeoutMills = idleReadTimeoutMills;
@@ -28,7 +30,8 @@ public class WebSocketHandler implements MuHandler {
         if (request.method() != Method.GET) {
             return false;
         }
-        if (Mutils.hasValue(path) && !path.equals(request.relativePath())) {
+        String configuredPath = path;
+        if (configuredPath != null && !configuredPath.isEmpty() && !configuredPath.equals(request.relativePath())) {
             return false;
         }
 
@@ -67,4 +70,3 @@ public class WebSocketHandler implements MuHandler {
             '}';
     }
 }
-

@@ -13,6 +13,7 @@ import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,6 +27,7 @@ import java.util.UUID;
 import java.util.concurrent.*;
 
 import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
+import static java.util.Objects.requireNonNull;
 
 /**
  * A request and response exchange between a client and the server
@@ -52,7 +54,7 @@ class HttpExchange implements ResponseInfo, Exchange {
     private volatile long endTime;
     private volatile HttpExchangeState state = HttpExchangeState.IN_PROGRESS;
     private final List<HttpExchangeStateChangeListener> listeners = new CopyOnWriteArrayList<>();
-    private ScheduledFuture<?> readTimer;
+    private @Nullable ScheduledFuture<?> readTimer;
 
     boolean inLoop() {
         return ctx.executor().inEventLoop();
@@ -68,7 +70,7 @@ class HttpExchange implements ResponseInfo, Exchange {
             Thread.currentThread().interrupt();
             throw new UncheckedIOException(new InterruptedIOException("Interrupted while writing"));
         } catch (ExecutionException e) {
-            Throwable cause = e.getCause();
+            Throwable cause = requireNonNull(e.getCause(), "ExecutionException had no cause");
             if (cause instanceof RuntimeException) {
                 throw (RuntimeException) cause;
             } else {
@@ -86,7 +88,7 @@ class HttpExchange implements ResponseInfo, Exchange {
             Thread.currentThread().interrupt();
             throw new UncheckedIOException(new InterruptedIOException("Interrupted while writing"));
         } catch (ExecutionException e) {
-            Throwable cause = e.getCause();
+            Throwable cause = requireNonNull(e.getCause(), "ExecutionException had no cause");
             if (cause instanceof RuntimeException) {
                 throw (RuntimeException) cause;
             } else {
@@ -109,7 +111,7 @@ class HttpExchange implements ResponseInfo, Exchange {
         this.listeners.add(listener);
     }
 
-    private void onReqOrRespStateChange(RequestState requestChanged, ResponseState responseChanged) {
+    private void onReqOrRespStateChange(@Nullable RequestState requestChanged, @Nullable ResponseState responseChanged) {
         RequestState reqState = request.requestState();
         ResponseState respState = response.responseState();
         if (reqState.endState() && respState == ResponseState.UPGRADED) {
@@ -277,7 +279,7 @@ class HttpExchange implements ResponseInfo, Exchange {
         String relativeUri = getRelativeUrl(nettyRequest.uri());
 
         NettyRequestAdapter muRequest = new NettyRequestAdapter(ctx, nettyRequest, headers, method,
-            proto, relativeUri, headers.get(HeaderNames.HOST));
+            proto, relativeUri, requireNonNull(headers.get(HeaderNames.HOST), "Validated HTTP/1 request had no Host header"));
 
         MuStatsImpl serverStats = server.stats;
         Http1Response muResponse = new Http1Response(ctx, muRequest, new Http1Headers());
@@ -345,9 +347,10 @@ class HttpExchange implements ResponseInfo, Exchange {
         if (nettyRequest.decoderResult().isFailure()) {
             Throwable cause = nettyRequest.decoderResult().cause();
             if (cause instanceof TooLongFrameException) {
-                if (cause.getMessage().contains("header is larger")) {
+                String message = cause.getMessage();
+                if (message != null && message.contains("header is larger")) {
                     throw new InvalidHttpRequestException(431, "431 Request Header Fields Too Large");
-                } else if (cause.getMessage().contains("line is larger")) {
+                } else if (message != null && message.contains("line is larger")) {
                     throw new InvalidHttpRequestException(414, "414 Request-URI Too Long");
                 }
             }

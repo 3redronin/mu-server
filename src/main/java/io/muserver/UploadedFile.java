@@ -2,11 +2,13 @@ package io.muserver;
 
 import io.netty.handler.codec.http.multipart.DiskFileUpload;
 import io.netty.handler.codec.http.multipart.FileUpload;
+import org.jspecify.annotations.Nullable;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 
 import static io.muserver.Mutils.notNull;
+import static java.util.Objects.requireNonNull;
 
 /**
  * A file uploaded by the user, for example with an <code>&lt;input type=&quot;file&quot; name=&quot;name&quot;&gt;</code>
@@ -75,7 +77,7 @@ public interface UploadedFile {
 }
 class MuUploadedFile implements UploadedFile {
     private final FileUpload fu;
-    private File file;
+    private @Nullable File file;
 
     MuUploadedFile(FileUpload fileUpload) {
         fu = fileUpload;
@@ -94,7 +96,7 @@ class MuUploadedFile implements UploadedFile {
                 file = fu.getFile();
             }
         }
-        return file;
+        return requireNonNull(file);
     }
 
     @Override
