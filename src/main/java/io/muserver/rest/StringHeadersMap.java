@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -76,7 +77,12 @@ class StringHeadersMap extends AbstractMultivaluedMap<String, String> {
                         @Override
                         public Entry<String, List<String>> next() {
                             Entry<String, List<Object>> entry = entries.next();
-                            return new SimpleEntry<String, List<String>>(entry.getKey(), null) {
+                            return new Entry<String, List<String>>() {
+                                @Override
+                                public String getKey() {
+                                    return entry.getKey();
+                                }
+
                                 @Override
                                 public List<String> getValue() {
                                     return asStringList(entry.getValue());
@@ -85,6 +91,21 @@ class StringHeadersMap extends AbstractMultivaluedMap<String, String> {
                                 @Override
                                 public List<String> setValue(List<String> value) {
                                     return asStringSnapshot(entry.setValue(asObjectList(value)));
+                                }
+
+                                @Override
+                                public boolean equals(Object obj) {
+                                    if (!(obj instanceof Entry)) {
+                                        return false;
+                                    }
+                                    Entry<?, ?> other = (Entry<?, ?>) obj;
+                                    return Objects.equals(getKey(), other.getKey())
+                                        && Objects.equals(getValue(), other.getValue());
+                                }
+
+                                @Override
+                                public int hashCode() {
+                                    return Objects.hashCode(getKey()) ^ Objects.hashCode(getValue());
                                 }
                             };
                         }
