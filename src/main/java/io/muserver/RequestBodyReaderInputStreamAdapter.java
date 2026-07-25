@@ -30,7 +30,7 @@ class RequestBodyReaderInputStreamAdapter extends RequestBodyReader {
                     afterConsumed();
                     return -1;
                 }
-                byte b = currentBuf.readByte();
+                int b = currentBuf.readUnsignedByte();
                 afterConsumed();
                 return b;
             }

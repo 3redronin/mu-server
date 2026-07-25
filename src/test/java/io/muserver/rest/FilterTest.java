@@ -317,6 +317,55 @@ public class FilterTest {
         }
     }
 
+    @Test
+    public void requestFiltersCanGunzipTheEntityStreamAndRemoveStaleRepresentationHeaders() throws IOException {
+        String originalText = String.join("", Collections.nCopies(20, "A request body that compresses well. "));
+        byte[] originalBytes = originalText.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        ByteArrayOutputStream compressedBytes = new ByteArrayOutputStream();
+        try (GZIPOutputStream gzip = new GZIPOutputStream(compressedBytes)) {
+            gzip.write(originalBytes);
+        }
+        byte[] compressed = compressedBytes.toByteArray();
+        assertThat(compressed.length, is(lessThan(originalBytes.length)));
+
+        @Path("/gunzip")
+        class Resource {
+            @POST
+            @Produces("text/plain")
+            public String echo(String body) {
+                return body;
+            }
+        }
+
+        AtomicReference<String> encodedLength = new AtomicReference<>();
+        AtomicReference<String> contentEncodingAfterDecoding = new AtomicReference<>();
+        AtomicReference<String> contentLengthAfterDecoding = new AtomicReference<>();
+        AtomicReference<String> contentTypeAfterDecoding = new AtomicReference<>();
+        server = httpsServerForTest()
+            .addHandler(restHandler(new Resource())
+                .addRequestFilter(requestContext -> {
+                    encodedLength.set(requestContext.getHeaderString(HttpHeaders.CONTENT_LENGTH));
+                    requestContext.setEntityStream(new GZIPInputStream(requestContext.getEntityStream()));
+                    requestContext.getHeaders().remove(HttpHeaders.CONTENT_ENCODING);
+                    requestContext.getHeaders().remove(HttpHeaders.CONTENT_LENGTH);
+                    contentEncodingAfterDecoding.set(requestContext.getHeaderString(HttpHeaders.CONTENT_ENCODING));
+                    contentLengthAfterDecoding.set(requestContext.getHeaderString(HttpHeaders.CONTENT_LENGTH));
+                    contentTypeAfterDecoding.set(requestContext.getHeaderString(HttpHeaders.CONTENT_TYPE));
+                }))
+            .start();
+
+        try (Response response = call(request(server.uri().resolve("/gunzip"))
+            .header(HttpHeaders.CONTENT_ENCODING, "gzip")
+            .post(RequestBody.create(compressed, MediaType.parse("text/plain;charset=utf-8"))))) {
+            assertThat(response.code(), is(200));
+            assertThat(response.body().string(), is(originalText));
+        }
+        assertThat(encodedLength.get(), is(Integer.toString(compressed.length)));
+        assertThat(contentEncodingAfterDecoding.get(), is(nullValue()));
+        assertThat(contentLengthAfterDecoding.get(), is(nullValue()));
+        assertThat(contentTypeAfterDecoding.get(), is("text/plain;charset=utf-8"));
+    }
+
 
     @Test
     public void requestsCanBeAborted() throws IOException {
