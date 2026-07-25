@@ -194,7 +194,7 @@ public class RequestBodyReaderStringTest {
     @Test
     public void chineseWorks() throws Exception {
         server = ServerUtils.httpsServerForTest()
-            .withHttpsPort(8443)
+            .withHttpsPort(0)
             .addHandler((request, response) -> {
                 response.contentType(ContentTypes.TEXT_PLAIN_UTF8);
                 String requestBody = request.readBodyAsString();

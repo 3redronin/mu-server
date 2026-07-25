@@ -25,12 +25,16 @@ import java.util.concurrent.CompletionStage;
 public class MuRuntimeDelegate extends RuntimeDelegate {
 
     private static @Nullable MuRuntimeDelegate singleton;
+    private static @Nullable MuRuntimeDelegate initializing;
 
     /**
      * Registers the mu RuntimeDelegate with jax-rs, if it was not already.
      * @return Returns the runtime delegate.
      */
     public static synchronized RuntimeDelegate ensureSet() {
+        if (initializing != null) {
+            return initializing;
+        }
         if (singleton == null) {
             singleton = new MuRuntimeDelegate();
             RuntimeDelegate.setInstance(singleton);
@@ -40,14 +44,36 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
 
     private final Map<Class<?>, HeaderDelegate> headerDelegates = new HashMap<>();
 
-    private MuRuntimeDelegate() {
-        headerDelegates.put(MediaType.class, new MediaTypeHeaderDelegate());
-        headerDelegates.put(CacheControl.class, new CacheControlHeaderDelegate());
-        headerDelegates.put(NewCookie.class, new NewCookieHeaderDelegate());
-        headerDelegates.put(Cookie.class, new CookieHeaderDelegate());
-        headerDelegates.put(EntityTag.class, new EntityTagDelegate());
-        headerDelegates.put(Link.class, new LinkHeaderDelegate());
-        headerDelegates.put(Date.class, new DateHeaderDelegate());
+    /**
+     * Creates a runtime delegate.
+     * <p>This constructor is public so that Jakarta REST can instantiate this class when
+     * {@value RuntimeDelegate#JAXRS_RUNTIME_DELEGATE_PROPERTY} is set to
+     * {@code io.muserver.rest.MuRuntimeDelegate}. Applications should normally use
+     * {@link #ensureSet()} instead.</p>
+     */
+    public MuRuntimeDelegate() {
+        synchronized (MuRuntimeDelegate.class) {
+            boolean first = singleton == null && initializing == null;
+            if (first) {
+                initializing = this;
+            }
+            try {
+                headerDelegates.put(MediaType.class, new MediaTypeHeaderDelegate());
+                headerDelegates.put(CacheControl.class, new CacheControlHeaderDelegate());
+                headerDelegates.put(NewCookie.class, new NewCookieHeaderDelegate());
+                headerDelegates.put(Cookie.class, new CookieHeaderDelegate());
+                headerDelegates.put(EntityTag.class, new EntityTagDelegate());
+                headerDelegates.put(Link.class, new LinkHeaderDelegate());
+                headerDelegates.put(Date.class, new DateHeaderDelegate());
+                if (first) {
+                    singleton = this;
+                }
+            } finally {
+                if (first) {
+                    initializing = null;
+                }
+            }
+        }
     }
 
     /**
