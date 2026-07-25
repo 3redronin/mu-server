@@ -33,6 +33,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
+import java.util.zip.GZIPInputStream;
+import java.util.zip.GZIPOutputStream;
 
 import static io.muserver.ContextHandlerBuilder.context;
 import static io.muserver.rest.MuRuntimeDelegate.MU_REQUEST_PROPERTY;
@@ -496,6 +498,46 @@ public class FilterTest {
         }
         try (Response response = call(request(server.uri().resolve("/stream-filter?known-length")).head())) {
             assertThat(response.header("content-length"), is("11"));
+        }
+    }
+
+    @Test
+    public void responseFiltersCanGzipTheEntityStreamWhenServerCompressionIsDisabled() throws IOException {
+        @Path("manual-gzip")
+        class Resource {
+            @GET
+            @Produces("text/plain")
+            public String get() {
+                return "compressed by a response filter";
+            }
+        }
+
+        server = httpsServerForTest()
+            .withGzipEnabled(false)
+            .addHandler(restHandler(new Resource())
+                .addResponseFilter((requestContext, responseContext) -> {
+                    responseContext.getHeaders().putSingle(HttpHeaders.CONTENT_ENCODING, "gzip");
+                    responseContext.getHeaders().add(HttpHeaders.VARY, HttpHeaders.ACCEPT_ENCODING);
+                    responseContext.setEntityStream(new GZIPOutputStream(responseContext.getEntityStream()));
+                }))
+            .start();
+
+        assertThat(server.gzipEnabled(), is(false));
+        try (Response response = call(request(server.uri().resolve("/manual-gzip"))
+            .header(HttpHeaders.ACCEPT_ENCODING, "gzip"))) {
+            assertThat(response.header(HttpHeaders.CONTENT_ENCODING), is("gzip"));
+            assertThat(response.header(HttpHeaders.CONTENT_LENGTH), is(nullValue()));
+            assertThat(response.header(HttpHeaders.VARY), is(HttpHeaders.ACCEPT_ENCODING));
+
+            byte[] compressed = response.body().bytes();
+            assertThat(compressed[0] & 0xff, is(0x1f));
+            assertThat(compressed[1] & 0xff, is(0x8b));
+
+            try (GZIPInputStream gzip = new GZIPInputStream(new ByteArrayInputStream(compressed));
+                 ByteArrayOutputStream uncompressed = new ByteArrayOutputStream()) {
+                Mutils.copy(gzip, uncompressed, 8192);
+                assertThat(uncompressed.toString("UTF-8"), is("compressed by a response filter"));
+            }
         }
     }
 

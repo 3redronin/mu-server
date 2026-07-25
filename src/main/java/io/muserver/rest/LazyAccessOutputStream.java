@@ -2,6 +2,7 @@ package io.muserver.rest;
 
 import io.muserver.MuResponse;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.Objects;
@@ -14,11 +15,18 @@ class LazyAccessOutputStream extends OutputStream {
     private final Runnable beforeFirstWrite;
     private OutputStream os;
     private boolean prepared;
+    private boolean writesReleased;
+    private ByteArrayOutputStream deferredBytes = new ByteArrayOutputStream();
 
-    private OutputStream out() {
+    private OutputStream out() throws IOException {
+        if (!writesReleased) {
+            return deferredBytes;
+        }
         if (os == null) {
             prepare();
             os = muResponse.outputStream();
+            deferredBytes.writeTo(os);
+            deferredBytes = null;
         }
         return os;
     }
@@ -26,6 +34,14 @@ class LazyAccessOutputStream extends OutputStream {
     LazyAccessOutputStream(MuResponse muResponse, Runnable beforeFirstWrite) {
         this.muResponse = muResponse;
         this.beforeFirstWrite = beforeFirstWrite;
+    }
+
+    void releaseWrites() {
+        writesReleased = true;
+    }
+
+    boolean hasDeferredBytes() {
+        return deferredBytes != null && deferredBytes.size() > 0;
     }
 
     void prepare() {
