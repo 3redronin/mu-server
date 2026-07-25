@@ -281,7 +281,6 @@ public class RestHandler implements MuHandler {
                     if (!muResponse.hasStartedSendingData()) {
                         muResponse.status(jaxRSResponse.getStatus());
                     }
-                    out.releaseWrites();
 
                     if (jaxRSResponse.hasEntity()) {
                         jaxRSResponse.executeInterceptors(writerInterceptors); // run the interceptors
@@ -301,17 +300,9 @@ public class RestHandler implements MuHandler {
                     if (entity == null) {
                         OutputStream responseEntityStream = jaxRSResponse.getOutputStream();
                         if (entityStreamReplaced) {
-                            out.deferUncommittedWrites();
-                            try {
-                                responseEntityStream.close();
-                            } catch (Exception closeFailure) {
-                                out.discardUncommittedWrites();
-                                throw closeFailure;
-                            }
+                            responseEntityStream.close();
                         }
-                        if (out.hasWrittenBytes()) {
-                            out.finish();
-                        } else {
+                        if (!muResponse.hasStartedSendingData()) {
                             if (status != 204 && status != 304 && status != 205) {
                                 jaxRSResponse.getHeaders().putSingle("content-length", "0");
                             }
@@ -325,7 +316,7 @@ public class RestHandler implements MuHandler {
                         Type entityGenericType = jaxRSResponse.getEntityType();
                         MessageBodyWriter messageBodyWriter = entityProviders.selectWriter(entityType, entityGenericType, writerAnnontations, responseMediaType);
 
-                        if (!entityStreamReplaced && !out.hasWrittenBytes() && entityProviders.isBuiltInWriter(messageBodyWriter)) {
+                        if (!entityStreamReplaced && !muResponse.hasStartedSendingData() && entityProviders.isBuiltInWriter(messageBodyWriter)) {
                             long size = messageBodyWriter.getSize(jaxRSResponse.getEntity(), jaxRSResponse.getType(), jaxRSResponse.getGenericType(), writerAnnontations, responseMediaType);
                             if (size >= 0) {
                                 jaxRSResponse.getHeaders().putSingle("content-length", Long.toString(size));
@@ -336,32 +327,10 @@ public class RestHandler implements MuHandler {
 
                         try {
                             OutputStream responseEntityStream = jaxRSResponse.getOutputStream();
-                            Exception writeFailure = null;
-                            try {
+                            try (OutputStream replacementStream = entityStreamReplaced ? responseEntityStream : null) {
                                 messageBodyWriter.writeTo(jaxRSResponse.getEntity(), jaxRSResponse.getType(), jaxRSResponse.getGenericType(), writerAnnontations,
                                     jaxRSResponse.getMediaType(), jaxRSResponse.getHeaders(), responseEntityStream);
                                 out.prepare();
-                            } catch (Exception e) {
-                                writeFailure = e;
-                                out.discardUncommittedWrites();
-                            }
-                            if (entityStreamReplaced) {
-                                out.deferUncommittedWrites();
-                                try {
-                                    responseEntityStream.close();
-                                } catch (Exception closeFailure) {
-                                    if (writeFailure == null) {
-                                        out.discardUncommittedWrites();
-                                        throw closeFailure;
-                                    }
-                                    writeFailure.addSuppressed(closeFailure);
-                                }
-                                if (writeFailure == null) {
-                                    out.finish();
-                                }
-                            }
-                            if (writeFailure != null) {
-                                throw writeFailure;
                             }
                         } catch (Exception e) {
                             // remove the added headers before rewriting
