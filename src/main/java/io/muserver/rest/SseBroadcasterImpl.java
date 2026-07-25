@@ -14,6 +14,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
@@ -23,45 +24,61 @@ class SseBroadcasterImpl implements SseBroadcaster {
     private final List<BiConsumer<SseEventSink, Throwable>> errorListeners = new CopyOnWriteArrayList<>();
     private final List<Consumer<SseEventSink>> closeListeners = new CopyOnWriteArrayList<>();
     private final List<SinkRegistration> sinks = new CopyOnWriteArrayList<>();
+    private final ReentrantLock stateLock = new ReentrantLock();
 
     @Override
-    public synchronized void onError(BiConsumer<SseEventSink, Throwable> onError) {
+    public void onError(BiConsumer<SseEventSink, Throwable> onError) {
         Mutils.notNull("onError", onError);
-        throwIfClosed();
-        this.errorListeners.add(onError);
+        stateLock.lock();
+        try {
+            throwIfClosed();
+            this.errorListeners.add(onError);
+        } finally {
+            stateLock.unlock();
+        }
     }
 
     @Override
-    public synchronized void onClose(Consumer<SseEventSink> onClose) {
+    public void onClose(Consumer<SseEventSink> onClose) {
         Mutils.notNull("onClose", onClose);
-        throwIfClosed();
-        this.closeListeners.add(onClose);
+        stateLock.lock();
+        try {
+            throwIfClosed();
+            this.closeListeners.add(onClose);
+        } finally {
+            stateLock.unlock();
+        }
     }
 
     @Override
-    public synchronized void register(SseEventSink sseEventSink) {
+    public void register(SseEventSink sseEventSink) {
         Mutils.notNull("sseEventSink", sseEventSink);
-        throwIfClosed();
-        SinkRegistration registration = new SinkRegistration(sseEventSink);
-        this.sinks.add(registration);
-        if (sseEventSink instanceof JaxSseEventSinkImpl) {
-            ((JaxSseEventSinkImpl) sseEventSink).setResponseCompleteHandler(info -> {
-                if (!info.completedSuccessfully()) {
-                    Exception ex;
-                    switch (info.response().responseState()) {
-                        case CLIENT_DISCONNECTED:
-                            ex = new ClientDisconnectedException();
-                            break;
-                        case TIMED_OUT:
-                            ex = new TimeoutException();
-                            break;
-                        default:
-                        case ERRORED:
-                            ex = new MuException("Generic error");
+        stateLock.lock();
+        try {
+            throwIfClosed();
+            SinkRegistration registration = new SinkRegistration(sseEventSink);
+            this.sinks.add(registration);
+            if (sseEventSink instanceof JaxSseEventSinkImpl) {
+                ((JaxSseEventSinkImpl) sseEventSink).setResponseCompleteHandler(info -> {
+                    if (!info.completedSuccessfully()) {
+                        Exception ex;
+                        switch (info.response().responseState()) {
+                            case CLIENT_DISCONNECTED:
+                                ex = new ClientDisconnectedException();
+                                break;
+                            case TIMED_OUT:
+                                ex = new TimeoutException();
+                                break;
+                            default:
+                            case ERRORED:
+                                ex = new MuException("Generic error");
+                        }
+                        onSinkErrored(registration, ex, true);
                     }
-                    onSinkErrored(registration, ex, true);
-                }
-            });
+                });
+            }
+        } finally {
+            stateLock.unlock();
         }
     }
 
@@ -69,9 +86,12 @@ class SseBroadcasterImpl implements SseBroadcaster {
     public CompletionStage<?> broadcast(OutboundSseEvent event) {
         Mutils.notNull("event", event);
         List<SinkRegistration> currentSinks;
-        synchronized (this) {
+        stateLock.lock();
+        try {
             throwIfClosed();
             currentSinks = List.copyOf(sinks);
+        } finally {
+            stateLock.unlock();
         }
 
         CompletableFuture<?> completableFuture = new CompletableFuture<>();
@@ -135,13 +155,16 @@ class SseBroadcasterImpl implements SseBroadcaster {
     @Override
     public void close(boolean cascading) {
         List<SinkRegistration> sinksToClose;
-        synchronized (this) {
+        stateLock.lock();
+        try {
             if (isClosed) {
                 return;
             }
             isClosed = true;
             sinksToClose = cascading ? List.copyOf(sinks) : List.of();
             sinks.clear();
+        } finally {
+            stateLock.unlock();
         }
         for (SinkRegistration registration : sinksToClose) {
             try {

@@ -28,7 +28,6 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.lang.annotation.Annotation;
-import java.lang.reflect.Modifier;
 import java.lang.reflect.Proxy;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
@@ -38,6 +37,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -420,13 +420,49 @@ public class SseBroadcasterImplTest {
     }
 
     @Test
-    public void stateChangingOperationsAreSerializedWithClose() throws Exception {
-        assertThat(Modifier.isSynchronized(SseBroadcasterImpl.class
-            .getMethod("register", SseEventSink.class).getModifiers()), is(true));
-        assertThat(Modifier.isSynchronized(SseBroadcasterImpl.class
-            .getMethod("onClose", java.util.function.Consumer.class).getModifiers()), is(true));
-        assertThat(Modifier.isSynchronized(SseBroadcasterImpl.class
-            .getMethod("onError", java.util.function.BiConsumer.class).getModifiers()), is(true));
+    public void registerAndCloseAreSerialized() throws Exception {
+        SseBroadcasterImpl broadcaster = new SseBroadcasterImpl();
+        CountDownLatch registrationStarted = new CountDownLatch(1);
+        CountDownLatch allowRegistrationToComplete = new CountDownLatch(1);
+        class BlockingSink extends JaxSseEventSinkImpl {
+            private BlockingSink() {
+                super(null, null, null);
+            }
+
+            @Override
+            void setResponseCompleteHandler(ResponseCompleteListener listener) {
+                registrationStarted.countDown();
+                try {
+                    assertThat(allowRegistrationToComplete.await(1, TimeUnit.SECONDS), is(true));
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(e);
+                }
+            }
+        }
+
+        CompletableFuture<?> registration = CompletableFuture.runAsync(() ->
+            broadcaster.register(new BlockingSink()));
+        assertThat(registrationStarted.await(1, TimeUnit.SECONDS), is(true));
+
+        CountDownLatch closeStarted = new CountDownLatch(1);
+        CompletableFuture<?> close = CompletableFuture.runAsync(() -> {
+            closeStarted.countDown();
+            broadcaster.close(false);
+        });
+        assertThat(closeStarted.await(1, TimeUnit.SECONDS), is(true));
+
+        try {
+            assertThrows(TimeoutException.class, () -> close.get(100, TimeUnit.MILLISECONDS));
+        } finally {
+            allowRegistrationToComplete.countDown();
+        }
+        registration.get(1, TimeUnit.SECONDS);
+        close.get(1, TimeUnit.SECONDS);
+
+        assertThat(broadcaster.connectedSinksCount(), is(0));
+        assertThrows(IllegalStateException.class,
+            () -> broadcaster.register(sink(new AtomicBoolean())));
     }
 
     @Test
