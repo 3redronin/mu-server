@@ -474,14 +474,25 @@ public class FilterTest {
                             out.write(bytes, offset, length);
                         }
                     }));
+                    if (requestContext.getUriInfo().getQueryParameters().containsKey("known-length")) {
+                        responseContext.getHeaders().putSingle(HttpHeaders.CONTENT_LENGTH, "11");
+                    }
                 }))
             .start();
 
         try (Response response = call(request(server.uri().resolve("/stream-filter")))) {
             assertThat(response.body().string(), is("prefix-body"));
+            assertThat(response.header("content-length"), is(nullValue()));
+        }
+        try (Response response = call(request(server.uri().resolve("/stream-filter?known-length")))) {
+            assertThat(response.body().string(), is("prefix-body"));
+            assertThat(response.header("content-length"), is("11"));
         }
         try (Response response = call(request(server.uri().resolve("/stream-filter")).head())) {
             assertThat(response.header("content-length"), is(nullValue()));
+        }
+        try (Response response = call(request(server.uri().resolve("/stream-filter?known-length")).head())) {
+            assertThat(response.header("content-length"), is("11"));
         }
     }
 

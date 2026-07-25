@@ -293,11 +293,13 @@ public class JaxRSResponseTest {
     }
 
     @Test
-    public void getHeaderStringTreatsAnEmptyValueListAsAbsent() {
+    public void getHeaderStringTreatsAnEmptyValueListAsPresentWithoutAValue() {
         Response response = JaxRSResponse.ok().build();
         response.getHeaders().put("X-Empty", new java.util.ArrayList<>());
+        response.getHeaders().putSingle("X-Null", null);
 
-        assertThat(response.getHeaderString("X-Empty"), is(nullValue()));
+        assertThat(response.getHeaderString("X-Empty"), is(""));
+        assertThat(response.getHeaderString("X-Null"), is(""));
     }
 
     @Test
