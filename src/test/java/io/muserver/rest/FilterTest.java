@@ -621,7 +621,8 @@ public class FilterTest {
                 })
                 .addResponseFilter((requestContext, responseContext) -> {
                     if (responseContext.getEntity() instanceof Thing) {
-                        responseContext.setEntityStream(new FilterOutputStream(responseContext.getEntityStream()) {
+                        responseContext.getHeaders().putSingle(HttpHeaders.CONTENT_ENCODING, "gzip");
+                        responseContext.setEntityStream(new GZIPOutputStream(responseContext.getEntityStream()) {
                             @Override
                             public void close() throws IOException {
                                 replacementClosed.set(true);
@@ -636,6 +637,33 @@ public class FilterTest {
             assertThat(response.code(), is(500));
         }
         assertThat(replacementClosed.get(), is(true));
+    }
+
+    @Test
+    public void responseFiltersCanWriteLargeBodiesWithoutAnEntity() throws IOException {
+        byte[] filterBody = new byte[LazyAccessOutputStream.MAX_DEFERRED_BYTES * 2 + 1];
+        java.util.Arrays.fill(filterBody, (byte) 'x');
+        @Path("filter-body")
+        class Resource {
+            @GET
+            public jakarta.ws.rs.core.Response get() {
+                return jakarta.ws.rs.core.Response.ok().build();
+            }
+        }
+
+        server = httpsServerForTest()
+            .addHandler(restHandler(new Resource())
+                .addResponseFilter((requestContext, responseContext) -> {
+                    responseContext.setStatus(201);
+                    responseContext.getHeaders().putSingle(HttpHeaders.CONTENT_TYPE, "application/octet-stream");
+                    responseContext.getEntityStream().write(filterBody);
+                }))
+            .start();
+
+        try (Response response = call(request(server.uri().resolve("/filter-body")))) {
+            assertThat(response.code(), is(201));
+            assertThat(response.body().bytes(), is(filterBody));
+        }
     }
 
     @Test
