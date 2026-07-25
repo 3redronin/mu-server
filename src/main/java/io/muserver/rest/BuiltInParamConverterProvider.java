@@ -174,21 +174,34 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
         }
     }
 
-    private static class EnumConverter<E extends Enum<E>>  implements ParamConverter<E> {
+    private static class EnumConverter<E extends Enum<E>> implements ParamConverter<E>, ResourceMethodParam.HasAllowedValues {
         private final Class<E> enumClass;
         private final StaticMethodConverter<E> fromStringConverter;
+        private final List<String> allowedValues;
+
         private EnumConverter(Class<E> enumClass) {
             this.enumClass = enumClass;
             this.fromStringConverter = StaticMethodConverter.tryToCreateFromString(enumClass);
+            this.allowedValues = fromStringConverter == null
+                ? Stream.of(enumClass.getEnumConstants()).map(Enum::name).collect(Collectors.toList())
+                : java.util.Collections.emptyList();
         }
+
         public E fromString(String value) {
             if (Mutils.nullOrEmpty(value)) return null;
             if (fromStringConverter != null) return fromStringConverter.fromString(value);
             return Enum.valueOf(enumClass, value);
         }
+
         public String toString(E value) {
             return value.name();
         }
+
+        @Override
+        public List<String> allowedValues() {
+            return allowedValues;
+        }
+
         public String toString() {
             String validValues = Stream.of(enumClass.getEnumConstants()).map(Enum::name).collect(Collectors.joining(", "));
             return enumClass.getSimpleName() + " converter (valid values: " + validValues + ")";

@@ -6,6 +6,7 @@ import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.ext.ExceptionMapper;
 
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -22,18 +23,23 @@ import java.util.Objects;
  * response, for example to return a {@code 400 Bad Request} with an
  * application-specific validation message.
  *
+ * <p>When Mu's built-in enum converter is used, {@link #getAllowedValues()}
+ * contains the enum constant names accepted by that converter.
+ *
  * <p>The original conversion failure is available from {@link #getCause()}.
  */
 public final class UriParameterConversionException extends NotFoundException {
     private final String parameterName;
     private final String parameterValue;
     private final Class<?> targetType;
+    private final List<String> allowedValues;
 
-    UriParameterConversionException(String parameterName, String parameterValue, Class<?> targetType, Throwable cause) {
+    UriParameterConversionException(String parameterName, String parameterValue, Class<?> targetType, List<String> allowedValues, Throwable cause) {
         super("Could not convert URI parameter \"" + parameterName + "\" with value \"" + parameterValue + "\" to " + targetType.getTypeName(), cause);
         this.parameterName = Objects.requireNonNull(parameterName, "parameterName");
         this.parameterValue = parameterValue;
         this.targetType = Objects.requireNonNull(targetType, "targetType");
+        this.allowedValues = List.copyOf(Objects.requireNonNull(allowedValues, "allowedValues"));
     }
 
     /**
@@ -55,5 +61,14 @@ public final class UriParameterConversionException extends NotFoundException {
      */
     public Class<?> getTargetType() {
         return targetType;
+    }
+
+    /**
+     * Returns the values accepted by the parameter converter when they are known exactly.
+     *
+     * @return the allowed values, or an empty list when the converter does not declare a finite set
+     */
+    public List<String> getAllowedValues() {
+        return allowedValues;
     }
 }

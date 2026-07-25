@@ -436,7 +436,10 @@ abstract class ResourceMethodParam {
                 throw e;
             } catch (Exception e) {
                 if (source == ValueSource.MATRIX_PARAM || source == ValueSource.QUERY_PARAM || source == ValueSource.PATH_PARAM) {
-                    throw new UriParameterConversionException(parameterName, (String) value, parameterType, e);
+                    List<String> allowedValues = converter instanceof HasAllowedValues
+                        ? ((HasAllowedValues) converter).allowedValues()
+                        : emptyList();
+                    throw new UriParameterConversionException(parameterName, (String) value, parameterType, allowedValues, e);
                 }
                 String message = "Could not convert String value \"" + value + "\" to a " + parameterType + " using " + converter + " on parameter " + parameterHandle;
                 throw new BadRequestException(message, e);
@@ -456,6 +459,10 @@ abstract class ResourceMethodParam {
 
     interface HasDefaultValue {
         Object getDefault();
+    }
+
+    interface HasAllowedValues {
+        List<String> allowedValues();
     }
 
 }

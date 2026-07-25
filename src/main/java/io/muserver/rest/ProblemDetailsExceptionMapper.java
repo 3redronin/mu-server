@@ -29,6 +29,7 @@ import java.util.UUID;
  * </p>
  * <ul>
  *     <li>{@link ProblemDetailsException}: values are taken from the exception.</li>
+ *     <li>{@link UriParameterConversionException}: a 400 Bad Request problem-details body with parameter metadata is created.</li>
  *     <li>{@link WebApplicationException} with no response entity and a 4xx/5xx status: a problem-details body is created.</li>
  *     <li>Any other exception: a generic 500 problem-details response is created.</li>
  * </ul>
@@ -63,6 +64,10 @@ public class ProblemDetailsExceptionMapper <E extends Throwable> implements Exce
             return toResponse(problem.getStatus(), problem.getTitle(), problem.getDetail(), problem.getType(), problem.getInstance(), problem.getExtensionMembers());
         }
 
+        if (exception instanceof UriParameterConversionException) {
+            return uriParameterConversionError((UriParameterConversionException) exception);
+        }
+
         if (exception instanceof WebApplicationException) {
             WebApplicationException webApplicationException = (WebApplicationException) exception;
             Response response = webApplicationException.getResponse();
@@ -89,6 +94,24 @@ public class ProblemDetailsExceptionMapper <E extends Throwable> implements Exce
         }
 
         return serverError(exception);
+    }
+
+    private Response uriParameterConversionError(UriParameterConversionException exception) {
+        int status = Response.Status.BAD_REQUEST.getStatusCode();
+        URI instance = newInstance();
+        if (shouldLogInstance(status)) {
+            log.error("Sending a problem details response with instance={}", instance, exception);
+        }
+        Map<String, Object> extensionMembers = new LinkedHashMap<>();
+        extensionMembers.put("parameter", exception.getParameterName());
+        if (exception.getParameterValue() != null) {
+            extensionMembers.put("suppliedValue", exception.getParameterValue());
+        }
+        if (!exception.getAllowedValues().isEmpty()) {
+            extensionMembers.put("allowedValues", exception.getAllowedValues());
+        }
+        String detail = "Invalid value for URI parameter \"" + exception.getParameterName() + "\".";
+        return toResponse(status, defaultTitle(status), detail, null, instance, extensionMembers);
     }
 
     private Response serverError(Throwable exception) {
