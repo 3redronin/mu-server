@@ -26,5 +26,4 @@ jobs:
       - name: Build with Maven on JDK ${{ matrix.java }} and ${{ matrix.netty-profile }}
         run: mvn --batch-mode --update-snapshots -P${{ matrix.netty-profile }} verify
       - name: Verify RuntimeDelegate system-property selection in isolation
-        if: matrix.java == 11
         run: mvn --batch-mode -P${{ matrix.netty-profile }} -Dtest=RuntimeDelegateSystemPropertyTest test
