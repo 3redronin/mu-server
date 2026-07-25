@@ -888,7 +888,7 @@ public class WebSocketsTest {
     }
 
     @Test
-    public void sendingMessagesAfterTheClientsCloseResultInFailureCallBacksForAsyncCalls() throws Exception {
+    public void sendingMessagesAfterClientDisconnectThrowIOExceptions() throws Exception {
         CompletableFuture<MuWebSocketSession> sessionFuture = new CompletableFuture<>();
         server = ServerUtils.httpsServerForTest()
             .addHandler(webSocketHandler((request, responseHeaders) -> new SimpleWebSocket() {
@@ -914,11 +914,11 @@ public class WebSocketsTest {
         MuWebSocketSession serverSession = sessionFuture.get(10, TimeUnit.SECONDS);
         clientSocket.cancel();
 
-        assertThrows(IOException.class, () -> {
-            for (int i = 0; i < 100; i++) {
-                serverSession.sendText("This shouldn't work");
-            }
-        });
+        assertEventually(() -> server.activeConnections(), empty());
+
+        assertThrows(IOException.class, () -> serverSession.sendText("This shouldn't work"));
+        IOException repeatedFailure = assertThrows(IOException.class, () -> serverSession.sendText("Neither should this"));
+        assertThat(repeatedFailure.getCause(), instanceOf(IOException.class));
     }
 
     @Test

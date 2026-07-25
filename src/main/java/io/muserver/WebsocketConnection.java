@@ -322,6 +322,7 @@ class WebsocketConnection implements MuWebSocketSession {
 
 
     private MessageWritingState messageWritingState = MessageWritingState.NONE;
+    private @Nullable IOException writeFailure;
 
     void onTimeout() {
         try {
@@ -475,29 +476,35 @@ class WebsocketConnection implements MuWebSocketSession {
         assert outputStream != null;
         writeLock.lock();
         try {
+            if (writeFailure != null) {
+                throw new IOException("Cannot write websocket messages after a previous write failed", writeFailure);
+            }
             if (expectedState != null && messageWritingState != expectedState) {
                 throw new IllegalStateException("Expected state " + expectedState + " but was " + messageWritingState);
             }
             if (closeSent) {
                 throw new IllegalStateException("Cannot write websocket messages after close frame sent");
             }
-            outputStream.write(header, 0, header.length);
-            if (payloadLen > 0) {
-                outputStream.write(payload, payloadOffset, payloadLen);
-            }
-            outputStream.flush();
-            if (endState != null) {
-                messageWritingState = endState;
-            }
-        } catch (IOException e) {
-            messageWritingState = MessageWritingState.ERROR;
-            state = WebsocketSessionState.ERRORED;
             try {
-                webSocket.onError(e);
-            } catch (Exception userException) {
-                e.addSuppressed(userException);
+                outputStream.write(header, 0, header.length);
+                if (payloadLen > 0) {
+                    outputStream.write(payload, payloadOffset, payloadLen);
+                }
+                outputStream.flush();
+                if (endState != null) {
+                    messageWritingState = endState;
+                }
+            } catch (IOException e) {
+                writeFailure = e;
+                messageWritingState = MessageWritingState.ERROR;
+                state = WebsocketSessionState.ERRORED;
+                try {
+                    webSocket.onError(e);
+                } catch (Exception userException) {
+                    e.addSuppressed(userException);
+                }
+                throw e;
             }
-            throw e;
         } finally {
             writeLock.unlock();
         }
