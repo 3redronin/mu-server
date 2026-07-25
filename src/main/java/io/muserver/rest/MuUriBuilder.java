@@ -27,21 +27,21 @@ class MuUriBuilder extends UriBuilder {
         MuRuntimeDelegate.ensureSet();
     }
 
-    private String scheme;
-    private String userInfo;
-    private String host;
+    private @Nullable String scheme;
+    private @Nullable String userInfo;
+    private @Nullable String host;
     private int port = -1;
     private List<MuPathSegment> pathSegments = new ArrayList<>();
     private MultivaluedMap<String, String> query = new MultivaluedHashMap<>();
-    private String fragment;
+    private @Nullable String fragment;
     private boolean hasPrecedingSlash = false;
     private boolean hasTrailingSlash = false;
 
     MuUriBuilder() {
     }
 
-    private MuUriBuilder(String scheme, String userInfo, String host, int port, List<MuPathSegment> pathSegments,
-                         boolean hasPrecedingSlash, boolean hasTrailingSlash, MultivaluedMap<String, String> query, String fragment) {
+    private MuUriBuilder(@Nullable String scheme, @Nullable String userInfo, @Nullable String host, int port, List<MuPathSegment> pathSegments,
+                         boolean hasPrecedingSlash, boolean hasTrailingSlash, MultivaluedMap<String, String> query, @Nullable String fragment) {
         this.scheme = scheme;
         this.userInfo = userInfo;
         this.host = host;
@@ -62,6 +62,7 @@ class MuUriBuilder extends UriBuilder {
 
     @Override
     public UriBuilder uri(URI uri) {
+        Mutils.notNull("uri", uri);
         scheme(uri.getScheme());
         userInfo(uri.getUserInfo());
         host(uri.getHost());
@@ -90,6 +91,7 @@ class MuUriBuilder extends UriBuilder {
 
     @Override
     public UriBuilder schemeSpecificPart(String ssp) {
+        Mutils.notNull("ssp", ssp);
         MuUriBuilder builder = (MuUriBuilder) fromUri(URI.create(scheme + "://" + ssp));
         this.scheme = builder.scheme;
         this.userInfo = builder.userInfo;
@@ -101,19 +103,19 @@ class MuUriBuilder extends UriBuilder {
     }
 
     @Override
-    public UriBuilder scheme(String scheme) {
+    public UriBuilder scheme(@Nullable String scheme) {
         this.scheme = decode(scheme);
         return this;
     }
 
     @Override
-    public UriBuilder userInfo(String userInfo) {
+    public UriBuilder userInfo(@Nullable String userInfo) {
         this.userInfo = decode(userInfo);
         return this;
     }
 
     @Override
-    public UriBuilder host(String host) {
+    public UriBuilder host(@Nullable String host) {
         this.host = decode(host);
         return this;
     }
@@ -128,14 +130,16 @@ class MuUriBuilder extends UriBuilder {
     public UriBuilder path(String path) {
         Mutils.notNull("path", path);
         setSlashes(path);
-        this.pathSegments.addAll(MuUriInfo.pathStringToSegments(decode(path), false).collect(toList()));
+        this.pathSegments.addAll(MuUriInfo.pathStringToSegments(Objects.requireNonNull(decode(path)), false).collect(toList()));
         return this;
     }
 
     @Override
-    public UriBuilder replacePath(String path) {
+    public UriBuilder replacePath(@Nullable String path) {
         this.pathSegments.clear();
-        return path(path);
+        this.hasPrecedingSlash = false;
+        this.hasTrailingSlash = false;
+        return path == null ? this : path(path);
     }
 
     @Override
@@ -185,14 +189,14 @@ class MuUriBuilder extends UriBuilder {
         Mutils.notNull("segments", segments);
         for (String segment : segments) {
             Mutils.notNull("segment", segment);
-            this.pathSegments.addAll(MuUriInfo.pathStringToSegments(decode(segment), true).collect(toList()));
+            this.pathSegments.addAll(MuUriInfo.pathStringToSegments(Objects.requireNonNull(decode(segment)), true).collect(toList()));
         }
         this.hasTrailingSlash = false;
         return this;
     }
 
     @Override
-    public UriBuilder replaceMatrix(String matrix) {
+    public UriBuilder replaceMatrix(@Nullable String matrix) {
         MultivaluedMap<String, String> params = getOrCreateCurrentSegment().getMatrixParameters();
         params.clear();
         if (matrix != null) {
@@ -222,12 +226,11 @@ class MuUriBuilder extends UriBuilder {
     }
 
     @Override
-    public UriBuilder replaceMatrixParam(String name, Object... values) {
+    public UriBuilder replaceMatrixParam(String name, Object @Nullable ... values) {
         Mutils.notNull("name", name);
-        Mutils.notNull("values", values);
         MultivaluedMap<String, String> params = getOrCreateCurrentSegment().getMatrixParameters();
-        params.replace(name, Stream.of(values).map(Object::toString).collect(toList()));
-        return this;
+        params.remove(name);
+        return values == null || values.length == 0 ? this : matrixParam(name, values);
     }
 
     private MuPathSegment getOrCreateCurrentSegment() {
@@ -242,7 +245,7 @@ class MuUriBuilder extends UriBuilder {
     }
 
     @Override
-    public UriBuilder replaceQuery(String qs) {
+    public UriBuilder replaceQuery(@Nullable String qs) {
         if (qs == null) {
             this.query.clear();
         } else {
@@ -268,14 +271,14 @@ class MuUriBuilder extends UriBuilder {
     }
 
     @Override
-    public UriBuilder replaceQueryParam(String name, Object... values) {
+    public UriBuilder replaceQueryParam(String name, Object @Nullable ... values) {
         Mutils.notNull("name", name);
         query.remove(name);
         return values == null ? this : queryParam(name, values);
     }
 
     @Override
-    public UriBuilder fragment(String fragment) {
+    public UriBuilder fragment(@Nullable String fragment) {
         this.fragment = decode(fragment);
         return this;
     }
@@ -496,7 +499,7 @@ class MuUriBuilder extends UriBuilder {
         return map;
     }
 
-    private static void addTemplateNames(List<String> sorted, String value) {
+    private static void addTemplateNames(List<String> sorted, @Nullable String value) {
         if (value != null) {
             List<String> toAdd = UriPattern.uriTemplateToRegex(value).namedGroups();
             for (String s : toAdd) {
@@ -507,7 +510,7 @@ class MuUriBuilder extends UriBuilder {
         }
     }
 
-    private static String decode(Object value) {
+    private static @Nullable String decode(@Nullable Object value) {
         return value == null ? null : Jaxutils.leniantUrlDecode(value.toString());
     }
 

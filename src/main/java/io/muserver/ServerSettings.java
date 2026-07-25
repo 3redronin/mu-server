@@ -1,5 +1,7 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.List;
 import java.util.Set;
 
@@ -11,9 +13,11 @@ class ServerSettings {
     final int maxUrlSize;
     final boolean gzipEnabled;
     final Set<String> mimeTypesToGzip;
-    final List<RateLimiterImpl> rateLimiters;
+    final @Nullable List<RateLimiterImpl> rateLimiters;
 
-    ServerSettings(long minimumGzipSize, int maxHeadersSize, long requestReadTimeoutMillis, long maxRequestSize, int maxUrlSize, boolean gzipEnabled, Set<String> mimeTypesToGzip, List<RateLimiterImpl> rateLimiters) {
+    ServerSettings(long minimumGzipSize, int maxHeadersSize, long requestReadTimeoutMillis, long maxRequestSize,
+                   int maxUrlSize, boolean gzipEnabled, Set<String> mimeTypesToGzip,
+                   @Nullable List<RateLimiterImpl> rateLimiters) {
         this.minimumGzipSize = minimumGzipSize;
         this.maxHeadersSize = maxHeadersSize;
         this.requestReadTimeoutMillis = requestReadTimeoutMillis;
@@ -24,7 +28,7 @@ class ServerSettings {
         this.rateLimiters = rateLimiters;
     }
 
-    boolean shouldCompress(String declaredLength, String contentType) {
+    boolean shouldCompress(@Nullable String declaredLength, @Nullable String contentType) {
         if (!gzipEnabled) {
             return false;
         }

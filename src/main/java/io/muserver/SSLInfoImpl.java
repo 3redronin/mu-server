@@ -14,6 +14,8 @@ import java.util.List;
 
 import org.jspecify.annotations.Nullable;
 
+import static java.util.Objects.requireNonNull;
+
 class SSLInfoImpl implements SSLInfo {
     private static final Logger log = LoggerFactory.getLogger(SSLInfoImpl.class);
     private final String providerName;
@@ -61,7 +63,7 @@ class SSLInfoImpl implements SSLInfo {
                     }
                 }},
                 new SecureRandom());
-            conn = (HttpsURLConnection) httpsUri.toURL().openConnection();
+            conn = (HttpsURLConnection) requireNonNull(httpsUri, "HTTPS URI has not been set").toURL().openConnection();
             conn.setSSLSocketFactory(ctx.getSocketFactory());
             conn.setHostnameVerifier((arg0, arg1) -> true);
             conn.connect();

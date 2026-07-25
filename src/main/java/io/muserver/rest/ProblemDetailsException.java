@@ -20,7 +20,7 @@ public class ProblemDetailsException extends WebApplicationException {
     private final @Nullable URI instance;
     private final Map<String, @Nullable Object> extensionMembers;
 
-    ProblemDetailsException(int status, String title, @Nullable String detail, @Nullable URI type, @Nullable URI instance, Map<String, @Nullable Object> extensionMembers, Throwable cause) {
+    ProblemDetailsException(int status, String title, @Nullable String detail, @Nullable URI type, @Nullable URI instance, Map<String, @Nullable Object> extensionMembers, @Nullable Throwable cause) {
         super(detail != null ? detail : title, cause, status);
         this.status = status;
         this.title = title;

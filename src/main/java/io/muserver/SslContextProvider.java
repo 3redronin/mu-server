@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static java.util.Arrays.asList;
+import static java.util.Objects.requireNonNull;
 
 class SslContextProvider {
 
@@ -18,25 +19,30 @@ class SslContextProvider {
     private volatile SSLInfo sslInfo;
 
     SslContextProvider(SslContext context) {
-        set(context);
+        sslInfo = createSslInfo(context);
+        nettySslContext.set(context);
     }
 
     public SslContext get() {
-        return nettySslContext.get();
+        return requireNonNull(nettySslContext.get());
     }
 
     public void set(SslContext newValue) {
-        String provider = (newValue instanceof JdkSslContext)
+        sslInfo = createSslInfo(newValue);
+        nettySslContext.set(newValue);
+    }
+
+    private static SSLInfo createSslInfo(SslContext context) {
+        String provider = (context instanceof JdkSslContext)
             ? "JDK"
-            : (newValue instanceof OpenSslContext || newValue instanceof ReferenceCountedOpenSslContext)
+            : (context instanceof OpenSslContext || context instanceof ReferenceCountedOpenSslContext)
             ? "OpenSSL"
             : "unknown";
-        SSLEngine engine = newValue.newEngine(ByteBufAllocator.DEFAULT);
+        SSLEngine engine = context.newEngine(ByteBufAllocator.DEFAULT);
         List<String> protocols = asList(engine.getEnabledProtocols());
         List<String> ciphers = asList(engine.getEnabledCipherSuites());
-        sslInfo = new SSLInfoImpl(provider, protocols, ciphers);
         engine.closeOutbound();
-        nettySslContext.set(newValue);
+        return new SSLInfoImpl(provider, protocols, ciphers);
     }
 
     SSLInfo sslInfo() {

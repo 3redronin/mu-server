@@ -17,10 +17,10 @@ public class ServerVariableObject implements JsonWriter {
     private final String defaultValue;
     private final @Nullable String description;
 
-    ServerVariableObject(@Nullable List<String> enumValues, String defaultValue, @Nullable String description) {
-        notNull("defaultValue", defaultValue);
+    ServerVariableObject(@Nullable List<String> enumValues, @Nullable String defaultValue, @Nullable String description) {
         this.enumValues = enumValues;
-        this.defaultValue = defaultValue;
+        notNull("defaultValue", defaultValue);
+        this.defaultValue = java.util.Objects.requireNonNull(defaultValue);
         this.description = description;
     }
 

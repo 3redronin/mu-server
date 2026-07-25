@@ -7,6 +7,7 @@ import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http2.Http2Connection;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.handler.codec.http2.*;
+import org.jspecify.annotations.Nullable;
 
 class MuGzipHttp2ConnectionEncoder implements Http2ConnectionEncoder {
     private final Http2ConnectionEncoder encoder;
@@ -65,7 +66,7 @@ class MuGzipHttp2ConnectionEncoder implements Http2ConnectionEncoder {
         }
     }
 
-    static CharSequence actualEncodingIfHasMuPrefix(CharSequence seq) {
+    static @Nullable CharSequence actualEncodingIfHasMuPrefix(@Nullable CharSequence seq) {
         if (seq != null) {
             int len = seq.length();
             if (len > 3 && seq.charAt(0) == 'm' && seq.charAt(1) == 'u' && seq.charAt(2) == '-') {

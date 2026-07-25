@@ -7,6 +7,7 @@ import io.muserver.MuServerBuilder;
 import jakarta.ws.rs.ApplicationPath;
 import jakarta.ws.rs.SeBootstrap;
 import jakarta.ws.rs.core.Application;
+import org.jspecify.annotations.Nullable;
 
 import javax.net.ssl.SSLContext;
 import java.lang.reflect.InvocationTargetException;
@@ -132,7 +133,7 @@ final class MuSeBootstrap {
         }
 
         @Override
-        public SeBootstrap.Configuration.Builder property(String name, Object value) {
+        public SeBootstrap.Configuration.Builder property(String name, @Nullable Object value) {
             Objects.requireNonNull(name, "name");
             if (PROPERTY_TYPES.containsKey(name)) {
                 if (value == null) {
@@ -187,7 +188,7 @@ final class MuSeBootstrap {
         }
 
         @Override
-        public Object property(String name) {
+        public @Nullable Object property(String name) {
             return properties.get(name);
         }
     }
@@ -214,7 +215,7 @@ final class MuSeBootstrap {
             }
             return CompletableFuture.completedFuture(new StopResult() {
                 @Override
-                public <T> T unwrap(Class<T> nativeClass) {
+                public <T> @Nullable T unwrap(Class<T> nativeClass) {
                     return null;
                 }
             });

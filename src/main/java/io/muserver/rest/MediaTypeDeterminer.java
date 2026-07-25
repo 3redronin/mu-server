@@ -82,13 +82,13 @@ class MediaTypeDeterminer {
         // 8. For each member of M,m: • If m is a concrete type, set Mselected = m, finish.
         for (CombinedMediaType mediaType : m) {
             if (mediaType.isConcrete()) {
-                return new MediaType(mediaType.type, mediaType.subType, mediaType.charset);
+                return new MediaType(Objects.requireNonNull(mediaType.type), Objects.requireNonNull(mediaType.subType), mediaType.charset);
             }
         }
 
         // 9. If M contains ‘*/*’ or ‘application/*’, set Mselected = ‘application/octet-stream’, finish
         for (CombinedMediaType mediaType : m) {
-            if ((mediaType.isWildcardType || mediaType.type.equals("application")) && mediaType.isWildcardSubtype) {
+            if ((mediaType.isWildcardType || "application".equals(mediaType.type)) && mediaType.isWildcardSubtype) {
                 return MediaType.APPLICATION_OCTET_STREAM_TYPE;
             }
         }

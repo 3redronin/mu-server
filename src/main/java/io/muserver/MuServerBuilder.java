@@ -28,6 +28,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.*;
 import java.util.function.Function;
@@ -58,19 +59,19 @@ public class MuServerBuilder {
     private boolean gzipEnabled = true;
     private Set<String> mimeTypesToGzip = ResourceType.gzippableMimeTypes(ResourceType.getResourceTypes());
     private boolean addShutdownHook = false;
-    private String host;
-    private HttpsConfigBuilder sslContextBuilder;
-    private Http2Config http2Config;
+    private @Nullable String host;
+    private @Nullable HttpsConfigBuilder sslContextBuilder;
+    private @Nullable Http2Config http2Config;
     private long requestReadTimeoutMillis = TimeUnit.MINUTES.toMillis(2);
     private long idleTimeoutMills = TimeUnit.MINUTES.toMillis(10);
-    private ExecutorService executor;
+    private @Nullable ExecutorService executor;
     private long maxRequestSize = 24 * 1024 * 1024;
-    private List<ResponseCompleteListener> responseCompleteListeners;
-    private List<RequestRejectListener> requestRejectListeners;
-    private HashedWheelTimer wheelTimer;
-    private List<RateLimiterImpl> rateLimiters;
+    private @Nullable List<ResponseCompleteListener> responseCompleteListeners;
+    private @Nullable List<RequestRejectListener> requestRejectListeners;
+    private @Nullable HashedWheelTimer wheelTimer;
+    private @Nullable List<RateLimiterImpl> rateLimiters;
     private WriteBufferWaterMark writeBufferWaterMark = WriteBufferWaterMark.DEFAULT;
-    private UnhandledExceptionHandler unhandledExceptionHandler;
+    private @Nullable UnhandledExceptionHandler unhandledExceptionHandler;
     private boolean haProxyProtocolEnabled = false;
 
     /**
@@ -90,7 +91,7 @@ public class MuServerBuilder {
      *             only, or <code>"0.0.0.0"</code> to allow connections from the local network.
      * @return The current Mu Server Builder
      */
-    public MuServerBuilder withInterface(String host) {
+    public MuServerBuilder withInterface(@Nullable String host) {
         this.host = host;
         return this;
     }
@@ -412,7 +413,11 @@ public class MuServerBuilder {
             rateLimiters = new ArrayList<>();
         }
         RateLimiterImpl rateLimiter = new RateLimiterImpl(selector, wheelTimer);
-        this.rateLimiters.add(rateLimiter);
+        List<RateLimiterImpl> limiters = this.rateLimiters;
+        if (limiters == null) {
+            throw new IllegalStateException("Rate limiter storage was not initialized");
+        }
+        limiters.add(rateLimiter);
         return this;
     }
 
@@ -513,14 +518,14 @@ public class MuServerBuilder {
     /**
      * @return The current value of this property
      */
-    public String interfaceHost() {
+    public @Nullable String interfaceHost() {
         return host;
     }
 
     /**
      * @return The current value of this property
      */
-    public HttpsConfigBuilder httpsConfigBuilder() {
+    public @Nullable HttpsConfigBuilder httpsConfigBuilder() {
         if (sslContextBuilder != null && !(sslContextBuilder instanceof HttpsConfigBuilder)) {
             throw new IllegalStateException("Please switch to using HttpsConfigBuilder to set HTTPS config");
         }
@@ -530,7 +535,7 @@ public class MuServerBuilder {
     /**
      * @return The current value of this property
      */
-    public Http2Config http2Config() {
+    public @Nullable Http2Config http2Config() {
         return http2Config;
     }
 
@@ -551,7 +556,7 @@ public class MuServerBuilder {
     /**
      * @return The current value of this property
      */
-    public ExecutorService executor() {
+    public @Nullable ExecutorService executor() {
         return executor;
     }
 
@@ -573,27 +578,30 @@ public class MuServerBuilder {
      * @return The current value of this property
      */
     public List<ResponseCompleteListener> responseCompleteListeners() {
-        return Collections.unmodifiableList(responseCompleteListeners);
+        return responseCompleteListeners == null ? Collections.emptyList() : Collections.unmodifiableList(responseCompleteListeners);
     }
 
     /**
      * @return The current value of this property
      */
     public List<RequestRejectListener> requestRejectListeners() {
-        return Collections.unmodifiableList(requestRejectListeners);
+        return requestRejectListeners == null ? Collections.emptyList() : Collections.unmodifiableList(requestRejectListeners);
     }
 
     /**
      * @return The current value of this property
      */
     public List<RateLimiter> rateLimiters() {
-        return rateLimiters.stream().map(RateLimiter.class::cast).collect(Collectors.toList());
+        List<RateLimiterImpl> limiters = rateLimiters;
+        return limiters == null
+            ? Collections.emptyList()
+            : limiters.stream().map(RateLimiter.class::cast).collect(Collectors.toList());
     }
 
     /**
      * @return The current value of this property
      */
-    public UnhandledExceptionHandler unhandledExceptionHandler() {
+    public @Nullable UnhandledExceptionHandler unhandledExceptionHandler() {
         return unhandledExceptionHandler;
     }
 
@@ -718,7 +726,7 @@ public class MuServerBuilder {
             if (httpsChannel != null) {
                 channels.add(httpsChannel);
                 httpsUri = getUriFromChannel(httpsChannel, "https", host);
-                ((SSLInfoImpl) sslContextProvider.sslInfo()).setHttpsUri(httpsUri);
+                ((SSLInfoImpl) Objects.requireNonNull(sslContextProvider).sslInfo()).setHttpsUri(httpsUri);
             }
 
             InetSocketAddress serverAddress = (InetSocketAddress) channels.get(0).localAddress();
@@ -743,13 +751,19 @@ private  boolean gracefulWait(Duration gracefulDuration, MuStatsImpl stats) thro
     return !stats.activeRequests().isEmpty();
 }
 
-    private static URI getUriFromChannel(Channel httpChannel, String protocol, String host) {
+    private static URI getUriFromChannel(Channel httpChannel, String protocol, @Nullable String host) {
         host = host == null ? "localhost" : host;
         InetSocketAddress a = (InetSocketAddress) httpChannel.localAddress();
         return URI.create(protocol + "://" + host.toLowerCase() + ":" + a.getPort());
     }
 
-    private static Channel createChannel(NioEventLoopGroup bossGroup, NioEventLoopGroup workerGroup, NettyHandlerAdapter nettyHandlerAdapter, String host, int port, SslContextProvider sslContextProvider, GlobalTrafficShapingHandler trafficShapingHandler, MuServerImpl server, final boolean http2, long idleTimeoutMills, WriteBufferWaterMark writeBufferWaterMark, boolean haProxyProtocolEnabled) throws InterruptedException {
+    private static Channel createChannel(NioEventLoopGroup bossGroup, NioEventLoopGroup workerGroup,
+                                         NettyHandlerAdapter nettyHandlerAdapter, @Nullable String host, int port,
+                                         @Nullable SslContextProvider sslContextProvider,
+                                         GlobalTrafficShapingHandler trafficShapingHandler, MuServerImpl server,
+                                         final boolean http2, long idleTimeoutMills,
+                                         WriteBufferWaterMark writeBufferWaterMark,
+                                         boolean haProxyProtocolEnabled) throws InterruptedException {
         boolean usesSsl = sslContextProvider != null;
         String proto = usesSsl ? "https" : "http";
         ServerBootstrap b = new ServerBootstrap();
@@ -767,7 +781,7 @@ private  boolean gracefulWait(Duration gracefulDuration, MuStatsImpl stats) thro
                         p.addLast("HAProxyMessageHandler", new HAProxyMessageHandler());
                     }
                     if (usesSsl) {
-                        p.addLast("sni", new MuSniHandler(() -> new DomainWildcardMappingBuilder<>(sslContextProvider.get()).build()));
+                        p.addLast("sni", new MuSniHandler(() -> new DomainWildcardMappingBuilder<>(Objects.requireNonNull(sslContextProvider).get()).build()));
                     }
                     boolean addAlpn = http2 && usesSsl;
                     if (addAlpn) {

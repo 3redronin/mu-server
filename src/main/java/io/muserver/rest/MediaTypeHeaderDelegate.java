@@ -1,8 +1,10 @@
 package io.muserver.rest;
 
 import io.muserver.MediaTypeParser;
+import io.muserver.Mutils;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.ext.RuntimeDelegate;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -18,15 +20,17 @@ class MediaTypeHeaderDelegate implements RuntimeDelegate.HeaderDelegate<MediaTyp
 
     @Override
     public MediaType fromString(String value) {
+        Mutils.notNull("value", value);
         return MediaTypeParser.fromString(value);
     }
 
     @Override
     public String toString(MediaType mediaType) {
+        Mutils.notNull("mediaType", mediaType);
         return MediaTypeParser.toString(mediaType);
     }
 
-    static List<MediaType> fromStrings(List<String> accepts) {
+    static List<MediaType> fromStrings(@Nullable List<String> accepts) {
         if (accepts == null || accepts.isEmpty()) {
             return Collections.emptyList();
         }
@@ -39,7 +43,7 @@ class MediaTypeHeaderDelegate implements RuntimeDelegate.HeaderDelegate<MediaTyp
         return results;
     }
 
-    static boolean atLeastOneCompatible(List<MediaType> providerProduces, List<MediaType> consumerAccepts, String checkParameter) {
+    static boolean atLeastOneCompatible(List<MediaType> providerProduces, List<MediaType> consumerAccepts, @Nullable String checkParameter) {
         for (MediaType clientAccept : consumerAccepts) {
             for (MediaType produce : providerProduces) {
                 boolean compatible = produce.isCompatible(clientAccept);
@@ -47,7 +51,7 @@ class MediaTypeHeaderDelegate implements RuntimeDelegate.HeaderDelegate<MediaTyp
                     if (checkParameter != null) {
                         String clientParam = clientAccept.getParameters().get(checkParameter);
                         if (clientParam != null) {
-                            String serverParam = produce.getParameters().get(checkParameter);
+                            @Nullable String serverParam = produce.getParameters().get(checkParameter);
                             compatible = clientParam.equalsIgnoreCase(serverParam);
                         }
                     }

@@ -1,6 +1,7 @@
 package io.muserver;
 
 import io.netty.handler.codec.CorruptedFrameException;
+import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -14,7 +15,7 @@ import java.util.concurrent.TimeoutException;
  */
 @SuppressWarnings("RedundantThrows") // because implementing classes might throw exceptions
 public abstract class BaseWebSocket implements MuWebSocket {
-    private MuWebSocketSession session;
+    private @Nullable MuWebSocketSession session;
 
     /**
      * @return The state of the current session
@@ -40,9 +41,9 @@ public abstract class BaseWebSocket implements MuWebSocket {
     }
 
     @Override
-    public void onClientClosed(int statusCode, String reason) throws Exception {
+    public void onClientClosed(int statusCode, @Nullable String reason) throws Exception {
         try {
-            session.close(statusCode, reason);
+            session().close(statusCode, reason);
         } catch (IOException ignored) {
         }
     }

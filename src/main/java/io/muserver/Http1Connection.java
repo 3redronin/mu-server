@@ -26,6 +26,7 @@ import java.util.Set;
 import static io.netty.buffer.Unpooled.copiedBuffer;
 import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.Objects.requireNonNull;
 
 class Http1Connection extends SimpleChannelInboundHandler<Object> implements HttpConnection {
     private static final Logger log = LoggerFactory.getLogger(Http1Connection.class);
@@ -36,9 +37,9 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
     private final MuServerImpl server;
     private final String proto;
     private final Instant startTime = Instant.now();
-    private ChannelHandlerContext nettyCtx;
-    private InetSocketAddress remoteAddress;
-    private Exchange currentExchange = null;
+    private @Nullable ChannelHandlerContext nettyCtx;
+    private @Nullable InetSocketAddress remoteAddress;
+    private @Nullable Exchange currentExchange;
 
     Http1Connection(NettyHandlerAdapter nettyHandlerAdapter, MuServerImpl server, String proto) {
         this.nettyHandlerAdapter = nettyHandlerAdapter;
@@ -123,20 +124,22 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
                 HttpRequest rejectedReq = (HttpRequest) msg;
                 String method = rejectedReq.method() == null ? null : rejectedReq.method().name();
                 String uri = rejectedReq.uri();
-                nettyHandlerAdapter.onRequestRejected(new RejectedRequestImpl(ihr.code, ihr.getMessage(), method, uri, this));
-                sendSimpleResponse(ctx, ihr.getMessage(), ihr.code);
+                String message = String.valueOf(ihr.getMessage());
+                nettyHandlerAdapter.onRequestRejected(new RejectedRequestImpl(ihr.code, message, method, uri, this));
+                sendSimpleResponse(ctx, message, ihr.code);
                 ctx.channel().read();
             } catch (RedirectException e) {
                 sendRedirect(ctx, e.location);
             }
         } else if (currentExchange != null) {
-            currentExchange.onMessage(ctx, msg, error -> {
+            Exchange exchange = currentExchange;
+            exchange.onMessage(ctx, msg, error -> {
                 if (error == null) {
                     if (!(msg instanceof LastHttpContent)) {
                         ctx.channel().read();
                     }
                 } else {
-                    ctx.fireUserEventTriggered(new MuExceptionFiredEvent(currentExchange, -1, error));
+                    ctx.fireUserEventTriggered(new MuExceptionFiredEvent(exchange, -1, error));
                 }
             });
         } else {
@@ -226,12 +229,12 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
 
     @Override
     public @Nullable String httpsProtocol() {
-        return isHttps() ? getSslSession(nettyCtx).getProtocol() : null;
+        return isHttps() ? getSslSession(context()).getProtocol() : null;
     }
 
     @Override
     public @Nullable String cipher() {
-        return isHttps() ? getSslSession(nettyCtx).getCipherSuite() : null;
+        return isHttps() ? getSslSession(context()).getCipherSuite() : null;
     }
 
     @Override
@@ -241,7 +244,7 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
 
     @Override
     public InetSocketAddress remoteAddress() {
-        return remoteAddress;
+        return requireNonNull(remoteAddress, "Channel handler has not been added");
     }
 
     @Override
@@ -282,17 +285,21 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
 
     @Override
     public Optional<Certificate> clientCertificate() {
-        return fromContext(nettyCtx);
+        return fromContext(context());
     }
 
     @Override
     public Optional<ProxiedConnectionInfo> proxyInfo() {
-        return Optional.ofNullable(nettyCtx.channel().attr(HAProxyMessageHandler.HA_PROXY_INFO).get());
+        return Optional.ofNullable(context().channel().attr(HAProxyMessageHandler.HA_PROXY_INFO).get());
     }
 
     @Override
     public Optional<String> sniHostName() {
-        return Optional.ofNullable(nettyCtx.channel().attr(MuSniHandler.SNI_HOSTNAME).get());
+        return Optional.ofNullable(context().channel().attr(MuSniHandler.SNI_HOSTNAME).get());
+    }
+
+    private ChannelHandlerContext context() {
+        return requireNonNull(nettyCtx, "Channel handler has not been added");
     }
 
     static Optional<Certificate> fromContext(ChannelHandlerContext channelHandlerContext) {

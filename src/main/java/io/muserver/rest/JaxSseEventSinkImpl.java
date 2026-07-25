@@ -8,11 +8,14 @@ import jakarta.ws.rs.ServerErrorException;
 import jakarta.ws.rs.ext.MessageBodyWriter;
 import jakarta.ws.rs.sse.OutboundSseEvent;
 import jakarta.ws.rs.sse.SseEventSink;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayOutputStream;
+import java.lang.reflect.Type;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -24,12 +27,12 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 class JaxSseEventSinkImpl implements SseEventSink {
     private static final Logger log = LoggerFactory.getLogger(JaxSseEventSinkImpl.class);
 
-    private final AsyncSsePublisher ssePublisher;
-    private final MuResponse response;
-    private final EntityProviders entityProviders;
+    private final @Nullable AsyncSsePublisher ssePublisher;
+    private final @Nullable MuResponse response;
+    private final @Nullable EntityProviders entityProviders;
     private final List<ResponseCompleteListener> responseCompleteListeners = new CopyOnWriteArrayList<>();
 
-    public JaxSseEventSinkImpl(AsyncSsePublisher ssePublisher, MuResponse response, EntityProviders entityProviders) {
+    public JaxSseEventSinkImpl(@Nullable AsyncSsePublisher ssePublisher, @Nullable MuResponse response, @Nullable EntityProviders entityProviders) {
         this.ssePublisher = ssePublisher;
         this.response = response;
         this.entityProviders = entityProviders;
@@ -54,11 +57,15 @@ class JaxSseEventSinkImpl implements SseEventSink {
 
     @Override
     public boolean isClosed() {
-        return ssePublisher.isClosed();
+        return Objects.requireNonNull(ssePublisher, "ssePublisher").isClosed();
     }
 
     @Override
     public CompletionStage<?> send(OutboundSseEvent event) {
+        Objects.requireNonNull(event, "event");
+        AsyncSsePublisher publisher = Objects.requireNonNull(ssePublisher, "ssePublisher");
+        MuResponse muResponse = Objects.requireNonNull(response, "response");
+        EntityProviders providers = Objects.requireNonNull(entityProviders, "entityProviders");
         if (isClosed()) {
             throw new IllegalStateException("The SSE stream was already closed");
         }
@@ -67,19 +74,25 @@ class JaxSseEventSinkImpl implements SseEventSink {
 
         try {
             if (event.isReconnectDelaySet()) {
-                stage = ssePublisher.setClientReconnectTime(event.getReconnectDelay(), TimeUnit.MILLISECONDS);
+                stage = publisher.setClientReconnectTime(event.getReconnectDelay(), TimeUnit.MILLISECONDS);
             }
             if (event.getComment() != null) {
-                stage = ssePublisher.sendComment(event.getComment());
+                stage = publisher.sendComment(event.getComment());
             }
-            if (event.getData() != null) {
-                MessageBodyWriter messageBodyWriter = entityProviders.selectWriter(event.getType(), event.getGenericType(),
+            Object dataObject = event.getData();
+            if (dataObject != null) {
+                Class<?> dataType = Objects.requireNonNull(event.getType(), "An SSE event with data must have a raw type");
+                Type genericDataType = event.getGenericType();
+                if (genericDataType == null) {
+                    genericDataType = dataType;
+                }
+                MessageBodyWriter messageBodyWriter = providers.selectWriter(dataType, genericDataType,
                     JaxRSResponse.Builder.EMPTY_ANNOTATIONS, event.getMediaType());
                 try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-                    messageBodyWriter.writeTo(event.getData(), event.getType(), event.getGenericType(), JaxRSResponse.Builder.EMPTY_ANNOTATIONS,
-                        event.getMediaType(), muHeadersToJaxObj(response.headers()), out);
+                    messageBodyWriter.writeTo(dataObject, dataType, genericDataType, JaxRSResponse.Builder.EMPTY_ANNOTATIONS,
+                        event.getMediaType(), muHeadersToJaxObj(muResponse.headers()), out);
                     String data = new String(out.toByteArray(), UTF_8);
-                    stage = ssePublisher.send(data, event.getName(), event.getId());
+                    stage = publisher.send(data, event.getName(), event.getId());
                 }
             }
             if (stage == null) {
@@ -98,6 +111,6 @@ class JaxSseEventSinkImpl implements SseEventSink {
 
     @Override
     public void close() {
-        ssePublisher.close();
+        Objects.requireNonNull(ssePublisher, "ssePublisher").close();
     }
 }

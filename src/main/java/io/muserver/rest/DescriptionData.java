@@ -3,6 +3,7 @@ package io.muserver.rest;
 import io.muserver.Mutils;
 import io.muserver.openapi.ExternalDocumentationObject;
 import io.muserver.openapi.TagObject;
+import org.jspecify.annotations.Nullable;
 
 import java.lang.reflect.AnnotatedElement;
 import java.net.URI;
@@ -13,24 +14,24 @@ import static io.muserver.openapi.TagObjectBuilder.tagObject;
 
 class DescriptionData {
 
-    final String summary;
-    final String description;
-    final ExternalDocumentationObject externalDocumentation;
-    final String example;
+    final @Nullable String summary;
+    final @Nullable String description;
+    final @Nullable ExternalDocumentationObject externalDocumentation;
+    final @Nullable String example;
 
-    DescriptionData(String summary, String description, ExternalDocumentationObject externalDocumentation, String example) {
+    DescriptionData(@Nullable String summary, @Nullable String description, @Nullable ExternalDocumentationObject externalDocumentation, @Nullable String example) {
         this.summary = summary;
         this.description = description;
         this.externalDocumentation = externalDocumentation;
         this.example = example;
     }
 
-    static DescriptionData fromAnnotation(AnnotatedElement source, String defaultSummary) {
+    static DescriptionData fromAnnotation(AnnotatedElement source, @Nullable String defaultSummary) {
         Description description = source.getAnnotation(Description.class);
         if (description == null) {
             return new DescriptionData(defaultSummary, null, null, null);
         } else {
-            ExternalDocumentationObject externalDocumentation = null;
+            @Nullable ExternalDocumentationObject externalDocumentation = null;
             if (!description.documentationUrl().isEmpty()) {
                 try {
                     URI uri = new URI(description.documentationUrl());
@@ -48,17 +49,19 @@ class DescriptionData {
     }
 
     TagObject toTag() {
+        Mutils.notNull("summary", summary);
         return tagObject()
-            .withName(summary)
+            .withName(java.util.Objects.requireNonNull(summary))
             .withDescription(description)
             .withExternalDocs(externalDocumentation)
             .build();
     }
 
     public String summaryAndDescription() {
-        String s = Mutils.coalesce(summary, "");
-        if (!Mutils.nullOrEmpty(description)) {
-            s += " - " + description;
+        String s = summary == null ? "" : summary;
+        String details = description;
+        if (details != null && !details.isEmpty()) {
+            s += " - " + details;
         }
         return s;
     }

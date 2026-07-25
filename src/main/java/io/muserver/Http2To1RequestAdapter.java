@@ -5,13 +5,14 @@ import io.netty.handler.codec.http.*;
 import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.handler.codec.http2.HttpConversionUtil;
+import org.jspecify.annotations.Nullable;
 
 class Http2To1RequestAdapter implements HttpRequest {
     private final HttpMethod nettyMeth;
     private final String uri;
     private final Http2Headers headers;
     private final int streamId;
-    private HttpHeaders http1Headers;
+    private @Nullable HttpHeaders http1Headers;
 
     Http2To1RequestAdapter(int streamId, HttpMethod nettyMeth, String uri, Http2Headers headers) {
         this.streamId = streamId;

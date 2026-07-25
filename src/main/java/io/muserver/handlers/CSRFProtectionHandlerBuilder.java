@@ -19,7 +19,7 @@ public class CSRFProtectionHandlerBuilder implements MuHandlerBuilder<CSRFProtec
 
     private final Set<String> trustedOrigins = new HashSet<>();
     private final Set<String> bypassPaths = new HashSet<>();
-    private MuHandler rejectionHandler;
+    private @Nullable MuHandler rejectionHandler;
 
     /**
      * Adds a trusted origin. Requests with an <code>Origin</code> header exactly matching this value are allowed.

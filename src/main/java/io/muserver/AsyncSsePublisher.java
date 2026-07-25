@@ -138,12 +138,12 @@ class AsyncSsePublisherImpl implements AsyncSsePublisher {
     }
 
     @Override
-    public CompletionStage<?> send(String message, String event) {
+    public CompletionStage<?> send(String message, @Nullable String event) {
         return send(message, event, null);
     }
 
     @Override
-    public CompletionStage<?> send(String message, String event, String eventID) {
+    public CompletionStage<?> send(String message, @Nullable String event, @Nullable String eventID) {
         return write(SsePublisherImpl.dataText(message, event, eventID));
     }
 

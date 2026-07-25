@@ -4,6 +4,9 @@ import java.net.URI;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.jspecify.annotations.Nullable;
+
+import static java.util.Objects.requireNonNull;
 
 /**
  * A handler that wraps a list of other handlers and serves them at a certain path prefix (or context).
@@ -22,8 +25,8 @@ public class ContextHandler implements MuHandler {
      * @param contextPath The patch
      * @param muHandlers The handlers
      */
-    ContextHandler(String contextPath, List<MuHandler> muHandlers) {
-        String slashTrimmed = Mutils.trim(Mutils.coalesce(contextPath, "").trim(), "/");
+    ContextHandler(@Nullable String contextPath, List<MuHandler> muHandlers) {
+        String slashTrimmed = Mutils.trim(requireNonNull(Mutils.coalesce(contextPath, "")).trim(), "/");
         this.hasContext = !slashTrimmed.isEmpty();
         this.contextPath = Stream.of(slashTrimmed.split("/"))
             .map(Mutils::urlEncode)

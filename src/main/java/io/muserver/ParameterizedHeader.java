@@ -167,8 +167,8 @@ public class ParameterizedHeader {
      */
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        Map<String, String> parameters = this.parameters();
-        for (Map.Entry<String, String> entry : parameters.entrySet()) {
+        Map<String, @Nullable String> parameters = this.parameters();
+        for (Map.Entry<String, @Nullable String> entry : parameters.entrySet()) {
             if (sb.length() > 0) {
                 sb.append(", ");
             }

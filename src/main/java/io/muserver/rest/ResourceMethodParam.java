@@ -27,6 +27,7 @@ import java.util.stream.Collectors;
 import static io.muserver.openapi.ParameterObjectBuilder.parameterObject;
 import static io.muserver.openapi.SchemaObjectBuilder.schemaObjectFrom;
 import static java.util.Collections.emptyList;
+import static java.util.Objects.requireNonNull;
 
 abstract class ResourceMethodParam {
 
@@ -36,10 +37,10 @@ abstract class ResourceMethodParam {
     final Type genericType;
     final Annotation[] annotations;
     final ValueSource source;
-    final DescriptionData descriptionData;
+    final @Nullable DescriptionData descriptionData;
     final boolean isRequired;
 
-    ResourceMethodParam(int index, ValueSource source, ResolvedParameter parameter, DescriptionData descriptionData, boolean isRequired) {
+    ResourceMethodParam(int index, ValueSource source, ResolvedParameter parameter, @Nullable DescriptionData descriptionData, boolean isRequired) {
         this.index = index;
         this.source = source;
         this.parameterHandle = parameter.handle;
@@ -50,16 +51,16 @@ abstract class ResourceMethodParam {
         this.isRequired = isRequired;
     }
 
-    static ResourceMethodParam fromParameter(int index, Parameter parameterHandle, List<ParamConverterProvider> paramConverterProviders, UriPattern methodPattern) {
+    static ResourceMethodParam fromParameter(int index, Parameter parameterHandle, List<ParamConverterProvider> paramConverterProviders, @Nullable UriPattern methodPattern) {
         return fromParameter(index, parameterHandle, parameterHandle,
             parameterHandle.getDeclaringExecutable().getDeclaringClass(), paramConverterProviders, methodPattern);
     }
 
     static ResourceMethodParam fromParameter(int index, Parameter parameterHandle, Parameter annotationSource, Class<?> concreteClass,
-                                             List<ParamConverterProvider> paramConverterProviders, UriPattern methodPattern) {
+                                             List<ParamConverterProvider> paramConverterProviders, @Nullable UriPattern methodPattern) {
 
         ResolvedParameter parameter = new ResolvedParameter(parameterHandle, annotationSource, concreteClass);
-        Pattern pattern = null;
+        @Nullable Pattern pattern = null;
         ValueSource source = getSource(annotationSource);
         boolean isRequired = source == ValueSource.PATH_PARAM || hasDeclared(annotationSource, Required.class);
         if (source == ValueSource.MESSAGE_BODY) {
@@ -76,7 +77,7 @@ abstract class ResourceMethodParam {
             ParamConverter<?> converter = getParamConverter(parameter, paramConverterProviders);
             boolean lazyDefaultValue = converter.getClass().getDeclaredAnnotation(ParamConverter.Lazy.class) != null;
             boolean explicitDefault = hasDeclared(annotationSource, DefaultValue.class);
-            Object defaultValue = getDefaultValue(parameter, annotationSource, converter, lazyDefaultValue, source, key);
+            @Nullable Object defaultValue = getDefaultValue(parameter, annotationSource, converter, lazyDefaultValue, source, key);
 
             isRequired |= (!explicitDefault && parameter.type.isPrimitive());
 
@@ -103,8 +104,9 @@ abstract class ResourceMethodParam {
 
         private ResolvedParameter(Parameter handle, Parameter annotationSource, Class<?> concreteClass) {
             this.handle = handle;
-            this.genericType = GenericTypeResolver.resolve(handle.getParameterizedType(), concreteClass,
+            Type resolvedType = GenericTypeResolver.resolve(handle.getParameterizedType(), concreteClass,
                 handle.getDeclaringExecutable().getDeclaringClass());
+            this.genericType = resolvedType == null ? handle.getParameterizedType() : resolvedType;
             Class<?> resolvedClass = GenericTypeResolver.rawClass(genericType);
             this.type = resolvedClass == null ? handle.getType() : resolvedClass;
             this.annotations = combinedAnnotations(handle, annotationSource);
@@ -134,22 +136,22 @@ abstract class ResourceMethodParam {
 
     static class RequestBasedParam extends ResourceMethodParam {
 
-        private final Object defaultValue;
+        private final @Nullable Object defaultValue;
         final boolean encodedRequested;
         private final boolean lazyDefaultValue;
         private final ParamConverter paramConverter;
         final String key;
         final boolean isDeprecated;
-        private final Pattern pattern;
+        private final @Nullable Pattern pattern;
         private final boolean explicitDefault;
 
         ParameterObjectBuilder createDocumentationBuilder() {
             ParameterObjectBuilder builder = parameterObject()
-                .withIn(source.openAPIIn)
+                .withIn(requireNonNull(source.openAPIIn, "Parameter source is not represented as an OpenAPI parameter"))
                 .withRequired(isRequired)
                 .withDeprecated(isDeprecated ? true : null)
                 .withName(key);
-            ExternalDocumentationObject externalDoc = null;
+            @Nullable ExternalDocumentationObject externalDoc = null;
             if (descriptionData != null) {
                 String desc = descriptionData.summaryAndDescription();
                 builder
@@ -157,7 +159,7 @@ abstract class ResourceMethodParam {
                     .withExample(descriptionData.example);
                 externalDoc = descriptionData.externalDocumentation;
             }
-            Pattern patternIfNotDefault = this.pattern == null || UriPattern.DEFAULT_CAPTURING_GROUP_PATTERN.equals(this.pattern.pattern()) ? null : this.pattern;
+            @Nullable Pattern patternIfNotDefault = this.pattern == null || UriPattern.DEFAULT_CAPTURING_GROUP_PATTERN.equals(this.pattern.pattern()) ? null : this.pattern;
             return builder.withSchema(
                 schemaObjectFrom(type, genericType, isRequired)
                     .withDefaultValue(source == ValueSource.PATH_PARAM || !hasExplicitDefault() ? null : defaultValue())
@@ -167,7 +169,7 @@ abstract class ResourceMethodParam {
             );
         }
 
-        RequestBasedParam(int index, ValueSource source, ResolvedParameter parameter, @Nullable Object defaultValue, boolean encodedRequested, boolean lazyDefaultValue, ParamConverter paramConverter, DescriptionData descriptionData, String key, boolean isDeprecated, boolean isRequired, Pattern pattern, boolean explicitDefault) {
+        RequestBasedParam(int index, ValueSource source, ResolvedParameter parameter, @Nullable Object defaultValue, boolean encodedRequested, boolean lazyDefaultValue, ParamConverter paramConverter, DescriptionData descriptionData, String key, boolean isDeprecated, boolean isRequired, @Nullable Pattern pattern, boolean explicitDefault) {
             super(index, source, parameter, descriptionData, isRequired);
             this.defaultValue = defaultValue;
             this.encodedRequested = encodedRequested;
@@ -188,7 +190,7 @@ abstract class ResourceMethodParam {
         }
 
 
-        public Object defaultValue() {
+        public @Nullable Object defaultValue() {
             boolean skipConverter = defaultValue != null && !lazyDefaultValue;
             return convertValue(parameterHandle, type, paramConverter, skipConverter, defaultValue, source, key);
         }
@@ -266,13 +268,13 @@ abstract class ResourceMethodParam {
                     : emptyList();
             boolean isSpecified = specifiedValue != null && !specifiedValue.isEmpty();
             if (encodedRequested && isSpecified) {
-                specifiedValue = specifiedValue.stream()
+                specifiedValue = requireNonNull(specifiedValue).stream()
                     .map(value -> source == ValueSource.FORM_PARAM ? FormUrlEncoder.formUrlEncode(value) : Mutils.urlEncode(value))
                     .collect(Collectors.toList());
             }
             if (collection != null) {
                 if (isSpecified) {
-                    for (String stringValue : specifiedValue) {
+                    for (String stringValue : requireNonNull(specifiedValue)) {
                         collection.add(ResourceMethodParam.convertValue(parameterHandle, type, paramConverter, false, stringValue, source, key));
                     }
                 } else if (hasExplicitDefault()) {
@@ -280,7 +282,7 @@ abstract class ResourceMethodParam {
                 }
                 return readOnly(collection);
             } else {
-                return isSpecified ? ResourceMethodParam.convertValue(parameterHandle, type, paramConverter, false, specifiedValue.get(0), source, key) : defaultValue();
+                return isSpecified ? ResourceMethodParam.convertValue(parameterHandle, type, paramConverter, false, requireNonNull(specifiedValue).get(0), source, key) : defaultValue();
             }
         }
 
@@ -301,8 +303,8 @@ abstract class ResourceMethodParam {
                 : Collections.unmodifiableCollection(collection);
         }
 
-        private List<String> getParamValues(MultivaluedMap<String, String> queryParameters, String key, CollectionParameterStrategy cps, boolean isCollectionType) {
-            List<String> values = queryParameters.get(key);
+        private @Nullable List<String> getParamValues(MultivaluedMap<String, String> queryParameters, String key, CollectionParameterStrategy cps, boolean isCollectionType) {
+            @Nullable List<String> values = queryParameters.get(key);
             if (isCollectionType && values != null && cps == CollectionParameterStrategy.SPLIT_ON_COMMA) {
                 List<String> copy = new ArrayList<>(values.size());
                 for (String value : values) {
@@ -334,7 +336,7 @@ abstract class ResourceMethodParam {
             return emptyList();
         }
 
-        static Collection<Object> createCollection(Class<?> collectionType) {
+        static @Nullable Collection<Object> createCollection(Class<?> collectionType) {
             if (SortedSet.class.equals(collectionType)) {
                 return new TreeSet<>();
             } else if (Set.class.equals(collectionType)) {
@@ -411,7 +413,7 @@ abstract class ResourceMethodParam {
         throw new MuException("Could not find a suitable ParamConverter for " + parameterizedType + " at " + parameter.handle.getDeclaringExecutable());
     }
 
-    private static Object getDefaultValue(ResolvedParameter parameter, Parameter annotationSource, ParamConverter<?> converter, boolean lazyDefaultValue, ValueSource source, String parameterName) {
+    private static @Nullable Object getDefaultValue(ResolvedParameter parameter, Parameter annotationSource, ParamConverter<?> converter, boolean lazyDefaultValue, ValueSource source, String parameterName) {
         DefaultValue annotation = annotationSource.getDeclaredAnnotation(DefaultValue.class);
         if (annotation == null) {
             return converter instanceof HasDefaultValue ? ((HasDefaultValue) converter).getDefault() : null;
@@ -419,7 +421,7 @@ abstract class ResourceMethodParam {
         return convertValue(parameter.handle, parameter.type, converter, lazyDefaultValue, annotation.value(), source, parameterName);
     }
 
-    private static Object convertValue(Parameter parameterHandle, Class<?> parameterType, ParamConverter<?> converter, boolean skipConverter, Object value, ValueSource source, String parameterName) {
+    private static @Nullable Object convertValue(Parameter parameterHandle, Class<?> parameterType, @Nullable ParamConverter<?> converter, boolean skipConverter, @Nullable Object value, ValueSource source, String parameterName) {
         if (converter == null || skipConverter) {
             return value;
         } else {
@@ -450,15 +452,15 @@ abstract class ResourceMethodParam {
     enum ValueSource {
         MESSAGE_BODY(null), QUERY_PARAM("query"), MATRIX_PARAM(null), PATH_PARAM("path"), COOKIE_PARAM("cookie"), HEADER_PARAM("header"), FORM_PARAM(null), CONTEXT(null), SUSPENDED(null);
 
-        final String openAPIIn;
+        final @Nullable String openAPIIn;
 
-        ValueSource(String openAPIIn) {
+        ValueSource(@Nullable String openAPIIn) {
             this.openAPIIn = openAPIIn;
         }
     }
 
     interface HasDefaultValue {
-        Object getDefault();
+        @Nullable Object getDefault();
     }
 
     interface HasAllowedValues {

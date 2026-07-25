@@ -19,8 +19,8 @@ import static java.util.Arrays.asList;
  */
 public class CORSHandlerBuilder implements MuHandlerBuilder<CORSHandler> {
 
-    private CORSConfig corsConfig;
-    private Set<Method> allowedMethods;
+    private @Nullable CORSConfig corsConfig;
+    private @Nullable Set<Method> allowedMethods;
 
     /**
      * Sets the CORS configuration for the handler

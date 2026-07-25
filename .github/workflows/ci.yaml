@@ -23,5 +23,9 @@ jobs:
           java-version: ${{ matrix.java }}
           distribution: 'temurin'
           cache: 'maven'
+      - name: Build with Maven and NullAway on JDK 21 and ${{ matrix.netty-profile }}
+        if: matrix.java == 21
+        run: mvn --batch-mode --update-snapshots -P${{ matrix.netty-profile }},nullaway verify
       - name: Build with Maven on JDK ${{ matrix.java }} and ${{ matrix.netty-profile }}
+        if: matrix.java != 21
         run: mvn --batch-mode --update-snapshots -P${{ matrix.netty-profile }} verify

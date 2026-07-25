@@ -26,6 +26,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import org.jspecify.annotations.Nullable;
 
 import static io.muserver.ContentTypes.TEXT_PLAIN_UTF8;
+import static java.util.Objects.requireNonNull;
 
 abstract class NettyResponseAdaptor implements MuResponse {
     private static final Logger log = LoggerFactory.getLogger(NettyResponseAdaptor.class);
@@ -42,7 +43,11 @@ abstract class NettyResponseAdaptor implements MuResponse {
     protected @Nullable HttpExchange httpExchange;
 
     public void setExchange(HttpExchange httpExchange) {
-        this.httpExchange = httpExchange;
+        this.httpExchange = requireNonNull(httpExchange, "httpExchange");
+    }
+
+    final HttpExchange exchange() {
+        return requireNonNull(httpExchange, "Exchange has not been set");
     }
 
     protected void outputState(ResponseState state) {
@@ -53,7 +58,7 @@ abstract class NettyResponseAdaptor implements MuResponse {
         }
         this.state = state;
         for (ResponseStateChangeListener listener : listeners) {
-            listener.onStateChange(httpExchange, state);
+            listener.onStateChange(exchange(), state);
         }
     }
 
@@ -119,7 +124,7 @@ abstract class NettyResponseAdaptor implements MuResponse {
     }
 
     protected @Nullable ChannelFuture startStreaming() {
-        assert httpExchange.inLoop() : "Not in event loop";
+        assert exchange().inLoop() : "Not in event loop";
         if (state != ResponseState.NOTHING) {
             throw new IllegalStateException("Cannot start streaming when state is " + state);
         }
@@ -131,7 +136,7 @@ abstract class NettyResponseAdaptor implements MuResponse {
     }
 
     static CharSequence getVaryWithAE(@Nullable String curValue) {
-        if (Mutils.nullOrEmpty(curValue)) {
+        if (curValue == null || curValue.isEmpty()) {
             return HeaderNames.ACCEPT_ENCODING;
         } else {
             if (!curValue.toLowerCase().contains(HeaderNames.ACCEPT_ENCODING)) {
@@ -149,9 +154,10 @@ abstract class NettyResponseAdaptor implements MuResponse {
     }
 
     ChannelFuture writeAndFlush(ByteBuffer data) {
-        if (!httpExchange.inLoop()) {
-            ChannelPromise promise = httpExchange.ctx.newPromise();
-            httpExchange.ctx.executor().submit(() -> writeAndFlush(data).addListener(f -> {
+        HttpExchange exchange = exchange();
+        if (!exchange.inLoop()) {
+            ChannelPromise promise = exchange.ctx.newPromise();
+            exchange.ctx.executor().submit(() -> writeAndFlush(data).addListener(f -> {
                 if (f.isSuccess()) {
                     promise.setSuccess();
                 } else {
@@ -169,7 +175,7 @@ abstract class NettyResponseAdaptor implements MuResponse {
                 }
                 return writeAndFlush(Unpooled.wrappedBuffer(data));
             } catch (Throwable e) {
-                return httpExchange.ctx.newFailedFuture(e);
+                return exchange.ctx.newFailedFuture(e);
             }
         }
     }
@@ -206,7 +212,7 @@ abstract class NettyResponseAdaptor implements MuResponse {
 
     public void sendChunk(String text) {
         throwIfAsync();
-        httpExchange.block(() -> {
+        exchange().block(() -> {
             throwIfFinished();
             if (state == ResponseState.NOTHING) {
                 startStreaming();
@@ -230,7 +236,11 @@ abstract class NettyResponseAdaptor implements MuResponse {
     }
 
     public void contentType(@Nullable CharSequence contentType) {
-        headers.set(HeaderNames.CONTENT_TYPE, contentType);
+        if (contentType == null) {
+            headers.remove(HeaderNames.CONTENT_TYPE);
+        } else {
+            headers.set(HeaderNames.CONTENT_TYPE, contentType);
+        }
     }
 
     public void addCookie(Cookie cookie) {
@@ -246,12 +256,12 @@ abstract class NettyResponseAdaptor implements MuResponse {
     public OutputStream outputStream(int bufferSize) {
         if (this.outputStream == null) {
             ChunkedHttpOutputStream nonBuffered = new ChunkedHttpOutputStream(this);
-            httpExchange.block(() -> {
+            exchange().block(() -> {
                 startStreaming();
                 outputStream = bufferSize > 0 ? new BufferedOutputStream(nonBuffered, bufferSize) : nonBuffered;
             });
         }
-        return this.outputStream;
+        return requireNonNull(this.outputStream);
     }
 
     private void throwIfAsync() {
@@ -269,7 +279,7 @@ abstract class NettyResponseAdaptor implements MuResponse {
             OutputStreamWriter os = new OutputStreamWriter(outputStream(), StandardCharsets.UTF_8);
             this.writer = new PrintWriter(os);
         }
-        return this.writer;
+        return requireNonNull(this.writer);
     }
 
     @Override
@@ -288,7 +298,7 @@ abstract class NettyResponseAdaptor implements MuResponse {
     }
 
     void complete() {
-        assert httpExchange.inLoop() : "Not in event loop";
+        assert exchange().inLoop() : "Not in event loop";
 
         ResponseState finalState = ResponseState.FINISHED;
 
@@ -319,7 +329,7 @@ abstract class NettyResponseAdaptor implements MuResponse {
     @Override
     public void write(String text) {
         throwIfAsync();
-        httpExchange.block(() -> writeOnLoop(text).addListener(f -> outputState(f, ResponseState.FULL_SENT)));
+        exchange().block(() -> writeOnLoop(text).addListener(f -> outputState(f, ResponseState.FULL_SENT)));
     }
 
     ChannelFuture writeOnLoop(String text) {
@@ -343,8 +353,9 @@ abstract class NettyResponseAdaptor implements MuResponse {
     protected abstract ChannelFuture writeLastContentMarker();
 
     public final void redirect(URI newLocation) {
-        if (!httpExchange.inLoop()) {
-            httpExchange.ctx.executor().execute(() -> redirect(newLocation));
+        HttpExchange exchange = exchange();
+        if (!exchange.inLoop()) {
+            exchange.ctx.executor().execute(() -> redirect(newLocation));
         } else {
             URI absoluteUrl = request.uri().resolve(newLocation).normalize();
             if (status < 300 || status > 303) {

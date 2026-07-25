@@ -1,5 +1,7 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
+
 import io.netty.handler.codec.http.cookie.DefaultCookie;
 
 import java.util.List;
@@ -85,7 +87,7 @@ public class Cookie {
         return nettyCookie.hashCode();
     }
 
-    public boolean equals(Object o) {
+    public boolean equals(@Nullable Object o) {
         return (this == o) || ((o instanceof Cookie) && nettyCookie.equals(o));
     }
 

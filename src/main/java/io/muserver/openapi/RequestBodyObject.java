@@ -19,10 +19,10 @@ public class RequestBodyObject implements JsonWriter {
     private final Map<String, MediaTypeObject> content;
     private final @Nullable Boolean required;
 
-    RequestBodyObject(@Nullable String description, Map<String, MediaTypeObject> content, @Nullable Boolean required) {
-        notNull("content", content);
+    RequestBodyObject(@Nullable String description, @Nullable Map<String, MediaTypeObject> content, @Nullable Boolean required) {
         this.description = description;
-        this.content = content;
+        notNull("content", content);
+        this.content = java.util.Objects.requireNonNull(content);
         this.required = required;
     }
 

@@ -1,6 +1,7 @@
 package io.muserver.rest;
 
 import io.muserver.MuRequest;
+import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -11,7 +12,7 @@ import java.io.InputStream;
 class LazyAccessInputStream extends InputStream {
 
     private final MuRequest request;
-    private InputStream inputStream;
+    private @Nullable InputStream inputStream;
 
     LazyAccessInputStream(MuRequest request) {
         this.request = request;
@@ -21,7 +22,7 @@ class LazyAccessInputStream extends InputStream {
         if (inputStream == null) {
             inputStream = request.inputStream().orElse(EmptyInputStream.INSTANCE);
         }
-        return inputStream;
+        return java.util.Objects.requireNonNull(inputStream);
     }
 
     @Override

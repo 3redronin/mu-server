@@ -19,7 +19,7 @@ class JaxRsHttpHeadersAdapter implements HttpHeaders {
     private static final List<MediaType> WILDCARD_MEDIA_TYPES = Collections.singletonList(MediaType.WILDCARD_TYPE);
     private final Headers muHeaders;
     private final List<io.muserver.Cookie> muCookies;
-    private MultivaluedMap<String, String> copy;
+    private @Nullable MultivaluedMap<String, String> copy;
 
     JaxRsHttpHeadersAdapter(Headers headers, List<io.muserver.Cookie> cookies) {
         muHeaders = headers;
@@ -54,7 +54,7 @@ class JaxRsHttpHeadersAdapter implements HttpHeaders {
             }
             copy = c;
         }
-        return copy;
+        return Objects.requireNonNull(copy);
     }
 
     @Override
@@ -69,7 +69,7 @@ class JaxRsHttpHeadersAdapter implements HttpHeaders {
     @Override
     public List<Locale> getAcceptableLanguages() {
         try {
-            return getLocalesFromHeader(HeaderNames.ACCEPT_LANGUAGE, WILDCARD_LOCALES);
+            return Objects.requireNonNull(getLocalesFromHeader(HeaderNames.ACCEPT_LANGUAGE, WILDCARD_LOCALES));
         } catch (IllegalArgumentException e) {
             throw new BadRequestException("Invalid accept-language header");
         }

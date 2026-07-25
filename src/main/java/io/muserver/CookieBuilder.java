@@ -13,10 +13,10 @@ import org.jspecify.annotations.Nullable;
  */
 public class CookieBuilder {
 
-    private String name;
-    private String value;
-    private String domain;
-    private String path;
+    private @Nullable String name;
+    private @Nullable String value;
+    private @Nullable String domain;
+    private @Nullable String path;
     private long maxAge = DefaultCookie.UNDEFINED_MAX_AGE;
     private boolean secure;
     private boolean httpOnly;
@@ -190,9 +190,10 @@ public class CookieBuilder {
      * @return Returns a newly created cookie.
      */
     public Cookie build() {
-        if (Mutils.nullOrEmpty(name)) throw new IllegalStateException("A cookie name must be specified");
+        String cookieName = name;
+        if (cookieName == null || cookieName.isEmpty()) throw new IllegalStateException("A cookie name must be specified");
         if (value == null) throw new IllegalStateException("A cookie value must be specified");
-        Cookie c = new Cookie(name, value);
+        Cookie c = new Cookie(cookieName, value);
         c.nettyCookie.setDomain(domain);
         c.nettyCookie.setPath(path);
         c.nettyCookie.setMaxAge(maxAge);

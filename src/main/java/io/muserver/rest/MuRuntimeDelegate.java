@@ -126,7 +126,7 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
         }
         Collection<NewCookie> newCookies = from.getCookies().values();
         if (!newCookies.isEmpty()) {
-            var headerDelegate = singleton.createHeaderDelegate(NewCookie.class);
+            var headerDelegate = getInstance().createHeaderDelegate(NewCookie.class);
             for (NewCookie cookie : newCookies) {
                 to.headers().add(HeaderNames.SET_COOKIE, headerDelegate.toString(cookie));
             }
@@ -156,6 +156,7 @@ public class MuRuntimeDelegate extends RuntimeDelegate {
     @Override
     @SuppressWarnings("unchecked")
     public <T> HeaderDelegate<T> createHeaderDelegate(Class<T> type) throws IllegalArgumentException {
+        Mutils.notNull("type", type);
         HeaderDelegate<T> headerDelegate = headerDelegates.get(type);
         if (headerDelegate != null) {
             return (HeaderDelegate<T>) headerDelegate;

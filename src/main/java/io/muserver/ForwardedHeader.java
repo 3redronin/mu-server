@@ -12,10 +12,10 @@ import static java.util.Collections.emptyMap;
  */
 public class ForwardedHeader {
 
-    private final String by;
-    private final String forValue;
-    private final String host;
-    private final String proto;
+    private final @Nullable String by;
+    private final @Nullable String forValue;
+    private final @Nullable String host;
+    private final @Nullable String proto;
     private final Map<String,String> extensions;
 
     /**
@@ -85,7 +85,7 @@ public class ForwardedHeader {
      * @return A list of ForwardedHeader objects
      * @throws IllegalArgumentException The value cannot be parsed
      */
-    public static List<ForwardedHeader> fromString(String input) {
+    public static List<ForwardedHeader> fromString(@Nullable String input) {
         if (input == null || input.trim().isEmpty()) {
             return emptyList();
         }
@@ -149,7 +149,7 @@ public class ForwardedHeader {
                         } else {
                             if (c == ';') {
                                 String val = buffer.toString();
-                                switch (paramName.toLowerCase()) {
+                                switch (Objects.requireNonNull(paramName).toLowerCase()) {
                                     case "by":
                                         by = val;
                                         break;
@@ -190,7 +190,7 @@ public class ForwardedHeader {
             switch (state) {
                 case PARAM_VALUE:
                     String val = buffer.toString();
-                    switch (paramName.toLowerCase()) {
+                    switch (Objects.requireNonNull(paramName).toLowerCase()) {
                         case "by":
                             by = val;
                             break;
@@ -255,7 +255,7 @@ public class ForwardedHeader {
         return sb.toString();
     }
 
-    private static void appendString(StringBuilder sb, String key, String value) {
+    private static void appendString(StringBuilder sb, String key, @Nullable String value) {
         if (value == null) {
             return;
         }
@@ -266,7 +266,7 @@ public class ForwardedHeader {
     }
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equals(@Nullable Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         ForwardedHeader that = (ForwardedHeader) o;

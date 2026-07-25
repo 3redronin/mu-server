@@ -6,6 +6,7 @@ import jakarta.ws.rs.core.Link;
 import jakarta.ws.rs.core.UriBuilder;
 import jakarta.ws.rs.core.UriBuilderException;
 import jakarta.ws.rs.ext.RuntimeDelegate;
+import org.jspecify.annotations.Nullable;
 
 import java.net.URI;
 import java.util.*;
@@ -34,11 +35,19 @@ class LinkHeaderDelegate implements RuntimeDelegate.HeaderDelegate<Link> {
         }
 
         Map<String, String> parma = h.parameters();
-        Link.Builder builder = new MuLinkBuilder()
-            .uri(uri.substring(1, uri.length() - 1))
-            .rel(parma.get("rel"))
-            .title(parma.get("title"))
-            .type(parma.get("type"));
+        Link.Builder builder = new MuLinkBuilder().uri(uri.substring(1, uri.length() - 1));
+        String rel = parma.get("rel");
+        if (rel != null) {
+            builder.rel(rel);
+        }
+        String title = parma.get("title");
+        if (title != null) {
+            builder.title(title);
+        }
+        String type = parma.get("type");
+        if (type != null) {
+            builder.type(type);
+        }
 
         for (Map.Entry<String, String> entry : parma.entrySet()) {
             String key = entry.getKey();
@@ -53,6 +62,7 @@ class LinkHeaderDelegate implements RuntimeDelegate.HeaderDelegate<Link> {
 
     @Override
     public String toString(Link value) {
+        Mutils.notNull("value", value);
         StringBuilder sb = new StringBuilder();
         sb.append("<").append(value.getUri().toString()).append(">");
         if (value.getRels().size() > 0) {
@@ -79,19 +89,19 @@ class LinkHeaderDelegate implements RuntimeDelegate.HeaderDelegate<Link> {
 
         private final URI uri;
         private final List<String> rels;
-        private final String title;
-        private final String type;
+        private final @Nullable String title;
+        private final @Nullable String type;
         private final Map<String, String> params;
 
-        MuLink(URI uri, List<String> rels, String title, String type, Map<String, String> params) {
+        MuLink(URI uri, List<String> rels, @Nullable String title, @Nullable String type, Map<String, String> params) {
             Mutils.notNull("uri", uri);
+            this.uri = java.util.Objects.requireNonNull(uri);
             Mutils.notNull("rels", rels);
-            Mutils.notNull("params", params);
-            this.uri = uri;
-            this.rels = rels;
+            this.rels = java.util.Objects.requireNonNull(rels);
             this.title = title;
             this.type = type;
-            this.params = params;
+            Mutils.notNull("params", params);
+            this.params = java.util.Objects.requireNonNull(params);
         }
 
         @Override
@@ -105,7 +115,7 @@ class LinkHeaderDelegate implements RuntimeDelegate.HeaderDelegate<Link> {
         }
 
         @Override
-        public String getRel() {
+        public @Nullable String getRel() {
             return rels.isEmpty() ? null : rels.get(0);
         }
 
@@ -115,12 +125,12 @@ class LinkHeaderDelegate implements RuntimeDelegate.HeaderDelegate<Link> {
         }
 
         @Override
-        public String getTitle() {
+        public @Nullable String getTitle() {
             return title;
         }
 
         @Override
-        public String getType() {
+        public @Nullable String getType() {
             return type;
         }
 
@@ -135,7 +145,7 @@ class LinkHeaderDelegate implements RuntimeDelegate.HeaderDelegate<Link> {
         }
 
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(@Nullable Object o) {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
             MuLink muLink = (MuLink) o;
@@ -154,15 +164,16 @@ class LinkHeaderDelegate implements RuntimeDelegate.HeaderDelegate<Link> {
 
     static class MuLinkBuilder implements Link.Builder {
 
-        private UriBuilder uri;
-        private List<String> rels;
-        private String title;
-        private String type;
-        private Map<String, String> params;
-        private URI baseUri;
+        private @Nullable UriBuilder uri;
+        private @Nullable List<String> rels;
+        private @Nullable String title;
+        private @Nullable String type;
+        private @Nullable Map<String, String> params;
+        private @Nullable URI baseUri;
 
         @Override
         public Link.Builder link(Link link) {
+            Mutils.notNull("link", link);
             this.uri = link.getUriBuilder();
             this.rels = link.getRels();
             this.title = link.getTitle();
@@ -178,36 +189,42 @@ class LinkHeaderDelegate implements RuntimeDelegate.HeaderDelegate<Link> {
 
         @Override
         public Link.Builder uri(URI uri) {
+            Mutils.notNull("uri", uri);
             this.uri = UriBuilder.fromUri(uri);
             return this;
         }
 
         @Override
         public Link.Builder uri(String uri) {
+            Mutils.notNull("uri", uri);
             this.uri = UriBuilder.fromUri(uri);
             return this;
         }
 
         @Override
         public Link.Builder baseUri(URI uri) {
+            Mutils.notNull("uri", uri);
             this.baseUri = uri;
             return this;
         }
 
         @Override
         public Link.Builder baseUri(String uri) {
+            Mutils.notNull("uri", uri);
             return baseUri(URI.create(uri));
         }
 
         @Override
         public Link.Builder uriBuilder(UriBuilder uriBuilder) {
+            Mutils.notNull("uriBuilder", uriBuilder);
             this.uri = uriBuilder;
             return this;
         }
 
         @Override
         public Link.Builder rel(String rel) {
-            if (rel == null || rel.isEmpty()) {
+            Mutils.notNull("rel", rel);
+            if (rel.isEmpty()) {
                 return this;
             }
             if (rels == null) {
@@ -219,18 +236,22 @@ class LinkHeaderDelegate implements RuntimeDelegate.HeaderDelegate<Link> {
 
         @Override
         public Link.Builder title(String title) {
+            Mutils.notNull("title", title);
             this.title = title;
             return this;
         }
 
         @Override
         public Link.Builder type(String type) {
+            Mutils.notNull("type", type);
             this.type = type;
             return this;
         }
 
         @Override
         public Link.Builder param(String name, String value) {
+            Mutils.notNull("name", name);
+            Mutils.notNull("value", value);
             if (params == null) {
                 params = new HashMap<>();
             }
@@ -240,11 +261,16 @@ class LinkHeaderDelegate implements RuntimeDelegate.HeaderDelegate<Link> {
 
         @Override
         public Link build(Object... values) {
-            return buildRelativized(null, values);
+            return buildInternal(null, values);
         }
 
         @Override
         public Link buildRelativized(URI relativeTo, Object... values) {
+            Mutils.notNull("relativeTo", relativeTo);
+            return buildInternal(relativeTo, values);
+        }
+
+        private Link buildInternal(@Nullable URI relativeTo, Object... values) {
             if (this.uri == null) {
                 throw new UriBuilderException("No URI has been set");
             }
@@ -255,7 +281,9 @@ class LinkHeaderDelegate implements RuntimeDelegate.HeaderDelegate<Link> {
             if (relativeTo != null) {
                 built = relativeTo.relativize(built);
             }
-            return new MuLink(built, coalesce(rels, emptyList()), title, type, coalesce(params, emptyMap()));
+            List<String> relsToUse = rels == null ? emptyList() : rels;
+            Map<String, String> paramsToUse = params == null ? emptyMap() : params;
+            return new MuLink(built, relsToUse, title, type, paramsToUse);
         }
     }
 }

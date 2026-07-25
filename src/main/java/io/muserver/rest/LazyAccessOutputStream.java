@@ -1,6 +1,7 @@
 package io.muserver.rest;
 
 import io.muserver.MuResponse;
+import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -12,7 +13,7 @@ import java.util.Objects;
 class LazyAccessOutputStream extends OutputStream {
     private final MuResponse muResponse;
     private final Runnable beforeFirstWrite;
-    private OutputStream os;
+    private @Nullable OutputStream os;
     private boolean prepared;
 
     private OutputStream out() {
@@ -20,7 +21,7 @@ class LazyAccessOutputStream extends OutputStream {
             prepare();
             os = muResponse.outputStream();
         }
-        return os;
+        return Objects.requireNonNull(os);
     }
 
     LazyAccessOutputStream(MuResponse muResponse, Runnable beforeFirstWrite) {

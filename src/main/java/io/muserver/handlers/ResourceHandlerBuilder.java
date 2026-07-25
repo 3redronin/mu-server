@@ -18,6 +18,7 @@ import java.util.Scanner;
 import org.jspecify.annotations.Nullable;
 
 import static io.muserver.handlers.ResourceType.DEFAULT_EXTENSION_MAPPINGS;
+import static java.util.Objects.requireNonNull;
 
 /**
  * <p>Used to create a {@link ResourceHandler} for serving static files.</p>
@@ -26,13 +27,13 @@ import static io.muserver.handlers.ResourceType.DEFAULT_EXTENSION_MAPPINGS;
  */
 public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler> {
 
-    private DateTimeFormatter directoryListingDateFormatter;
+    private @Nullable DateTimeFormatter directoryListingDateFormatter;
     private Map<String, ResourceType> extensionToResourceType = DEFAULT_EXTENSION_MAPPINGS;
-    private String defaultFile = "index.html";
-    private ResourceProviderFactory resourceProviderFactory;
+    private @Nullable String defaultFile = "index.html";
+    private @Nullable ResourceProviderFactory resourceProviderFactory;
     private boolean directoryListingEnabled = false;
-    private String directoryListingCss = null;
-    private ResourceCustomizer resourceCustomizer = null;
+    private @Nullable String directoryListingCss;
+    private @Nullable ResourceCustomizer resourceCustomizer;
     private BareDirectoryRequestAction bareDirectoryRequestAction = BareDirectoryRequestAction.REDIRECT_WITH_TRAILING_SLASH;
 
     /**
@@ -107,7 +108,7 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
     /**
      * @return The current value of this property
      */
-    public DateTimeFormatter directoryListingDateFormatter() {
+    public @Nullable DateTimeFormatter directoryListingDateFormatter() {
         return directoryListingDateFormatter;
     }
 
@@ -121,7 +122,7 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
     /**
      * @return The current value of this property
      */
-    public String defaultFile() {
+    public @Nullable String defaultFile() {
         return defaultFile;
     }
 
@@ -135,14 +136,14 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
     /**
      * @return The current value of this property
      */
-    public String directoryListingCss() {
+    public @Nullable String directoryListingCss() {
         return directoryListingCss;
     }
 
     /**
      * @return The current value of this property
      */
-    public ResourceCustomizer resourceCustomizer() {
+    public @Nullable ResourceCustomizer resourceCustomizer() {
         return resourceCustomizer;
     }
 
@@ -179,22 +180,24 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
         if (resourceProviderFactory == null) {
             throw new IllegalStateException("No resourceProviderFactory has been set");
         }
-        String css = this.directoryListingCss;
+        ResourceProviderFactory providerFactory = requireNonNull(resourceProviderFactory);
+        @Nullable String css = this.directoryListingCss;
         if (directoryListingEnabled && css == null) {
-            InputStream cssStream = RestHandlerBuilder.class.getResourceAsStream("/io/muserver/resources/api.css");
+            InputStream cssStream = requireNonNull(RestHandlerBuilder.class.getResourceAsStream("/io/muserver/resources/api.css"),
+                "Bundled directory listing CSS was not found");
             Scanner scanner = new Scanner(cssStream, "UTF-8").useDelimiter("\\A");
             css = scanner.next();
             scanner.close();
         }
 
-        DateTimeFormatter formatterToUse = this.directoryListingDateFormatter;
+        @Nullable DateTimeFormatter formatterToUse = this.directoryListingDateFormatter;
         if (directoryListingEnabled && formatterToUse == null) {
             formatterToUse = DateTimeFormatter.ofPattern("yyyy/MM/dd hh:mm:ss")
                 .withLocale(Locale.US)
                 .withZone(ZoneId.systemDefault());
         }
 
-        return new ResourceHandler(resourceProviderFactory, defaultFile, extensionToResourceType, directoryListingEnabled, css, formatterToUse, this.resourceCustomizer, this.bareDirectoryRequestAction);
+        return new ResourceHandler(providerFactory, defaultFile, extensionToResourceType, directoryListingEnabled, css, formatterToUse, this.resourceCustomizer, this.bareDirectoryRequestAction);
     }
 
 

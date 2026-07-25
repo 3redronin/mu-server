@@ -40,15 +40,15 @@ class NettyRequestAdapter implements MuRequest {
     private final URI uri;
     private final Method method;
     private final Headers headers;
-    private volatile RequestBodyReader requestBodyReader;
+    private volatile @Nullable RequestBodyReader requestBodyReader;
     private final RequestParameters query;
 
-    private List<Cookie> cookies;
+    private @Nullable List<Cookie> cookies;
     private String contextPath = "";
     private String relativePath;
-    private Map<String, Object> attributes;
-    private volatile AsyncHandleImpl asyncHandle;
-    private HttpExchange httpExchange;
+    private @Nullable Map<String, Object> attributes;
+    private volatile @Nullable AsyncHandleImpl asyncHandle;
+    private @Nullable HttpExchange httpExchange;
     private final List<RequestStateChangeListener> listeners = new CopyOnWriteArrayList<>();
 
     NettyRequestAdapter(ChannelHandlerContext ctx, HttpRequest nettyRequest, Headers headers, Method method, String proto, String uri, String host) {
@@ -73,7 +73,7 @@ class NettyRequestAdapter implements MuRequest {
 
     @Override
     public HttpConnection connection() {
-        return this.httpExchange.connection();
+        return exchange().connection();
     }
 
     private static URI getUri(Headers h, String scheme, String hostHeader, String requestUri, URI serverUri) {
@@ -106,7 +106,7 @@ class NettyRequestAdapter implements MuRequest {
 
     @Override
     public long startTime() {
-        return httpExchange.startTime();
+        return exchange().startTime();
     }
 
     public Method method() {
@@ -148,7 +148,7 @@ class NettyRequestAdapter implements MuRequest {
                 Throwable cause = e.getCause();
                 if (cause instanceof Error) throw (Error) cause;
                 if (cause instanceof RuntimeException) throw (RuntimeException) cause;
-                throw new MuException("Error while getting input stream", cause);
+                throw new MuException("Error while getting input stream", Objects.requireNonNull(cause));
             }
             return Optional.of(inputStreamReader.inputStream());
         } else if (rbr instanceof RequestBodyReaderInputStreamAdapter) {
@@ -179,7 +179,7 @@ class NettyRequestAdapter implements MuRequest {
         Charset bodyCharset = UTF_8;
         if (mediaType != null) {
             String charset = mediaType.getParameters().get("charset");
-            if (!Mutils.nullOrEmpty(charset)) {
+            if (charset != null && !charset.isEmpty()) {
                 try {
                     bodyCharset = Charset.forName(charset);
                 } catch (IllegalCharsetNameException | UnsupportedCharsetException e) {
@@ -205,7 +205,7 @@ class NettyRequestAdapter implements MuRequest {
         if (!state.endState()) {
             requestBodyReader = reader;
             setState(RequestState.RECEIVING_BODY);
-            httpExchange.scheduleReadTimeout();
+            exchange().scheduleReadTimeout();
             return ctx.newSucceededFuture();
         } else {
             log.warn("Request body reader set after state is " + state);
@@ -222,11 +222,11 @@ class NettyRequestAdapter implements MuRequest {
     @Override
     public List<UploadedFile> uploadedFiles(String name) throws IOException {
         ensureFormDataLoaded();
-        return ((RequestBodyReader.MultipartFormReader) requestBodyReader).uploads(name);
+        return ((RequestBodyReader.MultipartFormReader) Objects.requireNonNull(requestBodyReader)).uploads(name);
     }
 
     @Override
-    public UploadedFile uploadedFile(String name) throws IOException {
+    public @Nullable UploadedFile uploadedFile(String name) throws IOException {
         List<UploadedFile> uploadedFiles = uploadedFiles(name);
         return uploadedFiles.isEmpty() ? null : uploadedFiles.get(0);
     }
@@ -240,7 +240,7 @@ class NettyRequestAdapter implements MuRequest {
     @Override
     public RequestParameters form() throws IOException {
         ensureFormDataLoaded();
-        return ((FormRequestBodyReader) requestBodyReader).params();
+        return ((FormRequestBodyReader) Objects.requireNonNull(requestBodyReader)).params();
     }
 
     @Override
@@ -282,7 +282,7 @@ class NettyRequestAdapter implements MuRequest {
     }
 
     @Override
-    public Object attribute(String key) {
+    public @Nullable Object attribute(String key) {
         Mutils.notNull("key", key);
         if (attributes == null) {
             return null;
@@ -291,7 +291,7 @@ class NettyRequestAdapter implements MuRequest {
     }
 
     @Override
-    public void attribute(String key, Object value) {
+    public void attribute(String key, @Nullable Object value) {
         Mutils.notNull("key", key);
         if (attributes == null) {
             attributes = new HashMap<>();
@@ -309,11 +309,13 @@ class NettyRequestAdapter implements MuRequest {
 
     @Override
     public AsyncHandle handleAsync() {
-        if (isAsync()) {
-            return asyncHandle;
+        AsyncHandleImpl handle = asyncHandle;
+        if (handle != null) {
+            return handle;
         }
-        asyncHandle = new AsyncHandleImpl(this, httpExchange);
-        return asyncHandle;
+        handle = new AsyncHandleImpl(this, exchange());
+        asyncHandle = handle;
+        return handle;
     }
 
     @Override
@@ -341,10 +343,10 @@ class NettyRequestAdapter implements MuRequest {
         if (requestBodyReader == null) {
             String ct = contentType();
             RequestBodyReader reader;
-            if (ct.startsWith("multipart/")) {
+            if (ct != null && ct.startsWith("multipart/")) {
                 reader = new RequestBodyReader.MultipartFormReader(maxRequestBytes(), nettyRequest, bodyCharset(headers, true));
                 claimingBodyRead(reader);
-            } else if (ct.equals("application/x-www-form-urlencoded")) {
+            } else if ("application/x-www-form-urlencoded".equals(ct)) {
                 reader = new RequestBodyReader.UrlEncodedBodyReader(createStringRequestBodyReader(maxRequestBytes(), headers()));
                 claimingBodyRead(reader);
             } else {
@@ -408,7 +410,7 @@ class NettyRequestAdapter implements MuRequest {
                 if (future.isSuccess()) {
                     ctx.pipeline().fireUserEventTriggered(new ExchangeUpgradeEvent(session));
                 } else {
-                    ctx.pipeline().fireUserEventTriggered(new MuExceptionFiredEvent(httpExchange, 0, future.cause()));
+                    ctx.pipeline().fireUserEventTriggered(new MuExceptionFiredEvent(exchange(), 0, future.cause()));
                 }
             });
 
@@ -427,14 +429,15 @@ class NettyRequestAdapter implements MuRequest {
     }
 
     void setState(RequestState status) {
-        assert httpExchange.inLoop() : "Not in event loop";
+        HttpExchange exchange = exchange();
+        assert exchange.inLoop() : "Not in event loop";
         RequestState oldState = this.state;
         if (oldState.endState()) {
             throw new IllegalStateException("Didn't expect to get a status update to " + status + " when the current status is " + oldState);
         }
         this.state = status;
         for (RequestStateChangeListener listener : listeners) {
-            listener.onChange(httpExchange, status);
+            listener.onChange(exchange, status);
         }
     }
 
@@ -465,7 +468,7 @@ class NettyRequestAdapter implements MuRequest {
     }
 
     public HttpExchange exchange() {
-        return httpExchange;
+        return Objects.requireNonNull(httpExchange, "Exchange has not been set");
     }
 
     static class AsyncHandleImpl implements AsyncHandle {
@@ -499,7 +502,7 @@ class NettyRequestAdapter implements MuRequest {
         }
 
         @Override
-        public void complete(Throwable throwable) {
+        public void complete(@Nullable Throwable throwable) {
             if (throwable == null) {
                 complete();
             } else {
@@ -528,7 +531,7 @@ class NettyRequestAdapter implements MuRequest {
 
         @Override
         public Future<Void> write(ByteBuffer data) {
-            NettyResponseAdaptor response = request.httpExchange.response;
+            NettyResponseAdaptor response = request.exchange().response;
             try {
                 return response.writeAndFlush(data);
             } catch (Throwable e) {

@@ -11,6 +11,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.jspecify.annotations.Nullable;
 
 import java.util.*;
 import java.util.concurrent.Executors;
@@ -28,11 +29,11 @@ class AsyncResponseAdapter implements AsyncResponse, ResponseCompleteListener {
     private volatile boolean isSuspended;
     private volatile boolean isCancelled;
     private volatile boolean isDone;
-    private volatile ScheduledFuture<?> cancelEvent;
-    private volatile TimeoutHandler timeoutHandler;
+    private volatile @Nullable ScheduledFuture<?> cancelEvent;
+    private volatile @Nullable TimeoutHandler timeoutHandler;
     private final List<ConnectionCallback> connectionCallbacks = new ArrayList<>();
     private final List<CompletionCallback> completionCallbacks = new ArrayList<>();
-    private Throwable exceptionWhileWriting = null;
+    private @Nullable Throwable exceptionWhileWriting;
 
     AsyncResponseAdapter(AsyncHandle asyncHandle, Consumer resultConsumer) {
         this.asyncHandle = asyncHandle;
@@ -44,9 +45,10 @@ class AsyncResponseAdapter implements AsyncResponse, ResponseCompleteListener {
     }
 
     @Override
-    public boolean resume(Object response) {
-        if (cancelEvent != null) {
-            isCancelled = isCancelled || cancelEvent.cancel(false);
+    public boolean resume(@Nullable Object response) {
+        ScheduledFuture<?> event = cancelEvent;
+        if (event != null) {
+            isCancelled = isCancelled || event.cancel(false);
             cancelEvent = null;
         }
         if (isSuspended) {
@@ -68,7 +70,7 @@ class AsyncResponseAdapter implements AsyncResponse, ResponseCompleteListener {
 
     @Override
     public boolean resume(Throwable response) {
-        return resume((Object) response);
+        return resume((Object) Objects.requireNonNull(response, "response"));
     }
 
     @Override
@@ -83,10 +85,10 @@ class AsyncResponseAdapter implements AsyncResponse, ResponseCompleteListener {
 
     @Override
     public boolean cancel(Date retryAfter) {
-        return doCancel(Mutils.toHttpDate(retryAfter));
+        return doCancel(Mutils.toHttpDate(Objects.requireNonNull(retryAfter, "retryAfter")));
     }
 
-    private boolean doCancel(Object retryAfterValue) {
+    private boolean doCancel(@Nullable Object retryAfterValue) {
         Response.ResponseBuilder resp = Response.status(503);
         if (retryAfterValue != null) {
             resp.header(HeaderNames.RETRY_AFTER.toString(), retryAfterValue);
@@ -111,6 +113,7 @@ class AsyncResponseAdapter implements AsyncResponse, ResponseCompleteListener {
 
     @Override
     public boolean setTimeout(long time, TimeUnit unit) {
+        Objects.requireNonNull(unit, "unit");
         if (!isSuspended) {
             return false;
         }
@@ -132,21 +135,28 @@ class AsyncResponseAdapter implements AsyncResponse, ResponseCompleteListener {
 
     @Override
     public void setTimeoutHandler(TimeoutHandler handler) {
-        this.timeoutHandler = handler;
+        this.timeoutHandler = Objects.requireNonNull(handler, "handler");
     }
 
     @Override
     public Collection<Class<?>> register(Class<?> callback) {
+        Objects.requireNonNull(callback, "callback");
         throw new NotImplementedException("Mu-Server does not instantiate classes for you. Please use register(Object) with an instantiated callback instead.");
     }
 
     @Override
     public Map<Class<?>, Collection<Class<?>>> register(Class<?> callback, Class<?>... callbacks) {
+        Objects.requireNonNull(callback, "callback");
+        Objects.requireNonNull(callbacks, "callbacks");
+        for (Class<?> additionalCallback : callbacks) {
+            Objects.requireNonNull(additionalCallback, "callbacks element");
+        }
         throw new NotImplementedException("Mu-Server does not instantiate classes for you. Please use register(Object, Object...) with instantiated callbacks instead.");
     }
 
     @Override
     public Collection<Class<?>> register(Object callback) {
+        Objects.requireNonNull(callback, "callback");
         Collection<Class<?>> added = new HashSet<>();
         if (callback instanceof ConnectionCallback) {
             added.add(ConnectionCallback.class);
@@ -161,10 +171,12 @@ class AsyncResponseAdapter implements AsyncResponse, ResponseCompleteListener {
 
     @Override
     public Map<Class<?>, Collection<Class<?>>> register(Object callback, Object... callbacks) {
+        Objects.requireNonNull(callback, "callback");
+        Objects.requireNonNull(callbacks, "callbacks");
         Map<Class<?>, Collection<Class<?>>> added = new HashMap<>();
         register(callback, added);
         for (Object cb : callbacks) {
-            register(cb, added);
+            register(Objects.requireNonNull(cb, "callbacks element"), added);
         }
         return added;
     }
@@ -199,6 +211,6 @@ class AsyncResponseAdapter implements AsyncResponse, ResponseCompleteListener {
     }
 
     interface Consumer {
-        void accept(Object response) throws Exception;
+        void accept(@Nullable Object response) throws Exception;
     }
 }

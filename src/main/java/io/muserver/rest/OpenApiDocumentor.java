@@ -25,16 +25,16 @@ import static java.util.Collections.singletonList;
 
 class OpenApiDocumentor implements MuHandler {
     private final List<ResourceClass> roots;
-    private final String openApiJsonUrl;
+    private final @Nullable String openApiJsonUrl;
     private final OpenAPIObject openAPIObject;
-    private final String openApiHtmlUrl;
-    private final String openApiHtmlCss;
+    private final @Nullable String openApiHtmlUrl;
+    private final @Nullable String openApiHtmlCss;
     private final CORSConfig corsConfig;
     private final List<SchemaReference> customSchemas;
     private final SchemaObjectCustomizer schemaObjectCustomizer;
     private final List<ParamConverterProvider> paramConverterProviders;
 
-    OpenApiDocumentor(List<ResourceClass> roots, String openApiJsonUrl, String openApiHtmlUrl, OpenAPIObject openAPIObject, String openApiHtmlCss, CORSConfig corsConfig, List<SchemaReference> customSchemas, SchemaObjectCustomizer schemaObjectCustomizer, List<ParamConverterProvider> paramConverterProviders) {
+    OpenApiDocumentor(List<ResourceClass> roots, @Nullable String openApiJsonUrl, @Nullable String openApiHtmlUrl, OpenAPIObject openAPIObject, @Nullable String openApiHtmlCss, CORSConfig corsConfig, List<SchemaReference> customSchemas, SchemaObjectCustomizer schemaObjectCustomizer, List<ParamConverterProvider> paramConverterProviders) {
         this.customSchemas = customSchemas;
         this.schemaObjectCustomizer = schemaObjectCustomizer;
         this.paramConverterProviders = paramConverterProviders;
@@ -110,7 +110,9 @@ class OpenApiDocumentor implements MuHandler {
 
             try (OutputStreamWriter osw = new OutputStreamWriter(response.outputStream(), StandardCharsets.UTF_8);
                  BufferedWriter writer = new BufferedWriter(osw, 8192)) {
-                new HtmlDocumentor(writer, builtApi, openApiHtmlCss, request.uri()).writeHtml();
+                new HtmlDocumentor(writer, builtApi,
+                    Objects.requireNonNull(openApiHtmlCss, "OpenAPI HTML CSS was not initialized"),
+                    request.uri()).writeHtml();
             }
         }
 
@@ -137,7 +139,12 @@ class OpenApiDocumentor implements MuHandler {
 
             Map<String, OperationObject> operations;
             if (pathItems.containsKey(path)) {
-                operations = pathItems.get(path).operations();
+                PathItemObjectBuilder pathItem = Objects.requireNonNull(pathItems.get(path));
+                Map<String, OperationObject> configuredOperations = pathItem.operations();
+                operations = configuredOperations == null ? new LinkedHashMap<>() : configuredOperations;
+                if (configuredOperations == null) {
+                    pathItem.withOperations(operations);
+                }
             } else {
                 operations = new LinkedHashMap<>();
                 PathItemObjectBuilder pathItem = pathItemObject()
@@ -159,17 +166,18 @@ class OpenApiDocumentor implements MuHandler {
 
             String opIdPath = getPathWithoutRegex(root, method, parentResourcePath).replace("{", "_").replace("}", "_");
             String opPath = Mutils.trim(opIdPath, "/").replace("/", "_");
-            String opKey = method.httpMethod.name().toLowerCase();
+            String opKey = method.requiredHttpMethod().name().toLowerCase();
             OperationObject existing = operations.get(opKey);
             if (existing == null) {
                 existing = method.createOperationBuilder(customSchemas)
-                    .withOperationId(method.httpMethod.name() + "_" + opPath)
+                    .withOperationId(method.requiredHttpMethod().name() + "_" + opPath)
                     .withTags(singletonList(root.tag.name()))
                     .withParameters(parameters)
                     .build();
             } else {
                 OperationObject curOO = method.createOperationBuilder(customSchemas).build();
-                List<ParameterObject> combinedParams = new ArrayList<>(existing.parameters());
+                List<ParameterObject> combinedParams = new ArrayList<>(
+                    existing.parameters() == null ? Collections.emptyList() : existing.parameters());
                 for (ParameterObject po : parameters) {
                     // add to combinedParams if none with same name and in
                     if (combinedParams.stream().noneMatch(p -> p.name().equals(po.name()) &&
@@ -216,17 +224,17 @@ class OpenApiDocumentor implements MuHandler {
 class SchemaReference {
     final String id;
     final Class<?> type;
-    final Type genericType;
+    final @Nullable Type genericType;
     final SchemaObject schema;
 
-    SchemaReference(String id, Class<?> type, Type genericType, SchemaObject schema) {
+    SchemaReference(String id, Class<?> type, @Nullable Type genericType, SchemaObject schema) {
         this.id = id;
         this.type = type;
         this.genericType = genericType;
         this.schema = schema;
     }
 
-    static @Nullable SchemaReference find(List<SchemaReference> references, Class<?> type, Type genericType) {
+    static @Nullable SchemaReference find(List<SchemaReference> references, Class<?> type, @Nullable Type genericType) {
         for (SchemaReference reference : references) {
             if (reference.type.equals(type)) {
                 return reference;

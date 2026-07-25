@@ -2,6 +2,7 @@ package io.muserver.rest;
 
 import jakarta.ws.rs.core.AbstractMultivaluedMap;
 import jakarta.ws.rs.core.MultivaluedMap;
+import org.jspecify.annotations.Nullable;
 
 import java.util.AbstractList;
 import java.util.AbstractMap;
@@ -33,8 +34,9 @@ class StringHeadersMap extends AbstractMultivaluedMap<String, String> {
         }
 
         @Override
-        public List<String> get(Object key) {
-            return asStringList(headers.get(key));
+        public @Nullable List<String> get(Object key) {
+            List<Object> values = headers.get(key);
+            return values == null ? null : asStringList(values);
         }
 
         @Override
@@ -43,13 +45,15 @@ class StringHeadersMap extends AbstractMultivaluedMap<String, String> {
         }
 
         @Override
-        public List<String> put(String key, List<String> value) {
-            return asStringSnapshot(headers.put(key, asObjectList(value)));
+        public @Nullable List<String> put(String key, List<String> value) {
+            List<Object> previous = headers.put(key, asObjectList(value));
+            return previous == null ? null : asStringSnapshot(previous);
         }
 
         @Override
-        public List<String> remove(Object key) {
-            return asStringSnapshot(headers.remove(key));
+        public @Nullable List<String> remove(Object key) {
+            List<Object> removed = headers.remove(key);
+            return removed == null ? null : asStringSnapshot(removed);
         }
 
         @Override
@@ -94,7 +98,7 @@ class StringHeadersMap extends AbstractMultivaluedMap<String, String> {
                                 }
 
                                 @Override
-                                public boolean equals(Object obj) {
+                                public boolean equals(@Nullable Object obj) {
                                     if (!(obj instanceof Entry)) {
                                         return false;
                                     }
@@ -130,9 +134,6 @@ class StringHeadersMap extends AbstractMultivaluedMap<String, String> {
         }
 
         private List<String> asStringList(List<Object> values) {
-            if (values == null) {
-                return null;
-            }
             return new AbstractList<String>() {
                 @Override
                 public String get(int index) {
@@ -162,9 +163,6 @@ class StringHeadersMap extends AbstractMultivaluedMap<String, String> {
         }
 
         private List<String> asStringSnapshot(List<Object> values) {
-            if (values == null) {
-                return null;
-            }
             List<String> snapshot = new ArrayList<>(values.size());
             for (Object value : values) {
                 snapshot.add(converter.apply(value));
@@ -173,7 +171,7 @@ class StringHeadersMap extends AbstractMultivaluedMap<String, String> {
         }
 
         private static List<Object> asObjectList(List<String> values) {
-            return values == null ? null : new ArrayList<>(values);
+            return new ArrayList<>(values);
         }
     }
 }

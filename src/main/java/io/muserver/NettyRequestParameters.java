@@ -91,7 +91,7 @@ class NettyRequestParameters implements RequestParameters {
 
     @Override
     public boolean getBoolean(String name) {
-        String val = get(name, "").toLowerCase();
+        String val = Objects.requireNonNull(get(name, "")).toLowerCase();
         return isTruthy(val);
     }
 
@@ -123,7 +123,7 @@ class NettyRequestParameters implements RequestParameters {
 
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equals(@Nullable Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         NettyRequestParameters that = (NettyRequestParameters) o;

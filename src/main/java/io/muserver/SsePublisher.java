@@ -125,12 +125,12 @@ class SsePublisherImpl implements SsePublisher {
     }
 
     @Override
-    public void send(String message, String event) throws IOException {
+    public void send(String message, @Nullable String event) throws IOException {
         send(message, event, null);
     }
 
     @Override
-    public void send(String message, String event, String eventID) throws IOException {
+    public void send(String message, @Nullable String event, @Nullable String eventID) throws IOException {
         sendChunk(dataText(message, event, eventID));
     }
 
@@ -169,7 +169,7 @@ class SsePublisherImpl implements SsePublisher {
         return value.contains("\n") || value.contains("\r");
     }
 
-    static String dataText(String message, String event, String eventID) {
+    static String dataText(String message, @Nullable String event, @Nullable String eventID) {
         StringBuilder raw = new StringBuilder();
         if (eventID != null) {
             ensureNoLineBreaks(eventID, "SSE IDs");
