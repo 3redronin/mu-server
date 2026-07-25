@@ -447,6 +447,7 @@ public class FilterTest {
             ).start();
         try (Response resp = call(request().url(server.uri().resolve("/something").toString()))) {
             assertThat(resp.code(), is(400));
+            assertThat(resp.header("My-Header"), is("WAS-LOWERCASE"));
             assertThat(resp.header("Content-Type"), is("text/plain;charset=utf-8"));
             assertThat(resp.body().string(), is("12"));
         }

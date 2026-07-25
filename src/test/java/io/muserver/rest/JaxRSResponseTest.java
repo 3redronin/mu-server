@@ -303,6 +303,25 @@ public class JaxRSResponseTest {
     }
 
     @Test
+    public void stringHeadersAreALiveViewOfObjectHeaders() {
+        Response response = JaxRSResponse.ok().build();
+        MultivaluedMap<String, String> stringHeaders = response.getStringHeaders();
+
+        response.getHeaders().add("X-Live", "one");
+        response.getHeaders().add("X-Live", new StringBuilder("two"));
+        assertThat(stringHeaders.get("X-Live"), contains("one", "two"));
+
+        response.getHeaders().putSingle("X-Live", "replacement");
+        assertThat(stringHeaders.get("X-Live"), contains("replacement"));
+
+        stringHeaders.add("X-Live", "written-through");
+        assertThat(response.getHeaders().get("X-Live"), contains("replacement", "written-through"));
+
+        response.getHeaders().remove("X-Live");
+        assertThat(stringHeaders.get("X-Live"), is(nullValue()));
+    }
+
+    @Test
     public void containerResponseContextExposesEntityMetadataAndStreams() {
         @Deprecated
         class AnnotatedEntity { }
