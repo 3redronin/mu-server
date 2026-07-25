@@ -24,7 +24,6 @@ import java.nio.charset.StandardCharsets;
 import java.time.*;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.Temporal;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -121,18 +120,9 @@ class StringEntityProviders {
         @Override
         public void writeTo(char[] chars, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException, WebApplicationException {
             ByteBuffer bb = EntityProviders.charsetFor(mediaType).encode(CharBuffer.wrap(chars));
-            int byteStart = bb.position();
-            int byteEnd = bb.limit();
             byte[] bytes = new byte[bb.remaining()];
             bb.get(bytes);
-            try {
-                entityStream.write(bytes);
-            } finally {
-                Arrays.fill(bytes, (byte) 0);
-                if (bb.hasArray()) {
-                    Arrays.fill(bb.array(), bb.arrayOffset() + byteStart, bb.arrayOffset() + byteEnd, (byte) 0);
-                }
-            }
+            entityStream.write(bytes);
         }
     }
 
