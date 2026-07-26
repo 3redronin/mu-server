@@ -138,34 +138,46 @@ class RFC9113_5_1_StreamStatesTest {
     }
 
     @Test
-    public void thereIsAMaxNumberForStreamID() throws Exception {
+    public void additionalHeadersOnTheMaximumHalfClosedRemoteStreamAreAStreamError() throws Exception {
+        var handlerStarted = new CountDownLatch(1);
+        var releaseHandler = new CountDownLatch(1);
 
         server = httpsServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())
             .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
+                handlerStarted.countDown();
+                releaseHandler.await(5, TimeUnit.SECONDS);
                 response.status(202);
             })
             .start();
 
-        try (var client = new H2Client();
-             var con = client.connect(server.uri().getPort())) {
+        try {
+            try (var client = new H2Client();
+                 var con = client.connect(server.uri().getPort())) {
 
-            con.handshake();
+                con.handshake();
 
-            con.writeFrame(new Http2HeadersFrame(Integer.MAX_VALUE, true, getHelloHeaders()));
-            con.flush();
+                con.writeFrame(new Http2HeadersFrame(Integer.MAX_VALUE, true, getHelloHeaders()));
+                con.flush();
 
-            con.readLogicalFrame(Http2HeadersFrame.class);
+                assertThat(handlerStarted.await(5, TimeUnit.SECONDS), equalTo(true));
 
-            // can't actually go above the max value as it is restricted to a 31 bit unsigned integer. So this is stopped by reuse rather than being too big.
-            con.writeFrame(new Http2HeadersFrame(0xFFFFFFFF, true, getHelloHeaders()));
-            con.flush();
+                // The high bit is reserved and ignored, so this is another HEADERS frame for
+                // stream 2^31-1, which is known to be half-closed (remote) while the handler waits.
+                con.writeFrame(new Http2HeadersFrame(0xFFFFFFFF, true, getHelloHeaders()));
+                con.flush();
 
-            var goaway = con.readLogicalFrame(Http2GoAway.class);
-            assertThat(goaway.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
-            assertThrows(IOException.class, con::readFrameHeader);
+                var reset = con.readLogicalFrame(Http2ResetStreamFrame.class);
+                assertThat(reset.streamId(), equalTo(Integer.MAX_VALUE));
+                assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.STREAM_CLOSED));
+
+                byte[] opaqueData = new byte[] {1, 2, 3, 4, 5, 6, 7, 8};
+                con.writeFrame(new Http2Ping(false, opaqueData)).flush();
+                assertThat(con.readLogicalFrame(Http2Ping.class), equalTo(new Http2Ping(true, opaqueData)));
+            }
+        } finally {
+            releaseHandler.countDown();
         }
-
     }
 
     @Test
