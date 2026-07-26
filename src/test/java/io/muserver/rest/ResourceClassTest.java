@@ -1,17 +1,26 @@
 package io.muserver.rest;
 
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.OPTIONS;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
+import jakarta.ws.rs.Produces;
 import org.junit.Test;
 
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 import java.util.Collections;
 import java.util.List;
 
 import static java.net.URI.create;
 import static java.util.Collections.emptyList;
+import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasSize;
 
@@ -92,6 +101,31 @@ public class ResourceClassTest {
 
         assertThat(resourceClass.resourceMethods, hasSize(1));
         assertThat(resourceClass.resourceMethods.get(0).methodHandle.getDeclaringClass(), equalTo(UnannotatedImplementation.class));
+    }
+
+    @Test
+    public void warnsAboutNonPublicResourceMethodsAndLocators() {
+        List<String> warnings = ResourceClass.nonPublicResourceMethodWarnings(ResourceWithNonPublicMethods.class);
+
+        assertThat(warnings, hasSize(4));
+        assertThat(warnings.get(0), containsString("ResourceWithNonPublicMethods.packagePrivateResourceMethod()"));
+        assertThat(warnings.get(1), containsString("ResourceWithNonPublicMethods.privateResourceMethod()"));
+        assertThat(warnings.get(2), containsString("ResourceWithNonPublicMethods.protectedLocator()"));
+        assertThat(warnings.get(3), containsString("ResourceWithNonPublicMethods.protectedSubResourceMethod()"));
+        for (String warning : warnings) {
+            assertThat(warning, containsString("is ignored because only public methods may be exposed as resource methods or sub-resource locators."));
+        }
+    }
+
+    @Test
+    public void doesNotWarnAboutPublicOrUnrelatedAnnotatedMethods() {
+        assertThat(ResourceClass.nonPublicResourceMethodWarnings(ResourceWithoutVisibilityProblems.class), empty());
+    }
+
+    @Test
+    public void warnsAboutNonPublicAnnotatedMethodsOnSuperclasses() {
+        assertThat(ResourceClass.nonPublicResourceMethodWarnings(ResourceWithInheritedVisibilityProblem.class),
+            contains(containsString("BaseResourceWithVisibilityProblem.hidden()")));
     }
 
     @Path("/api/fruits")
@@ -181,5 +215,57 @@ public class ResourceClassTest {
 
     @Path("/api/inherited-implementation")
     private static class InterfaceResourceWithInheritedImplementation extends UnannotatedImplementation implements AnnotatedResourceMethod { }
+
+    @Path("/api/non-public")
+    private static class ResourceWithNonPublicMethods {
+        @GET
+        String packagePrivateResourceMethod() {
+            return "";
+        }
+
+        @GET
+        private String privateResourceMethod() {
+            return "";
+        }
+
+        @Path("locator")
+        protected Object protectedLocator() {
+            return new Object();
+        }
+
+        @CustomGET
+        @Path("custom")
+        protected String protectedSubResourceMethod() {
+            return "";
+        }
+    }
+
+    @Path("/api/public")
+    private static class ResourceWithoutVisibilityProblems {
+        @GET
+        public String publicResourceMethod() {
+            return "";
+        }
+
+        @Produces("text/plain")
+        private String helper() {
+            return "";
+        }
+    }
+
+    private static class BaseResourceWithVisibilityProblem {
+        @GET
+        protected String hidden() {
+            return "";
+        }
+    }
+
+    @Path("/api/inherited-problem")
+    private static class ResourceWithInheritedVisibilityProblem extends BaseResourceWithVisibilityProblem { }
+
+    @Target(ElementType.METHOD)
+    @Retention(RetentionPolicy.RUNTIME)
+    @HttpMethod(HttpMethod.GET)
+    private @interface CustomGET { }
 
 }
